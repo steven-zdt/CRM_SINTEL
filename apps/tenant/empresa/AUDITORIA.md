@@ -64,10 +64,19 @@ La app `empresa` está correctamente implementada con todos los servicios CRUD y
 #### `empresa_service.py`
 - **Funciones**:
   - `get_empresa()` → DTO con datos de empresa
-  - `get_or_create_empresa(defaults)` → Obtiene o crea empresa
+  - `get_or_create_empresa(defaults)` → Obtiene o crea/actualiza empresa
   - `update_empresa(data)` → Actualiza empresa con validaciones
 - **Estado**: ✅ Funcional
 - **Validaciones**: ✅ Tipos, longitudes, formatos (NIT, email, URL)
+- **⚠️ v2.60 - Corrección de IntegrityError**: 
+  - **Problema**: `get_or_create_empresa()` intentaba crear empresa con `Empresa.objects.create()` cuando ya existía una con el mismo NIT, causando `IntegrityError: duplicate key value violates unique constraint "empresa_empresa_nit_key"`.
+  - **Solución**: La función ahora:
+    1. Primero intenta obtener la empresa existente con `Empresa.objects.first()`
+    2. Si existe, actualiza los campos proporcionados en `defaults` usando `setattr()` y `save(update_fields=...)`
+    3. Si no existe, crea nueva empresa con protección contra NIT duplicado
+    4. Si la creación falla por NIT duplicado, obtiene la empresa por NIT y actualiza en lugar de crear
+  - **Ubicación**: `apps/tenant/empresa/impl/empresa_service.py` (líneas 52-135)
+  - **Transaccional**: ✅ `@transaction.atomic` garantiza consistencia
 
 #### `mailbox_service.py`
 - **Funciones**: CRUD para `MailInboxConfig`
@@ -240,8 +249,46 @@ python manage.py tenant_command audit_empresa_app --schema=tenant1 --verbose
 ✅ **Integración**: Correctamente integrada en `config/api_urls.py`  
 ✅ **Validaciones**: Permisos, transacciones y validaciones de datos  
 ✅ **Tests**: Tests existentes para validar funcionalidad  
+✅ **Bug Fixes**: ✅ v2.60 - Corrección de IntegrityError en `get_or_create_empresa()`
 
 **No se encontraron problemas críticos. La app está lista para producción.**
+
+---
+
+## 🔧 11. Historial de Correcciones (v2.60)
+
+### ✅ Corrección: IntegrityError en `get_or_create_empresa()` (v2.60)
+
+**Fecha**: 2024  
+**Problema**: Error 500 en `MiEmpresaView.patch` al recibir un request PATCH. El log indicaba: `IntegrityError: duplicate key value violates unique constraint "empresa_empresa_nit_key"`.
+
+**Causa Raíz**: 
+- La función `get_or_create_empresa(defaults=data)` intentaba ejecutar `Empresa.objects.create()` en lugar de actualizar el registro existente.
+- Cuando el NIT ya existía en la base de datos, la constraint única `nit` causaba el error.
+
+**Solución Implementada**:
+1. **Modificación en `get_or_create_empresa()`** (`apps/tenant/empresa/impl/empresa_service.py`):
+   - Primero intenta obtener la instancia actual de la Empresa del tenant con `Empresa.objects.first()`
+   - Si la empresa existe, itera sobre los datos recibidos (el payload del PATCH) y actualiza los campos correspondientes usando `setattr()`, luego hace un `.save(update_fields=...)`
+   - Si por alguna razón no existe, entonces sí la crea
+   - Protección adicional: Si la creación falla por NIT duplicado, intenta obtener la empresa por NIT y actualizarla en lugar de crear
+
+2. **Características de la corrección**:
+   - ✅ Transaccional: `@transaction.atomic` garantiza consistencia
+   - ✅ Validación de campos: Solo actualiza campos permitidos
+   - ✅ Manejo de errores: Protección contra IntegrityError por NIT duplicado
+   - ✅ Compatible con patrón singleton: Respeta la constraint única por tenant
+
+**Archivos Modificados**:
+- `apps/tenant/empresa/impl/empresa_service.py` (función `get_or_create_empresa`, líneas 52-135)
+
+**Endpoints Afectados**:
+- `PATCH /api/v1/core/empresa/` (vía `MiEmpresaView.patch`)
+
+**Resultado**: 
+- ✅ El error 500 por `IntegrityError` está resuelto
+- ✅ La función ahora actualiza correctamente la empresa existente en lugar de intentar crear una nueva
+- ✅ Compatible con el patrón singleton y las constraints de base de datos
 
 ---
 

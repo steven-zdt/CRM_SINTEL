@@ -45,14 +45,17 @@
                 const clienteIdInput = offcanvasEl.querySelector('#contacto-cliente-id');
                 const clienteId = clienteIdInput ? parseInt(clienteIdInput.value, 10) : null;
                 
-                // Disparar evento para inicializar el editor de contactos
-                setTimeout(() => {
-                    d.dispatchEvent(new CustomEvent('initContactosEditor', { 
-                        detail: { 
-                            cliente_id: clienteId || null
-                        } 
-                    }));
-                }, 100); // Pequeño delay para asegurar que el DOM esté completamente renderizado
+                // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
+                // Esto es más eficiente y no bloquea el hilo principal
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        d.dispatchEvent(new CustomEvent('initContactosEditor', { 
+                            detail: { 
+                                cliente_id: clienteId || null
+                            } 
+                        }));
+                    });
+                });
             }
         }
     });

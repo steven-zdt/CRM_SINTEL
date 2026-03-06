@@ -12,7 +12,6 @@ ARQUITECTURA V2.40 (Zero-Coupling con otras apps de negocio):
 """
 
 from django.db import models
-from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from apps.tenant.empresa.models import Empresa  # ÚNICA Dependencia Externa (SSoT)
 
@@ -211,8 +210,16 @@ class PedidoProyecto(models.Model):
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='pedidos_proyecto')
     proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='pedidos')
     
-    # Solicitante usa AUTH_USER_MODEL porque pertenece al Core Global de Django, no a una app externa.
-    solicitante = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='pedidos_realizados')
+    # Solicitante: Operador del tenant que solicita recursos (TenantProfile para mantener aislamiento)
+    solicitante = models.ForeignKey(
+        'perfil.TenantProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pedidos_realizados',
+        verbose_name=_('Solicitante'),
+        help_text=_('Operador del tenant que solicita los recursos')
+    )
     
     tipo_recurso = models.CharField(_('Tipo de Recurso'), max_length=20, choices=TIPO)
     fuente_suministro = models.CharField(_('Fuente de Suministro'), max_length=20, choices=FUENTE, default='PROVEEDOR')

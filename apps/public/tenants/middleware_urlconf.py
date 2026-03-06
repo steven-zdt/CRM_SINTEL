@@ -246,17 +246,27 @@ class TenantSecurityAndURLConfMiddleware:
         # 1. ESQUEMA PÚBLICO (Landing page, Login central, Consola)
         if tenant.schema_name == self.public_schema:
             # Validar acceso con múltiples capas de seguridad
-            if not self._validate_public_access(host, tenant, request):
+            access_valid = self._validate_public_access(host, tenant, request)
+            logger.info(
+                f"🔍 VALIDACIÓN PÚBLICA: Host='{host}' | Tenant='{tenant.schema_name}' | "
+                f"Path='{request.path}' | Acceso={'PERMITIDO' if access_valid else 'BLOQUEADO'}"
+            )
+            
+            if not access_valid:
                 # Bloquear acceso no autorizado
                 logger.warning(
                     f"⛔ BLOQUEO PÚBLICO: Intento de acceso desde '{host}' al esquema público. "
                     f"Path: {request.path}"
                 )
-                raise Http404("Recurso no encontrado.")
+                # ⚠️ CRÍTICO: No lanzar Http404 aquí, retornar 403 Forbidden
+                # Http404 se lanza después de que Django intente resolver las URLs
+                # Si lanzamos Http404 aquí, Django nunca intentará resolver las URLs
+                from django.http import HttpResponseForbidden
+                return HttpResponseForbidden("Acceso no autorizado al esquema público.")
             
             # Acceso permitido: Asignar URLs públicas
             request.urlconf = self.root_urlconf
-            logger.debug(f"✅ URLConf establecido: ROOT_URLCONF para tenant público '{tenant.schema_name}'")
+            logger.info(f"✅ URLConf establecido: ROOT_URLCONF='{self.root_urlconf}' para tenant público '{tenant.schema_name}' | Path='{request.path}'")
 
         # 2. ESQUEMA PRIVADO (Clientes / Tenants)
         else:

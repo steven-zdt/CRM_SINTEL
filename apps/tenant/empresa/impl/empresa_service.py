@@ -49,23 +49,57 @@ def get_empresa() -> Optional[Dict[str, Any]]:
     }
 
 
+@transaction.atomic
 def get_or_create_empresa(defaults: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Obtiene o crea la empresa del tenant actual (singleton).
+    Obtiene o crea/actualiza la empresa del tenant actual (singleton).
     
     ⚠️ SINGLETON: Solo existe una empresa por tenant.
+    ⚠️ v2.60: Si la empresa existe, actualiza los campos proporcionados en `defaults`.
     
     Args:
-        defaults: Valores por defecto para crear la empresa si no existe
+        defaults: Valores por defecto para crear la empresa si no existe, o campos a actualizar si ya existe
     
     Returns:
-        dict: DTO con datos de la empresa
+        dict: DTO con datos de la empresa (creada o actualizada)
     """
-    empresa_dto = get_empresa()
-    if empresa_dto:
-        return empresa_dto
+    from apps.tenant.empresa.models import Empresa
     
-    # Si no existe, crear con defaults
+    # ⚠️ v2.60: Intentar obtener la empresa existente primero
+    empresa = Empresa.objects.first()
+    
+    if empresa:
+        # ⚠️ v2.60: Si existe, actualizar los campos proporcionados en defaults
+        if defaults:
+            # Validar y actualizar solo campos permitidos
+            campos_permitidos = [
+                'razon_social', 'nit', 'dv', 'direccion', 'telefono', 'email_contacto',
+                'regimen_tributario', 'logo', 'website', 'moneda'
+            ]
+            
+            update_fields = []
+            for campo, valor in defaults.items():
+                if campo in campos_permitidos:
+                    # ⚠️ Validaciones básicas (similares a update_empresa)
+                    if campo == 'razon_social' and valor and not isinstance(valor, str):
+                        raise ValueError("El campo 'razon_social' debe ser una cadena de texto.")
+                    if campo == 'nit' and valor and not isinstance(valor, str):
+                        raise ValueError("El campo 'nit' debe ser una cadena de texto.")
+                    if campo == 'email_contacto' and valor and not isinstance(valor, str):
+                        raise ValueError("El campo 'email_contacto' debe ser una cadena de texto o null.")
+                    if campo == 'website' and valor and not isinstance(valor, str):
+                        raise ValueError("El campo 'website' debe ser una cadena de texto o null.")
+                    
+                    setattr(empresa, campo, valor)
+                    update_fields.append(campo)
+            
+            if update_fields:
+                empresa.save(update_fields=update_fields)
+        
+        # Retornar DTO actualizado
+        return get_empresa()
+    
+    # ⚠️ v2.60: Si no existe, crear con defaults
     if defaults is None:
         defaults = {
             'razon_social': 'Empresa',
@@ -76,9 +110,28 @@ def get_or_create_empresa(defaults: Optional[Dict[str, Any]] = None) -> Dict[str
             'moneda': 'COP',
         }
     
-    from apps.tenant.empresa.models import Empresa
+    # ⚠️ v2.60: Crear nueva empresa
+    # Si el NIT ya existe (caso edge), intentar obtener y actualizar en lugar de crear
+    try:
+        empresa = Empresa.objects.create(**defaults)
+    except Exception as e:
+        # ⚠️ PROTECCIÓN: Si falla por NIT duplicado u otra constraint, intentar obtener y actualizar
+        # Esto puede pasar en condiciones de carrera o si hay datos inconsistentes
+        if 'nit' in str(e).lower() or 'unique' in str(e).lower():
+            # Intentar obtener por NIT si está en defaults
+            if 'nit' in defaults:
+                empresa_existente = Empresa.objects.filter(nit=defaults['nit']).first()
+                if empresa_existente:
+                    # Actualizar la empresa existente con los demás campos
+                    for campo, valor in defaults.items():
+                        if campo != 'nit':  # No actualizar NIT si ya existe
+                            setattr(empresa_existente, campo, valor)
+                    empresa_existente.save()
+                    return get_empresa()
+        
+        # Si no es un error de NIT duplicado, re-lanzar la excepción
+        raise
     
-    empresa = Empresa.objects.create(**defaults)
     return get_empresa()
 
 

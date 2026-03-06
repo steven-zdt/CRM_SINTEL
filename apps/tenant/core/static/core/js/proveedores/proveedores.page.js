@@ -285,7 +285,7 @@
           return '<span class="badge bg-secondary">Inactivo</span>';
         },
         width: 100,
-        align: "center"
+        hozAlign: "center"
       },
       {
         title: "Acciones",
@@ -418,8 +418,15 @@
 
   /**
    * Inicializar el módulo completo
+   * ⚠️ v2.60: Prevención de doble inicialización - Verifica que la tabla no exista antes de inicializar
    */
   function initProveedores() {
+    // ⚠️ GUARDA: Prevenir doble inicialización
+    if (table && w.SintelProveedoresTables && w.SintelProveedoresTables.proveedores) {
+      console.log(`${MOD} Tabla ya inicializada, omitiendo inicialización duplicada`);
+      return;
+    }
+    
     console.log(`${MOD} Inicializando módulo de proveedores...`);
     
     // Inicializar tabla
@@ -448,6 +455,7 @@
 
   /**
    * ⚠️ Paso 4: Lazy Loading - Encapsula la lógica en DOMUtils.onVisibleOnce('#tab-proveedores', initProveedores)
+   * ⚠️ v2.60: Prevención de doble inicialización - Solo inicializar una vez mediante onVisibleOnce
    */
   if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
     const selectors = [
@@ -468,6 +476,7 @@
     }
     
     if (targetSelector) {
+      // ⚠️ v2.60: ÚNICA inicialización mediante onVisibleOnce - Eliminados fallbacks y listeners adicionales
       w.DOMUtils.onVisibleOnce(targetSelector, function(el) {
         console.log(`${MOD} Contenedor visible, inicializando tabla...`);
         initProveedores();
@@ -489,39 +498,8 @@
     }
   }
 
-  // Listener para cambios de hash (workspace.js)
-  function handleHashChange() {
-    if (w.location && w.location.hash === '#proveedores') {
-      setTimeout(function() {
-        const tabEl = d.querySelector('#tab-proveedores');
-        if (tabEl && tabEl.style.display !== 'none') {
-          if (!table || !w.SintelProveedoresTables || !w.SintelProveedoresTables.proveedores) {
-            console.log(`${MOD} Tab proveedores visible, inicializando...`);
-            initProveedores();
-          }
-        }
-      }, 200);
-    }
-  }
-
-  // Listener inicial
-  if (w.location && w.location.hash === '#proveedores') {
-    handleHashChange();
-  }
-
-  // Listener para cambios de hash
-  w.addEventListener('hashchange', handleHashChange);
-
-  // Listener para Bootstrap tabs (si se usan tabs internos)
-  d.addEventListener('shown.bs.tab', function(e) {
-    if (e.target && (e.target.getAttribute('data-bs-target') === '#pane-proveedores' || e.target.id === 'tab-proveedores')) {
-      setTimeout(function() {
-        if (!table || !w.SintelProveedoresTables || !w.SintelProveedoresTables.proveedores) {
-          initProveedores();
-        }
-      }, 100);
-    }
-  });
+  // ⚠️ v2.60: Listeners adicionales eliminados para prevenir doble inicialización
+  // La inicialización se maneja exclusivamente mediante DOMUtils.onVisibleOnce
 
   // Exponer API pública
   w.ProveedoresModule = {

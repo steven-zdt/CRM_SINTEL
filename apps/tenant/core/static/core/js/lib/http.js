@@ -61,9 +61,15 @@
     // Manejo del body
     if (body !== undefined) {
       if (body instanceof FormData) {
+        // ⚠️ v2.60: FormData - NO establecer Content-Type (el navegador lo calcula automáticamente con boundary)
+        // ⚠️ CRÍTICO: NO usar JSON.stringify() para FormData
         init.body = body;
-        // No establecer Content-Type para FormData (el navegador lo hace con boundary)
-        // Pero sí agregar CSRF al FormData para compatibilidad Django tradicional
+        
+        // ⚠️ IMPORTANTE: Eliminar Content-Type del header si existe (el navegador lo establecerá automáticamente)
+        // No establecerlo explícitamente permite que el navegador agregue el boundary correcto
+        delete init.headers["Content-Type"];
+        
+        // Agregar CSRF al FormData para compatibilidad Django tradicional
         if (needsCsrf) {
           const csrf = getCookie("csrftoken");
           if (csrf) {
@@ -71,9 +77,13 @@
           }
         }
         // ⚠️ DEBUG: Log FormData para diagnóstico
-        console.log('[http] Enviando FormData:', url);
+        console.log('[http] Enviando FormData (multipart/form-data):', url);
         for (const [key, value] of body.entries()) {
-          console.log(`[http] FormData[${key}]:`, value, typeof value);
+          if (value instanceof File) {
+            console.log(`[http] FormData[${key}]: File(${value.name}, ${value.size} bytes, ${value.type})`);
+          } else {
+            console.log(`[http] FormData[${key}]:`, value, typeof value);
+          }
         }
       } else {
         // ⚠️ CRÍTICO: Asegurar que el body sea un objeto JSON, no FormData ni HTMLFormElement

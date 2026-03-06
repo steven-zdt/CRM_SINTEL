@@ -1,0 +1,90 @@
+{% load static %}
+{# cuenta_offcanvas_form.html - Formulario Offcanvas para CuentaContable v2.60 #}
+{# ⚠️ Feature-Sliced Design: Template dedicado exclusivamente para CuentaContable #}
+{# ⚠️ HTMX: Cargado dinámicamente desde /api/v1/contabilidad/cuentas-contables/render-offcanvas/crear/ o /editar/ #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}" 
+     aria-labelledby="offcanvas-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}-label" 
+     style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-primary text-white">
+    <h5 class="offcanvas-title" id="offcanvas-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}-label">
+      <i class="bi bi-{% if cuenta %}pencil-square{% else %}plus-circle{% endif %} me-2"></i>
+      {% if cuenta %}Editar{% else %}Crear{% endif %} Cuenta Contable
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  
+  <div class="offcanvas-body">
+    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
+    <div id="feedback-cuenta-{% if cuenta %}edit{% else %}create{% endif %}" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    {# ⚠️ v2.60: Componente modular de manejo de errores HTMX #}
+    {% include 'tenant/core/partials/error_handler.html' %}
+    
+    <form id="form-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}" novalidate>
+      {% if cuenta %}<input type="hidden" id="input-id" name="id" value="{{ cuenta.id }}">{% endif %}
+      
+      <div class="row g-3">
+        <div class="col-12"><h6 class="text-primary border-bottom pb-2 small fw-bold">DATOS DE LA CUENTA</h6></div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Código *</label>
+          <input type="text" class="form-control" id="input-codigo" name="codigo" required 
+                 placeholder="Ej: 1105" maxlength="20" 
+                 value="{% if cuenta %}{{ cuenta.codigo|default:'' }}{% endif %}">
+          <small class="text-muted">Código único de la cuenta (máx. 20 caracteres)</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Tipo *</label>
+          <select class="form-select" id="select-tipo" name="tipo" required>
+            <option value="">Seleccione tipo...</option>
+            <option value="ACTIVO" {% if cuenta and cuenta.tipo == 'ACTIVO' %}selected{% endif %}>Activo</option>
+            <option value="PASIVO" {% if cuenta and cuenta.tipo == 'PASIVO' %}selected{% endif %}>Pasivo</option>
+            <option value="PATRIMONIO" {% if cuenta and cuenta.tipo == 'PATRIMONIO' %}selected{% endif %}>Patrimonio</option>
+            <option value="INGRESO" {% if cuenta and cuenta.tipo == 'INGRESO' %}selected{% endif %}>Ingreso</option>
+            <option value="GASTO" {% if cuenta and cuenta.tipo == 'GASTO' %}selected{% endif %}>Gasto</option>
+          </select>
+        </div>
+        
+        <div class="col-12">
+          <label class="form-label small fw-bold">Nombre *</label>
+          <input type="text" class="form-control" id="input-nombre" name="nombre" required 
+                 placeholder="Nombre de la cuenta" maxlength="200" 
+                 value="{% if cuenta %}{{ cuenta.nombre|default:'' }}{% endif %}">
+        </div>
+        
+        <div class="col-12">
+          <label class="form-label small fw-bold">Descripción</label>
+          <textarea class="form-control" id="input-descripcion" name="descripcion" rows="2" 
+                    placeholder="Descripción opcional de la cuenta">{% if cuenta %}{{ cuenta.descripcion|default:'' }}{% endif %}</textarea>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Cuenta Padre</label>
+          <select class="form-select" id="select-cuenta-padre" name="cuenta_padre">
+            <option value="">Ninguna (cuenta raíz)</option>
+            {# Las opciones se cargan dinámicamente vía JavaScript #}
+          </select>
+          <small class="text-muted">Opcional: Seleccione una cuenta padre si esta es una subcuenta</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Estado</label>
+          <select class="form-select" id="select-activa" name="activa">
+            <option value="true" {% if not cuenta or cuenta.activa %}selected{% endif %}>Activa</option>
+            <option value="false" {% if cuenta and not cuenta.activa %}selected{% endif %}>Inactiva</option>
+          </select>
+        </div>
+      </div>
+    </form>
+  </div>
+  
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="btn-guardar-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}">
+        <i class="bi bi-save me-2"></i>Guardar Cuenta
+      </button>
+    </div>
+  </div>
+</div>

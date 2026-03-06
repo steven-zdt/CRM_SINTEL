@@ -17,7 +17,8 @@
 
     /**
      * Recolectar datos del formulario del Offcanvas
-     * @returns {Object} Datos de la empresa
+     * ⚠️ v2.60: Retorna FormData nativo para soportar archivos (multipart/form-data)
+     * @returns {FormData|null} FormData con todos los campos del formulario, incluyendo archivos
      */
     function recolectarDatosFormulario() {
         const form = d.querySelector('#form-empresa');
@@ -26,26 +27,35 @@
             return null;
         }
 
+        // ⚠️ v2.60: Usar FormData nativo directamente desde el formulario
+        // Esto preserva los archivos (File objects) sin convertirlos a objetos JSON vacíos
         const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
         
-        // Remover campos vacíos
-        Object.keys(data).forEach(key => {
-            if (data[key] === '' || data[key] === null) {
-                delete data[key];
+        // ⚠️ v2.60: Remover campos vacíos del FormData (excepto archivos)
+        // Nota: No podemos iterar y eliminar directamente, así que reconstruimos el FormData
+        const cleanFormData = new FormData();
+        
+        // Iterar sobre todos los campos del FormData original
+        for (const [key, value] of formData.entries()) {
+            // ⚠️ CRÍTICO: Preservar archivos (File objects) siempre
+            if (value instanceof File) {
+                cleanFormData.append(key, value);
+                console.log(`${MOD} Archivo detectado: ${key} = File(${value.name}, ${value.size} bytes, ${value.type})`);
+            } 
+            // ⚠️ CRÍTICO: Preservar valores no vacíos
+            else if (value !== '' && value !== null && value !== undefined) {
+                cleanFormData.append(key, value);
             }
-        });
-
-        // ⚠️ Manejo de archivo logo (si existe)
-        const logoFile = form.querySelector('#empresa-logo')?.files[0];
-        if (logoFile) {
-            // Para archivos, necesitamos usar FormData directamente
-            // Por ahora, solo guardamos el nombre del archivo
-            // En producción, esto debería manejarse con multipart/form-data
-            console.log(`${MOD} Logo file detectado:`, logoFile.name);
+            // ⚠️ Campos vacíos se omiten automáticamente
         }
 
-        return data;
+        // ⚠️ v2.60: Verificar si hay un archivo de logo específicamente
+        const logoFile = form.querySelector('#empresa-logo')?.files[0];
+        if (logoFile) {
+            console.log(`${MOD} Logo file detectado y agregado al FormData:`, logoFile.name, logoFile.size, 'bytes');
+        }
+
+        return cleanFormData;
     }
 
     /**
@@ -74,13 +84,15 @@
         }
 
         // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
+        // ⚠️ v2.60: Usar Core API (PATCH /api/v1/core/empresa/) para crear/actualizar (singleton)
+        // ⚠️ IMPORTANTE: data es FormData nativo, se enviará como multipart/form-data
         let res;
         if (id) {
-            // Actualizar empresa existente
-            res = await w.http('PATCH', `/api/v1/empresas/${id}/`, data);
+            // Actualizar empresa existente (Core API)
+            res = await w.http('PATCH', '/api/v1/core/empresa/', data);
         } else {
-            // Crear nueva empresa
-            res = await w.http('POST', '/api/v1/empresas/', data);
+            // Crear nueva empresa (Core API - singleton pattern)
+            res = await w.http('PATCH', '/api/v1/core/empresa/', data);
         }
 
         // ⚠️ Error Boundary v2.60: Restaurar estado del botón

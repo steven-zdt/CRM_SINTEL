@@ -1,24 +1,29 @@
 """
 Vistas core para el esquema público.
 
-Lógica de redirección inteligente para el dominio público (sintel.com).
+Landing page y redirección inteligente para el dominio público (sintel.com).
 """
 from django.shortcuts import redirect
-from django.views.generic import View
+from django.views.generic import TemplateView
 from django.urls import reverse
 
 
-class PublicIndexView(View):
+class PublicIndexView(TemplateView):
     """
     Vista índice para el dominio público (sintel.com).
     
-    Lógica de redirección:
-    - Si el usuario está autenticado y es staff: redirige a la consola de gestión
-    - Si el usuario está autenticado pero no es staff: redirige a lista de tenants del usuario
-    - Si es usuario anónimo: redirige al login del admin
-    """
+    Renderiza la landing page profesional para usuarios anónimos.
+    Si el usuario está autenticado y es staff, redirige a la consola de gestión.
     
-    def get(self, request, *args, **kwargs):
+    Template: public/core/index.html
+    """
+    template_name = 'public/core/index.html'
+    
+    def dispatch(self, request, *args, **kwargs):
+        """
+        Redirección inteligente para usuarios autenticados.
+        Solo usuarios anónimos ven la landing page.
+        """
         # Si el usuario ya está logueado en el público
         if request.user.is_authenticated:
             # Si es staff o superuser, redirige a la consola de gestión
@@ -29,5 +34,5 @@ class PublicIndexView(View):
             # TODO: Implementar vista de selección de tenant para usuarios normales
             return redirect(reverse('admin:login'))
         
-        # Si es usuario anónimo en dominio público, redirige al login
-        return redirect(reverse('admin:login'))
+        # Usuario anónimo: mostrar landing page
+        return super().dispatch(request, *args, **kwargs)

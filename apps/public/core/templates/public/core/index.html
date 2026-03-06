@@ -1,0 +1,342 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="SINTEL - Plataforma ERP/CRM Multi-Tenant en la nube. Gestión empresarial completa con aislamiento de datos por cliente.">
+    <title>SINTEL - Plataforma ERP/CRM Multi-Tenant en la Nube</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{% static 'tenant/core/favicon.ico' %}">
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" 
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" 
+          crossorigin="anonymous">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --sintel-primary: #0d6efd;
+            --sintel-secondary: #6c757d;
+            --sintel-success: #198754;
+            --sintel-dark: #212529;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 100px 0;
+            margin-top: -56px; /* Compensar navbar fixed */
+        }
+        
+        .hero-section h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+        }
+        
+        .hero-section .lead {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+        }
+        
+        .features-section {
+            padding: 80px 0;
+            background-color: #f8f9fa;
+        }
+        
+        .feature-card {
+            border: none;
+            border-radius: 10px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,.15);
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            color: var(--sintel-primary);
+            margin-bottom: 1rem;
+        }
+        
+        .cta-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 0;
+        }
+        
+        .btn-cta {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            border-radius: 50px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-cta:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 25px rgba(0,0,0,.3);
+        }
+        
+        footer {
+            background-color: var(--sintel-dark);
+            color: white;
+            padding: 40px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .hero-section h1 {
+                font-size: 2.5rem;
+            }
+            
+            .hero-section .lead {
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="#">
+                <i class="bi bi-building"></i> SINTEL
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#features">Características</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#about">Acerca de</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link btn btn-primary text-white px-3 mx-2 rounded-pill" 
+                           href="{% url 'admin:login' %}">
+                            <i class="bi bi-box-arrow-in-right"></i> Acceso Administrador SINTEL
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-8 mx-auto text-center">
+                    <h1 class="display-3 fw-bold">
+                        <i class="bi bi-cloud-check"></i> SINTEL
+                    </h1>
+                    <p class="lead">
+                        Plataforma ERP/CRM Multi-Tenant en la Nube
+                    </p>
+                    <p class="fs-5 mb-4">
+                        Gestión empresarial completa con aislamiento total de datos por cliente. 
+                        Escalable, segura y diseñada para crecer con tu negocio.
+                    </p>
+                    <div class="d-flex gap-3 justify-content-center flex-wrap">
+                        <a href="{% url 'admin:login' %}" 
+                           class="btn btn-light btn-lg btn-cta">
+                            <i class="bi bi-box-arrow-in-right"></i> Acceso Administrador SINTEL
+                        </a>
+                        <a href="#features" class="btn btn-outline-light btn-lg">
+                            <i class="bi bi-info-circle"></i> Conocer Más
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features-section">
+        <div class="container">
+            <div class="row mb-5">
+                <div class="col-lg-8 mx-auto text-center">
+                    <h2 class="display-4 fw-bold mb-3">Características Principales</h2>
+                    <p class="lead text-muted">
+                        Tecnología de vanguardia para la gestión empresarial moderna
+                    </p>
+                </div>
+            </div>
+            
+            <div class="row g-4">
+                <!-- Feature 1: Multi-Tenant -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="card feature-card h-100 p-4 shadow-sm">
+                        <div class="text-center">
+                            <i class="bi bi-shield-lock feature-icon"></i>
+                            <h4 class="fw-bold mb-3">Aislamiento Multi-Tenant</h4>
+                            <p class="text-muted">
+                                Cada cliente tiene su propio esquema de base de datos completamente aislado. 
+                                Seguridad y privacidad garantizadas mediante arquitectura django-tenants. 
+                                Despliegue rápido de tenants con aprovisionamiento automático.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Feature 2: Escalabilidad -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="card feature-card h-100 p-4 shadow-sm">
+                        <div class="text-center">
+                            <i class="bi bi-graph-up-arrow feature-icon"></i>
+                            <h4 class="fw-bold mb-3">Escalabilidad Ilimitada</h4>
+                            <p class="text-muted">
+                                Arquitectura diseñada para crecer. Soporta desde startups hasta grandes empresas 
+                                sin comprometer el rendimiento. Escala horizontalmente según tus necesidades.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Feature 3: Módulos Integrados -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="card feature-card h-100 p-4 shadow-sm">
+                        <div class="text-center">
+                            <i class="bi bi-grid-3x3-gap feature-icon"></i>
+                            <h4 class="fw-bold mb-3">Gestión Centralizada</h4>
+                            <p class="text-muted">
+                                Consola de administración unificada para gestionar todos los tenants desde un solo lugar. 
+                                Sistema completo con módulos de Contabilidad, Facturación, Gastos, Inventario, 
+                                Empleados, Proyectos y más. Todo integrado en una sola plataforma.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Feature 4: API-First -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="card feature-card h-100 p-4 shadow-sm">
+                        <div class="text-center">
+                            <i class="bi bi-code-slash feature-icon"></i>
+                            <h4 class="fw-bold mb-3">Arquitectura API-First</h4>
+                            <p class="text-muted">
+                                APIs RESTful completas con Django REST Framework. Integración fácil con 
+                                sistemas externos, aplicaciones móviles y automatizaciones.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Feature 5: Seguridad -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="card feature-card h-100 p-4 shadow-sm">
+                        <div class="text-center">
+                            <i class="bi bi-shield-check feature-icon"></i>
+                            <h4 class="fw-bold mb-3">Seguridad Empresarial</h4>
+                            <p class="text-muted">
+                                Autenticación JWT, protección CSRF, validación estricta de dominios, 
+                                y múltiples capas de seguridad para proteger tus datos.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Feature 6: Contabilidad Invisible -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="card feature-card h-100 p-4 shadow-sm">
+                        <div class="text-center">
+                            <i class="bi bi-calculator feature-icon"></i>
+                            <h4 class="fw-bold mb-3">Contabilidad Invisible</h4>
+                            <p class="text-muted">
+                                Materialización automática de asientos contables desde facturas y gastos. 
+                                El contador solo revisa, no digita. Inspirado en Siigo Contador.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section id="about" class="cta-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 mx-auto text-center">
+                    <h2 class="display-5 fw-bold mb-4">¿Listo para Transformar tu Gestión Empresarial?</h2>
+                    <p class="lead mb-4">
+                        Únete a empresas que confían en SINTEL para gestionar sus operaciones 
+                        de manera eficiente y segura.
+                    </p>
+                    <a href="{% url 'admin:login' %}" 
+                       class="btn btn-light btn-lg btn-cta">
+                        <i class="bi bi-box-arrow-in-right"></i> Acceso Administrador SINTEL
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5 class="fw-bold mb-3">
+                        <i class="bi bi-building"></i> SINTEL
+                    </h5>
+                    <p class="text-muted">
+                        Plataforma ERP/CRM Multi-Tenant en la Nube
+                    </p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-muted mb-0">
+                        &copy; {% now "Y" %} SINTEL. Todos los derechos reservados.
+                    </p>
+                    <p class="text-muted small mt-2">
+                        Desarrollado con Django, django-tenants y Bootstrap 5
+                    </p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" 
+            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" 
+            crossorigin="anonymous"></script>
+    
+    <!-- Smooth Scroll -->
+    <script>
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

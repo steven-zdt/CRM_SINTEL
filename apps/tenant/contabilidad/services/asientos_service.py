@@ -18,6 +18,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from decimal import Decimal
 import logging
+from apps.tenant.contabilidad.services import verificar_periodo_cerrado
 
 logger = logging.getLogger(__name__)
 
@@ -97,39 +98,198 @@ def list_asientos(
 @transaction.atomic
 def create_asiento(data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Crea un asiento contable.
+    Crea un asiento contable con sus movimientos.
     
-    ⚠️ VALIDACIONES: Estados, número único.
+    ⚠️ v2.60: Service Layer Pattern - Lógica de negocio completa
+    ⚠️ VALIDACIONES: Estados, número único, cuadratura (si estado=APROBADO), periodos cerrados
+    ⚠️ VALIDACIÓN DE PERIODOS: Verifica que la fecha no esté en un periodo cerrado
     
     Args:
-        data: Diccionario con datos del asiento
+        data: Diccionario con datos del asiento y movimientos:
+            {
+                'numero': str,
+                'fecha': date,
+                'descripcion': str,
+                'estado': str,
+                'empresa': int (ID),
+                'factura': int (ID, opcional),
+                'movimientos': [
+                    {
+                        'cuenta': int (ID),
+                        'descripcion': str (opcional),
+                        'debe': Decimal,
+                        'haber': Decimal
+                    },
+                    ...
+                ]
+            }
     
     Returns:
         dict: DTO con datos del asiento creado
     
     Raises:
-        ValueError: Si los datos no son válidos
+        rest_framework.exceptions.ValidationError: Si los datos no son válidos (con estructura para error_injector.js)
+        ValueError: Si hay errores de negocio
     """
-    from apps.tenant.contabilidad.models import AsientoContable
+    from apps.tenant.contabilidad.models import AsientoContable, MovimientoContable
+    from apps.tenant.empresa.models import Empresa
+    from rest_framework.exceptions import ValidationError
+    from datetime import datetime
     
-    # Validaciones
+    # Extraer movimientos del payload
+    movimientos_data = data.pop('movimientos', [])
+    
+    # Validar que tenga movimientos
+    if not movimientos_data:
+        raise ValidationError({
+            'error': 'asiento_sin_movimientos',
+            'message': 'El asiento debe tener al menos un movimiento contable.',
+            'missing_fields': ['movimientos'],
+            'detalles': {
+                'total_movimientos': 0,
+                'sugerencia': 'Agregue al menos un movimiento contable (débito o crédito) al asiento.'
+            }
+        })
+    
+    # Validar número único
     if 'numero' in data:
         numero = data['numero']
         if not isinstance(numero, str) or len(numero) > 50:
-            raise ValueError("El campo 'numero' debe ser una cadena de texto de máximo 50 caracteres.")
+            raise ValidationError({
+                'numero': ['El campo "numero" debe ser una cadena de texto de máximo 50 caracteres.']
+            })
         if not numero.strip():
-            raise ValueError("El campo 'numero' no puede estar vacío.")
-        # Verificar unicidad
+            raise ValidationError({
+                'numero': ['El campo "numero" no puede estar vacío.']
+            })
         if AsientoContable.objects.filter(numero=numero).exists():
-            raise ValueError(f"Ya existe un asiento con el número '{numero}'.")
+            raise ValidationError({
+                'numero': [f"Ya existe un asiento con el número '{numero}'."]
+            })
+    else:
+        # Generar número automático si no se proporciona
+        from datetime import datetime
+        numero = f"AS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        data['numero'] = numero
     
-    if 'estado' in data:
-        estado = data['estado']
-        estados_validos = ['BORRADOR', 'APROBADO', 'CERRADO']
-        if estado not in estados_validos:
-            raise ValueError(f"El campo 'estado' debe ser uno de: {', '.join(estados_validos)}.")
+    # Validar estado
+    estado = data.get('estado', 'BORRADOR')
+    estados_validos = ['BORRADOR', 'APROBADO', 'CERRADO']
+    if estado not in estados_validos:
+        raise ValidationError({
+            'estado': [f"El campo 'estado' debe ser uno de: {', '.join(estados_validos)}."]
+        })
     
+    # ⚠️ v2.60: Validar periodo cerrado
+    fecha = data.get('fecha')
+    if fecha:
+        if isinstance(fecha, str):
+            try:
+                fecha = datetime.strptime(fecha, '%Y-%m-%d').date()
+            except ValueError:
+                raise ValidationError({
+                    'fecha': ['Formato de fecha inválido. Use YYYY-MM-DD.']
+                })
+        
+        empresa_id = data.get('empresa')
+        if empresa_id:
+            esta_cerrado, periodo = verificar_periodo_cerrado(fecha, empresa_id)
+            if esta_cerrado:
+                raise ValidationError({
+                    'fecha': [f'No se puede crear un asiento en un periodo cerrado ({periodo}).']
+                })
+    
+    # Obtener empresa (SSoT) - Singleton por tenant
+    empresa_id = data.get('empresa')
+    if not empresa_id:
+        # Intentar obtener empresa del tenant actual (singleton)
+        try:
+            empresa = Empresa.objects.first()
+            if not empresa:
+                raise ValidationError({
+                    'empresa': ['No se encontró una empresa para el tenant actual.']
+                })
+            data['empresa'] = empresa
+        except Exception as e:
+            raise ValidationError({
+                'empresa': [f'No se pudo determinar la empresa para el asiento: {str(e)}']
+            })
+    else:
+        try:
+            empresa = Empresa.objects.get(id=empresa_id)
+            data['empresa'] = empresa
+        except Empresa.DoesNotExist:
+            raise ValidationError({
+                'empresa': [f'Empresa con ID {empresa_id} no encontrada.']
+            })
+    
+    # Crear asiento
     asiento = AsientoContable.objects.create(**data)
+    
+    # Crear movimientos
+    total_debe = Decimal('0.00')
+    total_haber = Decimal('0.00')
+    orden = 1
+    
+    for mov_data in movimientos_data:
+        cuenta_id = mov_data.get('cuenta')
+        if not cuenta_id:
+            raise ValidationError({
+                'movimientos': [f'Movimiento {orden}: El campo "cuenta" es requerido.']
+            })
+        
+        debe = Decimal(str(mov_data.get('debe', 0)))
+        haber = Decimal(str(mov_data.get('haber', 0)))
+        
+        # Validar que tenga debe o haber, pero no ambos
+        if debe > 0 and haber > 0:
+            raise ValidationError({
+                'movimientos': [f'Movimiento {orden}: No puede tener débito y crédito simultáneamente.']
+            })
+        if debe == 0 and haber == 0:
+            raise ValidationError({
+                'movimientos': [f'Movimiento {orden}: Debe tener débito o crédito mayor a cero.']
+            })
+        
+        MovimientoContable.objects.create(
+            asiento=asiento,
+            cuenta_id=cuenta_id,
+            descripcion=mov_data.get('descripcion', ''),
+            debe=debe,
+            haber=haber,
+            orden=orden
+        )
+        
+        total_debe += debe
+        total_haber += haber
+        orden += 1
+    
+    # Actualizar totales del asiento
+    asiento.total_debe = total_debe
+    asiento.total_haber = total_haber
+    asiento.save(update_fields=['total_debe', 'total_haber'])
+    
+    # ⚠️ v2.60: Validar cuadratura si el estado es APROBADO
+    if estado == 'APROBADO':
+        diferencia = abs(float(total_debe) - float(total_haber))
+        if diferencia > 0.01:
+            # Construir error estructurado para error_injector.js
+            error_details = {
+                'error': 'asiento_no_cuadrado',
+                'message': f'El asiento no está cuadrado. Débito: ${total_debe:.2f}, Crédito: ${total_haber:.2f}. Diferencia: ${diferencia:.2f}.',
+                'missing_fields': ['movimientos'],
+                'detalles': {
+                    'total_debe': str(total_debe),
+                    'total_haber': str(total_haber),
+                    'diferencia': f'{diferencia:.2f}',
+                    'diferencia_absoluta': f'{diferencia:.2f}',
+                    'tipo_desbalance': 'falta_credito' if total_debe > total_haber else 'falta_debito',
+                    'valor_faltante': f'{diferencia:.2f}',
+                    'total_movimientos': len(movimientos_data),
+                    'sugerencia': f'Agregue un movimiento de {"crédito" if total_debe > total_haber else "débito"} por ${diferencia:.2f} o ajuste los movimientos existentes.'
+                }
+            }
+            raise ValidationError(error_details)
     
     return {
         'id': asiento.id,
@@ -147,36 +307,98 @@ def create_asiento(data: Dict[str, Any]) -> Dict[str, Any]:
 @transaction.atomic
 def update_asiento(asiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Actualiza un asiento contable.
+    Actualiza un asiento contable y sus movimientos.
     
-    ⚠️ VALIDACIONES: Estados, número único.
+    ⚠️ v2.60: Service Layer Pattern - Lógica de negocio completa
+    ⚠️ VALIDACIONES: Estados, número único, cuadratura (si estado=APROBADO), periodos cerrados
+    ⚠️ VALIDACIÓN DE PERIODOS: Verifica que la fecha no esté en un periodo cerrado
+    ⚠️ INMUTABILIDAD: Si el asiento está APROBADO o CERRADO, no se puede editar
     
     Args:
         asiento_id: ID del asiento
-        data: Diccionario con campos a actualizar
+        data: Diccionario con campos a actualizar y movimientos (opcional):
+            {
+                'numero': str (opcional),
+                'fecha': date (opcional),
+                'descripcion': str (opcional),
+                'estado': str (opcional),
+                'movimientos': [
+                    {
+                        'cuenta': int (ID),
+                        'descripcion': str (opcional),
+                        'debe': Decimal,
+                        'haber': Decimal
+                    },
+                    ...
+                ] (opcional - si se proporciona, reemplaza todos los movimientos)
+            }
     
     Returns:
         dict: DTO con datos del asiento actualizado
     
     Raises:
-        ValueError: Si los datos no son válidos
+        rest_framework.exceptions.ValidationError: Si los datos no son válidos (con estructura para error_injector.js)
         AsientoContable.DoesNotExist: Si el asiento no existe
     """
-    from apps.tenant.contabilidad.models import AsientoContable
+    from apps.tenant.contabilidad.models import AsientoContable, MovimientoContable
+    from rest_framework.exceptions import ValidationError
+    from datetime import datetime
     
-    asiento = AsientoContable.objects.get(id=asiento_id)
+    asiento = AsientoContable.objects.select_related('empresa').prefetch_related('movimientos').get(id=asiento_id)
     
-    # Validaciones (mismas que create)
+    # ⚠️ v2.60: Validar inmutabilidad - No se puede editar asientos aprobados o cerrados
+    if asiento.estado in ['APROBADO', 'CERRADO']:
+        raise ValidationError({
+            'estado': [f'No se puede editar un asiento en estado {asiento.estado}. Solo se pueden editar asientos en estado BORRADOR.']
+        })
+    
+    # Extraer movimientos del payload (opcional)
+    movimientos_data = data.pop('movimientos', None)
+    
+    # Validar número único (si se está actualizando)
     if 'numero' in data:
         numero = data['numero']
         if not isinstance(numero, str) or len(numero) > 50:
-            raise ValueError("El campo 'numero' debe ser una cadena de texto de máximo 50 caracteres.")
+            raise ValidationError({
+                'numero': ['El campo "numero" debe ser una cadena de texto de máximo 50 caracteres.']
+            })
         if not numero.strip():
-            raise ValueError("El campo 'numero' no puede estar vacío.")
-        # Verificar unicidad (excluyendo el asiento actual)
+            raise ValidationError({
+                'numero': ['El campo "numero" no puede estar vacío.']
+            })
         if AsientoContable.objects.filter(numero=numero).exclude(id=asiento_id).exists():
-            raise ValueError(f"Ya existe otro asiento con el número '{numero}'.")
+            raise ValidationError({
+                'numero': [f"Ya existe otro asiento con el número '{numero}'."]
+            })
     
+    # Validar estado
+    estado = data.get('estado', asiento.estado)
+    estados_validos = ['BORRADOR', 'APROBADO', 'CERRADO']
+    if estado not in estados_validos:
+        raise ValidationError({
+            'estado': [f"El campo 'estado' debe ser uno de: {', '.join(estados_validos)}."]
+        })
+    
+    # ⚠️ v2.60: Validar periodo cerrado (si se está actualizando la fecha)
+    fecha = data.get('fecha', asiento.fecha)
+    if fecha and fecha != asiento.fecha:
+        if isinstance(fecha, str):
+            try:
+                fecha = datetime.strptime(fecha, '%Y-%m-%d').date()
+            except ValueError:
+                raise ValidationError({
+                    'fecha': ['Formato de fecha inválido. Use YYYY-MM-DD.']
+                })
+        
+        empresa_id = asiento.empresa.id if asiento.empresa else None
+        if empresa_id:
+            esta_cerrado, periodo = verificar_periodo_cerrado(fecha, empresa_id)
+            if esta_cerrado:
+                raise ValidationError({
+                    'fecha': [f'No se puede actualizar un asiento a una fecha en un periodo cerrado ({periodo}).']
+                })
+    
+    # Actualizar campos del asiento
     campos_permitidos = ['numero', 'fecha', 'descripcion', 'estado', 'factura']
     update_fields = []
     for campo in campos_permitidos:
@@ -184,8 +406,99 @@ def update_asiento(asiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
             setattr(asiento, campo, data[campo])
             update_fields.append(campo)
     
+    # Si se proporcionan movimientos, reemplazar todos los existentes
+    if movimientos_data is not None:
+        # Validar que tenga movimientos
+        if not movimientos_data:
+            raise ValidationError({
+                'error': 'asiento_sin_movimientos',
+                'message': 'El asiento debe tener al menos un movimiento contable.',
+                'missing_fields': ['movimientos'],
+                'detalles': {
+                    'total_movimientos': 0,
+                    'sugerencia': 'Agregue al menos un movimiento contable (débito o crédito) al asiento.'
+                }
+            })
+        
+        # Eliminar movimientos existentes
+        asiento.movimientos.all().delete()
+        
+        # Crear nuevos movimientos
+        total_debe = Decimal('0.00')
+        total_haber = Decimal('0.00')
+        orden = 1
+        
+        for mov_data in movimientos_data:
+            cuenta_id = mov_data.get('cuenta')
+            if not cuenta_id:
+                raise ValidationError({
+                    'movimientos': [f'Movimiento {orden}: El campo "cuenta" es requerido.']
+                })
+            
+            debe = Decimal(str(mov_data.get('debe', 0)))
+            haber = Decimal(str(mov_data.get('haber', 0)))
+            
+            # Validar que tenga debe o haber, pero no ambos
+            if debe > 0 and haber > 0:
+                raise ValidationError({
+                    'movimientos': [f'Movimiento {orden}: No puede tener débito y crédito simultáneamente.']
+                })
+            if debe == 0 and haber == 0:
+                raise ValidationError({
+                    'movimientos': [f'Movimiento {orden}: Debe tener débito o crédito mayor a cero.']
+                })
+            
+            MovimientoContable.objects.create(
+                asiento=asiento,
+                cuenta_id=cuenta_id,
+                descripcion=mov_data.get('descripcion', ''),
+                debe=debe,
+                haber=haber,
+                orden=orden
+            )
+            
+            total_debe += debe
+            total_haber += haber
+            orden += 1
+        
+        # Actualizar totales
+        asiento.total_debe = total_debe
+        asiento.total_haber = total_haber
+        update_fields.extend(['total_debe', 'total_haber'])
+    
+    # Guardar cambios
     if update_fields:
         asiento.save(update_fields=update_fields)
+    
+    # Recalcular totales si no se actualizaron movimientos
+    if movimientos_data is None:
+        total_debe = sum(m.debe for m in asiento.movimientos.all())
+        total_haber = sum(m.haber for m in asiento.movimientos.all())
+        asiento.total_debe = total_debe
+        asiento.total_haber = total_haber
+        asiento.save(update_fields=['total_debe', 'total_haber'])
+    
+    # ⚠️ v2.60: Validar cuadratura si el estado es APROBADO
+    if estado == 'APROBADO':
+        diferencia = abs(float(asiento.total_debe) - float(asiento.total_haber))
+        if diferencia > 0.01:
+            # Construir error estructurado para error_injector.js
+            error_details = {
+                'error': 'asiento_no_cuadrado',
+                'message': f'El asiento no está cuadrado. Débito: ${asiento.total_debe:.2f}, Crédito: ${asiento.total_haber:.2f}. Diferencia: ${diferencia:.2f}.',
+                'missing_fields': ['movimientos'],
+                'detalles': {
+                    'total_debe': str(asiento.total_debe),
+                    'total_haber': str(asiento.total_haber),
+                    'diferencia': f'{diferencia:.2f}',
+                    'diferencia_absoluta': f'{diferencia:.2f}',
+                    'tipo_desbalance': 'falta_credito' if asiento.total_debe > asiento.total_haber else 'falta_debito',
+                    'valor_faltante': f'{diferencia:.2f}',
+                    'total_movimientos': asiento.movimientos.count(),
+                    'sugerencia': f'Agregue un movimiento de {"crédito" if asiento.total_debe > asiento.total_haber else "débito"} por ${diferencia:.2f} o ajuste los movimientos existentes.'
+                }
+            }
+            raise ValidationError(error_details)
     
     return {
         'id': asiento.id,
@@ -205,29 +518,94 @@ def aprobar_asiento(asiento_id: int) -> Dict[str, Any]:
     """
     Aprueba un asiento contable.
     
+    ⚠️ v2.60: Validación detallada de cuadratura con análisis de movimientos.
     ⚠️ VALIDACIÓN: Un asiento solo puede ser aprobado si total_debe == total_haber.
     
     Args:
         asiento_id: ID del asiento
     
     Returns:
-        dict: DTO con datos del asiento aprobado
+        dict: DTO con datos del asiento aprobado o información de error estructurada
     
     Raises:
-        ValueError: Si el asiento no puede ser aprobado (debe != haber)
         AsientoContable.DoesNotExist: Si el asiento no existe
+    
+    Nota:
+        Si el asiento no puede ser aprobado, retorna un dict con 'error' y 'detalles'
+        en lugar de lanzar una excepción, para facilitar el manejo en el ViewSet.
     """
     from apps.tenant.contabilidad.models import AsientoContable
     
-    asiento = AsientoContable.objects.get(id=asiento_id)
+    asiento = AsientoContable.objects.select_related().prefetch_related('movimientos__cuenta').get(id=asiento_id)
     
-    # Validar cuadratura
-    if asiento.total_debe != asiento.total_haber:
-        raise ValueError(
-            f"Un asiento no puede ser aprobado si débito ({asiento.total_debe}) "
-            f"no es igual a crédito ({asiento.total_haber})."
-        )
+    # ⚠️ v2.60: Validar que tenga movimientos
+    if not asiento.movimientos.exists():
+        return {
+            'error': 'asiento_sin_movimientos',
+            'message': 'El asiento debe tener al menos un movimiento contable para ser aprobado.',
+            'missing_fields': ['movimientos'],
+            'detalles': {
+                'total_movimientos': 0,
+                'sugerencia': 'Agregue al menos un movimiento contable (débito o crédito) al asiento.'
+            }
+        }
     
+    # ⚠️ v2.60: Análisis detallado de cuadratura
+    diferencia = float(asiento.total_debe) - float(asiento.total_haber)
+    diferencia_abs = abs(diferencia)
+    
+    if diferencia_abs > 0.01:  # Tolerancia para errores de punto flotante
+        # Analizar movimientos para detectar qué cuenta falta o qué valor sobra
+        movimientos = asiento.movimientos.select_related('cuenta').all()
+        
+        # Agrupar por cuenta para detectar desbalances
+        cuentas_desbalance = []
+        total_debe_movimientos = sum(float(m.debe) for m in movimientos)
+        total_haber_movimientos = sum(float(m.haber) for m in movimientos)
+        
+        for mov in movimientos:
+            debe_mov = float(mov.debe)
+            haber_mov = float(mov.haber)
+            if debe_mov > 0 and haber_mov > 0:
+                cuentas_desbalance.append({
+                    'cuenta_codigo': mov.cuenta.codigo,
+                    'cuenta_nombre': mov.cuenta.nombre,
+                    'problema': 'Tiene débito y crédito simultáneamente',
+                    'debe': str(debe_mov),
+                    'haber': str(haber_mov)
+                })
+        
+        # Construir mensaje detallado
+        mensaje_detallado = f'El asiento no está cuadrado. Débito: ${asiento.total_debe:.2f}, Crédito: ${asiento.total_haber:.2f}. Diferencia: ${diferencia_abs:.2f}.'
+        
+        if diferencia > 0:
+            mensaje_detallado += f' Falta ${diferencia_abs:.2f} en crédito.'
+            sugerencia = f'Agregue un movimiento de crédito por ${diferencia_abs:.2f} o ajuste los movimientos existentes.'
+        else:
+            mensaje_detallado += f' Sobra ${diferencia_abs:.2f} en crédito.'
+            sugerencia = f'Agregue un movimiento de débito por ${diferencia_abs:.2f} o ajuste los movimientos existentes.'
+        
+        if cuentas_desbalance:
+            mensaje_detallado += ' Además, algunas cuentas tienen débito y crédito simultáneamente.'
+        
+        return {
+            'error': 'asiento_no_cuadrado',
+            'message': mensaje_detallado,
+            'missing_fields': ['movimientos'],
+            'detalles': {
+                'total_debe': str(asiento.total_debe),
+                'total_haber': str(asiento.total_haber),
+                'diferencia': f'{diferencia:.2f}',
+                'diferencia_absoluta': f'{diferencia_abs:.2f}',
+                'tipo_desbalance': 'falta_credito' if diferencia > 0 else 'falta_debito',
+                'valor_faltante': f'{diferencia_abs:.2f}',
+                'cuentas_problematicas': cuentas_desbalance,
+                'total_movimientos': movimientos.count(),
+                'sugerencia': sugerencia
+            }
+        }
+    
+    # Si pasa todas las validaciones, aprobar el asiento
     asiento.estado = 'APROBADO'
     asiento.save(update_fields=['estado'])
     
@@ -245,19 +623,39 @@ def aprobar_asiento(asiento_id: int) -> Dict[str, Any]:
 
 
 @transaction.atomic
+@transaction.atomic
 def delete_asiento(asiento_id: int) -> None:
     """
     Elimina un asiento contable.
+    
+    ⚠️ v2.60: Service Layer Pattern - Lógica de negocio completa
+    ⚠️ VALIDACIONES: Inmutabilidad - No se puede eliminar asientos APROBADOS o CERRADOS
     
     Args:
         asiento_id: ID del asiento
     
     Raises:
+        rest_framework.exceptions.ValidationError: Si el asiento no puede ser eliminado
         AsientoContable.DoesNotExist: Si el asiento no existe
     """
     from apps.tenant.contabilidad.models import AsientoContable
+    from rest_framework.exceptions import ValidationError
     
-    asiento = AsientoContable.objects.get(id=asiento_id)
+    try:
+        asiento = AsientoContable.objects.get(id=asiento_id)
+    except AsientoContable.DoesNotExist:
+        raise ValidationError({
+            'detail': [f'Asiento contable con ID {asiento_id} no encontrado.']
+        })
+    
+    # ⚠️ v2.60: Validar inmutabilidad - No se puede eliminar asientos aprobados o cerrados
+    if asiento.estado in ['APROBADO', 'CERRADO']:
+        raise ValidationError({
+            'error': 'validation_error',
+            'message': f'No se puede eliminar un asiento en estado {asiento.estado}. Solo se pueden eliminar asientos en estado BORRADOR.',
+            'missing_fields': ['estado']
+        })
+    
     asiento.delete()
 
 
@@ -716,3 +1114,166 @@ def materializar_asiento_desde_gasto(gasto) -> Dict[str, Any]:
         'total_haber': str(asiento.total_haber),
         'created_at': asiento.created_at.isoformat() if asiento.created_at else None,
     }
+
+
+def listar_documentos_sin_asiento(tipo: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Lista documentos (Facturas y Gastos) que no tienen asiento contable asociado.
+    
+    ⚠️ v2.60: Service Layer Pattern - Lógica de negocio extraída del ViewSet
+    ⚠️ Zero Waste: Usa select_related para eficiencia
+    
+    Args:
+        tipo: 'facturas' o 'gastos' (opcional, si no se especifica retorna ambos)
+    
+    Returns:
+        dict: {
+            'facturas': [...],
+            'gastos': [...]
+        }
+    """
+    from apps.tenant.facturas.models import Factura
+    from apps.tenant.gastos.models import Gasto, DocumentoSoporte
+    from apps.tenant.contabilidad.models import AsientoContable
+    import re
+    
+    resultado = {
+        'facturas': [],
+        'gastos': []
+    }
+    
+    # ⚠️ Zero Waste: Obtener IDs de facturas que ya tienen asiento
+    facturas_con_asiento = set(
+        AsientoContable.objects.filter(factura__isnull=False)
+        .values_list('factura_id', flat=True)
+    )
+    
+    # Listar facturas sin asiento
+    if not tipo or tipo == 'facturas':
+        facturas_qs = Factura.objects.select_related('empresa').filter(
+            estado=Factura.Estado.ACEPTADA
+        ).exclude(id__in=facturas_con_asiento).order_by('-fecha_emision')[:100]
+        
+        for factura in facturas_qs:
+            resultado['facturas'].append({
+                'id': factura.id,
+                'numero': factura.numero,
+                'fecha': factura.fecha_emision.strftime('%Y-%m-%d') if factura.fecha_emision else '',
+                'emisor': factura.emisor_razon_social,
+                'receptor': factura.receptor_razon_social,
+                'naturaleza': factura.naturaleza,
+                'estado': factura.estado,
+                'total': str(factura.total),
+                'subtotal': str(factura.subtotal),
+                'impuestos': str(factura.impuestos),
+            })
+    
+    # ⚠️ Zero Waste: Obtener IDs de gastos que ya tienen asiento (por descripción)
+    descripciones_gastos_con_asiento = set(
+        AsientoContable.objects.filter(descripcion__startswith='Asiento automático desde Gasto')
+        .values_list('descripcion', flat=True)
+    )
+    
+    # Extraer números de documento de las descripciones
+    numeros_gastos_con_asiento = set()
+    for desc in descripciones_gastos_con_asiento:
+        match = re.search(r'Gasto\s+([A-Z0-9-]+)', desc)
+        if match:
+            numeros_gastos_con_asiento.add(match.group(1))
+    
+    # Listar gastos sin asiento
+    if not tipo or tipo == 'gastos':
+        gastos_qs = Gasto.objects.select_related('documento_soporte', 'empresa').filter(
+            documento_soporte__activo=True,
+            documento_soporte__anulado=False
+        ).exclude(documento_soporte__numero_documento__in=numeros_gastos_con_asiento).order_by('-documento_soporte__fecha')[:100]
+        
+        for gasto in gastos_qs:
+            ds = gasto.documento_soporte
+            resultado['gastos'].append({
+                'id': gasto.id,
+                'numero_documento': ds.numero_documento,
+                'fecha': ds.fecha.strftime('%Y-%m-%d') if ds.fecha else '',
+                'vendedor_nombre': ds.vendedor_nombre,
+                'vendedor_nit': ds.vendedor_nit,
+                'categoria_contable': gasto.categoria_contable,
+                'activo': ds.activo,
+                'anulado': ds.anulado,
+                'total': str(ds.total),
+                'subtotal': str(ds.subtotal),
+                'retefuente': str(ds.retefuente),
+                'reteica': str(ds.reteica),
+            })
+    
+    return resultado
+
+
+@transaction.atomic
+def crear_asientos_desde_documentos(facturas_ids: List[int], gastos_ids: List[int]) -> Dict[str, Any]:
+    """
+    Crea asientos contables desde documentos seleccionados.
+    
+    ⚠️ v2.60: Service Layer Pattern - Lógica de negocio extraída del ViewSet
+    ⚠️ Materialización masiva desde documentos
+    
+    Args:
+        facturas_ids: Lista de IDs de facturas
+        gastos_ids: Lista de IDs de gastos
+    
+    Returns:
+        dict: {
+            'exitosos': [...],
+            'errores': [...]
+        }
+    """
+    from apps.tenant.facturas.models import Factura
+    from apps.tenant.gastos.models import Gasto
+    
+    resultado = {
+        'exitosos': [],
+        'errores': []
+    }
+    
+    # Procesar facturas
+    for factura_id in facturas_ids:
+        try:
+            factura = Factura.objects.get(id=factura_id, estado=Factura.Estado.ACEPTADA)
+            asiento = materializar_asiento_desde_factura(factura)
+            resultado['exitosos'].append({
+                'tipo': 'factura',
+                'id': factura_id,
+                'numero': factura.numero,
+                'asiento_id': asiento['id'],
+                'asiento_numero': asiento['numero']
+            })
+        except Exception as e:
+            logger.error(f"Error al crear asiento desde factura {factura_id}: {str(e)}", exc_info=True)
+            resultado['errores'].append({
+                'tipo': 'factura',
+                'id': factura_id,
+                'error': str(e)
+            })
+    
+    # Procesar gastos
+    for gasto_id in gastos_ids:
+        try:
+            gasto = Gasto.objects.select_related('documento_soporte').get(id=gasto_id)
+            if not gasto.documento_soporte.activo or gasto.documento_soporte.anulado:
+                raise ValueError("El gasto debe estar activo y no anulado")
+            asiento = materializar_asiento_desde_gasto(gasto)
+            resultado['exitosos'].append({
+                'tipo': 'gasto',
+                'id': gasto_id,
+                'numero': gasto.documento_soporte.numero_documento,
+                'asiento_id': asiento['id'],
+                'asiento_numero': asiento['numero']
+            })
+        except Exception as e:
+            logger.error(f"Error al crear asiento desde gasto {gasto_id}: {str(e)}", exc_info=True)
+            resultado['errores'].append({
+                'tipo': 'gasto',
+                'id': gasto_id,
+                'error': str(e)
+            })
+    
+    return resultado

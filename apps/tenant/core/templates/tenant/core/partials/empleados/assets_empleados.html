@@ -35,32 +35,35 @@
         document.addEventListener('htmx:afterSwap', function(event) {
             const targetId = event.detail.target.id;
             
+            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
+            // Los eventos htmx:afterSwap ya garantizan que el DOM está actualizado
+            const initOffcanvas = function(offcanvasId, logMessage) {
+                requestAnimationFrame(() => {
+                    const offcanvasEl = document.getElementById(offcanvasId);
+                    if (offcanvasEl) {
+                        console.log(logMessage);
+                    }
+                });
+            };
+            
             // Offcanvas de empleado
             if (targetId === 'offcanvas-container-empleado') {
-                setTimeout(function() {
-                    console.log('[empleados.assets] ✅ Offcanvas de empleado cargado vía HTMX');
-                }, 50);
+                initOffcanvas('offcanvas-container-empleado', '[empleados.assets] ✅ Offcanvas de empleado cargado vía HTMX');
             }
             
             // Offcanvas de contrato
             if (targetId === 'offcanvas-container-contrato') {
-                setTimeout(function() {
-                    console.log('[empleados.assets] ✅ Offcanvas de contrato cargado vía HTMX');
-                }, 50);
+                initOffcanvas('offcanvas-container-contrato', '[empleados.assets] ✅ Offcanvas de contrato cargado vía HTMX');
             }
             
             // Offcanvas de devengo/nómina
             if (targetId === 'offcanvas-container-devengo') {
-                setTimeout(function() {
-                    console.log('[empleados.assets] ✅ Offcanvas de devengo/nómina cargado vía HTMX');
-                }, 50);
+                initOffcanvas('offcanvas-container-devengo', '[empleados.assets] ✅ Offcanvas de devengo/nómina cargado vía HTMX');
             }
             
             // Offcanvas de historial de nóminas
             if (targetId === 'offcanvas-container-historial-nominas') {
-                setTimeout(function() {
-                    console.log('[empleados.assets] ✅ Offcanvas de historial de nóminas cargado vía HTMX');
-                }, 50);
+                initOffcanvas('offcanvas-container-historial-nominas', '[empleados.assets] ✅ Offcanvas de historial de nóminas cargado vía HTMX');
             }
         });
     }

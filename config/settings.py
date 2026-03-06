@@ -384,14 +384,19 @@ Seguridad Host Header (prod) y soporte HTTPS detrás de proxy.
 # - El dominio base sin punto es para el tenant público (ej: sintel.com)
 # - Los subdominios se activan automáticamente al crear un tenant
 # ⚠️ SEGURIDAD: En producción, usar lista explícita desde ENV (NO usar '*')
-ALLOWED_HOSTS = (
-    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+# ⚠️ v2.60: Siempre incluir sintel.com y dominios públicos para permitir acceso desde ambos dominios
+base_allowed_hosts = (
+    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,sintel.com").split(",")
     if DEBUG
     else os.getenv("ALLOWED_HOSTS", "sintel.com,.sintel.com").split(",")
 )
 
 # Limpiar espacios y filtrar vacíos
-ALLOWED_HOSTS = [h.strip() for h in ALLOWED_HOSTS if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in base_allowed_hosts if h.strip()]
+
+# ⚠️ v2.60: Asegurar que sintel.com siempre esté incluido (para acceso desde dominio público)
+if 'sintel.com' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('sintel.com')
 
 # En desarrollo, agregar hosts adicionales si no están en ENV
 if DEBUG:

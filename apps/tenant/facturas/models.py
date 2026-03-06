@@ -306,12 +306,13 @@ class MailIngestionRun(models.Model):
     ]
     
     started_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        'perfil.TenantProfile',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name='mail_ingestion_runs',
         verbose_name=_('Iniciado por'),
-        related_name='mail_ingestion_runs'
+        help_text=_('Operador del tenant que inició la ingesta de correo')
     )
     started_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Iniciado'))
     finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Finalizado'))

@@ -94,7 +94,7 @@
                     return formatearNumero(value, 3) + ' ' + unidad;
                 },
                 width: 140,
-                align: "right",
+                hozAlign: "right",
                 sorter: "number"
             },
             {
@@ -114,7 +114,7 @@
                     return valorFormateado;
                 },
                 width: 140,
-                align: "right",
+                hozAlign: "right",
                 sorter: "number"
             },
             {
@@ -124,7 +124,7 @@
                     return formatearMoneda(cell.getValue());
                 },
                 width: 140,
-                align: "right",
+                hozAlign: "right",
                 sorter: "number"
             },
             {
@@ -134,7 +134,7 @@
                     return formatearMoneda(cell.getValue());
                 },
                 width: 150,
-                align: "right",
+                hozAlign: "right",
                 sorter: "number"
             },
             {
@@ -148,7 +148,7 @@
                     return '<span class="badge bg-secondary">Inactivo</span>';
                 },
                 width: 100,
-                align: "center"
+                hozAlign: "center"
             },
             {
                 title: "Acciones",

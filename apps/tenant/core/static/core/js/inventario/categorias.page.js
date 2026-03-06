@@ -68,7 +68,7 @@
           return '<span class="badge bg-secondary">Inactivo</span>';
         },
         width: 100,
-        align: "center"
+        hozAlign: "center"
       },
       {
         title: "Acciones",

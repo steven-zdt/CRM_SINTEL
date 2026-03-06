@@ -29,43 +29,48 @@
         document.addEventListener('htmx:afterSwap', function(event) {
             const targetId = event.detail.target.id;
             
+            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
+            // Los eventos htmx:afterSwap ya garantizan que el DOM está actualizado
+            const initOffcanvas = function(offcanvasId, logMessage, callback) {
+                requestAnimationFrame(() => {
+                    const offcanvasEl = document.getElementById(offcanvasId);
+                    if (offcanvasEl) {
+                        console.log(logMessage);
+                        if (typeof callback === 'function') {
+                            callback();
+                        }
+                    }
+                });
+            };
+            
             // Offcanvas de productos
             if (targetId === 'offcanvas-container-inventario') {
-                setTimeout(function() {
-                    console.log('[inventario.assets] Offcanvas de productos cargado vía HTMX');
-                }, 50);
+                initOffcanvas('offcanvas-container-inventario', '[inventario.assets] Offcanvas de productos cargado vía HTMX');
             }
             
             // Offcanvas de servicios
             if (targetId === 'offcanvas-container-servicios') {
-                setTimeout(function() {
-                    console.log('[inventario.assets] Offcanvas de servicios cargado vía HTMX');
-                }, 50);
+                initOffcanvas('offcanvas-container-servicios', '[inventario.assets] Offcanvas de servicios cargado vía HTMX');
             }
             
             // Offcanvas de historial de servicios
             if (targetId === 'offcanvas-container-historial-servicio') {
-                setTimeout(function() {
-                    console.log('[inventario.assets] Offcanvas de historial de servicios cargado vía HTMX');
+                initOffcanvas('offcanvas-container-historial-servicio', '[inventario.assets] Offcanvas de historial de servicios cargado vía HTMX', function() {
                     // Reinicializar eventos del formulario de historial
                     if (window.SintelInventarioTables && window.SintelInventarioTables.servicios && window.SintelInventarioTables.servicios.configurarEventosFormulario) {
                         window.SintelInventarioTables.servicios.configurarEventosFormulario();
                     }
-                }, 100);
+                });
             }
             
             // Offcanvas de categorías
             if (targetId === 'offcanvas-container-categorias') {
-                setTimeout(function() {
-                    console.log('[inventario.assets] Offcanvas de categorías cargado vía HTMX');
-                }, 50);
+                initOffcanvas('offcanvas-container-categorias', '[inventario.assets] Offcanvas de categorías cargado vía HTMX');
             }
             
             // Offcanvas de activos
             if (targetId === 'offcanvas-container-activos') {
-                setTimeout(function() {
-                    console.log('[inventario.assets] Offcanvas de activos cargado vía HTMX');
-                }, 50);
+                initOffcanvas('offcanvas-container-activos', '[inventario.assets] Offcanvas de activos cargado vía HTMX');
             }
         });
     }

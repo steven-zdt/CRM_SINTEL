@@ -18,13 +18,15 @@
 <script>
     if (typeof htmx !== 'undefined') {
         document.addEventListener('htmx:afterSwap', function(event) {
+            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
+            // Los eventos htmx:afterSwap ya garantizan que el DOM está actualizado
             if (event.detail.target.id === 'offcanvas-container-proyectos') {
-                // Pequeño delay para asegurar que el DOM esté completamente renderizado
-                setTimeout(function() {
-                    if (window.ProyectosEditorModule && typeof window.ProyectosEditorModule.init === 'function') {
+                requestAnimationFrame(() => {
+                    const offcanvasEl = document.getElementById('offcanvas-container-proyectos');
+                    if (offcanvasEl && window.ProyectosEditorModule && typeof window.ProyectosEditorModule.init === 'function') {
                         window.ProyectosEditorModule.init();
                     }
-                }, 50);
+                });
             }
         });
     }

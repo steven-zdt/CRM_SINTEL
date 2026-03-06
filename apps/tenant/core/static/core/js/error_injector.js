@@ -145,13 +145,26 @@
         
         // 3b. Buscar en el offcanvas de asientos si está cargado
         if (!container || !msgDiv) {
-            const offcanvasAsiento = d.getElementById('offcanvas-asiento-crear');
+            const offcanvasAsiento = d.getElementById('offcanvas-asiento-crear') || d.getElementById('offcanvas-asiento-editar');
             if (offcanvasAsiento) {
-                container = offcanvasAsiento.querySelector(`#${ERROR_CONTAINER_ID}`);
+                container = offcanvasAsiento.querySelector(`#${ERROR_CONTAINER_ID}`) || offcanvasAsiento.querySelector(`#error-container-asiento`);
                 if (container) {
-                    msgDiv = container.querySelector(`#${ERROR_MESSAGE_ID}`);
+                    msgDiv = container.querySelector(`#${ERROR_MESSAGE_ID}`) || container.querySelector(`#error-message-asiento`);
                     fieldsUl = container.querySelector(`#${FIELDS_UL_ID}`);
-                    fieldsContainer = container.querySelector(`#${MISSING_FIELDS_LIST_ID}`);
+                    fieldsContainer = container.querySelector(`#${MISSING_FIELDS_LIST_ID}`) || container.querySelector(`#missing-fields-list-asiento`);
+                }
+            }
+        }
+        
+        // 3c. Buscar en el offcanvas de cuentas si está cargado
+        if (!container || !msgDiv) {
+            const offcanvasCuenta = d.getElementById('offcanvas-cuenta-crear') || d.getElementById('offcanvas-cuenta-editar');
+            if (offcanvasCuenta) {
+                container = offcanvasCuenta.querySelector(`#${ERROR_CONTAINER_ID}`) || offcanvasCuenta.querySelector(`#error-container-cuenta`);
+                if (container) {
+                    msgDiv = container.querySelector(`#${ERROR_MESSAGE_ID}`) || container.querySelector(`#error-message-cuenta`);
+                    fieldsUl = container.querySelector(`#${FIELDS_UL_ID}`);
+                    fieldsContainer = container.querySelector(`#${MISSING_FIELDS_LIST_ID}`) || container.querySelector(`#missing-fields-list-cuenta`);
                 }
             }
         }
@@ -159,7 +172,7 @@
         // 4. Si aún no se encuentra, crear un contenedor temporal en el contenedor HTMX
         if (!container || !msgDiv) {
             // Intentar en contenedor de asientos primero
-            const asientosContainer = d.getElementById('offcanvas-container-asientos');
+            const asientosContainer = d.getElementById('offcanvas-container-asiento') || d.getElementById('offcanvas-container-asientos');
             if (asientosContainer && xhr.status >= 400) {
                 // Crear contenedor temporal de error
                 const tempErrorHtml = `
@@ -185,26 +198,27 @@
                 // Fallback: intentar en mailinbox
                 const mailinboxContainer = d.getElementById('offcanvas-container-mailinbox');
                 if (mailinboxContainer && xhr.status >= 400) {
-                // Crear contenedor temporal de error
-                const tempErrorHtml = `
-                    <div id="${ERROR_CONTAINER_ID}" class="mt-3">
-                        <div class="alert alert-danger d-flex align-items-start" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill me-2 mt-1"></i>
-                            <div class="flex-grow-1">
-                                <div id="${ERROR_MESSAGE_ID}" class="mb-0"></div>
-                                <div id="${MISSING_FIELDS_LIST_ID}" class="mt-2 d-none">
-                                    <small class="text-muted text-uppercase fw-bold d-block mb-1">Campos Requeridos Faltantes:</small>
-                                    <ul class="list-group list-group-flush small mb-0" id="${FIELDS_UL_ID}"></ul>
+                    // Crear contenedor temporal de error
+                    const tempErrorHtml = `
+                        <div id="${ERROR_CONTAINER_ID}" class="mt-3">
+                            <div class="alert alert-danger d-flex align-items-start" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-2 mt-1"></i>
+                                <div class="flex-grow-1">
+                                    <div id="${ERROR_MESSAGE_ID}" class="mb-0"></div>
+                                    <div id="${MISSING_FIELDS_LIST_ID}" class="mt-2 d-none">
+                                        <small class="text-muted text-uppercase fw-bold d-block mb-1">Campos Requeridos Faltantes:</small>
+                                        <ul class="list-group list-group-flush small mb-0" id="${FIELDS_UL_ID}"></ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                `;
-                mailinboxContainer.insertAdjacentHTML('afterbegin', tempErrorHtml);
-                container = d.getElementById(ERROR_CONTAINER_ID);
-                msgDiv = d.getElementById(ERROR_MESSAGE_ID);
-                fieldsUl = d.getElementById(FIELDS_UL_ID);
-                fieldsContainer = d.getElementById(MISSING_FIELDS_LIST_ID);
+                    `;
+                    mailinboxContainer.insertAdjacentHTML('afterbegin', tempErrorHtml);
+                    container = d.getElementById(ERROR_CONTAINER_ID);
+                    msgDiv = d.getElementById(ERROR_MESSAGE_ID);
+                    fieldsUl = d.getElementById(FIELDS_UL_ID);
+                    fieldsContainer = d.getElementById(MISSING_FIELDS_LIST_ID);
+                }
             }
         }
 
@@ -258,6 +272,10 @@
                 // ⚠️ v2.60: Manejo específico para rango de consecutivos agotado (409 Conflict)
                 errorMessage = response.message || errorMessage;
                 errorMessage = `<strong>⚠️ Rango de Consecutivos Agotado</strong><br>${errorMessage}`;
+            } else if (response.error === "empresa_not_found" || response.code === "empresa_not_found") {
+                // ⚠️ v2.60: Error de empresa no configurada (Proveedores, Clientes, etc.)
+                errorMessage = response.detail || response.message || errorMessage;
+                errorMessage = `<strong>⚠️ Configuración Requerida</strong><br>${errorMessage}<br><small class="text-muted">Por favor, configure la empresa del tenant antes de continuar.</small>`;
             } else if (response.error === "asiento_no_cuadrado" || response.error === "asiento_sin_movimientos") {
                 // ⚠️ v2.60 Fase 3: Error Injector Contable - Análisis detallado de cuadratura
                 errorMessage = response.message || errorMessage;

@@ -35,8 +35,9 @@ window.abrirOffcanvasSecundario = function() {
             // Remover el listener después de usarlo
             document.body.removeEventListener('htmx:afterSwap', handler);
             
-            // Inicializar offcanvas de forma segura después de un pequeño delay
-            setTimeout(() => {
+            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
+            // Esto asegura que el DOM esté completamente renderizado antes de inicializar Bootstrap
+            requestAnimationFrame(() => {
                 const offcanvasEl = document.getElementById('offcanvas-container-secundario');
                 if (offcanvasEl && window.bootstrap) {
                     try {
@@ -56,7 +57,7 @@ window.abrirOffcanvasSecundario = function() {
                         console.error('[offcanvas_list_plantillas] Error al abrir offcanvas secundario:', error);
                     }
                 }
-            }, 50);
+            });
         }
     };
     

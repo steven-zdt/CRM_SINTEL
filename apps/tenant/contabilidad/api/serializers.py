@@ -161,9 +161,12 @@ class AsientoContableDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'total_debe', 'total_haber', 'created_at', 'updated_at']
     
     def validate(self, data):
-        """Validar que debe = haber si el asiento está aprobado."""
-        estado = data.get('estado', self.instance.estado if self.instance else None)
-        if estado == 'APROBADO':
-            # La validación se hace en el modelo
-            pass
+        """
+        Validación básica del serializer.
+        
+        ⚠️ v2.60: Service Layer Pattern - Validaciones complejas (cuadratura, periodos cerrados)
+        se realizan en el servicio (create_asiento, update_asiento).
+        El serializer solo valida estructura básica de datos.
+        """
+        # La validación de cuadratura y periodos cerrados se hace en el servicio
         return data

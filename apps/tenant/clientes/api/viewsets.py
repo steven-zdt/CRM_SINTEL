@@ -78,16 +78,30 @@ class ClienteViewSet(
 
     def get_empresa(self):
         """
-        Obtiene la empresa del tenant actual (SSoT).
+        ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
         
         ⚠️ PERFORMANCE BIBLE:
         - Usa .first() en lugar de .all()[0] (más eficiente)
         - Singleton pattern: Solo debe existir una empresa por tenant
+        
+        ⚠️ MANEJO DE ERRORES NO INVASIVO:
+        - No se agrega try/except aquí (lógica de negocio pura)
+        - Los errores se propagan naturalmente
+        - El módulo inyectable (error_injector.js) maneja la presentación en HTML
+        
+        Returns:
+            Empresa: Instancia de la empresa del tenant
+            
+        Raises:
+            APIException: Si no se encuentra la empresa (manejado por error_injector.js)
         """
+        from rest_framework.exceptions import APIException
         empresa = Empresa.objects.only('id').first()
         if not empresa:
-            from rest_framework.exceptions import APIException
-            raise APIException(detail='No se encontró empresa para este tenant')
+            raise APIException(
+                detail='No se encontró empresa para este tenant. Por favor, configure la empresa primero.',
+                code='empresa_not_found'
+            )
         return empresa
 
     def list(self, request):
@@ -410,17 +424,31 @@ class ContactoClienteViewSet(viewsets.ModelViewSet):
     
     def get_empresa(self):
         """
-        Obtiene la empresa del tenant actual (SSoT).
+        ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
         Reutiliza la lógica de ClienteViewSet.
         
         ⚠️ PERFORMANCE BIBLE:
         - Usa .first() en lugar de .all()[0] (más eficiente)
         - Singleton pattern: Solo debe existir una empresa por tenant
+        
+        ⚠️ MANEJO DE ERRORES NO INVASIVO:
+        - No se agrega try/except aquí (lógica de negocio pura)
+        - Los errores se propagan naturalmente
+        - El módulo inyectable (error_injector.js) maneja la presentación en HTML
+        
+        Returns:
+            Empresa: Instancia de la empresa del tenant
+            
+        Raises:
+            APIException: Si no se encuentra la empresa (manejado por error_injector.js)
         """
+        from rest_framework.exceptions import APIException
         empresa = Empresa.objects.only('id').first()
         if not empresa:
-            from rest_framework.exceptions import APIException
-            raise APIException(detail='No se encontró empresa para este tenant')
+            raise APIException(
+                detail='No se encontró empresa para este tenant. Por favor, configure la empresa primero.',
+                code='empresa_not_found'
+            )
         return empresa
     
     def perform_create(self, serializer):

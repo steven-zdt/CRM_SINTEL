@@ -73,15 +73,23 @@ class ProveedorViewSet(
         - Usa .first() en lugar de .all()[0] (más eficiente)
         - Singleton pattern: Solo debe existir una empresa por tenant
         
+        ⚠️ MANEJO DE ERRORES NO INVASIVO:
+        - No se agrega try/except aquí (lógica de negocio pura)
+        - Los errores se propagan naturalmente
+        - El módulo inyectable (error_injector.js) maneja la presentación en HTML
+        
         Returns:
             Empresa: Instancia de la empresa del tenant
             
         Raises:
-            APIException: Si no se encuentra la empresa
+            APIException: Si no se encuentra la empresa (manejado por error_injector.js)
         """
         empresa = Empresa.objects.only('id').first()
         if not empresa:
-            raise APIException(detail='No se encontró empresa para este tenant')
+            raise APIException(
+                detail='No se encontró empresa para este tenant. Por favor, configure la empresa primero.',
+                code='empresa_not_found'
+            )
         return empresa
 
     def list(self, request):

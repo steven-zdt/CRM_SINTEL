@@ -256,29 +256,57 @@ Interfaz de administración para gestión de tenants, usuarios y catálogos DIAN
 ### 5. `apps/public/core/` - Core Público
 
 #### Propósito
-Funcionalidades core del esquema público (middleware, vistas, utilidades).
+Funcionalidades core del esquema público (middleware, vistas, utilidades, landing page).
 
 #### Componentes
 
 **Middleware (`middleware.py`):**
-- Middleware para manejo de esquemas y routing
+- `ForceNoPortMiddleware` - Normaliza HTTP_HOST eliminando puerto antes de resolución de tenant
+- `HTTPSRedirectMiddleware` - Redirige HTTPS a HTTP en desarrollo
+- `CSRFTrustedOriginMiddleware` - Permite dominios arbitrarios en desarrollo
+- `RequestContextMiddleware` - Añade request_id y schema_name a los logs
 
 **Vistas (`views.py`):**
-- `PublicIndexView` - Redirección inteligente desde dominio público
-  - Usuario staff → Consola
-  - Usuario normal → Login
-  - Anónimo → Login
+- `PublicIndexView` (TemplateView) - Landing page profesional para dominio público
+  - **Template:** `public/core/index.html`
+  - **Lógica de redirección:**
+    - Usuario staff/superuser → `/console/` (Consola de administración)
+    - Usuario normal autenticado → `/admin/login/` (No tiene acceso a consola)
+    - Usuario anónimo → Renderiza landing page profesional
+  - **Características:**
+    - Hero section con gradiente y call-to-action
+    - Sección de características (Features) con 6 tarjetas
+    - CTA final con botón destacado
+    - Footer informativo
+    - Diseño responsive con Bootstrap 5
 
 **API (`api/views.py`):**
 - `LoggedTokenVerifyView` - Verificación de token JWT con logging
 - Registra errores 401 para diagnóstico
 
-#### Templates (`static/public/core/landing/`):
-- `index.html` - Landing page pública
-- `login.html` - Login
-- `activate.html` - Activación de cuenta
-- `reset-request.html` - Solicitud reset password
-- `reset-confirm.html` - Confirmación reset password
+#### Templates (`templates/public/core/`):
+- `index.html` - Landing page profesional (Bootstrap 5)
+  - Hero section con título y descripción
+  - Features: Multi-Tenant, Escalabilidad, Módulos, API-First, Seguridad, Contabilidad Invisible
+  - CTA: Botón "Acceso Administrador Plataforma" → `/admin/`
+  - Footer con información del proyecto
+
+#### Scripts de Inicialización (`scripts/setup_public_domain.py`):
+- **Propósito:** Crear el tenant público y asociar dominios necesarios
+- **Funcionalidad:**
+  - Crea tenant `public` si no existe (campo `nombre='SINTEL Public'`)
+  - Crea/verifica dominios: `sintel.com` (primario), `localhost`, `127.0.0.1`, `0.0.0.0`
+  - Establece dominio primario si no existe
+  - Idempotente: puede ejecutarse múltiples veces sin problemas
+- **Uso:**
+  ```bash
+  docker exec -it crm_sintel-web-1 python scripts/setup_public_domain.py
+  ```
+- **Configuración PYTHONPATH:**
+  - Calcula BASE_DIR correctamente (dos niveles arriba desde `scripts/`)
+  - Inyecta BASE_DIR en `sys.path` antes de importar Django
+  - Configura `DJANGO_SETTINGS_MODULE = 'config.settings'`
+  - Inicializa Django con `django.setup()`
 
 #### JavaScript (`static/core/js/`):
 - `landing.ui.js` - UI landing page
@@ -291,6 +319,62 @@ Funcionalidades core del esquema público (middleware, vistas, utilidades).
 ---
 
 ## 🔄 Flujos Principales
+
+### Flujo 0: Acceso al Dominio Público (Landing Page) ⭐ NUEVO
+
+**Escenario:** Usuario accede a `http://sintel.com/` o `http://localhost:8000/`
+
+```
+1. Request HTTP → sintel.com/ (o localhost:8000/)
+   
+2. ForceNoPortMiddleware:
+   - Normaliza HTTP_HOST eliminando puerto
+   - localhost:8000 → localhost
+   
+3. TenantMainMiddleware:
+   - Busca dominio en BD: Domain.objects.filter(domain='sintel.com').first()
+   - Encuentra: Domain(domain='sintel.com', tenant=Client(schema_name='public'))
+   - Activa schema: connection.set_schema_to('public')
+   - Establece request.tenant = Client(schema_name='public')
+   
+4. TenantSecurityAndURLConfMiddleware:
+   - Valida acceso público con _validate_public_access():
+     * CAPA 1: Verifica host en ALLOWED_PUBLIC_DOMAINS ['sintel.com', 'localhost', '127.0.0.1', '0.0.0.0']
+     * CAPA 2: Bloquea subdominios (ej: cliente.sintel.com NO puede acceder al público)
+     * CAPA 3: Valida que no sea subdominio de localhost
+   - Si acceso permitido: Establece request.urlconf = 'config.urls_public'
+   - Si acceso bloqueado: Retorna HttpResponseForbidden(403)
+   
+5. Django resuelve URL en ROOT_URLCONF:
+   - path('', PublicIndexView.as_view(), name='public_index')
+   
+6. PublicIndexView.dispatch():
+   - Si usuario autenticado:
+     * Staff/Superuser → redirect('/console/') (Consola de administración)
+     * Usuario normal → redirect('/admin/login/') (No tiene acceso a consola)
+   - Si usuario anónimo:
+     * Renderiza template: 'public/core/index.html'
+     * Muestra landing page profesional con:
+       - Hero section: Título "SINTEL - Plataforma ERP/CRM Multi-Tenant"
+       - Features: 6 tarjetas explicando características
+       - CTA: Botón "Acceso Administrador Plataforma" → /admin/
+       - Footer: Información del proyecto
+   
+7. Response 200 OK con HTML de landing page
+```
+
+**Archivos Involucrados:**
+- `apps/public/core/views.py` - PublicIndexView
+- `apps/public/core/templates/public/core/index.html` - Template landing page
+- `apps/public/tenants/middleware_urlconf.py` - Validación de acceso público
+- `config/urls_public.py` - Ruta raíz `path('', PublicIndexView.as_view())`
+
+**Inicialización Requerida:**
+- Ejecutar `scripts/setup_public_domain.py` para crear tenant público y dominios
+- Verificar que exista:
+  - Client(schema_name='public', nombre='SINTEL Public')
+  - Domain(domain='sintel.com', tenant=public, is_primary=True)
+  - Domain(domain='localhost', tenant=public, is_primary=False)
 
 ### Flujo 1: Creación de Tenant (Onboarding)
 
@@ -416,12 +500,16 @@ apps/public/
 │   └── static/js/             # JavaScript consola
 │
 └── core/
-    ├── views.py               # PublicIndexView
-    ├── middleware.py          # Core middleware
+    ├── views.py               # PublicIndexView (TemplateView con landing page)
+    ├── middleware.py          # Core middleware (ForceNoPort, HTTPSRedirect, CSRFTrusted, RequestContext)
+    ├── templates/
+    │   └── public/
+    │       └── core/
+    │           └── index.html # Landing page profesional (Bootstrap 5)
     ├── api/
     │   └── views.py           # LoggedTokenVerifyView
     └── static/
-        ├── public/core/landing/ # Templates landing
+        ├── public/core/landing/ # Templates landing (legacy)
         └── core/js/            # JavaScript landing
 ```
 

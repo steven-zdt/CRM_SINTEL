@@ -29,13 +29,16 @@
 <script>
     if (typeof htmx !== 'undefined') {
         document.addEventListener('htmx:afterSwap', function(event) {
+            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
             // Si se recargó el contenedor de empresa, refrescar Tabulator
             if (event.detail.target.id === 'ui-empresa-list' || 
                 event.detail.target.closest('#ui-empresa-list')) {
                 if (window.EmpresaListModule && typeof window.EmpresaListModule.refresh === 'function') {
-                    setTimeout(() => {
-                        window.EmpresaListModule.refresh();
-                    }, 100);
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            window.EmpresaListModule.refresh();
+                        });
+                    });
                 }
             }
         });

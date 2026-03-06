@@ -1,0 +1,133 @@
+{% load static %}
+{# asiento_offcanvas_detalle.html - Vista de detalle de AsientoContable (read-only) v2.60 #}
+{# ⚠️ Feature-Sliced Design: Template dedicado exclusivamente para AsientoContable #}
+{# ⚠️ HTMX: Cargado dinámicamente desde /api/v1/contabilidad/asientos-contables/{id}/render-offcanvas/detalle/ #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-asiento-detalle" 
+     aria-labelledby="offcanvas-asiento-detalle-label" style="width: 90%; max-width: 800px;">
+  <div class="offcanvas-header border-bottom bg-primary text-white">
+    <h5 class="offcanvas-title" id="offcanvas-asiento-detalle-label">
+      <i class="bi bi-eye me-2"></i>Detalle de Asiento Contable
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  
+  <div class="offcanvas-body">
+    <div class="row g-3">
+      <div class="col-12"><h6 class="text-primary border-bottom pb-2 small fw-bold">DATOS DEL ASIENTO</h6></div>
+      
+      <div class="col-md-4">
+        <label class="form-label small fw-bold text-muted">Número</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">{{ asiento.numero|default:'---' }}</div>
+      </div>
+      
+      <div class="col-md-4">
+        <label class="form-label small fw-bold text-muted">Fecha</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">{{ asiento.fecha|default:'---' }}</div>
+      </div>
+      
+      <div class="col-md-4">
+        <label class="form-label small fw-bold text-muted">Estado</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">
+          {% if asiento.estado %}
+            {% if asiento.estado == 'BORRADOR' %}
+              <span class="badge bg-secondary">Borrador</span>
+            {% elif asiento.estado == 'APROBADO' %}
+              <span class="badge bg-success">Aprobado</span>
+            {% elif asiento.estado == 'CERRADO' %}
+              <span class="badge bg-info">Cerrado</span>
+            {% else %}
+              <span class="badge bg-light text-dark">{{ asiento.estado }}</span>
+            {% endif %}
+          {% else %}
+            ---
+          {% endif %}
+        </div>
+      </div>
+      
+      <div class="col-12">
+        <label class="form-label small fw-bold text-muted">Descripción</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">{{ asiento.descripcion|default:'---' }}</div>
+      </div>
+
+      <div class="col-12 mt-4"><h6 class="text-primary border-bottom pb-2 small fw-bold">MOVIMIENTOS CONTABLES</h6></div>
+      
+      {% if asiento.movimientos %}
+      <div class="col-12">
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered">
+            <thead class="table-light">
+              <tr>
+                <th>#</th>
+                <th>Cuenta Contable</th>
+                <th>Descripción</th>
+                <th class="text-end">Débito</th>
+                <th class="text-end">Crédito</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for movimiento in asiento.movimientos %}
+              <tr>
+                <td>{{ movimiento.orden|default:forloop.counter }}</td>
+                <td>
+                  {% if movimiento.cuenta_codigo and movimiento.cuenta_nombre %}
+                    <strong>{{ movimiento.cuenta_codigo }}</strong> - {{ movimiento.cuenta_nombre }}
+                  {% else %}
+                    ID: {{ movimiento.cuenta }}
+                  {% endif %}
+                </td>
+                <td>{{ movimiento.descripcion|default:'---' }}</td>
+                <td class="text-end">{{ movimiento.debe|default:'0.00' }}</td>
+                <td class="text-end">{{ movimiento.haber|default:'0.00' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot class="table-active">
+              <tr>
+                <td colspan="3" class="text-end fw-bold">TOTALES:</td>
+                <td class="text-end fw-bold">{{ asiento.total_debe|default:'0.00' }}</td>
+                <td class="text-end fw-bold">{{ asiento.total_haber|default:'0.00' }}</td>
+              </tr>
+              <tr>
+                <td colspan="3" class="text-end fw-bold">
+                  {% if asiento.total_debe == asiento.total_haber %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Cuadrado</span>
+                  {% else %}
+                    <span class="badge bg-danger"><i class="bi bi-x-circle"></i> No cuadra</span>
+                  {% endif %}
+                </td>
+                <td colspan="2" class="text-muted small">
+                  Diferencia: 
+                  {% if asiento.total_debe != asiento.total_haber %}
+                    {{ asiento.total_debe|add:asiento.total_haber|floatformat:2 }}
+                  {% else %}
+                    $0.00
+                  {% endif %}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="col-12">
+        <div class="alert alert-info">
+          <i class="bi bi-info-circle me-2"></i>Este asiento no tiene movimientos contables.
+        </div>
+      </div>
+      {% endif %}
+      
+      {% if asiento.created_at %}
+      <div class="col-12">
+        <label class="form-label small fw-bold text-muted">Fecha de Creación</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">{{ asiento.created_at }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cerrar</button>
+    </div>
+  </div>
+</div>

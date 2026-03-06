@@ -330,13 +330,13 @@ class PeriodoContable(models.Model):
     )
     
     cerrado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        'perfil.TenantProfile',  # Usuario del tenant (perfil específico del tenant)
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='periodos_cerrados',
         verbose_name=_('Cerrado Por'),
-        help_text=_('Usuario que cerró el periodo')
+        help_text=_('Usuario del tenant que cerró el periodo')
     )
     
     observaciones = models.TextField(

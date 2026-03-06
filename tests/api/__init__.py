@@ -1,3 +1,0 @@
-"""
-Tests para endpoints API.
-"""
