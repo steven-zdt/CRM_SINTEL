@@ -230,3 +230,5 @@ Las variables de entorno se configuran en el archivo `.env` (ver `documentacion/
 - `CONTACT_EMAIL`: Email de contacto (opcional)
 
 Ver `documentacion/VARIABLES_ENTORNO_EMAIL.md` para configuración detallada de email.
+#   C R M _ S I N T E L  
+ 
