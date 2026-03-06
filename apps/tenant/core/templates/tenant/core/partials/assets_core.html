@@ -1,0 +1,73 @@
+{% load static %}
+{# ⚠️ v3.3: Alineado con reglas - Rutas en core/static/core/js/ #}
+<!-- ===================== -->
+<!-- 1) LIB CORE (obligado) -->
+<!-- ===================== -->
+<!-- ⚠️ v2.40: SweetAlert2 para sistema de feedback centralizado -->
+<!-- ⚠️ v2.60: Fallback a cdnjs si jsdelivr falla -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.10.5/sweetalert2.all.min.js';"></script>
+<script src="{% static 'core/js/lib/http.js' %}"></script>
+<script src="{% static 'core/js/lib/api-helpers.js' %}"></script>
+<script src="{% static 'core/js/lib/ajax-setup-csrf.js' %}"></script>
+<script src="{% static 'core/js/lib/dom-utils.js' %}"></script>
+{# ⚠️ v3.3: DataTables eliminado - Migrado completamente a Tabulator #}
+
+<!-- ========================= -->
+<!-- 2) HELPERS CORE (obligado) -->
+<!-- ========================= -->
+<!-- ⚠️ v2.60: Routes Helper - Descubrimiento de rutas API (HATEOAS) -->
+<!-- ⚠️ DEBE cargarse ANTES de crud.js y otros helpers que lo usan -->
+<script src="{% static 'core/js/helpers/routes.js' %}"></script>
+<script src="{% static 'core/js/helpers/crud.js' %}"></script>
+<script src="{% static 'core/js/helpers/modal-service.js' %}"></script>
+<script src="{% static 'core/js/helpers/error-service.js' %}"></script>
+<!-- ⚠️ v2.40: Sistema de feedback centralizado (DESPUÉS de SweetAlert2) -->
+<script src="{% static 'core/js/utils/feedback.js' %}"></script>
+
+<!-- ========================================== -->
+<!-- 2.5) UI MANAGER (Error Boundary) - Global -->
+<!-- ========================================== -->
+<!-- ⚠️ v2.60: Gestor global de errores HTMX - DEBE cargarse DESPUÉS de HTMX -->
+<!-- ⚠️ NOTA: HTMX se carga en workspace.html ANTES de este include -->
+<!-- Procesa respuestas de error de HTMX (400, 409, 500) y las renderiza en formularios -->
+<script src="{% static 'core/js/lib/ui-manager.js' %}"></script>
+
+<!-- ========================================== -->
+<!-- 2.6) ERROR INJECTOR (Modular) - Global    -->
+<!-- ========================================== -->
+<!-- ⚠️ v2.60: Módulo inyectable de manejo de errores HTMX - Modular y reutilizable -->
+<!-- ⚠️ DEBE cargarse DESPUÉS de HTMX y UI Manager -->
+<!-- Maneja errores 422 con missing_fields y muestra formularios dinámicos -->
+<script src="{% static 'core/js/error_injector.js' %}"></script>
+
+<!-- ========================================== -->
+<!-- 3) TABULATOR FACTORY (v2.40) - Global     -->
+<!-- ========================================== -->
+<!-- ⚠️ v2.40: Factory global para Tabulator (The Engine) -->
+<!-- ⚠️ REQUERIDO: Debe cargarse ANTES de cualquier módulo que use Tabulator -->
+<!-- ⚠️ RUTA: core/js/common/ (no tenant/core/js/) porque está en apps/tenant/core/static/core/js/common/ -->
+<script src="{% static 'core/js/common/tabulator.factory.js' %}"></script>
+
+<!-- ====================== -->
+<!-- 4) SHIM __DEBUG__      -->
+<!-- ====================== -->
+<script>
+  window.__DEBUG__ = (typeof window.__DEBUG__ === "boolean") ? window.__DEBUG__ : false;
+  // Sincroniza con API_HELPERS si ya está cargado
+  if (window.API_HELPERS) {
+    window.API_HELPERS.DEBUG = window.__DEBUG__;
+  }
+</script>
+
+<!-- ================================================== -->
+<!-- 5) Ajuste DT en tabs (DEPRECATED - Client-Side)   -->
+<!-- ================================================== -->
+<!-- ⚠️ DEPRECATED v2.40: Este código fue eliminado porque:
+     1. Migramos a Client-Side DataTables (no necesita ajuste global)
+     2. Cada módulo maneja su propia inicialización y ajuste de columnas
+     3. El código defensivo ya está implementado en cada módulo individual
+     4. Causaba errores "Cannot read properties of undefined (reading 'recalc')"
+     
+     Si necesitas ajustar tablas al cambiar tabs, hazlo en el módulo específico
+     usando el evento 'shown.bs.tab' con verificaciones defensivas.
+-->

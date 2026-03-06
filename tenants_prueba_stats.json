@@ -1,0 +1,12 @@
+{
+  "fecha": "2026-02-20T21:35:40.712990+00:00",
+  "cantidad_solicitada": 5,
+  "stats": {
+    "creados": 5,
+    "omitidos": 0,
+    "errores": 0,
+    "con_datos": 5,
+    "sin_datos": 0
+  },
+  "errores": []
+}

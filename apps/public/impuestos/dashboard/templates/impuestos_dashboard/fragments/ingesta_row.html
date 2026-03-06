@@ -1,0 +1,35 @@
+<tr id="doc-{{doc.id}}"
+    hx-get="{% url 'impuestos_dashboard:ingesta_row' doc.id %}"
+    hx-trigger="every 5s"
+    hx-swap="outerHTML">
+  <td>
+    <a href="{% url 'impuestos_dashboard:ingesta_detail' doc.id %}">{{doc.id}}</a>
+  </td>
+  <td>{{doc.fuente}}</td>
+  <td>{{doc.tipo|default:"—"}}</td>
+  <td>
+    <span class="badge badge-{{doc.estado|lower}}">{{doc.estado}}</span>
+  </td>
+  <td>{% if doc.archivo %}✔{% else %}—{% endif %}</td>
+  <td>{{doc.created_at|date:"Y-m-d H:i"}}</td>
+  <td>
+    {% if doc.url_origen and not doc.archivo %}
+      <button 
+        hx-post="{% url 'impuestos_dashboard:reintentar_descarga' doc.id %}" 
+        hx-target="#doc-{{doc.id}}" 
+        class="btn btn-light"
+        title="Reintentar descarga">
+        ↻ Descarga
+      </button>
+    {% endif %}
+    {% if doc.archivo and doc.estado != 'PROCESADO' %}
+      <button 
+        hx-post="{% url 'impuestos_dashboard:reintentar_procesar' doc.id %}" 
+        hx-target="#doc-{{doc.id}}" 
+        class="btn btn-light"
+        title="Reprocesar">
+        ↻ Procesar
+      </button>
+    {% endif %}
+  </td>
+</tr>

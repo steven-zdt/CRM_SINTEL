@@ -1,0 +1,27 @@
+{% load static %}
+{# list.html estandarizado para módulo Perfil v2.37 #}
+{# ⚠️ Singleton: No requiere DataTable, solo botones de acción #}
+<div id="ui-perfil-list" class="ui-module ui-perfil">
+  <!-- Toolbar -->
+  <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-perfil">
+    <div id="actions-perfil" class="ms-auto">
+      <button class="btn btn-sm btn-secondary" id="btn-perfil-ver" type="button">
+        <i class="bi bi-eye"></i> Ver Perfil
+      </button>
+      <button class="btn btn-sm btn-primary" id="btn-perfil-editar" type="button">
+        <i class="bi bi-pencil"></i> Editar Perfil
+      </button>
+    </div>
+  </div>
+  
+  <!-- Feedback -->
+  <div id="feedback-perfil-list" class="alert d-none" role="alert"
+       aria-live="polite"></div>
+  
+  <!-- Información del perfil (se carga dinámicamente) -->
+  <div id="perfil-info-container" class="card">
+    <div class="card-body">
+      <p class="text-muted text-center">Cargando información del perfil...</p>
+    </div>
+  </div>
+</div>

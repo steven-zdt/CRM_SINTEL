@@ -1,0 +1,42 @@
+<form hx-post="{% if mode == 'new' %}{% url 'console:console-impuestos-tipo-save' %}{% else %}{% url 'console:console-impuestos-tipo-update' obj.id %}{% endif %}"
+      hx-target="#modal-body" 
+      hx-swap="innerHTML">
+  {% csrf_token %}
+  
+  <div class="mb-3">
+    <label class="block text-sm font-medium text-gray-700">Código</label>
+    <input type="text" name="codigo" value="{{ obj.codigo|default:'' }}" required
+           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+  </div>
+  
+  <div class="mb-3">
+    <label class="block text-sm font-medium text-gray-700">Nombre</label>
+    <input type="text" name="nombre" value="{{ obj.nombre|default:'' }}" required
+           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+  </div>
+  
+  <div class="mb-3">
+    <label class="block text-sm font-medium text-gray-700">Descripción</label>
+    <textarea name="descripcion" rows="3"
+              class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">{{ obj.descripcion|default:'' }}</textarea>
+  </div>
+  
+  <div class="mb-3">
+    <label class="block text-sm font-medium text-gray-700">Fecha de Vigencia</label>
+    <input type="date" name="fecha_vigencia" value="{{ obj.fecha_vigencia|date:'Y-m-d'|default:'' }}" required
+           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+  </div>
+  
+  <div class="mb-3">
+    <label class="flex items-center">
+      <input type="checkbox" name="activo" {% if obj.activo or mode == 'new' %}checked{% endif %}
+             class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+      <span class="ml-2 text-sm text-gray-700">Activo</span>
+    </label>
+  </div>
+  
+  <div class="mt-4 flex gap-2">
+    <button type="submit" class="btn btn-primary">Guardar</button>
+    <button type="button" class="btn btn-secondary" onclick="document.getElementById('crudModal').classList.add('hidden')">Cerrar</button>
+  </div>
+</form>

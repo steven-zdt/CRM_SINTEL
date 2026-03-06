@@ -1,0 +1,45 @@
+{% load static %}
+{# assets_cotizaciones.html - Assets del módulo Cotizaciones v2.60 #}
+{# ⚠️ v2.60: Alineado con DNA Dinámico y Tabulator Factory #}
+{# ⚠️ v2.60: API-First Architecture - Backend DRF + Frontend Tabulator #}
+{# ⚠️ Feature-Sliced: Módulos dedicados por funcionalidad #}
+{# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
+{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, etc.) - ya cargado en workspace.html #}
+{# 2. cotizaciones.api.js (define window.cotizacionesAPI) - DEBE cargarse PRIMERO #}
+{# 3. cotizaciones.helpers.js (define window.CotizacionesHelpers) - Funciones utilitarias #}
+{# 4. cotizaciones.page.js (depende de CotizacionesHelpers y TabulatorFactory) - Workspace principal #}
+{# 5. cotizacion_columns.js (define window.getCotizacionColumns) - DEBE cargarse ANTES del Editor #}
+{# 6. cotizacion_editor.js (depende de getCotizacionColumns) - Editor de cotizaciones #}
+
+{% include 'tenant/core/partials/assets_core.html' %}
+
+{# HTMX Library - Para carga dinámica de formularios #}
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+{# BLOQUE 1: API Wrapper - DEBE cargarse PRIMERO #}
+{# ⚠️ RUTA: core/js/cotizaciones/ (no tenant/core/js/) porque está en apps/tenant/core/static/core/js/cotizaciones/ #}
+{# ⚠️ Cache-Busting v2.60.2: Fuerza al navegador a descargar la versión actualizada #}
+<script src="{% static 'core/js/cotizaciones/cotizaciones.api.js' %}?v=2.60.2"></script>
+
+{# BLOQUE 2: HTMX Handlers - Manejo de errores y eventos HTMX #}
+<script src="{% static 'core/js/cotizaciones/htmx-handlers.js' %}?v=2.60.2"></script>
+
+{# BLOQUE 2.5: Helpers - Funciones utilitarias compartidas v2.60 #}
+<script src="{% static 'core/js/cotizaciones/cotizaciones.helpers.js' %}?v=2.60.2"></script>
+
+{# BLOQUE 3: Página Principal - DEBE cargarse ÚLTIMO #}
+<script src="{% static 'core/js/cotizaciones/cotizaciones.page.js' %}?v=2.60.2"></script>
+
+{# BLOQUE 4: Catálogo de Productos (STS) - Módulo independiente #}
+{# ⚠️ DNA Dinámico v2.40: productos.page.js eliminado - funcionalidad integrada en cotizacion_editor.js #}
+{# <script src="{% static 'core/js/cotizaciones/productos.page.js' %}"></script> #}
+
+{# BLOQUE 5: Columnas de Tabulator - DEBE cargarse ANTES del Editor #}
+{# ⚠️ CRÍTICO: cotizacion_columns.js define window.getCotizacionColumns() que es requerido por cotizacion_editor.js #}
+<script src="{% static 'core/js/cotizaciones/cotizacion_columns.js' %}?v=2.60"></script>
+
+{# BLOQUE 6: Editor de Cotizaciones Estilo Excel - Arquitectura Modular v2.40 #}
+{# ⚠️ DNA Dinámico v2.40: Editor integrado en cotizacion_editor.js #}
+{# ⚠️ RUTA: features/cotizacion_editor.js (Feature-Sliced architecture) #}
+{# ⚠️ DEPENDENCIA: Requiere cotizacion_columns.js cargado previamente #}
+<script src="{% static 'core/js/cotizaciones/features/cotizacion_editor.js' %}?v=2.60.wizard"></script>

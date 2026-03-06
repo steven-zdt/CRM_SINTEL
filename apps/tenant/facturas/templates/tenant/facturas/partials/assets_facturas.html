@@ -1,0 +1,36 @@
+{% load static %}
+{# assets_facturas.html - Assets del módulo Facturas v2.60 #}
+{# ⚠️ v2.60: Migrado a Feature-Sliced Architecture + HTMX + Offcanvas #}
+{# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
+{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http.js, ui-manager.js, etc.) - ya cargado en workspace.html #}
+{# 2. facturas.api.js (define window.facturasAPI) - REQUERIDO #}
+{# 3. facturas_ui.js (Módulo centralizado de UI - define window.AppFacturas) - REQUERIDO #}
+{# 4. facturas_list.js (Feature: Listado y Tabulator) - REQUERIDO #}
+{# 5. facturas_editor.js (Feature: Editor y Offcanvas) - REQUERIDO #}
+
+{# BLOQUE 1: API Wrapper (REQUERIDO) #}
+<script src="{% static 'core/js/facturas/facturas.api.js' %}"></script>
+
+{# BLOQUE 2: Módulo Centralizado de UI (REQUERIDO) #}
+{# ⚠️ CRÍTICO: facturas_ui.js expone window.AppFacturas para eventos inline (onclick) #}
+<script src="{% static 'core/js/facturas/facturas_ui.js' %}"></script>
+
+{# BLOQUE 3: Features Feature-Sliced (REQUERIDO) #}
+<script src="{% static 'core/js/facturas/features/facturas_list.js' %}"></script>
+<script src="{% static 'core/js/facturas/features/facturas_editor.js' %}"></script>
+
+{# ⚠️ HTMX: Reinicializar listeners cuando se carga el Offcanvas vía HTMX #}
+<script>
+    if (typeof htmx !== 'undefined') {
+        document.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target.id === 'offcanvas-container-facturas') {
+                // Pequeño delay para asegurar que el DOM esté completamente renderizado
+                setTimeout(function() {
+                    if (window.FacturasEditorModule && typeof window.FacturasEditorModule.init === 'function') {
+                        window.FacturasEditorModule.init();
+                    }
+                }, 50);
+            }
+        });
+    }
+</script>

@@ -1,0 +1,71 @@
+{% load static %}
+{# list.html - Módulo de Empleados v2.95 #}
+{# ⚠️ v2.95: Migrado a Tabulator Factory con soporte de flujo secuencial #}
+{# ⚠️ v2.40: API-First Architecture - Backend DRF + Frontend Tabulator #}
+
+<div id="tab-empleados" class="ui-module ui-empleados" role="region" aria-label="Módulo de Empleados">
+  
+  {# Panel de Resumen de Nómina y Estadísticas #}
+  <div class="row mb-4" id="panel-totales-empleados">
+    <div class="col-md-4">
+      <div class="card border-primary h-100 shadow-sm">
+        <div class="card-body text-center">
+          <h6 class="text-muted text-uppercase small fw-bold mb-2">Nómina Mes Actual</h6>
+          <h2 class="display-6 fw-bold text-primary mb-2" id="total-nomina-mes">$0.00</h2>
+          <p class="mb-0 small text-muted">
+            Pagados: <span id="empleados-pagados" class="badge bg-secondary">0</span>
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-4">
+      <div class="card border-success h-100 shadow-sm">
+        <div class="card-body text-center">
+          <h6 class="text-muted text-uppercase small fw-bold mb-2">Empleados Activos</h6>
+          <h2 class="display-6 fw-bold text-success mb-2" id="empleados-activos">0</h2>
+          <p class="mb-0 small text-muted">Personal vinculado actualmente</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-4">
+      <div class="card bg-light h-100 border-0 shadow-sm d-flex align-items-center justify-content-center">
+        <div class="text-center p-3">
+          <i class="bi bi-person-badge text-primary fs-1"></i>
+          <p class="mb-0 small text-muted d-block mt-2 fw-bold">Flujo de Talento Humano</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Toolbar #}
+  <div class="d-flex justify-content-between align-items-center gap-2 mb-3" id="toolbar-empleados">
+    <div class="btn-group shadow-sm">
+      <button type="button" class="btn btn-primary" id="btn-empleados-crear">
+        <i class="bi bi-plus-lg"></i> Nuevo Empleado
+      </button>
+      <button type="button" id="btn-refrescar-empleados" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+  
+  {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
+  <div class="mb-3">
+    <input type="text" id="search-empleado" class="form-control" placeholder="Buscar por documento o nombre..." aria-label="Buscar empleado">
+  </div>
+
+  {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+      <div id="grid-empleados" class="flex-grow-1" style="min-height: 400px;" role="grid" aria-label="Tabla de empleados"></div>
+    </div>
+  </div>
+  
+  {# Feedback para errores y mensajes #}
+  <div id="empleados-list-feedback" class="alert d-none mt-3" role="alert" aria-live="polite"></div>
+  
+  {# ⚠️ v2.60: Contenedores Offcanvas para HTMX - Movidos a workspace.html (contenedores globales) #}
+  {# Los contenedores offcanvas están definidos globalmente en workspace.html para evitar duplicación #}
+</div>

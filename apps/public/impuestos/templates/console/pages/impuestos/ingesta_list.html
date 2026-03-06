@@ -1,0 +1,146 @@
+{% extends "console/base.html" %}
+{% load static %}
+
+{% block title %}Ingesta – Catálogo DIAN{% endblock %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <link rel="stylesheet" href="{% static 'impuestos_dashboard/console.css' %}"/>
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css"/>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Ingesta</h1>
+    <a href="{% url 'console:impuestos-ingesta-create' %}" 
+       class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+      Nueva ingesta
+    </a>
+  </div>
+  
+  <form method="get" class="filters">
+    <select name="estado">
+      <option value="">-- Estado --</option>
+      <option value="RECIBIDO" {% if request.GET.estado == "RECIBIDO" %}selected{% endif %}>RECIBIDO</option>
+      <option value="EN_PROCESO" {% if request.GET.estado == "EN_PROCESO" %}selected{% endif %}>EN_PROCESO</option>
+      <option value="PROCESADO" {% if request.GET.estado == "PROCESADO" %}selected{% endif %}>PROCESADO</option>
+      <option value="ERROR" {% if request.GET.estado == "ERROR" %}selected{% endif %}>ERROR</option>
+    </select>
+    <input type="text" name="fuente" value="{{request.GET.fuente|default:''}}" placeholder="Fuente..." />
+    <button type="submit">Filtrar</button>
+    <a href="{% url 'console:impuestos-ingesta-list' %}" class="text-blue-600 hover:text-blue-800">Limpiar</a>
+  </form>
+  
+  <!-- CSRF Token hidden para JavaScript -->
+  {% csrf_token %}
+  
+  <table id="ingesta-table" class="table display" style="width:100%">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Fuente</th>
+        <th>Tipo</th>
+        <th>Estado</th>
+        <th>Archivo</th>
+        <th>Creado</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody id="docs-body">
+      {% for doc in docs %}
+        {% include "console/pages/impuestos/fragments/ingesta_row.html" with doc=doc %}
+      {% empty %}
+        <!-- DataTables requiere que las filas vacías tengan el mismo número de columnas que el thead -->
+        <tr>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td class="text-center text-gray-500">Sin registros.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+$(document).ready(function() {
+  $('#ingesta-table').DataTable({
+    // Especificar columnas explícitamente para evitar error de conteo
+    columns: [
+      { data: 0, title: 'ID', orderable: true, searchable: false },
+      { data: 1, title: 'Fuente', orderable: true, searchable: true },
+      { data: 2, title: 'Tipo', orderable: true, searchable: true },
+      { data: 3, title: 'Estado', orderable: true, searchable: true },
+      { data: 4, title: 'Archivo', orderable: false, searchable: false },
+      { data: 5, title: 'Creado', orderable: true, searchable: false },
+      { data: 6, title: 'Acciones', orderable: false, searchable: false }
+    ],
+    order: [[5, 'desc']], // Ordenar por fecha de creación descendente
+    pageLength: 25,
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
+    },
+    // Deshabilitar auto-detección de columnas para evitar conflictos con HTMX
+    autoWidth: false,
+    // Asegurar que DataTables respete el HTML existente
+    deferRender: false
+  });
+});
+
+function deleteDocumento(id) {
+  if (!confirm('¿Está seguro de que desea eliminar este documento? Esta acción no se puede deshacer.')) {
+    return;
+  }
+  
+  // Obtener token CSRF de forma segura
+  function getCSRFToken() {
+    const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (csrfInput && csrfInput.value) {
+      return csrfInput.value;
+    }
+    // Fallback: obtener de cookies
+    const match = document.cookie.match(/csrftoken=([^;]+)/);
+    if (match) {
+      return match[1];
+    }
+    // Fallback: obtener de meta tag si existe
+    const metaTag = document.querySelector('meta[name="csrf-token"]');
+    if (metaTag) {
+      return metaTag.getAttribute('content');
+    }
+    return null;
+  }
+  
+  const csrftoken = getCSRFToken();
+  if (!csrftoken) {
+    alert('Error: No se pudo obtener el token CSRF. Por favor, recarga la página.');
+    return;
+  }
+  
+  $.ajax({
+    url: '/console/impuestos/ingesta/' + id + '/delete/',
+    type: 'POST',
+    headers: {
+      'X-CSRFToken': csrftoken
+    },
+    success: function() {
+      // Eliminar fila de DataTable
+      var table = $('#ingesta-table').DataTable();
+      table.row('#doc-' + id).remove().draw();
+    },
+    error: function(xhr) {
+      alert('Error al eliminar el documento: ' + (xhr.responseJSON?.error || xhr.statusText));
+    }
+  });
+}
+</script>
+{% endblock %}

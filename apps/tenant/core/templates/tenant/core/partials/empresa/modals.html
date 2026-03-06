@@ -1,0 +1,212 @@
+{% load static %}
+{# modals.html - Modales del módulo Empresa v2.40 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+{# ⚠️ v2.40: Alineado con EmpresaUpsertSerializer y EmpresaDetailSerializer #}
+{# ⚠️ CONFIGURACIÓN: Alineado con Tabulator Factory v2.40 y lazy loading #}
+{# Campos canónicos: razon_social, nit, dv, direccion, telefono, email_contacto, #}
+{#                  regimen_tributario, logo, website, moneda #}
+{# ⚠️ IMPORTANTE: Los IDs de los campos deben coincidir exactamente con collectEmpresaPayload() #}
+
+<!-- Modal: Ver Empresa (readonly) -->
+<!-- ⚠️ v2.40: Alineado con EmpresaDetailSerializer (campos canónicos) -->
+<div class="modal fade" id="modal-ver-empresa" tabindex="-1" aria-labelledby="modal-ver-empresa-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-ver-empresa-label">Ver Empresa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="empresa-view-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-empresa-view">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="empresa-view-nit" class="form-label">NIT</label>
+              <input type="text" class="form-control" id="empresa-view-nit" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-view-razon_social" class="form-label">Razón Social</label>
+              <input type="text" class="form-control" id="empresa-view-razon_social" readonly disabled />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="empresa-view-direccion" class="form-label">Dirección</label>
+              <input type="text" class="form-control" id="empresa-view-direccion" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-view-telefono" class="form-label">Teléfono</label>
+              <input type="text" class="form-control" id="empresa-view-telefono" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-view-email_contacto" class="form-label">Email de Contacto</label>
+              <input type="email" class="form-control" id="empresa-view-email_contacto" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-view-regimen_tributario" class="form-label">Régimen Tributario</label>
+              <input type="text" class="form-control" id="empresa-view-regimen_tributario" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-view-moneda" class="form-label">Moneda</label>
+              <input type="text" class="form-control" id="empresa-view-moneda" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-view-website" class="form-label">Website</label>
+              <input type="url" class="form-control" id="empresa-view-website" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-view-logo" class="form-label">Logo</label>
+              <div id="empresa-view-logo-container">
+                <img id="empresa-view-logo-img" src="" alt="Logo" class="img-thumbnail" style="max-width: 200px; display: none;" />
+                <span id="empresa-view-logo-text" class="text-muted">Sin logo</span>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Empresa -->
+<div class="modal fade" id="modal-editar-empresa" tabindex="-1" aria-labelledby="modal-editar-empresa-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-editar-empresa-label">Editar Empresa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="empresa-edit-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-empresa-edit">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="empresa-edit-nit" class="form-label">NIT *</label>
+              <input type="text" class="form-control" id="empresa-edit-nit" required placeholder="NIT (8-10 dígitos)" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-edit-razon_social" class="form-label">Razón Social *</label>
+              <input type="text" class="form-control" id="empresa-edit-razon_social" required placeholder="Razón Social" />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="empresa-edit-direccion" class="form-label">Dirección *</label>
+              <input type="text" class="form-control" id="empresa-edit-direccion" required placeholder="Dirección" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-edit-telefono" class="form-label">Teléfono *</label>
+              <input type="text" class="form-control" id="empresa-edit-telefono" required placeholder="Teléfono" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-edit-email_contacto" class="form-label">Email de Contacto</label>
+              <input type="email" class="form-control" id="empresa-edit-email_contacto" placeholder="Email de Contacto" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-edit-regimen_tributario" class="form-label">Régimen Tributario</label>
+              <select class="form-control" id="empresa-edit-regimen_tributario">
+                <option value="NO_RESPONDE">No Responde</option>
+                <option value="ORDINARIO">Régimen Ordinario</option>
+                <option value="ESPECIAL">Régimen Tributario Especial (RTE)</option>
+                <option value="SIMPLE">Régimen Simple de Tributación (SIMPLE)</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-edit-moneda" class="form-label">Moneda</label>
+              <select class="form-control" id="empresa-edit-moneda">
+                <option value="COP">Peso Colombiano (COP)</option>
+                <option value="USD">Dólar Estadounidense (USD)</option>
+                <option value="EUR">Euro (EUR)</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-edit-website" class="form-label">Website</label>
+              <input type="url" class="form-control" id="empresa-edit-website" placeholder="https://www.ejemplo.com" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-edit-logo" class="form-label">Logo</label>
+              <input type="file" class="form-control" id="empresa-edit-logo" accept="image/*" />
+              <small class="form-text text-muted">Subir nuevo logo (opcional)</small>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-empresa">
+          <i class="bi bi-save"></i> <span id="btn-guardar-texto">Guardar Cambios</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Crear Empresa -->
+<div class="modal fade" id="modal-crear-empresa" tabindex="-1" aria-labelledby="modal-crear-empresa-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-crear-empresa-label">Crear Empresa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="empresa-create-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-empresa-create">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="empresa-create-nit" class="form-label">NIT *</label>
+              <input type="text" class="form-control" id="empresa-create-nit" required placeholder="NIT (8-10 dígitos)" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-create-razon_social" class="form-label">Razón Social *</label>
+              <input type="text" class="form-control" id="empresa-create-razon_social" required placeholder="Razón Social" />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="empresa-create-direccion" class="form-label">Dirección *</label>
+              <input type="text" class="form-control" id="empresa-create-direccion" required placeholder="Dirección" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-create-telefono" class="form-label">Teléfono *</label>
+              <input type="text" class="form-control" id="empresa-create-telefono" required placeholder="Teléfono" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-create-email_contacto" class="form-label">Email de Contacto</label>
+              <input type="email" class="form-control" id="empresa-create-email_contacto" placeholder="Email de Contacto" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-create-regimen_tributario" class="form-label">Régimen Tributario</label>
+              <select class="form-control" id="empresa-create-regimen_tributario">
+                <option value="NO_RESPONDE" selected>No Responde</option>
+                <option value="ORDINARIO">Régimen Ordinario</option>
+                <option value="ESPECIAL">Régimen Tributario Especial (RTE)</option>
+                <option value="SIMPLE">Régimen Simple de Tributación (SIMPLE)</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-create-moneda" class="form-label">Moneda</label>
+              <select class="form-control" id="empresa-create-moneda">
+                <option value="COP" selected>Peso Colombiano (COP)</option>
+                <option value="USD">Dólar Estadounidense (USD)</option>
+                <option value="EUR">Euro (EUR)</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-create-website" class="form-label">Website</label>
+              <input type="url" class="form-control" id="empresa-create-website" placeholder="https://www.ejemplo.com" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="empresa-create-logo" class="form-label">Logo</label>
+              <input type="file" class="form-control" id="empresa-create-logo" accept="image/*" />
+              <small class="form-text text-muted">Subir logo (opcional)</small>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-empresa">
+          <i class="bi bi-plus-circle"></i> <span id="btn-guardar-texto">Crear Empresa</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,142 @@
+{% extends 'console/base.html' %}
+{% load static %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Gestión de Usuarios</h2>
+    
+    <!-- CSRF Token hidden para JavaScript -->
+    {% csrf_token %}
+    
+    <!-- Tabla de Usuarios con DataTables -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <table id="dt-users" 
+               class="min-w-full divide-y divide-gray-200" 
+               style="width:100%"
+               data-api-url="{{ api_url }}">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th>ID</th>
+                    <th>Email</th>
+                    <th>Activo</th>
+                    <th>Staff</th>
+                    <th>Fecha Registro</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                <!-- DataTables carga datos via AJAX desde {{ api_url }} -->
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ block.super }}
+  <!-- jQuery (requerido por DataTables) -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <!-- DataTables JS -->
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <script>
+  // Inicializar DataTables para usuarios (POST + CSRF)
+  document.addEventListener('DOMContentLoaded', function() {
+      if (typeof jQuery === 'undefined' || typeof jQuery.fn.dataTable === 'undefined') {
+          console.error('DataTables no está disponible');
+          return;
+      }
+
+      // Obtener CSRF token
+      function getCookie(name) {
+          let cookieValue = null;
+          if (document.cookie && document.cookie !== '') {
+              const cookies = document.cookie.split(';');
+              for (let i = 0; i < cookies.length; i++) {
+                  const cookie = cookies[i].trim();
+                  if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                      cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                      break;
+                  }
+              }
+          }
+          return cookieValue;
+      }
+
+      const table = jQuery('#dt-users').DataTable({
+          processing: true,
+          serverSide: true,
+          ajax: {
+              url: jQuery('#dt-users').data('api-url') || '/api/admin/v1/console/dt/users/',
+              type: 'POST',
+              headers: {
+                  'X-CSRFToken': getCookie('csrftoken'),
+                  'Content-Type': 'application/json'
+              },
+              contentType: 'application/json',
+              data: function(d) {
+                  return JSON.stringify({
+                      draw: d.draw,
+                      start: d.start,
+                      length: d.length,
+                      search: { value: d.search.value || '' },
+                      order: d.order.map(function(o) {
+                          return { column: o.column, dir: o.dir };
+                      }),
+                      columns: d.columns.map(function(c) {
+                          return {
+                              data: c.data,
+                              name: c.name || '',
+                              searchable: c.searchable !== false,
+                              orderable: c.orderable !== false,
+                              search: { value: c.search.value || '', regex: c.search.regex || false }
+                          };
+                      })
+                  });
+              },
+              dataSrc: function(json) {
+                  if (json.data && Array.isArray(json.data)) {
+                      return json.data.map(function(user) {
+                          return [
+                              user.id || '-',
+                              user.email || '-',
+                              user.is_active ? 'Sí' : 'No',
+                              user.is_staff ? 'Sí' : 'No',
+                              user.date_joined ? new Date(user.date_joined).toLocaleString('es-ES') : '-'
+                          ];
+                      });
+                  }
+                  return [];
+              },
+              error: function(xhr, error, thrown) {
+                  console.error('DataTables error:', error, thrown);
+                  if (xhr.status === 401) {
+                      alert('Sesión expirada. Por favor, inicia sesión nuevamente.');
+                      window.location.href = '/admin/login/';
+                  } else if (xhr.status === 403) {
+                      alert('No tienes permisos para acceder a esta información.');
+                  }
+              }
+          },
+          columns: [
+              { data: 0, title: 'ID', orderable: true, searchable: false },
+              { data: 1, title: 'Email', orderable: true, searchable: true },
+              { data: 2, title: 'Activo', orderable: true, searchable: false },
+              { data: 3, title: 'Staff', orderable: true, searchable: false },
+              { data: 4, title: 'Fecha Registro', orderable: true, searchable: false }
+          ],
+          order: [[4, 'desc']],
+          pageLength: 25,
+          language: {
+              url: 'https://cdn.datatables.net/plug-ins/1.13.8/i18n/es-ES.json'
+          }
+      });
+  });
+  </script>
+{% endblock %}

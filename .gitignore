@@ -1,0 +1,38 @@
+# 1. Entorno y Credenciales (¡CRÍTICO!)
+.env
+infra/compose/.env
+.venv/
+venv/
+env/
+
+# 2. Archivos temporales de Python y Django
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+db.sqlite3
+db.sqlite3-journal
+
+# 3. Archivos estáticos y multimedia
+/staticfiles/
+/media/
+/uploads/
+
+# 4. Logs y Caches de Testing
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# 5. Volúmenes de Docker locales
+postgres_data/
+opensearch_data/
+redis_data/
+
+# 6. Configuración de IDEs y OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

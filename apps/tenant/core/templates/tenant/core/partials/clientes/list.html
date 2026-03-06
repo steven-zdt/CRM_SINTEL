@@ -1,0 +1,67 @@
+{# list.html - Vista de Clientes y Contactos con Tabs v2.60 #}
+{# ⚠️ v2.60: Migrado a Tabs de Bootstrap 5 (Clientes | Contactos) #}
+{# ⚠️ v2.60: HTMX + Offcanvas (sin modales legacy) #}
+
+<div class="card shadow-sm">
+  <div class="card-header bg-white">
+    <ul class="nav nav-tabs card-header-tabs" id="clientes-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab-clientes" data-bs-toggle="tab" data-bs-target="#tab-pane-clientes" 
+                type="button" role="tab" aria-controls="tab-pane-clientes" aria-selected="true">
+          <i class="bi bi-people me-2"></i>Directorio de Clientes
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-contactos" data-bs-toggle="tab" data-bs-target="#tab-pane-contactos" 
+                type="button" role="tab" aria-controls="tab-pane-contactos" aria-selected="false">
+          <i class="bi bi-person-lines-fill me-2"></i>Directorio de Contactos
+        </button>
+      </li>
+    </ul>
+  </div>
+  <div class="card-body">
+    <div class="tab-content" id="clientes-tab-content">
+      {# Tab 1: Directorio de Clientes #}
+      <div class="tab-pane fade show active" id="tab-pane-clientes" role="tabpanel" 
+           aria-labelledby="tab-clientes" tabindex="0">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" id="search-cliente" class="form-control" placeholder="Buscar cliente...">
+            <button class="btn btn-outline-secondary" type="button"><i class="bi bi-search"></i></button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/api/v1/clientes/offcanvas/" 
+                  hx-target="#offcanvas-container-clientes" 
+                  hx-swap="innerHTML"
+                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-cliente'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+            <i class="bi bi-plus-lg me-1"></i>Nuevo Cliente
+          </button>
+        </div>
+        <div id="grid-clientes"></div>
+      </div>
+
+      {# Tab 2: Directorio de Contactos #}
+      <div class="tab-pane fade" id="tab-pane-contactos" role="tabpanel" 
+           aria-labelledby="tab-contactos" tabindex="0">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" id="search-contacto" class="form-control" placeholder="Buscar contacto...">
+            <button class="btn btn-outline-secondary" type="button"><i class="bi bi-search"></i></button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/api/v1/clientes/contactos/gestor-offcanvas/" 
+                  hx-target="#offcanvas-container-contactos" 
+                  hx-swap="innerHTML"
+                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-contactos'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+            <i class="bi bi-person-plus me-1"></i>Nuevo Contacto
+          </button>
+        </div>
+        <div id="grid-contactos"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ⚠️ v2.60: Contenedores HTMX para Offcanvas #}
+<div id="offcanvas-container-clientes"></div>
+<div id="offcanvas-container-contactos"></div>

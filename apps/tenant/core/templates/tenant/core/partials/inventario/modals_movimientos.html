@@ -1,0 +1,59 @@
+<div class="modal fade" id="modal-movimiento" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Registrar Movimiento de Inventario</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="form-movimiento">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Producto *</label>
+                            <select class="form-select" id="movimiento-producto" name="producto" required>
+                                <option value="">Seleccione...</option>
+                                </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Tipo Movimiento *</label>
+                            <select class="form-select" id="movimiento-tipo" name="tipo" required>
+                                <optgroup label="Entradas">
+                                    <option value="ENTRADA_COMPRA">Compra</option>
+                                    <option value="ENTRADA_AJUSTE">Ajuste (+)</option>
+                                    <option value="ENTRADA_DEVOLUCION">Devolución Cliente</option>
+                                </optgroup>
+                                <optgroup label="Salidas">
+                                    <option value="SALIDA_VENTA">Venta</option>
+                                    <option value="SALIDA_CONSUMO">Consumo Interno</option>
+                                    <option value="SALIDA_BAJA">Baja / Deterioro</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Cantidad *</label>
+                            <input type="number" class="form-control" id="movimiento-cantidad" name="cantidad" 
+                                   step="0.001" min="0.001" required placeholder="0.000">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Referencia / Documento</label>
+                            <input type="text" class="form-control" id="movimiento-referencia" name="origen_referencia" 
+                                   placeholder="Ej: Factura 123, Ajuste #5">
+                        </div>
+                        
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Observaciones</label>
+                            <textarea class="form-control" id="movimiento-observaciones" name="observaciones" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success" id="btn-guardar-movimiento">Registrar Movimiento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

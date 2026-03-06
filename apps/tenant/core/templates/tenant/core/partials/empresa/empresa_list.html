@@ -1,0 +1,40 @@
+{% load static %}
+{# empresa_list.html - Módulo Empresa independiente v2.37 #}
+{# Consume: /api/v1/empresas/ #}
+<div id="empresa-module-container" class="ui-module ui-empresa">
+  <!-- Toolbar -->
+  <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-empresa">
+    <button id="btn-refrescar-empresa" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-repeat"></i> Refrescar
+    </button>
+    <div id="actions-empresa" class="ms-auto">
+      <button class="btn btn-sm btn-primary" id="btn-empresa-crear" type="button">
+        <i class="bi bi-plus-circle"></i> Crear/Editar Empresa
+      </button>
+    </div>
+  </div>
+  
+  <!-- Feedback -->
+  <div id="feedback-empresa-list" class="alert d-none" role="alert"
+       aria-live="polite"></div>
+  
+  <!-- Tabla DataTables (singleton: mostrará 0 o 1 registro) -->
+  <!-- ⚠️ v2.37: Alineado con LIST_FIELDS de services.py -->
+  <table id="tabla-empresa" class="table table-striped w-100">
+    <thead>
+      <tr>
+        <th>NIT</th>
+        <th>Razón Social</th>
+        <th>Tipo Contribuyente</th>
+        <th>Dirección</th>
+        <th>Teléfono</th>
+        <th>Email</th>
+        <th>Régimen Renta</th>
+        <th>Moneda</th>
+        <th>Actualizado</th>
+        <th class="text-end">Acciones</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>

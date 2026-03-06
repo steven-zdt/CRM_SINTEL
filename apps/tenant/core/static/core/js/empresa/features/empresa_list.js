@@ -1,0 +1,270 @@
+/**
+ * Feature: Listado y Tabulator - Empresa v2.60
+ * ⚠️ Feature-Sliced Architecture: Lógica de inicialización y gestión de Tabulator
+ * ⚠️ Vanilla JS: Sin dependencias de jQuery
+ * ⚠️ API-First: Consume DRF REST API
+ * ⚠️ Modular: Usa TabulatorFactory (The Engine)
+ * ⚠️ Anti-Zombies: Previene instancias fantasma de Tabulator por recargas HTMX
+ * 
+ * Dependencias globales requeridas:
+ * - TabulatorFactory (definido en tabulator.factory.js)
+ * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
+ */
+(function(w, d) {
+    'use strict';
+
+    const MOD = '[empresa.list]';
+    let table = null;
+
+    // ⚠️ Anti-Zombies v2.60: Singleton global para instancias de Tabulator
+    if (!w.SintelEmpresaTables) {
+        w.SintelEmpresaTables = {};
+    }
+
+    // Definir columnas específicas del módulo
+    function getColumns() {
+        return [
+            {
+                title: "NIT",
+                field: "nit",
+                formatter: function(cell) {
+                    const rowData = cell.getRow().getData();
+                    const nit = rowData.nit ? String(rowData.nit).trim() : '';
+                    const dv = rowData.dv ? String(rowData.dv).trim() : '';
+                    if (!nit) return '---';
+                    return dv ? `${nit}-${dv}` : nit;
+                },
+                width: 150
+            },
+            {
+                title: "Razón Social",
+                field: "razon_social",
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                    return cell.getValue() || '---';
+                },
+                minWidth: 250
+            },
+            {
+                title: "Dirección",
+                field: "direccion",
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                    return cell.getValue() || '---';
+                },
+                minWidth: 200
+            },
+            {
+                title: "Teléfono",
+                field: "telefono",
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                    return cell.getValue() || '---';
+                },
+                width: 150
+            },
+            {
+                title: "Email",
+                field: "email_contacto",
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                    return cell.getValue() || '---';
+                },
+                width: 200
+            },
+            {
+                title: "Acciones",
+                formatter: function(cell) {
+                    const rowData = cell.getRow().getData();
+                    const id = rowData.id;
+                    
+                    return `
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary btn-edit-empresa" data-id="${id}" title="Editar Empresa">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                        </div>
+                    `;
+                },
+                headerSort: false,
+                hozAlign: "center",
+                width: 100
+            }
+        ];
+    }
+
+    // Inicializar Tabulator usando Factory (The Engine)
+    function initTabulator() {
+        if (!w.TabulatorFactory) {
+            console.error(`${MOD} TabulatorFactory no está disponible`);
+            return;
+        }
+
+        const gridElement = d.querySelector('#grid-empresa');
+        if (!gridElement) {
+            console.warn(`${MOD} Elemento #grid-empresa no encontrado`);
+            return;
+        }
+
+        // ⚠️ Anti-Zombies v2.60: Destruir instancia previa si existe
+        if (w.SintelEmpresaTables['empresa']) {
+            try {
+                w.SintelEmpresaTables['empresa'].destroy();
+                console.log(`${MOD} Instancia zombie de Tabulator destruida`);
+            } catch (error) {
+                console.warn(`${MOD} Error al destruir instancia previa:`, error);
+            }
+        }
+
+        // ⚠️ DRY: Solo definimos lo específico, el resto viene del Factory
+        table = w.TabulatorFactory.create(
+            '#grid-empresa',
+            '/api/v1/empresas/',
+            getColumns(),
+            {
+                searchInputSelector: '#search-empresa'
+            }
+        );
+
+        // ⚠️ Anti-Zombies v2.60: Guardar instancia en singleton global
+        if (table) {
+            w.SintelEmpresaTables['empresa'] = table;
+            console.log(`${MOD} Tabulator inicializado y guardado en SintelEmpresaTables`);
+        }
+
+        return table;
+    }
+
+    // Event Delegation para acciones del Grid
+    function initListEvents() {
+        const gridElement = d.querySelector('#grid-empresa');
+        if (!gridElement) {
+            console.warn(`${MOD} Elemento #grid-empresa no encontrado para eventos`);
+            return;
+        }
+
+        // ⚠️ Event Delegation: Escuchar clics en el contenedor del grid
+        gridElement.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.btn-edit-empresa');
+            if (!btn) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const id = btn.getAttribute('data-id');
+            if (!id) {
+                console.warn(`${MOD} Botón sin data-id`);
+                return;
+            }
+
+            // ⚠️ Loading state
+            const originalHTML = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+            try {
+                // ⚠️ HTMX: Cargar Offcanvas desde el servidor
+                await htmx.ajax('GET', `/api/v1/empresas/gestor-offcanvas/?id=${id}`, {
+                    target: '#offcanvas-container-empresa',
+                    swap: 'innerHTML'
+                });
+
+                // ⚠️ Safeguard: Verificar que el elemento existe antes de abrir
+                const offcanvasEl = d.getElementById('offcanvas-empresa');
+                if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                    bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                } else {
+                    console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);
+                }
+            } catch (error) {
+                console.error(`${MOD} Error al cargar Offcanvas:`, error);
+                if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                    w.SintelFeedback.error('Error al cargar el formulario de empresa');
+                }
+            } finally {
+                // Restaurar estado del botón
+                btn.disabled = false;
+                btn.innerHTML = originalHTML;
+            }
+        });
+
+        console.log(`${MOD} Event delegation configurado`);
+    }
+
+    // ⚠️ Recarga Reactiva: Escuchar evento personalizado
+    function initEventListeners() {
+        // Escuchar evento de empresa guardada para refrescar el grid
+        d.addEventListener('empresaGuardada', () => {
+            if (table && typeof table.replaceData === 'function') {
+                table.replaceData();
+                console.log(`${MOD} Grid refrescado tras guardar empresa`);
+            } else {
+                console.warn(`${MOD} No se pudo refrescar: tabla no inicializada`);
+            }
+        });
+
+        console.log(`${MOD} Event listeners configurados`);
+    }
+
+    // Inicialización principal
+    function init() {
+        console.log(`${MOD} Inicializando módulo de listado...`);
+
+        // ⚠️ Lazy Loading: Solo inicializar cuando el tab esté visible
+        const tabElement = d.querySelector('#tab-empresa');
+        if (tabElement) {
+            // Usar DOMUtils.onVisibleOnce si está disponible
+            if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
+                w.DOMUtils.onVisibleOnce(tabElement, () => {
+                    initTabulator();
+                    initListEvents();
+                    initEventListeners();
+                });
+            } else {
+                // Fallback: Inicializar directamente
+                initTabulator();
+                initListEvents();
+                initEventListeners();
+            }
+        } else {
+            // Si no hay tab, inicializar directamente
+            initTabulator();
+            initListEvents();
+            initEventListeners();
+        }
+    }
+
+    // ⚠️ HTMX: Limpiar instancias zombie en recargas
+    if (typeof htmx !== 'undefined') {
+        d.addEventListener('htmx:beforeSwap', (event) => {
+            // Si se está recargando el contenedor principal, destruir instancias
+            if (event.detail.target.id === 'ui-empresa-list' || 
+                event.detail.target.closest('#ui-empresa-list')) {
+                if (w.SintelEmpresaTables['empresa']) {
+                    try {
+                        w.SintelEmpresaTables['empresa'].destroy();
+                        delete w.SintelEmpresaTables['empresa'];
+                        console.log(`${MOD} Instancia destruida por HTMX swap`);
+                    } catch (error) {
+                        console.warn(`${MOD} Error al destruir instancia en HTMX swap:`, error);
+                    }
+                }
+            }
+        });
+    }
+
+    // Auto-inicializar cuando el DOM esté listo
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    // ⚠️ API Pública: Exponer funciones para uso externo
+    w.EmpresaListModule = {
+        init,
+        refresh: () => {
+            if (table && typeof table.replaceData === 'function') {
+                table.replaceData();
+            }
+        },
+        getTable: () => table
+    };
+
+})(window, document);

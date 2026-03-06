@@ -1,0 +1,91 @@
+{# historial_servicio_offcanvas.html - Offcanvas del módulo Historial de Servicios v2.60 #}
+{# ⚠️ v2.60: HTMX + Offcanvas con Zero Trust #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-historial-servicio" aria-labelledby="offcanvas-historial-servicio-label" style="width: 90%; max-width: 700px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-historial-servicio-label">
+      <i class="bi bi-clock-history me-2"></i>
+      <span id="offcanvas-historial-servicio-titulo">
+        Registrar Historial de Servicio
+      </span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
+    <div id="form-historial-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    <form id="form-historial-servicio" method="POST" onsubmit="return false;">
+      {# Selección de Servicio #}
+      <div class="mb-3">
+        <label for="historial-servicio-select" class="form-label text-danger fw-bold">Servicio *</label>
+        <select class="form-select" id="historial-servicio-select" name="servicio_id" required>
+          <option value="">Seleccionar servicio...</option>
+          {# Se llenará dinámicamente desde JS #}
+        </select>
+        <div class="form-text">Seleccione el servicio a registrar</div>
+      </div>
+      
+      {# Fecha de Registro #}
+      <div class="mb-3">
+        <label for="historial-fecha-registro" class="form-label text-danger fw-bold">Fecha de Registro *</label>
+        <input type="date" class="form-control" id="historial-fecha-registro" name="fecha_registro" 
+               value="{% now "Y-m-d" %}" required>
+        <div class="form-text">Fecha en que se prestó el servicio</div>
+      </div>
+      
+      {# Cantidad #}
+      <div class="mb-3">
+        <label for="historial-cantidad" class="form-label text-danger fw-bold">Cantidad *</label>
+        <div class="input-group">
+          <input type="number" class="form-control" id="historial-cantidad" name="cantidad" 
+                 step="0.01" min="0.01" value="1" required placeholder="1.00">
+          <span class="input-group-text">UND</span>
+        </div>
+        <div class="form-text">Cantidad de servicios prestados</div>
+      </div>
+      
+      {# Valor Cobrado #}
+      <div class="mb-3">
+        <label for="historial-valor-cobrado" class="form-label">Valor Cobrado</label>
+        <div class="input-group">
+          <span class="input-group-text">$</span>
+          <input type="number" class="form-control" id="historial-valor-cobrado" name="valor_cobrado" 
+                 step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div class="form-text">Valor total cobrado por el servicio (se auto-completa con el precio del servicio)</div>
+      </div>
+      
+      {# Referencia Externa #}
+      <div class="mb-3">
+        <label for="historial-origen-referencia" class="form-label">Referencia Externa</label>
+        <input type="text" class="form-control" id="historial-origen-referencia" name="origen_referencia" 
+               placeholder="Ej. FAC-123, ORD-456">
+        <div class="form-text">Número de factura, orden, etc. (opcional)</div>
+      </div>
+      
+      {# Cliente Referencia #}
+      <div class="mb-3">
+        <label for="historial-cliente-referencia" class="form-label">Cliente</label>
+        <input type="text" class="form-control" id="historial-cliente-referencia" name="cliente_referencia" 
+               placeholder="Nombre del cliente">
+        <div class="form-text">Cliente al que se le prestó el servicio (opcional)</div>
+      </div>
+      
+      {# Observaciones #}
+      <div class="mb-3">
+        <label for="historial-observaciones" class="form-label">Observaciones</label>
+        <textarea class="form-control" id="historial-observaciones" name="observaciones" rows="3" 
+                  placeholder="Notas adicionales sobre el servicio prestado..."></textarea>
+      </div>
+      
+      {# Botones de Acción #}
+      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-historial">
+          <i class="bi bi-check-lg me-1"></i>Registrar Historial
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,420 @@
+{% load static %}
+{# modals.html - Módulo de Empleados v2.95 #}
+{# ⚠️ v2.95: Migrado a Tabulator Factory con soporte de flujo secuencial #}
+{# ⚠️ v2.40: API-First Architecture - Modales sin onclick, usando event listeners #}
+
+<div class="modal fade" id="modal-empleado-form" tabindex="-1" data-bs-backdrop="static" aria-labelledby="modal-empleado-form-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="modal-empleado-form-title">Gestionar Empleado</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <form id="form-empleado" novalidate>
+        <div class="modal-body">
+          <div id="empleado-form-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+          <div class="row g-3">
+            <input type="hidden" name="id">
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Tipo Documento *</label>
+              <select class="form-select" name="tipo_documento" required>
+                <option value="">Seleccione un tipo</option>
+                <option value="CC">Cédula de Ciudadanía</option>
+                <option value="CE">Cédula de Extranjería</option>
+                <option value="PA">Pasaporte</option>
+                <option value="PPT">PPT</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Número Documento *</label>
+              <input type="text" class="form-control" name="numero_documento" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Primer Nombre *</label>
+              <input type="text" class="form-control" name="primer_nombre" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Segundo Nombre</label>
+              <input type="text" class="form-control" name="segundo_nombre" placeholder="Opcional">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Primer Apellido *</label>
+              <input type="text" class="form-control" name="primer_apellido" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Segundo Apellido</label>
+              <input type="text" class="form-control" name="segundo_apellido" placeholder="Opcional">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Email *</label>
+              <input type="email" class="form-control" name="email" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Teléfono</label>
+              <input type="text" class="form-control" name="telefono" placeholder="Opcional">
+            </div>
+            
+            {# ⚠️ v2.95: Seguridad Social #}
+            <div class="col-12">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Seguridad Social</h6>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">EPS *</label>
+              <select class="form-select" name="eps" required>
+                <option value="">Seleccione una EPS</option>
+                <option value="EPS001">Nueva EPS</option>
+                <option value="EPS002">Salud Total</option>
+                <option value="EPS003">Sanitas</option>
+                <option value="EPS004">Sura</option>
+                <option value="EPS005">Compensar</option>
+                <option value="EPS006">Coosalud</option>
+                <option value="EPS007">Mutual Ser</option>
+                <option value="EPS008">Famisanar</option>
+                <option value="EPS009">Ecopetrol (Régimen Especial)</option>
+                <option value="EPS010">Salud Mía</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Fondo de Pensión (AFP) *</label>
+              <select class="form-select" name="afp" required>
+                <option value="">Seleccione una AFP</option>
+                <option value="AFP001">Protección</option>
+                <option value="AFP002">Porvenir</option>
+                <option value="AFP003">Colfondos</option>
+                <option value="AFP004">Skandia</option>
+                <option value="AFP005">Colpensiones (Régimen de Prima Media)</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">ARL Contratada *</label>
+              <select class="form-select" name="arl" required>
+                <option value="">Seleccione una ARL</option>
+                <option value="ARL001">Positiva ARL</option>
+                <option value="ARL002">ARL Sura</option>
+                <option value="ARL003">ARL Seguros Bolívar</option>
+                <option value="ARL004">ARL Colmena</option>
+                <option value="ARL005">ARL AXA Colpatria</option>
+                <option value="ARL006">ARL La Equidad</option>
+                <option value="ARL007">ARL Liberty Seguros</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Nivel de Riesgo ARL *</label>
+              <select class="form-select" name="nivel_riesgo_arl" required>
+                <option value="I">Clase I (Riesgo Mínimo)</option>
+                <option value="II">Clase II (Riesgo Bajo)</option>
+                <option value="III">Clase III (Riesgo Medio)</option>
+                <option value="IV">Clase IV (Riesgo Alto)</option>
+                <option value="V">Clase V (Riesgo Máximo)</option>
+              </select>
+            </div>
+            
+            {# Estado y Fechas #}
+            <div class="col-12">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Estado y Fechas</h6>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Estado *</label>
+              <select class="form-select" name="estado" required>
+                <option value="ACTIVO">Activo</option>
+                <option value="RETIRADO">Retirado</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Fecha Ingreso *</label>
+              <input type="date" class="form-control" name="fecha_ingreso" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Fecha Retiro</label>
+              <input type="date" class="form-control" name="fecha_retiro" placeholder="Opcional">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="btn-guardar-empleado">
+            <i class="bi bi-save"></i> Guardar Empleado
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modal-contrato-form" tabindex="-1" data-bs-backdrop="static" aria-labelledby="modal-contrato-form-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="modal-contrato-form-title">Asignar Contrato Laboral</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <form id="form-contrato" novalidate enctype="multipart/form-data">
+        <input type="hidden" name="empleado" id="contrato-empleado-id">
+        <div class="modal-body">
+          <div id="contrato-form-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+          <div class="row g-3">
+            {# Tipo y Estado #}
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Tipo de Contrato *</label>
+              <select class="form-select" name="tipo" required>
+                <option value="">Seleccione un tipo</option>
+                <option value="FIJO">Término Fijo</option>
+                <option value="INDEF">Indefinido</option>
+                <option value="OBRA">Obra o Labor</option>
+                <option value="APREND">Aprendizaje</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Estado *</label>
+              <select class="form-select" name="estado" required>
+                <option value="ACTIVO">Activo</option>
+                <option value="INACTIVO">Inactivo</option>
+                <option value="HISTORICO">Histórico</option>
+              </select>
+            </div>
+            
+            {# Fechas #}
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Fecha Inicio *</label>
+              <input type="date" class="form-control" name="fecha_inicio" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Fecha Fin</label>
+              <div class="input-group">
+                <input type="date" class="form-control" name="fecha_fin" id="contrato-fecha-fin">
+                <div class="input-group-text">
+                  <input class="form-check-input mt-0" type="checkbox" id="contrato-indefinido" aria-label="Contrato Indefinido">
+                  <label class="form-check-label ms-2 small" for="contrato-indefinido">Indefinido</label>
+                </div>
+              </div>
+            </div>
+            
+            {# Información del Cargo #}
+            <div class="col-12">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Información del Cargo</h6>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label small fw-bold">Cargo *</label>
+              <input type="text" class="form-control" name="cargo" required>
+            </div>
+            
+            {# Valores Económicos #}
+            <div class="col-12">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Valores Económicos</h6>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Salario Mensual (COP) *</label>
+              <input type="number" class="form-control" name="salario_mensual" step="0.01" min="0" required>
+              <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Auxilio de Transporte (COP)</label>
+              <input type="number" class="form-control" name="auxilio_transporte" step="0.01" min="0" value="0">
+              <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label small fw-bold">Préstamos de la Empresa (COP)</label>
+              <input type="number" class="form-control" name="prestamos_empresa" step="0.01" min="0" value="0" placeholder="Préstamos o deudas que la empresa tiene con el empleado (puede ser 0)">
+              <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+            </div>
+            
+            {# Archivo PDF #}
+            <div class="col-12">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Documento</h6>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label small fw-bold">Archivo PDF del Contrato</label>
+              <input type="file" class="form-control" name="archivo_pdf" accept=".pdf" aria-label="Subir archivo PDF del contrato">
+              <small class="form-text text-muted">Copia digital del contrato firmado (PDF) - Opcional</small>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-success" id="btn-guardar-contrato">
+            <i class="bi bi-save"></i> Activar Contrato
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modal-devengo-form" tabindex="-1" data-bs-backdrop="static" aria-labelledby="modal-devengo-form-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title" id="modal-devengo-form-title">Registrar Nómina</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <form id="form-devengo" novalidate>
+        <input type="hidden" name="empleado" id="devengo-empleado-id">
+        <input type="hidden" name="contrato_id" id="devengo-contrato-id">
+        <input type="hidden" name="contrato_tipo" id="devengo-contrato-tipo">
+        <div class="modal-body">
+          <div id="devengo-form-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+          <div class="row g-3">
+            {# Información del Empleado #}
+            <div class="col-12">
+              <h6 class="text-muted mb-3">Información del Empleado</h6>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">Primer Nombre</label>
+              <input type="text" class="form-control" id="devengo-empleado-primer-nombre" readonly>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">Primer Apellido</label>
+              <input type="text" class="form-control" id="devengo-empleado-primer-apellido" readonly>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">Número de Documento</label>
+              <input type="text" class="form-control" id="devengo-empleado-documento" readonly>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Periodo (YYYY-MM) *</label>
+              <input type="text" class="form-control" name="periodo_mes" id="devengo-periodo-mes" pattern="\d{4}-\d{2}" placeholder="2024-01" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Fecha de Pago *</label>
+              <input type="date" class="form-control" name="fecha_pago" id="devengo-fecha-pago" required>
+            </div>
+            
+            {# Método de Pago #}
+            <div class="col-12">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Método de Cálculo</h6>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label small fw-bold">Método de Pago *</label>
+              <select class="form-select" id="devengo-metodo-pago" required>
+                <option value="">Seleccione un método</option>
+                <option value="DIAS">Por Días</option>
+                <option value="TURNOS">Por Turnos</option>
+                <option value="HORAS">Por Horas</option>
+              </select>
+            </div>
+            
+            {# Campos de Entrada según Método #}
+            <div class="col-md-6" id="devengo-campo-dias" style="display: none;">
+              <label class="form-label small fw-bold">Días Laborados *</label>
+              <input type="number" class="form-control" name="dias_laborados" id="devengo-dias-laborados" step="0.5" min="0" placeholder="Ej: 15.5">
+              <small class="form-text text-muted">Permite decimales (ej: 0.5 = medio día)</small>
+            </div>
+            <div class="col-md-6" id="devengo-campo-horas" style="display: none;">
+              <label class="form-label small fw-bold">Horas Trabajadas *</label>
+              <input type="number" class="form-control" name="horas_trabajadas" id="devengo-horas-trabajadas" step="0.5" min="0" placeholder="Ej: 176">
+              <small class="form-text text-muted">Total de horas trabajadas en el periodo</small>
+            </div>
+            <div class="col-md-6" id="devengo-alerta-horas" style="display: none;">
+              <div class="alert alert-warning mb-0" role="alert">
+                <i class="bi bi-exclamation-triangle"></i> <strong>Advertencia:</strong> Las horas semanales superan las 46 horas (incluyendo recargos). Verifique el cálculo.
+              </div>
+            </div>
+            
+            {# Auxilio de Transporte según Método #}
+            <div class="col-md-6" id="devengo-auxilio-dias" style="display: none;">
+              <label class="form-label small fw-bold">Auxilio de Transporte (Por Días) (COP)</label>
+              <input type="number" class="form-control" name="auxilio_transporte_dias" id="devengo-auxilio-transporte-dias" step="0.01" min="0" placeholder="Auxilio proporcional por días">
+              <small class="form-text text-muted">Se calcula automáticamente desde el contrato</small>
+            </div>
+            <div class="col-md-6" id="devengo-auxilio-horas" style="display: none;">
+              <label class="form-label small fw-bold">Auxilio de Transporte (Por Horas) (COP)</label>
+              <input type="number" class="form-control" name="auxilio_transporte_horas" id="devengo-auxilio-transporte-horas" step="0.01" min="0" placeholder="Auxilio proporcional por horas">
+              <small class="form-text text-muted">Se calcula automáticamente desde el contrato</small>
+            </div>
+            
+            {# Devengos #}
+            <div class="col-12">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Devengos</h6>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Salario Base (COP)</label>
+              <input type="number" class="form-control" name="salario_base" id="devengo-salario-base" step="0.01" min="0" readonly>
+              <small class="form-text text-muted">Calculado desde el contrato</small>
+            </div>
+            {# ⚠️ v2.95: Campo auxilio_transporte oculto que se actualiza con el valor del método seleccionado #}
+            <input type="hidden" name="auxilio_transporte" id="devengo-auxilio-transporte">
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Otros Devengos (COP)</label>
+              <input type="number" class="form-control" name="otros_devengos" id="devengo-otros-devengos" step="0.01" min="0" value="0" placeholder="Horas extras, bonificaciones, etc.">
+              <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+            </div>
+            
+            {# Deducciones de Ley #}
+            <div class="col-12" id="seccion-deducciones-ley">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Deducciones de Ley</h6>
+            </div>
+            <div class="col-md-6" id="devengo-campo-salud">
+              <label class="form-label small fw-bold">Salud (4%) (COP)</label>
+              <input type="number" class="form-control" name="salud_empleado" id="devengo-salud-empleado" step="0.01" min="0" value="0" readonly>
+              <small class="form-text text-muted">Deducción en Pesos Colombianos</small>
+            </div>
+            <div class="col-md-6" id="devengo-campo-pension">
+              <label class="form-label small fw-bold">Pensión (4%) (COP)</label>
+              <input type="number" class="form-control" name="pension_empleado" id="devengo-pension-empleado" step="0.01" min="0" value="0" readonly>
+              <small class="form-text text-muted">Deducción en Pesos Colombianos</small>
+            </div>
+            
+            {# Neto a Pagar #}
+            <div class="col-12">
+              <hr class="my-3">
+              <h6 class="text-muted mb-3">Resumen</h6>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label small fw-bold">Neto a Pagar (COP)</label>
+              <input type="number" class="form-control form-control-lg fw-bold text-success" name="neto_pagar" id="devengo-neto-pagar" step="0.01" min="0" readonly>
+              <small class="form-text text-muted">Valor total en Pesos Colombianos</small>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-info" id="btn-guardar-devengo">
+            <i class="bi bi-save"></i> Guardar Pago
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modal-devengo-history" tabindex="-1" aria-labelledby="modal-devengo-history-title" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-devengo-history-title">Historial de Pagos</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        {# ⚠️ v2.95: Filtros de Fecha para el Historial de Nómina #}
+        <div class="row g-3 mb-4">
+          <div class="col-md-5">
+            <label for="historial-fecha-inicio" class="form-label small fw-bold">Desde</label>
+            <input type="date" id="historial-fecha-inicio" class="form-control" aria-label="Fecha inicio del historial">
+          </div>
+          <div class="col-md-5">
+            <label for="historial-fecha-fin" class="form-label small fw-bold">Hasta</label>
+            <input type="date" id="historial-fecha-fin" class="form-control" aria-label="Fecha fin del historial">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button type="button" id="btn-filtrar-historial" class="btn btn-primary w-100" aria-label="Filtrar historial">
+              <i class="bi bi-filter"></i> Filtrar
+            </button>
+          </div>
+        </div>
+        {# ⚠️ v2.95: Contenedor para Tabulator de Historial (TabulatorFactory) #}
+        <div id="grid-history-nomina" style="min-height: 300px;" role="grid" aria-label="Historial de pagos de nómina"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,184 @@
+{% load static %}
+{# modals_cuentas.html - Modales del módulo Contabilidad Cuentas v2.37 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+
+<!-- Modal: Ver Cuenta Contable (readonly) -->
+<div class="modal fade" id="modal-ver-cuenta" tabindex="-1" aria-labelledby="modal-ver-cuenta-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-ver-cuenta-label">Ver Cuenta Contable</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="cuenta-view-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-cuenta-view">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-view-codigo" class="form-label">Código</label>
+              <input type="text" class="form-control" id="cuenta-view-codigo" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-view-nombre" class="form-label">Nombre</label>
+              <input type="text" class="form-control" id="cuenta-view-nombre" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-view-tipo" class="form-label">Tipo</label>
+              <input type="text" class="form-control" id="cuenta-view-tipo" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-view-activa" class="form-label">Estado</label>
+              <input type="text" class="form-control" id="cuenta-view-activa" readonly disabled />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cuenta-view-descripcion" class="form-label">Descripción</label>
+              <textarea class="form-control" id="cuenta-view-descripcion" rows="3" readonly disabled></textarea>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cuenta-view-cuenta_padre" class="form-label">Cuenta Padre</label>
+              <input type="text" class="form-control" id="cuenta-view-cuenta_padre" readonly disabled />
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Cuenta Contable -->
+<div class="modal fade" id="modal-editar-cuenta" tabindex="-1" aria-labelledby="modal-editar-cuenta-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-editar-cuenta-label">Editar Cuenta Contable</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="cuenta-edit-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-cuenta-edit">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-edit-codigo" class="form-label">Código *</label>
+              <input type="text" class="form-control" id="cuenta-edit-codigo" required />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-edit-nombre" class="form-label">Nombre *</label>
+              <input type="text" class="form-control" id="cuenta-edit-nombre" required />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-edit-tipo" class="form-label">Tipo *</label>
+              <select class="form-select" id="cuenta-edit-tipo" required>
+                <option value="">Seleccione...</option>
+                <option value="ACTIVO">Activo</option>
+                <option value="PASIVO">Pasivo</option>
+                <option value="PATRIMONIO">Patrimonio</option>
+                <option value="INGRESO">Ingreso</option>
+                <option value="GASTO">Gasto</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-edit-activa" class="form-label">Estado</label>
+              <select class="form-select" id="cuenta-edit-activa">
+                <option value="true">Activa</option>
+                <option value="false">Inactiva</option>
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cuenta-edit-descripcion" class="form-label">Descripción</label>
+              <textarea class="form-control" id="cuenta-edit-descripcion" rows="3"></textarea>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cuenta-edit-cuenta_padre" class="form-label">Cuenta Padre (ID)</label>
+              <input type="number" class="form-control" id="cuenta-edit-cuenta_padre" placeholder="ID de cuenta padre (opcional)" />
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-cuenta">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Crear Cuenta Contable -->
+<div class="modal fade" id="modal-crear-cuenta" tabindex="-1" aria-labelledby="modal-crear-cuenta-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-crear-cuenta-label">Crear Cuenta Contable</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="cuenta-create-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-cuenta-create">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-create-codigo" class="form-label">Código *</label>
+              <input type="text" class="form-control" id="cuenta-create-codigo" required placeholder="Código único de la cuenta" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-create-nombre" class="form-label">Nombre *</label>
+              <input type="text" class="form-control" id="cuenta-create-nombre" required placeholder="Nombre de la cuenta" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-create-tipo" class="form-label">Tipo *</label>
+              <select class="form-select" id="cuenta-create-tipo" required>
+                <option value="">Seleccione...</option>
+                <option value="ACTIVO">Activo</option>
+                <option value="PASIVO">Pasivo</option>
+                <option value="PATRIMONIO">Patrimonio</option>
+                <option value="INGRESO">Ingreso</option>
+                <option value="GASTO">Gasto</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cuenta-create-activa" class="form-label">Estado</label>
+              <select class="form-select" id="cuenta-create-activa">
+                <option value="true" selected>Activa</option>
+                <option value="false">Inactiva</option>
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cuenta-create-descripcion" class="form-label">Descripción</label>
+              <textarea class="form-control" id="cuenta-create-descripcion" rows="3" placeholder="Descripción de la cuenta (opcional)"></textarea>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cuenta-create-cuenta_padre" class="form-label">Cuenta Padre (ID)</label>
+              <input type="number" class="form-control" id="cuenta-create-cuenta_padre" placeholder="ID de cuenta padre (opcional)" />
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-crear-cuenta">Crear</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Eliminar Cuenta Contable -->
+<div class="modal fade" id="modal-eliminar-cuenta" tabindex="-1" aria-labelledby="modal-eliminar-cuenta-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-eliminar-cuenta-label">Eliminar Cuenta Contable</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="cuenta-delete-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <p>¿Está seguro de que desea eliminar esta cuenta contable?</p>
+        <p class="text-muted small" id="cuenta-delete-info">Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar-cuenta">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>

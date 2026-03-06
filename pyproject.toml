@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "UP", "SIM"]
+ignore = ["E203", "E266", "E501"]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config"]
+
+[tool.bandit]
+exclude_dirs = ["migrations", "venv", ".venv", "__pycache__", "tests"]

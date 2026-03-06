@@ -1,0 +1,70 @@
+{% extends "console/base.html" %}
+{% load static %}
+
+{% block title %}Catálogo DIAN – Biblioteca Tributaria{% endblock %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css"/>
+  <link rel="stylesheet" href="{% static 'impuestos_dashboard/console.css' %}"/>
+{% endblock %}
+
+{% block content %}
+  <header class="bt-header mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Catálogo DIAN · Biblioteca Tributaria</h1>
+    <nav class="bt-subnav mt-4 flex gap-4">
+      <a href="{% url 'console:impuestos-index' %}" class="text-blue-600 hover:text-blue-800">Inicio</a>
+      <a href="{% url 'console:impuestos-ingesta-list' %}" class="text-blue-600 hover:text-blue-800">Ingesta</a>
+      <a href="{% url 'console:impuestos-ingesta-create' %}" class="text-blue-600 hover:text-blue-800">Nueva Ingesta</a>
+      <a href="{% url 'console:impuestos-search-page' %}" class="text-blue-600 hover:text-blue-800">Búsqueda</a>
+      <a href="{% url 'console:console-impuestos-tipos' %}" class="text-blue-600 hover:text-blue-800">Tipos de Impuesto</a>
+      {% if request.user.is_staff %}
+      <a href="{% url 'console:impuestos-search-health' %}" class="text-blue-600 hover:text-blue-800">Salud</a>
+      {% endif %}
+    </nav>
+  </header>
+  
+  <section class="bt-content">
+    {% block page_content %}{% endblock %}
+  </section>
+{% endblock %}
+
+{% block extra_js %}
+  {{ block.super }}
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <!-- DataTables -->
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  
+  <script>
+    // CSRF para cualquier AJAX (jQuery + HTMX)
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+      return null;
+    }
+    
+    const csrftoken = getCookie('csrftoken') || document.querySelector('meta[name="csrf-token"]')?.content;
+    
+    // jQuery AJAX setup
+    if (typeof $ !== 'undefined' && csrftoken) {
+      $.ajaxSetup({
+        headers: {'X-CSRFToken': csrftoken}
+      });
+    }
+    
+    // HTMX CSRF (ya está en base.html, pero lo mantenemos por compatibilidad)
+    document.body.addEventListener('htmx:configRequest', function (event) {
+      const token = csrftoken || document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token }}';
+      if (token) {
+        event.detail.headers['X-CSRFToken'] = token;
+      }
+    });
+  </script>
+  
+  {% block extra_page_js %}{% endblock %}
+{% endblock %}

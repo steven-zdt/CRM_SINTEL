@@ -1,0 +1,322 @@
+{% load static %}
+{# ⚠️ Bootstrap Icons CSS - Requerido para mostrar iconos bi-plus-lg y bi-trash-lg #}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+<div class="offcanvas-header bg-success text-white">
+  <h5 class="offcanvas-title">
+    <i class="bi bi-layout-text-window me-2"></i>Editor de Cotización
+  </h5>
+  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+</div>
+
+<div class="offcanvas-body">
+  <div id="modal-cotizacion-editor" data-cotizacion-uuid="{{ cotizacion.uuid|default:'' }}">
+    
+    {# ⚠️ v2.60: Datos del Emisor - Información de la empresa emisora #}
+    <div class="card mb-3 border-secondary" id="modulo-emisor-cotizacion">
+      <div class="card-body py-2">
+        <div class="d-flex align-items-center">
+          <div class="me-3" id="emisor-logo-container">
+            <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold text-primary" id="emisor-nombre">Cargando empresa...</h5>
+            <small class="text-muted">NIT: <span id="emisor-nit">...</span></small>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    {# ⚠️ v2.60: Configuración Inicial - Cliente, Perfil, Fecha de Emisión y Fecha de Vencimiento #}
+    <div class="card mb-3 border-primary shadow-sm">
+      <div class="card-header bg-light fw-bold text-primary">
+        <i class="bi bi-gear me-2"></i>Configuración Inicial
+      </div>
+      <div class="card-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-5">
+            <label class="form-label small fw-bold">Cliente *</label>
+            <select id="editor-select-cliente" class="form-select form-select-sm" required></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">Perfil / Plantilla *</label>
+            <select id="editor-select-perfil" class="form-select form-select-sm" required></select>
+          </div>
+        </div>
+        
+        {# ⚠️ v2.60: Panel de Previsualización en Tiempo Real - Folio Proyectado y Fecha de Vencimiento #}
+        <div class="row g-3 mb-4 p-3 bg-light border rounded">
+          <div class="col-md-6">
+            <label class="form-label fw-bold text-muted mb-1"><i class="bi bi-hash me-1"></i>Folio Proyectado</label>
+            <div class="fs-5 fw-bold text-primary" id="preview-folio">Seleccione una plantilla...</div>
+            <small class="text-muted" style="font-size: 0.75rem;">* El número final se confirmará al guardar.</small>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold text-muted mb-1"><i class="bi bi-calendar-event me-1"></i>Vencimiento Calculado</label>
+            <div class="fs-5 fw-bold text-dark" id="preview-vencimiento">--</div>
+            <small class="text-muted" id="preview-dias-validez" style="font-size: 0.75rem;">Validez: -- días.</small>
+          </div>
+        </div>
+        
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Fecha de Emisión *</label>
+            <input type="date" id="input-fecha-emision" class="form-control form-control-sm" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Tipo de Cotización</label>
+            <select id="editor-select-tipo-cotizacion" class="form-select form-select-sm">
+              <option value="MIXTO" selected>Mixto</option>
+              <option value="PRODUCTOS">Solo Productos</option>
+              <option value="SERVICIOS">Solo Servicios</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ⚠️ v2.60: Panel de Configuración Dinámica - User-Driven (Plantilla Maestra) #}
+    <div class="card mb-3 border-info shadow-sm">
+      <div class="card-header bg-light fw-bold text-info">
+        <i class="bi bi-sliders me-2"></i>Configuración Dinámica
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label small fw-bold mb-2">Módulos Activos</label>
+            <div class="row g-2">
+              <div class="col-md-3">
+                <div class="form-check form-switch">
+                  <input class="form-check-input dna-switch" 
+                         type="checkbox" 
+                         id="switch-equipos" 
+                         data-target="#section-equipos"
+                         data-seccion="equipos">
+                  <label class="form-check-label small" for="switch-equipos">
+                    <i class="bi bi-box-seam me-1"></i>Equipos
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-check form-switch">
+                  <input class="form-check-input dna-switch" 
+                         type="checkbox" 
+                         id="switch-materiales" 
+                         data-target="#section-materiales"
+                         data-seccion="materiales">
+                  <label class="form-check-label small" for="switch-materiales">
+                    <i class="bi bi-box me-1"></i>Materiales
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-check form-switch">
+                  <input class="form-check-input dna-switch" 
+                         type="checkbox" 
+                         id="switch-servicios" 
+                         data-target="#section-servicios"
+                         data-seccion="servicios">
+                  <label class="form-check-label small" for="switch-servicios">
+                    <i class="bi bi-tools me-1"></i>Mano de Obra
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ⚠️ v2.60: Secciones dinámicas - User-Driven (activadas por switches) #}
+    <div id="section-equipos" class="editor-module d-none mb-4">
+      <h6 class="fw-bold mb-2 text-dark">
+        <i class="bi bi-box-seam me-2"></i>Equipos y Suministros
+      </h6>
+      <div id="grid-editor-equipos" class="border rounded"></div>
+    </div>
+
+    <div id="section-materiales" class="editor-module d-none mb-4">
+      <h6 class="fw-bold mb-2 text-dark">
+        <i class="bi bi-box me-2"></i>Materiales de Instalación
+      </h6>
+      <div id="grid-editor-materiales" class="border rounded"></div>
+    </div>
+
+    <div id="section-servicios" class="editor-module d-none mb-4">
+      <h6 class="fw-bold mb-2 text-dark">
+        <i class="bi bi-tools me-2"></i>Servicios Profesionales
+      </h6>
+      <div id="grid-editor-servicios" class="border rounded"></div>
+    </div>
+
+    {# ⚠️ FASE 3: Panel de Configuración Financiera - User-Driven (Valores manuales del usuario) #}
+    <div class="card mb-3 border-success shadow-sm">
+      <div class="card-header bg-light fw-bold text-success">
+        <i class="bi bi-calculator me-2"></i>Configuración Financiera (User-Driven)
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          {# ⚠️ FASE 3: IVA Global - Campo individual según flujo actual #}
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">IVA (%) *</label>
+            <input type="number" 
+                   class="form-control form-control-sm dna-finance" 
+                   id="input-iva-porcentaje" 
+                   step="0.01" 
+                   min="0" 
+                   max="100" 
+                   value="19.00"
+                   placeholder="19.00"
+                   required>
+            <small class="text-muted">Porcentaje de IVA global aplicado a la cotización</small>
+          </div>
+        </div>
+        
+        {# ⚠️ REFACTORIZACIÓN: Switch para activar/desactivar AIU (Opcional) #}
+        <div class="form-check form-switch mb-3 mt-3">
+          <input class="form-check-input" 
+                 type="checkbox" 
+                 id="switch-activar-aiu"
+                 role="switch"
+                 aria-label="Activar esquema AIU para esta cotización">
+          <label class="form-check-label fw-bold" for="switch-activar-aiu">
+            <i class="bi bi-toggle-on me-1"></i>Activar esquema AIU para esta cotización
+          </label>
+          <small class="text-muted d-block ms-4 mt-1">
+            El AIU (Administración, Imprevistos y Utilidad) es opcional y se aplica sobre el subtotal antes del IVA.
+          </small>
+        </div>
+        
+        {# ⚠️ REFACTORIZACIÓN: Contenedor de campos AIU (Oculto por defecto) #}
+        <div id="container-aiu-fields" class="d-none">
+          <div class="row g-3">
+            {# ⚠️ FASE 3: AIU - Componentes individuales según flujo actual #}
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">AIU Administración (%)</label>
+              <input type="number" 
+                     class="form-control form-control-sm dna-finance" 
+                     id="input-aiu-admin" 
+                     step="0.01" 
+                     min="0" 
+                     max="100" 
+                     value="0.00"
+                     placeholder="0.00">
+              <small class="text-muted">Porcentaje de AIU para administración</small>
+            </div>
+            
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">AIU Imprevistos (%)</label>
+              <input type="number" 
+                     class="form-control form-control-sm dna-finance" 
+                     id="input-aiu-imprevistos" 
+                     step="0.01" 
+                     min="0" 
+                     max="100" 
+                     value="0.00"
+                     placeholder="0.00">
+              <small class="text-muted">Porcentaje de AIU para imprevistos</small>
+            </div>
+            
+            <div class="col-md-4">
+              <label class="form-label small fw-bold">AIU Utilidad (%)</label>
+              <input type="number" 
+                     class="form-control form-control-sm dna-finance" 
+                     id="input-aiu-utilidad" 
+                     step="0.01" 
+                     min="0" 
+                     max="100" 
+                     value="0.00"
+                     placeholder="0.00">
+              <small class="text-muted">Porcentaje de AIU para utilidad</small>
+            </div>
+          </div>
+        </div>
+        
+        <div class="alert alert-info mt-3 mb-0">
+          <small>
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Nota:</strong> Estos valores se enviarán directamente al backend y tendrán prioridad sobre los valores por defecto de la plantilla (User-Driven Architecture).
+          </small>
+        </div>
+      </div>
+    </div>
+
+    {# ⚠️ v2.60: Dashboard Financiero por Módulo - Resumen de costos, utilidades y descuentos #}
+    <div class="card mb-4 border-info shadow-sm" id="dashboard-financiero">
+      <div class="card-header bg-info text-white fw-bold">
+        <i class="bi bi-pie-chart me-2"></i>Resumen Financiero por Módulo
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0 text-center" id="tabla-dashboard-modulos">
+            <thead class="table-light">
+              <tr>
+                <th class="text-start">Módulo</th>
+                <th>Inversión (Costo)</th>
+                <th class="text-success">Utilidad Esperada</th>
+                <th class="text-danger">Descuentos</th>
+                <th>IVA Generado</th>
+                <th class="fw-bold">Total Módulo</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-dashboard-modulos">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {# ⚠️ v2.60: Panel de Totales - Espejo que suma valores calculados por fila (sin lógica compleja) #}
+    <div class="card mb-3 border-primary shadow-sm" id="panel-totales-cotizacion">
+      <div class="card-header bg-light fw-bold text-primary">
+        <i class="bi bi-cash-stack me-2"></i>Resumen de Totales
+      </div>
+      <div class="card-body bg-light">
+        <div class="row g-3 text-center">
+          {# Subtotal - Suma de las bases gravables (subtotal_linea) #}
+          <div class="col-md-3 border-end">
+            <small class="text-muted d-block mb-1 fw-bold">Subtotal</small>
+            <h5 class="mb-0 fw-bold text-dark" id="total-subtotal">$0.00</h5>
+            <small class="text-muted">(Suma de bases gravables)</small>
+          </div>
+          
+          {# AIU - Si aplica (calculado sobre subtotal) #}
+          <div class="col-md-3 border-end" id="contenedor-total-aiu" style="display: none;">
+            <small class="text-muted d-block mb-1 fw-bold">AIU</small>
+            <h5 class="mb-0 fw-bold text-warning" id="total-aiu">$0.00</h5>
+            <small class="text-muted">(Administración e Imprevistos)</small>
+          </div>
+          
+          {# IVA - Suma de los IVAs de cada fila (_valor_iva_interno) #}
+          <div class="col-md-3 border-end">
+            <small class="text-muted d-block mb-1 fw-bold">IVA</small>
+            <h5 class="mb-0 fw-bold text-info" id="total-iva">$0.00</h5>
+            <small class="text-muted">(Suma de IVAs por fila)</small>
+          </div>
+          
+          {# Total Final - Subtotal + IVA + AIU (si aplica) #}
+          <div class="col-md-3">
+            <small class="text-primary d-block fw-bold mb-1">Total Final</small>
+            <h4 class="mb-0 text-primary fw-bold" id="total-final">$0.00</h4>
+            <small class="text-muted">(Subtotal + IVA + AIU)</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ⚠️ v2.60: Botones de Acción #}
+    <div class="mt-4 d-flex justify-content-end gap-2 pb-5">
+      <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="offcanvas">
+        Cancelar
+      </button>
+      <button type="button" id="btn-guardar-maestro" class="btn btn-primary px-4">
+        <i class="bi bi-save me-1"></i>Guardar Cotización
+      </button>
+    </div>
+  </div>
+</div>
+
+{# ⚠️ ORDEN CRÍTICO: cotizacion_columns.js DEBE cargarse ANTES que cotizacion_editor.js #}
+{# cotizacion_columns.js define window.getCotizacionColumns() requerido por el editor #}
+<script src="{% static 'core/js/cotizaciones/cotizacion_columns.js' %}?v=2.60"></script>
+<script src="{% static 'core/js/cotizaciones/features/cotizacion_editor.js' %}?v=2.60"></script>

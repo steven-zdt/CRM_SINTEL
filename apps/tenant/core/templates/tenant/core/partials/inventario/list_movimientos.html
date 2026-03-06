@@ -1,0 +1,28 @@
+<div class="ui-module h-100 d-flex flex-column">
+    {# ⚠️ v2.40: Elemento de feedback para errores #}
+    <div id="feedback-movimientos-list" class="alert d-none mb-2" role="alert"></div>
+    
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <h5 class="mb-0 fw-bold text-success"><i class="bi bi-arrow-left-right me-2"></i>Kardex</h5>
+            <span class="badge bg-light text-dark border">Movimientos de Inventario</span>
+        </div>
+        <div class="btn-group shadow-sm">
+            <button type="button" class="btn btn-success" id="btn-nuevo-movimiento" 
+                    onclick="if(window.InventarioMovimientosModule?.abrirModalCrear){window.InventarioMovimientosModule.abrirModalCrear();}else{console.warn('InventarioMovimientosModule no disponible');}">
+                <i class="bi bi-plus-lg me-1"></i> Registrar Movimiento
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="window.InventarioMovimientosModule?.refresh()">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+    
+    {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
+    <div class="mb-3">
+        <input type="text" id="search-movimiento" class="form-control" placeholder="Buscar por producto, origen u observaciones...">
+    </div>
+    
+    {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+    <div id="grid-movimientos" class="flex-grow-1"></div>
+</div>

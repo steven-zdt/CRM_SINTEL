@@ -1,0 +1,70 @@
+{# offcanvas_plantilla_editar.html - Módulo Dedicado Edición v2.60 - SIMPLIFICADO (User-Driven) #}
+{# ⚠️ v2.60: Formulario simplificado. Solo campos esenciales: nombre, generación de códigos y días de validez. #}
+<div class="offcanvas-header bg-warning text-dark">
+  <h5 class="offcanvas-title"><i class="bi bi-pencil me-2"></i>Editar Plantilla Base</h5>
+  <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+</div>
+<div class="offcanvas-body">
+  <form id="form-plantilla-editar" novalidate>
+    <div id="form-plantilla-editar-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    <input type="hidden" id="edit-plantilla-id" value="{{ configuracion.id }}">
+    
+    <div class="mb-3">
+      <label class="form-label fw-bold">Nombre de la Plantilla Base <span class="text-danger">*</span></label>
+      <input type="text" class="form-control" name="nombre_configuracion" required 
+             placeholder="Ej: Cotización Estándar"
+             value="{{ configuracion.nombre_configuracion }}">
+    </div>
+
+    <h6 class="border-bottom pb-2 mt-4 mb-3 text-primary">
+      <i class="bi bi-123 me-2"></i>Numeración y Secuencia
+    </h6>
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Prefijo</label>
+        <input type="text" class="form-control" name="prefijo_secuencia" placeholder="Ej: STS. "
+               value="{{ configuracion.prefijo_secuencia }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Semilla Inicial <span class="text-danger">*</span></label>
+        <input type="number" class="form-control" name="semilla_inicial" min="1" required
+               value="{{ configuracion.semilla_inicial }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Sufijo</label>
+        <input type="text" class="form-control" name="sufijo_secuencia" placeholder="Ej: -2026"
+               value="{{ configuracion.sufijo_secuencia }}">
+      </div>
+    </div>
+
+    <h6 class="border-bottom pb-2 mt-4 mb-3 text-primary">
+      <i class="bi bi-calendar-event me-2"></i>Reglas de Negocio
+    </h6>
+    <div class="mb-3">
+      <label class="form-label fw-bold">Días de Validez <span class="text-danger">*</span></label>
+      <div class="input-group">
+        <input type="number" class="form-control" name="dias_validez" min="1" max="30" required
+               value="{{ configuracion.dias_validez|default:15 }}">
+        <span class="input-group-text">Días</span>
+      </div>
+      <div class="form-text">Tiempo de vigencia desde la creación (Máximo 30 días).</div>
+    </div>
+    
+    <div class="mb-3">
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="check-es-activo-editar" name="es_activo" {% if configuracion.es_activo %}checked{% endif %}>
+        <label class="form-check-label fw-bold" for="check-es-activo-editar">Plantilla Activa</label>
+      </div>
+    </div>
+    
+    <div class="mt-4 d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="submit" class="btn btn-warning" id="btn-submit-plantilla-editar">
+        <i class="bi bi-save me-1"></i>Guardar Cambios
+      </button>
+    </div>
+  </form>
+</div>
+{% load static %}
+<script src="{% static 'core/js/cotizaciones/features/plantilla_editar.js' %}?v=2.60.2"></script>

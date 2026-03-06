@@ -1,0 +1,79 @@
+{% extends "console/base.html" %}
+{% load static %}
+
+{% block title %}Nueva ingesta – Catálogo DIAN{% endblock %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'impuestos_dashboard/console.css' %}"/>
+{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+  <h1 class="text-2xl font-bold text-gray-900 mb-6">Nueva ingesta</h1>
+  
+  {% if error %}
+  <div class="alert alert-danger">
+    {{error}}
+    {% if retry_after %}
+      <p>Intenta de nuevo en <strong>{{retry_after}}</strong> segundos.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+  
+  <div class="grid">
+    <section class="mb-4">
+      <h3 class="text-lg font-semibold mb-4">Subir archivo (PDF / XLSX / CSV / HTML)</h3>
+      <!-- FORM NATIVO MULTIPART: apunta a vista de consola que redirige después de crear -->
+      <form method="post" action="{% url 'console:impuestos-ingesta-create' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="fuente" value="DIAN"/>
+        <div class="form-group">
+          <label for="archivo">Archivo:</label>
+          <input type="file" name="archivo" id="archivo" required accept=".pdf,.xlsx,.xls,.csv,.html,.htm"/>
+        </div>
+        <div class="form-group">
+          <label for="fecha_publicacion_archivo">Fecha de Publicación:</label>
+          <input type="date" name="fecha_publicacion" id="fecha_publicacion_archivo"/>
+        </div>
+        <button type="submit" class="btn btn-primary">Subir y procesar</button>
+      </form>
+      <p class="hint mt-2" style="font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem;">
+        El formulario envía <code>multipart/form-data</code>. DRF lo parsea con <code>MultiPartParser</code>.
+        Máx 50MB. Se detectará el tipo automáticamente.
+      </p>
+    </section>
+    
+    <section>
+      <h3 class="text-lg font-semibold mb-4">Programar por URL</h3>
+      <!-- FORM POST NORMAL: apunta a vista de consola que redirige después de crear -->
+      <form method="post" action="{% url 'console:impuestos-ingesta-create' %}">
+        {% csrf_token %}
+        <div class="form-group">
+          <label for="url_origen">URL:</label>
+          <input type="url" name="url_origen" id="url_origen" placeholder="https://..." required/>
+        </div>
+        <div class="form-group">
+          <label for="fuente">Fuente:</label>
+          <select name="fuente" id="fuente" required>
+            <option value="DIAN" selected>DIAN</option>
+            <option value="DOF">DOF</option>
+            <option value="SUIN">SUIN</option>
+            <option value="DIARIO_OFICIAL">Diario Oficial</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="fecha_publicacion_url">Fecha de Publicación:</label>
+          <input type="date" name="fecha_publicacion" id="fecha_publicacion_url"/>
+        </div>
+        <button type="submit" class="btn btn-primary">Programar descarga</button>
+      </form>
+      <p class="hint mt-2" style="font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem;">
+        El navegador enviará <code>application/x-www-form-urlencoded</code> y DRF lo parsea con <code>FormParser</code>.
+        No establezcas <code>Content-Type: application/json</code> aquí (causaría 415 si el body no es JSON).
+        Se respetará robots.txt y los límites de rastreo del sitio.
+      </p>
+    </section>
+  </div>
+{% endblock %}
+

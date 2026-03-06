@@ -1,0 +1,43 @@
+name: Verify Core Partials & Legacy
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main ]
+
+jobs:
+  verify-core:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # Opción Node
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+      
+      - name: Run Node verification
+        run: |
+          node scripts/verifica_core_contaminacion.js || exit $?
+      
+      # Opción Python (comentada, descomentar si prefieres Python)
+      # - name: Setup Python
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: '3.12'
+      # 
+      # - name: Run Python verification
+      #   run: |
+      #     python scripts/verifica_core_contaminacion.py || exit $?
+      
+      - name: Upload audit artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: core-audit
+          path: |
+            AUDITORIA_CORE_CONTAMINACION.md
+            auditoria_core_contaminacion.json

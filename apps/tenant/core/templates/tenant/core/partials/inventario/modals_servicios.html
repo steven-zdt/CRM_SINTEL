@@ -1,0 +1,53 @@
+<div class="modal fade" id="modal-servicio" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">Gestión de Servicio</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="form-servicio">
+                <div class="modal-body">
+                    <input type="hidden" id="servicio-id" name="id">
+                    
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Código *</label>
+                            <input type="text" class="form-control" id="servicio-codigo" name="codigo" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Estado</label>
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" id="servicio-activo" name="activo" checked>
+                                <label class="form-check-label" for="servicio-activo">Activo</label>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Nombre del Servicio *</label>
+                            <input type="text" class="form-control" id="servicio-nombre" name="nombre" required>
+                        </div>
+                        
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Categoría *</label>
+                            <select class="form-select" id="servicio-categoria" name="categoria" required>
+                                <option value="">Seleccione...</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Precio Base (Referencia)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" id="servicio-precio" name="precio_venta" step="0.01" min="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btn-guardar-servicio">Guardar Servicio</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

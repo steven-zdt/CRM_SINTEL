@@ -1,0 +1,50 @@
+{% extends "console/base.html" %}
+{% load static %}
+
+{% block title %}Detalle de ingesta – Catálogo DIAN{% endblock %}
+
+{% block extra_head %}
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <link rel="stylesheet" href="{% static 'impuestos_dashboard/console.css' %}"/>
+{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+  <h1 class="text-2xl font-bold text-gray-900 mb-6">Detalle & Logs</h1>
+  
+  <ul class="meta">
+    <li>ID: <b>{{doc.id}}</b></li>
+    <li>Fuente: <b>{{doc.fuente}}</b></li>
+    <li>Tipo: <b>{{doc.tipo|default:"—"}}</b></li>
+    <li>Estado: <span class="badge badge-{{doc.estado|lower}}">{{doc.estado}}</span></li>
+    <li>Archivo: {% if doc.archivo %}<a href="{{doc.archivo.url}}" class="text-blue-600 hover:text-blue-800">Descargar</a>{% else %}—{% endif %}</li>
+    <li>URL Origen: {% if doc.url_origen %}<a href="{{doc.url_origen}}" target="_blank" class="text-blue-600 hover:text-blue-800">{{doc.url_origen}}</a>{% else %}—{% endif %}</li>
+    <li>Fecha Publicación: {{doc.fecha_publicacion|date:"Y-m-d"|default:"—"}}</li>
+    {% if doc.content_type %}<li>Content Type: <code>{{doc.content_type}}</code></li>{% endif %}
+    {% if doc.extension %}<li>Extensión: <code>{{doc.extension}}</code></li>{% endif %}
+    {% if doc.size_bytes %}<li>Tamaño: {{doc.size_bytes|filesizeformat}}</li>{% endif %}
+    {% if doc.hash_sha256 %}<li>Hash SHA256: <code class="text-xs">{{doc.hash_sha256|truncatechars:64}}</code></li>{% endif %}
+    <li>Creado: {{doc.created_at|date:"Y-m-d H:i:s"}}</li>
+    <li>Actualizado: {{doc.updated_at|date:"Y-m-d H:i:s"}}</li>
+  </ul>
+  
+  {% if doc.user_agent or doc.robots_observado %}
+  <div class="crawling-info">
+    <h3 class="text-lg font-semibold mb-2">Cumplimiento Crawling</h3>
+    <ul>
+      <li>User Agent: {{doc.user_agent|default:"—"}}</li>
+      <li>Robots.txt Observado: {% if doc.robots_observado %}✔ Sí{% else %}✗ No{% endif %}</li>
+      <li>Crawl Delay: {{doc.crawl_delay_s}}s</li>
+    </ul>
+  </div>
+  {% endif %}
+  
+  <div id="logs"
+       hx-get="{% url 'impuestos_dashboard:ingesta_logs' doc.id %}"
+       hx-trigger="load, every 3s"
+       hx-swap="innerHTML">
+    <p>Cargando logs...</p>
+  </div>
+</div>
+{% endblock %}

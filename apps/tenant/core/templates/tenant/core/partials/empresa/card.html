@@ -1,0 +1,29 @@
+{% load static %}
+<div data-partial="empresa-card" class="empresa-card">
+    <div class="card-header">
+        <h3>Mi Empresa</h3>
+    </div>
+    <div class="card-body">
+        <div id="empresa-loading" class="loading">Cargando datos de empresa...</div>
+        <div id="empresa-content" style="display: none;">
+            <div class="empresa-info">
+                <div id="empresa-razon-social" class="empresa-field">
+                    <strong>Razón Social:</strong> <span id="empresa-razon-social-value">-</span>
+                </div>
+                <div id="empresa-nit" class="empresa-field">
+                    <strong>NIT:</strong> <span id="empresa-nit-value">-</span>
+                </div>
+                <div id="empresa-direccion" class="empresa-field">
+                    <strong>Dirección:</strong> <span id="empresa-direccion-value">-</span>
+                </div>
+                <div id="empresa-telefono" class="empresa-field">
+                    <strong>Teléfono:</strong> <span id="empresa-telefono-value">-</span>
+                </div>
+            </div>
+            <div class="empresa-actions">
+                <a href="/empresa/" class="btn btn-primary">Editar Empresa</a>
+            </div>
+        </div>
+        <div id="empresa-error" class="error-message" style="display: none;"></div>
+    </div>
+</div>

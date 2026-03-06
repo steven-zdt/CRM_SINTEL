@@ -1,0 +1,44 @@
+{% load static %}
+{# partial_summary.html - Panel de totales netos de gastos v2.60 #}
+{# ⚠️ Feature-Sliced Architecture: Partial reutilizable para resumen financiero #}
+<div class="row mb-4" id="panel-totales-gastos">
+    <div class="col-md-3 mb-3 mb-md-0">
+        <div class="card border-primary h-100 shadow-sm">
+            <div class="card-body text-center">
+                <h6 class="text-muted text-uppercase small fw-bold">Gasto Total Neto</h6>
+                <h2 class="display-6 fw-bold text-primary" id="gasto-total-neto">$0.00</h2>
+                <p class="mb-0 small text-muted">
+                    Documentos: <span id="gasto-cantidad" class="badge bg-secondary">0</span>
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3 mb-md-0">
+        <div class="card border-danger h-100 shadow-sm">
+            <div class="card-body text-center">
+                <h6 class="text-muted text-uppercase small fw-bold">Retefuente</h6>
+                <h2 class="display-6 fw-bold text-danger" id="gasto-retefuente">$0.00</h2>
+                <p class="mb-0 x-small text-muted">Retención en la Fuente</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3 mb-md-0">
+        <div class="card border-warning h-100 shadow-sm">
+            <div class="card-body text-center">
+                <h6 class="text-muted text-uppercase small fw-bold">ReteICA</h6>
+                <h2 class="display-6 fw-bold text-warning" id="gasto-reteica">$0.00</h2>
+                <p class="mb-0 x-small text-muted">Retención ICA</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-light h-100 border-0 shadow-sm">
+            <div class="card-body d-flex align-items-center justify-content-center">
+                <div class="text-center">
+                    <i class="bi bi-shield-lock-fill text-success fs-2"></i>
+                    <p class="mb-0 small text-muted d-block mt-2 fw-bold">Documento Soporte Inmutable</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

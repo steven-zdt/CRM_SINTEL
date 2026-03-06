@@ -1,0 +1,147 @@
+{# contactos_offcanvas.html - Gestor de Contactos de Cliente v2.60 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+{# ⚠️ v2.60: Gestor independiente de contactos usando Bootstrap Offcanvas + HTMX #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-contactos" aria-labelledby="offcanvas-contactos-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-contactos-label">
+      <i class="bi bi-people me-2"></i>
+      <span id="offcanvas-contactos-title">Contactos{% if cliente.razon_social %} - {{ cliente.razon_social }}{% endif %}</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern (Aislamiento Gradual) #}
+    <div id="form-contacto-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    {# Sección: Formulario de Creación de Contacto #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-person-plus me-2"></i>Agregar Nuevo Contacto
+      </h6>
+      <form id="form-contacto-cliente" method="POST" onsubmit="return false;">
+        <input type="hidden" id="contacto-cliente-id" name="cliente" value="{{ cliente.id|default:'' }}">
+        <input type="hidden" id="contacto-id" name="id" value="">
+        
+        <div class="row g-3">
+          {# ⚠️ v2.60: Selector de cliente - visible solo cuando no hay cliente_id (modo creación desde módulo Contactos) #}
+          <div class="col-12" id="contacto-cliente-select-container" {% if cliente.id %}style="display: none;"{% endif %}>
+            <label for="contacto-cliente-select" class="form-label">Cliente *</label>
+            <select class="form-select" id="contacto-cliente-select" name="cliente_select" required>
+              <option value="">Seleccione un cliente...</option>
+            </select>
+            <small class="form-text text-muted">Seleccione el cliente al que desea asignar este contacto</small>
+          </div>
+          <div class="col-12">
+            <label for="contacto-nombre_completo" class="form-label">Nombre Completo *</label>
+            <input type="text" class="form-control" id="contacto-nombre_completo" name="nombre_completo" 
+                   required placeholder="Nombre completo del contacto" />
+          </div>
+          <div class="col-md-6">
+            <label for="contacto-cargo" class="form-label">Cargo</label>
+            <input type="text" class="form-control" id="contacto-cargo" name="cargo" 
+                   placeholder="Cargo o posición" />
+          </div>
+          <div class="col-md-6">
+            <label for="contacto-telefono" class="form-label">Teléfono</label>
+            <input type="text" class="form-control" id="contacto-telefono" name="telefono" 
+                   placeholder="Teléfono de contacto" />
+          </div>
+          <div class="col-12">
+            <label for="contacto-email" class="form-label">Email *</label>
+            <input type="email" class="form-control" id="contacto-email" name="email" 
+                   required placeholder="Email de contacto" />
+          </div>
+          <div class="col-md-6">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="contacto-activo" name="activo" checked />
+              <label class="form-check-label" for="contacto-activo">
+                Activo
+              </label>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="contacto-is_principal" name="is_principal" />
+              <label class="form-check-label" for="contacto-is_principal">
+                Contacto Principal
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <div class="d-flex justify-content-end gap-2 mt-3">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-cancelar-contacto">
+            <i class="bi bi-x-lg me-1"></i>Cancelar
+          </button>
+          <button type="submit" class="btn btn-primary btn-sm" id="btn-guardar-contacto">
+            <i class="bi bi-save me-1"></i>Guardar Contacto
+          </button>
+        </div>
+      </form>
+    </div>
+
+    {# Sección: Lista de Contactos Existentes #}
+    <div class="mb-3">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-list-ul me-2"></i>Contactos Registrados
+      </h6>
+      <div id="lista-contactos-cliente">
+        {# Los contactos se inyectarán dinámicamente aquí mediante JS o HTMX #}
+        {% if contactos %}
+          {% for contacto in contactos %}
+          <div class="card mb-2 contacto-item-card" data-contacto-id="{{ contacto.id }}">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                  <h6 class="mb-1">
+                    {{ contacto.nombre_completo }}
+                    {% if contacto.is_principal %}
+                      <span class="badge bg-primary ms-2">Principal</span>
+                    {% endif %}
+                    {% if not contacto.activo %}
+                      <span class="badge bg-secondary ms-2">Inactivo</span>
+                    {% endif %}
+                  </h6>
+                  {% if contacto.cargo %}
+                    <p class="text-muted small mb-1"><i class="bi bi-briefcase me-1"></i>{{ contacto.cargo }}</p>
+                  {% endif %}
+                  <p class="text-muted small mb-1"><i class="bi bi-envelope me-1"></i>{{ contacto.email }}</p>
+                  {% if contacto.telefono %}
+                    <p class="text-muted small mb-0"><i class="bi bi-telephone me-1"></i>{{ contacto.telefono }}</p>
+                  {% endif %}
+                </div>
+                <div class="btn-group btn-group-sm">
+                  <button type="button" class="btn btn-outline-primary btn-editar-contacto" 
+                          data-contacto-id="{{ contacto.id }}" title="Editar Contacto">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button type="button" class="btn btn-outline-danger btn-eliminar-contacto" 
+                          data-contacto-id="{{ contacto.id }}" title="Eliminar Contacto">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle me-2"></i>No hay contactos registrados para este cliente.
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="alert alert-info mb-0">
+            <i class="bi bi-info-circle me-2"></i>No hay contactos registrados para este cliente.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex justify-content-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-lg me-1"></i>Cerrar
+      </button>
+    </div>
+  </div>
+</div>

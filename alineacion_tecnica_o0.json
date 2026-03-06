@@ -1,0 +1,172 @@
+{
+  "fecha": "2024-12-19T00:00:00",
+  "version": "v2.37",
+  "partials_corregidos": [
+    {
+      "archivo": "apps/tenant/facturas/templates/tenant/facturas/partials/assets_facturas.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/clientes/templates/tenant/clientes/partials/assets_clientes.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/gastos/templates/tenant/gastos/partials/assets_gastos.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/empleados/templates/tenant/empleados/partials/assets_empleados.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/proveedores/templates/tenant/proveedores/partials/assets_proveedores.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/contabilidad/templates/tenant/contabilidad/partials/assets_cuentas.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/contabilidad/templates/tenant/contabilidad/partials/assets_asientos.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/inventario/templates/tenant/inventario/partials/assets_inventario.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/empresa/templates/tenant/empresa/partials/assets_empresa.html",
+      "estado": "OK"
+    },
+    {
+      "archivo": "apps/tenant/perfil/templates/tenant/perfil/partials/assets_perfil.html",
+      "estado": "OK"
+    }
+  ],
+  "tablas_actualizadas": [
+    {
+      "archivo": "apps/tenant/facturas/templates/tenant/facturas/partials/list.html",
+      "tabla": "#table-facturas"
+    },
+    {
+      "archivo": "apps/tenant/clientes/templates/tenant/clientes/partials/list.html",
+      "tabla": "#table-clientes"
+    },
+    {
+      "archivo": "apps/tenant/gastos/templates/tenant/gastos/partials/list.html",
+      "tabla": "#table-gastos"
+    },
+    {
+      "archivo": "apps/tenant/empleados/templates/tenant/empleados/partials/list.html",
+      "tabla": "#table-empleados"
+    },
+    {
+      "archivo": "apps/tenant/proveedores/templates/tenant/proveedores/partials/list.html",
+      "tabla": "#table-proveedores"
+    },
+    {
+      "archivo": "apps/tenant/contabilidad/templates/tenant/contabilidad/partials/list_cuentas.html",
+      "tabla": "#table-contabilidad-cuentas"
+    },
+    {
+      "archivo": "apps/tenant/contabilidad/templates/tenant/contabilidad/partials/list_asientos.html",
+      "tabla": "#table-contabilidad-asientos"
+    },
+    {
+      "archivo": "apps/tenant/inventario/templates/tenant/inventario/partials/list_catalogo.html",
+      "tabla": "#table-inventario-catalogo"
+    },
+    {
+      "archivo": "apps/tenant/inventario/templates/tenant/inventario/partials/list_activos.html",
+      "tabla": "#table-inventario-activos"
+    },
+    {
+      "archivo": "apps/tenant/inventario/templates/tenant/inventario/partials/list_movimientos.html",
+      "tabla": "#table-inventario-movimientos"
+    },
+    {
+      "archivo": "apps/tenant/empresa/templates/tenant/empresa/partials/list.html",
+      "tabla": "#table-empresa"
+    },
+    {
+      "archivo": "apps/tenant/empresa/templates/tenant/empresa/partials/mailinbox_list.html",
+      "tabla": "#table-mailinbox"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/facturas/list.html",
+      "tabla": "#table-facturas"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/clientes/list.html",
+      "tabla": "#table-clientes"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/gastos/list.html",
+      "tabla": "#table-gastos"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/empleados/list.html",
+      "tabla": "#table-empleados"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/proveedores/list.html",
+      "tabla": "#table-proveedores"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/contabilidad/list_cuentas.html",
+      "tabla": "#table-contabilidad-cuentas"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/contabilidad/list_asientos.html",
+      "tabla": "#table-contabilidad-asientos"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/inventario/list_catalogo.html",
+      "tabla": "#table-inventario-catalogo"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/inventario/list_activos.html",
+      "tabla": "#table-inventario-activos"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/inventario/list_movimientos.html",
+      "tabla": "#table-inventario-movimientos"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/empresa/list.html",
+      "tabla": "#table-empresa"
+    },
+    {
+      "archivo": "apps/tenant/core/templates/tenant/core/partials/mailinbox/list.html",
+      "tabla": "#table-mailinbox"
+    }
+  ],
+  "sanity_check": {
+    "helpers": {
+      "API_HELPERS": "OK",
+      "DOMUtils": "OK",
+      "DataTablesUtils": "OK",
+      "Routes": "OK",
+      "CRUD": "OK",
+      "Module": "OK"
+    },
+    "funciones_criticas": {
+      "API_HELPERS.safeFetchJson": "OK",
+      "API_HELPERS.getCSRF": "OK",
+      "API_HELPERS.withTrailingSlash": "OK",
+      "DOMUtils.waitForVisible": "OK",
+      "DOMUtils.awaitVisibleAny": "OK",
+      "DataTablesUtils.initServerSide": "OK",
+      "DataTablesUtils.safeDestroy": "OK",
+      "Routes.get": "OK",
+      "Routes.collectionUrl": "OK",
+      "CRUD.create": "OK",
+      "Module.init": "OK"
+    }
+  },
+  "assets_core_html": {
+    "orden_verificado": true,
+    "sanity_check_agregado": true,
+    "hook_datatables_agregado": true
+  }
+}

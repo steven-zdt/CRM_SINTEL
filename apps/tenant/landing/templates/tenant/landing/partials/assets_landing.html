@@ -1,0 +1,9 @@
+{% load static %}
+{# ⚠️ PASO 3: Helpers Core removidos (ya vienen de assets_core.html) #}
+{# BLOQUE 1: Helpers Core (DEBEN ir primero) #}
+{% include 'tenant/core/partials/assets_core.html' %}
+
+{# BLOQUE 2: Archivos del módulo Landing #}
+<script src="{% static 'core/js/landing/landing.api.js' %}"></script>
+<script src="{% static 'core/js/landing/landing.ui.js' %}"></script>
+<script src="{% static 'core/js/landing/landing.page.js' %}"></script>

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Cotización {{ cotizacion.codigo_unico|default:cotizacion.numero_cotizacion }}</title>
+    <style>
+        /* ⚠️ xhtml2pdf: CSS compatible - Solo propiedades básicas soportadas */
+        @page {
+            size: letter;
+            margin: 2cm;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            color: #000;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+        }
+        /* Layout basado en tablas - Compatible con xhtml2pdf */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        table.header-table {
+            margin-bottom: 20px;
+            border-bottom: 2px solid #000;
+        }
+        table.header-table td {
+            padding: 5px;
+            border: none;
+        }
+        table.info-table {
+            margin-bottom: 20px;
+        }
+        table.info-table td {
+            padding: 4px 8px;
+            border: none;
+            vertical-align: top;
+        }
+        table.items-table {
+            margin-bottom: 15px;
+        }
+        table.items-table th {
+            background-color: #333;
+            color: #fff;
+            padding: 8px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 9pt;
+            border: 1px solid #000;
+        }
+        table.items-table td {
+            padding: 6px;
+            border: 1px solid #ddd;
+            font-size: 9pt;
+        }
+        table.items-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        table.totals-table {
+            width: 300px;
+            margin-top: 20px;
+            margin-left: auto;
+            margin-right: 0;
+        }
+        table.totals-table td {
+            padding: 5px 10px;
+            border: none;
+        }
+        table.totals-table .label {
+            font-weight: bold;
+            text-align: right;
+            padding-right: 20px;
+        }
+        table.totals-table .value {
+            text-align: right;
+            font-weight: bold;
+        }
+        table.totals-table .total-row {
+            border-top: 2px solid #000;
+            font-size: 11pt;
+        }
+        .text-right {
+            text-align: right;
+        }
+        .text-center {
+            text-align: center;
+        }
+        .text-left {
+            text-align: left;
+        }
+        .section-title {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            padding: 5px;
+            background-color: #e0e0e0;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+            font-size: 8pt;
+            text-align: center;
+            color: #666;
+        }
+        .no-items {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+            font-style: italic;
+        }
+        h1 {
+            margin: 0;
+            font-size: 18pt;
+            font-weight: bold;
+        }
+        h2 {
+            margin: 0 0 5px 0;
+            font-size: 14pt;
+            font-weight: bold;
+        }
+        h3 {
+            margin: 0 0 10px 0;
+            font-size: 12pt;
+            font-weight: bold;
+        }
+        .client-box {
+            background-color: #f5f5f5;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header: Usando tabla para layout -->
+    <table class="header-table">
+        <tr>
+            <td>
+                <h1>COTIZACIÓN</h1>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <table class="info-table">
+                    <tr>
+                        <td><strong>Código:</strong></td>
+                        <td>{{ cotizacion.codigo_unico|default:cotizacion.numero_cotizacion }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fecha de Emisión:</strong></td>
+                        <td>{{ cotizacion.fecha_emision|date:"d/m/Y" }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fecha de Vencimiento:</strong></td>
+                        <td>{{ cotizacion.fecha_vencimiento|date:"d/m/Y" }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Estado:</strong></td>
+                        <td>{{ cotizacion.get_estado_display }}</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Información de la Empresa: Usando tabla -->
+    <table class="info-table">
+        <tr>
+            <td colspan="2">
+                <h2>{{ empresa.razon_social }}</h2>
+            </td>
+        </tr>
+        <tr>
+            <td><strong>NIT:</strong></td>
+            <td>{{ empresa.nit }}{% if empresa.digito_verificacion %}-{{ empresa.digito_verificacion }}{% endif %}</td>
+        </tr>
+        {% if empresa.direccion %}
+        <tr>
+            <td><strong>Dirección:</strong></td>
+            <td>{{ empresa.direccion }}</td>
+        </tr>
+        {% endif %}
+        {% if empresa.telefono %}
+        <tr>
+            <td><strong>Teléfono:</strong></td>
+            <td>{{ empresa.telefono }}</td>
+        </tr>
+        {% endif %}
+        {% if empresa.email %}
+        <tr>
+            <td><strong>Email:</strong></td>
+            <td>{{ empresa.email }}</td>
+        </tr>
+        {% endif %}
+    </table>
+
+    <!-- Información del Cliente: Usando tabla -->
+    {% if cotizacion.cliente %}
+    <div class="client-box">
+        <h3>Cliente</h3>
+        <table class="info-table">
+            <tr>
+                <td><strong>Nombre:</strong></td>
+                <td>{{ cotizacion.cliente.nombre_comercial|default:cotizacion.cliente.razon_social }}</td>
+            </tr>
+            <tr>
+                <td><strong>NIT/CC:</strong></td>
+                <td>{{ cotizacion.cliente.numero_documento }}</td>
+            </tr>
+            {% if cotizacion.cliente.direccion %}
+            <tr>
+                <td><strong>Dirección:</strong></td>
+                <td>{{ cotizacion.cliente.direccion }}</td>
+            </tr>
+            {% endif %}
+            {% if cotizacion.cliente.telefono %}
+            <tr>
+                <td><strong>Teléfono:</strong></td>
+                <td>{{ cotizacion.cliente.telefono }}</td>
+            </tr>
+            {% endif %}
+            {% if cotizacion.cliente.email %}
+            <tr>
+                <td><strong>Email:</strong></td>
+                <td>{{ cotizacion.cliente.email }}</td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- Sección 1: Dispositivos y Equipos (PRODUCTO) -->
+    {% if seccion_1 %}
+    <div class="section-title">1. DISPOSITIVOS Y EQUIPOS</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width: 5%;">#</th>
+                <th style="width: 35%;">Descripción</th>
+                <th style="width: 10%;">Marca</th>
+                <th style="width: 10%;">Referencia</th>
+                <th style="width: 8%;">Cant.</th>
+                <th style="width: 8%;">Unidad</th>
+                <th style="width: 12%;" class="text-right">Precio Unit.</th>
+                <th style="width: 12%;" class="text-right">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_1 %}
+            <tr>
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td>{{ item.marca|default:"-" }}</td>
+                <td>{{ item.referencia|default:"-" }}</td>
+                <td class="text-center">{{ item.cantidad|floatformat:2 }}</td>
+                <td class="text-center">{{ item.unidad|default:"UND" }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0|default:"0" }}</td>
+                <td class="text-right">${{ item.subtotal_linea|floatformat:0|default:"0" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Sección 2: Accesorios y Materiales (MATERIAL) -->
+    {% if seccion_2 %}
+    <div class="section-title">2. ACCESORIOS Y MATERIALES</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width: 5%;">#</th>
+                <th style="width: 35%;">Descripción</th>
+                <th style="width: 10%;">Marca</th>
+                <th style="width: 10%;">Referencia</th>
+                <th style="width: 8%;">Cant.</th>
+                <th style="width: 8%;">Unidad</th>
+                <th style="width: 12%;" class="text-right">Precio Unit.</th>
+                <th style="width: 12%;" class="text-right">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_2 %}
+            <tr>
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td>{{ item.marca|default:"-" }}</td>
+                <td>{{ item.referencia|default:"-" }}</td>
+                <td class="text-center">{{ item.cantidad|floatformat:2 }}</td>
+                <td class="text-center">{{ item.unidad|default:"UND" }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0|default:"0" }}</td>
+                <td class="text-right">${{ item.subtotal_linea|floatformat:0|default:"0" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Sección 3: Mano de Obra e Instalación (SERVICIO) -->
+    {% if seccion_3 %}
+    <div class="section-title">3. MANO DE OBRA E INSTALACIÓN</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width: 5%;">#</th>
+                <th style="width: 55%;">Descripción</th>
+                <th style="width: 8%;">Cant.</th>
+                <th style="width: 8%;">Unidad</th>
+                <th style="width: 12%;" class="text-right">Precio Unit.</th>
+                <th style="width: 12%;" class="text-right">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_3 %}
+            <tr>
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td class="text-center">{{ item.cantidad|floatformat:2 }}</td>
+                <td class="text-center">{{ item.unidad|default:"UND" }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0|default:"0" }}</td>
+                <td class="text-right">${{ item.subtotal_linea|floatformat:0|default:"0" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Resumen Económico: Tabla alineada a la derecha -->
+    <!-- ⚠️ xhtml2pdf: Usar tabla con align="right" para alineación (sin flexbox) -->
+    <table class="totals-table" align="right">
+        <tr>
+            <td class="label">Subtotal:</td>
+            <td class="value">${{ subtotal_items|floatformat:0|default:"0" }}</td>
+        </tr>
+        {% if aplicar_aiu %}
+        <tr>
+            <td class="label">AIU Administración ({{ aiu_admin_porcentaje|floatformat:2 }}%):</td>
+            <td class="value">${{ valor_administracion|floatformat:0|default:"0" }}</td>
+        </tr>
+        <tr>
+            <td class="label">AIU Imprevistos ({{ aiu_imprevistos_porcentaje|floatformat:2 }}%):</td>
+            <td class="value">${{ valor_imprevistos|floatformat:0|default:"0" }}</td>
+        </tr>
+        <tr>
+            <td class="label">AIU Utilidad ({{ aiu_utilidad_porcentaje|floatformat:2 }}%):</td>
+            <td class="value">${{ valor_utilidad|floatformat:0|default:"0" }}</td>
+        </tr>
+        <tr>
+            <td class="label">IVA sobre Utilidad ({{ iva_porcentaje|floatformat:2 }}%):</td>
+            <td class="value">${{ iva_valor|floatformat:0|default:"0" }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td class="label">IVA ({{ iva_porcentaje|floatformat:2 }}%):</td>
+            <td class="value">${{ iva_valor|floatformat:0|default:"0" }}</td>
+        </tr>
+        {% endif %}
+        <tr class="total-row">
+            <td class="label">TOTAL:</td>
+            <td class="value">${{ total_neto|floatformat:0|default:"0" }}</td>
+        </tr>
+    </table>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Este documento es una cotización y no constituye una factura. Válido hasta {{ cotizacion.fecha_vencimiento|date:"d/m/Y" }}.</p>
+        <p>Generado el {{ "now"|date:"d/m/Y H:i" }}</p>
+    </div>
+</body>
+</html>

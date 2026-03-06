@@ -1,0 +1,134 @@
+{% extends 'console/base.html' %}
+{% load static %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">Catálogo DIAN</h2>
+    
+    <!-- Tabs -->
+    <div class="border-b border-gray-200 mb-6">
+        <nav class="-mb-px flex space-x-8 overflow-x-auto">
+            <!-- Catálogos existentes -->
+            <button onclick="loadCatalog('tipos', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm active">
+                Tipos de Impuesto
+            </button>
+            <button onclick="loadCatalog('tarifas-iva', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Tarifas IVA
+            </button>
+            <button onclick="loadCatalog('conceptos-retencion', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Conceptos Retención
+            </button>
+            <button onclick="loadCatalog('codigos-tributarios', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Códigos Tributarios
+            </button>
+            <button onclick="loadCatalog('actividades-economicas', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Actividades Económicas
+            </button>
+            <!-- Nuevos catálogos de normativa DIAN (v2.30+) -->
+            <button onclick="loadCatalog('contribuyentes-tipos', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Tipos de Contribuyente
+            </button>
+            <button onclick="loadCatalog('regimenes-renta', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Regímenes de Renta
+            </button>
+            <button onclick="loadCatalog('responsabilidades-rut', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Responsabilidades RUT
+            </button>
+            <button onclick="loadCatalog('perfiles-tributarios', event)" class="catalog-tab border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                Perfiles Tributarios
+            </button>
+        </nav>
+    </div>
+    
+    <!-- Filtros -->
+    <div class="bg-white shadow rounded-lg p-4 mb-6">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+                <label for="search-catalog" class="block text-sm font-medium text-gray-700">Buscar</label>
+                <input type="text" id="search-catalog" placeholder="Código o nombre..." 
+                       class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            </div>
+            <div class="flex items-end">
+                <button onclick="loadCurrentCatalog()" class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    Filtrar
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tabla de Catálogo -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50" id="catalog-table-head">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargando...</th>
+                </tr>
+            </thead>
+            <tbody id="catalog-table-body" class="bg-white divide-y divide-gray-200">
+                <tr>
+                    <td colspan="10" class="px-6 py-4 text-center text-gray-500">Selecciona una categoría</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <!-- Paginación -->
+        <div id="catalog-pagination" class="bg-white px-4 py-3 border-t border-gray-200 sm:px-6"></div>
+    </div>
+</div>
+
+<script>
+let currentCatalogType = 'tipos';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadCatalog('tipos');
+    
+    // Event listeners para filtros
+    document.getElementById('search-catalog').addEventListener('keyup', function(e) {
+        if (e.key === 'Enter') loadCurrentCatalog();
+    });
+});
+
+function loadCatalog(type, event = null) {
+    currentCatalogType = type;
+    
+    // Actualizar tabs activos
+    document.querySelectorAll('.catalog-tab').forEach(tab => {
+        tab.classList.remove('active', 'border-indigo-500', 'text-indigo-600');
+        tab.classList.add('border-transparent', 'text-gray-500');
+    });
+    
+    // Si hay evento, activar el tab clickeado
+    if (event && event.target) {
+        event.target.classList.add('active', 'border-indigo-500', 'text-indigo-600');
+        event.target.classList.remove('border-transparent', 'text-gray-500');
+    } else {
+        // Si no hay evento, activar el tab correspondiente al tipo
+        const tabs = document.querySelectorAll('.catalog-tab');
+        tabs.forEach(tab => {
+            const tabText = tab.textContent.trim().toLowerCase();
+            const typeWords = type.replace(/-/g, ' ').split(' ');
+            if (typeWords.some(word => tabText.includes(word))) {
+                tab.classList.add('active', 'border-indigo-500', 'text-indigo-600');
+                tab.classList.remove('border-transparent', 'text-gray-500');
+            }
+        });
+    }
+    
+    loadCurrentCatalog();
+}
+
+function loadCurrentCatalog() {
+    const search = document.getElementById('search-catalog').value;
+    consoleAPI.loadCatalog(currentCatalogType, search);
+}
+</script>
+
+<style>
+.catalog-tab.active {
+    border-color: #6366f1;
+    color: #6366f1;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% load static %}
+{# assets_empleados.html - Assets del módulo Empleados v2.60 #}
+{# ⚠️ Feature-Sliced Architecture v2.60: Módulos independientes por dominio #}
+{# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (SIN async/defer) #}
+{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, etc.) - ya cargado en workspace.html #}
+{# 2. empleados.api.js (define window.empleadosAPI) - DEBE cargarse PRIMERO #}
+{# 3. features/empleados_editor.js (define w.EmpleadosEditor) #}
+{# 4. features/contratos_editor.js (define w.ContratosEditor) #}
+{# 5. features/devengos_editor.js (define w.DevengosEditor) #}
+{# 6. features/historial_nominas.js (define w.HistorialNominas) #}
+{# 7. features/empleados_list.js (define w.EmpleadosList) - DEBE cargarse ÚLTIMO #}
+
+{% include 'tenant/core/partials/assets_core.html' %}
+
+{# ⚠️ v2.60: ORDEN CRÍTICO DE CARGA - Sin async/defer #}
+{# BLOQUE 1: API Wrapper - DEBE cargarse PRIMERO #}
+{# ⚠️ RUTA: core/js/empleados/ (no tenant/core/js/) porque está en apps/tenant/core/static/core/js/empleados/ #}
+<script src="{% static 'core/js/empleados/empleados.api.js' %}"></script>
+
+{# BLOQUE 2: Features - Cargar en orden estricto según especificaciones v2.60 #}
+{# ⚠️ Feature-Sliced Architecture: Cada feature es independiente y se expone en window #}
+{# ⚠️ ORDEN CRÍTICO: Sin async/defer para garantizar ejecución secuencial #}
+{# 1. empleados_list.js se carga SEGUNDO (usa lazy loading, así que la inicialización espera a que otros módulos estén listos) #}
+<script src="{% static 'core/js/empleados/features/empleados_list.js' %}"></script>
+{# 2-5. Los otros módulos se cargan después (empleados_list.js los llama mediante namespaces globales) #}
+<script src="{% static 'core/js/empleados/features/empleados_editor.js' %}"></script>
+<script src="{% static 'core/js/empleados/features/contratos_editor.js' %}"></script>
+<script src="{% static 'core/js/empleados/features/devengos_editor.js' %}"></script>
+<script src="{% static 'core/js/empleados/features/historial_nominas.js' %}"></script>
+
+{# ⚠️ v2.60: HTMX - Reinicializar listeners cuando se carga el Offcanvas vía HTMX #}
+{# Los contenedores offcanvas están definidos globalmente en workspace.html #}
+<script>
+    if (typeof htmx !== 'undefined') {
+        document.addEventListener('htmx:afterSwap', function(event) {
+            const targetId = event.detail.target.id;
+            
+            // Offcanvas de empleado
+            if (targetId === 'offcanvas-container-empleado') {
+                setTimeout(function() {
+                    console.log('[empleados.assets] ✅ Offcanvas de empleado cargado vía HTMX');
+                }, 50);
+            }
+            
+            // Offcanvas de contrato
+            if (targetId === 'offcanvas-container-contrato') {
+                setTimeout(function() {
+                    console.log('[empleados.assets] ✅ Offcanvas de contrato cargado vía HTMX');
+                }, 50);
+            }
+            
+            // Offcanvas de devengo/nómina
+            if (targetId === 'offcanvas-container-devengo') {
+                setTimeout(function() {
+                    console.log('[empleados.assets] ✅ Offcanvas de devengo/nómina cargado vía HTMX');
+                }, 50);
+            }
+            
+            // Offcanvas de historial de nóminas
+            if (targetId === 'offcanvas-container-historial-nominas') {
+                setTimeout(function() {
+                    console.log('[empleados.assets] ✅ Offcanvas de historial de nóminas cargado vía HTMX');
+                }, 50);
+            }
+        });
+    }
+</script>
+
+{# Estilos #}
+{% if 'empleados.styles.css' %}
+<link rel="stylesheet" href="{% static 'core/css/empleados/empleados.styles.css' %}">
+{% endif %}

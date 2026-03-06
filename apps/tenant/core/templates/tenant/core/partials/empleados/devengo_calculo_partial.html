@@ -1,0 +1,96 @@
+{# devengo_calculo_partial.html - Partial HTMX para actualización en tiempo real de valores calculados #}
+{# ⚠️ v2.60: Este partial se usa en el endpoint preview-calculo para actualizar campos readonly #}
+{# ⚠️ Error Boundary Pattern: Si hay errores, se muestran en #form-devengo-feedback #}
+{# ⚠️ NOTA: HTMX puede actualizar múltiples targets, pero este partial se renderiza en #devengo-campos-calculados #}
+
+{# Actualizar campos de Devengos (dentro de #devengo-campos-calculados) #}
+<div class="row g-3">
+  <div class="col-md-6">
+    <label for="devengo-salario_base" class="form-label text-danger fw-bold">Salario Base (COP) *</label>
+    <input type="number" class="form-control" id="devengo-salario_base" name="salario_base" 
+           value="{{ calculo.salario_base }}" 
+           step="0.01" min="0" readonly required>
+    <small class="form-text text-muted">⚠️ Calculado automáticamente desde el contrato (no editable)</small>
+  </div>
+  <div class="col-md-6">
+    <label for="devengo-auxilio_transporte" class="form-label">Auxilio de Transporte (COP)</label>
+    <input type="number" class="form-control" id="devengo-auxilio_transporte" name="auxilio_transporte" 
+           value="{{ calculo.auxilio_transporte }}" 
+           step="0.01" min="0" readonly>
+    <small class="form-text text-muted">⚠️ Calculado proporcionalmente según días laborados (no editable)</small>
+  </div>
+</div>
+
+{# Script para actualizar campos fuera de este contenedor (deducciones y neto) #}
+<script>
+  (function() {
+    'use strict';
+    const d = document;
+    
+    // Actualizar campos de Deducciones (dentro de #devengo-deducciones-calculadas)
+    const saludEl = d.getElementById('devengo-salud_empleado');
+    const pensionEl = d.getElementById('devengo-pension_empleado');
+    
+    if (saludEl) {
+      saludEl.value = '{{ calculo.salud_empleado }}';
+      saludEl.classList.add('bg-light'); // Asegurar bg-light en campos readonly
+    }
+    if (pensionEl) {
+      pensionEl.value = '{{ calculo.pension_empleado }}';
+      pensionEl.classList.add('bg-light'); // Asegurar bg-light en campos readonly
+    }
+    
+    // Actualizar campo Neto a Pagar (fuera del contenedor, en el resumen)
+    const netoEl = d.getElementById('devengo-neto_pagar');
+    if (netoEl) {
+      const netoValue = parseFloat('{{ calculo.neto_pagar }}');
+      
+      // ⚠️ v2.60: Formatear con Intl.NumberFormat para moneda COP
+      const formatter = new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+      
+      const netoFormateado = formatter.format(netoValue);
+      // El campo es de tipo "text" para permitir el formato de moneda
+      netoEl.value = netoFormateado;
+      
+      // Asegurar que tenga bg-light (es readonly)
+      netoEl.classList.add('bg-light');
+      
+      // ⚠️ Error Boundary Pattern: Si el neto es negativo, cambiar color a rojo y mostrar advertencia
+      if (netoValue < 0) {
+        netoEl.classList.remove('text-success');
+        netoEl.classList.add('text-danger');
+        
+        // Mostrar advertencia en el contenedor de feedback usando UIManager
+        const feedbackEl = d.getElementById('form-devengo-feedback');
+        if (feedbackEl) {
+          feedbackEl.classList.remove('d-none');
+          feedbackEl.classList.remove('alert-danger');
+          feedbackEl.classList.add('alert-warning');
+          feedbackEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Advertencia:</strong> El neto a pagar es negativo (' + netoFormateado + '). Revise los descuentos y préstamos.';
+        }
+        
+        // Usar UIManager si está disponible
+        if (window.UIManager && typeof window.UIManager.notifyError === 'function') {
+          window.UIManager.notifyError({
+            status: 400,
+            data: { detail: 'El neto a pagar no puede ser negativo. Revise los descuentos y préstamos.' }
+          }, '[devengo.offcanvas]');
+        }
+      } else {
+        netoEl.classList.remove('text-danger');
+        netoEl.classList.add('text-success');
+        
+        // Ocultar advertencia si el neto es positivo
+        const feedbackEl = d.getElementById('form-devengo-feedback');
+        if (feedbackEl && feedbackEl.classList.contains('alert-warning')) {
+          feedbackEl.classList.add('d-none');
+        }
+      }
+    }
+  })();
+</script>

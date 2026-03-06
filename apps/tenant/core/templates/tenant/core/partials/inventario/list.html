@@ -1,0 +1,159 @@
+{% load static %}
+{# list.html - Módulo Inventario v2.60 - HTMX + Offcanvas #}
+{# ⚠️ v2.60: Migrado a HTMX + Offcanvas con Zero Trust #}
+{# ⚠️ API-First Architecture - Backend DRF + Frontend Tabulator #}
+
+<div id="tab-inventario-content" class="ui-module ui-inventario" role="region" aria-label="Módulo de Inventario">
+  
+  {# Navegación por Tabs: Existencias | Movimientos | Servicios | Categorías | Activos Fijos #}
+  <ul class="nav nav-tabs mb-3" id="inventario-tabs" role="tablist">
+
+    
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-categorias" data-bs-toggle="tab" data-bs-target="#pane-categorias" 
+              type="button" role="tab" aria-controls="pane-categorias" aria-selected="false">
+        <i class="bi bi-tags me-2"></i>Categorías
+      </button>
+    </li>
+
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-existencias" data-bs-toggle="tab" data-bs-target="#pane-existencias" 
+              type="button" role="tab" aria-controls="pane-existencias" aria-selected="true">
+        <i class="bi bi-box-seam me-2"></i>Productos
+      </button>
+    </li>
+
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-servicios" data-bs-toggle="tab" data-bs-target="#pane-servicios" 
+              type="button" role="tab" aria-controls="pane-servicios" aria-selected="false">
+        <i class="bi bi-tools me-2"></i>Servicios
+      </button>
+    </li>
+
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-activos" data-bs-toggle="tab" data-bs-target="#pane-activos" 
+              type="button" role="tab" aria-controls="pane-activos" aria-selected="false">
+        <i class="bi bi-building me-2"></i>Activos Fijos
+      </button>
+    </li>
+
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-movimientos" data-bs-toggle="tab" data-bs-target="#pane-movimientos" 
+              type="button" role="tab" aria-controls="pane-movimientos" aria-selected="false">
+        <i class="bi bi-arrow-left-right me-2"></i>Movimientos Recientes
+      </button>
+    </li>
+
+  </ul>
+  
+  {# Contenido de Tabs #}
+  <div class="tab-content" id="inventario-tab-content">
+    
+    {# Tab: Existencias (Productos) #}
+    <div class="tab-pane fade show active" id="pane-existencias" role="tabpanel" aria-labelledby="tab-existencias">
+      
+      {# Toolbar #}
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-3" id="toolbar-inventario">
+        <div class="btn-group shadow-sm">
+          {# ⚠️ v2.60: Botón HTMX para registrar entrada/salida #}
+          <button type="button" class="btn btn-primary btn-sm" 
+                  hx-get="/api/v1/inventario/productos/gestor-offcanvas/?tipo=ajuste" 
+                  hx-target="#offcanvas-container-inventario" 
+                  hx-swap="innerHTML"
+                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-inventario'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+            <i class="bi bi-arrow-left-right me-1"></i>Entrada/Salida
+          </button>
+          <button type="button" class="btn btn-outline-primary btn-sm" 
+                  hx-get="/api/v1/inventario/productos/gestor-offcanvas/" 
+                  hx-target="#offcanvas-container-inventario" 
+                  hx-swap="innerHTML"
+                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-inventario'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+            <i class="bi bi-plus-lg me-1"></i>Nuevo Producto
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.SintelInventarioTables?.main?.replaceData()" title="Refrescar lista">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+      </div>
+      
+      {# Input de búsqueda para Tabulator #}
+      <div class="mb-3">
+        <div class="input-group">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input type="text" id="search-producto" class="form-control border-start-0" 
+                 placeholder="Buscar por código, nombre o categoría...">
+        </div>
+      </div>
+      
+      {# ⚠️ Contenedor del Grid de Tabulator #}
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+          <div id="grid-inventario" class="w-100"></div>
+        </div>
+      </div>
+      
+    </div>
+    
+    {# Tab: Movimientos Recientes (Kardex) #}
+    <div class="tab-pane fade" id="pane-movimientos" role="tabpanel" aria-labelledby="tab-movimientos">
+      
+      {# Toolbar #}
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-3" id="toolbar-movimientos">
+        <div class="btn-group shadow-sm">
+          {# ⚠️ v2.60: Botón HTMX para registrar movimiento #}
+          <button type="button" class="btn btn-success btn-sm" 
+                  hx-get="/api/v1/inventario/productos/gestor-offcanvas/?tipo=ajuste" 
+                  hx-target="#offcanvas-container-inventario" 
+                  hx-swap="innerHTML"
+                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-inventario'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+            <i class="bi bi-plus-lg me-1"></i>Registrar Movimiento
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="if(window.SintelInventarioTables?.movimientos){window.SintelInventarioTables.movimientos.replaceData();}" title="Refrescar lista">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+      </div>
+      
+      {# Input de búsqueda para Tabulator #}
+      <div class="mb-3">
+        <div class="input-group">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input type="text" id="search-movimiento" class="form-control border-start-0" 
+                 placeholder="Buscar por producto, origen u observaciones...">
+        </div>
+      </div>
+      
+      {# ⚠️ Contenedor del Grid de Tabulator para Movimientos #}
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+          <div id="grid-movimientos" class="w-100"></div>
+        </div>
+      </div>
+      
+    </div>
+    
+    {# Tab: Servicios #}
+    <div class="tab-pane fade" id="pane-servicios" role="tabpanel" aria-labelledby="tab-servicios">
+      {% include 'tenant/core/partials/inventario/list_servicios.html' %}
+    </div>
+    
+    {# Tab: Categorías #}
+    <div class="tab-pane fade" id="pane-categorias" role="tabpanel" aria-labelledby="tab-categorias">
+      {% include 'tenant/core/partials/inventario/list_categorias.html' %}
+    </div>
+    
+    {# Tab: Activos Fijos #}
+    <div class="tab-pane fade" id="pane-activos" role="tabpanel" aria-labelledby="tab-activos">
+      {% include 'tenant/core/partials/inventario/list_activos.html' %}
+    </div>
+    
+  </div>
+  
+</div>
+
+{# ⚠️ v2.60: Contenedores HTMX para recibir el HTML de los Offcanvas #}
+<div id="offcanvas-container-inventario"></div>
+<div id="offcanvas-container-servicios"></div>
+<div id="offcanvas-container-historial-servicio"></div>
+<div id="offcanvas-container-categorias"></div>
+<div id="offcanvas-container-activos"></div>

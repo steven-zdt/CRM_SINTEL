@@ -1,0 +1,343 @@
+{% extends "tenant/base.html" %}
+{% load static %}
+{% block title %}SINTEL | Workspace v2.95{% endblock %}
+
+{% block extra_head %}
+  <link rel="stylesheet" href="{% static 'tenant/core/css/workspace.css' %}">
+{% endblock extra_head %}
+
+{% block content %}
+{# Panel UX Smoke Runner (Herramienta de Diagnóstico) v2.95 #}
+<div id="ux-smoke-panel" class="d-none container mt-4">
+  <div class="card shadow-lg border-primary">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+      <span class="fw-bold"><i class="bi bi-cpu me-2"></i>UX Smoke Runner v2.95</span>
+      <button id="ux-btn-run-all" class="btn btn-primary btn-sm">Ejecutar Todo</button>
+    </div>
+    <div class="card-body bg-light">
+      <pre id="ux-log" class="bg-dark text-success p-3 rounded small" style="height:250px; overflow:auto;"></pre>
+    </div>
+  </div>
+</div>
+
+<div class="mobile-top shadow-sm">
+  <div class="d-flex align-items-center">
+    <span class="me-2">📊</span>
+    <strong>SINTEL</strong>
+  </div>
+  <button class="btn btn-dark btn-sm" id="navToggle"><i class="bi bi-list"></i></button>
+</div>
+
+<div class="ws-shell">
+  <aside class="ws-aside shadow" id="sidebar">
+    <div class="brand p-4">
+      <div class="d-flex align-items-center">
+        <span class="dot bg-success me-2"></span>
+        <h2 class="h5 mb-0 fw-bold">SINTEL v2.95</h2>
+      </div>
+    </div>
+    <ul class="nav flex-column" id="nav">
+      <li class="nav-item"><a href="#empresa" data-tab="empresa" class="nav-link"><i class="bi bi-building me-2"></i>Empresa <span class="badge bg-info ms-auto">SSoT</span></a></li>
+      {# Módulo de Proyectos alineado con lógica de costos v2.80 #}
+      <li class="nav-item"><a href="#proyectos" data-tab="proyectos" class="nav-link"><i class="bi bi-kanban me-2"></i>Proyectos</a></li>
+      <li class="nav-item"><a href="#facturas" data-tab="facturas" class="nav-link"><i class="bi bi-receipt me-2"></i>Facturas</a></li>
+      <li class="nav-item"><a href="#contabilidad" data-tab="contabilidad" class="nav-link"><i class="bi bi-journal-text me-2"></i>Contabilidad</a></li>
+      <li class="nav-item"><a href="#inventario" data-tab="inventario" class="nav-link"><i class="bi bi-box-seam me-2"></i>Inventario</a></li>
+      <li class="nav-item"><a href="#clientes" data-tab="clientes" class="nav-link"><i class="bi bi-person-badge me-2"></i>Clientes</a></li>
+      <li class="nav-item"><a href="#proveedores" data-tab="proveedores" class="nav-link"><i class="bi bi-truck me-2"></i>Proveedores</a></li>
+      {# Módulo de Empleados con flujo secuencial v2.95 #}
+      <li class="nav-item"><a href="#empleados" data-tab="empleados" class="nav-link"><i class="bi bi-people me-2"></i>Empleados</a></li>
+      {# Módulo de Cotizaciones v2.60 - DNA Dinámico #}
+      <li class="nav-item"><a href="#cotizaciones" data-tab="cotizaciones" class="nav-link"><i class="bi bi-file-earmark-text me-2"></i>Cotizaciones</a></li>
+      <li class="nav-item"><a href="#gastos" data-tab="gastos" class="nav-link"><i class="bi bi-cash-stack me-2"></i>Gastos</a></li>
+      <hr class="mx-3 my-2 text-white-50">
+      <li class="nav-item"><a href="#perfil" data-tab="perfil" class="nav-link"><i class="bi bi-person-circle me-2"></i>Mi Perfil</a></li>
+    </ul>
+  </aside>
+
+  <main class="ws-main bg-white">
+    <div class="ws-top p-4 border-bottom d-flex justify-content-between align-items-center">
+      <h1 id="viewTitle" class="h3 mb-0 fw-bold text-dark">Workspace</h1>
+      <div id="viewActions"></div>
+    </div>
+
+    <div class="workspace-content p-4" aria-live="polite">
+      
+      {# Módulo Empresa #}
+      <section id="tab-empresa" class="workspace-tab" style="display: none;">
+        {% include 'tenant/core/partials/empresa/list.html' %}
+        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+        {# {% include 'tenant/core/partials/empresa/modals.html' %} #}
+      </section>
+
+      {# Módulo Proyectos #}
+      <section id="tab-proyectos" class="workspace-tab" style="display: none;">
+        {% include 'tenant/core/partials/proyectos/list.html' %}
+        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+        {# {% include 'tenant/core/partials/proyectos/modals.html' %} #}
+      </section>
+      
+      {# Módulo Facturas v2.60 - HTML Centralizado en Core #}
+      <section id="tab-facturas" class="workspace-tab" style="display: none;">
+        {# ⚠️ v2.60: Toolbar y contenido centralizados en Core #}
+        {% include 'tenant/core/partials/facturas/list.html' %}
+        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+        {# El contenedor del offcanvas está en list.html: #offcanvas-container-facturas #}
+      </section>
+      
+      {# Módulo Clientes #}
+      <section id="tab-clientes" class="workspace-tab" style="display: none;">
+        {% include 'tenant/core/partials/clientes/list.html' %}
+        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+      </section>
+      
+      {# Módulo Proveedores #}
+      <section id="tab-proveedores" class="workspace-tab" style="display: none;">
+        {% include 'tenant/core/partials/proveedores/list.html' %}
+        {% include 'tenant/core/partials/proveedores/modals.html' %}
+      </section>
+      
+      {# Módulo Empleados #}
+      <section id="tab-empleados" class="workspace-tab" style="display: none;">
+        {% include 'tenant/core/partials/empleados/list.html' %}
+        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+        {# {% include 'tenant/core/partials/empleados/modals.html' %} #}
+      </section>
+      
+      {# Módulo Gastos v2.60 - Feature-Sliced Architecture #}
+      <section id="tab-gastos" class="workspace-tab" style="display: none;">
+        {% include 'tenant/core/partials/gastos/list.html' %}
+        {# ⚠️ v2.60: Modal de configuración de resolución se mantiene (no usa HTMX) #}
+        {% include 'tenant/core/partials/gastos/modals.html' %}
+      </section>
+      
+      {# Módulo Cotizaciones v2.60 - DNA Dinámico con Edición Completa #}
+      <section id="tab-cotizaciones" class="workspace-tab" style="display: none;">
+        {# ⚠️ v2.60: Estructura de sub-navegación para Cotizaciones (Cotizaciones, Catálogo) #}
+        {# ⚠️ FASE 1: HTMX integrado para cargar editor directamente desde lista #}
+        {# ⚠️ FASE 2: Carga automática de datos cuando se abre editor con UUID #}
+        {# ⚠️ FASE 3: Actualización (PATCH) sincronizada con backend #}
+        {# ⚠️ Sincronización con Modelo Cotizacion: La tabla principal está en list.html con ID "tabla-cotizaciones-principal" #}
+        {# ⚠️ Atributos de datos: data-url="/api/v1/cotizaciones/" y data-page-size="20" para inicialización automática #}
+        <div class="ui-module ui-cotizaciones">
+          {# Navegación por Pills (Sub-Tabs) #}
+          <ul class="nav nav-pills mb-3" id="cotizaciones-subnav" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="cotizaciones-cotizaciones-tab" data-bs-toggle="tab" data-bs-target="#subtab-cotizaciones" type="button" role="tab" aria-controls="subtab-cotizaciones" aria-selected="true">
+                <i class="bi bi-file-earmark-text me-2"></i>Cotizaciones
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="cotizaciones-catalogo-tab" data-bs-toggle="tab" data-bs-target="#subtab-catalogo" type="button" role="tab" aria-controls="subtab-catalogo" aria-selected="false">
+                <i class="bi bi-box-seam me-2"></i>Catálogo (STS)
+              </button>
+            </li>
+          </ul>
+          
+          {# Contenedor de Contenido (Tab Content) #}
+          <div class="tab-content" id="cotizaciones-tab-content">
+            <div class="tab-pane fade show active" id="subtab-cotizaciones" role="tabpanel" aria-labelledby="cotizaciones-cotizaciones-tab">
+              {% include 'tenant/core/partials/cotizaciones/list.html' %}
+            </div>
+            <div class="tab-pane fade" id="subtab-catalogo" role="tabpanel" aria-labelledby="cotizaciones-catalogo-tab">
+            
+          
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      {# Módulo Contabilidad v2.60 - Feature-Sliced Architecture #}
+      <section id="tab-contabilidad" class="workspace-tab" style="display: none;">
+        {# ⚠️ v2.60: Navegación por Pills (Sub-Tabs) para Cuentas y Asientos #}
+        <ul class="nav nav-pills mb-3" id="contabilidad-subnav" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="contabilidad-cuentas-tab" data-bs-toggle="tab" data-bs-target="#subtab-cuentas" type="button" role="tab" aria-controls="subtab-cuentas" aria-selected="true">
+              <i class="bi bi-list-ul me-2"></i>Cuentas Contables
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="contabilidad-asientos-tab" data-bs-toggle="tab" data-bs-target="#subtab-asientos" type="button" role="tab" aria-controls="subtab-asientos" aria-selected="false">
+              <i class="bi bi-journal-text me-2"></i>Asientos Contables
+            </button>
+          </li>
+        </ul>
+        
+        {# Contenedor de Contenido (Tab Content) #}
+        <div class="tab-content" id="contabilidad-tab-content">
+          <div class="tab-pane fade show active" id="subtab-cuentas" role="tabpanel" aria-labelledby="contabilidad-cuentas-tab">
+            {% include 'tenant/contabilidad/partials/list_cuentas.html' %}
+          </div>
+          <div class="tab-pane fade" id="subtab-asientos" role="tabpanel" aria-labelledby="contabilidad-asientos-tab">
+            {% include 'tenant/core/partials/contabilidad/list_asientos.html' %}
+            {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+          </div>
+        </div>
+      </section>
+      
+      {# Módulo Inventario #}
+      <section id="tab-inventario" class="workspace-tab" style="display: none;">
+        {% include 'tenant/core/partials/inventario/list.html' %}
+        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+        {# {% include 'tenant/core/partials/inventario/modals.html' %} #}
+      </section>
+
+      <div id="workspace-welcome" class="text-center py-5">
+        <i class="bi bi-grid-3x3-gap text-light" style="font-size: 5rem;"></i>
+        <h4 class="mt-4 text-muted">Selecciona un módulo para comenzar la gestión</h4>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+{# ⚠️ v2.60: Contenedores globales para Offcanvas (HTMX) #}
+<div id="offcanvas-cliente-container"></div>
+
+{# Módulo Empleados - Contenedores Offcanvas globales #}
+<div id="offcanvas-container-empleado"></div>
+<div id="offcanvas-container-contrato"></div>
+<div id="offcanvas-container-devengo"></div>
+<div id="offcanvas-container-historial-nominas"></div>
+
+{# Módulo Contabilidad - Contenedores Offcanvas globales #}
+<div id="offcanvas-container-asientos"></div>
+
+{# ⚠️ v2.60: Módulo MailInboxConfig - Contenedor Offcanvas global para Configuraciones de Correo #}
+{# NOTA: También existe un contenedor local en mailinbox_list.html, pero este es el contenedor global #}
+<div id="offcanvas-container-mailinbox"></div>
+
+{# ⚠️ FASE 1: Módulo Cotizaciones - Contenedor Offcanvas global para Editor #}
+{# ⚠️ NOTA: El contenedor #offcanvas-container está definido en list.html dentro de la sección de cotizaciones #}
+{# El contenedor se carga cuando se accede a la sección de cotizaciones y está disponible para HTMX #}
+{# El botón "Editar" en la lista usa hx-target="#offcanvas-container" para cargar el editor #}
+
+{% endblock content %}
+
+{% block extra_js %}
+  {# ⚠️ ORDEN CRÍTICO DE CARGA - v2.60 #}
+  {# 0. NOTYF (Feedback visual) #}
+  <!-- ⚠️ v2.60: Fallback a cdnjs si jsdelivr falla -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css" onerror="this.onerror=null; this.href='https://cdnjs.cloudflare.com/ajax/libs/notyf/3.10.0/notyf.min.css';">
+  <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js" onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/notyf/3.10.0/notyf.min.js';"></script>
+  <script src="{% static 'core/js/common/notyf.init.js' %}"></script>
+  
+  {# ⚠️ CRÍTICO: HTMX debe cargarse ANTES de assets_core.html (ui-manager.js depende de HTMX) #}
+  {# ⚠️ Bootstrap ya está cargado en base.html (línea 74) - ANTES de este bloque #}
+  {# ⚠️ Tabulator ya está cargado en base.html (línea 77) - ANTES de este bloque #}
+  <!-- HTMX -->
+  <!-- ⚠️ v2.60: Fallback automático a CDN alternativo si unpkg falla -->
+  <script src="https://unpkg.com/htmx.org@1.9.10" onerror="this.onerror=null; console.warn('[HTMX] Fallback: Intentando cargar desde cdnjs...'); this.src='https://cdnjs.cloudflare.com/ajax/libs/htmx/1.9.10/htmx.min.js';"></script>
+  <script>
+    // ⚠️ v2.60: Verificar que HTMX se cargó correctamente
+    (function() {
+      function checkHTMX(retries = 0) {
+        if (typeof htmx !== 'undefined') {
+          console.log('[HTMX] ✅ HTMX cargado correctamente');
+          return;
+        }
+        
+        if (retries < 2) {
+          console.warn(`[HTMX] ⚠️ HTMX no disponible. Reintento ${retries + 1}/2...`);
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/htmx/1.9.10/htmx.min.js';
+          script.onload = function() {
+            console.log('[HTMX] ✅ HTMX cargado desde cdnjs (fallback)');
+          };
+          script.onerror = function() {
+            if (retries < 1) {
+              setTimeout(() => checkHTMX(retries + 1), 1000);
+            } else {
+              console.error('[HTMX] ❌ CRÍTICO: No se pudo cargar HTMX desde ningún CDN.');
+              console.error('[HTMX] 💡 SOLUCIÓN: Implementa recursos locales en apps/tenant/core/static/core/vendor/');
+            }
+          };
+          document.head.appendChild(script);
+        } else {
+          console.error('[HTMX] ❌ CRÍTICO: HTMX no disponible después de múltiples intentos.');
+        }
+      }
+      
+      // Verificar después de un breve delay
+      setTimeout(checkHTMX, 100);
+    })();
+  </script>
+  
+  {# ⚠️ CRÍTICO: Setup global de CSRF para HTMX - Inyecta token en todas las peticiones POST/PUT/PATCH/DELETE #}
+  <script>
+    (function() {
+      // Función helper para obtener el token CSRF
+      function getCSRFToken() {
+        // Intentar desde meta tag
+        const metaToken = document.querySelector('meta[name="csrf-token"]');
+        if (metaToken && metaToken.content) {
+          return metaToken.content;
+        }
+        // Intentar desde cookie
+        const name = 'csrftoken';
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) {
+          return decodeURIComponent(parts.pop().split(';').shift());
+        }
+        return null;
+      }
+      
+      // Configurar HTMX para inyectar CSRF automáticamente
+      if (typeof htmx !== 'undefined') {
+        document.body.addEventListener('htmx:configRequest', function(event) {
+          const method = (event.detail.verb || 'GET').toUpperCase();
+          // Solo mutaciones necesitan CSRF
+          if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+            const token = getCSRFToken();
+            if (token) {
+              event.detail.headers['X-CSRFToken'] = token;
+            } else {
+              console.warn('[HTMX CSRF] Token CSRF no encontrado para método', method);
+            }
+          }
+        });
+        console.log('[HTMX CSRF] Setup global de CSRF para HTMX activado');
+      }
+    })();
+  </script>
+  
+  {# 1. LIBRERÍAS CORE - v2.95 #}
+  {# ⚠️ Incluye: http.js, api-helpers.js, ui-manager.js (requiere HTMX), tabulator.factory.js #}
+  {% include 'tenant/core/partials/assets_core.html' %}
+  
+  {# 2. NAVEGACIÓN Y ORQUESTACIÓN #}
+  <script src="{% static 'core/js/workspace.js' %}"></script>
+  
+  {# 3. ASSETS MODULARES #}
+  {% include 'tenant/core/partials/empresa/assets_empresa.html' %}
+  {% include 'tenant/core/partials/proyectos/assets_proyectos.html' %}
+  {% include 'tenant/facturas/partials/assets_facturas.html' %}
+  {% include 'tenant/core/partials/empleados/assets_empleados.html' %}
+  {# ⚠️ v2.60: Spinner global para indicadores HTMX #}
+  <div id="spinner" class="htmx-indicator position-fixed top-50 start-50 translate-middle" style="z-index: 9999; display: none;">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Cargando...</span>
+    </div>
+  </div>
+
+  {% include 'tenant/core/partials/gastos/assets_gastos.html' %}
+  {% include 'tenant/core/partials/cotizaciones/assets_cotizaciones.html' %}
+  {% include 'tenant/contabilidad/partials/assets_cuentas.html' %}
+  {% include 'tenant/core/partials/inventario/assets_inventario.html' %}
+  {% include 'tenant/core/partials/clientes/assets_clientes.html' %}
+  {% include 'tenant/core/partials/proveedores/assets_proveedores.html' %}
+
+  {# UX SMOKE AUTO-RUNNER v2.95 #}
+  <script>
+    (function(){
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("uxsmoke") === "1") {
+        document.getElementById("ux-smoke-panel").classList.remove("d-none");
+        const script = document.createElement('script');
+        script.src = "{% static 'core/js/tests/workspace_ux_smoke.js' %}";
+        document.head.appendChild(script);
+      }
+    })();
+  </script>
+{% endblock extra_js %}

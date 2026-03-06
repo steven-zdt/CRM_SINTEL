@@ -1,0 +1,24 @@
+{% load static %}
+{% comment %}
+Partial reutilizable para header con branding del tenant.
+
+⚠️ POLÍTICA: Todo branding viene de variables (branding.nombre, branding.logo_url).
+NO se permiten hardcodes de marca aquí.
+
+⚠️ v2.40: Alineado con Bootstrap 5 (Tailwind removido)
+{% endcomment %}
+<div class="d-flex align-items-center">
+    {% if branding.logo_url %}
+        <img src="{{ branding.logo_url }}" 
+             alt="{{ branding.nombre }}" 
+             class="me-2"
+             style="height: 32px; width: auto;"
+             onerror="this.style.display='none';">
+    {% endif %}
+    <a href="/" class="d-flex align-items-center text-decoration-none">
+        {% if not branding.logo_url %}
+            <i class="fas fa-building text-white fs-4 me-2"></i>
+        {% endif %}
+        <span class="fs-5 fw-bold text-white">{{ branding.nombre|default:"Sistema de Gestión" }}</span>
+    </a>
+</div>

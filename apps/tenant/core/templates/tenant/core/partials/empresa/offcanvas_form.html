@@ -1,0 +1,135 @@
+{# offcanvas_form.html - Offcanvas del módulo Empresa v2.60 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+{# ⚠️ v2.60: Migrado a HTMX + Offcanvas con Zero Trust #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-empresa" aria-labelledby="offcanvas-empresa-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-empresa-label">
+      <i class="bi bi-building me-2"></i>
+      <span id="offcanvas-empresa-titulo">{% if empresa %}Editar Empresa{% else %}Nueva Empresa{% endif %}</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
+    <div id="form-empresa-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    <form id="form-empresa" method="POST" onsubmit="return false;">
+      <input type="hidden" id="empresa-id" name="id" value="{% if empresa %}{{ empresa.id }}{% endif %}">
+      
+      {# Sección: Información Básica #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-info-circle me-2"></i>Información Básica
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="empresa-razon_social" class="form-label">Razón Social *</label>
+            <input type="text" class="form-control" id="empresa-razon_social" name="razon_social" 
+                   value="{% if empresa %}{{ empresa.razon_social }}{% endif %}" 
+                   required placeholder="Nombre legal de la empresa" />
+          </div>
+        </div>
+      </div>
+      
+      {# Sección: Datos Fiscales #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-receipt me-2"></i>Datos Fiscales
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label for="empresa-nit" class="form-label">NIT *</label>
+            <input type="text" class="form-control" id="empresa-nit" name="nit" 
+                   value="{% if empresa %}{{ empresa.nit }}{% endif %}" 
+                   required placeholder="Número de Identificación Tributaria" />
+          </div>
+          <div class="col-md-4">
+            <label for="empresa-dv" class="form-label">Dígito de Verificación</label>
+            <input type="text" class="form-control" id="empresa-dv" name="dv" 
+                   value="{% if empresa %}{{ empresa.dv }}{% endif %}" 
+                   placeholder="DV" maxlength="2" />
+          </div>
+          <div class="col-md-12">
+            <label for="empresa-regimen_tributario" class="form-label">Régimen Tributario</label>
+            <select class="form-select" id="empresa-regimen_tributario" name="regimen_tributario">
+              <option value="NO_RESPONDE" {% if empresa and empresa.regimen_tributario == 'NO_RESPONDE' %}selected{% endif %}>No Responde</option>
+              <option value="SIMPLIFICADO" {% if empresa and empresa.regimen_tributario == 'SIMPLIFICADO' %}selected{% endif %}>Simplificado</option>
+              <option value="COMUN" {% if empresa and empresa.regimen_tributario == 'COMUN' %}selected{% endif %}>Común</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      {# Sección: Dirección y Contacto #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-geo-alt me-2"></i>Dirección y Contacto
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="empresa-direccion" class="form-label">Dirección</label>
+            <input type="text" class="form-control" id="empresa-direccion" name="direccion" 
+                   value="{% if empresa %}{{ empresa.direccion }}{% endif %}" 
+                   placeholder="Dirección completa" />
+          </div>
+          <div class="col-md-6">
+            <label for="empresa-telefono" class="form-label">Teléfono</label>
+            <input type="text" class="form-control" id="empresa-telefono" name="telefono" 
+                   value="{% if empresa %}{{ empresa.telefono }}{% endif %}" 
+                   placeholder="Teléfono de contacto" />
+          </div>
+          <div class="col-md-6">
+            <label for="empresa-email_contacto" class="form-label">Email de Contacto</label>
+            <input type="email" class="form-control" id="empresa-email_contacto" name="email_contacto" 
+                   value="{% if empresa %}{{ empresa.email_contacto }}{% endif %}" 
+                   placeholder="email@ejemplo.com" />
+          </div>
+        </div>
+      </div>
+      
+      {# Sección: Configuración Adicional #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-gear me-2"></i>Configuración Adicional
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="empresa-website" class="form-label">Sitio Web</label>
+            <input type="url" class="form-control" id="empresa-website" name="website" 
+                   value="{% if empresa %}{{ empresa.website }}{% endif %}" 
+                   placeholder="https://www.ejemplo.com" />
+          </div>
+          <div class="col-md-6">
+            <label for="empresa-moneda" class="form-label">Moneda</label>
+            <select class="form-select" id="empresa-moneda" name="moneda">
+              <option value="COP" {% if not empresa or empresa.moneda == 'COP' %}selected{% endif %}>COP - Peso Colombiano</option>
+              <option value="USD" {% if empresa and empresa.moneda == 'USD' %}selected{% endif %}>USD - Dólar Estadounidense</option>
+              <option value="EUR" {% if empresa and empresa.moneda == 'EUR' %}selected{% endif %}>EUR - Euro</option>
+            </select>
+          </div>
+          <div class="col-md-12">
+            <label for="empresa-logo" class="form-label">Logo</label>
+            <input type="file" class="form-control" id="empresa-logo" name="logo" accept="image/*" />
+            {% if empresa and empresa.logo %}
+              <div class="mt-2">
+                <img src="{{ empresa.logo.url }}" alt="Logo actual" style="max-height: 100px; width: auto;" class="rounded" />
+                <small class="d-block text-muted mt-1">Logo actual</small>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      
+      {# Botones de Acción #}
+      <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+          <i class="bi bi-x-circle me-1"></i>Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary" id="btn-guardar-empresa">
+          <i class="bi bi-check-circle me-1"></i>Guardar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

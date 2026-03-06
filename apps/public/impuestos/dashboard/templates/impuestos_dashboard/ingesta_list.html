@@ -1,0 +1,42 @@
+{% extends "impuestos_dashboard/base_console.html" %}
+{% load static %}
+
+{% block page_title %}Ingesta{% endblock %}
+
+{% block console_content %}
+<h2>Listado de Documentos</h2>
+
+<form method="get" class="filters">
+  <select name="estado">
+    <option value="">-- Estado --</option>
+    <option value="RECIBIDO" {% if "RECIBIDO" == filtro_estado %}selected{% endif %}>RECIBIDO</option>
+    <option value="EN_PROCESO" {% if "EN_PROCESO" == filtro_estado %}selected{% endif %}>EN_PROCESO</option>
+    <option value="PROCESADO" {% if "PROCESADO" == filtro_estado %}selected{% endif %}>PROCESADO</option>
+    <option value="ERROR" {% if "ERROR" == filtro_estado %}selected{% endif %}>ERROR</option>
+  </select>
+  <input type="text" name="fuente" value="{{filtro_fuente|default:''}}" placeholder="Fuente..." />
+  <button type="submit">Filtrar</button>
+  <a href="{% url 'impuestos_dashboard:ingesta_list' %}">Limpiar</a>
+</form>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Fuente</th>
+      <th>Tipo</th>
+      <th>Estado</th>
+      <th>Archivo</th>
+      <th>Creado</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody id="docs-body">
+    {% for doc in docs %}
+      {% include "impuestos_dashboard/fragments/ingesta_row.html" with doc=doc %}
+    {% empty %}
+      <tr><td colspan="7">Sin registros.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

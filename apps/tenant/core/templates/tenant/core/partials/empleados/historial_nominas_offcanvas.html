@@ -1,0 +1,42 @@
+{# historial_nominas_offcanvas.html - Offcanvas del Historial de Nóminas v2.60 #}
+{# ⚠️ v2.60: HTMX + Offcanvas con Tabulator Factory #}
+{# ⚠️ Paso 2: Interfaz HTMX y Offcanvas - Historial de nóminas del empleado #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-historial-nominas" aria-labelledby="offcanvas-historial-nominas-label" style="width: 95%; max-width: 1200px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-historial-nominas-label">
+      <i class="bi bi-clock-history me-2"></i>
+      <span>Historial de Nóminas</span>
+      {% if empleado %}
+        <small class="text-muted d-block mt-1">{{ empleado.nombre_completo }}</small>
+      {% endif %}
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ Paso 2: Contenedor de feedback para UIManager (manejo de errores) #}
+    <div id="form-historial-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    {# ⚠️ Paso 2: Buscador local para la tabla #}
+    <div class="mb-3">
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input type="text" 
+               id="search-historial-nominas" 
+               class="form-control" 
+               placeholder="Buscar por periodo (YYYY-MM) o fecha de pago...">
+      </div>
+    </div>
+    
+    {# ⚠️ Paso 2: Contenedor para la tabla Tabulator #}
+    <div id="grid-historial-nominas" style="min-height: 400px;"></div>
+  </div>
+  {# ⚠️ v2.60: Offcanvas Footer para botones de acción #}
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-lg me-1"></i>Cerrar
+      </button>
+    </div>
+  </div>
+</div>

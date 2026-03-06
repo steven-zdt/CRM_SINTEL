@@ -1,0 +1,27 @@
+<div class="ui-module h-100 d-flex flex-column">
+    {# ⚠️ v2.40: Elemento de feedback para errores #}
+    <div id="feedback-productos-list" class="alert d-none mb-2" role="alert"></div>
+    
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-box-seam me-2"></i>Productos</h5>
+            <span class="badge bg-light text-dark border">Inventario Físico</span>
+        </div>
+        <div class="btn-group shadow-sm">
+            <button type="button" class="btn btn-primary" id="btn-nuevo-producto">
+                <i class="bi bi-plus-lg me-1"></i> Nuevo Producto
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="window.InventarioProductosModule?.refresh()">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+    
+    {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
+    <div class="mb-3">
+        <input type="text" id="search-producto" class="form-control" placeholder="Buscar por código, nombre o categoría...">
+    </div>
+    
+    {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+    <div id="grid-productos" class="flex-grow-1"></div>
+</div>

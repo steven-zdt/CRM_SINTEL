@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CreditNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
+            xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+            xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+    <cbc:UBLVersionID>UBL 2.1</cbc:UBLVersionID>
+    <cbc:CustomizationID>10</cbc:CustomizationID>
+    <cbc:ProfileID>DIAN 2.1: Nota Crédito de Factura Electrónica de Venta</cbc:ProfileID>
+    <cbc:ID>NC-BEV24545428</cbc:ID>
+    <cbc:UUID schemeName="CUFE-SHA384">b6f4477484958695869483928594859384859384859384859384859384859345</cbc:UUID>
+    <cbc:IssueDate>2025-10-25</cbc:IssueDate>
+    <cbc:IssueTime>10:00:00-05:00</cbc:IssueTime>
+    <cbc:CreditNoteTypeCode>91</cbc:CreditNoteTypeCode>
+    <cbc:Note>Anulación parcial por devolución de mercancía - SIMULACION SINTEL</cbc:Note>
+    <cbc:DocumentCurrencyCode>COP</cbc:DocumentCurrencyCode>
+    
+    <cac:BillingReference>
+        <cac:InvoiceDocumentReference>
+            <cbc:ID>BEV24545428</cbc:ID>
+            <cbc:UUID schemeName="CUFE-SHA384">a5f3366373847584758473827483748273482734827348273482734827348234</cbc:UUID>
+            <cbc:IssueDate>2025-10-24</cbc:IssueDate>
+        </cac:InvoiceDocumentReference>
+    </cac:BillingReference>
+
+    <cac:AccountingSupplierParty>
+        <cac:Party>
+            <cac:PartyTaxScheme>
+                <cbc:RegistrationName>TU EMPRESA S.A.S</cbc:RegistrationName>
+                <cbc:CompanyID schemeID="31" schemeName="31">900123456</cbc:CompanyID>
+                <cac:TaxScheme>
+                    <cbc:ID>01</cbc:ID>
+                    <cbc:Name>IVA</cbc:Name>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+        </cac:Party>
+    </cac:AccountingSupplierParty>
+
+    <cac:AccountingCustomerParty>
+        <cac:Party>
+            <cac:PartyTaxScheme>
+                <cbc:RegistrationName>CLIENTE PRUEBA S.A.S</cbc:RegistrationName>
+                <cbc:CompanyID schemeID="31" schemeName="31">800987654</cbc:CompanyID>
+                <cac:TaxScheme>
+                    <cbc:ID>01</cbc:ID>
+                    <cbc:Name>IVA</cbc:Name>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+        </cac:Party>
+    </cac:AccountingCustomerParty>
+
+    <cac:LegalMonetaryTotal>
+        <cbc:LineExtensionAmount currencyID="COP">100000.00</cbc:LineExtensionAmount>
+        <cbc:TaxExclusiveAmount currencyID="COP">100000.00</cbc:TaxExclusiveAmount>
+        <cbc:TaxInclusiveAmount currencyID="COP">119000.00</cbc:TaxInclusiveAmount>
+        <cbc:PayableAmount currencyID="COP">119000.00</cbc:PayableAmount>
+    </cac:LegalMonetaryTotal>
+
+    <cac:CreditNoteLine>
+        <cbc:ID>1</cbc:ID>
+        <cbc:CreditedQuantity unitCode="94">1</cbc:CreditedQuantity>
+        <cbc:LineExtensionAmount currencyID="COP">100000.00</cbc:LineExtensionAmount>
+        <cac:Item>
+            <cbc:Description>Servicios de Desarrollo de Software</cbc:Description>
+        </cac:Item>
+        <cac:Price>
+            <cbc:PriceAmount currencyID="COP">100000.00</cbc:PriceAmount>
+        </cac:Price>
+    </cac:CreditNoteLine>
+</CreditNote>

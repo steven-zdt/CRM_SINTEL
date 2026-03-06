@@ -1,0 +1,66 @@
+{# offcanvas_list_plantillas.html - Lista de Plantillas en Offcanvas v2.60 #}
+<div class="offcanvas-header bg-dark text-white">
+  <h5 class="offcanvas-title">
+    <i class="bi bi-gear-fill me-2"></i>Parámetros y Plantillas
+  </h5>
+  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+</div>
+<div class="offcanvas-body d-flex flex-column">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <p class="text-muted small mb-0">Gestione los perfiles base para sus cotizaciones.</p>
+    <button class="btn btn-sm btn-primary"
+            hx-get="{% url 'cotizaciones_ui:ui_crear_configuracion' %}" 
+            hx-target="#offcanvas-container-secundario"
+            hx-swap="innerHTML"
+            onclick="window.abrirOffcanvasSecundario()">
+      <i class="bi bi-plus-lg me-1"></i>Nueva Plantilla
+    </button>
+  </div>
+  
+  <div class="flex-grow-1" style="min-height: 400px;">
+    <div id="grid-plantillas-offcanvas" class="w-100 h-100"></div>
+  </div>
+</div>
+
+{# ⚠️ Contenedor secundario para creación de plantillas (navegación en cascada) #}
+<div id="offcanvas-container-secundario" class="offcanvas offcanvas-end" tabindex="-1" aria-labelledby="offcanvas-secundario-label" style="z-index: 1056;"></div>
+
+{% load static %}
+<script>
+// ⚠️ Función específica para abrir offcanvas secundario después de carga HTMX
+window.abrirOffcanvasSecundario = function() {
+    // Esperar a que HTMX cargue el contenido antes de abrir el offcanvas
+    const handler = function(event) {
+        if (event.detail.target && event.detail.target.id === 'offcanvas-container-secundario') {
+            // Remover el listener después de usarlo
+            document.body.removeEventListener('htmx:afterSwap', handler);
+            
+            // Inicializar offcanvas de forma segura después de un pequeño delay
+            setTimeout(() => {
+                const offcanvasEl = document.getElementById('offcanvas-container-secundario');
+                if (offcanvasEl && window.bootstrap) {
+                    try {
+                        // Verificar que el elemento tenga los atributos necesarios
+                        if (!offcanvasEl.hasAttribute('tabindex')) {
+                            offcanvasEl.setAttribute('tabindex', '-1');
+                        }
+                        
+                        // Crear instancia de forma segura con opciones explícitas
+                        const instance = window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl, {
+                            backdrop: true,
+                            keyboard: true,
+                            scroll: false
+                        });
+                        instance.show();
+                    } catch (error) {
+                        console.error('[offcanvas_list_plantillas] Error al abrir offcanvas secundario:', error);
+                    }
+                }
+            }, 50);
+        }
+    };
+    
+    document.body.addEventListener('htmx:afterSwap', handler);
+};
+</script>
+<script src="{% static 'core/js/cotizaciones/features/plantillas_list.js' %}?v=2.60.2"></script>

@@ -1,0 +1,32 @@
+<div class="ui-module h-100 d-flex flex-column">
+    {# ⚠️ v2.40: Elemento de feedback para errores #}
+    <div id="feedback-activos-list" class="alert d-none mb-2" role="alert"></div>
+    
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-building me-2"></i>Activos Fijos</h5>
+            <span class="badge bg-light text-dark border">Planta y Equipo</span>
+        </div>
+        <div class="btn-group shadow-sm">
+            {# ⚠️ v2.60: Botón HTMX para crear activo #}
+            <button type="button" class="btn btn-primary" id="btn-nuevo-activo" 
+                    hx-get="/api/v1/inventario/activos/gestor-offcanvas/" 
+                    hx-target="#offcanvas-container-activos" 
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-activos'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                <i class="bi bi-plus-lg me-1"></i> Nuevo Activo
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="if(window.SintelInventarioTables?.activos){window.SintelInventarioTables.activos.replaceData();}">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+    
+    {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
+    <div class="mb-3">
+        <input type="text" id="search-activo" class="form-control" placeholder="Buscar por código, nombre, categoría, ubicación o responsable...">
+    </div>
+    
+    {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+    <div id="grid-activos" class="flex-grow-1"></div>
+</div>

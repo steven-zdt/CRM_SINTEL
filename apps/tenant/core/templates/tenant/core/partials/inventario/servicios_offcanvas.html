@@ -1,0 +1,101 @@
+{# servicios_offcanvas.html - Offcanvas del módulo Servicios v2.60 #}
+{# ⚠️ v2.60: HTMX + Offcanvas con Zero Trust #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-servicios" aria-labelledby="offcanvas-servicios-label" style="width: 90%; max-width: 700px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-servicios-label">
+      <i class="bi bi-gear me-2"></i>
+      <span id="offcanvas-servicios-titulo">
+        {% if servicio %}Editar Servicio{% else %}Nuevo Servicio{% endif %}
+      </span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
+    <div id="form-servicio-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    <form id="form-servicio" method="POST" onsubmit="return false;"
+          hx-post="/api/v1/inventario/servicios/" 
+          hx-target="#grid-servicios" 
+          hx-swap="none">
+      <input type="hidden" id="servicio-id" name="id" value="{% if servicio %}{{ servicio.id }}{% endif %}">
+      
+      {# Datos Básicos #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-info-circle me-2"></i>Datos Básicos
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="servicio-codigo" class="form-label text-danger fw-bold">Código *</label>
+            <input type="text" class="form-control" id="servicio-codigo" name="codigo" 
+                   value="{% if servicio %}{{ servicio.codigo }}{% endif %}" 
+                   placeholder="Ej. SRV-001" required>
+          </div>
+          <div class="col-md-6">
+            <label for="servicio-nombre" class="form-label text-danger fw-bold">Nombre *</label>
+            <input type="text" class="form-control" id="servicio-nombre" name="nombre" 
+                   value="{% if servicio %}{{ servicio.nombre }}{% endif %}" 
+                   required>
+          </div>
+          <div class="col-md-6">
+            <label for="servicio-categoria" class="form-label">Categoría</label>
+            <select class="form-select" id="servicio-categoria" name="categoria">
+              <option value="">Sin categoría</option>
+              {% for categoria in categorias %}
+                <option value="{{ categoria.id }}" {% if servicio and servicio.categoria_id == categoria.id %}selected{% endif %}>
+                  {{ categoria.nombre }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label for="servicio-descripcion" class="form-label">Descripción</label>
+            <textarea class="form-control" id="servicio-descripcion" name="descripcion" rows="3" 
+                      placeholder="Descripción del servicio...">{% if servicio %}{{ servicio.descripcion }}{% endif %}</textarea>
+          </div>
+        </div>
+      </div>
+      
+      {# Precio #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-currency-dollar me-2"></i>Precio
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="servicio-precio-venta" class="form-label">Precio de Venta</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" class="form-control" id="servicio-precio-venta" name="precio_venta" 
+                     step="0.01" min="0" value="{% if servicio %}{{ servicio.precio_venta }}{% else %}0{% endif %}">
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {# Estado #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-toggle-on me-2"></i>Estado
+        </h6>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="servicio-activo" name="activo" 
+                 {% if not servicio or servicio.activo %}checked{% endif %}>
+          <label class="form-check-label" for="servicio-activo">
+            Servicio Activo
+          </label>
+        </div>
+      </div>
+      
+      {# Botones de Acción #}
+      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-servicio">
+          <i class="bi bi-check-lg me-1"></i>{% if servicio %}Actualizar{% else %}Crear{% endif %} Servicio
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

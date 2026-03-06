@@ -1,0 +1,292 @@
+{% load static %}
+{# modals.html - Modales del módulo Clientes v2.37 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+
+<!-- Modal: Ver Cliente (readonly) -->
+<div class="modal fade" id="modal-ver-cliente" tabindex="-1" aria-labelledby="modal-ver-cliente-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-ver-cliente-label">Ver Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="cliente-view-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-cliente-view">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-tipo_persona" class="form-label">Tipo Persona</label>
+              <input type="text" class="form-control" id="cliente-view-tipo_persona" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-tipo_documento" class="form-label">Tipo Documento</label>
+              <input type="text" class="form-control" id="cliente-view-tipo_documento" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-numero_documento" class="form-label">Número Documento</label>
+              <input type="text" class="form-control" id="cliente-view-numero_documento" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-razon_social" class="form-label">Razón Social</label>
+              <input type="text" class="form-control" id="cliente-view-razon_social" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-nombre_comercial" class="form-label">Nombre Comercial</label>
+              <input type="text" class="form-control" id="cliente-view-nombre_comercial" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-regimen_tributario" class="form-label">Régimen Tributario</label>
+              <input type="text" class="form-control" id="cliente-view-regimen_tributario" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="cliente-view-email" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-telefono" class="form-label">Teléfono</label>
+              <input type="text" class="form-control" id="cliente-view-telefono" readonly disabled />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cliente-view-direccion" class="form-label">Dirección</label>
+              <input type="text" class="form-control" id="cliente-view-direccion" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-ciudad" class="form-label">Ciudad</label>
+              <input type="text" class="form-control" id="cliente-view-ciudad" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-view-segmento" class="form-label">Segmento</label>
+              <input type="text" class="form-control" id="cliente-view-segmento" readonly disabled />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cliente-view-observaciones" class="form-label">Observaciones</label>
+              <textarea class="form-control" id="cliente-view-observaciones" readonly disabled rows="3"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Cliente -->
+<div class="modal fade" id="modal-editar-cliente" tabindex="-1" aria-labelledby="modal-editar-cliente-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-editar-cliente-label">Editar Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="cliente-edit-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-cliente-edit">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-tipo_persona" class="form-label">Tipo Persona *</label>
+              <select class="form-select" id="cliente-edit-tipo_persona" required>
+                <option value="">Seleccionar...</option>
+                <option value="NATURAL">Persona natural</option>
+                <option value="JURIDICA">Persona jurídica</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-tipo_documento" class="form-label">Tipo Documento *</label>
+              <select class="form-select" id="cliente-edit-tipo_documento" required>
+                <option value="">Seleccionar...</option>
+                <option value="CC">Cédula de ciudadanía</option>
+                <option value="CE">Cédula de extranjería</option>
+                <option value="NIT">NIT</option>
+                <option value="PA">Pasaporte</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-numero_documento" class="form-label">Número Documento *</label>
+              <input type="text" class="form-control" id="cliente-edit-numero_documento" required placeholder="Número de documento" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-razon_social" class="form-label">Razón Social *</label>
+              <input type="text" class="form-control" id="cliente-edit-razon_social" required placeholder="Razón social o nombre completo" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-nombre_comercial" class="form-label">Nombre Comercial</label>
+              <input type="text" class="form-control" id="cliente-edit-nombre_comercial" placeholder="Nombre comercial" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-regimen_tributario" class="form-label">Régimen Tributario *</label>
+              <select class="form-select" id="cliente-edit-regimen_tributario" required>
+                <option value="">Seleccionar...</option>
+                <option value="SIMPLE">Régimen Simple</option>
+                <option value="ORDINARIO">Régimen Ordinario</option>
+                <option value="NO_RESP">No responsable de IVA</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="cliente-edit-email" placeholder="Email de contacto" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-telefono" class="form-label">Teléfono</label>
+              <input type="text" class="form-control" id="cliente-edit-telefono" placeholder="Teléfono" />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cliente-edit-direccion" class="form-label">Dirección</label>
+              <input type="text" class="form-control" id="cliente-edit-direccion" placeholder="Dirección" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-ciudad" class="form-label">Ciudad</label>
+              <input type="text" class="form-control" id="cliente-edit-ciudad" placeholder="Ciudad" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-edit-segmento" class="form-label">Segmento *</label>
+              <select class="form-select" id="cliente-edit-segmento" required>
+                <option value="">Seleccionar...</option>
+                <option value="B2B">B2B</option>
+                <option value="B2C">B2C</option>
+                <option value="MIXTO">Mixto</option>
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="cliente-edit-activo" checked />
+                <label class="form-check-label" for="cliente-edit-activo">
+                  Activo
+                </label>
+              </div>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cliente-edit-observaciones" class="form-label">Observaciones</label>
+              <textarea class="form-control" id="cliente-edit-observaciones" rows="3" placeholder="Observaciones adicionales"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-cliente">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Crear Cliente -->
+<div class="modal fade" id="modal-crear-cliente" tabindex="-1" aria-labelledby="modal-crear-cliente-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-crear-cliente-label">Crear Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="cliente-create-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-cliente-create">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-tipo_persona" class="form-label">Tipo Persona *</label>
+              <select class="form-select" id="cliente-create-tipo_persona" required>
+                <option value="">Seleccionar...</option>
+                <option value="NATURAL">Persona natural</option>
+                <option value="JURIDICA">Persona jurídica</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-tipo_documento" class="form-label">Tipo Documento *</label>
+              <select class="form-select" id="cliente-create-tipo_documento" required>
+                <option value="">Seleccionar...</option>
+                <option value="CC">Cédula de ciudadanía</option>
+                <option value="CE">Cédula de extranjería</option>
+                <option value="NIT">NIT</option>
+                <option value="PA">Pasaporte</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-numero_documento" class="form-label">Número Documento *</label>
+              <input type="text" class="form-control" id="cliente-create-numero_documento" required placeholder="Número de documento" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-razon_social" class="form-label">Razón Social *</label>
+              <input type="text" class="form-control" id="cliente-create-razon_social" required placeholder="Razón social o nombre completo" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-nombre_comercial" class="form-label">Nombre Comercial</label>
+              <input type="text" class="form-control" id="cliente-create-nombre_comercial" placeholder="Nombre comercial" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-regimen_tributario" class="form-label">Régimen Tributario *</label>
+              <select class="form-select" id="cliente-create-regimen_tributario" required>
+                <option value="">Seleccionar...</option>
+                <option value="SIMPLE">Régimen Simple</option>
+                <option value="ORDINARIO">Régimen Ordinario</option>
+                <option value="NO_RESP">No responsable de IVA</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="cliente-create-email" placeholder="Email de contacto" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-telefono" class="form-label">Teléfono</label>
+              <input type="text" class="form-control" id="cliente-create-telefono" placeholder="Teléfono" />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cliente-create-direccion" class="form-label">Dirección</label>
+              <input type="text" class="form-control" id="cliente-create-direccion" placeholder="Dirección" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-ciudad" class="form-label">Ciudad</label>
+              <input type="text" class="form-control" id="cliente-create-ciudad" placeholder="Ciudad" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="cliente-create-segmento" class="form-label">Segmento *</label>
+              <select class="form-select" id="cliente-create-segmento" required>
+                <option value="">Seleccionar...</option>
+                <option value="B2B">B2B</option>
+                <option value="B2C">B2C</option>
+                <option value="MIXTO">Mixto</option>
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="cliente-create-activo" checked />
+                <label class="form-check-label" for="cliente-create-activo">
+                  Activo
+                </label>
+              </div>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="cliente-create-observaciones" class="form-label">Observaciones</label>
+              <textarea class="form-control" id="cliente-create-observaciones" rows="3" placeholder="Observaciones adicionales"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-crear-cliente-modal">Crear</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Eliminar Cliente -->
+<div class="modal fade" id="modal-eliminar-cliente" tabindex="-1" aria-labelledby="modal-eliminar-cliente-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-eliminar-cliente-label">Eliminar Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="cliente-delete-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <p>¿Está seguro de que desea eliminar este cliente?</p>
+        <p class="text-muted small" id="cliente-delete-info"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar-cliente">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>

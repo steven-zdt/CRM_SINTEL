@@ -1,0 +1,28 @@
+{% extends "impuestos_dashboard/base_console.html" %}
+
+{% block page_title %}Catálogo DIAN{% endblock %}
+
+{% block console_content %}
+<div class="cards-grid">
+  <a href="{% url 'impuestos_dashboard:ingesta_list' %}" class="card">
+    <h3 class="text-xl font-semibold mb-2">Ingesta</h3>
+    <p class="text-gray-600">Sube documentos o programa URLs para scraping.</p>
+  </a>
+  
+  <a href="{% url 'impuestos_dashboard:ingesta_create' %}" class="card">
+    <h3 class="text-xl font-semibold mb-2">Nueva ingesta</h3>
+    <p class="text-gray-600">Crear un proceso de ingesta (archivo o URL).</p>
+  </a>
+  
+  {# Placeholders para siguientes sprints: #}
+  <div class="card disabled">
+    <h3 class="text-xl font-semibold mb-2">Buscador (OpenSearch)</h3>
+    <p class="text-gray-600">Próximamente</p>
+  </div>
+  
+  <div class="card disabled">
+    <h3 class="text-xl font-semibold mb-2">Catálogos DIAN</h3>
+    <p class="text-gray-600">Próximamente</p>
+  </div>
+</div>
+{% endblock %}

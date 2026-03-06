@@ -1,0 +1,284 @@
+{# devengo_offcanvas.html - Offcanvas del módulo Nóminas v2.60 #}
+{# ⚠️ v2.60: HTMX + Offcanvas con Zero Trust #}
+{# ⚠️ Paso 3: Interfaz HTMX y Offcanvas - Experiencia de usuario modular #}
+{# ⚠️ NOTA: Este template es simplificado - La lógica completa de cálculo está en el frontend #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-devengo" aria-labelledby="offcanvas-devengo-label" style="width: 95%; max-width: 1000px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-devengo-label">
+      <i class="bi bi-cash-coin me-2"></i>
+      <span id="offcanvas-devengo-titulo">
+        {% if devengo %}Ver Nómina{% else %}Registrar Nómina{% endif %}
+      </span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ Paso 3: Contenedor de feedback para UIManager (manejo de errores 400) #}
+    <div id="form-devengo-feedback" class="alert d-none mb-3" role="alert"></div>
+    
+    {# ⚠️ Paso 3: Formulario puramente declarativo - El éxito y errores se manejan en devengos_editor.js #}
+    {# ⚠️ v2.60: El formulario solo crea nuevas nóminas. Para modificar, usar Historial de Nóminas #}
+    <form id="form-devengo" method="POST" onsubmit="return false;"
+          {% if devengo %}
+          hx-patch="/api/v1/empleados/devengos/{{ devengo.id }}/"
+          {% else %}
+          hx-post="/api/v1/empleados/devengos/"
+          {% endif %}
+          hx-target="#grid-empleados" 
+          hx-swap="none"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          hx-on::htmx:before-request="const btn = document.getElementById('btn-guardar-devengo'); if(btn && !btn.disabled){ btn.disabled = true; btn.innerHTML = '<span class=\"spinner-border spinner-border-sm me-1\" role=\"status\" aria-hidden=\"true\"></span>Guardando...'; }"
+          hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+      {% csrf_token %}
+      {# ⚠️ v2.60: Campo id siempre vacío para modo creación (prohibir Upsert) #}
+      <input type="hidden" id="devengo-id" name="id" value="">
+      <input type="hidden" id="devengo-empleado-id" name="empleado" value="{% if empleado %}{{ empleado.id }}{% elif devengo %}{{ devengo.empleado.id }}{% endif %}">
+      <input type="hidden" id="devengo-contrato-id" name="contrato" value="{% if contrato %}{{ contrato.id }}{% elif devengo %}{{ devengo.contrato.id }}{% endif %}">
+      
+      {# Información del Empleado (Solo lectura) #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-person me-2"></i>Información del Empleado
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Primer Nombre</label>
+            <input type="text" class="form-control bg-light" id="devengo-empleado-primer-nombre" 
+                   value="{% if empleado %}{{ empleado.primer_nombre }}{% elif devengo %}{{ devengo.empleado.primer_nombre }}{% endif %}" 
+                   readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Primer Apellido</label>
+            <input type="text" class="form-control bg-light" id="devengo-empleado-primer-apellido" 
+                   value="{% if empleado %}{{ empleado.primer_apellido }}{% elif devengo %}{{ devengo.empleado.primer_apellido }}{% endif %}" 
+                   readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Número de Documento</label>
+            <input type="text" class="form-control bg-light" id="devengo-empleado-documento" 
+                   value="{% if empleado %}{{ empleado.numero_documento }}{% elif devengo %}{{ devengo.empleado.numero_documento }}{% endif %}" 
+                   readonly>
+          </div>
+        </div>
+      </div>
+      
+      {# Periodo y Fecha #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar-range me-2"></i>Periodo y Fecha
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="devengo-periodo_mes" class="form-label text-danger fw-bold">Periodo (YYYY-MM) *</label>
+            <input type="text" class="form-control" 
+                   id="devengo-periodo_mes" name="periodo_mes" 
+                   value="{% if devengo %}{{ devengo.periodo_mes }}{% else %}{{ 'now'|date:'Y-m' }}{% endif %}" 
+                   pattern="\d{4}-\d{2}" placeholder="2024-01" 
+                   title="Formato: YYYY-MM (ej: 2024-01)" 
+                   required
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados, #devengo-deducciones-calculadas"
+                   hx-swap="innerHTML"
+                   hx-trigger="change, keyup changed delay:500ms, blur"
+                   hx-include="#devengo-contrato-id, #devengo-dias_laborados, #devengo-otros_devengos, #devengo-prestamos, #devengo-descuentos_operativos, #devengo-periodo_mes, #devengo-fecha_pago"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-on::htmx:before-request="document.getElementById('devengo-campos-calculados').innerHTML = '';"
+                   hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+            <small class="form-text text-muted">Formato: YYYY-MM (ej: 2024-01). Puede registrar múltiples nóminas en el mismo mes usando diferentes fechas de pago (semanas, quincenas, etc.). Cambiar el periodo actualiza los cálculos automáticamente.</small>
+          </div>
+          <div class="col-md-6">
+            <label for="devengo-fecha_pago" class="form-label text-danger fw-bold">Fecha de Pago *</label>
+            <input type="date" class="form-control" id="devengo-fecha_pago" name="fecha_pago" 
+                   value="{% if devengo %}{{ devengo.fecha_pago|date:'Y-m-d' }}{% endif %}" 
+                   required
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados, #devengo-deducciones-calculadas"
+                   hx-swap="innerHTML"
+                   hx-trigger="change, keyup changed delay:500ms, blur"
+                   hx-include="#devengo-contrato-id, #devengo-dias_laborados, #devengo-otros_devengos, #devengo-prestamos, #devengo-descuentos_operativos, #devengo-periodo_mes, #devengo-fecha_pago"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-on::htmx:before-request="document.getElementById('devengo-campos-calculados').innerHTML = '';"
+                   hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+            <small class="form-text text-muted">Permite registrar múltiples pagos (semanas/quincenas) en el mismo mes. Cambiar la fecha actualiza los cálculos automáticamente.</small>
+          </div>
+        </div>
+      </div>
+      
+      {# Días Laborados #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar-check me-2"></i>Días Laborados
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="devengo-dias_laborados" class="form-label text-danger fw-bold">Días Laborados *</label>
+            <input type="number" class="form-control" id="devengo-dias_laborados" name="dias_laborados" 
+                   value="{% if devengo %}{{ devengo.dias_laborados }}{% else %}30{% endif %}" 
+                   step="0.1" min="0.1" max="30" required
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados, #devengo-deducciones-calculadas"
+                   hx-swap="innerHTML"
+                   hx-trigger="change, keyup changed delay:500ms, blur"
+                   hx-include="#devengo-contrato-id, #devengo-dias_laborados, #devengo-otros_devengos, #devengo-prestamos, #devengo-descuentos_operativos, #devengo-periodo_mes, #devengo-fecha_pago"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-on::htmx:before-request="document.getElementById('devengo-campos-calculados').innerHTML = '';"
+                   hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+            <small class="form-text text-muted">Permite decimales (ej: 0.5 = medio día, 15.5 = quince días y medio). Los valores se calculan automáticamente.</small>
+          </div>
+        </div>
+      </div>
+      
+      {# Devengos #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-arrow-up-circle me-2"></i>Devengos (COP)
+        </h6>
+        <div class="row g-3">
+        {# ⚠️ v2.60: Contenedor para campos calculados (actualizado vía HTMX) #}
+        <div id="devengo-campos-calculados">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="devengo-salario_base" class="form-label text-danger fw-bold">Salario Base (COP) *</label>
+              <input type="number" class="form-control bg-light" id="devengo-salario_base" 
+                     value="{% if devengo %}{{ devengo.salario_base }}{% endif %}" 
+                     step="0.01" min="0" readonly required disabled>
+              <small class="form-text text-muted">⚠️ Calculado automáticamente: (Salario Base / 30) * Días Laborados (Zero Trust: backend)</small>
+            </div>
+            <div class="col-md-6">
+              <label for="devengo-auxilio_transporte" class="form-label">Auxilio de Transporte (COP)</label>
+              <input type="number" class="form-control bg-light" id="devengo-auxilio_transporte" 
+                     value="{% if devengo %}{{ devengo.auxilio_transporte|default:0 }}{% else %}0{% endif %}" 
+                     step="0.01" min="0" readonly disabled>
+              <small class="form-text text-muted">⚠️ Calculado proporcionalmente: (Auxilio / 30) * Días Laborados (Zero Trust: backend)</small>
+            </div>
+          </div>
+        </div>
+          <div class="col-md-6">
+            <label for="devengo-otros_devengos" class="form-label">Otros Devengos (COP)</label>
+            <input type="number" class="form-control" id="devengo-otros_devengos" name="otros_devengos" 
+                   value="{% if devengo %}{{ devengo.otros_devengos|default:0 }}{% else %}0{% endif %}" 
+                   step="0.01" min="0" placeholder="Horas extras, bonificaciones, etc."
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados, #devengo-deducciones-calculadas"
+                   hx-swap="innerHTML"
+                   hx-trigger="keyup changed delay:500ms, blur"
+                   hx-include="#devengo-contrato-id, #devengo-dias_laborados, #devengo-otros_devengos, #devengo-prestamos, #devengo-descuentos_operativos, #devengo-periodo_mes, #devengo-fecha_pago"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-on::htmx:before-request="document.getElementById('devengo-campos-calculados').innerHTML = ''; document.getElementById('devengo-deducciones-calculadas').innerHTML = '';"
+                   hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+            <small class="form-text text-muted">Valor en Pesos Colombianos (actualiza cálculo automáticamente)</small>
+          </div>
+        </div>
+      </div>
+      
+      {# Deducciones de Ley #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-arrow-down-circle me-2"></i>Deducciones de Ley (COP)
+        </h6>
+        {# ⚠️ v2.60: Los campos de salud y pensión se actualizan vía HTMX #}
+        <div id="devengo-deducciones-calculadas">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="devengo-salud_empleado" class="form-label text-danger fw-bold">Salud (4%) (COP) *</label>
+              <input type="number" class="form-control bg-light" id="devengo-salud_empleado" 
+                     value="{% if devengo %}{{ devengo.salud_empleado }}{% else %}0{% endif %}" 
+                     step="0.01" min="0" readonly required disabled>
+              <small class="form-text text-muted">⚠️ Calculado automáticamente: IBC * 0.04 (Zero Trust: backend)</small>
+            </div>
+            <div class="col-md-6">
+              <label for="devengo-pension_empleado" class="form-label text-danger fw-bold">Pensión (4%) (COP) *</label>
+              <input type="number" class="form-control bg-light" id="devengo-pension_empleado" 
+                     value="{% if devengo %}{{ devengo.pension_empleado }}{% else %}0{% endif %}" 
+                     step="0.01" min="0" readonly required disabled>
+              <small class="form-text text-muted">⚠️ Calculado automáticamente: IBC * 0.04 (Zero Trust: backend)</small>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3 mt-2">
+          <div class="col-md-6">
+            <label for="devengo-prestamos" class="form-label">Préstamos (COP)</label>
+            <input type="number" class="form-control" id="devengo-prestamos" name="prestamos" 
+                   value="{% if devengo %}{{ devengo.prestamos|default:0 }}{% else %}0{% endif %}" 
+                   step="0.01" min="0"
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados, #devengo-deducciones-calculadas"
+                   hx-swap="innerHTML"
+                   hx-trigger="keyup changed delay:500ms, blur"
+                   hx-include="#devengo-contrato-id, #devengo-dias_laborados, #devengo-otros_devengos, #devengo-prestamos, #devengo-descuentos_operativos, #devengo-periodo_mes, #devengo-fecha_pago"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-on::htmx:before-request="document.getElementById('devengo-campos-calculados').innerHTML = ''; document.getElementById('devengo-deducciones-calculadas').innerHTML = '';"
+                   hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+            <small class="form-text text-muted">Préstamos descontados (actualiza cálculo automáticamente al perder el foco)</small>
+          </div>
+          <div class="col-md-6">
+            <label for="devengo-descuentos_operativos" class="form-label">Descuentos Operativos (COP)</label>
+            <input type="number" class="form-control" id="devengo-descuentos_operativos" name="descuentos_operativos" 
+                   value="{% if devengo %}{{ devengo.descuentos_operativos|default:0 }}{% else %}0{% endif %}" 
+                   step="0.01" min="0"
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados, #devengo-deducciones-calculadas"
+                   hx-swap="innerHTML"
+                   hx-trigger="keyup changed delay:500ms, blur"
+                   hx-include="#devengo-contrato-id, #devengo-dias_laborados, #devengo-otros_devengos, #devengo-prestamos, #devengo-descuentos_operativos, #devengo-periodo_mes, #devengo-fecha_pago"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-on::htmx:before-request="document.getElementById('devengo-campos-calculados').innerHTML = ''; document.getElementById('devengo-deducciones-calculadas').innerHTML = '';"
+                   hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+            <small class="form-text text-muted">Descuentos operativos varios (actualiza cálculo automáticamente al perder el foco)</small>
+          </div>
+        </div>
+      </div>
+      
+      {# Resumen #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calculator me-2"></i>Resumen
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="devengo-neto_pagar" class="form-label text-danger fw-bold">Neto a Pagar (COP) *</label>
+            <input type="text" class="form-control form-control-lg fw-bold text-success bg-light" id="devengo-neto_pagar" 
+                   value="{% if devengo %}{{ devengo.neto_pagar|floatformat:2 }}{% endif %}" 
+                   readonly disabled>
+            <small class="form-text text-muted">⚠️ Valor total en Pesos Colombianos (calculado automáticamente - Zero Trust: backend)</small>
+          </div>
+        </div>
+      </div>
+      
+      {# Observaciones #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-chat-left-text me-2"></i>Observaciones
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="devengo-observaciones" class="form-label">Observaciones</label>
+            <textarea class="form-control" id="devengo-observaciones" name="observaciones" rows="3" 
+                      placeholder="Observaciones adicionales...">{% if devengo %}{{ devengo.observaciones|default:'' }}{% endif %}</textarea>
+          </div>
+        </div>
+      </div>
+
+    </form>
+  </div>
+  {# ⚠️ v2.60: Offcanvas Footer para botones de acción (garantiza visibilidad) #}
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-lg me-1"></i>Cancelar
+      </button>
+      {# ⚠️ v2.60: Botón siempre visible - se deshabilita dinámicamente si hay error de duplicado #}
+      {# Para modificar nóminas existentes, usar Historial de Nóminas #}
+      {% if not devengo %}
+        <button type="submit" class="btn btn-primary" id="btn-guardar-devengo" form="form-devengo">
+          <i class="bi bi-check-lg me-1"></i>Guardar Nómina
+        </button>
+      {% else %}
+        <button type="button" class="btn btn-info" disabled>
+          <i class="bi bi-lock me-1"></i>Nómina Inmutable (Solo lectura)
+        </button>
+      {% endif %}
+    </div>
+  </div>
+</div>

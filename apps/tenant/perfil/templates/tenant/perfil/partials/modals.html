@@ -1,0 +1,99 @@
+{% load static %}
+{# modals.html - Modales del módulo Perfil v2.37 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+{# ⚠️ Singleton: Solo modales Ver y Editar (no Crear ni Eliminar) #}
+
+<!-- Modal: Ver Perfil (readonly) -->
+<div class="modal fade" id="modal-ver-perfil" tabindex="-1" aria-labelledby="modal-ver-perfil-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-ver-perfil-label">Ver Mi Perfil</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="perfil-view-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-perfil-view">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="perfil-view-user_full_name" class="form-label">Nombre Completo</label>
+              <input type="text" class="form-control" id="perfil-view-user_full_name" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-view-user_email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="perfil-view-user_email" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-view-cargo" class="form-label">Cargo</label>
+              <input type="text" class="form-control" id="perfil-view-cargo" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-view-departamento" class="form-label">Departamento</label>
+              <input type="text" class="form-control" id="perfil-view-departamento" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-view-telefono_corporativo" class="form-label">Teléfono Corporativo</label>
+              <input type="text" class="form-control" id="perfil-view-telefono_corporativo" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-view-avatar_url" class="form-label">Avatar</label>
+              <div id="perfil-view-avatar-preview" class="mt-2"></div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Perfil -->
+<div class="modal fade" id="modal-editar-perfil" tabindex="-1" aria-labelledby="modal-editar-perfil-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-editar-perfil-label">Editar Mi Perfil</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="perfil-edit-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-perfil-edit" enctype="multipart/form-data">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="perfil-edit-user_full_name" class="form-label">Nombre Completo</label>
+              <input type="text" class="form-control" id="perfil-edit-user_full_name" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-edit-user_email" class="form-label">Email</label>
+              <input type="email" class="form-control" id="perfil-edit-user_email" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-edit-cargo" class="form-label">Cargo</label>
+              <input type="text" class="form-control" id="perfil-edit-cargo" placeholder="Cargo en la empresa" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-edit-departamento" class="form-label">Departamento</label>
+              <input type="text" class="form-control" id="perfil-edit-departamento" placeholder="Departamento" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-edit-telefono_corporativo" class="form-label">Teléfono Corporativo</label>
+              <input type="text" class="form-control" id="perfil-edit-telefono_corporativo" placeholder="Teléfono corporativo" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="perfil-edit-avatar" class="form-label">Avatar</label>
+              <input type="file" class="form-control" id="perfil-edit-avatar" accept="image/jpeg,image/png,image/gif,image/webp" />
+              <div id="perfil-edit-avatar-preview" class="mt-2"></div>
+              <small class="form-text text-muted">Tipos permitidos: JPEG, PNG, GIF, WebP. Tamaño máximo: 5MB</small>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-perfil">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>

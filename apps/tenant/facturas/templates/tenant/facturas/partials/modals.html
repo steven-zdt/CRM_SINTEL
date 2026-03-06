@@ -1,0 +1,38 @@
+{% load static %}
+<!-- Modales del módulo Facturas -->
+
+<!-- Modal: Importar Factura -->
+<div class="modal fade" id="modal-factura-importar" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Importar Factura UBL XML</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="input-ubl-file" class="form-label">Archivo XML</label>
+          <input type="file" id="input-ubl-file" class="form-control" accept=".xml,text/xml" required />
+          <small class="text-muted">Selecciona un archivo XML UBL 2.1 (Invoice o CreditNote)</small>
+        </div>
+        
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="check-preview" checked>
+          <label class="form-check-label" for="check-preview">
+            Previsualizar (sin guardar)
+          </label>
+        </div>
+
+        <div id="import-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" id="btn-import-preview" class="btn btn-info">Previsualizar</button>
+        <button type="button" id="btn-import-save" class="btn btn-primary">Guardar desde DTO</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nota: Los modales de detalle, XML y eliminar se crean dinámicamente desde JS -->
+<!-- para evitar duplicados y mantener la lógica en facturas.modals.js -->

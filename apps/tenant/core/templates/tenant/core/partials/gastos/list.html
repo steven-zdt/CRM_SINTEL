@@ -1,0 +1,72 @@
+{% load static %}
+{# list.html - Módulo Gastos v2.60 - Feature-Sliced Architecture #}
+{# ⚠️ v2.60: Migrado a Feature-Sliced - Usa partial_summary.html #}
+<div id="workspace-gastos" class="ui-module ui-gastos">
+    
+    {# ⚠️ v2.60: Panel de totales netos - Partial reutilizable #}
+    {% include 'tenant/core/gastos/partial_summary.html' %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="btn-group shadow-sm">
+            {# ⚠️ v2.60: Botón HTMX para crear nuevo gasto - Usa render-offcanvas endpoint #}
+            <button class="btn btn-primary px-3" 
+                    type="button"
+                    hx-get="/api/v1/gastos/render-offcanvas/crear/"
+                    hx-target="#offcanvas-container-gastos"
+                    hx-swap="innerHTML"
+                    hx-indicator="#spinner"
+                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-gasto-crear'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                <i class="bi bi-file-earmark-plus me-1"></i> Nuevo Gasto
+            </button>
+            {# ⚠️ v2.60: Botón HTMX para configurar resolución DIAN - Usa render-offcanvas endpoint #}
+            <button class="btn btn-outline-primary px-3" 
+                    id="btn-config-resolucion" 
+                    type="button"
+                    title="Configurar Resolución DIAN"
+                    hx-get="/api/v1/gastos/render-offcanvas/resolucion/"
+                    hx-target="#offcanvas-container-gastos"
+                    hx-swap="innerHTML"
+                    hx-indicator="#spinner"
+                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-resolucion-config'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                <i class="bi bi-gear me-1"></i> Configurar Resolución
+            </button>
+            <button class="btn btn-outline-secondary" id="btn-refrescar-gastos" title="Refrescar datos"
+                    onclick="if(window.gastosPage?.refresh){window.gastosPage.refresh();}else{console.warn('gastosPage no disponible');}">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+        <div id="gastos-list-feedback" class="small fw-bold text-end"></div>
+    </div>
+
+    {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
+    <div class="mb-3">
+        <input type="text" id="search-gasto" class="form-control" placeholder="Buscar por descripción, vendedor o prefijo...">
+    </div>
+
+    {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div id="grid-gastos" class="flex-grow-1" style="min-height: 400px;"></div>
+        </div>
+    </div>
+
+    {# ⚠️ v2.60: Sección de Resoluciones DIAN Disponibles #}
+    <div class="card shadow-sm border-0 mt-4">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <i class="bi bi-file-earmark-text me-2"></i>Resoluciones DIAN Disponibles
+            </h6>
+            <button class="btn btn-sm btn-outline-primary" 
+                    type="button"
+                    onclick="if(window.AppGastos && window.AppGastos.refreshResoluciones){window.AppGastos.refreshResoluciones();}else{console.warn('AppGastos.refreshResoluciones no disponible');}">
+                <i class="bi bi-arrow-clockwise"></i> Refrescar
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div id="grid-resoluciones" class="flex-grow-1" style="min-height: 300px;"></div>
+        </div>
+    </div>
+    
+    {# ⚠️ v2.60: Contenedor para Offcanvas (HTMX) #}
+    <div id="offcanvas-container-gastos"></div>
+</div>

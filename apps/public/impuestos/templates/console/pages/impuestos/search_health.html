@@ -1,0 +1,79 @@
+{% extends "console/base.html" %}
+{% load static %}
+
+{% block title %}Salud de OpenSearch - Catálogo DIAN{% endblock %}
+
+{% block extra_head %}
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <link rel="stylesheet" href="{% static 'impuestos_dashboard/console.css' %}"/>
+{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+  <h1 class="text-2xl font-bold text-gray-900 mb-6">Salud de OpenSearch</h1>
+  
+  <div class="mb-4 text-sm text-gray-600">
+    <p>Estado del clúster OpenSearch y configuración del alias. Se actualiza cada 10 segundos.</p>
+  </div>
+  
+  <div 
+    hx-get="{% url 'console:impuestos-search-health' %}" 
+    hx-trigger="load, every 10s" 
+    hx-target="#health-content" 
+    hx-swap="innerHTML"
+    hx-headers='{"HX-Request": "true"}'>
+    <div id="health-content" class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+      <p class="text-gray-500">Cargando salud...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// Renderizar JSON de forma legible cuando llegue la respuesta
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+  if (evt.target.id === 'health-content') {
+    try {
+      // HTMX devuelve JSON cuando el endpoint devuelve JsonResponse
+      const data = typeof evt.target.textContent === 'string' ? 
+        JSON.parse(evt.target.textContent) : evt.target.textContent;
+      
+      // Crear HTML formateado
+      const clusterStatus = data.cluster?.status || 'unknown';
+      const aliasExists = data.alias_exists ? '✓' : '✗';
+      const aliasPoints = data.alias_points_to || [];
+      
+      let html = '<div class="space-y-4">';
+      html += `<div class="border-l-4 ${clusterStatus === 'green' ? 'border-green-500' : clusterStatus === 'yellow' ? 'border-yellow-500' : 'border-red-500'} pl-4">`;
+      html += `<h3 class="font-semibold text-gray-900">Estado del Clúster</h3>`;
+      html += `<p class="text-sm text-gray-600">Status: <span class="font-mono font-semibold">${clusterStatus}</span></p>`;
+      html += `<p class="text-sm text-gray-600">Nodos: ${data.cluster?.number_of_nodes || 'N/A'}</p>`;
+      html += `<p class="text-sm text-gray-600">Índices primarios: ${data.cluster?.active_primary_shards || 'N/A'}</p>`;
+      html += '</div>';
+      
+      html += `<div class="border-l-4 border-blue-500 pl-4">`;
+      html += `<h3 class="font-semibold text-gray-900">Alias</h3>`;
+      html += `<p class="text-sm text-gray-600">Alias: <span class="font-mono">${data.alias || 'N/A'}</span> ${aliasExists}</p>`;
+      if (aliasPoints && aliasPoints.length > 0) {
+        html += `<p class="text-sm text-gray-600">Apunta a: <span class="font-mono">${aliasPoints.join(', ')}</span></p>`;
+      } else {
+        html += `<p class="text-sm text-yellow-600">No apunta a ningún índice</p>`;
+      }
+      html += '</div>';
+      
+      html += '<details class="mt-4"><summary class="cursor-pointer text-sm text-gray-600 hover:text-gray-900">Ver JSON completo</summary>';
+      html += '<pre class="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto text-xs mt-2">' + 
+        JSON.stringify(data, null, 2) + '</pre>';
+      html += '</details>';
+      
+      html += '</div>';
+      evt.target.innerHTML = html;
+    } catch (e) {
+      // Si no es JSON o hay error, mostrar el contenido como está
+      evt.target.innerHTML = '<pre class="bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto">' + 
+        evt.target.textContent + '</pre>';
+    }
+  }
+});
+</script>
+{% endblock %}

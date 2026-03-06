@@ -1,0 +1,23 @@
+{% load static %}
+{# assets_gastos.html - Assets del módulo Gastos v2.40 #}
+{# ⚠️ v2.40: Sistema de Documento Soporte Inmutable #}
+{# ⚠️ v2.40: Migrado a Tabulator Factory (eliminado DataTables) #}
+{# ⚠️ UBICACIÓN: Core es la única fuente de verdad UI para todas las apps #}
+{# ⚠️ NOTA: assets_core.html ya se incluye en workspace.html antes de este archivo #}
+{# ⚠️ CONFIGURACIÓN: gastos.page.js usa lazy loading con DOMUtils.onVisibleOnce (#tab-gastos) #}
+{# ⚠️ Tabulator: Remote pagination GET /api/v1/gastos/ con StandardResultsSetPagination #}
+
+{# BLOQUE 1: Helpers Core (DEBEN ir primero) #}
+{# TabulatorFactory se carga en assets_core.html, pero verificamos que esté disponible #}
+
+{# BLOQUE 2: Archivos del módulo Gastos v2.60 - Feature-Sliced Architecture #}
+{# ⚠️ v2.60: Reestructuración Feature-Sliced - Módulos separados por acción #}
+<script src="{% static 'core/js/gastos/gastos.api.js' %}"></script>
+{# ⚠️ ORDEN CRÍTICO: Main primero (inicializa AppGastos), luego crear, anular, resolución y listado de resoluciones #}
+<script src="{% static 'core/js/gastos/gastos_main.js' %}"></script>
+<script src="{% static 'core/js/gastos/gastos_crear.js' %}"></script>
+<script src="{% static 'core/js/gastos/gastos_anular.js' %}"></script>
+<script src="{% static 'core/js/gastos/gastos_resolucion.js' %}"></script>
+<script src="{% static 'core/js/gastos/gastos_resoluciones_list.js' %}"></script>
+
+{# ⚠️ NOTA: No se requiere CSS separado - los estilos están en workspace.html y Bootstrap #}

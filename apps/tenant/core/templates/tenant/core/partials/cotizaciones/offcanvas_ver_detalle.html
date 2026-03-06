@@ -1,0 +1,57 @@
+<div class="offcanvas-header bg-info text-white">
+  <h5 class="offcanvas-title">
+    <i class="bi bi-eye-fill me-2"></i>Detalles de Plantilla
+  </h5>
+  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+</div>
+
+<div class="offcanvas-body">
+    <div class="card border-0 bg-light mb-3">
+        <div class="card-body">
+            <h6 class="text-primary fw-bold border-bottom pb-2">INFORMACIÓN GENERAL</h6>
+            <div class="row g-2 small">
+                <div class="col-6 text-muted">Nombre:</div>
+                <div class="col-6 fw-bold" id="view-nombre">-</div>
+                <div class="col-6 text-muted">Tipo Base:</div>
+                <div class="col-6 fw-bold" id="view-tipo">-</div>
+                <div class="col-6 text-muted">IVA aplicado:</div>
+                <div class="col-6 fw-bold"><span id="view-iva">0</span>%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 bg-light mb-3">
+        <div class="card-body">
+            <h6 class="text-primary fw-bold border-bottom pb-2">CONFIGURACIÓN DE CÓDIGO</h6>
+            <div class="row g-2 small">
+                <div class="col-6 text-muted">Prefijo:</div>
+                <div class="col-6 fw-bold" id="view-prefijo">-</div>
+                <div class="col-6 text-muted">Sufijo:</div>
+                <div class="col-6 fw-bold" id="view-sufijo">-</div>
+                <div class="col-6 text-muted">Secuencia Actual:</div>
+                <div class="col-6 fw-bold text-success" id="view-secuencia">0</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-section-aiu" class="card border-0 bg-light d-none">
+        <div class="card-body">
+            <h6 class="text-primary fw-bold border-bottom pb-2">DESGLOSE AIU</h6>
+            <div class="row g-2 small">
+                <div class="col-6 text-muted">Administración:</div>
+                <div class="col-6 fw-bold"><span id="view-aiu-admin">0</span>%</div>
+                <div class="col-6 text-muted">Imprevistos:</div>
+                <div class="col-6 fw-bold"><span id="view-aiu-imprev">0</span>%</div>
+                <div class="col-6 text-muted">Utilidad:</div>
+                <div class="col-6 fw-bold"><span id="view-aiu-util">0</span>%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 d-grid">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cerrar Vista</button>
+    </div>
+</div>
+
+{% load static %}
+<script src="{% static 'core/js/cotizaciones/features/plantilla_ver.js' %}?v=2.60.2"></script>

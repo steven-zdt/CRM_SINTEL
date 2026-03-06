@@ -1,0 +1,88 @@
+{% load static %}
+{# list.html - Módulo Facturas v2.40 - Tabulator Factory #}
+{# ⚠️ v2.40: Migrado a Tabulator Factory (eliminado DataTables) #}
+<div id="tab-facturas-content" class="ui-module ui-facturas">
+  <!-- Panel de Totales Netos -->
+  <div class="row mb-4" id="panel-totales-netos">
+    <!-- Card Ventas Netas -->
+    <div class="col-md-6 mb-3">
+      <div class="card h-100 border-success">
+        <div class="card-header bg-success text-white d-flex align-items-center">
+          <i class="bi bi-graph-up-arrow me-2"></i>
+          <strong>Ventas Netas</strong>
+        </div>
+        <div class="card-body">
+          <h3 class="card-title mb-0" id="ventas-total-neto">$0</h3>
+          <p class="text-muted small mb-0 mt-2">Total de facturas de venta</p>
+        </div>
+        <div class="card-footer bg-light">
+          <div class="d-flex justify-content-between small">
+            <span>Subtotal: <strong id="ventas-subtotal-neto">$0</strong></span>
+            <span>IVA: <strong id="ventas-impuestos-neto">$0</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Card Compras Netas -->
+    <div class="col-md-6 mb-3">
+      <div class="card h-100 border-primary">
+        <div class="card-header bg-primary text-white d-flex align-items-center">
+          <i class="bi bi-cart-dash me-2"></i>
+          <strong>Compras Netas</strong>
+        </div>
+        <div class="card-body">
+          <h3 class="card-title mb-0" id="compras-total-neto">$0</h3>
+          <p class="text-muted small mb-0 mt-2">Total de facturas de compra</p>
+        </div>
+        <div class="card-footer bg-light">
+          <div class="d-flex justify-content-between small">
+            <span>Subtotal: <strong id="compras-subtotal-neto">$0</strong></span>
+            <span>IVA: <strong id="compras-impuestos-neto">$0</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Texto Legal -->
+    <div class="col-12">
+      <p class="text-muted small text-center mb-0">
+        <i class="bi bi-info-circle"></i> 
+        <em>Valores calculados excluyendo documentos con Nota de Crédito aplicada</em>
+      </p>
+    </div>
+  </div>
+  
+  <!-- Toolbar -->
+  <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-facturas">
+    <button class="btn btn-sm btn-primary" id="btn-facturas-importar" type="button">
+      <i class="bi bi-file-earmark-arrow-up"></i> Importar XML
+    </button>
+    <button id="btn-refrescar-facturas" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-clockwise"></i> Refrescar
+    </button>
+    <div class="ms-auto">
+      <label for="filter-nc-status" class="form-label me-2 mb-0 small">Filtrar por NC:</label>
+      <select id="filter-nc-status" class="form-select form-select-sm" style="width: auto; display: inline-block;">
+        <option value="all">Todas</option>
+        <option value="with-nc">Con Nota Crédito</option>
+        <option value="without-nc">Sin Nota Crédito</option>
+      </select>
+    </div>
+  </div>
+  
+  <!-- Feedback -->
+  <div id="feedback-facturas-list" class="alert d-none" role="alert" aria-live="polite"></div>
+  
+  {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
+  <div class="mb-3">
+    <input type="text" id="search-factura" class="form-control" placeholder="Buscar por número, CUFE, emisor o receptor...">
+  </div>
+
+  {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+      <div id="grid-facturas" class="flex-grow-1" style="min-height: 400px;"></div>
+    </div>
+  </div>
+</div>

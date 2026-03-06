@@ -1,0 +1,147 @@
+{% load static %}
+{# mailinbox_modals.html - Modales del módulo MailInboxConfig v2.40 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+{# ⚠️ v2.40: Alineado con MailInboxConfigDetailSerializer y configuración moderna #}
+{# ⚠️ IMPORTANTE: Los IDs de los campos deben coincidir exactamente con collectMailInboxPayload() #}
+
+<!-- Modal: Crear/Editar MailInboxConfig -->
+<div class="modal fade" id="modal-mailinbox-form" tabindex="-1" aria-labelledby="modal-mailinbox-form-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-mailinbox-form-label">Nueva Configuración</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="mailinbox-form-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-mailinbox">
+          <input type="hidden" id="mailinbox-id" />
+          
+          <!-- Información Básica -->
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-nombre" class="form-label">Nombre *</label>
+              <input type="text" class="form-control" id="mailinbox-nombre" required placeholder="Ej: Buzón Principal" />
+              <small class="form-text text-muted">Alias para identificar esta configuración</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-email_address" class="form-label">Email Principal</label>
+              <input type="email" class="form-control" id="mailinbox-email_address" placeholder="correo@ejemplo.com" />
+              <small class="form-text text-muted">Dirección de correo principal</small>
+            </div>
+          </div>
+
+          <!-- Proveedor -->
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-provider" class="form-label">Proveedor</label>
+              <select class="form-control" id="mailinbox-provider">
+                <option value="custom">Personalizado</option>
+                <option value="gmail">Gmail</option>
+              </select>
+              <small class="form-text text-muted">Seleccione el proveedor de correo</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="mailinbox-is_active" checked />
+                <label class="form-check-label" for="mailinbox-is_active">
+                  Configuración Activa
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Configuración IMAP -->
+          <hr class="my-3">
+          <h6 class="mb-3">Configuración IMAP (Recepción)</h6>
+          
+          <div class="row">
+            <div class="col-md-8 mb-3">
+              <label for="mailinbox-imap_host" class="form-label">Servidor IMAP *</label>
+              <input type="text" class="form-control" id="mailinbox-imap_host" required placeholder="imap.gmail.com" />
+              <small class="form-text text-muted">Hostname del servidor IMAP</small>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label for="mailinbox-imap_port" class="form-label">Puerto IMAP *</label>
+              <input type="number" class="form-control" id="mailinbox-imap_port" required placeholder="993" value="993" />
+              <small class="form-text text-muted">Puerto IMAP (993 SSL, 143 STARTTLS)</small>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-imap_username" class="form-label">Usuario IMAP *</label>
+              <input type="text" class="form-control" id="mailinbox-imap_username" required placeholder="correo@ejemplo.com" />
+              <small class="form-text text-muted">Usuario para autenticación IMAP</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-imap_password" class="form-label">Contraseña IMAP *</label>
+              <input type="password" class="form-control" id="mailinbox-imap_password" required placeholder="Contraseña o App Password" />
+              <small class="form-text text-muted">Gmail: Requiere App Password si 2FA está activo</small>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="mailinbox-imap_ssl" checked />
+                <label class="form-check-label" for="mailinbox-imap_ssl">
+                  Usar SSL/TLS
+                </label>
+              </div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="mailinbox-imap_starttls" />
+                <label class="form-check-label" for="mailinbox-imap_starttls">
+                  Usar STARTTLS
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label for="mailinbox-imap_mailbox" class="form-label">Carpeta IMAP</label>
+              <input type="text" class="form-control" id="mailinbox-imap_mailbox" placeholder="INBOX" value="INBOX" />
+              <small class="form-text text-muted">Carpeta a monitorear (por defecto: INBOX)</small>
+            </div>
+          </div>
+
+          <!-- Opciones Avanzadas -->
+          <hr class="my-3">
+          <h6 class="mb-3">Opciones Avanzadas</h6>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="mailinbox-imap_mark_as_seen" checked />
+                <label class="form-check-label" for="mailinbox-imap_mark_as_seen">
+                  Marcar correos como leídos
+                </label>
+              </div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-imap_max_attachment_mb" class="form-label">Límite Adjuntos (MB)</label>
+              <input type="number" class="form-control" id="mailinbox-imap_max_attachment_mb" value="50" min="1" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label for="mailinbox-imap_move_processed_to" class="form-label">Mover Procesados a</label>
+              <input type="text" class="form-control" id="mailinbox-imap_move_processed_to" placeholder="Procesados (opcional)" />
+              <small class="form-text text-muted">Carpeta donde mover correos procesados (opcional)</small>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-mailinbox">
+          <i class="bi bi-save"></i> <span id="btn-guardar-mailinbox-texto">Guardar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

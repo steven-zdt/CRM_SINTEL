@@ -1,0 +1,226 @@
+{% load static %}
+{# modals.html - Modales del módulo Gastos v2.37 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+
+<!-- Modal: Ver Gasto (readonly) -->
+<div class="modal fade" id="modal-ver-gasto" tabindex="-1" aria-labelledby="modal-ver-gasto-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-ver-gasto-label">Ver Gasto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="gasto-view-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-gasto-view">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="gasto-view-fecha" class="form-label">Fecha</label>
+              <input type="date" class="form-control" id="gasto-view-fecha" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-view-periodo" class="form-label">Periodo</label>
+              <input type="text" class="form-control" id="gasto-view-periodo" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-view-tipo" class="form-label">Tipo</label>
+              <input type="text" class="form-control" id="gasto-view-tipo" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-view-subtipo" class="form-label">Subtipo</label>
+              <input type="text" class="form-control" id="gasto-view-subtipo" readonly disabled />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="gasto-view-descripcion" class="form-label">Descripción</label>
+              <input type="text" class="form-control" id="gasto-view-descripcion" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-view-valor" class="form-label">Valor</label>
+              <input type="text" class="form-control" id="gasto-view-valor" readonly disabled />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-view-comprobante" class="form-label">Comprobante</label>
+              <input type="text" class="form-control" id="gasto-view-comprobante" readonly disabled />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="gasto-view-observaciones" class="form-label">Observaciones</label>
+              <textarea class="form-control" id="gasto-view-observaciones" readonly disabled rows="3"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Gasto -->
+<div class="modal fade" id="modal-editar-gasto" tabindex="-1" aria-labelledby="modal-editar-gasto-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-editar-gasto-label">Editar Gasto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="gasto-edit-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-gasto-edit">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="gasto-edit-fecha" class="form-label">Fecha *</label>
+              <input type="date" class="form-control" id="gasto-edit-fecha" required />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-edit-periodo" class="form-label">Periodo *</label>
+              <input type="text" class="form-control" id="gasto-edit-periodo" required placeholder="YYYY-MM" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-edit-tipo" class="form-label">Tipo *</label>
+              <select class="form-select" id="gasto-edit-tipo" required>
+                <option value="">Seleccionar...</option>
+                <option value="PERSONAL">Gastos de personal</option>
+                <option value="OPERATIVO">Gastos operativos</option>
+                <option value="ADMIN">Gastos administrativos</option>
+                <option value="MANUTENCION">Gastos de manutención</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-edit-subtipo" class="form-label">Subtipo *</label>
+              <select class="form-select" id="gasto-edit-subtipo" required>
+                <option value="">Seleccionar...</option>
+                <option value="SALARIO">Salario / Devengo empleado</option>
+                <option value="APORTE_SALUD">Aporte patronal salud</option>
+                <option value="APORTE_PENSION">Aporte patronal pensión</option>
+                <option value="APORTE_ARL">Aporte patronal ARL</option>
+                <option value="APORTE_CAJA">Caja de compensación</option>
+                <option value="ARRENDAMIENTO">Arrendamiento</option>
+                <option value="SERVICIOS">Servicios públicos</option>
+                <option value="VIATICOS">Viáticos</option>
+                <option value="INSUMOS">Materiales / Insumos</option>
+                <option value="MANUTENCION">Manutención</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="gasto-edit-descripcion" class="form-label">Descripción *</label>
+              <input type="text" class="form-control" id="gasto-edit-descripcion" required placeholder="Descripción del gasto" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-edit-valor" class="form-label">Valor *</label>
+              <input type="number" step="0.01" class="form-control" id="gasto-edit-valor" required placeholder="0.00" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-edit-comprobante" class="form-label">Comprobante</label>
+              <input type="text" class="form-control" id="gasto-edit-comprobante" placeholder="Número de comprobante" />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="gasto-edit-observaciones" class="form-label">Observaciones</label>
+              <textarea class="form-control" id="gasto-edit-observaciones" rows="3" placeholder="Observaciones adicionales"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-gasto">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Crear Gasto -->
+<div class="modal fade" id="modal-crear-gasto" tabindex="-1" aria-labelledby="modal-crear-gasto-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-crear-gasto-label">Crear Gasto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="gasto-create-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-gasto-create">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="gasto-create-fecha" class="form-label">Fecha *</label>
+              <input type="date" class="form-control" id="gasto-create-fecha" required />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-create-periodo" class="form-label">Periodo *</label>
+              <input type="text" class="form-control" id="gasto-create-periodo" required placeholder="YYYY-MM" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-create-tipo" class="form-label">Tipo *</label>
+              <select class="form-select" id="gasto-create-tipo" required>
+                <option value="">Seleccionar...</option>
+                <option value="PERSONAL">Gastos de personal</option>
+                <option value="OPERATIVO">Gastos operativos</option>
+                <option value="ADMIN">Gastos administrativos</option>
+                <option value="MANUTENCION">Gastos de manutención</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-create-subtipo" class="form-label">Subtipo *</label>
+              <select class="form-select" id="gasto-create-subtipo" required>
+                <option value="">Seleccionar...</option>
+                <option value="SALARIO">Salario / Devengo empleado</option>
+                <option value="APORTE_SALUD">Aporte patronal salud</option>
+                <option value="APORTE_PENSION">Aporte patronal pensión</option>
+                <option value="APORTE_ARL">Aporte patronal ARL</option>
+                <option value="APORTE_CAJA">Caja de compensación</option>
+                <option value="ARRENDAMIENTO">Arrendamiento</option>
+                <option value="SERVICIOS">Servicios públicos</option>
+                <option value="VIATICOS">Viáticos</option>
+                <option value="INSUMOS">Materiales / Insumos</option>
+                <option value="MANUTENCION">Manutención</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="gasto-create-descripcion" class="form-label">Descripción *</label>
+              <input type="text" class="form-control" id="gasto-create-descripcion" required placeholder="Descripción del gasto" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-create-valor" class="form-label">Valor *</label>
+              <input type="number" step="0.01" class="form-control" id="gasto-create-valor" required placeholder="0.00" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="gasto-create-comprobante" class="form-label">Comprobante</label>
+              <input type="text" class="form-control" id="gasto-create-comprobante" placeholder="Número de comprobante" />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="gasto-create-observaciones" class="form-label">Observaciones</label>
+              <textarea class="form-control" id="gasto-create-observaciones" rows="3" placeholder="Observaciones adicionales"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-crear-gasto-modal">Crear</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Eliminar Gasto -->
+<div class="modal fade" id="modal-eliminar-gasto" tabindex="-1" aria-labelledby="modal-eliminar-gasto-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-eliminar-gasto-label">Eliminar Gasto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="gasto-delete-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <p>¿Está seguro de que desea eliminar este gasto?</p>
+        <p class="text-muted small" id="gasto-delete-info"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar-gasto">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>

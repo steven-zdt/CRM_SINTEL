@@ -1,0 +1,280 @@
+<div class="modal fade" id="modal-gasto-create" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg">
+          <div class="modal-header bg-primary text-white">
+              <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-2"></i>Generar Gasto (Doc. Soporte)</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="form-gasto" novalidate>
+              <div class="modal-body">
+                  <div id="feedback-create-gasto" class="mb-3"></div>
+                  
+                  <div class="row g-3">
+                      <div class="col-12"><h6 class="text-primary border-bottom pb-2 small fw-bold">DATOS FISCALES</h6></div>
+                      <div class="col-md-7">
+                          <label class="form-label small fw-bold">Resolución DIAN Autorizada *</label>
+                          <select class="form-select border-primary-subtle" id="select-resolucion" name="resolucion_dian" required disabled>
+                              <option value="">Cargando resolución activa...</option>
+                          </select>
+                          <small class="text-muted">Se usa automáticamente la resolución vigente configurada</small>
+                      </div>
+                      <div class="col-md-5">
+                          <label class="form-label small fw-bold">Fecha de la Operación *</label>
+                          <input type="date" class="form-control" name="fecha" required>
+                      </div>
+                      <div class="col-md-4">
+                          <label class="form-label small fw-bold">NIT Vendedor *</label>
+                          <input type="text" class="form-control" name="vendedor_nit" required placeholder="Sin dígito de verif.">
+                      </div>
+                      <div class="col-md-8">
+                          <label class="form-label small fw-bold">Nombre o Razón Social *</label>
+                          <input type="text" class="form-control" name="vendedor_nombre" required>
+                      </div>
+
+                      <div class="col-12 mt-4"><h6 class="text-primary border-bottom pb-2 small fw-bold">VALORES DEL DOCUMENTO</h6></div>
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Subtotal *</label>
+                          <div class="input-group">
+                              <span class="input-group-text">$</span>
+                              <input type="number" step="0.01" class="form-control" name="subtotal" id="input-subtotal" required>
+                          </div>
+                          <small class="text-muted">Base gravable para el cálculo de retenciones</small>
+                      </div>
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Total Neto a Pagar</label>
+                          <div class="input-group">
+                              <span class="input-group-text">$</span>
+                              <input type="text" class="form-control bg-light" id="input-total-neto" readonly value="0.00">
+                          </div>
+                          <small class="text-muted">Subtotal - Retefuente - ReteICA</small>
+                      </div>
+                      
+                      <div class="col-12 mt-3"><h6 class="text-secondary border-bottom pb-2 small fw-bold">RETENCIONES</h6></div>
+                      
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Porcentaje Retefuente *</label>
+                          <select class="form-select" name="retefuente_porcentaje" id="select-retefuente-porcentaje" required>
+                              <option value="0.00">0% - Sin Retefuente</option>
+                              <option value="0.04">4% - Servicios (Declarantes)</option>
+                              <option value="0.06">6% - Servicios (No Declarantes)</option>
+                              <option value="0.10">10% - Honorarios y Consultoría (Persona Natural no declarante)</option>
+                              <option value="0.11">11% - Honorarios y Consultoría (Persona Jurídica o declarante)</option>
+                          </select>
+                          <small class="text-muted">Valor calculado: <span id="display-retefuente" class="fw-bold text-primary">$0.00</span></small>
+                      </div>
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Porcentaje ReteICA *</label>
+                          <select class="form-select" name="reteica_porcentaje" id="select-reteica-porcentaje" required>
+                              <option value="0.00">0% - Exento</option>
+                              <option value="0.0069">0.69% - Tarifa 0.69% (6.9/1000)</option>
+                              <option value="0.00966">0.966% - Tarifa 0.966% (9.66/1000)</option>
+                              <option value="0.01104">1.104% - Tarifa 1.104% (11.04/1000)</option>
+                          </select>
+                          <small class="text-muted">Valor calculado: <span id="display-reteica" class="fw-bold text-warning">$0.00</span></small>
+                      </div>
+
+                      <div class="col-12 mt-4"><h6 class="text-primary border-bottom pb-2 small fw-bold">CONTABILIDAD</h6></div>
+                      <div class="col-md-4">
+                          <label class="form-label small fw-bold">Periodo Fiscal (YYYY-MM) *</label>
+                          <input type="text" class="form-control" name="periodo" placeholder="2026-02" required>
+                      </div>
+                      <div class="col-md-4">
+                          <label class="form-label small fw-bold">Categoría Contable *</label>
+                          <select class="form-select" name="categoria_contable" required>
+                              <option value="">Seleccione una categoría...</option>
+                              <option value="ARRENDAMIENTOS">Arrendamientos</option>
+                              <option value="SERVICIOS_PUBLICOS">Servicios Públicos</option>
+                              <option value="PAPELERIA_UTILES">Papelería y Útiles</option>
+                              <option value="MANTENIMIENTO_REPARACIONES">Mantenimiento y Reparaciones</option>
+                              <option value="EQUIPOS_HERRAMIENTAS">Equipos y Herramientas</option>
+                              <option value="LICENCIAS_SOFTWARE">Licencias y Software</option>
+                              <option value="HOSTING_DOMINIO">Hosting y Dominios</option>
+                              <option value="TRANSPORTE_FLETES">Transporte y Fletes</option>
+                              <option value="COMBUSTIBLE">Combustible</option>
+                              <option value="VIATICOS">Viáticos</option>
+                              <option value="PUBLICIDAD_MARKETING">Publicidad y Marketing</option>
+                              <option value="SEGUROS">Seguros</option>
+                              <option value="IMPUESTOS_TASAS">Impuestos, Tasas y Contribuciones</option>
+                              <option value="HONORARIOS">Honorarios</option>
+                              <option value="SERVICIOS_PROFESIONALES">Servicios Profesionales</option>
+                              <option value="ASEO_CAFETERIA">Aseo y Cafetería</option>
+                              <option value="VIGILANCIA_SEGURIDAD">Vigilancia y Seguridad</option>
+                              <option value="CAPACITACION">Capacitación</option>
+                              <option value="GASTOS_FINANCIEROS">Gastos Financieros</option>
+                              <option value="COMISIONES_BANCARIAS">Comisiones Bancarias</option>
+                              <option value="SUSCRIPCIONES">Suscripciones</option>
+                              <option value="ELEMENTOS_PROTECCION">Elementos de Protección</option>
+                              <option value="MATERIALES_INSUMOS">Materiales e Insumos</option>
+                              <option value="ADECUACIONES_INSTALACIONES">Adecuaciones e Instalaciones</option>
+                              <option value="COMUNICACIONES">Comunicaciones</option>
+                              <option value="ENERGIA">Energía</option>
+                              <option value="LIMPEZA_ASEO">Limpieza y Aseo</option>
+                              <option value="TECNOLOGIA_INFORMATICA">Tecnología e Informática</option>
+                              <option value="GASTOS_LEGALES">Gastos Legales</option>
+                              <option value="TRIBUTARIOS">Gastos Tributarios</option>
+                              <option value="OTROS">Otros Gastos</option>
+                          </select>
+                      </div>
+                      <div class="col-md-4">
+                          <label class="form-label small fw-bold">Centro de Costo</label>
+                          <select class="form-select" name="centro_costo">
+                              <option value="">Seleccione un centro de costo...</option>
+                              <option value="ADMINISTRATIVOS">Administrativos</option>
+                              <option value="MATERIA_PRIMA">Materia Prima</option>
+                              <option value="MANUTENCION">Mantenimiento</option>
+                              <option value="VIATICOS">Viáticos</option>
+                              <option value="SERVICIOS_PUBLICOS">Servicios Públicos</option>
+                              <option value="TRANSPORTE">Transporte</option>
+                              <option value="COMUNICACIONES">Comunicaciones</option>
+                              <option value="SEGUROS">Seguros</option>
+                              <option value="ARRIENDOS">Arriendos</option>
+                              <option value="SERVICIOS_PROFESIONALES">Servicios Profesionales</option>
+                              <option value="PUBLICIDAD">Publicidad y Marketing</option>
+                              <option value="CAPACITACION">Capacitación</option>
+                              <option value="HERRAMIENTAS">Herramientas y Equipos</option>
+                              <option value="INSUMOS">Insumos y Materiales</option>
+                              <option value="ENERGIA">Energía y Combustibles</option>
+                              <option value="LIMPEZA">Limpieza y Aseo</option>
+                              <option value="SEGURIDAD">Seguridad</option>
+                              <option value="TECNOLOGIA">Tecnología e Informática</option>
+                              <option value="LEGALES">Gastos Legales</option>
+                              <option value="TRIBUTARIOS">Gastos Tributarios</option>
+                              <option value="OTROS">Otros Gastos</option>
+                          </select>
+                      </div>
+                      <div class="col-12">
+                          <label class="form-label small fw-bold">Descripción / Observaciones</label>
+                          <textarea class="form-control" name="descripcion" rows="2"></textarea>
+                      </div>
+                      <div class="col-12">
+                          <label class="form-label small fw-bold">Adjuntar Soporte (PDF/JPG)</label>
+                          <input type="file" class="form-control" name="adjunto">
+                      </div>
+                  </div>
+              </div>
+              <div class="modal-footer bg-light border-top-0">
+                  <button type="button" class="btn btn-link text-muted me-auto" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="button" class="btn btn-primary px-4 shadow-sm" id="btn-guardar-gasto">
+                      <i class="bi bi-cloud-arrow-up me-1"></i> Guardar y Firmar
+                  </button>
+              </div>
+          </form>
+      </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modal-gasto-detail" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg">
+          <div class="modal-header bg-dark text-white">
+              <h5 class="modal-title"><i class="bi bi-shield-lock me-2"></i>Evidencia Legal del Gasto</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="detail-content-gastos">
+              <div class="text-center py-5">
+                  <div class="spinner-border text-primary" role="status"></div>
+                  <p class="mt-2 text-muted">Cargando documento soporte...</p>
+              </div>
+          </div>
+          <div class="modal-footer border-0">
+              <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cerrar</button>
+          </div>
+      </div>
+  </div>
+</div>
+
+<!-- Modal: Configurar Resolución DIAN -->
+<!-- ⚠️ v2.40: Configuración de resolución DIAN para Documentos Soporte -->
+<div class="modal fade" id="modal-resolucion-config" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg">
+          <div class="modal-header bg-dark text-white">
+              <h5 class="modal-title"><i class="bi bi-gear me-2"></i>Configurar Resolución DIAN</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="form-resolucion-config" novalidate>
+              <div class="modal-body">
+                  <div id="feedback-config-resolucion" class="mb-3"></div>
+                  
+                  <div class="alert alert-info">
+                      <i class="bi bi-info-circle me-2"></i>
+                      <strong>Importante:</strong> Solo puede haber una resolución vigente a la vez. 
+                      Al marcar esta como vigente, se desactivarán automáticamente las anteriores.
+                  </div>
+                  
+                  <div class="row g-3">
+                      <div class="col-12"><h6 class="text-dark border-bottom pb-2 small fw-bold">DATOS DE LA RESOLUCIÓN</h6></div>
+                      
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Número de Resolución DIAN *</label>
+                          <input type="text" class="form-control" name="numero_resolucion" required 
+                                 placeholder="Ej: 12345678901234">
+                          <small class="text-muted">Número asignado por la DIAN</small>
+                      </div>
+                      
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Prefijo *</label>
+                          <input type="text" class="form-control" name="prefijo" required 
+                                 placeholder="Ej: DS, SI" maxlength="10">
+                          <small class="text-muted">Prefijo del documento (máx. 10 caracteres)</small>
+                      </div>
+                      
+                      <div class="col-12"><h6 class="text-dark border-bottom pb-2 small fw-bold mt-3">RANGO DE CONSECUTIVOS</h6></div>
+                      
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Rango Desde *</label>
+                          <input type="number" class="form-control" name="rango_desde" required 
+                                 min="1" placeholder="Ej: 1">
+                          <small class="text-muted">Número inicial del rango autorizado</small>
+                      </div>
+                      
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Rango Hasta *</label>
+                          <input type="number" class="form-control" name="rango_hasta" required 
+                                 min="1" placeholder="Ej: 9999">
+                          <small class="text-muted">Número final del rango autorizado</small>
+                      </div>
+                      
+                      <div class="col-12"><h6 class="text-dark border-bottom pb-2 small fw-bold mt-3">FECHAS DE VIGENCIA</h6></div>
+                      
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Fecha de Emisión (Inicio) *</label>
+                          <input type="date" class="form-control" name="fecha_resolucion" required>
+                          <small class="text-muted">Fecha en que la DIAN emitió la resolución (se usa como fecha de inicio)</small>
+                      </div>
+                      
+                      <div class="col-md-6">
+                          <label class="form-label small fw-bold">Fecha Fin Aplicación *</label>
+                          <input type="date" class="form-control" name="fecha_fin" required>
+                          <small class="text-muted">Hasta cuándo estará vigente (debe ser posterior a la fecha de emisión)</small>
+                      </div>
+                      
+                      <div class="col-12 mt-3">
+                          <div class="form-check">
+                              <input class="form-check-input" type="checkbox" name="vigente" id="check-vigente" checked>
+                              <label class="form-check-label" for="check-vigente">
+                                  <strong>Marcar como Resolución Vigente (Predeterminada)</strong>
+                              </label>
+                              <small class="d-block text-muted">
+                                  Si está marcada, se usará automáticamente al crear nuevos gastos
+                              </small>
+                          </div>
+                      </div>
+                      
+                      <div class="col-12">
+                          <label class="form-label small fw-bold">Clave Técnica (Opcional)</label>
+                          <input type="text" class="form-control" name="clave_tecnica" 
+                                 placeholder="Clave técnica adicional" maxlength="100">
+                      </div>
+                  </div>
+              </div>
+              <div class="modal-footer bg-light border-top-0">
+                  <button type="button" class="btn btn-link text-muted me-auto" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="submit" class="btn btn-dark px-4 shadow-sm">
+                      <i class="bi bi-save me-1"></i> Guardar Resolución
+                  </button>
+              </div>
+          </form>
+      </div>
+  </div>
+</div>

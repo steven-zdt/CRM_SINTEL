@@ -1,0 +1,60 @@
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .viewsets import (
+    CategoriaItemViewSet,
+    ProductoViewSet,
+    ServicioViewSet,
+    ActivoFijoViewSet,
+    MovimientoInventarioViewSet,
+    HistorialServicioViewSet
+)
+
+# Configuración del Router
+router = DefaultRouter()
+
+# 1. Categorías (Maestras)
+router.register(r'categorias', CategoriaItemViewSet, basename='inv-categorias')
+
+# 2. Catálogo Comercial (Separado)
+router.register(r'productos', ProductoViewSet, basename='inv-productos')
+router.register(r'servicios', ServicioViewSet, basename='inv-servicios')
+
+# 3. Activos Fijos (Internos)
+router.register(r'activos', ActivoFijoViewSet, basename='inv-activos')
+
+# 4. Trazabilidad y Movimientos
+router.register(r'movimientos', MovimientoInventarioViewSet, basename='inv-movimientos')
+router.register(r'historial-servicios', HistorialServicioViewSet, basename='inv-historial-servicios')
+
+# Registro de URLs
+urlpatterns = [
+    path('', include(router.urls)),
+]
+
+# NOTA DE ARQUITECTURA v2.40:
+# ---------------------------
+# - Se eliminó el endpoint unificado 'catalogo/' en favor de 'productos/' y 'servicios/'.
+# - Se eliminó 'vinculos/item-catalogo' ya que ahora usamos referencias desacopladas (strings).
+#
+# ENDPOINTS PRINCIPALES (Tabulator Factory v2.40):
+# -------------------------------------------------
+# GET /api/v1/inventario/categorias/          - Lista de categorías (DataTables client-side)
+# GET /api/v1/inventario/productos/          - Lista paginada de productos (Tabulator)
+# GET /api/v1/inventario/servicios/          - Lista paginada de servicios (Tabulator)
+# GET /api/v1/inventario/activos/             - Lista paginada de activos fijos (Tabulator)
+# GET /api/v1/inventario/movimientos/        - Lista paginada de movimientos/Kardex (Tabulator)
+#
+# Todos los endpoints principales soportan:
+# - Paginación estándar DRF: ?page=1&page_size=10
+# - Búsqueda: ?search=texto
+# - Filtrado por empresa (automático, SSoT)
+#
+# ENDPOINTS DEPRECATED (Legacy DataTables Server-Side):
+# -----------------------------------------------------
+# POST /api/v1/inventario/productos/dt/     - ⚠️ DEPRECATED v2.40 (usar GET /productos/)
+# POST /api/v1/inventario/servicios/dt/      - ⚠️ DEPRECATED v2.40 (usar GET /servicios/)
+# POST /api/v1/inventario/activos/dt/        - ⚠️ DEPRECATED v2.40 (usar GET /activos/)
+# POST /api/v1/inventario/movimientos/dt/    - ⚠️ DEPRECATED v2.40 (usar GET /movimientos/)
+#
+# Estos endpoints se mantienen por compatibilidad temporal pero serán eliminados en v2.50.
+# El frontend Tabulator Factory consume directamente los endpoints GET estándar.

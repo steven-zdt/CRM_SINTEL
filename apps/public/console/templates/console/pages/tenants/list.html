@@ -1,0 +1,351 @@
+{% extends "console/base.html" %}
+{% load static %}
+
+{% block title %}Gestión de Empresas - Consola de Administración{% endblock %}
+
+{% block extra_head %}
+  {{ block.super }}
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+  <!-- Nota: Los iconos SVG están inline en el JavaScript, no necesitamos Heroicons React -->
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+  <div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header Section -->
+    <div class="mb-8">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div class="mb-4 sm:mb-0">
+          <h1 class="text-3xl font-bold text-gray-900 tracking-tight">
+            Gestión de Empresas
+          </h1>
+          <p class="mt-2 text-sm text-gray-600">
+            Administra empresas (tenants), sus dominios y accesos de forma centralizada
+          </p>
+        </div>
+        <a href="{% url 'console:tenants-new' %}" 
+           class="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          Nuevo Tenant
+        </a>
+      </div>
+    </div>
+    
+    <!-- Messages -->
+    <div id="messages-container" class="mb-6 space-y-3"></div>
+    
+    <!-- Django Messages (si existen, se mostrarán aquí también) -->
+    {% if messages %}
+    <div class="mb-6 space-y-3">
+      {% for message in messages %}
+      <div class="rounded-lg p-4 shadow-sm border-l-4 {% if message.tags == 'error' %}bg-red-50 text-red-800 border-red-400{% elif message.tags == 'success' %}bg-green-50 text-green-800 border-green-400{% else %}bg-blue-50 text-blue-800 border-blue-400{% endif %} animate-fade-in">
+        <div class="flex items-start">
+          <div class="flex-shrink-0">
+            {% if message.tags == 'error' %}
+            <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+            </svg>
+            {% elif message.tags == 'success' %}
+            <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+            </svg>
+            {% else %}
+            <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+            </svg>
+            {% endif %}
+          </div>
+          <div class="ml-3 flex-1">
+            <p class="text-sm font-medium">{{ message }}</p>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- CSRF Token hidden para JavaScript -->
+    {% csrf_token %}
+    
+    <!-- Table Card -->
+    <div class="bg-white shadow-xl rounded-xl overflow-hidden border border-gray-200">
+      <div class="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200">
+        <div class="flex items-center">
+          <svg class="w-6 h-6 text-indigo-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+          </svg>
+          <h2 class="text-lg font-semibold text-gray-900">Lista de Empresas</h2>
+        </div>
+      </div>
+      
+      <div class="p-6 overflow-x-auto">
+        <table id="dt-tenants" 
+               class="min-w-full divide-y divide-gray-200" 
+               style="width:100%; table-layout: auto;"
+               data-api-url="{{ api_url }}">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">ID</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Schema</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Empresa</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Dominio</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Admin</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Creado</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Trial</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Vence</th>
+              <th class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <!-- DataTables carga datos via AJAX desde {{ api_url }} -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Animaciones */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+  
+  /* Mejoras visuales para DataTables - Estilos unificados con users */
+  #dt-tenants_wrapper .dataTables_filter input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+  }
+  
+  #dt-tenants_wrapper .dataTables_filter input:focus {
+    outline: none;
+    border-color: #6366f1;
+    ring: 2px;
+    ring-color: #6366f1;
+    ring-opacity: 0.2;
+  }
+  
+  #dt-tenants_wrapper .dataTables_length select {
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    background-color: white;
+  }
+  
+  #dt-tenants_wrapper .dataTables_info {
+    padding-top: 1rem;
+    color: #6b7280;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  
+  #dt-tenants_wrapper .dataTables_paginate {
+    padding-top: 1rem;
+  }
+  
+  #dt-tenants_wrapper .dataTables_paginate .paginate_button {
+    padding: 0.5rem 0.75rem;
+    margin: 0 0.25rem;
+    border-radius: 0.375rem;
+    border: 1px solid #d1d5db;
+    background-color: white;
+    color: #374151;
+    transition: all 0.2s;
+  }
+  
+  #dt-tenants_wrapper .dataTables_paginate .paginate_button:hover {
+    background-color: #f3f4f6;
+    border-color: #9ca3af;
+  }
+  
+  #dt-tenants_wrapper .dataTables_paginate .paginate_button.current {
+    background-color: #6366f1;
+    color: white;
+    border-color: #6366f1;
+  }
+  
+  /* Estilos para badges de estado - Unificados */
+  .badge-trial {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  
+  .badge-trial-yes {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    border: 1px solid #fcd34d;
+  }
+  
+  .badge-trial-no {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1e40af;
+    border: 1px solid #93c5fd;
+  }
+  
+  .badge-active {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  
+  .badge-inactive {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  
+  /* Estilos para la tabla - Unificados con users */
+  #dt-tenants tbody tr {
+    transition: all 0.2s ease;
+  }
+  
+  #dt-tenants tbody tr:hover {
+    background-color: #f9fafb;
+    transform: scale(1.001);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+  
+  #dt-tenants tbody td {
+    padding: 1rem 1.5rem;
+    font-size: 0.875rem;
+    color: #374151;
+    vertical-align: middle;
+  }
+  
+  /* Estilos para código de dominio */
+  #dt-tenants code {
+    font-family: 'Monaco', 'Courier New', 'Consolas', monospace;
+    font-size: 0.75rem;
+    background-color: #f3f4f6;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    color: #1f2937;
+  }
+  
+  /* Mejora de botones de acción - Unificados */
+  #dt-tenants button {
+    transition: all 0.2s ease;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    margin: 0 0.25rem;
+  }
+  
+  #dt-tenants button:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  #dt-tenants button:not(:disabled):active {
+    transform: translateY(0);
+  }
+  
+  /* Botones deshabilitados */
+  .btn-delete-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  /* Loading state */
+  #dt-tenants_wrapper .dataTables_processing {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 0.5rem;
+    padding: 1rem 2rem;
+    font-weight: 500;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  }
+  
+  /* Asegurar que la tabla use todo el ancho disponible */
+  #dt-tenants {
+    width: 100% !important;
+    table-layout: auto;
+  }
+  
+  #dt-tenants_wrapper {
+    width: 100%;
+  }
+  
+  /* Ajustar columnas para mejor visualización */
+  #dt-tenants th,
+  #dt-tenants td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* Columnas específicas con más espacio */
+  #dt-tenants th:nth-child(3), /* Empresa */
+  #dt-tenants td:nth-child(3) {
+    min-width: 200px;
+    white-space: normal;
+  }
+  
+  #dt-tenants th:nth-child(10), /* Acciones */
+  #dt-tenants td:nth-child(10) {
+    min-width: 300px;
+    white-space: normal;
+  }
+  
+  /* Responsive improvements */
+  @media (max-width: 768px) {
+    #dt-tenants_wrapper .dataTables_filter,
+    #dt-tenants_wrapper .dataTables_length {
+      margin-bottom: 1rem;
+    }
+    
+    #dt-tenants tbody td {
+      padding: 0.75rem 0.5rem;
+      font-size: 0.8125rem;
+    }
+  }
+  
+  /* Scroll horizontal para tablas muy anchas */
+  .dataTables_wrapper {
+    overflow-x: auto;
+  }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+  {{ block.super }}
+  <!-- jQuery (requerido por DataTables) -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <!-- DataTables JS -->
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <!-- Tenants Manager (API-First) -->
+  <script src="{% static 'js/tenants_manager.js' %}"></script>
+  <script>
+  // El módulo TenantsManager se inicializa automáticamente al cargar la página
+  // No se requiere código adicional aquí
+  </script>
+{% endblock %}

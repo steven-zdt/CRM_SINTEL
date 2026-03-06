@@ -1,0 +1,47 @@
+{% load static %}
+{# mailinbox_list.html - Módulo MailInboxConfig v2.40 - Tabulator Factory #}
+{# ⚠️ v2.40: Migrado a Tabulator Factory (eliminado DataTables) #}
+{# ⚠️ LAZY INIT: Tabulator se inicializa solo cuando el tab #tab-empresa está visible (DOMUtils.onVisibleOnce) #}
+<div id="mailinbox-module-container" class="ui-module ui-mailinbox mt-4">
+  <!-- Card Container -->
+  <div class="card">
+    <!-- Card Header -->
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="card-title mb-0">
+        <i class="bi bi-envelope"></i> Configuraciones de Correo
+      </h5>
+      <div>
+        <button id="btn-mailinbox-crear" 
+                class="btn btn-sm btn-success"
+                hx-get="/api/v1/empresas/mail-inbox-config/render-offcanvas/"
+                hx-target="#offcanvas-container-mailinbox"
+                hx-swap="innerHTML"
+                hx-indicator="#spinner"
+                hx-on::after-settle="if(event.detail.target.id === 'offcanvas-container-mailinbox'){ const containerEl = document.getElementById('offcanvas-container-mailinbox'); const offcanvasEl = containerEl ? containerEl.querySelector('#offcanvas-mailinbox') : null; if(offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas){ const bsOffcanvas = new bootstrap.Offcanvas(offcanvasEl); bsOffcanvas.show(); if(window.mailinboxOffcanvas && typeof window.mailinboxOffcanvas.init === 'function'){ window.mailinboxOffcanvas.init(); } } }">
+          <i class="bi bi-plus-circle"></i> Nueva Configuración
+        </button>
+      </div>
+    </div>
+    
+    <!-- Card Body -->
+    <div class="card-body">
+      <!-- Feedback -->
+      <div id="feedback-mailinbox-list" class="alert d-none" role="alert" aria-live="polite"></div>
+      
+      {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
+      <div class="mb-3">
+        <input type="text" id="search-mailinbox" class="form-control" placeholder="Buscar por nombre, email, host o proveedor...">
+      </div>
+
+      {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+          <div id="grid-mailinbox" class="flex-grow-1" style="min-height: 300px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  {# ⚠️ v2.60: Contenedor para Offcanvas (HTMX) #}
+  <div id="offcanvas-container-mailinbox"></div>
+</div>

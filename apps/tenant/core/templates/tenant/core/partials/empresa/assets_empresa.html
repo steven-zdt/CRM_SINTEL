@@ -1,0 +1,43 @@
+{% load static %}
+{# assets_empresa.html - Assets del módulo Empresa v2.60 #}
+{# ⚠️ v2.60: Migrado a Feature-Sliced Architecture (HTMX + Offcanvas) #}
+{# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
+{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http(), etc.) - ya cargado en workspace.html #}
+{# 2. empresa.api.js (define window.empresaAPI) - Capa de Datos (opcional, legacy) #}
+{# 3. features/empresa_list.js - Feature: Listado y Tabulator #}
+{# 4. features/empresa_editor.js - Feature: Editor y Offcanvas #}
+
+{# BLOQUE 1: API Wrapper (Legacy - mantener para compatibilidad) #}
+<script src="{% static 'core/js/empresa/empresa.api.js' %}"></script>
+
+{# BLOQUE 2: Feature-Sliced Architecture v2.60 #}
+{# Feature 1: Listado y Tabulator #}
+<script src="{% static 'core/js/empresa/features/empresa_list.js' %}"></script>
+
+{# Feature 2: Editor y Offcanvas #}
+<script src="{% static 'core/js/empresa/features/empresa_editor.js' %}"></script>
+
+{# BLOQUE 3: Archivos del módulo MailInboxConfig (opcional) #}
+{# ⚠️ ORDEN CRÍTICO: mailinbox.api.js DEBE cargarse ANTES de mailinbox.page.js #}
+{# mailinbox.page.js depende de window.mailinboxAPI definido en mailinbox.api.js #}
+<script src="{% static 'core/js/mailinbox/mailinbox.api.js' %}"></script>
+<script src="{% static 'core/js/mailinbox/mailinbox.page.js' %}"></script>
+{# ⚠️ v2.60: Offcanvas para MailInboxConfig (HTMX-Driven) #}
+<script src="{% static 'core/js/mailinbox/mailinbox_offcanvas.js' %}"></script>
+
+{# ⚠️ v2.60: HTMX afterSwap - Refrescar tablas cuando se recargue el contenido #}
+<script>
+    if (typeof htmx !== 'undefined') {
+        document.addEventListener('htmx:afterSwap', function(event) {
+            // Si se recargó el contenedor de empresa, refrescar Tabulator
+            if (event.detail.target.id === 'ui-empresa-list' || 
+                event.detail.target.closest('#ui-empresa-list')) {
+                if (window.EmpresaListModule && typeof window.EmpresaListModule.refresh === 'function') {
+                    setTimeout(() => {
+                        window.EmpresaListModule.refresh();
+                    }, 100);
+                }
+            }
+        });
+    }
+</script>

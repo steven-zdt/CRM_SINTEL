@@ -1,0 +1,18 @@
+{% load static %}
+<div data-partial="landing-auth" class="grid md:grid-cols-2 gap-6">
+    <form id="landing_login_form" class="border rounded p-4 space-y-2">
+        <h2 class="text-lg font-semibold">Iniciar sesión</h2>
+        <input id="login_user" type="email" class="border rounded p-2 w-full" placeholder="Email" required />
+        <input id="login_pass" type="password" class="border rounded p-2 w-full" placeholder="Contraseña" required />
+        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Entrar</button>
+        <div id="login_msg" class="text-sm text-gray-500 mt-1"></div>
+    </form>
+    <form id="landing_activate_form" class="border rounded p-4 space-y-2">
+        <h2 class="text-lg font-semibold">Activar cuenta</h2>
+        <input id="activate_token" class="border rounded p-2 w-full" placeholder="Token de activación" />
+        <input id="activate_password1" type="password" class="border rounded p-2 w-full" placeholder="Nueva contraseña" />
+        <input id="activate_password2" type="password" class="border rounded p-2 w-full" placeholder="Confirmar contraseña" />
+        <button type="submit" class="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700">Activar</button>
+        <div id="activate_msg" class="text-sm text-gray-500 mt-1"></div>
+    </form>
+</div>

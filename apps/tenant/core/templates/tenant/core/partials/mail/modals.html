@@ -1,0 +1,78 @@
+<!-- Modales del módulo MailDigester (ejecuciones especiales) -->
+
+<!-- Modal: Confirmar Iniciar Ingesta -->
+<div class="modal fade" id="modal-mail-run-confirm" tabindex="-1" aria-labelledby="modal-mail-run-confirm-label" aria-describedby="modal-mail-run-confirm-desc">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-mail-run-confirm-label">Iniciar Ingesta de Correo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="mail-run-modal-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-mail-run">
+          <div class="mb-3">
+            <label for="mail-run-config-id" class="form-label">Configuración de Buzón *</label>
+            <select class="form-select" id="mail-run-config-id" required>
+              <option value="">Seleccione una configuración...</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="mail-run-limit" class="form-label">Límite de Mensajes</label>
+            <input type="number" class="form-control" id="mail-run-limit" value="50" min="1" max="500" />
+            <small class="text-muted">Número máximo de mensajes a procesar en esta ejecución</small>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" data-action="confirm" data-kind="run">Iniciar Ingesta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirmar Detener Ingesta -->
+<div class="modal fade" id="modal-mail-stop-confirm" tabindex="-1" aria-labelledby="modal-mail-stop-confirm-label" aria-describedby="modal-mail-stop-confirm-desc">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-mail-stop-confirm-label">Detener Ingesta</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="mail-stop-modal-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <p>¿Estás seguro de que deseas detener esta ejecución de ingesta?</p>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="mail-stop-force" />
+          <label class="form-check-label" for="mail-stop-force">
+            Forzar detención (puede dejar tareas incompletas)
+          </label>
+        </div>
+        <input type="hidden" id="mail-stop-run-id" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" data-action="confirm" data-kind="stop">Detener</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Detalles de Ejecución -->
+<div class="modal fade" id="modal-mail-details" tabindex="-1" aria-labelledby="modal-mail-details-label" aria-describedby="modal-mail-details-desc">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-mail-details-label">Detalles de Ejecución</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body" id="mail-details-content">
+        <div class="text-center text-muted py-4">Cargando...</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,162 @@
+{# contrato_offcanvas.html - Offcanvas del módulo Contratos v2.60 #}
+{# ⚠️ v2.60: HTMX + Offcanvas con Zero Trust #}
+{# ⚠️ Paso 3: Interfaz HTMX y Offcanvas - Experiencia de usuario modular #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-contrato" aria-labelledby="offcanvas-contrato-label" style="width: 90%; max-width: 800px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-contrato-label">
+      <i class="bi bi-file-earmark-text me-2"></i>
+      <span id="offcanvas-contrato-titulo">
+        {% if contrato %}Editar Contrato{% else %}Nuevo Contrato{% endif %}
+      </span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ Paso 3: Contenedor de feedback para UIManager (manejo de errores 400) #}
+    <div id="form-contrato-feedback" class="alert d-none mb-3" role="alert"></div>
+    
+    {# ⚠️ Paso 3: Formulario puramente declarativo - El éxito se maneja en listeners JS globales #}
+    <form id="form-contrato" method="POST" onsubmit="return false;" enctype="multipart/form-data"
+          {% if contrato %}
+          hx-patch="/api/v1/empleados/contratos/{{ contrato.id }}/"
+          {% else %}
+          hx-post="/api/v1/empleados/contratos/"
+          {% endif %}
+          hx-target="#grid-empleados" 
+          hx-swap="none"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[contrato.offcanvas]', {errorContainerSelector: '#form-contrato-feedback'})">
+      {% csrf_token %}
+      <input type="hidden" id="contrato-id" name="id" value="{% if contrato %}{{ contrato.id }}{% endif %}">
+      <input type="hidden" id="contrato-empleado-id" name="empleado" value="{% if empleado %}{{ empleado.id }}{% elif contrato %}{{ contrato.empleado.id }}{% endif %}">
+      
+      {# Tipo y Estado #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-file-earmark-text me-2"></i>Tipo y Estado
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="contrato-tipo" class="form-label text-danger fw-bold">Tipo de Contrato *</label>
+            <select class="form-select" id="contrato-tipo" name="tipo" required>
+              <option value="">Seleccione un tipo</option>
+              <option value="FIJO" {% if contrato and contrato.tipo == "FIJO" %}selected{% endif %}>Término Fijo</option>
+              <option value="INDEF" {% if contrato and contrato.tipo == "INDEF" %}selected{% endif %}>Indefinido</option>
+              <option value="OBRA" {% if contrato and contrato.tipo == "OBRA" %}selected{% endif %}>Obra o Labor</option>
+              <option value="PRESTACION" {% if contrato and contrato.tipo == "PRESTACION" %}selected{% endif %}>Prestación de Servicios</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="contrato-estado" class="form-label text-danger fw-bold">Estado *</label>
+            <select class="form-select" id="contrato-estado" name="estado" required>
+              <option value="ACTIVO" {% if contrato and contrato.estado == "ACTIVO" or not contrato %}selected{% endif %}>Activo</option>
+              <option value="INACTIVO" {% if contrato and contrato.estado == "INACTIVO" %}selected{% endif %}>Inactivo</option>
+              <option value="HISTORICO" {% if contrato and contrato.estado == "HISTORICO" %}selected{% endif %}>Histórico</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      {# Fechas #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar me-2"></i>Fechas
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="contrato-fecha_inicio" class="form-label text-danger fw-bold">Fecha Inicio *</label>
+            <input type="date" class="form-control" id="contrato-fecha_inicio" name="fecha_inicio" 
+                   value="{% if contrato %}{{ contrato.fecha_inicio|date:'Y-m-d' }}{% endif %}" 
+                   required>
+          </div>
+          <div class="col-md-6">
+            <label for="contrato-fecha_fin" class="form-label">Fecha Fin</label>
+            <div class="input-group">
+              <input type="date" class="form-control" id="contrato-fecha_fin" name="fecha_fin" 
+                     value="{% if contrato and contrato.fecha_fin %}{{ contrato.fecha_fin|date:'Y-m-d' }}{% endif %}">
+              <div class="input-group-text">
+                <input class="form-check-input mt-0" type="checkbox" id="contrato-indefinido" aria-label="Contrato Indefinido">
+                <label class="form-check-label ms-2 small" for="contrato-indefinido">Indefinido</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {# Información del Cargo #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-briefcase me-2"></i>Información del Cargo
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="contrato-cargo" class="form-label text-danger fw-bold">Cargo *</label>
+            <input type="text" class="form-control" id="contrato-cargo" name="cargo" 
+                   value="{% if contrato %}{{ contrato.cargo }}{% endif %}" 
+                   placeholder="Cargo del empleado" required>
+          </div>
+        </div>
+      </div>
+      
+      {# Valores Económicos #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-currency-dollar me-2"></i>Valores Económicos (COP)
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="contrato-salario_mensual" class="form-label text-danger fw-bold">Salario Mensual (COP) *</label>
+            <input type="number" class="form-control" id="contrato-salario_mensual" name="salario_mensual" 
+                   value="{% if contrato %}{{ contrato.salario_mensual }}{% endif %}" 
+                   step="0.01" min="0" required>
+            <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+          </div>
+          <div class="col-md-6">
+            <label for="contrato-auxilio_transporte" class="form-label">Auxilio de Transporte (COP)</label>
+            <input type="number" class="form-control" id="contrato-auxilio_transporte" name="auxilio_transporte" 
+                   value="{% if contrato %}{{ contrato.auxilio_transporte|default:0 }}{% else %}0{% endif %}" 
+                   step="0.01" min="0">
+            <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+          </div>
+          <div class="col-md-12">
+            <label for="contrato-prestamos_empresa" class="form-label">Préstamos de la Empresa (COP)</label>
+            <input type="number" class="form-control" id="contrato-prestamos_empresa" name="prestamos_empresa" 
+                   value="{% if contrato %}{{ contrato.prestamos_empresa|default:0 }}{% else %}0{% endif %}" 
+                   step="0.01" min="0" 
+                   placeholder="Préstamos o deudas que la empresa tiene con el empleado (puede ser 0)">
+            <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+          </div>
+        </div>
+      </div>
+      
+      {# Archivo PDF #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-file-pdf me-2"></i>Documento
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="contrato-archivo_pdf" class="form-label">Archivo PDF del Contrato</label>
+            <input type="file" class="form-control" id="contrato-archivo_pdf" name="archivo_pdf" accept=".pdf" 
+                   aria-label="Subir archivo PDF del contrato">
+            <small class="form-text text-muted">Copia digital del contrato firmado (PDF) - Opcional</small>
+            {% if contrato and contrato.archivo_pdf %}
+              <div class="mt-2">
+                <small class="text-muted">Archivo actual: <a href="{{ contrato.archivo_pdf.url }}" target="_blank">Ver PDF</a></small>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# Botones de Acción #}
+      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="submit" class="btn btn-success" id="btn-guardar-contrato" form="form-contrato">
+          <i class="bi bi-check-lg me-1"></i>{% if contrato %}Actualizar{% else %}Crear{% endif %} Contrato
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

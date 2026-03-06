@@ -1,0 +1,39 @@
+{% extends "impuestos_dashboard/base_console.html" %}
+{% load static %}
+
+{% block page_title %}Detalle #{{doc.id}}{% endblock %}
+
+{% block console_content %}
+<h2>Documento #{{doc.id}}</h2>
+
+<ul class="meta">
+  <li>Fuente: <b>{{doc.fuente}}</b></li>
+  <li>Tipo: <b>{{doc.tipo|default:"—"}}</b></li>
+  <li>Estado: <span class="badge badge-{{doc.estado|lower}}">{{doc.estado}}</span></li>
+  <li>Archivo: {% if doc.archivo %}<a href="{{doc.archivo.url}}">Descargar</a>{% else %}—{% endif %}</li>
+  <li>URL Origen: {% if doc.url_origen %}<a href="{{doc.url_origen}}" target="_blank">{{doc.url_origen}}</a>{% else %}—{% endif %}</li>
+  <li>Fecha Publicación: {{doc.fecha_publicacion|date:"Y-m-d"|default:"—"}}</li>
+  <li>Hash SHA256: <code>{{doc.hash_sha256|default:"—"}}</code></li>
+  <li>Creado: {{doc.created_at|date:"Y-m-d H:i:s"}}</li>
+  <li>Actualizado: {{doc.updated_at|date:"Y-m-d H:i:s"}}</li>
+</ul>
+
+{% if doc.user_agent or doc.robots_observado %}
+<div class="crawling-info">
+  <h3>Cumplimiento Crawling</h3>
+  <ul>
+    <li>User Agent: {{doc.user_agent|default:"—"}}</li>
+    <li>Robots.txt Observado: {% if doc.robots_observado %}✔ Sí{% else %}✗ No{% endif %}</li>
+    <li>Crawl Delay: {{doc.crawl_delay_s}}s</li>
+  </ul>
+</div>
+{% endif %}
+
+<div id="logs"
+     hx-get="{% url 'impuestos_dashboard:ingesta_logs' doc.id %}"
+     hx-trigger="load, every 3s"
+     hx-swap="innerHTML">
+  <!-- logs se cargarán aquí -->
+  <p>Cargando logs...</p>
+</div>
+{% endblock %}

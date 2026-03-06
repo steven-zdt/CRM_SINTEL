@@ -1,0 +1,101 @@
+{% comment %}
+Partial HTMX para mostrar el estado de creación de tenant.
+
+Este partial se actualiza automáticamente cada 2 segundos usando HTMX.
+Cuando el estado es SUCCESS o FAILURE, el polling se detiene automáticamente
+porque no se incluye el atributo hx-trigger.
+
+Arquitectura Server-Side First:
+- El servidor decide cuándo hacer polling (estados PENDING/STARTED/RETRY)
+- El servidor decide cuándo detener polling (estados SUCCESS/FAILURE)
+- Zero JavaScript: Todo se controla desde el HTML renderizado por Django
+{% endcomment %}
+
+{% if not state %}
+  {# Estado inicial: Cargar estado después de 2 segundos (no inmediato) #}
+  <div class="flex items-center justify-center py-8"
+       hx-get="{% url 'console:tenants-status' %}?task_id={{ task_id }}"
+       hx-trigger="load delay:2s"
+       hx-swap="outerHTML">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    <div class="ml-4">
+      <h3 class="text-lg font-medium text-gray-900">⏳ Iniciando verificación...</h3>
+      <p class="text-sm text-gray-600 mt-1">Consultando estado de la tarea...</p>
+    </div>
+  </div>
+
+{% elif state == 'SUCCESS' %}
+  {# Estado: Éxito - Detener polling #}
+  <div class="flex items-center justify-center py-8">
+    <div class="text-green-600">
+      <svg class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+    <div class="ml-4">
+      <h3 class="text-lg font-medium text-gray-900">✅ Tenant creado exitosamente</h3>
+      <p class="text-sm text-gray-600 mt-1">El tenant ha sido provisionado y está listo para usar.</p>
+      {% if result and result.login_url %}
+        <div class="mt-4">
+          <a href="{{ result.login_url }}" target="_blank" 
+             class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+            🔗 Acceder al Tenant
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+{% elif state == 'FAILURE' %}
+  {# Estado: Error - Detener polling #}
+  <div class="flex items-center justify-center py-8">
+    <div class="text-red-600">
+      <svg class="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+    <div class="ml-4">
+      <h3 class="text-lg font-medium text-gray-900">❌ Error al crear tenant</h3>
+      <p class="text-sm text-gray-600 mt-1">{{ error|default:"Error desconocido" }}</p>
+      <div class="mt-4">
+        <a href="{% url 'console:tenants-list' %}" 
+           class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+          Volver a Tenants
+        </a>
+      </div>
+    </div>
+  </div>
+
+{% elif state == 'PENDING' or state == 'STARTED' or state == 'RETRY' %}
+  {# Estado: En progreso - Continuar polling cada 2 segundos #}
+  {# IMPORTANTE: Usar "load delay:2s" en lugar de "every 2s" para evitar inundación #}
+  <div class="flex items-center justify-center py-8"
+       hx-get="{% url 'console:tenants-status' %}?task_id={{ task_id }}"
+       hx-trigger="load delay:2s"
+       hx-swap="outerHTML">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    <div class="ml-4">
+      <h3 class="text-lg font-medium text-gray-900">⏳ Creación en progreso...</h3>
+      <p class="text-sm text-gray-600 mt-1">Por favor espera mientras se configura el tenant.</p>
+      {% if state %}
+        <p class="text-xs text-gray-500 mt-1">Estado: <span class="font-mono">{{ state }}</span></p>
+      {% endif %}
+      <p class="text-xs text-gray-400 mt-1">Actualizando automáticamente...</p>
+    </div>
+  </div>
+
+{% else %}
+  {# Estado: Desconocido o intermedio - Continuar polling con precaución #}
+  <div class="flex items-center justify-center py-8"
+       hx-get="{% url 'console:tenants-status' %}?task_id={{ task_id }}"
+       hx-trigger="load delay:2s"
+       hx-swap="outerHTML">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    <div class="ml-4">
+      <h3 class="text-lg font-medium text-gray-900">⏳ Procesando...</h3>
+      <p class="text-sm text-gray-600 mt-1">Estado: <span class="font-mono">{{ state|default:"Desconocido" }}</span></p>
+      <p class="text-xs text-gray-400 mt-1">Verificando estado...</p>
+    </div>
+  </div>
+
+{% endif %}

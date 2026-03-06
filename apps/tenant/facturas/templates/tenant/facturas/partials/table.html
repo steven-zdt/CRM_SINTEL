@@ -1,0 +1,27 @@
+{% load static %}
+<div data-partial="facturas-table" class="facturas-table">
+    <div class="table-header">
+        <h3>Facturas Recientes</h3>
+        <a href="/facturas/" class="btn btn-sm btn-primary">Ver Todas</a>
+    </div>
+    <div class="table-body">
+        <div id="facturas-loading" class="loading">Cargando facturas...</div>
+        <div id="facturas-content" style="display: none;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Número</th>
+                        <th>Fecha</th>
+                        <th>Cliente</th>
+                        <th>Total</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody id="facturas-tbody">
+                    <!-- Datos cargados vía JavaScript -->
+                </tbody>
+            </table>
+        </div>
+        <div id="facturas-error" class="error-message" style="display: none;"></div>
+    </div>
+</div>

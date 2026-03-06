@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-sintel}
+      POSTGRES_USER: ${DATABASE_USER:-sintel}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-sintel}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    entrypoint: ["/entrypoint.sh"]
+    volumes:
+      - .:/app
+    ports:
+      - "80:8000"   # Puerto 80 del host -> Puerto 8000 del contenedor (para acceso sin puerto)
+      - "8000:8000" # Puerto 8000 del host -> Puerto 8000 del contenedor (para compatibilidad)
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - SERVICE_ROLE=web  # ⚠️ CRÍTICO: Define el rol del servicio
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery:
+    build: .
+    entrypoint: ["/entrypoint.sh"]
+    command: celery -A config worker --loglevel=info --concurrency=4 -Q high_priority,default
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - SERVICE_ROLE=celery  # ⚠️ CRÍTICO: Define el rol del servicio
+      - C_FORCE_ROOT=1
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

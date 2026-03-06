@@ -1,0 +1,107 @@
+{% load static %}
+{# offcanvas_resolucion.html - Formulario HTMX para configurar resolución DIAN v2.60 #}
+{# ⚠️ Feature-Sliced Architecture: Template dedicado para configuración de resolución #}
+{# ⚠️ HTMX: Cargado dinámicamente desde render-offcanvas/resolucion endpoint #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-resolucion-config" aria-labelledby="offcanvas-resolucion-config-label" style="width: 90%; max-width: 700px;">
+  <div class="offcanvas-header border-bottom bg-dark text-white">
+    <h5 class="offcanvas-title" id="offcanvas-resolucion-config-label">
+      <i class="bi bi-gear me-2"></i>Configurar Resolución DIAN
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  
+  <div class="offcanvas-body">
+    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
+    <div id="feedback-config-resolucion" class="alert d-none mb-3" role="alert"></div>
+    
+    {# ⚠️ v2.60: Componente modular de manejo de errores HTMX #}
+    {% include 'tenant/core/partials/error_handler.html' %}
+    
+    <div class="alert alert-info">
+      <i class="bi bi-info-circle me-2"></i>
+      <strong>Importante:</strong> Solo puede haber una resolución vigente a la vez. 
+      Al marcar esta como vigente, se desactivarán automáticamente las anteriores.
+    </div>
+    
+    <form id="form-resolucion-config" novalidate
+          hx-post="/api/v1/gastos/configurar-resolucion/"
+          hx-target="#feedback-config-resolucion"
+          hx-swap="innerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          hx-on::htmx:response-error="window.errorInjector && window.errorInjector.handleError(event)"
+          hx-on::htmx:after-request="if(event.detail.successful && (event.detail.xhr.status === 200 || event.detail.xhr.status === 201)){ try { const response = typeof event.detail.xhr.response === 'string' ? JSON.parse(event.detail.xhr.response) : event.detail.xhr.response; if(window.AppGastos && window.AppGastos.onResolucionSaved){ window.AppGastos.onResolucionSaved(response); } } catch(e) { console.error('[gastos.resolucion] Error parsing response:', e); } }">
+      <div class="row g-3">
+        <div class="col-12"><h6 class="text-dark border-bottom pb-2 small fw-bold">DATOS DE LA RESOLUCIÓN</h6></div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Número de Resolución DIAN *</label>
+          <input type="text" class="form-control" name="numero_resolucion" required 
+                 placeholder="Ej: 12345678901234">
+          <small class="text-muted">Número asignado por la DIAN</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Prefijo *</label>
+          <input type="text" class="form-control" name="prefijo" required 
+                 placeholder="Ej: DS, SI" maxlength="10">
+          <small class="text-muted">Prefijo del documento (máx. 10 caracteres)</small>
+        </div>
+        
+        <div class="col-12"><h6 class="text-dark border-bottom pb-2 small fw-bold mt-3">RANGO DE CONSECUTIVOS</h6></div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Rango Desde *</label>
+          <input type="number" class="form-control" name="rango_desde" required 
+                 min="1" placeholder="Ej: 1">
+          <small class="text-muted">Número inicial del rango autorizado</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Rango Hasta *</label>
+          <input type="number" class="form-control" name="rango_hasta" required 
+                 min="1" placeholder="Ej: 9999">
+          <small class="text-muted">Número final del rango autorizado</small>
+        </div>
+        
+        <div class="col-12"><h6 class="text-dark border-bottom pb-2 small fw-bold mt-3">FECHAS DE VIGENCIA</h6></div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Fecha de Emisión (Inicio) *</label>
+          <input type="date" class="form-control" name="fecha_resolucion" required>
+          <small class="text-muted">Fecha en que la DIAN emitió la resolución (se usa como fecha de inicio)</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Fecha Fin Aplicación *</label>
+          <input type="date" class="form-control" name="fecha_fin" required>
+          <small class="text-muted">Hasta cuándo estará vigente (debe ser posterior a la fecha de emisión)</small>
+        </div>
+        
+        <div class="col-12 mt-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="vigente" id="check-vigente" checked>
+            <label class="form-check-label" for="check-vigente">
+              <strong>Marcar como Resolución Vigente (Predeterminada)</strong>
+            </label>
+            <small class="d-block text-muted">
+              Si está marcada, se usará automáticamente al crear nuevos gastos
+            </small>
+          </div>
+        </div>
+        
+        <div class="col-12">
+          <label class="form-label small fw-bold">Clave Técnica (Opcional)</label>
+          <input type="text" class="form-control" name="clave_tecnica" 
+                 placeholder="Clave técnica adicional" maxlength="100">
+        </div>
+      </div>
+      
+      <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+        <button type="button" class="btn btn-link text-muted" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="submit" class="btn btn-dark px-4 shadow-sm">
+          <i class="bi bi-save me-1"></i> Guardar Resolución
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

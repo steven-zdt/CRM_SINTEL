@@ -1,0 +1,20 @@
+<div class="card shadow-sm">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+      <h5 class="mb-0 text-secondary"><i class="bi bi-truck me-2"></i>Directorio de Proveedores</h5>
+      <div>
+          <div class="input-group input-group-sm d-inline-flex w-auto me-2">
+              <input type="text" id="search-proveedor" class="form-control" placeholder="Buscar proveedor...">
+              <button class="btn btn-outline-secondary" type="button"><i class="bi bi-search"></i></button>
+          </div>
+          <button class="btn btn-primary btn-sm" id="btn-nuevo-proveedor">
+              <i class="bi bi-plus-lg me-1"></i>Nuevo
+          </button>
+      </div>
+  </div>
+  <div class="card-body p-0">
+      <div id="grid-proveedores"></div>
+  </div>
+</div>
+
+{# ⚠️ Paso 4: Contenedor para Offcanvas cargado vía HTMX #}
+<div id="offcanvas-container-proveedor"></div>

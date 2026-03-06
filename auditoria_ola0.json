@@ -1,0 +1,385 @@
+{
+  "timestamp": "2026-02-12T11:14:42Z",
+  "apps": [
+    {
+      "app": "facturas",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/facturas/assets_facturas.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/facturas/facturas.page.js",
+        "apps/tenant/core/static/core/js/facturas/facturas.table.js",
+        "apps/tenant/core/static/core/js/facturas/facturas.dt.js",
+        "apps/tenant/core/static/core/js/facturas/facturas.api.js",
+        "apps/tenant/core/static/core/js/facturas/facturas.components.js"
+      ],
+      "datatables": [
+        {
+          "file": "facturas.page.js",
+          "table": "#table-facturas",
+          "ajax_url": "/api/v1/facturas/dt/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        },
+        {
+          "file": "facturas.dt.js",
+          "table": "#dt-facturas-main",
+          "ajax_url": "/api/v1/facturas/dt/facturas/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        }
+      ],
+      "hardcoded_urls": [
+        "/api/v1/facturas/dt/",
+        "/api/v1/facturas/",
+        "/api/v1/facturas/dt/facturas/"
+      ],
+      "csrf_getcookie_usages": 1,
+      "csrf_helper": false,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": false,
+      "http_helper": false,
+      "api_helpers": false
+    },
+    {
+      "app": "contabilidad",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/contabilidad/assets_contabilidad.html",
+        "apps/tenant/core/templates/tenant/core/partials/contabilidad/assets_cuentas.html",
+        "apps/tenant/core/templates/tenant/core/partials/contabilidad/assets_asientos.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/contabilidad/contabilidad.page.js",
+        "apps/tenant/core/static/core/js/contabilidad/contabilidad.table.js",
+        "apps/tenant/core/static/core/js/contabilidad/cuentas.page.js",
+        "apps/tenant/core/static/core/js/contabilidad/asientos.page.js",
+        "apps/tenant/core/static/core/js/contabilidad/contabilidad.api.js"
+      ],
+      "datatables": [
+        {
+          "file": "contabilidad.table.js",
+          "table": "#table-contabilidad-cuentas",
+          "ajax_url": "/api/v1/contabilidad/dt/cuentas-contables/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        },
+        {
+          "file": "contabilidad.table.js",
+          "table": "#table-contabilidad-asientos",
+          "ajax_url": "/api/v1/contabilidad/dt/asientos-contables/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        }
+      ],
+      "hardcoded_urls": [
+        "/api/v1/contabilidad/dt/cuentas-contables/",
+        "/api/v1/contabilidad/dt/asientos-contables/",
+        "/api/v1/contabilidad/asientos-contables/"
+      ],
+      "csrf_getcookie_usages": 1,
+      "csrf_helper": false,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": true,
+      "http_helper": false,
+      "api_helpers": false
+    },
+    {
+      "app": "inventario",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/inventario/assets_inventario.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/inventario/inventario.page.js",
+        "apps/tenant/core/static/core/js/inventario/inventario.table.js",
+        "apps/tenant/core/static/core/js/inventario/catalogo.page.js",
+        "apps/tenant/core/static/core/js/inventario/activos.page.js",
+        "apps/tenant/core/static/core/js/inventario/movimientos.page.js",
+        "apps/tenant/core/static/core/js/inventario/inventario.api.js"
+      ],
+      "datatables": [
+        {
+          "file": "inventario.table.js",
+          "table": "#table-inventario-catalogo",
+          "ajax_url": "/api/v1/inventario/dt/catalogo/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        },
+        {
+          "file": "inventario.table.js",
+          "table": "#table-inventario-activos",
+          "ajax_url": "/api/v1/inventario/dt/activos-fijos/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        },
+        {
+          "file": "inventario.table.js",
+          "table": "#table-inventario-movimientos",
+          "ajax_url": "/api/v1/inventario/dt/movimientos/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        }
+      ],
+      "hardcoded_urls": [
+        "/api/v1/inventario/dt/catalogo/",
+        "/api/v1/inventario/dt/activos-fijos/",
+        "/api/v1/inventario/dt/movimientos/",
+        "/api/v1/inventario/catalogo/",
+        "/api/v1/inventario/activos-fijos/"
+      ],
+      "csrf_getcookie_usages": 1,
+      "csrf_helper": false,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": true,
+      "http_helper": false,
+      "api_helpers": false
+    },
+    {
+      "app": "clientes",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/clientes/assets_clientes.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/clientes/clientes.page.js",
+        "apps/tenant/core/static/core/js/clientes/clientes.table.js"
+      ],
+      "datatables": [
+        {
+          "file": "clientes.table.js",
+          "table": "#table-clientes",
+          "ajax_url": "/api/v1/clientes/dt/clientes/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        }
+      ],
+      "hardcoded_urls": [
+        "/api/v1/clientes/dt/clientes/",
+        "/api/v1/clientes/"
+      ],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": true,
+      "http_helper": false,
+      "api_helpers": true
+    },
+    {
+      "app": "proveedores",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/proveedores/assets_proveedores.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/proveedores/proveedores.page.js",
+        "apps/tenant/core/static/core/js/proveedores/proveedores.dt.js",
+        "apps/tenant/core/static/core/js/proveedores/proveedores.api.js"
+      ],
+      "datatables": [
+        {
+          "file": "proveedores.dt.js",
+          "table": "#dt-proveedores-main",
+          "ajax_url": "/api/v1/proveedores/dt/proveedores/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        }
+      ],
+      "hardcoded_urls": [
+        "/api/v1/proveedores/dt/proveedores/",
+        "/api/v1/proveedores/"
+      ],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": true,
+      "http_helper": true,
+      "api_helpers": true
+    },
+    {
+      "app": "empleados",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/empleados/assets_empleados.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/empleados/empleados.page.js",
+        "apps/tenant/core/static/core/js/empleados/empleados.dt.js",
+        "apps/tenant/core/static/core/js/empleados/empleados.api.js"
+      ],
+      "datatables": [
+        {
+          "file": "empleados.dt.js",
+          "table": "#dt-empleados-main",
+          "ajax_url": "/api/v1/empleados/dt/empleados/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        }
+      ],
+      "hardcoded_urls": [
+        "/api/v1/empleados/dt/empleados/"
+      ],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": false,
+      "http_helper": true,
+      "api_helpers": false
+    },
+    {
+      "app": "gastos",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/gastos/assets_gastos.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/gastos/gastos.page.js",
+        "apps/tenant/core/static/core/js/gastos/gastos.dt.js",
+        "apps/tenant/core/static/core/js/gastos/gastos.api.js"
+      ],
+      "datatables": [
+        {
+          "file": "gastos.dt.js",
+          "table": "#dt-gastos-main",
+          "ajax_url": "/api/v1/gastos/dt/gastos/",
+          "method": "POST",
+          "csrf_header": true,
+          "server_side": true
+        }
+      ],
+      "hardcoded_urls": [
+        "/api/v1/gastos/dt/gastos/"
+      ],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": false,
+      "http_helper": true,
+      "api_helpers": false
+    },
+    {
+      "app": "perfil",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/perfil/assets_perfil.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/perfil/perfil.page.js",
+        "apps/tenant/core/static/core/js/perfil/perfil.api.js"
+      ],
+      "datatables": [],
+      "hardcoded_urls": [
+        "/api/v1/perfil/perfiles/me/"
+      ],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": true,
+      "http_helper": true,
+      "api_helpers": true
+    },
+    {
+      "app": "empresa",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/empresa/assets_empresa.html",
+        "apps/tenant/core/templates/tenant/core/partials/empresa/assets_empresas.html",
+        "apps/tenant/core/templates/tenant/core/partials/empresa/assets_mailinbox.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/empresa/empresa.page.js",
+        "apps/tenant/core/static/core/js/empresa/empresa.api.js",
+        "apps/tenant/core/static/core/js/empresa/empresa.ui.js",
+        "apps/tenant/core/static/core/js/empresa/empresa.modals.js",
+        "apps/tenant/core/static/core/js/mailinbox/mailinbox.page.js"
+      ],
+      "datatables": [],
+      "hardcoded_urls": [
+        "/api/v1/core/empresa/",
+        "/api/v1/empresas/",
+        "/api/v1/empresas/mail-inbox-config/"
+      ],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": true,
+      "http_helper": true,
+      "api_helpers": true
+    },
+    {
+      "app": "landing",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/landing/assets_landing.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/landing/landing.page.js",
+        "apps/tenant/core/static/core/js/landing/landing.api.js"
+      ],
+      "datatables": [],
+      "hardcoded_urls": [],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": false,
+      "http_helper": true,
+      "api_helpers": true
+    },
+    {
+      "app": "dashboard",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/dashboard/assets_dashboard.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/dashboard/dashboard.page.js",
+        "apps/tenant/core/static/core/js/dashboard/dashboard.api.js"
+      ],
+      "datatables": [],
+      "hardcoded_urls": [],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": false,
+      "http_helper": true,
+      "api_helpers": true
+    },
+    {
+      "app": "mail",
+      "partials": [
+        "apps/tenant/core/templates/tenant/core/partials/mail/assets_mail.html"
+      ],
+      "pages": [
+        "apps/tenant/core/static/core/js/mail/mail.page.js",
+        "apps/tenant/core/static/core/js/mail/mail.api.js",
+        "apps/tenant/core/static/core/js/mail/mail.ui.js",
+        "apps/tenant/core/static/core/js/mail/mail.modals.js"
+      ],
+      "datatables": [],
+      "hardcoded_urls": [],
+      "csrf_getcookie_usages": 0,
+      "csrf_helper": true,
+      "visibility_timeouts": [],
+      "domutils_waitforvisible": false,
+      "http_helper": true,
+      "api_helpers": true
+    }
+  ],
+  "summary": {
+    "modules_total": 12,
+    "modules_with_hardcoded_urls": 12,
+    "modules_with_getcookie": 3,
+    "modules_with_csrf_helper": 9,
+    "datatables_total": 11,
+    "datatables_conform_post_csrf": 11,
+    "visibility_timeouts_total": 0,
+    "modules_with_domutils": 7,
+    "modules_with_http_helper": 8,
+    "modules_with_api_helpers": 6
+  },
+  "routes_verification": {
+    "all_apps_registered": true,
+    "all_datatables_endpoints_present": true,
+    "missing_routes": []
+  }
+}

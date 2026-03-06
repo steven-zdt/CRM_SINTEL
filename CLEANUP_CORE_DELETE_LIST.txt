@@ -1,0 +1,25 @@
+# Lista de Archivos a Eliminar - Limpieza apps/tenant/core
+# Generado: 2026-02-10
+
+## Templates (apps/tenant/core/templates/tenant/core/partials/)
+partials/assets_common.html
+partials/assets_facturas_refresh.html
+partials/assets_facturas.html
+partials/assets_perfil.html
+partials/assets_maildigester.html
+
+## Static JS (apps/tenant/core/static/core/js/)
+facturas.ui.js
+empresa.ui.js
+perfil.ui.js
+contabilidad.ui.js
+dashboard.ui.js
+landing.ui.js
+landing.reset.ui.js
+http.js
+_csrf.js
+
+## Notas:
+# - Los partials de inventario con guiones bajos (_catalogo_table.html, etc.) se mantienen
+#   temporalmente porque están siendo usados en workspace.html (migración futura)
+# - Los shells estáticos en apps/tenant/core/static/tenant/ NO se tocan (fuera del alcance)

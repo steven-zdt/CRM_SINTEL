@@ -1,0 +1,110 @@
+{% extends "console/pages/impuestos/base_console.html" %}
+
+{% block page_content %}
+<h2 class="text-xl font-semibold mb-4">Tipos de Impuesto</h2>
+
+<div class="toolbar mb-4">
+  <button class="btn btn-primary"
+          hx-get="{% url 'console:console-impuestos-tipo-form' %}"
+          hx-target="#modal-body" 
+          hx-swap="innerHTML"
+          onclick="setTimeout(() => document.getElementById('crudModal').classList.remove('hidden'), 100)">
+    Nuevo
+  </button>
+</div>
+
+<table id="dt-tipos" class="display table" style="width:100%">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Código</th>
+      <th>Nombre</th>
+      <th>Activo</th>
+      <th>Vigencia</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- DataTables carga datos via AJAX -->
+  </tbody>
+</table>
+
+<!-- Modal CRUD -->
+<div id="crudModal" class="modal hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+  <div class="modal-dialog relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 shadow-lg rounded-md bg-white">
+    <div class="modal-header flex justify-between items-center mb-4">
+      <h5 class="modal-title text-lg font-semibold">Gestión Tipo Impuesto</h5>
+      <button type="button" class="btn-close text-gray-400 hover:text-gray-600" onclick="document.getElementById('crudModal').classList.add('hidden')">×</button>
+    </div>
+    <div id="modal-body" class="modal-body">
+      <!-- Form HTMX se carga aquí -->
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_page_js %}
+<script>
+$(document).ready(function() {
+  const table = $('#dt-tipos').DataTable({
+    processing: true,
+    serverSide: true,
+    ajax: {
+      url: "/api/public/v1/impuestos/dt/tipos/",
+      type: "GET",
+      // CSRF se añade globalmente por $.ajaxSetup arriba
+    },
+    columns: [
+      { data: 0 },  // id
+      { data: 1 },  // codigo
+      { data: 2 },  // nombre
+      { data: 3 },  // activo
+      { data: 4 },  // fecha_vigencia
+      {
+        data: null,
+        orderable: false,
+        render: function(data, type, row) {
+          const id = row[0];
+          return `
+            <button class="btn btn-sm btn-outline-primary"
+              hx-get="/console/impuestos/tipos/${id}/editar/"
+              hx-target="#modal-body"
+              hx-swap="innerHTML"
+              onclick="document.getElementById('crudModal').classList.remove('hidden')">
+              Editar
+            </button>
+            <button class="btn btn-sm btn-outline-danger"
+              onclick="deleteTipo(${id})">
+              Borrar
+            </button>
+          `;
+        }
+      }
+    ],
+    order: [[0, 'desc']],
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
+    }
+  });
+  
+  // Función para eliminar
+  window.deleteTipo = function(id) {
+    if (!confirm('¿Está seguro de que desea eliminar este tipo de impuesto?')) {
+      return;
+    }
+    
+    $.ajax({
+      url: `/api/public/v1/impuestos/tipos-crud/${id}/`,
+      type: 'DELETE',
+      success: function() {
+        table.ajax.reload(null, false);
+      },
+      error: function(xhr) {
+        alert('Error al eliminar: ' + (xhr.responseJSON?.error || xhr.statusText));
+      }
+    });
+  };
+});
+</script>
+{% endblock %}

@@ -1,0 +1,173 @@
+{% load static %}
+{# offcanvas_mailinbox.html - Offcanvas para crear/editar MailInboxConfig v2.60 #}
+{# ⚠️ HTMX-Driven: Cargado dinámicamente desde ViewSet #}
+{# ⚠️ v2.60: Migrado de Modal a Offcanvas con HTMX #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-mailinbox" aria-labelledby="offcanvas-mailinbox-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-mailinbox-label">
+      <i class="bi bi-envelope"></i> <span id="offcanvas-mailinbox-title">Nueva Configuración de Correo</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ Error Handler: Fragmento inyectable para errores #}
+    {% include 'tenant/core/partials/error_handler.html' %}
+    
+    <form id="form-mailinbox" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+      <input type="hidden" id="mailinbox-id" name="id" value="{% if config %}{{ config.id }}{% endif %}" />
+      
+      <!-- Información Básica -->
+      <div class="mb-4">
+        <h6 class="fw-bold text-primary mb-3">
+          <i class="bi bi-info-circle"></i> Información Básica
+        </h6>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-nombre" class="form-label small fw-bold">Nombre *</label>
+              <input type="text" class="form-control border-primary-subtle" id="mailinbox-nombre" name="nombre" required placeholder="Ej: Buzón Principal" value="{% if config %}{{ config.nombre }}{% endif %}" />
+              <small class="text-muted">Alias para identificar esta configuración</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-email_address" class="form-label small fw-bold">Email Principal</label>
+              <input type="email" class="form-control border-primary-subtle" id="mailinbox-email_address" name="email_address" placeholder="correo@ejemplo.com" value="{% if config %}{{ config.email_address }}{% endif %}" />
+              <small class="text-muted">Dirección de correo principal</small>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-provider" class="form-label small fw-bold">Proveedor</label>
+              <select class="form-select border-primary-subtle" id="mailinbox-provider" name="provider">
+                <option value="custom" {% if not config or config.provider == 'custom' %}selected{% endif %}>Personalizado</option>
+                <option value="gmail" {% if config and config.provider == 'gmail' %}selected{% endif %}>Gmail</option>
+              </select>
+              <small class="text-muted">Seleccione el proveedor de correo</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="mailinbox-is_active" name="is_active" {% if not config or config.is_active %}checked{% endif %} />
+                <label class="form-check-label" for="mailinbox-is_active">
+                  Configuración Activa
+                </label>
+              </div>
+            </div>
+        </div>
+      </div>
+
+      <!-- Configuración IMAP -->
+      <div class="mb-4">
+        <hr class="my-3">
+        <h6 class="fw-bold text-primary mb-3">
+          <i class="bi bi-server"></i> Configuración IMAP (Recepción)
+        </h6>
+        
+          <div class="row">
+            <div class="col-md-8 mb-3">
+              <label for="mailinbox-imap_host" class="form-label small fw-bold">Servidor IMAP *</label>
+              <input type="text" class="form-control border-primary-subtle" id="mailinbox-imap_host" name="imap_host" required placeholder="imap.gmail.com" value="{% if config %}{{ config.imap_host }}{% endif %}" />
+              <small class="text-muted">Hostname del servidor IMAP</small>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label for="mailinbox-imap_port" class="form-label small fw-bold">Puerto IMAP *</label>
+              <input type="number" class="form-control border-primary-subtle" id="mailinbox-imap_port" name="imap_port" required placeholder="993" value="{% if config %}{{ config.imap_port }}{% else %}993{% endif %}" />
+              <small class="text-muted">Puerto IMAP (993 SSL, 143 STARTTLS)</small>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-imap_username" class="form-label small fw-bold">Usuario IMAP *</label>
+              <input type="text" class="form-control border-primary-subtle" id="mailinbox-imap_username" name="imap_username" required placeholder="correo@ejemplo.com" value="{% if config %}{{ config.imap_username }}{% endif %}" />
+              <small class="text-muted">Usuario para autenticación IMAP</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-imap_password" class="form-label small fw-bold">Contraseña IMAP {% if not is_edit %}*{% else %}<small class="text-muted">(dejar vacío para no cambiar)</small>{% endif %}</label>
+              <div class="input-group">
+                <input type="password" class="form-control border-primary-subtle" id="mailinbox-imap_password" name="imap_password" {% if not is_edit %}required{% endif %} placeholder="{% if is_edit %}Dejar vacío para no cambiar{% else %}Contraseña o App Password{% endif %}" />
+                <button type="button" class="btn btn-outline-secondary" id="btn-toggle-password" title="Mostrar/Ocultar contraseña">
+                  <i class="bi bi-eye" id="icon-toggle-password"></i>
+                </button>
+              </div>
+              <small class="text-muted">Gmail: Requiere App Password si 2FA está activo</small>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="mailinbox-imap_ssl" name="imap_ssl" {% if not config or config.imap_ssl %}checked{% endif %} />
+                <label class="form-check-label" for="mailinbox-imap_ssl">
+                  Usar SSL/TLS
+                </label>
+              </div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="mailinbox-imap_starttls" name="imap_starttls" {% if config and config.imap_starttls %}checked{% endif %} />
+                <label class="form-check-label" for="mailinbox-imap_starttls">
+                  Usar STARTTLS
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label for="mailinbox-imap_mailbox" class="form-label small fw-bold">Carpeta IMAP</label>
+              <input type="text" class="form-control border-primary-subtle" id="mailinbox-imap_mailbox" name="imap_mailbox" placeholder="INBOX" value="{% if config %}{{ config.imap_mailbox }}{% else %}INBOX{% endif %}" />
+              <small class="text-muted">Carpeta a monitorear (por defecto: INBOX)</small>
+            </div>
+          </div>
+      </div>
+
+      <!-- Opciones Avanzadas -->
+      <div class="mb-4">
+        <hr class="my-3">
+        <h6 class="fw-bold text-primary mb-3">
+          <i class="bi bi-gear"></i> Opciones Avanzadas
+        </h6>
+        
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="mailinbox-imap_mark_as_seen" name="imap_mark_as_seen" {% if not config or config.imap_mark_as_seen %}checked{% endif %} />
+                <label class="form-check-label" for="mailinbox-imap_mark_as_seen">
+                  Marcar correos como leídos
+                </label>
+              </div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="mailinbox-imap_max_attachment_mb" class="form-label small fw-bold">Límite Adjuntos (MB)</label>
+              <input type="number" class="form-control border-primary-subtle" id="mailinbox-imap_max_attachment_mb" name="imap_max_attachment_mb" value="{% if config %}{{ config.imap_max_attachment_mb }}{% else %}50{% endif %}" min="1" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label for="mailinbox-imap_move_processed_to" class="form-label small fw-bold">Mover Procesados a</label>
+              <input type="text" class="form-control border-primary-subtle" id="mailinbox-imap_move_processed_to" name="imap_move_processed_to" placeholder="Procesados (opcional)" value="{% if config %}{{ config.imap_move_processed_to }}{% endif %}" />
+              <small class="text-muted">Carpeta donde mover correos procesados (opcional)</small>
+            </div>
+          </div>
+      </div>
+
+      <!-- Botón Probar Conexión -->
+      <div class="mb-3">
+        <button type="button" class="btn btn-outline-info w-100" id="btn-probar-conexion-mailinbox">
+          <i class="bi bi-wifi"></i> Probar Conexión
+        </button>
+        <div id="test-connection-result" class="mt-2 d-none"></div>
+      </div>
+    </form>
+  </div>
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-circle"></i> Cancelar
+      </button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-mailinbox">
+          <i class="bi bi-save"></i> <span id="btn-guardar-mailinbox-texto">{% if is_edit %}Actualizar{% else %}Guardar{% endif %}</span>
+        </button>
+    </div>
+  </div>
+</div>

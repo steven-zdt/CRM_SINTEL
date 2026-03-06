@@ -1,0 +1,36 @@
+{% extends "console/base.html" %}
+{% load static %}
+
+{% block title %}{% block console_title %}Catálogo DIAN{% endblock %} - Consola de Administración - SINTEL{% endblock %}
+
+{% block extra_head %}
+  <!-- HTMX & Alpine -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Estilos específicos del dashboard de impuestos -->
+  <link rel="stylesheet" href="{% static 'impuestos_dashboard/console.css' %}"/>
+{% endblock %}
+
+{% block content %}
+  <div class="px-4 py-6">
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">
+      {% block page_title %}Catálogo DIAN{% endblock %}
+    </h1>
+    
+    {% if messages %}
+      <div class="mb-4">
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} p-4 mb-2 rounded">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    
+    {% block console_content %}{% endblock %}
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  <!-- JavaScript adicional para el dashboard de impuestos -->
+{% endblock %}

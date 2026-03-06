@@ -1,0 +1,85 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Consola de Administración - SINTEL{% endblock %}</title>
+    
+    <!-- Tailwind CSS CDN (desarrollo) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Alpine.js para interactividad -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- HTMX para actualizaciones dinámicas sin JavaScript -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- CSRF Token para JavaScript -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-100">
+    <!-- Navbar -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <h1 class="text-xl font-bold text-gray-900">SINTEL Console</h1>
+                    </div>
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                        <a href="{% url 'console:dashboard' %}" 
+                           class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Dashboard
+                        </a>
+                        <a href="{% url 'console:tenants-list' %}" 
+                           class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Empresas
+                        </a>
+                        <a href="{% url 'console:users-list' %}" 
+                           class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {% if request.path == '/console/users/' %}border-indigo-500 text-indigo-600{% endif %}">
+                            Usuarios
+                        </a>
+                        <a href="{% url 'console:impuestos-ingesta-list' %}" 
+                           class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {% if '/console/impuestos/' in request.path %}border-indigo-500 text-indigo-600{% endif %}">
+                            Catálogo DIAN
+                        </a>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-sm text-gray-700">{{ user.email|default:user.username }}</span>
+                    <a href="{% url 'admin:logout' %}" class="ml-4 text-sm text-red-600 hover:text-red-800">Salir</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="w-[80%] mx-auto py-6 sm:px-6 lg:px-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- JavaScript -->
+    <script src="{% static 'js/console.js' %}"></script>
+    <!-- JWT Auth Helper -->
+    <script src="{% static 'js/jwt-auth.js' %}"></script>
+    
+    <!-- HTMX CSRF Global Hook (para formularios HTML tradicionales) -->
+    {% if csrf_token %}
+    <script>
+      // Hook global para agregar X-CSRFToken a todas las peticiones HTMX
+      // Nota: CSRF solo para formularios HTML tradicionales, no para APIs REST (JWT)
+      document.body.addEventListener('htmx:configRequest', function (event) {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token }}';
+        if (csrfToken) {
+          event.detail.headers['X-CSRFToken'] = csrfToken;
+        }
+      });
+    </script>
+    {% endif %}
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

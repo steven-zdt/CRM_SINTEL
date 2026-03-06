@@ -1,0 +1,72 @@
+{% load static %}
+{# assets_inventario.html - Assets del módulo Inventario v2.60 #}
+{# ⚠️ SINTEL v2.60: Sincronización Arquitectónica - Carga Perezosa (Lazy Loading) #}
+{# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
+{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http.js, ui-manager.js, etc.) - ya cargado en workspace.html #}
+{# 2. inventario.api.js (Capa de Datos - define window.inventarioAPI) - REQUERIDO #}
+{# 3. inventario_editor.js (Feature: Editor y Offcanvas - Modales) - REQUERIDO #}
+{# 4. inventario_list.js (Feature: Listado y Tabulator - Page) - REQUERIDO #}
+{# ⚠️ v2.60: Orden API -> Modals -> Page para garantizar dependencias correctas #}
+
+{# BLOQUE 1: API Wrapper (Capa de Datos) - REQUERIDO #}
+<script src="{% static 'core/js/inventario/inventario.api.js' %}"></script>
+
+{# BLOQUE 2: Features Feature-Sliced - Orden: Modals -> Page #}
+{# Modals: Editor y Offcanvas (se carga antes que Page para estar disponible) #}
+<script src="{% static 'core/js/inventario/features/inventario_editor.js' %}"></script>
+{# Page: Listado y Tabulator (usa lazy loading con DOMUtils.onVisibleOnce) #}
+<script src="{% static 'core/js/inventario/features/inventario_list.js' %}"></script>
+
+{# BLOQUE 3: Módulos específicos - Servicios, Categorías, Activos #}
+{# ⚠️ v2.60: Cada módulo tiene su propio .page.js con lazy loading #}
+<script src="{% static 'core/js/inventario/servicios.page.js' %}"></script>
+<script src="{% static 'core/js/inventario/categorias.page.js' %}"></script>
+<script src="{% static 'core/js/inventario/activos.page.js' %}"></script>
+
+{# ⚠️ HTMX: Reinicializar listeners cuando se carga el Offcanvas vía HTMX #}
+<script>
+    if (typeof htmx !== 'undefined') {
+        document.addEventListener('htmx:afterSwap', function(event) {
+            const targetId = event.detail.target.id;
+            
+            // Offcanvas de productos
+            if (targetId === 'offcanvas-container-inventario') {
+                setTimeout(function() {
+                    console.log('[inventario.assets] Offcanvas de productos cargado vía HTMX');
+                }, 50);
+            }
+            
+            // Offcanvas de servicios
+            if (targetId === 'offcanvas-container-servicios') {
+                setTimeout(function() {
+                    console.log('[inventario.assets] Offcanvas de servicios cargado vía HTMX');
+                }, 50);
+            }
+            
+            // Offcanvas de historial de servicios
+            if (targetId === 'offcanvas-container-historial-servicio') {
+                setTimeout(function() {
+                    console.log('[inventario.assets] Offcanvas de historial de servicios cargado vía HTMX');
+                    // Reinicializar eventos del formulario de historial
+                    if (window.SintelInventarioTables && window.SintelInventarioTables.servicios && window.SintelInventarioTables.servicios.configurarEventosFormulario) {
+                        window.SintelInventarioTables.servicios.configurarEventosFormulario();
+                    }
+                }, 100);
+            }
+            
+            // Offcanvas de categorías
+            if (targetId === 'offcanvas-container-categorias') {
+                setTimeout(function() {
+                    console.log('[inventario.assets] Offcanvas de categorías cargado vía HTMX');
+                }, 50);
+            }
+            
+            // Offcanvas de activos
+            if (targetId === 'offcanvas-container-activos') {
+                setTimeout(function() {
+                    console.log('[inventario.assets] Offcanvas de activos cargado vía HTMX');
+                }, 50);
+            }
+        });
+    }
+</script>

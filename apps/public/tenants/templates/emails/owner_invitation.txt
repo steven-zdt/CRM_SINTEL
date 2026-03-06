@@ -1,0 +1,15 @@
+¡Bienvenido a {{ tenant_name }}!
+
+Hola {{ user.first_name|default:user.email }},
+
+Has sido invitado como administrador principal de {{ tenant_name }} en SINTEL.
+
+Para activar tu cuenta y establecer tu contraseña, visita el siguiente enlace:
+
+{{ activation_url }}
+
+Importante: Este enlace expirará en 24 horas. Si no activas tu cuenta en ese tiempo, 
+contacta al administrador para recibir una nueva invitación.
+
+---
+© 2026 SINTEL. Todos los derechos reservados.

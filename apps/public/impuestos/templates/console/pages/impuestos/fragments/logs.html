@@ -1,0 +1,34 @@
+<h3 class="text-lg font-semibold mb-4">Logs</h3>
+<table class="table">
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Etapa</th>
+      <th>Nivel</th>
+      <th>Mensaje</th>
+      {% if logs|length > 0 and logs.0.payload %}
+      <th>Payload</th>
+      {% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for log in logs %}
+      <tr class="log-{{log.nivel|lower}}">
+        <td>{{log.ts|date:"Y-m-d H:i:s"}}</td>
+        <td>{{log.etapa}}</td>
+        <td><span class="badge badge-{{log.nivel|lower}}">{{log.nivel}}</span></td>
+        <td><pre class="log">{{log.mensaje}}</pre></td>
+        {% if log.payload %}
+        <td>
+          <details class="cursor-pointer">
+            <summary class="text-xs text-gray-500">Ver payload</summary>
+            <pre class="text-xs bg-gray-50 p-2 mt-2 rounded border">{{log.payload|safe}}</pre>
+          </details>
+        </td>
+        {% endif %}
+      </tr>
+    {% empty %}
+      <tr><td colspan="{% if logs|length > 0 and logs.0.payload %}5{% else %}4{% endif %}">Sin eventos.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

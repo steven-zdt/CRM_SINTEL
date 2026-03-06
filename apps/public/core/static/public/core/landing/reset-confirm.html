@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">Definir nueva contraseña</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 420px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .logo h1 {
+            color: #667eea;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .logo p {
+            color: #6b7280;
+            font-size: 14px;
+        }
+        
+        h2 {
+            color: #1f2937;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            color: #374151;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .form-group input.error {
+            border-color: #ef4444;
+        }
+        
+        .error-message {
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 4px;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 8px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+        
+        .footer {
+            margin-top: 24px;
+            text-align: center;
+        }
+        
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .success-message {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .success-message .btn {
+            margin-top: 16px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f4f6;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" aria-live="polite">
+        <div class="logo">
+            <h1 id="branding-name">Sistema de Gestión</h1>
+            <p>Gestión contable y facturación electrónica</p>
+        </div>
+        
+        <h2 id="title">Definir nueva contraseña</h2>
+        
+        <div id="invalid" class="alert alert-error" style="display: none;" role="alert">
+            El enlace es inválido o ha expirado. Por favor, solicita un nuevo enlace de recuperación.
+        </div>
+        
+        <div id="success-message" class="success-message" style="display: none;" role="alert">
+            <div class="alert alert-success">
+                <strong>¡Contraseña restablecida exitosamente!</strong>
+                <p style="margin-top: 8px; margin-bottom: 0;">Tu contraseña ha sido actualizada. Ahora puedes iniciar sesión con tu nueva contraseña.</p>
+            </div>
+            <a href="/login/" class="btn btn-primary" style="display: inline-block; width: auto; padding: 12px 24px;">
+                Ir al inicio de sesión
+            </a>
+        </div>
+        
+        <form id="reset-confirm-form" style="display: none;">
+            <div class="form-group">
+                <label for="npw1">Nueva contraseña</label>
+                <input 
+                    type="password" 
+                    id="npw1" 
+                    name="password1" 
+                    minlength="8" 
+                    required 
+                    autocomplete="new-password"
+                    aria-describedby="password1-error"
+                    aria-invalid="false"
+                >
+                <div id="password1-error" class="error-message" role="alert"></div>
+            </div>
+            
+            <div class="form-group">
+                <label for="npw2">Confirmar contraseña</label>
+                <input 
+                    type="password" 
+                    id="npw2" 
+                    name="password2" 
+                    minlength="8" 
+                    required 
+                    autocomplete="new-password"
+                    aria-describedby="password2-error"
+                    aria-invalid="false"
+                >
+                <div id="password2-error" class="error-message" role="alert"></div>
+            </div>
+            
+            <div id="form-error" class="error-message" role="alert"></div>
+            
+            <button type="submit" class="btn btn-primary" id="submit-btn">
+                Guardar y continuar
+            </button>
+        </form>
+        
+        <div class="footer">
+            <a href="/login/">← Volver al inicio de sesión</a>
+        </div>
+    </div>
+    
+    <script type="module" src="/static/core/js/reset-confirm.ui.js"></script>
+</body>
+</html>

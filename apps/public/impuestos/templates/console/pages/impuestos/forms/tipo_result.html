@@ -1,0 +1,22 @@
+<div class="alert {% if success %}alert-success{% else %}alert-danger{% endif %}">
+  {% if success %}
+    <p>✓ Tipo de impuesto guardado correctamente.</p>
+  {% else %}
+    <p>✗ Error: {{ body|safe }}</p>
+  {% endif %}
+</div>
+
+<script>
+  // Refrescar DataTable después de guardar
+  if (typeof $ !== 'undefined' && $('#dt-tipos').length) {
+    setTimeout(function() {
+      $('#dt-tipos').DataTable().ajax.reload(null, false);
+      // Cerrar modal después de 1 segundo si fue exitoso
+      {% if success %}
+      setTimeout(function() {
+        document.getElementById('crudModal').classList.add('hidden');
+      }, 1000);
+      {% endif %}
+    }, 400);
+  }
+</script>

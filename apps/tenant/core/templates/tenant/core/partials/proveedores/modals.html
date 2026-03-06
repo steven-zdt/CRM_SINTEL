@@ -1,0 +1,170 @@
+{% load static %}
+{# modals.html - Modales del módulo Proveedores v2.40 #}
+{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
+{# ⚠️ v2.40: Alineado con el modelo Proveedor actual #}
+
+<!-- Modal: Crear/Editar Proveedor -->
+<div class="modal fade" id="modal-proveedor" tabindex="-1" aria-labelledby="modal-proveedor-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-proveedor-label">Proveedor</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="proveedor-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+        <form id="form-proveedor">
+          <input type="hidden" id="proveedor-id" name="id">
+          
+          <!-- Identificación Legal -->
+          <h6 class="text-muted mb-3">Identificación Legal</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-tipo_persona" class="form-label">Tipo Persona *</label>
+              <select class="form-select" id="proveedor-tipo_persona" name="tipo_persona" required>
+                <option value="">Seleccionar...</option>
+                <option value="NATURAL">Persona natural</option>
+                <option value="JURIDICA" selected>Persona jurídica</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-tipo_documento" class="form-label">Tipo Documento *</label>
+              <select class="form-select" id="proveedor-tipo_documento" name="tipo_documento" required>
+                <option value="">Seleccionar...</option>
+                <option value="NIT" selected>NIT</option>
+                <option value="CC">Cédula de ciudadanía</option>
+                <option value="CE">Cédula de extranjería</option>
+                <option value="PA">Pasaporte</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-numero_documento" class="form-label">Número Documento *</label>
+              <input type="text" class="form-control" id="proveedor-numero_documento" name="numero_documento" required placeholder="Sin dígito de verificación" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-digito_verificacion" class="form-label">Dígito de Verificación</label>
+              <input type="text" class="form-control" id="proveedor-digito_verificacion" name="digito_verificacion" maxlength="1" placeholder="DV" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-razon_social" class="form-label">Razón Social *</label>
+              <input type="text" class="form-control" id="proveedor-razon_social" name="razon_social" required placeholder="Nombre legal completo" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-nombre_comercial" class="form-label">Nombre Comercial</label>
+              <input type="text" class="form-control" id="proveedor-nombre_comercial" name="nombre_comercial" placeholder="Nombre comercial" />
+            </div>
+          </div>
+
+          <!-- Información Tributaria -->
+          <h6 class="text-muted mb-3 mt-4">Información Tributaria</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-regimen_tributario" class="form-label">Régimen Tributario *</label>
+              <select class="form-select" id="proveedor-regimen_tributario" name="regimen_tributario" required>
+                <option value="">Seleccionar...</option>
+                <option value="SIMPLE">Régimen Simple</option>
+                <option value="ORDINARIO" selected>Régimen Ordinario</option>
+                <option value="NO_RESP">No responsable de IVA</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-actividad_economica_ciiu" class="form-label">Código CIIU</label>
+              <input type="text" class="form-control" id="proveedor-actividad_economica_ciiu" name="actividad_economica_ciiu" maxlength="10" placeholder="Código CIIU Principal" />
+            </div>
+            <div class="col-md-4 mb-3">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="proveedor-responsable_iva" name="responsable_iva" checked />
+                <label class="form-check-label" for="proveedor-responsable_iva">
+                  Responsable de IVA
+                </label>
+              </div>
+            </div>
+            <div class="col-md-4 mb-3">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="proveedor-gran_contribuyente" name="gran_contribuyente" />
+                <label class="form-check-label" for="proveedor-gran_contribuyente">
+                  Gran Contribuyente
+                </label>
+              </div>
+            </div>
+            <div class="col-md-4 mb-3">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="proveedor-autoretenedor" name="autoretenedor" />
+                <label class="form-check-label" for="proveedor-autoretenedor">
+                  Autoretenedor
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contacto y Ubicación -->
+          <h6 class="text-muted mb-3 mt-4">Contacto y Ubicación</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-email_contacto" class="form-label">Email</label>
+              <input type="email" class="form-control" id="proveedor-email_contacto" name="email_contacto" placeholder="Email de contacto" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-telefono_contacto" class="form-label">Teléfono</label>
+              <input type="text" class="form-control" id="proveedor-telefono_contacto" name="telefono_contacto" placeholder="Teléfono de contacto" />
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="proveedor-direccion" class="form-label">Dirección</label>
+              <input type="text" class="form-control" id="proveedor-direccion" name="direccion" placeholder="Dirección" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-ciudad" class="form-label">Ciudad</label>
+              <input type="text" class="form-control" id="proveedor-ciudad" name="ciudad" placeholder="Ciudad" />
+            </div>
+          </div>
+
+          <!-- Información Comercial y Bancaria -->
+          <h6 class="text-muted mb-3 mt-4">Información Comercial y Bancaria</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-plazo_pago_dias" class="form-label">Plazo de Pago (días)</label>
+              <input type="number" class="form-control" id="proveedor-plazo_pago_dias" name="plazo_pago_dias" min="0" value="30" placeholder="Días de crédito estándar" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-banco" class="form-label">Banco</label>
+              <input type="text" class="form-control" id="proveedor-banco" name="banco" placeholder="Banco" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-tipo_cuenta" class="form-label">Tipo de Cuenta</label>
+              <select class="form-select" id="proveedor-tipo_cuenta" name="tipo_cuenta">
+                <option value="">Seleccionar...</option>
+                <option value="AHORROS">Ahorros</option>
+                <option value="CORRIENTE">Corriente</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="proveedor-numero_cuenta" class="form-label">Número de Cuenta</label>
+              <input type="text" class="form-control" id="proveedor-numero_cuenta" name="numero_cuenta" placeholder="Número de cuenta" />
+            </div>
+          </div>
+
+          <!-- Estado -->
+          <h6 class="text-muted mb-3 mt-4">Estado</h6>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="proveedor-activo" name="activo" checked />
+                <label class="form-check-label" for="proveedor-activo">
+                  Activo
+                </label>
+              </div>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label for="proveedor-observaciones" class="form-label">Observaciones</label>
+              <textarea class="form-control" id="proveedor-observaciones" name="observaciones" rows="3" placeholder="Observaciones adicionales"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" form="form-proveedor" class="btn btn-primary" id="btn-guardar-proveedor">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
