@@ -1,0 +1,7 @@
+{% load static %}
+{# assets_cuenta.html - Carga de scripts Feature-Sliced para CuentaContable v2.60 #}
+{# ⚠️ Feature-Sliced Design: Scripts dedicados exclusivamente para CuentaContable #}
+{# ⚠️ Orden de carga crítico: API → List → Editor #}
+<script src="{% static 'contabilidad/js/cuenta/cuenta.api.js' %}"></script>
+<script src="{% static 'contabilidad/js/cuenta/features/cuenta_list.js' %}"></script>
+<script src="{% static 'contabilidad/js/cuenta/features/cuenta_editor.js' %}"></script>

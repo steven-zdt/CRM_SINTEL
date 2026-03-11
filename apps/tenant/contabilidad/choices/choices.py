@@ -1,0 +1,51 @@
+# apps/tenant/contabilidad/choices.py
+
+CATALOGO_NIIF_COLOMBIA = [
+    # [Código, Nombre, Nivel, Naturaleza]
+    ('1', 'ACTIVO', 1, 'D'),
+    ('11', 'DISPONIBLE', 2, 'D'),
+    ('1105', 'CAJA', 4, 'D'),
+    ('110505', 'CAJA GENERAL', 6, 'D'),
+    ('1110', 'BANCOS', 4, 'D'),
+    ('111005', 'MONEDA NACIONAL', 6, 'D'),
+    ('13', 'CUENTAS POR COBRAR', 2, 'D'),
+    ('1305', 'CLIENTES', 4, 'D'),
+    ('2', 'PASIVO', 1, 'C'),
+    ('21', 'OBLIGACIONES FINANCIERAS', 2, 'C'),
+    ('23', 'CUENTAS POR PAGAR', 2, 'C'),
+    ('24', 'IMPUESTOS, GRAVÁMENES Y TASAS', 2, 'C'),
+    ('2365', 'RETENCIÓN EN LA FUENTE', 4, 'C'),
+    ('236505', 'RETENCIÓN EN LA FUENTE - SALARIOS', 6, 'C'),
+    ('236510', 'RETENCIÓN EN LA FUENTE - HONORARIOS', 6, 'C'),
+    ('236515', 'RETENCIÓN EN LA FUENTE - SERVICIOS', 6, 'C'),
+    ('2368', 'IMPUESTO DE INDUSTRIA Y COMERCIO RETENIDO', 4, 'C'),
+    ('236805', 'ICA RETENIDO - ACTIVIDADES COMERCIALES', 6, 'C'),
+    ('236810', 'ICA RETENIDO - ACTIVIDADES DE SERVICIOS', 6, 'C'),
+    ('2408', 'IMPUESTO SOBRE LAS VENTAS POR PAGAR', 4, 'C'),
+    ('240805', 'IVA GENERADO - TARIFA 19%', 6, 'C'),
+    ('240810', 'IVA DESCONTABLE - COMPRAS', 6, 'C'),
+    ('3', 'PATRIMONIO', 1, 'C'),
+    ('31', 'CAPITAL SOCIAL', 2, 'C'),
+    ('4', 'INGRESOS', 1, 'C'),
+    ('41', 'INGRESOS OPERACIONALES', 2, 'C'),
+    ('4135', 'COMERCIO AL POR MAYOR Y AL POR MENOR', 4, 'C'),
+    ('413505', 'VENTA DE MERCANCÍAS', 6, 'C'),
+    ('413510', 'VENTA DE SERVICIOS', 6, 'C'),
+    ('5', 'GASTOS', 1, 'D'),
+    ('51', 'GASTOS DE ADMINISTRACIÓN', 2, 'D'),
+    ('5105', 'GASTOS DE PERSONAL', 4, 'D'),
+    ('510506', 'SUELDOS', 6, 'D'),
+    ('510527', 'AUXILIO DE TRANSPORTE', 6, 'D'),
+    ('5110', 'HONORARIOS', 4, 'D'),
+    ('511005', 'HONORARIOS PROFESIONALES', 6, 'D'),
+    ('5115', 'IMPUESTOS', 4, 'D'),
+    ('511505', 'INDUSTRIA Y COMERCIO', 6, 'D'),
+    ('6', 'COSTOS DE VENTAS', 1, 'D'),
+    ('61', 'COSTO DE VENTAS Y DE PRESTACIÓN DE SERVICIOS', 2, 'D'),
+    ('6135', 'COMERCIO AL POR MAYOR Y AL POR MENOR', 4, 'D'),
+    ('613505', 'COSTO DE MERCANCÍAS VENDIDAS', 6, 'D'),
+    # ... se puede extender tanto como necesites
+
+
+    
+]

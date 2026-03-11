@@ -19,14 +19,74 @@
 (function (w, d) {
   'use strict';
 
-  const MOD = '[cuentas.page]';
+  const MOD = 'cuentas';
   const TABLE_SELECTOR = '#grid-cuentas';
   const SEARCH_SELECTOR = '#search-cuenta';
-  const API_URL = '/api/v1/contabilidad/cuentas-contables/';
+  const ROUTES_MODULE = 'contabilidad.cuentas';  // ⚠️ v2.61: Usar Routes para descubrir URLs
   const TAB_ID = '#subtab-cuentas';
   const ERROR_CONTAINER_ID = '#error-container-cuentas';
   const OFFCANVAS_CONTAINER_ID = '#offcanvas-container-cuentas';
-  let table = null;
+  
+  // Estado del módulo
+  let state = {
+    initialized: false,
+    listenersAttached: false,
+    table: null,
+    urls: { collection: null }
+  };
+
+  /**
+   * Descubrir URL de colección usando Routes
+   * ⚠️ v2.61: Usar Routes helper centralizado (patrón asientos.page.js)
+   */
+  async function discoverCollectionUrl() {
+    if (state.urls.collection) {
+      return state.urls.collection;
+    }
+    
+    console.info(`[${MOD}.page] Descubriendo URL de colección usando Routes:`, ROUTES_MODULE);
+    
+    try {
+      // Usar Routes para obtener la URL de colección
+      if (window.Routes && typeof window.Routes.collectionUrl === 'function') {
+        const collectionUrl = await window.Routes.collectionUrl(ROUTES_MODULE);
+        if (collectionUrl) {
+          state.urls.collection = collectionUrl;
+          console.info(`[${MOD}.page] state.urls.collection descubierta desde Routes:`, state.urls.collection);
+          return state.urls.collection;
+        }
+      }
+      
+      // Fallback: usar ruta estándar
+      const fallbackUrl = '/api/v1/contabilidad/cuentas-contables/';
+      state.urls.collection = window.API_HELPERS?.withTrailingSlash(fallbackUrl) || fallbackUrl;
+      console.warn(`[${MOD}.page] Routes no disponible, usando fallback:`, state.urls.collection);
+      return state.urls.collection;
+    } catch (err) {
+      console.error(`[${MOD}.page] Error descubriendo URL de colección:`, err);
+      // Fallback: usar ruta estándar
+      const fallbackUrl = '/api/v1/contabilidad/cuentas-contables/';
+      state.urls.collection = window.API_HELPERS?.withTrailingSlash(fallbackUrl) || fallbackUrl;
+      return state.urls.collection;
+    }
+  }
+
+  /**
+   * Construir URL de detalle para una cuenta
+   * @param {string|number} id - ID de la cuenta
+   * @returns {string} URL de detalle
+   */
+  async function cuentaDetailUrl(id) {
+    if (!state.urls.collection) {
+      await discoverCollectionUrl();
+    }
+    if (!state.urls.collection) {
+      console.warn(`[${MOD}.page] state.urls.collection no descubierta, usando fallback`);
+      const fallbackUrl = '/api/v1/contabilidad/cuentas-contables/';
+      return window.API_HELPERS?.buildDetailUrl(fallbackUrl, id) || `${fallbackUrl}${id}/`;
+    }
+    return window.API_HELPERS?.buildDetailUrl(state.urls.collection, id) || `${state.urls.collection}${id}/`;
+  }
 
   // Helper: Formatear fecha
   function formatDateTime(isoStr) {
@@ -128,7 +188,7 @@
   }
 
   // ⚠️ v2.60: Inicializar Tabulator usando TabulatorFactory
-  function initTabulator() {
+  async function initTabulator() {
     if (!w.TabulatorFactory) {
       console.error(MOD, 'TabulatorFactory no está disponible');
       return null;
@@ -140,10 +200,13 @@
       return null;
     }
 
+    // ⚠️ v2.61: Descubrir URL antes de crear tabla
+    const apiUrl = await discoverCollectionUrl();
+    
     // ⚠️ v2.60: Usar TabulatorFactory v2.40
-    table = w.TabulatorFactory.create(
+    state.table = w.TabulatorFactory.create(
       TABLE_SELECTOR,
-      API_URL,
+      apiUrl,
       getColumns(),
       {
         searchInputSelector: SEARCH_SELECTOR,
@@ -151,7 +214,7 @@
       }
     );
 
-    return table;
+    return state.table;
   }
 
   // ⚠️ v2.60: Manejar apertura de offcanvas después de carga HTMX
@@ -173,7 +236,7 @@
   // ⚠️ v2.60: Event delegation para acciones de tabla
   function attachTableListeners() {
     // Ver detalle
-    d.addEventListener('click', (ev) => {
+    d.addEventListener('click', async (ev) => {
       const btn = ev.target.closest('.btn-ver-cuenta');
       if (btn) {
         ev.preventDefault();
@@ -181,7 +244,8 @@
         if (id) {
           // Cargar offcanvas de detalle vía HTMX
           if (typeof htmx !== 'undefined') {
-            htmx.ajax('GET', `${API_URL}${id}/render-offcanvas/detalle/`, {
+            const detailUrl = await cuentaDetailUrl(id);
+            htmx.ajax('GET', `${detailUrl}render-offcanvas/detalle/`, {
               target: OFFCANVAS_CONTAINER_ID,
               swap: 'innerHTML'
             }).then(() => {
@@ -193,7 +257,7 @@
     });
 
     // Editar
-    d.addEventListener('click', (ev) => {
+    d.addEventListener('click', async (ev) => {
       const btn = ev.target.closest('.btn-editar-cuenta');
       if (btn) {
         ev.preventDefault();
@@ -201,7 +265,8 @@
         if (id) {
           // Cargar offcanvas de edición vía HTMX
           if (typeof htmx !== 'undefined') {
-            htmx.ajax('GET', `${API_URL}${id}/render-offcanvas/editar/`, {
+            const detailUrl = await cuentaDetailUrl(id);
+            htmx.ajax('GET', `${detailUrl}render-offcanvas/editar/`, {
               target: OFFCANVAS_CONTAINER_ID,
               swap: 'innerHTML'
             }).then(() => {
@@ -269,7 +334,8 @@
       }
     }
 
-    const url = mode === 'create' ? API_URL : `${API_URL}${formData.get('id')}/`;
+    const collectionUrl = await discoverCollectionUrl();
+    const url = mode === 'create' ? collectionUrl : await cuentaDetailUrl(formData.get('id'));
     const method = mode === 'create' ? 'POST' : 'PATCH';
 
     try {
@@ -292,8 +358,8 @@
       }
 
       // Recargar tabla
-      if (table && typeof table.replaceData === 'function') {
-        table.replaceData();
+      if (state.table && typeof state.table.replaceData === 'function') {
+        state.table.replaceData();
       }
 
       // Cerrar offcanvas
@@ -326,7 +392,8 @@
     }
 
     try {
-      const response = await w.http(`${API_URL}${id}/`, {
+      const deleteUrl = await cuentaDetailUrl(id);
+      const response = await w.http(deleteUrl, {
         method: 'DELETE'
       });
 
@@ -341,8 +408,8 @@
       }
 
       // Recargar tabla
-      if (table && typeof table.replaceData === 'function') {
-        table.replaceData();
+      if (state.table && typeof state.table.replaceData === 'function') {
+        state.table.replaceData();
       }
 
       // Mostrar feedback de éxito
@@ -362,8 +429,8 @@
     const btnRefresh = d.querySelector('#btn-refrescar-cuentas');
     if (btnRefresh) {
       btnRefresh.addEventListener('click', () => {
-        if (table && typeof table.replaceData === 'function') {
-          table.replaceData();
+        if (state.table && typeof state.table.replaceData === 'function') {
+          state.table.replaceData();
         }
       });
     }
@@ -382,8 +449,8 @@
     }
 
     // Inicializar tabla cuando el tab sea visible
-    w.DOMUtils.onVisibleOnce(TAB_ID, () => {
-      table = initTabulator();
+    w.DOMUtils.onVisibleOnce(TAB_ID, async () => {
+      state.table = await initTabulator();
       attachTableListeners();
       attachOffcanvasListeners();
       attachRefreshListener();
@@ -407,8 +474,8 @@
     w.AppCuentas = Object.freeze({
       init,
       reload: () => {
-        if (table && typeof table.replaceData === 'function') {
-          table.replaceData();
+        if (state.table && typeof state.table.replaceData === 'function') {
+          state.table.replaceData();
         } else {
           init();
         }

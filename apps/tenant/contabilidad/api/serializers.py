@@ -10,7 +10,12 @@ Serializers para la app contabilidad.
 Referencia: https://www.django-rest-framework.org/api-guide/serializers/
 """
 from rest_framework import serializers
-from apps.tenant.contabilidad.models import CuentaContable, AsientoContable, MovimientoContable
+from apps.tenant.contabilidad.models import (
+    CuentaContable, 
+    AsientoContable, 
+    MovimientoContable,
+    CatalogoMaestroNIIF
+)
 # Importar directamente desde services.py para evitar circularidad con services/__init__.py
 import importlib.util
 from pathlib import Path
@@ -55,11 +60,20 @@ class CuentaContableDetailSerializer(serializers.ModelSerializer):
     Serializer completo para detalle de cuenta contable.
     
     ⚠️ v2.37: Alineado con CUENTA_DETAIL_FIELDS del service.
+    ⚠️ v2.61: Incluye catalogo_referencia anidado para mostrar información del catálogo NIIF.
     """
+    catalogo_referencia_detalle = serializers.SerializerMethodField()
+    
     class Meta:
         model = CuentaContable
-        fields = CUENTA_DETAIL_FIELDS
+        fields = tuple(CUENTA_DETAIL_FIELDS) + ('catalogo_referencia', 'catalogo_referencia_detalle')
         read_only_fields = ['id', 'created_at']
+    
+    def get_catalogo_referencia_detalle(self, obj):
+        """Retorna información detallada del catálogo NIIF si existe referencia."""
+        if obj.catalogo_referencia:
+            return CatalogoMaestroNIIFNestedSerializer(obj.catalogo_referencia).data
+        return None
 
 
 class MovimientoContableListSerializer(serializers.ModelSerializer):
@@ -170,3 +184,71 @@ class AsientoContableDetailSerializer(serializers.ModelSerializer):
         """
         # La validación de cuadratura y periodos cerrados se hace en el servicio
         return data
+
+
+# ═══════════════════════════════════════════════════════════════
+# CATÁLOGO MAESTRO NIIF - Serializers
+# ═══════════════════════════════════════════════════════════════
+
+class CatalogoMaestroNIIFListSerializer(serializers.ModelSerializer):
+    """
+    Serializer mínimo para listado del Catálogo Maestro NIIF.
+    
+    ⚠️ v2.61: Catálogo oficial NIIF Colombia (SSoT).
+    ⚠️ POLÍTICA: Solo lectura - Los datos se auto-setean desde choices.py.
+    """
+    tipo_cuenta = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CatalogoMaestroNIIF
+        fields = ('id', 'codigo', 'nombre', 'nivel', 'naturaleza', 'tipo_cuenta', 'activa')
+        read_only_fields = ('id', 'nombre', 'nivel', 'naturaleza', 'tipo_cuenta', 'created_at')
+    
+    def get_tipo_cuenta(self, obj):
+        """Retorna el tipo de cuenta basado en el primer dígito del código."""
+        return obj.get_tipo_cuenta()
+
+
+class CatalogoMaestroNIIFDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo para detalle del Catálogo Maestro NIIF.
+    
+    ⚠️ v2.61: Catálogo oficial NIIF Colombia (SSoT).
+    ⚠️ POLÍTICA: Solo lectura - Los datos se auto-setean desde choices.py.
+    """
+    tipo_cuenta = serializers.SerializerMethodField()
+    cuentas_vinculadas_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CatalogoMaestroNIIF
+        fields = (
+            'id', 'codigo', 'nombre', 'nivel', 'naturaleza', 
+            'tipo_cuenta', 'activa', 'created_at', 'cuentas_vinculadas_count'
+        )
+        read_only_fields = ('id', 'nombre', 'nivel', 'naturaleza', 'tipo_cuenta', 'created_at')
+    
+    def get_tipo_cuenta(self, obj):
+        """Retorna el tipo de cuenta basado en el primer dígito del código."""
+        return obj.get_tipo_cuenta()
+    
+    def get_cuentas_vinculadas_count(self, obj):
+        """Retorna el número de cuentas del tenant vinculadas a esta cuenta del catálogo."""
+        return obj.cuentas_vinculadas.count()
+
+
+class CatalogoMaestroNIIFNestedSerializer(serializers.ModelSerializer):
+    """
+    Serializer anidado para mostrar información del catálogo en CuentaContable.
+    
+    ⚠️ v2.61: Usado en CuentaContableDetailSerializer para mostrar la referencia NIIF.
+    """
+    tipo_cuenta = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CatalogoMaestroNIIF
+        fields = ('id', 'codigo', 'nombre', 'nivel', 'naturaleza', 'tipo_cuenta')
+        read_only_fields = fields
+    
+    def get_tipo_cuenta(self, obj):
+        """Retorna el tipo de cuenta basado en el primer dígito del código."""
+        return obj.get_tipo_cuenta()

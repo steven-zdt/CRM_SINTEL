@@ -1,9 +1,9 @@
 """
 ViewSets para la app contabilidad.
 
-⚠️ v2.40: ENFORCED MODE implementado.
+⚠️ v2.60: ENFORCED MODE implementado.
 POST/PATCH/PUT/DELETE solo para STAFF/ADMIN; no-staff recibe 405.
-⚠️ v2.37: Alineado con Service Layer Pattern.
+⚠️ v2.60: Alineado con Service Layer Pattern.
 ⚠️ IMPORTANTE: 
 - django-tenants maneja automáticamente el aislamiento por esquema
 - NO es necesario filtrar manualmente por tenant_id
@@ -23,12 +23,19 @@ from django.db.models import Q
 import logging
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly
-from apps.tenant.contabilidad.models import CuentaContable, AsientoContable, MovimientoContable, PeriodoContable
+from apps.tenant.contabilidad.models import (
+    CuentaContable, 
+    AsientoContable, 
+    MovimientoContable, 
+    PeriodoContable,
+    CatalogoMaestroNIIF
+)
 from apps.tenant.contabilidad.services import (
     qs_cuenta_list, qs_cuenta_detail,
-    qs_asiento_list, qs_asiento_detail,
-    get_balance_prueba, verificar_periodo_cerrado
+    qs_asiento_list, qs_asiento_detail
 )
+# ⚠️ v2.61: NO importar verificar_periodo_cerrado y get_balance_prueba aquí
+# Se importarán localmente dentro de las funciones que las necesiten para evitar circular import
 from apps.tenant.contabilidad.services.asientos_service import (
     aprobar_asiento,
     create_asiento,
@@ -49,6 +56,8 @@ from apps.tenant.contabilidad.api.serializers import (
     AsientoContableListSerializer,
     MovimientoContableListSerializer,
     MovimientoContableDetailSerializer,
+    CatalogoMaestroNIIFListSerializer,
+    CatalogoMaestroNIIFDetailSerializer,
 )
 from apps.config.api.pagination import StandardResultsSetPagination
 
@@ -348,10 +357,10 @@ class CuentaContableViewSet(BaseTenantViewSet):
         - GET /api/v1/contabilidad/cuentas-contables/render-offcanvas/crear/ → Modo creación
         
         Returns:
-            Template HTML: tenant/contabilidad/partials/cuenta_offcanvas_form.html
+            Template HTML: tenant/core/contabilidad/partials/cuenta_offcanvas_form.html
         """
         context = {'cuenta': None}
-        return Response(context, template_name='tenant/contabilidad/partials/cuenta_offcanvas_form.html')
+        return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_form.html')
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
     def render_offcanvas_editar(self, request, pk=None):
@@ -362,12 +371,12 @@ class CuentaContableViewSet(BaseTenantViewSet):
         - GET /api/v1/contabilidad/cuentas-contables/{id}/render-offcanvas/editar/ → Modo edición
         
         Returns:
-            Template HTML: tenant/contabilidad/partials/cuenta_offcanvas_form.html
+            Template HTML: tenant/core/contabilidad/partials/cuenta_offcanvas_form.html
         """
         cuenta = self.get_object()
         serializer = self.get_serializer(cuenta)
         context = {'cuenta': serializer.data}
-        return Response(context, template_name='tenant/contabilidad/partials/cuenta_offcanvas_form.html')
+        return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_form.html')
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
     def render_offcanvas_detalle(self, request, pk=None):
@@ -378,12 +387,12 @@ class CuentaContableViewSet(BaseTenantViewSet):
         - GET /api/v1/contabilidad/cuentas-contables/{id}/render-offcanvas/detalle/ → Modo lectura
         
         Returns:
-            Template HTML: tenant/contabilidad/partials/cuenta_offcanvas_detalle.html
+            Template HTML: tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html
         """
         cuenta = self.get_object()
         serializer = self.get_serializer(cuenta)
         context = {'cuenta': serializer.data}
-        return Response(context, template_name='tenant/contabilidad/partials/cuenta_offcanvas_detalle.html')
+        return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html')
 
 
 class AsientoContableViewSet(BaseTenantViewSet):
@@ -734,6 +743,9 @@ class AsientoContableViewSet(BaseTenantViewSet):
         Returns:
             JSON con balance agrupado por cuenta
         """
+        # ⚠️ v2.61: Importación local para evitar circular import
+        from apps.tenant.contabilidad.services import get_balance_prueba
+        
         empresa_id = request.query_params.get('empresa_id')
         if empresa_id:
             try:
@@ -761,10 +773,10 @@ class AsientoContableViewSet(BaseTenantViewSet):
         - GET /api/v1/contabilidad/asientos-contables/render-offcanvas/crear/ → Modo creación
         
         Returns:
-            Template HTML: tenant/contabilidad/partials/asiento_offcanvas_form.html
+            Template HTML: tenant/core/contabilidad/partials/asiento_offcanvas_form.html
         """
         context = {'asiento': None}
-        return Response(context, template_name='tenant/contabilidad/partials/asiento_offcanvas_form.html')
+        return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_form.html')
     
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/cargar-desde-documentos')
     def render_offcanvas_cargar_desde_documentos(self, request):
@@ -774,10 +786,10 @@ class AsientoContableViewSet(BaseTenantViewSet):
         ⚠️ v2.60 Fase 3: Asistente de Selección - Lista Facturas y Gastos sin asiento
         
         Returns:
-            Template HTML: tenant/contabilidad/partials/asiento_offcanvas_cargar_desde_docs.html
+            Template HTML: tenant/core/contabilidad/partials/asiento_offcanvas_cargar_desde_docs.html
         """
         context = {}
-        return Response(context, template_name='tenant/contabilidad/partials/asiento_offcanvas_cargar_desde_docs.html')
+        return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_cargar_desde_docs.html')
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
     def render_offcanvas_editar(self, request, pk=None):
@@ -788,12 +800,12 @@ class AsientoContableViewSet(BaseTenantViewSet):
         - GET /api/v1/contabilidad/asientos-contables/{id}/render-offcanvas/editar/ → Modo edición
         
         Returns:
-            Template HTML: tenant/contabilidad/partials/asiento_offcanvas_form.html
+            Template HTML: tenant/core/contabilidad/partials/asiento_offcanvas_form.html
         """
         asiento = self.get_object()
         serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
         context = {'asiento': serializer.data}
-        return Response(context, template_name='tenant/contabilidad/partials/asiento_offcanvas_form.html')
+        return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_form.html')
     
     @action(detail=False, methods=['get'], url_path='documentos-sin-asiento')
     def documentos_sin_asiento(self, request):
@@ -862,14 +874,14 @@ class AsientoContableViewSet(BaseTenantViewSet):
         - id: ID del asiento (requerido)
         
         Returns:
-            Template HTML: tenant/contabilidad/partials/asiento_offcanvas_detalle.html
+            Template HTML: tenant/core/contabilidad/partials/asiento_offcanvas_detalle.html
         """
         asiento_id = request.query_params.get('id')
         context = {}
         
         if not asiento_id:
             context['error'] = "Se requiere el parámetro 'id' para el modo detalle."
-            return Response(context, template_name='tenant/contabilidad/partials/asiento_offcanvas_detalle.html')
+            return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_detalle.html')
         
         try:
             asiento = self.get_queryset().get(id=asiento_id)
@@ -881,7 +893,7 @@ class AsientoContableViewSet(BaseTenantViewSet):
         except Exception as e:
             context['error'] = f"Error al cargar asiento: {str(e)}"
         
-        return Response(context, template_name='tenant/contabilidad/partials/asiento_offcanvas_detalle.html')
+        return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_detalle.html')
 
 
 class MovimientoContableViewSet(viewsets.ModelViewSet):
@@ -925,9 +937,184 @@ class MovimientoContableViewSet(viewsets.ModelViewSet):
         return qs.order_by('asiento', 'orden')
 
 
+class CatalogoMaestroNIIFViewSet(BaseTenantViewSet):
+    """
+    ViewSet para CatalogoMaestroNIIF (Catálogo oficial NIIF Colombia).
+    
+    ⚠️ v2.61: Catálogo Maestro NIIF Colombia (SSoT).
+    ⚠️ POLÍTICA: Solo lectura para usuarios normales. Solo ADMIN puede crear/editar.
+    ⚠️ AUTO-SETEO: Al crear, solo se requiere el campo 'codigo'. Los demás campos se auto-completan.
+    
+    Endpoints:
+    - GET /api/v1/core/v1/contabilidad/catalogo-niif/ - Listado del catálogo
+    - GET /api/v1/core/v1/contabilidad/catalogo-niif/{id}/ - Detalle de cuenta del catálogo
+    - POST /api/v1/core/v1/contabilidad/catalogo-niif/ - Crear cuenta (solo ADMIN)
+    """
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [permissions.IsAuthenticated, IsTenantAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['nivel', 'naturaleza', 'activa']
+    search_fields = ['codigo', 'nombre']
+    ordering_fields = ['codigo', 'nombre', 'nivel']
+    ordering = ['codigo']
+    
+    def get_serializer_class(self):
+        """Selecciona el serializer según la acción."""
+        if self.action == "retrieve":
+            return CatalogoMaestroNIIFDetailSerializer
+        return CatalogoMaestroNIIFListSerializer
+    
+    def get_queryset(self):
+        """
+        QuerySet optimizado para el catálogo NIIF.
+        
+        ⚠️ v2.61: El catálogo es compartido por todos los tenants (cada tenant tiene su copia).
+        """
+        if self.action == "list":
+            # Campos mínimos para LIST
+            return CatalogoMaestroNIIF.objects.only(
+                'id', 'codigo', 'nombre', 'nivel', 'naturaleza', 'activa'
+            ).order_by('codigo')
+        elif self.action == "retrieve":
+            # Campos completos para RETRIEVE con prefetch de cuentas vinculadas
+            return CatalogoMaestroNIIF.objects.prefetch_related('cuentas_vinculadas')
+        else:
+            # Para create/update/delete necesitamos todos los campos
+            return CatalogoMaestroNIIF.objects.all()
+    
+    def create(self, request, *args, **kwargs):
+        """
+        Crea una nueva cuenta en el catálogo NIIF.
+        
+        ⚠️ AUTO-SETEO: Solo se requiere el campo 'codigo'.
+        Los campos nombre, nivel y naturaleza se auto-completan desde CATALOGO_NIIF_COLOMBIA.
+        
+        Body:
+        {
+            "codigo": "1110"  // Solo se requiere el código
+        }
+        
+        Response:
+        {
+            "id": 1,
+            "codigo": "1110",
+            "nombre": "BANCOS",  // Auto-seteado
+            "nivel": 4,  // Auto-seteado
+            "naturaleza": "D",  // Auto-seteado
+            "tipo_cuenta": "ACTIVO",
+            "activa": true
+        }
+        """
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            # El método save() del modelo se encarga del auto-seteo
+            self.perform_create(serializer)
+            
+            headers = self.get_success_headers(serializer.data)
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED,
+                headers=headers
+            )
+        except ValueError as e:
+            # Error de validación del catálogo (código no existe en CATALOGO_NIIF_COLOMBIA)
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=False, methods=['get'], url_path='por-nivel/(?P<nivel>[0-9]+)')
+    def por_nivel(self, request, nivel=None):
+        """
+        Filtra cuentas del catálogo por nivel.
+        
+        GET /api/v1/core/v1/contabilidad/catalogo-niif/por-nivel/1/  - Nivel 1 (Clases)
+        GET /api/v1/core/v1/contabilidad/catalogo-niif/por-nivel/2/  - Nivel 2 (Grupos)
+        GET /api/v1/core/v1/contabilidad/catalogo-niif/por-nivel/4/  - Nivel 4 (Cuentas)
+        GET /api/v1/core/v1/contabilidad/catalogo-niif/por-nivel/6/  - Nivel 6 (Subcuentas)
+        """
+        queryset = self.get_queryset().filter(nivel=int(nivel))
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='buscar-por-tipo')
+    def buscar_por_tipo(self, request):
+        """
+        Busca cuentas del catálogo NIIF filtradas por tipo de cuenta.
+        
+        Query params:
+        - tipo: ACTIVO, PASIVO, PATRIMONIO, INGRESO, GASTO, COSTO
+        - search: Búsqueda por código o nombre (opcional)
+        - nivel: Filtro por nivel (opcional)
+        
+        GET /api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?tipo=ACTIVO
+        GET /api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?tipo=ACTIVO&search=banco
+        GET /api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?tipo=ACTIVO&nivel=4
+        """
+        tipo = request.query_params.get('tipo', None)
+        search = request.query_params.get('search', '')
+        nivel = request.query_params.get('nivel', None)
+        
+        if not tipo:
+            return Response(
+                {'error': 'El parámetro "tipo" es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Mapeo de tipo a primer dígito del código
+        tipo_map = {
+            'ACTIVO': '1',
+            'PASIVO': '2',
+            'PATRIMONIO': '3',
+            'INGRESO': '4',
+            'GASTO': '5',
+            'COSTO': '6',
+        }
+        
+        primer_digito = tipo_map.get(tipo.upper())
+        if not primer_digito:
+            return Response(
+                {'error': f'Tipo inválido: {tipo}. Valores permitidos: ACTIVO, PASIVO, PATRIMONIO, INGRESO, GASTO, COSTO'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Filtrar por primer dígito del código
+        queryset = self.get_queryset().filter(codigo__startswith=primer_digito, activa=True)
+        
+        # Aplicar búsqueda si se proporciona
+        if search:
+            queryset = queryset.filter(
+                Q(codigo__icontains=search) | Q(nombre__icontains=search)
+            )
+        
+        # Aplicar filtro de nivel si se proporciona
+        if nivel:
+            queryset = queryset.filter(nivel=int(nivel))
+        
+        # Paginar resultados
+        page = self.paginate_queryset(queryset)
+        
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
 # Lista de ViewSets para registro automático en el router
 VIEWSETS = [
     (r'cuentas-contables', CuentaContableViewSet, 'cuenta-contable'),
     (r'asientos-contables', AsientoContableViewSet, 'asiento-contable'),
     (r'movimientos-contables', MovimientoContableViewSet, 'movimiento-contable'),
+    (r'catalogo-niif', CatalogoMaestroNIIFViewSet, 'catalogo-niif'),
 ]

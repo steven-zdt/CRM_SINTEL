@@ -18,7 +18,8 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from decimal import Decimal
 import logging
-from apps.tenant.contabilidad.services import verificar_periodo_cerrado
+# ⚠️ v2.61: Importación local de verificar_periodo_cerrado para evitar circular import
+# Se importa dentro de las funciones que la necesitan
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,8 @@ def create_asiento(data: Dict[str, Any]) -> Dict[str, Any]:
         
         empresa_id = data.get('empresa')
         if empresa_id:
+            # ⚠️ v2.61: Importación local para evitar circular import
+            from apps.tenant.contabilidad.services import verificar_periodo_cerrado
             esta_cerrado, periodo = verificar_periodo_cerrado(fecha, empresa_id)
             if esta_cerrado:
                 raise ValidationError({
@@ -392,6 +395,8 @@ def update_asiento(asiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
         
         empresa_id = asiento.empresa.id if asiento.empresa else None
         if empresa_id:
+            # ⚠️ v2.61: Importación local para evitar circular import
+            from apps.tenant.contabilidad.services import verificar_periodo_cerrado
             esta_cerrado, periodo = verificar_periodo_cerrado(fecha, empresa_id)
             if esta_cerrado:
                 raise ValidationError({

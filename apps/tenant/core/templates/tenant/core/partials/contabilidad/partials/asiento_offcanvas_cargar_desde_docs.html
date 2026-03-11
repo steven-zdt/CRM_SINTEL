@@ -1,0 +1,58 @@
+{% load static %}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-asiento-cargar-desde-documentos" aria-labelledby="offcanvas-asiento-cargar-desde-documentos-label" style="width: 90%; max-width: 900px;">
+  <div class="offcanvas-header border-bottom bg-primary text-white">
+    <h5 class="offcanvas-title" id="offcanvas-asiento-cargar-desde-documentos-label">
+      <i class="bi bi-file-earmark-plus me-2"></i>Cargar Asientos desde Documentos
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body">
+    <div id="feedback-asiento-cargar-desde-documentos" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    {% include 'tenant/core/partials/error_handler.html' %}
+
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <select id="filter-docs-sin-asiento" class="form-select form-select-sm" style="width: auto;">
+        <option value="">Todos</option>
+        <option value="facturas">Facturas</option>
+        <option value="gastos">Gastos</option>
+      </select>
+
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-refrescar-docs-sin-asiento"
+              hx-get="/api/v1/contabilidad/asientos-contables/documentos-sin-asiento/"
+              hx-target="#docs-sin-asiento-container"
+              hx-swap="innerHTML">
+        <i class="bi bi-arrow-clockwise"></i> Refrescar
+      </button>
+
+      <div class="ms-auto">
+        <button type="button" class="btn btn-sm btn-primary" id="btn-crear-asientos-desde-documentos" disabled>
+          <i class="bi bi-check2-square me-1"></i> Crear Asientos
+        </button>
+      </div>
+    </div>
+
+    <div class="alert alert-info small">
+      Selecciona facturas y/o gastos sin asiento para materializar asientos contables.
+    </div>
+
+    <div id="docs-sin-asiento-container" class="border rounded p-2 bg-light" style="min-height: 240px;">
+      <div class="text-muted small">Cargando documentos...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    if (!window.htmx) return;
+    try {
+      htmx.ajax('GET', '/api/v1/contabilidad/asientos-contables/documentos-sin-asiento/', { target: '#docs-sin-asiento-container', swap: 'innerHTML' });
+    } catch (e) {}
+
+    const el = document.getElementById('offcanvas-asiento-cargar-desde-documentos');
+    if (el && window.bootstrap && window.bootstrap.Offcanvas) {
+      window.bootstrap.Offcanvas.getOrCreateInstance(el).show();
+    }
+  })();
+</script>

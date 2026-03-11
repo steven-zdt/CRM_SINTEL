@@ -1,0 +1,22 @@
+{# list_periodos.html - Listado de Períodos Contables v2.61 #}
+{# ⚠️ Feature-Sliced Design: Template dedicado exclusivamente para listado de PeriodoContable #}
+{# ⚠️ Tabulator: Tabla reactiva con paginación remota #}
+
+{% load static %}
+
+<div id="grid-periodos" class="tabulator-table"></div>
+
+<script>
+  // Inicializar tabla cuando el DOM esté listo
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.PeriodosPage) {
+        window.PeriodosPage.initTabulator();
+      }
+    });
+  } else {
+    if (window.PeriodosPage) {
+      window.PeriodosPage.initTabulator();
+    }
+  }
+</script>

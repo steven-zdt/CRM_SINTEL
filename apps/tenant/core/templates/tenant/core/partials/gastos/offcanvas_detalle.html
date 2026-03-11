@@ -1,0 +1,107 @@
+{% load static %}
+{# offcanvas_detalle.html - Vista inmutable de detalle de gasto v2.60 #}
+{# ⚠️ Feature-Sliced Architecture: Template dedicado para visualización #}
+{# ⚠️ HTMX: Cargado dinámicamente desde gestor-offcanvas endpoint #}
+{# ⚠️ INMUTABLE: Solo lectura, no permite edición #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-gasto-detalle" aria-labelledby="offcanvas-gasto-detalle-label" style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-dark text-white">
+    <h5 class="offcanvas-title" id="offcanvas-gasto-detalle-label">
+      <i class="bi bi-shield-lock me-2"></i>Evidencia Legal del Gasto
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  
+  <div class="offcanvas-body" id="detail-content-gastos">
+    {% if error %}
+      <div class="alert alert-warning mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+      </div>
+    {% elif gasto %}
+      {% with ds=gasto.documento_soporte %}
+      <div class="row">
+        <div class="col-md-6">
+          <h6>Evidencia Legal</h6>
+          <table class="table table-sm">
+            <tr><th>Documento:</th><td>{{ ds.prefijo }}-{{ ds.consecutivo }}</td></tr>
+            <tr><th>Fecha:</th><td>{{ ds.fecha|date:"d/m/Y H:i" }}</td></tr>
+            <tr><th>Vendedor:</th><td>{{ ds.vendedor_nombre|default:"N/A" }}</td></tr>
+            <tr><th>NIT:</th><td>{{ ds.vendedor_nit|default:"N/A" }}</td></tr>
+            <tr><th>Estado:</th><td>
+              {% if ds.anulado %}
+                <b class="text-danger">ANULADO</b>
+              {% elif ds.activo %}
+                <b class="text-success">ACTIVO</b>
+              {% else %}
+                <b class="text-warning">INACTIVO</b>
+              {% endif %}
+            </td></tr>
+          </table>
+        </div>
+        <div class="col-md-6">
+          <h6>Valores Monetarios</h6>
+          <table class="table table-sm">
+            <tr><th>Subtotal:</th><td>${{ ds.subtotal|floatformat:2|default:"0.00" }}</td></tr>
+            <tr>
+              <th>Retefuente:</th>
+              <td>
+                ${{ ds.retefuente|floatformat:2|default:"0.00" }}
+                {% if ds.retefuente_porcentaje %}
+                  {% widthratio ds.retefuente_porcentaje 1 100 as retefuente_pct %}
+                  <small class="text-muted d-block">({{ retefuente_pct }}%)</small>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th>ReteICA:</th>
+              <td>
+                ${{ ds.reteica|floatformat:2|default:"0.00" }}
+                {% if ds.reteica_porcentaje %}
+                  {% widthratio ds.reteica_porcentaje 1 100 as reteica_pct %}
+                  <small class="text-muted d-block">({{ reteica_pct }}%)</small>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th>Total Retenciones:</th>
+              <td id="total-retenciones-display">
+                <script>
+                  // Calcular total de retenciones en JavaScript
+                  (function() {
+                    const retefuente = parseFloat('{{ ds.retefuente|default:0 }}') || 0;
+                    const reteica = parseFloat('{{ ds.reteica|default:0 }}') || 0;
+                    const total = retefuente + reteica;
+                    const formatter = new Intl.NumberFormat('es-CO', {
+                      style: 'currency',
+                      currency: 'COP',
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    });
+                    document.getElementById('total-retenciones-display').textContent = formatter.format(total);
+                  })();
+                </script>
+              </td>
+            </tr>
+            <tr class="table-active"><th>Total Neto:</th><td><b>${{ ds.total|floatformat:2|default:"0.00" }}</b></td></tr>
+          </table>
+        </div>
+      </div>
+      <hr>
+      <h6>Clasificación Contable</h6>
+      <p><b>Categoría:</b> {{ gasto.categoria_contable|default:"N/A" }} | <b>Centro de Costo:</b> {{ gasto.centro_costo|default:"N/A" }}</p>
+      <p><b>Periodo:</b> {{ gasto.periodo|default:"N/A" }}</p>
+      <p><b>Descripción:</b> {{ gasto.descripcion|default:"Sin descripción" }}</p>
+      {% endwith %}
+    {% else %}
+      <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">Cargando documento soporte...</p>
+      </div>
+    {% endif %}
+  </div>
+  
+  <div class="offcanvas-footer bg-light border-top p-3">
+    <div class="d-flex justify-content-end">
+      <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="offcanvas">Cerrar</button>
+    </div>
+  </div>
+</div>

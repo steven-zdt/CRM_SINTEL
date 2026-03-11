@@ -16,6 +16,136 @@ from decimal import Decimal
 from apps.tenant.empresa.models import Empresa  # SSoT empresa (singleton por tenant)
 
 
+class CatalogoMaestroNIIF(models.Model):
+    """
+    Catálogo Maestro de Cuentas NIIF para Colombia (SSoT).
+    
+    ⚠️ POLÍTICA:
+    - Este es el catálogo oficial NIIF Colombia (Single Source of Truth)
+    - NO pertenece a ningún tenant específico (es compartido)
+    - Las cuentas de los tenants (CuentaContable) pueden referenciar este catálogo
+    - Se puebla desde apps/tenant/contabilidad/choices/choices.py
+    
+    ⚠️ IMPORTANTE:
+    - Este modelo está en TENANT_APPS pero actúa como referencia estática
+    - Cada tenant tiene su propia copia del catálogo maestro
+    - Permite que cada tenant personalice su plan de cuentas anclado al estándar NIIF
+    
+    ⚠️ AUTO-SETEO:
+    - Solo se requiere el campo 'codigo' al crear una instancia
+    - Los campos nombre, nivel y naturaleza se auto-completan desde CATALOGO_NIIF_COLOMBIA
+    - Estos campos son editable=False para garantizar integridad del catálogo
+    """
+    NATURALEZA_CHOICES = [
+        ('D', _('Débito/Deudora')),
+        ('C', _('Crédito/Acreedora')),
+    ]
+    
+    codigo = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name=_('Código NIIF'),
+        help_text=_('Código oficial de la cuenta según NIIF Colombia')
+    )
+    nombre = models.CharField(
+        max_length=200,
+        editable=False,
+        verbose_name=_('Nombre Oficial'),
+        help_text=_('Nombre oficial de la cuenta según NIIF Colombia (auto-seteado desde catálogo)')
+    )
+    nivel = models.IntegerField(
+        editable=False,
+        verbose_name=_('Nivel'),
+        help_text=_('Nivel de la cuenta: 1 (Clase), 2 (Grupo), 4 (Cuenta), 6 (Subcuenta) (auto-seteado desde catálogo)')
+    )
+    naturaleza = models.CharField(
+        max_length=1,
+        choices=NATURALEZA_CHOICES,
+        editable=False,
+        verbose_name=_('Naturaleza'),
+        help_text=_('Naturaleza de la cuenta: D (Débito/Deudora), C (Crédito/Acreedora) (auto-seteado desde catálogo)')
+    )
+    activa = models.BooleanField(
+        default=True,
+        verbose_name=_('Activa'),
+        help_text=_('Indica si la cuenta está activa en el catálogo')
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Fecha de Creación')
+    )
+    
+    class Meta:
+        verbose_name = _('Catálogo Maestro NIIF')
+        verbose_name_plural = _('Catálogo Maestro NIIF')
+        ordering = ['codigo']
+        indexes = [
+            models.Index(fields=['codigo']),
+            models.Index(fields=['nivel']),
+        ]
+    
+    def __str__(self):
+        return f"{self.codigo} - {self.nombre}"
+    
+    def save(self, *args, **kwargs):
+        """
+        Sobrescribe save() para auto-setear nombre, nivel y naturaleza desde CATALOGO_NIIF_COLOMBIA.
+        
+        ⚠️ POLÍTICA DE AUTO-SETEO:
+        - Busca self.codigo en CATALOGO_NIIF_COLOMBIA
+        - Asigna automáticamente nombre, nivel y naturaleza
+        - Si el código no existe en el catálogo, lanza ValueError
+        - Garantiza integridad del catálogo oficial
+        
+        Raises:
+            ValueError: Si el código no existe en CATALOGO_NIIF_COLOMBIA
+        """
+        from apps.tenant.contabilidad.choices.choices import CATALOGO_NIIF_COLOMBIA
+        
+        # Buscar el código en el catálogo oficial
+        cuenta_catalogo = None
+        for codigo, nombre, nivel, naturaleza in CATALOGO_NIIF_COLOMBIA:
+            if codigo == self.codigo:
+                cuenta_catalogo = (codigo, nombre, nivel, naturaleza)
+                break
+        
+        # Validar que el código existe en el catálogo
+        if not cuenta_catalogo:
+            raise ValueError(
+                f"El código '{self.codigo}' no existe en CATALOGO_NIIF_COLOMBIA. "
+                f"Solo se pueden crear cuentas que existan en el catálogo oficial."
+            )
+        
+        # Auto-setear los campos desde el catálogo
+        self.nombre = cuenta_catalogo[1]
+        self.nivel = cuenta_catalogo[2]
+        self.naturaleza = cuenta_catalogo[3]
+        
+        # Guardar la instancia
+        super().save(*args, **kwargs)
+    
+    def get_tipo_cuenta(self):
+        """
+        Determina el tipo de cuenta basado en el primer dígito del código.
+        
+        Returns:
+            str: ACTIVO, PASIVO, PATRIMONIO, INGRESO, GASTO, COSTO
+        """
+        if not self.codigo:
+            return None
+        
+        primer_digito = self.codigo[0]
+        tipos = {
+            '1': 'ACTIVO',
+            '2': 'PASIVO',
+            '3': 'PATRIMONIO',
+            '4': 'INGRESO',
+            '5': 'GASTO',
+            '6': 'COSTO',
+        }
+        return tipos.get(primer_digito, None)
+
+
 class CuentaContable(models.Model):
     """
     Plan de cuentas contables (por tenant).
@@ -77,6 +207,16 @@ class CuentaContable(models.Model):
         related_name='cuentas_contables',
         verbose_name=_('Empresa'),
         help_text=_('Empresa propietaria de la cuenta contable (SSoT por tenant).')
+    )
+    # ⚠️ v2.61: Vinculación con Catálogo Maestro NIIF
+    catalogo_referencia = models.ForeignKey(
+        CatalogoMaestroNIIF,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cuentas_vinculadas',
+        verbose_name=_('Referencia Catálogo NIIF'),
+        help_text=_('Cuenta oficial del catálogo NIIF Colombia a la que está anclada esta cuenta personalizada')
     )
     activa = models.BooleanField(
         default=True,

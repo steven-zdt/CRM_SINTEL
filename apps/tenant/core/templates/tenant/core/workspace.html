@@ -166,7 +166,7 @@
         {# Contenedor de Contenido (Tab Content) #}
         <div class="tab-content" id="contabilidad-tab-content">
           <div class="tab-pane fade show active" id="subtab-cuentas" role="tabpanel" aria-labelledby="contabilidad-cuentas-tab">
-            {% include 'tenant/contabilidad/partials/list_cuentas.html' %}
+            {% include 'tenant/core/contabilidad/partials/list_cuentas.html' %}
           </div>
           <div class="tab-pane fade" id="subtab-asientos" role="tabpanel" aria-labelledby="contabilidad-asientos-tab">
             {% include 'tenant/core/partials/contabilidad/list_asientos.html' %}
@@ -201,6 +201,7 @@
 <div id="offcanvas-container-historial-nominas"></div>
 
 {# Módulo Contabilidad - Contenedores Offcanvas globales #}
+<div id="offcanvas-container-cuentas"></div>
 <div id="offcanvas-container-asientos"></div>
 
 {# ⚠️ v2.60: Módulo MailInboxConfig - Contenedor Offcanvas global para Configuraciones de Correo #}
@@ -323,7 +324,7 @@
 
   {% include 'tenant/core/partials/gastos/assets_gastos.html' %}
   {% include 'tenant/core/partials/cotizaciones/assets_cotizaciones.html' %}
-  {% include 'tenant/contabilidad/partials/assets_cuentas.html' %}
+  {% include 'tenant/core/contabilidad/partials/assets_cuentas.html' %}
   {% include 'tenant/core/partials/inventario/assets_inventario.html' %}
   {% include 'tenant/core/partials/clientes/assets_clientes.html' %}
   {% include 'tenant/core/partials/proveedores/assets_proveedores.html' %}

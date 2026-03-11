@@ -17,7 +17,8 @@ from apps.tenant.core.services.facturas import get_facturas_snapshot
 from apps.tenant.core.services.contabilidad import get_contabilidad_snapshot
 from apps.tenant.core.services.perfil import get_perfil_snapshot
 from apps.tenant.core.services.landing import get_landing_snapshot
-from apps.tenant.core.api.serializers_sections import DashboardSectionsSerializer
+# ⚠️ v2.61: Comentado - serializers_sections no existe
+# from apps.tenant.core.api.serializers_sections import DashboardSectionsSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -78,16 +79,20 @@ class CoreLinksViewSet(ViewSet):
                     "ui": "/dashboard/facturas/",  # Placeholder para UI futura
                 },
                 "contabilidad": {
-                    "api": "/api/v1/asientos-contables/",  # Endpoint principal de contabilidad
+                    "api": "/api/v1/core/v1/contabilidad/asientos/",  # Endpoint principal de contabilidad (facade)
                     "ui": "/dashboard/contabilidad/",  # Placeholder para UI futura
                 },
                 "cuentas-contables": {
-                    "api": "/api/v1/cuentas-contables/",
+                    "api": "/api/v1/core/v1/contabilidad/cuentas/",  # Facade
                     "ui": "/dashboard/contabilidad/cuentas/",  # Placeholder para UI futura
                 },
                 "asientos-contables": {
-                    "api": "/api/v1/asientos-contables/",
+                    "api": "/api/v1/core/v1/contabilidad/asientos/",  # Facade
                     "ui": "/dashboard/contabilidad/asientos/",  # Placeholder para UI futura
+                },
+                "catalogo-niif": {
+                    "api": "/api/v1/core/v1/contabilidad/catalogo-niif/",  # Facade
+                    "ui": "/dashboard/contabilidad/catalogo-niif/",  # Placeholder para UI futura
                 },
                 "perfil": {
                     "api": "/api/v1/perfil/perfiles/me/",
@@ -218,8 +223,8 @@ class DashboardSectionsViewSet(ViewSet):
                 },
             }
             
-            serializer = DashboardSectionsSerializer(data)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            # ⚠️ v2.61: Retornar datos directamente sin serializer (serializers_sections no existe)
+            return Response(data, status=status.HTTP_200_OK)
             
         except Exception as e:
             logger.error(

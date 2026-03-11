@@ -84,8 +84,10 @@ except (ImportError, AttributeError) as e:
     # Aunque falle, intentamos registrar una ruta mínima para evitar 404 completo
     # Esto permite que el error sea visible pero no bloquea el servidor
 
+# ⚠️ v2.61: Contabilidad expuesta directamente bajo /api/v1/contabilidad/
 try:
-    urlpatterns.append(path('', include('apps.tenant.contabilidad.api.urls')))
+    urlpatterns.append(path('contabilidad/', include('apps.tenant.contabilidad.api.urls')))
+    logger.info("✅ URLs de contabilidad registradas correctamente: /api/v1/contabilidad/")
 except (ImportError, AttributeError) as e:
     logger.warning(f"⚠️ No se pudieron cargar URLs de contabilidad: {e}")
 

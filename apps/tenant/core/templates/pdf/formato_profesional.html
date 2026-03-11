@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Cotización {{ cotizacion.codigo_unico|default:cotizacion.numero_cotizacion }}</title>
+    <style>
+        /* ⚠️ xhtml2pdf: CSS compatible - Solo propiedades básicas soportadas */
+        @page {
+            size: letter;
+            margin: 1.8cm 1.5cm 1.5cm 1.5cm;
+        }
+
+        /* ── Base ─────────────────────────────────────────────── */
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 9pt;
+            color: #1a2332;
+            line-height: 1.35;
+            margin: 0;
+            padding: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+
+        /* ── Barra superior de color ──────────────────────────── */
+        table.topbar-table {
+            margin-bottom: 0;
+        }
+        table.topbar-table td {
+            background-color: #1a3a5c;
+            height: 6px;
+            border: none;
+            padding: 0;
+        }
+
+        /* ── Header / Membrete ────────────────────────────────── */
+        table.header-table {
+            border-bottom: 1px solid #dce3ec;
+            margin-bottom: 12px;
+            margin-top: 8px;
+        }
+        table.header-table td {
+            padding: 4px 2px;
+            border: none;
+            vertical-align: bottom;
+        }
+        .doc-title {
+            color: #1a3a5c;
+            font-size: 22pt;
+            font-weight: bold;
+            letter-spacing: 1px;
+            margin: 0;
+            padding: 0;
+        }
+        .doc-ref {
+            color: #5a7a9a;
+            font-size: 9pt;
+            margin: 2px 0 0 2px;
+        }
+        .issuer-data {
+            text-align: right;
+            font-size: 8pt;
+            color: #3a5068;
+            line-height: 1.1;
+        }
+        .issuer-name {
+            font-weight: bold;
+            color: #1a3a5c;
+            font-size: 9.5pt;
+            margin-bottom: 2px;
+        }
+        .issuer-wrap {
+            display: inline-block;
+            background-color: transparent;
+           
+            border-radius: 10px;
+            padding: 5px 12px 5px 12px;
+            text-align: right;
+        }
+        .issuer-wrap div {
+            margin: 0;
+            padding: 1px 0;
+            line-height: 1.15;
+        }
+
+        /* ── Tabla de fechas / meta ───────────────────────────── */
+        table.meta-table {
+            margin-bottom: 12px;
+        }
+        table.meta-table td {
+            padding: 5px 8px;
+            font-size: 8.5pt;
+            background-color: #f0f4f8;
+            border: none;
+            color: #2a4a68;
+        }
+        table.meta-table .meta-label {
+            color: #5a7a9a;
+            font-weight: bold;
+            font-size: 7.5pt;
+            text-transform: uppercase;
+        }
+        table.meta-table .meta-value {
+            font-weight: bold;
+            color: #1a2332;
+            font-size: 9pt;
+        }
+
+        /* ── Caja de cliente ─────────────────────────────────── */
+        table.client-table {
+            margin-bottom: 14px;
+            border-left: 3px solid #2e86c1;
+            background-color: #f7fafd;
+        }
+        table.client-table td {
+            padding: 4px 10px;
+            border: none;
+            font-size: 8.5pt;
+            vertical-align: top;
+        }
+        .client-label {
+            color: #5a7a9a;
+            font-size: 7.5pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .client-value {
+            color: #1a2332;
+        }
+
+        /* ── Títulos de sección ──────────────────────────────── */
+        table.section-title-table {
+            margin-bottom: 4px;
+            margin-top: 14px;
+        }
+        table.section-title-table td {
+            padding: 5px 8px;
+            border: none;
+            border-left: 4px solid #2e86c1;
+            background-color: #eaf2fb;
+            font-size: 9.5pt;
+            font-weight: bold;
+            color: #1a3a5c;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── Tabla de ítems ─────────────────────────────────── */
+        table.items-table {
+            margin-bottom: 8px;
+        }
+        table.items-table th {
+            background-color: #1a3a5c;
+            color: #ffffff;
+            padding: 7px 6px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 8pt;
+            border: none;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        table.items-table td {
+            padding: 6px;
+            border-bottom: 1px solid #e8eef4;
+            border-right: none;
+            border-left: none;
+            border-top: none;
+            font-size: 8.5pt;
+            color: #1a2332;
+        }
+        table.items-table tr.row-even td {
+            background-color: #f5f9fd;
+        }
+        table.items-table tr.row-odd td {
+            background-color: #ffffff;
+        }
+
+        /* ── Tabla de totales ───────────────────────────────── */
+        table.totals-table {
+            width: 310px;
+            margin-top: 16px;
+        }
+        table.totals-table td {
+            padding: 4px 10px;
+            border: none;
+            font-size: 8.5pt;
+        }
+        table.totals-table .label {
+            text-align: right;
+            color: #3a5068;
+            padding-right: 16px;
+        }
+        table.totals-table .value {
+            text-align: right;
+            color: #1a2332;
+            white-space: nowrap;
+        }
+        table.totals-table tr.subtotal-row td {
+            border-bottom: 1px solid #dce3ec;
+            padding-bottom: 6px;
+        }
+        table.totals-table tr.total-row td {
+            border-top: 2px solid #1a3a5c;
+            padding-top: 7px;
+            font-size: 11pt;
+            font-weight: bold;
+            color: #1a3a5c;
+        }
+
+        /* ── Utilidades ─────────────────────────────────────── */
+        .text-right  { text-align: right; }
+        .text-center { text-align: center; }
+        .text-left   { text-align: left; }
+
+        /* ── Footer ─────────────────────────────────────────── */
+        .footer {
+            margin-top: 28px;
+            padding-top: 8px;
+            border-top: 1px solid #dce3ec;
+            font-size: 7.5pt;
+            text-align: center;
+            color: #8aabb0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Barra de color superior -->
+    <table class="topbar-table" cellpadding="0" cellspacing="0">
+        <tr><td>&nbsp;</td></tr>
+    </table>
+
+    <!-- Header: Membrete -->
+    <table class="header-table" cellpadding="0" cellspacing="0">
+        <tr>
+            <!-- Columna 1: Título del documento -->
+            <td width="52%" valign="bottom">
+                <div class="doc-title">COTIZACIÓN</div>
+                <div class="doc-ref">Ref: {{ cotizacion.codigo_unico|default:cotizacion.numero_cotizacion }}</div>
+            </td>
+
+            <!-- Columna 2: Logo + Datos empresa (logo arriba, datos abajo) -->
+            <td width="48%" class="issuer-data" valign="top" style="text-align: right;">
+                {% if logo_uri %}
+                <div style="margin-bottom: 4px;">
+                    <img src="{{ logo_uri }}" alt="Logo"
+                         style="width: 55px; height: 55px; object-fit: contain;" />
+                </div>
+                {% endif %}
+                <div class="issuer-wrap">
+                    <div class="issuer-name">{{ empresa.razon_social }}</div>
+                    <div>NIT: {{ empresa.nit }}{% if empresa.digito_verificacion %}-{{ empresa.digito_verificacion }}{% endif %}</div>
+                    {% if empresa.direccion %}<div>{{ empresa.direccion }}</div>{% endif %}
+                    {% if empresa.telefono %}<div>Tel: {{ empresa.telefono }}</div>{% endif %}
+                    {% if empresa.email %}<div>{{ empresa.email }}</div>{% endif %}
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Meta: Fechas y estado -->
+    <table class="meta-table" cellpadding="0" cellspacing="0">
+        <tr>
+            <td width="33%" style="border-right: 2px solid #dce3ec;">
+                <div class="meta-label">Fecha de Emisión</div>
+                <div class="meta-value">{{ cotizacion.fecha_emision|date:"d/m/Y" }}</div>
+            </td>
+            <td width="33%" style="text-align:center; border-right: 2px solid #dce3ec;">
+                <div class="meta-label">Válida Hasta</div>
+                <div class="meta-value">{{ cotizacion.fecha_vencimiento|date:"d/m/Y" }}</div>
+            </td>
+            <td width="33%" style="text-align:right;">
+                <div class="meta-label">Estado</div>
+                <div class="meta-value">{{ cotizacion.get_estado_display }}</div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Cliente -->
+    {% if cotizacion.cliente %}
+    <table class="client-table" cellpadding="0" cellspacing="0">
+        <tr>
+            <td width="14%" class="client-label">Cliente</td>
+            <td class="client-value"><strong>{{ cotizacion.cliente.nombre_comercial|default:cotizacion.cliente.razon_social|upper }}</strong></td>
+            <td width="14%" class="client-label">NIT / CC</td>
+            <td class="client-value">{{ cotizacion.cliente.numero_documento }}</td>
+        </tr>
+        <tr>
+            <td class="client-label">Dirección</td>
+            <td colspan="3" class="client-value">{{ cotizacion.cliente.direccion|default:"N/A" }}</td>
+        </tr>
+    </table>
+    {% endif %}
+
+    <!-- Sección 1: Dispositivos y Equipos -->
+    {% if seccion_1 %}
+    <table class="section-title-table" cellpadding="0" cellspacing="0">
+        <tr><td>1.&nbsp;&nbsp;Dispositivos y Equipos</td></tr>
+    </table>
+    <table class="items-table" cellpadding="0" cellspacing="0">
+        <thead>
+            <tr>
+                <th style="width:4%;">#</th>
+                <th style="width:33%;">Descripción</th>
+                <th style="width:10%;">Marca</th>
+                <th style="width:10%;">Referencia</th>
+                <th style="width:8%; text-align:center;">Unidad</th>
+                <th style="width:7%; text-align:center;">Cant.</th>
+                <th style="width:14%; text-align:right;">Precio Unit.</th>
+                <th style="width:14%; text-align:right;">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_1 %}
+            <tr class="{% cycle 'row-odd' 'row-even' %}">
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td>{{ item.marca|default:"-" }}</td>
+                <td>{{ item.referencia|default:"-" }}</td>
+                <td class="text-center">{{ item.unidad|default:"UND" }}</td>
+                <td class="text-center">{{ item.cantidad|floatformat:2 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0|default:"0" }}</td>
+                <td class="text-right">${{ item.subtotal_linea|floatformat:0|default:"0" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Sección 2: Accesorios y Materiales -->
+    {% if seccion_2 %}
+    <table class="section-title-table" cellpadding="0" cellspacing="0">
+        <tr><td>2.&nbsp;&nbsp;Accesorios y Materiales</td></tr>
+    </table>
+    <table class="items-table" cellpadding="0" cellspacing="0">
+        <thead>
+            <tr>
+                <th style="width:4%;">#</th>
+                <th style="width:33%;">Descripción</th>
+                <th style="width:10%;">Marca</th>
+                <th style="width:10%;">Referencia</th>
+                <th style="width:8%; text-align:center;">Unidad</th>
+                <th style="width:7%; text-align:center;">Cant.</th>
+                <th style="width:14%; text-align:right;">Precio Unit.</th>
+                <th style="width:14%; text-align:right;">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_2 %}
+            <tr class="{% cycle 'row-odd' 'row-even' %}">
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td>{{ item.marca|default:"-" }}</td>
+                <td>{{ item.referencia|default:"-" }}</td>
+                <td class="text-center">{{ item.unidad|default:"UND" }}</td>
+                <td class="text-center">{{ item.cantidad|floatformat:2 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0|default:"0" }}</td>
+                <td class="text-right">${{ item.subtotal_linea|floatformat:0|default:"0" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Sección 3: Mano de Obra e Instalación -->
+    {% if seccion_3 %}
+    <table class="section-title-table" cellpadding="0" cellspacing="0">
+        <tr><td>3.&nbsp;&nbsp;Mano de Obra e Instalación</td></tr>
+    </table>
+    <table class="items-table" cellpadding="0" cellspacing="0">
+        <thead>
+            <tr>
+                <th style="width:4%;">#</th>
+                <th style="width:51%;">Descripción</th>
+                <th style="width:9%; text-align:center;">Unidad</th>
+                <th style="width:8%; text-align:center;">Cant.</th>
+                <th style="width:14%; text-align:right;">Precio Unit.</th>
+                <th style="width:14%; text-align:right;">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_3 %}
+            <tr class="{% cycle 'row-odd' 'row-even' %}">
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td class="text-center">{{ item.unidad|default:"UND" }}</td>
+                <td class="text-center">{{ item.cantidad|floatformat:2 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0|default:"0" }}</td>
+                <td class="text-right">${{ item.subtotal_linea|floatformat:0|default:"0" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Resumen Económico -->
+    <!-- ⚠️ xhtml2pdf: align="right" para posicionar la tabla a la derecha -->
+    <table class="totals-table" align="right" cellpadding="0" cellspacing="0">
+        <tr class="subtotal-row">
+            <td class="label">Subtotal</td>
+            <td class="value">${{ subtotal_items|floatformat:0|default:"0" }}</td>
+        </tr>
+        {% if aplicar_aiu %}
+        <tr>
+            <td class="label">AIU Administración ({{ aiu_admin_porcentaje|floatformat:2 }}%)</td>
+            <td class="value">${{ valor_administracion|floatformat:0|default:"0" }}</td>
+        </tr>
+        <tr>
+            <td class="label">AIU Imprevistos ({{ aiu_imprevistos_porcentaje|floatformat:2 }}%)</td>
+            <td class="value">${{ valor_imprevistos|floatformat:0|default:"0" }}</td>
+        </tr>
+        <tr>
+            <td class="label">AIU Utilidad ({{ aiu_utilidad_porcentaje|floatformat:2 }}%)</td>
+            <td class="value">${{ valor_utilidad|floatformat:0|default:"0" }}</td>
+        </tr>
+        <tr>
+            <td class="label">IVA s/ Utilidad ({{ iva_porcentaje|floatformat:2 }}%)</td>
+            <td class="value">${{ iva_valor|floatformat:0|default:"0" }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td class="label">IVA ({{ iva_porcentaje|floatformat:2 }}%)</td>
+            <td class="value">${{ iva_valor|floatformat:0|default:"0" }}</td>
+        </tr>
+        {% endif %}
+        <tr class="total-row">
+            <td class="label">TOTAL</td>
+            <td class="value">${{ total_neto|floatformat:0|default:"0" }}</td>
+        </tr>
+    </table>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Cotización válida hasta el {{ cotizacion.fecha_vencimiento|date:"d/m/Y" }} &nbsp;·&nbsp; Este documento no constituye una factura de venta.</p>
+    </div>
+
+</body>
+</html>

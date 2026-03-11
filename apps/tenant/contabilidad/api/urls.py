@@ -12,6 +12,7 @@ from apps.tenant.contabilidad.api.viewsets import (
     CuentaContableViewSet,
     AsientoContableViewSet,
     MovimientoContableViewSet,
+    CatalogoMaestroNIIFViewSet,
 )
 # ⚠️ DEPRECATED v2.40: datatables.py está deprecado. Use ViewSet.datatables() actions en su lugar.
 # from apps.tenant.contabilidad.api.datatables import (
@@ -28,6 +29,7 @@ router = DefaultRouter(trailing_slash=TRAILING_SLASH)
 router.register(r'cuentas-contables', CuentaContableViewSet, basename='cuenta-contable')
 router.register(r'asientos-contables', AsientoContableViewSet, basename='asiento-contable')
 router.register(r'movimientos-contables', MovimientoContableViewSet, basename='movimiento-contable')
+router.register(r'catalogo-niif', CatalogoMaestroNIIFViewSet, basename='catalogo-niif')
 
 # URLs generadas por el router
 urlpatterns = router.urls

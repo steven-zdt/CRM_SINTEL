@@ -1,0 +1,11 @@
+{% load static %}
+{# ⚠️ v2.61: Assets del módulo Contabilidad Asientos - Feature-Sliced Architecture #}
+{# BLOQUE 1: Helpers Core (DEBEN ir primero) #}
+{% include 'tenant/core/partials/assets_core.html' %}
+
+{# BLOQUE 2: Archivos del módulo Contabilidad Asientos #}
+{# ⚠️ v2.61: Migración a Tabulator Factory v2.40 - Orden de carga crítico #}
+{# ⚠️ v2.61 PURGA: asientos_main.js eliminado (Fase 3) - Reemplazado por asientos.page.js #}
+<script src="{% static 'core/js/contabilidad/asientos.page.js' %}"></script>
+<script src="{% static 'core/js/contabilidad/asientos_form.js' %}"></script>
+<script src="{% static 'core/js/contabilidad/asientos_cargar_desde_docs.js' %}"></script>

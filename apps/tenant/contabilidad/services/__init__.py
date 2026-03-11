@@ -9,20 +9,19 @@ Servicios internos del dominio Contabilidad.
 ⚠️ v2.37: Re-exporta LIST_FIELDS y qs_* desde services.py (nivel superior)
 """
 from .cuentas_service import (
-    list_cuentas,
     create_cuenta,
     update_cuenta,
     delete_cuenta,
 )
 from .asientos_service import (
-    list_asientos,
     create_asiento,
     update_asiento,
     delete_asiento,
     aprobar_asiento,
+    listar_documentos_sin_asiento,
+    crear_asientos_desde_documentos,
 )
 from .movimientos_service import (
-    list_movimientos,
     create_movimiento,
     update_movimiento,
     delete_movimiento,
@@ -53,21 +52,19 @@ if services_py_path.exists():
     qs_cuenta_detail = services_module.qs_cuenta_detail
     qs_asiento_list = services_module.qs_asiento_list
     qs_asiento_detail = services_module.qs_asiento_detail
-    # ⚠️ v2.60 Fase 3: Exportar funciones de reportes
+    # ⚠️ v2.61: Re-exportar get_balance_prueba (verificar_periodo_cerrado NO se re-exporta)
     get_balance_prueba = services_module.get_balance_prueba
-    verificar_periodo_cerrado = services_module.verificar_periodo_cerrado
 
 __all__ = [
-    'list_cuentas',
     'create_cuenta',
     'update_cuenta',
     'delete_cuenta',
-    'list_asientos',
     'create_asiento',
     'update_asiento',
     'delete_asiento',
     'aprobar_asiento',
-    'list_movimientos',
+    'listar_documentos_sin_asiento',
+    'crear_asientos_desde_documentos',
     'create_movimiento',
     'update_movimiento',
     'delete_movimiento',
@@ -76,7 +73,6 @@ __all__ = [
     'ASIENTO_LIST_FIELDS', 'ASIENTO_DETAIL_FIELDS',
     'qs_cuenta_list', 'qs_cuenta_detail',
     'qs_asiento_list', 'qs_asiento_detail',
-    # ⚠️ v2.60 Fase 3: Funciones de reportes y validación
+    # v2.61: Balance de prueba
     'get_balance_prueba',
-    'verificar_periodo_cerrado',
 ]
