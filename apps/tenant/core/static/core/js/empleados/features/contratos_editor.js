@@ -11,66 +11,43 @@
 
   /**
    * Abrir offcanvas de contrato vía HTMX
-   * ⚠️ v2.60: Para crear contrato nuevo, pasar empleado_id
+   * ⚠️ v2.61: Feature-Sliced Architecture - Delega a módulos específicos
+   * - Para crear contrato nuevo, pasar empleado_id (usa ContratosForm)
+   * - Para editar contrato existente, pasar contratoId (usa ContratosEditar)
    */
   async function openContratoOffcanvas(empleadoId, contratoId = null) {
-    let url;
+    // ⚠️ v2.61: Delegar a módulos específicos según el modo
     if (contratoId) {
-      url = `${API_URL}gestor-offcanvas/?tipo=contrato&id=${contratoId}`;
+      // Modo edición: usar ContratosEditar
+      if (w.ContratosEditar && typeof w.ContratosEditar.cargarOffcanvasEditarContrato === 'function') {
+        await w.ContratosEditar.cargarOffcanvasEditarContrato(contratoId);
+      } else {
+        console.error(`${MOD} ❌ ContratosEditar no está disponible`);
+        if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+          w.UIManager.notifyError(
+            { status: 500, data: { detail: 'Módulo ContratosEditar no está disponible. Verifique que contratos_editar.js se haya cargado.' } },
+            MOD
+          );
+        }
+      }
     } else if (empleadoId) {
-      url = `${API_URL}gestor-offcanvas/?tipo=contrato&empleado=${empleadoId}`;
+      // Modo creación: usar ContratosForm
+      if (w.ContratosForm && typeof w.ContratosForm.cargarOffcanvasCrearContrato === 'function') {
+        await w.ContratosForm.cargarOffcanvasCrearContrato(empleadoId);
+      } else {
+        console.error(`${MOD} ❌ ContratosForm no está disponible`);
+        if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+          w.UIManager.notifyError(
+            { status: 500, data: { detail: 'Módulo ContratosForm no está disponible. Verifique que contratos_form.js se haya cargado.' } },
+            MOD
+          );
+        }
+      }
     } else {
       console.error(`${MOD} ❌ No se proporcionó empleadoId ni contratoId`);
       if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
         w.UIManager.notifyError(
           { status: 400, data: { detail: 'Se requiere un ID de empleado o contrato para abrir el offcanvas de contrato.' } },
-          MOD
-        );
-      }
-      return;
-    }
-    
-    if (typeof htmx === 'undefined' || !htmx.ajax) {
-      console.error(`${MOD} ❌ HTMX no está disponible`);
-      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-        w.UIManager.notifyError(
-          { status: 500, data: { detail: 'HTMX no está disponible. Verifique que la librería se haya cargado correctamente.' } },
-          MOD
-        );
-      }
-      return;
-    }
-
-    console.log(`${MOD} Cargando offcanvas de contrato: ${url}`);
-    
-    try {
-      await htmx.ajax('GET', url, {
-        target: '#offcanvas-container-contrato',
-        swap: 'innerHTML',
-        headers: {
-          'X-CSRFToken': d.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
-        }
-      });
-
-      const offcanvasEl = d.getElementById('offcanvas-contrato');
-      if (offcanvasEl) {
-        const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-        offcanvas.show();
-        console.log(`${MOD} ✅ Offcanvas de contrato abierto correctamente`);
-      } else {
-        console.warn(`${MOD} ⚠️ Offcanvas #offcanvas-contrato no encontrado después de cargar HTMX`);
-        if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-          w.UIManager.notifyError(
-            { status: 500, data: { detail: 'El offcanvas no se cargó correctamente. Verifique que el endpoint gestor-offcanvas retorne el HTML correcto.' } },
-            MOD
-          );
-        }
-      }
-    } catch (error) {
-      console.error(`${MOD} ❌ Error al cargar offcanvas de contrato:`, error);
-      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-        w.UIManager.notifyError(
-          { status: 500, data: { detail: `Error al cargar el formulario de contrato: ${error.message || error}` } },
           MOD
         );
       }

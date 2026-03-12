@@ -1,9 +1,20 @@
 /**
  * asientos.page.js - Módulo Contabilidad Asientos v2.37
  * 
+ * ⚠️ DEPRECADO v2.61: DataTables fue migrado completamente a Tabulator.
+ * Este archivo está DEPRECADO y NO debe usarse en producción.
+ * 
+ * ⚠️ v2.61: Usar asientos_main.js en su lugar (Tabulator Factory v2.40)
+ * 
+ * ⚠️ v2.61: Cambios en validación de cuadratura:
+ * - Los asientos en estado BORRADOR pueden guardarse aunque no cuadren
+ * - La validación estricta de partida doble solo aplica para APROBADO/CERRADO
+ * - Tolerancia de 0.01 para errores de redondeo
+ * - Los totales se calculan desde la BD después de crear los movimientos
+ * 
  * ⚠️ v2.37: Alineado con arquitectura SINTEL API-First
  * - Fetch resiliente (índice → colección)
- * - DataTables client-side con datos mínimos
+ * - DataTables client-side con datos mínimos (DEPRECADO)
  * - CSRF token en headers para mutaciones
  * - Mapeo exacto a AsientoContableListSerializer
  * - Manejo 401 inteligente
@@ -268,22 +279,44 @@
     if (!tbody) return;
     
     if (!movimientos || movimientos.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No hay movimientos registrados</td></tr>';
+      // ⚠️ NORMATIVA: Ajustar colspan si se agregan columnas de terceros
+      const hasTerceros = false; // Se detectará dinámicamente si hay datos
+      const colspan = hasTerceros ? 6 : 4;
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No hay movimientos registrados</td></tr>`;
       return;
     }
     
+    // ⚠️ NORMATIVA: Incluir campos de terceros si están disponibles
     tbody.innerHTML = movimientos.map(mov => {
       const cuentaNombre = mov.cuenta_nombre || mov.cuenta?.nombre || `ID: ${mov.cuenta || '-'}`;
       const debe = formatCurrency(mov.debe || 0);
       const haber = formatCurrency(mov.haber || 0);
-      return `
-        <tr>
-          <td>${cuentaNombre}</td>
-          <td>${mov.descripcion || '-'}</td>
-          <td class="text-end">${debe}</td>
-          <td class="text-end">${haber}</td>
-        </tr>
-      `;
+      // ⚠️ NORMATIVA: Campos de terceros
+      const terceroNit = mov.tercero_nit || '---';
+      const terceroRazonSocial = mov.tercero_razon_social || '---';
+      
+      // Si hay campos de terceros, mostrarlos; si no, mantener formato original
+      if (mov.tercero_nit || mov.tercero_razon_social) {
+        return `
+          <tr>
+            <td>${cuentaNombre}</td>
+            <td>${mov.descripcion || '-'}</td>
+            <td class="text-end">${debe}</td>
+            <td class="text-end">${haber}</td>
+            <td><small class="text-muted">${terceroNit}</small></td>
+            <td><small>${terceroRazonSocial}</small></td>
+          </tr>
+        `;
+      } else {
+        return `
+          <tr>
+            <td>${cuentaNombre}</td>
+            <td>${mov.descripcion || '-'}</td>
+            <td class="text-end">${debe}</td>
+            <td class="text-end">${haber}</td>
+          </tr>
+        `;
+      }
     }).join('');
   }
 
@@ -311,6 +344,9 @@
       setValue('asiento-view-estado', data.estado);
       setValue('asiento-view-total_debe', formatCurrency(data.total_debe || 0));
       setValue('asiento-view-total_haber', formatCurrency(data.total_haber || 0));
+      // ⚠️ NORMATIVA: Campos de comprobante para trazabilidad
+      setValue('asiento-view-tipo_comprobante', data.tipo_comprobante || '---');
+      setValue('asiento-view-numero_comprobante', data.numero_comprobante || '---');
       
       // Renderizar movimientos
       if (data.movimientos && Array.isArray(data.movimientos)) {
@@ -854,8 +890,14 @@
   /**
    * Inicializar módulo Asientos
    * ⚠️ v2.37: Descubre URL de colección antes de inicializar
+   * ⚠️ v2.61: DEPRECADO - Este módulo no debe inicializarse automáticamente
    */
   async function initAsientoModule() {
+    // ⚠️ v2.61: Prevenir inicialización automática (archivo deprecado)
+    console.warn(`[${MOD}.page] ⚠️ DEPRECADO: Este archivo está deprecado. Use asientos_main.js en su lugar.`);
+    console.warn(`[${MOD}.page] Inicialización bloqueada para evitar conflictos con Tabulator.`);
+    return;
+    
     console.info(`[${MOD}.page] Inicializando módulo Asientos Contables...`);
     
     // Descubrir URL de colección antes de inicializar DataTable

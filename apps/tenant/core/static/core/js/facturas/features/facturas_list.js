@@ -1,20 +1,28 @@
 /**
- * Feature: Listado y Tabulator - Facturas v2.60
+ * Feature: Listado y Tabulator - Facturas v2.61.3
  * ⚠️ Feature-Sliced Architecture: Lógica de inicialización y gestión de Tabulator
  * ⚠️ Vanilla JS: Sin dependencias de jQuery
- * ⚠️ API-First: Consume DRF REST API
+ * ⚠️ API-First: Consume Core API facade (FACTURAS_API_BASE)
  * ⚠️ Modular: Usa TabulatorFactory (The Engine)
  * ⚠️ Anti-Zombies: Previene instancias fantasma de Tabulator por recargas HTMX
+ * 
+ * ⚠️ v2.61.2: Facturas son solo lectura - botón "Ver" carga offcanvas_ver_factura.html
+ * ⚠️ v2.61.2: Eliminación corrige URL hash a #facturas y cierra todos los offcanvas
+ * ⚠️ v2.61.2: _eliminandoFactura flag para evitar rowClick tras eliminar+refresh
+ * ⚠️ v2.61.3: Alineado con backend persisted:True - usa gestor-offcanvas con readonly=true
  * 
  * Dependencias globales requeridas:
  * - TabulatorFactory (definido en tabulator.factory.js)
  * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
+ * - w.VerDetalleFactura (definido en ver_detalle_factura.js) - Solo lectura
  */
 (function(w, d) {
     'use strict';
 
     const MOD = '[facturas.list]';
     let table = null;
+    // ⚠️ v2.61.2: Flag de módulo - previene rowClick durante eliminación (scope compartido)
+    let _eliminandoFactura = false;
 
     // ⚠️ Anti-Zombies v2.60: Singleton global para instancias de Tabulator
     if (window.SintelFacturasTables) {
@@ -249,9 +257,16 @@
                 });
             }
             
-            // ⚠️ Configurar evento rowClick después de inicializar
+            // ⚠️ v2.61.2: Configurar evento rowClick para modo solo lectura
+            // ⚠️ _eliminandoFactura está en scope de módulo (compartido con initListEvents)
             if (typeof table.on === 'function') {
                 table.on('rowClick', async (e, row) => {
+                    // ⚠️ v2.61.2: Prevenir rowClick si se está eliminando una factura
+                    if (_eliminandoFactura) {
+                        console.log(`${MOD} rowClick ignorado: eliminación en proceso`);
+                        return;
+                    }
+                    
                     const rowData = row.getData();
                     const id = rowData.id;
                     
@@ -263,20 +278,72 @@
                         return;
                     }
 
-                    try {
-                        // ⚠️ HTMX: Cargar Offcanvas desde el servidor
-                        await htmx.ajax('GET', `/api/v1/facturas/gestor-offcanvas/?id=${id}`, {
-                            target: '#offcanvas-container-facturas',
-                            swap: 'innerHTML'
-                        });
+                    // ⚠️ v2.61.2: Simular click en botón "Ver" para usar el flujo de solo lectura
+                    const btnView = d.querySelector(`.btn-view-factura[data-id="${id}"]`);
+                    if (btnView) {
+                        btnView.click();
+                    } else {
+                        // Fallback: usar el mismo flujo que el botón Ver
+                        try {
+                            const offcanvasContainer = d.getElementById('offcanvas-container-facturas');
+                            if (!offcanvasContainer) {
+                                console.warn(`${MOD} Contenedor #offcanvas-container-facturas no encontrado`);
+                                return;
+                            }
 
-                        // ⚠️ Safeguard: Verificar que el elemento existe antes de abrir
-                        const offcanvasEl = d.getElementById('offcanvas-factura');
-                        if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                            bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                            // ⚠️ HTMX: Cargar template de solo lectura
+                            await htmx.ajax('GET', `/api/v1/core/v1/facturas/facturas/gestor-offcanvas/?id=${id}&simple=true&readonly=true`, {
+                                target: '#offcanvas-container-facturas',
+                                swap: 'innerHTML'
+                            });
+
+                            // ⚠️ Safeguard: Esperar un momento para que el DOM se actualice
+                            await new Promise(resolve => setTimeout(resolve, 100));
+
+                            // ⚠️ v2.61.2: Buscar el offcanvas correcto
+                            let offcanvasEl = d.getElementById('offcanvas-ver-factura');
+                            if (!offcanvasEl) {
+                                offcanvasEl = d.getElementById('offcanvas-factura');
+                                if (offcanvasEl) {
+                                    offcanvasEl.id = 'offcanvas-ver-factura';
+                                    offcanvasEl.setAttribute('aria-labelledby', 'offcanvas-ver-factura-label');
+                                }
+                            }
+
+                            if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                                
+                                // ⚠️ v2.61.2: Cargar datos de la factura usando verDetalleFactura
+                                // Intentar múltiples formas de acceso al módulo
+                                if (w.VerDetalleFactura && typeof w.VerDetalleFactura.ver === 'function') {
+                                    await w.VerDetalleFactura.ver(id);
+                                } else if (typeof window.VerDetalleFactura !== 'undefined' && typeof window.VerDetalleFactura.ver === 'function') {
+                                    await window.VerDetalleFactura.ver(id);
+                                } else if (typeof window.verDetalleFactura === 'function') {
+                                    await window.verDetalleFactura(id);
+                                } else {
+                                    console.warn(`${MOD} Función verDetalleFactura no disponible. Módulos disponibles:`, {
+                                        VerDetalleFactura: typeof w.VerDetalleFactura,
+                                        windowVerDetalleFactura: typeof window.VerDetalleFactura,
+                                        verDetalleFactura: typeof window.verDetalleFactura
+                                    });
+                                    // ⚠️ Fallback: Intentar cargar datos directamente
+                                    try {
+                                        const response = await w.http('GET', `/api/v1/core/v1/facturas/facturas/${id}/`);
+                                        if (response.ok && response.data) {
+                                            console.log(`${MOD} Datos cargados directamente desde API (fallback)`);
+                                        }
+                                    } catch (error) {
+                                        console.error(`${MOD} Error en fallback de carga de datos:`, error);
+                                    }
+                                }
+                                
+                                // Mostrar offcanvas después de cargar datos
+                                offcanvasInstance.show();
+                            }
+                        } catch (error) {
+                            console.error(`${MOD} Error al cargar Offcanvas desde fila:`, error);
                         }
-                    } catch (error) {
-                        console.error(`${MOD} Error al cargar Offcanvas desde fila:`, error);
                     }
                 });
             }
@@ -295,7 +362,7 @@
 
         // ⚠️ Event Delegation: Escuchar clics en el contenedor del grid
         gridElement.addEventListener('click', async (e) => {
-            // Botón Ver/Editar (abre Offcanvas)
+            // Botón Ver (abre Offcanvas de solo lectura)
             const btnView = e.target.closest('.btn-view-factura');
             if (btnView) {
                 e.preventDefault();
@@ -313,23 +380,72 @@
                 btnView.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
                 try {
-                    // ⚠️ HTMX: Cargar Offcanvas desde el servidor
-                    await htmx.ajax('GET', `/api/v1/facturas/gestor-offcanvas/?id=${id}`, {
+                    // ⚠️ v2.61.2: Cargar template de solo lectura directamente
+                    // Primero cargar el template HTML estático
+                    const offcanvasContainer = d.getElementById('offcanvas-container-facturas');
+                    if (!offcanvasContainer) {
+                        console.warn(`${MOD} Contenedor #offcanvas-container-facturas no encontrado`);
+                        return;
+                    }
+
+                    // ⚠️ HTMX: Cargar template de solo lectura desde el servidor
+                    // Usar el endpoint gestor-offcanvas pero con modo solo lectura
+                    await htmx.ajax('GET', `/api/v1/core/v1/facturas/facturas/gestor-offcanvas/?id=${id}&simple=true&readonly=true`, {
                         target: '#offcanvas-container-facturas',
                         swap: 'innerHTML'
                     });
 
-                    // ⚠️ Safeguard: Verificar que el elemento existe antes de abrir
-                    const offcanvasEl = d.getElementById('offcanvas-factura');
+                    // ⚠️ Safeguard: Esperar un momento para que el DOM se actualice
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    // ⚠️ v2.61.2: Buscar el offcanvas correcto (puede ser offcanvas-factura o offcanvas-ver-factura)
+                    let offcanvasEl = d.getElementById('offcanvas-ver-factura');
+                    if (!offcanvasEl) {
+                        // Fallback: buscar offcanvas-factura y cambiar su ID
+                        offcanvasEl = d.getElementById('offcanvas-factura');
+                        if (offcanvasEl) {
+                            offcanvasEl.id = 'offcanvas-ver-factura';
+                            offcanvasEl.setAttribute('aria-labelledby', 'offcanvas-ver-factura-label');
+                        }
+                    }
+
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                        
+                        // ⚠️ v2.61.2: Cargar datos de la factura usando verDetalleFactura
+                        // Intentar múltiples formas de acceso al módulo
+                        if (w.VerDetalleFactura && typeof w.VerDetalleFactura.ver === 'function') {
+                            await w.VerDetalleFactura.ver(id);
+                        } else if (typeof window.VerDetalleFactura !== 'undefined' && typeof window.VerDetalleFactura.ver === 'function') {
+                            await window.VerDetalleFactura.ver(id);
+                        } else if (typeof window.verDetalleFactura === 'function') {
+                            await window.verDetalleFactura(id);
+                        } else {
+                            console.warn(`${MOD} Función verDetalleFactura no disponible. Módulos disponibles:`, {
+                                VerDetalleFactura: typeof w.VerDetalleFactura,
+                                windowVerDetalleFactura: typeof window.VerDetalleFactura,
+                                verDetalleFactura: typeof window.verDetalleFactura
+                            });
+                            // ⚠️ Fallback: Intentar cargar datos directamente
+                            try {
+                                const response = await w.http('GET', `/api/v1/core/v1/facturas/facturas/${id}/`);
+                                if (response.ok && response.data) {
+                                    console.log(`${MOD} Datos cargados directamente desde API (fallback)`);
+                                }
+                            } catch (error) {
+                                console.error(`${MOD} Error en fallback de carga de datos:`, error);
+                            }
+                        }
+                        
+                        // Mostrar offcanvas después de cargar datos
+                        offcanvasInstance.show();
                     } else {
                         console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);
                     }
                 } catch (error) {
                     console.error(`${MOD} Error al cargar Offcanvas:`, error);
                     if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                        w.SintelFeedback.error('Error al cargar el formulario de factura');
+                        w.SintelFeedback.error('Error al cargar el detalle de la factura');
                     }
                 } finally {
                     // Restaurar estado del botón
@@ -356,23 +472,64 @@
                     return;
                 }
 
+                // ⚠️ v2.61.2: Activar flag para prevenir rowClick durante eliminación
+                _eliminandoFactura = true;
+
                 // ⚠️ Loading state
                 const originalHTML = btnDelete.innerHTML;
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
                 try {
-                    const res = await w.http('DELETE', `/api/v1/facturas/${id}/`);
+                    // ⚠️ v2.61.2: Usar Core API facade
+                    const res = await w.http('DELETE', `/api/v1/core/v1/facturas/facturas/${id}/`);
                     
                     if (res.ok) {
+                        // ⚠️ v2.61.2: Cerrar cualquier offcanvas abierto que muestre esta factura
+                        const offcanvasVerFactura = d.getElementById('offcanvas-ver-factura');
+                        const offcanvasFactura = d.getElementById('offcanvas-factura');
+                        
+                        if (offcanvasVerFactura && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                            const instance = bootstrap.Offcanvas.getInstance(offcanvasVerFactura);
+                            if (instance) {
+                                instance.hide();
+                            }
+                        }
+                        if (offcanvasFactura && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                            const instance = bootstrap.Offcanvas.getInstance(offcanvasFactura);
+                            if (instance) {
+                                instance.hide();
+                            }
+                        }
+                        
                         if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
                             w.SintelFeedback.success('Factura eliminada correctamente');
                         }
-                        // Recargar grid
+                        
+                        // ⚠️ v2.61.2: Recargar grid y asegurar que estamos en la pestaña correcta
                         if (table && typeof table.replaceData === 'function') {
-                            table.replaceData();
+                            // Recargar datos sin disparar eventos de click
+                            table.replaceData().then(() => {
+                                // ⚠️ v2.61.2: Desactivar flag después de recargar (con delay para evitar eventos residuales)
+                                setTimeout(() => {
+                                    _eliminandoFactura = false;
+                                }, 500);
+                            });
+                        } else {
+                            // Si no hay tabla, desactivar flag inmediatamente
+                            setTimeout(() => {
+                                _eliminandoFactura = false;
+                            }, 500);
+                        }
+                        
+                        // ⚠️ v2.61.2: Asegurar que estamos en workspace/#facturas
+                        if (w.location && w.location.hash !== '#facturas') {
+                            w.location.hash = '#facturas';
                         }
                     } else {
+                        // Si falla la eliminación, desactivar flag
+                        _eliminandoFactura = false;
+                        
                         if (w.UIManager && typeof w.UIManager.handleError === 'function') {
                             w.UIManager.handleError(res, MOD);
                         } else {
@@ -380,6 +537,9 @@
                         }
                     }
                 } catch (error) {
+                    // Si hay error, desactivar flag
+                    _eliminandoFactura = false;
+                    
                     console.error(`${MOD} Error al eliminar factura:`, error);
                     if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
                         w.SintelFeedback.error('Error al eliminar la factura');

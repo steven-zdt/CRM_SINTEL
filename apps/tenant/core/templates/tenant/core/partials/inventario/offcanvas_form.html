@@ -1,6 +1,8 @@
-{# offcanvas_form.html - Offcanvas del módulo Inventario v2.60 #}
+{# offcanvas_form.html - Offcanvas del módulo Inventario v2.61.3 #}
 {# ⚠️ v2.60: Migrado a HTMX + Offcanvas con Zero Trust #}
+{# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa productos_editor.js (Feature: CREATE/UPDATE) #}
 {# ⚠️ Formulario dinámico: Producto o Ajuste de Inventario según tipo_formulario #}
+{# ⚠️ v2.61.3: El formulario se maneja por JavaScript (productos_editor.js), no por HTMX POST directo #}
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-inventario" aria-labelledby="offcanvas-inventario-label" style="width: 90%; max-width: 700px;">
   <div class="offcanvas-header border-bottom bg-light">
@@ -19,6 +21,11 @@
   <div class="offcanvas-body">
     {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
     <div id="form-inventario-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    {# ⚠️ v2.61.3: Error Injector Pattern - Manejo de errores HTMX con missing_fields #}
+    {# El partial error_handler.html recibe la propagación de errores 422 con missing_fields #}
+    {# error_injector.js intercepta htmx:responseError y muestra los campos faltantes aquí #}
+    {% include 'tenant/core/partials/error_handler.html' %}
     
     {% if tipo_formulario == 'ajuste' %}
       {# ============================================ #}

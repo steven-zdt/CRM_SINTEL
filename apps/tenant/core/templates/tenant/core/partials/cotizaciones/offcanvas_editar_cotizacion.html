@@ -195,5 +195,29 @@
   </div>
 </div>
 
-<script src="{% static 'core/js/cotizaciones/cotizacion_columns.js' %}?v=2.60"></script>
-<script src="{% static 'core/js/cotizaciones/features/cotizacion_editar.js' %}?v=2.60"></script>
+{# ⚠️ v2.61: Scripts específicos para EDITAR cotizaciones #}
+{# ⚠️ v2.61: Feature-Sliced Architecture - Módulo independiente para edición #}
+<script src="{% static 'core/js/cotizaciones/cotizacion_columns.js' %}?v=2.61"></script>
+<script src="{% static 'core/js/cotizaciones/features/cotizacion_editar.js' %}?v=2.61"></script>
+
+{# ⚠️ v2.61: Mostrar offcanvas automáticamente después de cargar el contenido #}
+<script>
+  (function() {
+    const offcanvasElement = document.getElementById('offcanvas-container');
+    if (offcanvasElement && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+      requestAnimationFrame(function() {
+        try {
+          const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasElement, {
+            backdrop: true,
+            keyboard: true,
+            scroll: false
+          });
+          offcanvasInstance.show();
+          console.log('[cotizaciones] Offcanvas de edición mostrado automáticamente');
+        } catch (error) {
+          console.error('[cotizaciones] Error al mostrar offcanvas de edición:', error);
+        }
+      });
+    }
+  })();
+</script>

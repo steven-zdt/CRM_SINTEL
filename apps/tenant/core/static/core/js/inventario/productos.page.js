@@ -1,18 +1,21 @@
 /**
- * Módulo Productos v2.60 - Tabulator Implementation (Migrado desde DataTables)
- * ⚠️ STANDALONE MODULE: Módulo completamente independiente
- * ⚠️ Vanilla JS: Sin dependencias de jQuery
- * ⚠️ API-First: Consume DRF REST API
- * ⚠️ Modular: Usa TabulatorFactory (The Engine)
- * ⚠️ Aislamiento Gradual v2.60: Sin bloques try/catch, usa UIManager.handleError()
+ * ⚠️ DEPRECATED v2.61.3: Este archivo está DEPRECADO
  * 
- * ⚠️ ARQUITECTURA STANDALONE:
- * - Este módulo NO depende de otros módulos del inventario (categorías, servicios, activos)
- * - Otros módulos pueden usar este módulo, pero este NO los usa
- * - Solo expone su API global: window.InventarioProductosModule
- * - Al eliminar un producto, se eliminan automáticamente:
- *   * Todo el stock asociado (es parte del registro)
- *   * Todos los movimientos de inventario (Kardex) - CASCADE
+ * ⚠️ MIGRACIÓN A FEATURE-SLICED ARCHITECTURE:
+ * - La lógica CRUD ha sido migrada a módulos independientes en features/:
+ *   * productos_list.js (Feature: READ, DELETE, verKardex)
+ *   * productos_editor.js (Feature: CREATE, UPDATE)
+ * 
+ * ⚠️ USO ACTUAL:
+ * - Este archivo NO debe ser cargado en nuevos templates
+ * - Usar en su lugar: productos_list.js + productos_editor.js
+ * - Este archivo se mantiene solo para compatibilidad con código legacy
+ * 
+ * ⚠️ ELIMINACIÓN DE LÓGICA DUPLICADA:
+ * - Funciones CRUD eliminadas (editar, eliminar, verKardex, guardarProducto, abrirModalCrear, cargarCategorias)
+ * - Solo se mantiene la estructura básica para evitar errores en código legacy
+ * 
+ * ⚠️ NOTA: Este archivo será eliminado en una futura versión
  */
 (function(w, d) {
   'use strict';
@@ -120,8 +123,25 @@
     ];
   }
 
-  // Inicializar tabla
+  /**
+   * ⚠️ DEPRECATED v2.61.3: Inicialización de tabla delegada a productos_list.js
+   * 
+   * La inicialización de la tabla ahora se maneja en:
+   * - productos_list.js (Feature: READ - Listado con Tabulator)
+   */
   function initTable() {
+    console.warn('[productos.page] initTable() está DEPRECADO. Use productos_list.js en su lugar.');
+    
+    // Intentar usar el nuevo módulo si está disponible
+    if (w.ProductosList && typeof w.ProductosList.init === 'function') {
+      w.ProductosList.init();
+      if (w.ProductosList.getTable && typeof w.ProductosList.getTable === 'function') {
+        table = w.ProductosList.getTable();
+      }
+      return table;
+    }
+    
+    // Fallback legacy solo si el nuevo módulo no está disponible
     if (!w.TabulatorFactory) {
       console.error('[productos.page] TabulatorFactory no está disponible');
       return null;
@@ -132,477 +152,122 @@
       searchInputSelector: SEARCH_SELECTOR
     });
 
-    // ⚠️ v2.95: Event delegation para botones de acciones
-    if (table) {
-      const container = d.querySelector(TABLE_SELECTOR);
-      if (container) {
-        container.addEventListener('click', function(e) {
-          const btn = e.target.closest('button[data-action]');
-          if (!btn) return;
-          
-          e.preventDefault();
-          e.stopPropagation();
-          
-          const action = btn.getAttribute('data-action');
-          const id = parseInt(btn.getAttribute('data-id'), 10);
-          
-          if (!id || isNaN(id)) {
-            console.warn('[productos.page] ID no válido:', id);
-            return;
-          }
-          
-          if (!w.InventarioProductosModule) {
-            console.error('[productos.page] InventarioProductosModule no está disponible');
-            if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-              w.UIManager.notifyError({ status: 500, data: { detail: 'Error: Módulo no disponible' } }, '[productos.page]');
-            }
-            return;
-          }
-          
-          switch (action) {
-            case 'editar':
-              w.InventarioProductosModule.editar(id);
-              break;
-            case 'eliminar':
-              w.InventarioProductosModule.eliminar(id);
-              break;
-            case 'ver-kardex':
-              w.InventarioProductosModule.verKardex(id);
-              break;
-            default:
-              console.warn('[productos.page] Acción no reconocida:', action);
-          }
-        });
-      }
-    }
+    // ⚠️ v2.61.3: Event delegation delegado a productos_list.js
+    // Los eventos ahora se manejan en productos_list.js (initListEvents)
 
     return table;
   }
 
   /**
-   * Funciones CRUD
-   * ⚠️ v2.60: Aislamiento Gradual - Sin try/catch, solo verifica ok
+   * ⚠️ DEPRECATED v2.61.3: Funciones CRUD eliminadas
+   * 
+   * Las siguientes funciones han sido migradas a módulos independientes:
+   * - editar() → productos_editor.js (Feature: UPDATE)
+   * - eliminar() → productos_list.js (Feature: DELETE)
+   * - verKardex() → productos_list.js (Feature: READ detail)
+   * - guardarProducto() → productos_editor.js (Feature: CREATE/UPDATE)
+   * - abrirModalCrear() → productos_editor.js (Feature: CREATE)
+   * - cargarCategorias() → productos_editor.js (Feature: CREATE/UPDATE)
+   * 
+   * ⚠️ NOTA: Estas funciones se mantienen como stubs para compatibilidad con código legacy
+   * que pueda estar llamando a window.InventarioProductosModule
    */
+  
+  // ⚠️ Stub functions para compatibilidad legacy
   async function editar(id) {
-    // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-    const res = await w.inventarioAPI.productos.get(id);
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Solo verificar ok
-    if (!res.ok || !res.data) {
-      if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-        w.UIManager.handleError(res, '[productos.page]');
-      }
-      return;
-    }
-    
-    const data = res.data;
-    
-    // Llenar formulario
-    d.querySelector('#producto-id').value = data.id || '';
-    d.querySelector('#producto-codigo').value = data.codigo || '';
-    d.querySelector('#producto-nombre').value = data.nombre || '';
-    d.querySelector('#producto-precio').value = data.precio_venta || '';
-    d.querySelector('#producto-stock-min').value = data.stock_minimo || 0;
-    d.querySelector('#producto-activo').checked = data.activo !== false;
-    
-    // Cargar categorías y seleccionar la del producto
-    await cargarCategorias(data.categoria);
-    
-    // Abrir modal
-    const modalEl = d.querySelector('#modal-producto');
-    if (modalEl) {
-      // ⚠️ CRÍTICO: Usar getOrCreateInstance para evitar conflictos de aria-hidden (patrón de clientes)
-      if (w.bootstrap && w.bootstrap.Modal) {
-        const modal = w.bootstrap.Modal.getOrCreateInstance(modalEl);
-        modalEl.addEventListener('shown.bs.modal', function focusFirstInput() {
-          const firstInput = modalEl.querySelector('input:not([type="hidden"]), select, textarea');
-          if (firstInput) {
-            firstInput.focus();
-          }
-          modalEl.removeEventListener('shown.bs.modal', focusFirstInput);
-        }, { once: true });
-        modal.show();
-      } else if (w.UIManager && typeof w.UIManager.handleModal === 'function') {
-        // Fallback: usar UIManager si Bootstrap no está disponible
-        w.UIManager.handleModal('#modal-producto', 'show');
-      }
-      
-      // Actualizar título
-      const title = modalEl.querySelector('.modal-title');
-      if (title) title.textContent = 'Editar Producto';
-    }
-  }
-
-  /**
-   * Eliminar producto
-   * ⚠️ v2.60: Aislamiento Gradual - Sin try/catch, solo verifica ok
-   */
-  async function eliminar(id) {
-    // ⚠️ REGLA DE SEGURIDAD DE ELIMINACIÓN: Validar estado activo antes de proceder
-    // ⚠️ STANDALONE MODULE: Este módulo es independiente
-    // ⚠️ NOTA: Al eliminar un producto, se eliminan automáticamente su stock y todos sus movimientos de kardex
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-    // Obtener datos del producto para validar estado y mostrar información
-    const resGet = await w.inventarioAPI.productos.get(id);
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Solo verificar ok
-    if (!resGet.ok || !resGet.data) {
-      if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-        w.UIManager.handleError(resGet, '[productos.page]');
-      }
-      return;
-    }
-    
-    const data = resGet.data;
-    
-    // Validar que el producto no esté activo
-    if (data.activo) {
-      if (w.SintelFeedback) {
-        w.SintelFeedback.error('El ítem está activo. Desactívelo primero.');
-      }
-      return;
-    }
-    
-    // Construir mensaje de confirmación con información del stock
-    let mensajeConfirmacion = '¿Está seguro de eliminar este producto?';
-    const stock = parseFloat(data.stock_actual || 0);
-    if (stock > 0) {
-      mensajeConfirmacion += `\n\nEste producto tiene ${stock} unidades en stock.`;
-    }
-    mensajeConfirmacion += '\n\n⚠️ ADVERTENCIA: Esta acción eliminará:';
-    mensajeConfirmacion += '\n- El producto';
-    mensajeConfirmacion += '\n- Todo el stock asociado';
-    mensajeConfirmacion += '\n- Todo el historial de movimientos (Kardex)';
-    mensajeConfirmacion += '\n\nEsta acción es irreversible.';
-    
-    if (!confirm(mensajeConfirmacion)) {
-      return;
-    }
-
-    // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-    const res = await w.inventarioAPI.productos.delete(id);
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Solo verificar ok
-    if (!res.ok) {
-      if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-        w.UIManager.handleError(res, '[productos.page]');
-      }
-      return;
-    }
-    
-    // Éxito
-    if (w.SintelFeedback) {
-      w.SintelFeedback.success('Producto eliminado correctamente. Stock y kardex eliminados.');
-    }
-    
-    if (table) {
-      table.replaceData();
-    }
-  }
-
-  /**
-   * Ver kardex de producto
-   * ⚠️ v2.60: Aislamiento Gradual - Sin try/catch, solo verifica ok
-   */
-  async function verKardex(id) {
-    // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-    // Obtener información del producto
-    const productoRes = await w.inventarioAPI.productos.get(id);
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Solo verificar ok
-    if (!productoRes.ok || !productoRes.data) {
-      if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-        w.UIManager.handleError(productoRes, '[productos.page]');
-      }
-      return;
-    }
-    
-    const producto = productoRes.data;
-    
-    // Obtener kardex
-    const kardexRes = await w.inventarioAPI.productos.kardex(id);
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Solo verificar ok
-    if (!kardexRes.ok) {
-      if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-        w.UIManager.handleError(kardexRes, '[productos.page]');
-      }
-      return;
-    }
-    
-    const movimientos = Array.isArray(kardexRes.data) ? kardexRes.data : (kardexRes.data.results || []);
-    
-    // Mostrar información del producto
-    const infoEl = d.querySelector('#kardex-producto-info');
-    if (infoEl) {
-      infoEl.innerHTML = `
-        <div class="row">
-          <div class="col-md-6">
-            <strong>Código:</strong> ${producto.codigo || '-'}<br>
-            <strong>Nombre:</strong> ${producto.nombre || '-'}
-          </div>
-          <div class="col-md-6">
-            <strong>Stock Actual:</strong> <span class="badge ${parseFloat(producto.stock_actual || 0) <= parseFloat(producto.stock_minimo || 0) ? 'bg-danger' : 'bg-success'}">${parseFloat(producto.stock_actual || 0).toFixed(2)}</span><br>
-            <strong>Stock Mínimo:</strong> ${parseFloat(producto.stock_minimo || 0).toFixed(2)}
-          </div>
-        </div>
-      `;
-    }
-    
-    // Llenar tabla de movimientos
-    const tbody = d.querySelector('#table-kardex tbody');
-    if (tbody) {
-      if (movimientos.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No hay movimientos registrados</td></tr>';
-      } else {
-        tbody.innerHTML = movimientos.map(mov => {
-          const fecha = mov.created_at ? new Date(mov.created_at).toLocaleString('es-CO') : '-';
-          const tipo = mov.tipo_display || mov.tipo || '-';
-          const cantidad = parseFloat(mov.cantidad || 0).toFixed(3);
-          const referencia = mov.origen_referencia || mov.cliente_referencia || '-';
-          const observaciones = mov.observaciones || '-';
-          const tipoColor = (tipo.includes('ENTRADA') || tipo.includes('entrada')) ? 'success' : 'danger';
-          
-          return `
-            <tr>
-              <td>${fecha}</td>
-              <td><span class="badge bg-${tipoColor}">${tipo}</span></td>
-              <td class="text-end">${cantidad}</td>
-              <td>${referencia}</td>
-              <td>${observaciones}</td>
-            </tr>
-          `;
-        }).join('');
-      }
-    }
-    
-    // Abrir modal
-    const modalEl = d.querySelector('#modal-kardex');
-    if (modalEl) {
-      // ⚠️ CRÍTICO: Usar getOrCreateInstance para evitar conflictos de aria-hidden (patrón de clientes)
-      if (w.bootstrap && w.bootstrap.Modal) {
-        const modal = w.bootstrap.Modal.getOrCreateInstance(modalEl);
-        modalEl.addEventListener('shown.bs.modal', function focusFirstInput() {
-          const firstInput = modalEl.querySelector('input:not([type="hidden"]), select, textarea');
-          if (firstInput) {
-            firstInput.focus();
-          }
-          modalEl.removeEventListener('shown.bs.modal', focusFirstInput);
-        }, { once: true });
-        modal.show();
-      } else if (w.UIManager && typeof w.UIManager.handleModal === 'function') {
-        // Fallback: usar UIManager si Bootstrap no está disponible
-        w.UIManager.handleModal('#modal-producto', 'show');
-      }
-    }
-  }
-
-  /**
-   * Cargar categorías
-   * ⚠️ v2.60: Aislamiento Gradual - Sin try/catch, solo verifica ok
-   */
-  async function cargarCategorias(categoriaSeleccionada = null) {
-    // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-    const res = await w.inventarioAPI.categorias.list();
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Solo verificar ok
-    if (!res.ok || !res.data) {
-      // ⚠️ v2.60: Delegar a UIManager para mostrar error (pero no bloquear)
-      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-        w.UIManager.notifyError(res, '[productos.page]');
-      }
-      return;
-    }
-    
-    const categorias = Array.isArray(res.data) ? res.data : (res.data.results || []);
-    const select = d.querySelector('#producto-categoria');
-    if (!select) return;
-    
-    // Limpiar opciones
-    select.innerHTML = '<option value="">Seleccione...</option>';
-    
-    // Agregar categorías
-    categorias.forEach(cat => {
-      if (cat.aplicacion === 'PRODUCTO' || cat.aplicacion === 'TODO') {
-        const option = d.createElement('option');
-        option.value = cat.id;
-        option.textContent = cat.nombre;
-        if (categoriaSeleccionada && cat.id === categoriaSeleccionada) {
-          option.selected = true;
-        }
-        select.appendChild(option);
-      }
-    });
-  }
-
-  /**
-   * Guardar producto
-   * ⚠️ v2.60: Aislamiento Gradual - Sin try/catch, solo verifica ok
-   */
-  async function guardarProducto() {
-    const form = d.querySelector('#form-producto');
-    if (!form) return;
-    
-    const formData = new FormData(form);
-    const data = {
-      codigo: formData.get('codigo'),
-      nombre: formData.get('nombre'),
-      categoria: parseInt(formData.get('categoria')) || null,
-      precio_venta: parseFloat(formData.get('precio_venta')) || 0,
-      stock_minimo: parseFloat(formData.get('stock_minimo')) || 0,
-      activo: d.querySelector('#producto-activo').checked
-    };
-    
-    const id = d.querySelector('#producto-id').value;
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-    let res;
-    if (id) {
-      res = await w.inventarioAPI.productos.update(id, data);
-    } else {
-      res = await w.inventarioAPI.productos.save(data);
-    }
-    
-    // ⚠️ v2.60: Aislamiento Gradual - Solo verificar ok y delegar a UIManager
-    if (!res.ok) {
-      // ⚠️ Error Boundary: Delegar completamente a UIManager (aislamiento de presentación)
-      if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-        w.UIManager.handleError(res, '[productos.page]', {
-          modalSelector: '#modal-producto',
-          errorContainerSelector: '#feedback-producto'
+    console.warn('[productos.page] editar() está DEPRECADO. Use productos_editor.js en su lugar.');
+    if (w.ProductosEditor && typeof w.ProductosEditor.init === 'function') {
+      // Intentar usar el nuevo módulo si está disponible
+      const offcanvasContainer = d.getElementById('offcanvas-container-inventario');
+      if (offcanvasContainer && typeof htmx !== 'undefined') {
+        await htmx.ajax('GET', `/api/v1/core/v1/inventario/productos/gestor-offcanvas/?id=${id}`, {
+          target: '#offcanvas-container-inventario',
+          swap: 'innerHTML'
         });
-      } else {
-        // Fallback crítico: Si UIManager no está disponible, usar notifyError
-        if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-          w.UIManager.notifyError(res, '[productos.page]');
-        }
-      }
-      // ⚠️ Error Boundary: Modal permanece abierto para errores 400 (UIManager lo maneja)
-      return;
-    }
-    
-    // Éxito: cerrar modal y mostrar notificación
-    if (w.UIManager && typeof w.UIManager.handleModal === 'function') {
-      w.UIManager.handleModal('#modal-producto', 'hide');
-    } else {
-      const modalEl = d.querySelector('#modal-producto');
-      if (modalEl) {
-        // ⚠️ v2.60: Usar UIManager para cerrar modal
-        if (w.UIManager && typeof w.UIManager.handleModal === 'function') {
-          w.UIManager.handleModal('#modal-producto', 'hide');
+        const offcanvasEl = d.getElementById('offcanvas-inventario');
+        if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+          const instance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+          instance.show();
         }
       }
     }
-    
-    if (w.SintelFeedback) {
-      w.SintelFeedback.success(id ? 'Producto actualizado correctamente' : 'Producto creado correctamente');
+  }
+
+  async function eliminar(id) {
+    console.warn('[productos.page] eliminar() está DEPRECADO. Use productos_list.js en su lugar.');
+    if (w.ProductosList && typeof w.ProductosList.eliminar === 'function') {
+      await w.ProductosList.eliminar(id);
     }
-    
-    // Recargar tabla
-    if (table) {
-      table.replaceData();
+  }
+
+  async function verKardex(id) {
+    console.warn('[productos.page] verKardex() está DEPRECADO. Use productos_list.js en su lugar.');
+    if (w.ProductosList && typeof w.ProductosList.verKardex === 'function') {
+      await w.ProductosList.verKardex(id);
     }
   }
 
   function abrirModalCrear() {
-    // Verificar que Bootstrap esté disponible
-    if (typeof bootstrap === 'undefined') {
-      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-        w.UIManager.notifyError({ status: 500, data: { detail: 'Error: Bootstrap no está cargado' } }, '[productos.page]');
-      }
-      return;
-    }
-    
-    // Buscar modal
-    const modalEl = d.querySelector('#modal-producto');
-    if (!modalEl) {
-      console.error('[productos.page] Modal #modal-producto no encontrado en el DOM');
-      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-        w.UIManager.notifyError({ status: 500, data: { detail: 'Error: Modal no encontrado. Verifique que modals_productos.html esté incluido.' } }, '[productos.page]');
-      }
-      return;
-    }
-    
-    // Limpiar formulario
-    const form = d.querySelector('#form-producto');
-    if (form) {
-      form.reset();
-    }
-    
-    // Limpiar campos específicos
-    const idField = d.querySelector('#producto-id');
-    if (idField) idField.value = '';
-    
-    const activoField = d.querySelector('#producto-activo');
-    if (activoField) activoField.checked = true;
-    
-    // Cargar categorías (async, no bloquea la apertura del modal)
-    cargarCategorias().catch(err => {
-      console.error('[productos.page] Error al cargar categorías:', err);
-    });
-    
-    // Abrir modal usando Bootstrap 5
-    // ⚠️ v2.60: Aislamiento Gradual - Sin try/catch, solo verificar disponibilidad
-    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    
-    // Actualizar título antes de mostrar
-    const title = modalEl.querySelector('.modal-title');
-    if (title) {
-      title.textContent = 'Nuevo Producto';
-    }
-    
-    modal.show();
-      if (w.SintelFeedback) {
-        w.SintelFeedback.error('Error al abrir el modal: ' + error.message);
+    console.warn('[productos.page] abrirModalCrear() está DEPRECADO. Use productos_editor.js en su lugar.');
+    if (w.ProductosEditor && typeof w.ProductosEditor.init === 'function') {
+      const offcanvasContainer = d.getElementById('offcanvas-container-inventario');
+      if (offcanvasContainer && typeof htmx !== 'undefined') {
+        htmx.ajax('GET', '/api/v1/core/v1/inventario/productos/gestor-offcanvas/', {
+          target: '#offcanvas-container-inventario',
+          swap: 'innerHTML'
+        }).then(() => {
+          const offcanvasEl = d.getElementById('offcanvas-inventario');
+          if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+            const instance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+            instance.show();
+          }
+        });
       }
     }
   }
 
-  // Función para configurar eventos (reutilizable)
+  /**
+   * ⚠️ DEPRECATED v2.61.3: configurarEventos() eliminado
+   * 
+   * Los eventos del formulario y botones ahora se manejan en:
+   * - productos_editor.js (Feature: CREATE/UPDATE)
+   * - productos_list.js (Feature: READ, DELETE)
+   */
   function configurarEventos() {
-    // ⚠️ v2.60: Aislamiento Gradual - Sin logs de operación
-    
-    // Configurar botón "Nuevo"
-    const btnNuevo = d.querySelector('#btn-nuevo-producto');
-    if (btnNuevo) {
-      // Remover listeners anteriores si existen (evitar duplicados)
-      const nuevoBtn = btnNuevo.cloneNode(true);
-      btnNuevo.parentNode.replaceChild(nuevoBtn, btnNuevo);
-      
-      nuevoBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        abrirModalCrear();
-      });
-    }
-    
-    // Configurar formulario
-    const form = d.querySelector('#form-producto');
-    if (form) {
-      // Remover listeners anteriores si existen (evitar duplicados)
-      const nuevoForm = form.cloneNode(true);
-      form.parentNode.replaceChild(nuevoForm, form);
-      
-      nuevoForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        guardarProducto();
-      });
-    }
+    console.warn('[productos.page] configurarEventos() está DEPRECADO. Los eventos se manejan en productos_editor.js y productos_list.js');
+    // Función vacía para compatibilidad legacy
   }
 
-  // Función para inicializar el módulo completo
+  /**
+   * ⚠️ DEPRECATED v2.61.3: Inicialización delegada a módulos nuevos
+   * 
+   * La inicialización ahora se maneja en:
+   * - productos_list.js (Feature: READ - Listado)
+   * - productos_editor.js (Feature: CREATE/UPDATE)
+   */
   function inicializarModulo() {
-    // ⚠️ v2.60: Aislamiento Gradual - Sin logs de operación
+    console.warn('[productos.page] inicializarModulo() está DEPRECADO. Use productos_list.js y productos_editor.js en su lugar.');
     
-    // Inicializar tabla
-    table = initTable();
+    // Intentar usar el nuevo módulo si está disponible
+    if (w.ProductosList && typeof w.ProductosList.init === 'function') {
+      w.ProductosList.init();
+      if (w.ProductosList.getTable && typeof w.ProductosList.getTable === 'function') {
+        table = w.ProductosList.getTable();
+      }
+    } else {
+      // Fallback legacy solo si el nuevo módulo no está disponible
+      table = initTable();
+    }
     
-    // Exponer módulo globalmente ANTES de configurar eventos
+    // ⚠️ DEPRECATED v2.61.3: Exponer módulo globalmente solo para compatibilidad legacy
+    // ⚠️ NOTA: Este módulo está deprecado. Use ProductosList y ProductosEditor en su lugar
     w.InventarioProductosModule = {
       table: table,
       refresh: function() {
-        if (table) {
+        console.warn('[productos.page] refresh() está DEPRECADO. Use ProductosList.recargar() en su lugar.');
+        if (w.ProductosList && typeof w.ProductosList.recargar === 'function') {
+          w.ProductosList.recargar();
+        } else if (table) {
           table.replaceData();
         }
       },
@@ -612,9 +277,7 @@
       abrirModalCrear: abrirModalCrear
     };
     
-    // ⚠️ v2.60: Aislamiento Gradual - Sin logs de éxito
-    
-    // Configurar eventos DESPUÉS de inicializar el módulo
+    // ⚠️ DEPRECATED: configurarEventos() ya no hace nada
     configurarEventos();
   }
 

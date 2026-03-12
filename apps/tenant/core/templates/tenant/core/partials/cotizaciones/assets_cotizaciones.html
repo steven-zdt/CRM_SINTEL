@@ -13,8 +13,8 @@
 
 {% include 'tenant/core/partials/assets_core.html' %}
 
-{# HTMX Library - Para carga dinámica de formularios #}
-<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+{# ⚠️ v2.61: HTMX ya está cargado en workspace.html, no es necesario cargarlo aquí #}
+{# ⚠️ v2.61: Eliminado para evitar conflictos y doble carga #}
 
 {# BLOQUE 1: API Wrapper - DEBE cargarse PRIMERO #}
 {# ⚠️ RUTA: core/js/cotizaciones/ (no tenant/core/js/) porque está en apps/tenant/core/static/core/js/cotizaciones/ #}
@@ -38,8 +38,8 @@
 {# ⚠️ CRÍTICO: cotizacion_columns.js define window.getCotizacionColumns() que es requerido por cotizacion_editor.js #}
 <script src="{% static 'core/js/cotizaciones/cotizacion_columns.js' %}?v=2.60"></script>
 
-{# BLOQUE 6: Editor de Cotizaciones Estilo Excel - Arquitectura Modular v2.40 #}
-{# ⚠️ DNA Dinámico v2.40: Editor integrado en cotizacion_editor.js #}
-{# ⚠️ RUTA: features/cotizacion_editor.js (Feature-Sliced architecture) #}
-{# ⚠️ DEPENDENCIA: Requiere cotizacion_columns.js cargado previamente #}
-<script src="{% static 'core/js/cotizaciones/features/cotizacion_editor.js' %}?v=2.60.wizard"></script>
+{# BLOQUE 6: Editor de Cotizaciones - Feature-Sliced Architecture v2.61 #}
+{# ⚠️ v2.61: Separación completa de crear/editar - Módulos independientes #}
+{# ⚠️ NOTA: cotizacion_crear.js y cotizacion_editar.js se cargan en sus respectivos templates #}
+{# ⚠️ DEPRECATED: cotizacion_editor.js ya no se usa (reemplazado por módulos separados) #}
+{# <script src="{% static 'core/js/cotizaciones/features/cotizacion_editor.js' %}?v=2.60.wizard"></script> #}

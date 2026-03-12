@@ -1,0 +1,136 @@
+{# offcanvas_ver_factura.html - Offcanvas de solo lectura para ver detalle de factura v2.61.2 #}
+{# ⚠️ v2.61.2: Refactorizado para eliminar capacidad de edición - Solo lectura #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-ver-factura" aria-labelledby="offcanvas-ver-factura-label" style="width: 90%; max-width: 800px;">
+    <div class="offcanvas-header border-bottom bg-light">
+        <h5 class="offcanvas-title" id="offcanvas-ver-factura-label">
+            <i class="bi bi-eye me-2"></i>Detalle de Factura
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+    
+    <div class="offcanvas-body">
+        <div class="row g-3">
+            {# Información General #}
+            <div class="col-12">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-info-circle me-2"></i>Información General
+                </h6>
+            </div>
+            
+            <div class="col-md-6">
+                <label class="form-label text-muted small">Número de Factura:</label>
+                <p id="view_numero_factura" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+            
+            <div class="col-md-6">
+                <label class="form-label text-muted small">Estado:</label>
+                <p id="view_estado" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+            
+            <div class="col-md-6">
+                <label class="form-label text-muted small">Fecha de Emisión:</label>
+                <p id="view_fecha_emision" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+            
+            <div class="col-md-6">
+                <label class="form-label text-muted small">Moneda:</label>
+                <p id="view_moneda" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+            
+            {# Emisor #}
+            <div class="col-12 mt-3">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-person-badge me-2"></i>Emisor
+                </h6>
+            </div>
+            
+            <div class="col-md-6">
+                <label class="form-label text-muted small">Razón Social:</label>
+                <p id="view_emisor_razon_social" class="form-control-plaintext border-bottom mb-0 text-start">-</p>
+            </div>
+            
+            <div class="col-md-6">
+                <label class="form-label text-muted small">NIT:</label>
+                <p id="view_emisor_nit" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+            
+            {# Receptor #}
+            <div class="col-12 mt-3">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-person me-2"></i>Receptor
+                </h6>
+            </div>
+            
+            <div class="col-md-6">
+                <label class="form-label text-muted small">Razón Social:</label>
+                <p id="view_receptor_razon_social" class="form-control-plaintext border-bottom mb-0 text-start">-</p>
+            </div>
+            
+            <div class="col-md-6">
+                <label class="form-label text-muted small">NIT:</label>
+                <p id="view_receptor_nit" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+            
+            {# Totales #}
+            <div class="col-12 mt-3">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-calculator me-2"></i>Totales
+                </h6>
+            </div>
+            
+            <div class="col-md-4">
+                <label class="form-label text-muted small">Subtotal:</label>
+                <p id="view_subtotal" class="form-control-plaintext border-bottom mb-0 text-end">-</p>
+            </div>
+            
+            <div class="col-md-4">
+                <label class="form-label text-muted small">Impuestos:</label>
+                <p id="view_impuestos" class="form-control-plaintext border-bottom mb-0 text-end">-</p>
+            </div>
+            
+            <div class="col-md-4">
+                <label class="form-label text-muted small">Total:</label>
+                <p id="view_total" class="form-control-plaintext border-bottom mb-0 text-end fw-bold text-primary">-</p>
+            </div>
+            
+            {# CUFE #}
+            <div class="col-12 mt-3" id="view_cufe_container" style="display: none;">
+                <label class="form-label text-muted small">CUFE:</label>
+                <p id="view_cufe" class="form-control-plaintext border-bottom mb-0 font-monospace small text-break">-</p>
+            </div>
+            
+            {# Items de la Factura #}
+            <div class="col-12 mt-3">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-list-ul me-2"></i>Items de la Factura
+                </h6>
+            </div>
+            
+            <div class="col-12">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th class="text-start">Descripción</th>
+                                <th class="text-end">Cantidad</th>
+                                <th class="text-end">Precio Unitario</th>
+                                <th class="text-end">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="view_detalle_items_body">
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">No hay items disponibles</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="offcanvas-footer p-3 border-top bg-light">
+        <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="offcanvas">
+            <i class="bi bi-x-circle me-2"></i>Cerrar
+        </button>
+    </div>
+</div>

@@ -1,7 +1,8 @@
 # 🔍 Auditoría Completa: Flujo y Funcionalidad - App Facturas
 
-**Versión:** 2.60  
-**Fecha:** 2026-03-04  
+**Versión:** 2.61.3  
+**Fecha:** 2026-03-12  
+**Última actualización:** 2026-03-12  
 **Ubicación:** `apps/tenant/facturas/`
 
 ---
@@ -19,7 +20,8 @@
 9. [Ingesta por Correo](#ingesta-por-correo)
 10. [Permisos y Seguridad](#permisos-y-seguridad)
 11. [Flujos Completos](#flujos-completos)
-12. [Dependencias y Aislamiento](#dependencias-y-aislamiento)
+12. [Flujo Completo: Workspace → Core API → Models](#-flujo-completo-workspace--core-api--models)
+13. [Dependencias y Aislamiento](#dependencias-y-aislamiento)
 
 ---
 
@@ -37,6 +39,12 @@ La app **Facturas** es un módulo completo para la gestión de facturas electró
 - ✅ **Idempotencia**: Importación por CUFE/CUDE evita duplicados
 - ✅ **Ingesta por Correo**: Procesamiento automático de facturas desde buzones IMAP
 - ✅ **Notas Crédito**: Gestión completa de notas crédito con relación OneToOne
+- ✅ **Pre-validación de Idempotencia (v2.61.2)**: `fast_get_cufe()` extrae CUFE con regex antes del parsing completo
+- ✅ **Batch Processing (v2.61.2)**: `upload-ubl` acepta `files[]` con resumen `{creados, duplicados, errores}`
+- ✅ **Silent Success (v2.61.2)**: Actualiza `FacturaAnexos` si el XML nuevo es `AttachedDocument` más completo
+- ✅ **Core API Facade (v2.61.2)**: `/api/v1/core/v1/facturas/` como punto de entrada unificado
+- ✅ **Solo Lectura Frontend (v2.61.2)**: `offcanvas_ver_factura.html` + `ver_detalle_factura.js`
+- ✅ **Alineación Backend-Frontend (v2.61.3)**: `persisted:True` en payload + `!data.id` en frontend
 
 ### Características Principales
 
@@ -79,20 +87,35 @@ Models (Persistencia)
 Database
 ```
 
-### Pipeline de Importación
+### Pipeline de Importación (v2.61.3)
 
 ```
-XML/PDF/XLS Upload
+XML/PDF/XLS Upload (single o batch files[])
+    ↓
+fast_get_cufe() — regex sobre bytes crudos (⚡ pre-validación idempotencia)
+    ├─ CUFE ya existe → 200 OK inmediato (sin parsing)
+    └─ CUFE nuevo → continuar
+    ↓
+upload_ubl (FacturaViewSet) — detecta batch/single/async
+    ↓
+importar_documento() — pipeline universal
+    ├─ status_code >= 400 → propagar error inmediatamente (v2.61.3)
+    └─ ok → obtener DTO
     ↓
 document_ingest (Pipeline Universal)
     ↓
-DTO Canónico
+DTO Canónico (parser.py — fix timezone v2.61.3, fix import re UnboundLocalError v2.61.3)
     ↓
 guardar_factura_desde_dto() / guardar_nota_credito_desde_dto()
+    ├─ transaction.atomic solo envuelve BD (no parsing) (v2.61.2)
+    ├─ Silent Success: actualiza FacturaAnexos si AttachedDocument más completo (v2.61.2)
+    └─ Retorna {id, persisted:True} (v2.61.3)
     ↓
 Factura/NotaCredito (Persistencia)
     ↓
 FacturaAnexos (XML almacenado)
+    ↓
+Frontend: detecta data.id (no data.persisted) para evitar re-persistencia (v2.61.3)
 ```
 
 ---
@@ -319,34 +342,40 @@ apps/tenant/facturas/
 
 #### Funciones Principales
 
-##### `guardar_factura_desde_dto(dto, xml_text)`
+##### `guardar_factura_desde_dto(dto, xml_text, file_bytes, file_type)`
 
 **Propósito:** Persiste factura desde DTO canónico del pipeline XML (SSoT).
 
 **Parámetros:**
 - `dto`: DTO canónico de factura (formato: `apps/services/xml_ingest/dto.InvoiceDTO`)
 - `xml_text`: Texto XML original (para anexos)
+- `file_bytes`: Bytes del archivo (v2.61.2: para Silent Success en FacturaAnexos)
+- `file_type`: Tipo de archivo (`'xml'` o `'pdf'`)
 
 **Retorna:**
 - `Tuple[Dict, int]`: (payload, status_code)
-  - `201 Created`: Si se crea nueva factura
-  - `200 OK`: Si factura ya existe (idempotente)
+  - `201 Created`: Si se crea nueva factura → `{"id", "numero", "naturaleza", "created": True, "persisted": True}`
+  - `200 OK`: Si factura ya existe (idempotente) → `{"id", "numero", "naturaleza", "created": False, "persisted": True}`
   - `409 Conflict`: Si hay conflicto de integridad
   - `422 Unprocessable Entity`: Si faltan campos obligatorios
 
-**Lógica:**
+**Lógica (v2.61.2 + v2.61.3):**
 1. Valida configuración de empresa (SSoT)
 2. Normaliza números y NITs usando `normalize_document_number()`
 3. Resuelve naturaleza (VENTA/COMPRA) usando `_resolver_naturaleza()`
 4. Extrae prefijo y consecutivo desde número
 5. Parsea fecha de emisión (timezone-aware)
-6. Busca factura existente por CUFE (idempotencia)
-7. Si no existe, crea nueva factura
-8. Guarda anexos (XML) en `FacturaAnexos`
+6. `transaction.atomic` envuelve SOLO la escritura en BD (no el parsing)
+7. Busca factura existente por CUFE (idempotencia)
+8. Si no existe, crea nueva factura
+9. **Silent Success**: actualiza `FacturaAnexos.ubl_xml` si el nuevo XML es `AttachedDocument` (más completo)
+10. Retorna `persisted: True` siempre en el payload
 
 **Reglas:**
 - ⚠️ **IDEMPOTENCIA**: Por CUFE (clave legal) o número (fallback)
-- ⚠️ **TRANSACCIONAL**: `@transaction.atomic` (todo o nada)
+- ⚠️ **TRANSACCIONAL OPTIMIZADO** (v2.61.2): `transaction.atomic` solo en escritura BD
+- ⚠️ **SILENT SUCCESS** (v2.61.2): Actualiza FacturaAnexos si AttachedDocument > Invoice simple
+- ⚠️ **PERSISTED FLAG** (v2.61.3): Retorna `"persisted": True` para señalizar al frontend
 - ⚠️ **SSoT**: Usa `get_empresa_emisor_data()` para resolver naturaleza
 
 ##### `guardar_nota_credito_desde_dto(dto, xml_text)`
@@ -386,14 +415,18 @@ apps/tenant/facturas/
 - Si `async_mode=False`: `Tuple[Dict, int]` (payload, status_code)
 - Si `async_mode=True`: `Dict` con task_id (pendiente implementación)
 
-**Lógica:**
+**Lógica (v2.61.3):**
 1. Verifica si el pipeline universal está disponible (`FEATURE_DOCUMENT_PIPELINE`)
 2. Detecta tipo de documento (hint para XML/UBL)
 3. Llama a `ingest_document()` del pipeline universal
-4. Si `preview=False`, materializa usando `guardar_factura_desde_dto()` o `guardar_nota_credito_desde_dto()`
+4. **v2.61.3**: Si `status_code >= 400`, propaga el error inmediatamente (sin intentar materializar)
+5. Si `preview=False`, materializa usando `guardar_factura_desde_dto()` o `guardar_nota_credito_desde_dto()`
+6. **v2.61.3**: Retorna `"persisted": True` también para `NotaCredito` (201)
 
 **Reglas:**
 - ⚠️ **PIPELINE UNIVERSAL**: Usa `apps.services.document_ingest.ingest_document`
+- ⚠️ **FAIL FAST** (v2.61.3): Errores del pipeline (400, 415, etc.) se propagan sin intento de materialización
+- ⚠️ **PERSISTED FLAG** (v2.61.3): Payload de éxito incluye `"persisted": True` para Factura y NotaCredito
 - ⚠️ **COMPATIBILIDAD**: Mantiene compatibilidad con pipeline legacy
 
 ##### `get_facturacion_summary(empresa_id)`
@@ -1203,6 +1236,560 @@ apps/tenant/facturas/
 
 ---
 
+## 🌐 Flujo Completo: Workspace → Core API → Models
+
+### Resumen del Flujo Arquitectónico
+
+El flujo completo de la app Facturas se inicia desde el template principal `workspace.html`, pasa por el Core API (`core/api/urls.py`), y finalmente llega a los modelos en `facturas/models.py`. Este flujo garantiza una arquitectura desacoplada y modular, alineada con el patrón de cotizaciones y contabilidad.
+
+### Diagrama de Flujo Completo
+
+```
+1. Usuario accede a /workspace/
+   ↓
+2. Django: WorkspaceView.render() (apps/tenant/core/views_ui.py)
+   ↓
+3. Template: tenant/core/workspace.html
+   ├── Incluye: tenant/core/partials/facturas/list.html
+   ├── Incluye: tenant/facturas/partials/assets_facturas.html
+   └── Carga JavaScript modular (facturas.page.js)
+   ↓
+4. JavaScript: facturas.page.js se inicializa
+   ├── Detecta tab #tab-facturas visible
+   ├── Inicializa Tabulator con API endpoint
+   └── Configura listeners HTMX
+   ↓
+5. Frontend: Usuario interactúa (upload XML, ver detalle, eliminar, etc.)
+   ↓
+6. HTMX/API: Request a Core API facade
+   ├── GET /api/v1/core/v1/facturas/facturas/ (list)
+   ├── GET /api/v1/core/v1/facturas/facturas/{id}/ (retrieve)
+   ├── POST /api/v1/core/v1/facturas/facturas/upload-ubl/ (upload UBL)
+   ├── GET /api/v1/core/v1/facturas/facturas/gestor-offcanvas/ (offcanvas)
+   └── DELETE /api/v1/core/v1/facturas/facturas/{id}/ (delete)
+   ↓
+7. Core API: apps/tenant/core/api/urls.py
+   ├── Router dedicado: path("v1/facturas/", include("apps.tenant.core.api.v1.facturas.urls"))
+   └── Gateway directo: path("_apps/facturas/", include("apps.tenant.facturas.api.urls"))
+   ↓
+8. Core API Facade: apps/tenant/core/api/v1/facturas/viewsets.py
+   ├── FacturaCoreViewSet (hereda de FacturaViewSet)
+   ├── ItemFacturaCoreViewSet (hereda de ItemFacturaViewSet)
+   └── NotaCreditoCoreViewSet (hereda de NotaCreditoViewSet)
+   ↓
+9. App API: apps/tenant/facturas/api/viewsets.py
+   ├── FacturaViewSet (ReadOnlyModelViewSet)
+   ├── ItemFacturaViewSet (CRUD)
+   └── NotaCreditoViewSet (List, Retrieve, Destroy)
+   ↓
+10. Serializers: apps/tenant/facturas/api/serializers.py
+    ├── FacturaListSerializer (validación)
+    ├── FacturaDetailSerializer (validación)
+    └── ItemFacturaSerializer (validación)
+    ↓
+11. Service Layer: apps/tenant/facturas/services.py
+    ├── guardar_factura_desde_dto()
+    ├── guardar_nota_credito_desde_dto()
+    ├── importar_documento()
+    └── eliminar_factura()
+    ↓
+12. Parser UBL: apps/tenant/facturas/ubl_parser.py
+    ├── parse_ubl_to_dict()
+    └── importar_factura_desde_ubl()
+    ↓
+13. Models: apps/tenant/facturas/models.py
+    ├── Factura.save()
+    ├── ItemFactura.save()
+    └── NotaCredito.save()
+    ↓
+14. Database: PostgreSQL (multi-tenant)
+```
+
+### 1. Punto de Entrada: `workspace.html`
+
+**Ubicación:** `apps/tenant/core/templates/tenant/core/workspace.html`
+
+#### Estructura del Módulo Facturas
+
+```html
+{# Módulo Facturas v2.60 - HTML Centralizado en Core #}
+<section id="tab-facturas" class="workspace-tab" style="display: none;">
+  {# ⚠️ v2.60: Toolbar y contenido centralizados en Core #}
+  {% include 'tenant/core/partials/facturas/list.html' %}
+  {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+  {# El contenedor del offcanvas está en list.html: #offcanvas-container-facturas #}
+</section>
+```
+
+#### Carga de Assets JavaScript
+
+```html
+{# En bloque extra_js de workspace.html #}
+{% include 'tenant/facturas/partials/assets_facturas.html' %}
+```
+
+**Orden de Carga Crítico:**
+1. `assets_core.html` (DOMUtils, TabulatorFactory, UIManager)
+2. `facturas.api.js` (API wrapper)
+3. `facturas.page.js` (módulo principal)
+4. `facturas.editor.js` (editor de facturas, si aplica)
+
+#### Configuración HTMX
+
+```html
+{# HTMX cargado globalmente en workspace.html #}
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+{# Setup global de CSRF para HTMX #}
+<script>
+  document.body.addEventListener('htmx:configRequest', function(event) {
+    const method = (event.detail.verb || 'GET').toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      const token = getCSRFToken();
+      if (token) {
+        event.detail.headers['X-CSRFToken'] = token;
+      }
+    }
+  });
+</script>
+```
+
+### 2. Core API: `core/api/urls.py`
+
+**Ubicación:** `apps/tenant/core/api/urls.py`
+
+#### Router Dedicado para Facturas
+
+```python
+# ⚠️ v2.61.1: Routers dedicados por módulo (patrón de contabilidad y cotizaciones)
+# ⚠️ FACTURAS: Router dedicado con todas las funcionalidades CRUD
+path("v1/facturas/", include("apps.tenant.core.api.v1.facturas.urls")),
+```
+
+**Endpoints Disponibles:**
+- `/api/v1/core/v1/facturas/facturas/` (CRUD principal - ReadOnly)
+- `/api/v1/core/v1/facturas/items-factura/` (CRUD items)
+- `/api/v1/core/v1/facturas/notas-credito/` (CRUD notas crédito)
+- Todas las acciones `@action` se heredan automáticamente:
+  - `upload-ubl/` (POST)
+  - `upload-document/` (POST)
+  - `summary/` (GET)
+  - `ingest/{task_id}/status/` (GET)
+  - `create-from-dto/` (POST)
+  - `materialize/` (POST)
+  - `{id}/xml/` (GET)
+  - `{id}/app-response/` (GET)
+  - `update-inbox-state/` (POST)
+  - `gestor-offcanvas/` (GET - TemplateHTMLRenderer)
+
+#### Gateway Directo
+
+```python
+# Gateway a APIs de apps (acceso directo a las apps sin facades)
+path("_apps/facturas/", include("apps.tenant.facturas.api.urls")),
+```
+
+**Endpoints Disponibles:**
+- `/api/v1/core/_apps/facturas/` (CRUD directo)
+- `/api/v1/core/_apps/facturas/upload-ubl/`
+- `/api/v1/core/_apps/facturas/upload-document/`
+- `/api/v1/core/_apps/facturas/summary/`
+- `/api/v1/core/_apps/facturas/ingest/{task_id}/status/`
+- `/api/v1/core/_apps/facturas/create-from-dto/`
+- `/api/v1/core/_apps/facturas/materialize/`
+- `/api/v1/core/_apps/facturas/{id}/xml/`
+- `/api/v1/core/_apps/facturas/{id}/app-response/`
+- `/api/v1/core/_apps/facturas/update-inbox-state/`
+- `/api/v1/core/_apps/facturas/gestor-offcanvas/`
+- `/api/v1/core/_apps/facturas/items-factura/` (CRUD items)
+- `/api/v1/core/_apps/facturas/notas-credito/` (CRUD notas crédito)
+
+### 3. Core API Facade: `core/api/v1/facturas/`
+
+**Ubicación:** `apps/tenant/core/api/v1/facturas/`
+
+#### Estructura de Archivos
+
+```
+apps/tenant/core/api/v1/facturas/
+├── __init__.py
+├── urls.py                    # Router dedicado
+├── viewsets.py                # Facade ViewSets
+└── serializers.py             # Facade Serializers
+```
+
+#### ViewSets Facade
+
+**Archivo:** `apps/tenant/core/api/v1/facturas/viewsets.py`
+
+```python
+class FacturaCoreViewSet(FacturaViewSet):
+    """
+    ⚠️ v2.61.1: Facade ViewSet para Facturas en Core API.
+    
+    Hereda todas las acciones @action de FacturaViewSet:
+    - importar-ubl: POST
+    - summary: GET
+    - upload-ubl: POST
+    - upload-document: POST
+    - ingest/{task_id}/status: GET
+    - create-from-dto: POST
+    - materialize: POST
+    - xml: GET (detail)
+    - app-response: GET (detail)
+    - update-inbox-state: POST
+    - gestor-offcanvas: GET (TemplateHTMLRenderer)
+    """
+    authentication_classes = [SessionAuthentication]
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ws_serializers.FacturaWorkspaceListSerializer
+        elif self.action == 'retrieve':
+            return ws_serializers.FacturaWorkspaceDetailSerializer
+        return ws_serializers.FacturaWorkspaceSerializer
+```
+
+**Características:**
+- ✅ **Herencia Completa**: Todas las acciones `@action` se heredan automáticamente
+- ✅ **SessionAuthentication**: Autenticación por sesión (workspace)
+- ✅ **Serializers Especializados**: Serializers optimizados para workspace
+
+#### Router Dedicado
+
+**Archivo:** `apps/tenant/core/api/v1/facturas/urls.py`
+
+```python
+from rest_framework.routers import DefaultRouter
+from .viewsets import (
+    FacturaCoreViewSet,
+    ItemFacturaCoreViewSet,
+    NotaCreditoCoreViewSet,
+)
+
+router = DefaultRouter(trailing_slash=True)
+# ⚠️ CRÍTICO: Orden de registro importa - rutas específicas ANTES de ruta vacía ""
+router.register(r'notas-credito', NotaCreditoCoreViewSet, basename='core-factura-nota-credito')
+router.register(r'items-factura', ItemFacturaCoreViewSet, basename='core-factura-item')
+router.register(r'facturas', FacturaCoreViewSet, basename='core-factura')  # ⚠️ AL FINAL para evitar greedy matching
+
+urlpatterns = router.urls
+```
+
+### 4. App API: `facturas/api/`
+
+**Ubicación:** `apps/tenant/facturas/api/`
+
+#### ViewSets Principales
+
+**Archivo:** `apps/tenant/facturas/api/viewsets.py`
+
+##### `FacturaViewSet`
+
+```python
+class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet para gestión de facturas (ReadOnly).
+    Expone CRUD limitado y acciones personalizadas.
+    """
+    queryset = Factura.objects.all()
+    serializer_class = FacturaSerializer
+    lookup_field = 'id'
+    pagination_class = StandardResultsSetPagination
+    
+    @action(detail=False, methods=['post'], url_path='upload-ubl')
+    def upload_ubl(self, request):
+        """Sube un archivo XML UBL 2.1 y lo importa."""
+        # ...
+    
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request):
+        """Retorna resumen de facturación neta."""
+        # ...
+    
+    @action(detail=True, methods=['get'], url_path='xml')
+    def xml(self, request, id=None):
+        """Retorna el UBL XML completo de la factura."""
+        # ...
+    
+    @action(detail=False, methods=['get'], url_path='gestor-offcanvas')
+    def gestor_offcanvas(self, request):
+        """Devuelve el HTML del formulario de factura para HTMX Offcanvas."""
+        # ...
+```
+
+### 5. Service Layer: `facturas/services.py`
+
+**Ubicación:** `apps/tenant/facturas/services.py`
+
+#### Métodos Principales
+
+```python
+# v2.61.2: transaction.atomic envuelve SOLO la escritura en BD (no el parsing)
+def guardar_factura_desde_dto(dto, xml_text=None, file_bytes=None, file_type='xml'):
+    """
+    Persiste factura desde DTO canónico del pipeline XML (SSoT).
+    
+    Lógica (v2.61.3):
+    1. Valida configuración de empresa (SSoT)
+    2. Normaliza números y NITs
+    3. Resuelve naturaleza (VENTA/COMPRA)
+    4. Extrae prefijo y consecutivo
+    5. Parsea fecha de emisión (timezone-aware)
+    6. TRANSACCIONAL (solo BD): busca por CUFE → crea o actualiza
+    7. Silent Success: actualiza FacturaAnexos si AttachedDocument > Invoice
+    8. Retorna {"id", "numero", "naturaleza", "created", "persisted": True}
+    """
+    # ...
+
+def importar_documento(file_bytes, filename, preview, async_mode):
+    """
+    Importa documento usando el pipeline universal de documentos.
+    
+    Lógica (v2.61.3):
+    1. Verifica si el pipeline universal está disponible
+    2. Detecta tipo de documento (hint para XML/UBL)
+    3. Llama a ingest_document() del pipeline universal
+    4. ⚠️ v2.61.3: Si status_code >= 400 → propaga error inmediatamente
+    5. Si preview=False, materializa usando guardar_factura_desde_dto()
+       o guardar_nota_credito_desde_dto()
+    6. ⚠️ v2.61.3: Retorna "persisted": True en respuesta exitosa (Factura y NC)
+    """
+    # ...
+
+def eliminar_factura(factura):
+    """
+    Elimina una factura y todos sus registros relacionados.
+    
+    Lógica:
+    1. Elimina nota de crédito asociada primero (si existe)
+    2. Elimina anexos (OneToOne, se elimina automáticamente)
+    3. Elimina factura (esto elimina automáticamente los items por CASCADE)
+    """
+    # ...
+```
+
+### 6. Parser UBL: `facturas/ubl_parser.py`
+
+**Ubicación:** `apps/tenant/facturas/ubl_parser.py`
+
+#### Funciones Principales
+
+```python
+def fast_get_cufe(xml_bytes: bytes) -> Optional[str]:
+    """
+    ⚡ v2.61.2: Pre-validación de Idempotencia — extrae CUFE/CUDE con regex pura.
+    
+    Ejecuta en milisegundos sobre los bytes crudos SIN parsear todo el XML.
+    Busca contenido dentro de <cbc:UUID> o variantes con namespace.
+    
+    Patrón:
+      r'<[^>]*:UUID[^>]*>([A-Za-z0-9\\-]{20,})</[^>]*:UUID[^>]*>'
+    
+    Retorna: CUFE (str) o None si no se encuentra
+    """
+
+def _limpiar_cdata_eficiente(xml_content: str) -> str:
+    """
+    v2.61.2: Limpia marcadores CDATA de forma eficiente mediante regex.
+    Reemplaza <![CDATA[ ... ]]> preservando el contenido interno.
+    """
+
+def _extraer_invoice_desde_attached_document(root, xml_bytes):
+    """
+    v2.61.2: Extrae el Invoice/CreditNote embebido en AttachedDocument.
+    
+    Optimizaciones:
+    - Si xml_bytes > 2MB: usa lxml.etree.iterparse (streaming, bajo consumo RAM)
+    - Si < 2MB: parsing estándar (más rápido para archivos pequeños)
+    - Limpieza CDATA con _limpiar_cdata_eficiente() (regex)
+    - Buffer de memoria limitado a 10MB
+    - Libera elementos procesados inmediatamente (elem.clear())
+    """
+
+def parse_ubl_to_dict(root, xml_bytes=None, naturaleza=None):
+    """
+    Mapea UBL 2.1 (root ya parseado) a DTO (dict) sin crear Factura.
+    
+    Lógica:
+    1. Detecta si es AttachedDocument y extrae Invoice interno
+       (usa _extraer_invoice_desde_attached_document con iterparse si >2MB)
+    2. Obtiene namespaces dinámicos
+    3. Extrae información básica (número, fecha, CUFE)
+    4. Extrae emisor y receptor
+    5. Extrae totales y moneda
+    6. Construye DTO con datos extraídos
+    """
+```
+
+### 6b. Parser Genérico: `apps/services/document_parser/xml_parser/parser.py`
+
+**Ubicación:** `apps/services/document_parser/xml_parser/parser.py`
+
+#### Correcciones v2.61.3
+
+```python
+# FIX: UnboundLocalError 'cannot access local variable re' (v2.61.3)
+# Causa: import re dentro de _parse_invoice_ubl21() hacía que Python tratara
+#        're' como variable local en todo el scope de la función.
+# Solución: eliminados los 'import re' dentro de la función (líneas 270 y 316).
+#           El módulo re ya está importado al inicio del archivo (línea 12).
+
+# FIX: Doble timezone en fecha_emision (v2.61.3 / v2.61.2)
+# Causa: issue_time puede incluir offset "-05:00" ya que la DIAN lo incluye.
+# Solución: solo agrega "-05:00" si la cadena datetime NO tiene timezone ya.
+if fecha_emision and "T" in fecha_emision:
+    time_part = fecha_emision.split("T", 1)[1]
+    has_tz = bool(re.search(r'[+-]\d{2}:\d{2}$', time_part)) or time_part.endswith('Z')
+    if not has_tz:
+        fecha_emision = f"{fecha_emision}-05:00"  # UTC-5 (Colombia)
+```
+
+### 7. Models: `facturas/models.py`
+
+**Ubicación:** `apps/tenant/facturas/models.py`
+
+#### Modelos Principales
+
+```python
+class Factura(models.Model):
+    """
+    Modelo principal de Facturas.
+    Representa una factura electrónica UBL 2.1.
+    """
+    numero = models.CharField(max_length=50, unique=True)
+    cufe = models.CharField(max_length=128, unique=True, db_index=True)
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    naturaleza = models.CharField(max_length=10, choices=Naturaleza.choices)
+    # Snapshot Emisor
+    emisor_nit = models.CharField(max_length=20)
+    emisor_razon_social = models.CharField(max_length=255)
+    # Snapshot Receptor
+    receptor_nit = models.CharField(max_length=20)
+    receptor_razon_social = models.CharField(max_length=255)
+    # Totales
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2)
+    impuestos = models.DecimalField(max_digits=12, decimal_places=2)
+    total = models.DecimalField(max_digits=12, decimal_places=2)
+    # ...
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['numero', 'fecha_emision']),
+            models.Index(fields=['estado', 'naturaleza']),
+            models.Index(fields=['cufe']),
+            models.Index(fields=['empresa']),
+        ]
+
+class ItemFactura(models.Model):
+    """
+    Items de línea de una factura.
+    """
+    factura = models.ForeignKey(Factura, on_delete=models.CASCADE, related_name='items')
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    linea_id = models.CharField(max_length=50)
+    descripcion = models.TextField()
+    cantidad = models.DecimalField(max_digits=10, decimal_places=2)
+    valor_unitario = models.DecimalField(max_digits=12, decimal_places=2)
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2)
+    total = models.DecimalField(max_digits=12, decimal_places=2)
+    # ...
+    
+    def save(self, *args, **kwargs):
+        """Calcula subtotales automáticamente."""
+        self.subtotal = self.cantidad * self.valor_unitario
+        self.valor_iva = self.subtotal * (self.porcentaje_iva / Decimal('100.00'))
+        self.total = self.subtotal + self.valor_iva
+        super().save(*args, **kwargs)
+```
+
+### 8. Flujo de Datos Completo (v2.61.3)
+
+#### Ejemplo: Importar Factura desde XML UBL
+
+```
+1. Usuario: Sube archivo XML UBL 2.1 en workspace.html
+   → Botón "Importar XML / PDF" (data-action="subir-factura", sin onclick inline)
+   ↓
+2. HTMX: POST /api/v1/core/v1/facturas/facturas/upload-ubl/?preview=false&async=false
+   (batch: acepta files[] con múltiples archivos)
+   ↓
+3. Core API Facade: FacturaCoreViewSet.upload_ubl()
+   → Hereda de FacturaViewSet.upload_ubl() (todas las acciones heredan)
+   ↓
+4. App API: FacturaViewSet.upload_ubl()
+   → ⚡ fast_get_cufe(xml_bytes): regex sobre bytes crudos
+   │   ├─ CUFE ya existe → return 200 OK inmediato
+   │   └─ CUFE nuevo → continuar
+   → Detecta batch (files[]) → procesa cada archivo
+   → Si >10 archivos → delega a Celery (202 + task_id)
+   → Llama a services.importar_documento()
+   ↓
+5. Service Layer: importar_documento()
+   → Llama a ingest_document() del pipeline universal
+   → ⚠️ Si status_code >= 400 → propaga error inmediatamente (v2.61.3)
+   → Obtiene DTO canónico
+   ↓
+6. Document Parser: parser.py (_parse_invoice_ubl21)
+   → Extrae número, CUFE, emisor, receptor, totales
+   → Timezone fix: agrega -05:00 solo si no hay tz en fecha_emision (v2.61.3)
+   → Sin import re locales (fix UnboundLocalError v2.61.3)
+   ↓
+7. Service Layer: guardar_factura_desde_dto()
+   → Valida empresa (SSoT)
+   → Normaliza NITs y números
+   → Resuelve naturaleza (VENTA/COMPRA)
+   → transaction.atomic solo envuelve escritura BD (v2.61.2)
+   → Busca por CUFE (idempotencia)
+   → Crea o actualiza Factura
+   → Silent Success: actualiza FacturaAnexos si AttachedDocument (v2.61.2)
+   → Retorna {"id", "numero", "created", "persisted": True} (v2.61.3)
+   ↓
+8. Models: Factura.save() → ItemFactura.save() × N
+   → Calcula subtotales automáticamente
+   ↓
+9. Response: {id, numero, naturaleza, created, persisted: true} (201 o 200)
+   ↓
+10. Frontend: facturas_ui.js — manejarSubidaArchivo()
+    → Detecta data.id (no data.persisted) para saber si ya fue persistido (v2.61.3)
+    │   ├─ data.id existe → ya persistido → cerrar offcanvas + recargar tabla
+    │   ├─ data.id ausente + missingFields → mostrarFormularioCamposFaltantes()
+    │   └─ data.id ausente + DTO completo → persistir vía create-from-dto
+    ↓
+11. Frontend: facturas_list.js — Tabulator recarga datos
+    → _eliminandoFactura en scope módulo (fix ReferenceError v2.61.3)
+    → rowClick ignorado durante eliminación
+```
+
+### 9. Ventajas de la Arquitectura
+
+#### ✅ Desacoplamiento
+- **Core API Facade**: Expone funcionalidades de apps individuales de forma unificada
+- **Gateway Directo**: Permite acceso directo a APIs de apps sin facades
+- **Service Layer**: Lógica de negocio centralizada e independiente
+
+#### ✅ Modularidad
+- **Templates Separados**: `list.html`, `offcanvas_factura.html`
+- **JavaScript Modular**: `facturas.api.js`, `facturas.page.js`, `facturas.editor.js`
+- **ViewSets Especializados**: Serializers optimizados para workspace
+
+#### ✅ Resiliencia
+- **SSoT (Single Source of Truth)**: Empresa siempre del tenant
+- **Snapshot Pattern**: Datos de emisor/receptor guardados al momento de emisión
+- **Idempotencia**: Importación por CUFE/CUDE evita duplicados
+
+#### ✅ Escalabilidad
+- **Router Dedicado**: Fácil agregar nuevas funcionalidades
+- **Herencia de Acciones**: Todas las acciones `@action` se heredan automáticamente
+- **Gateway Directo**: Acceso directo para casos especiales
+- **Pipeline Universal**: Soporte para múltiples formatos (XML, PDF, XLS)
+
+#### ✅ Inmutabilidad
+- **Documentos Históricos**: Facturas son documentos históricos (no edición, solo eliminación)
+- **Integridad Fiscal**: Snapshot garantiza integridad histórica
+
+---
+
 ## 🔗 Dependencias y Aislamiento
 
 ### Dependencias Externas
@@ -1232,6 +1819,72 @@ apps/tenant/facturas/
 ---
 
 ## 📝 Notas de Versión
+
+### v2.61.3 — Alineación Backend-Frontend (2026-03-12)
+
+**Backend (`services.py`):**
+- ✅ `guardar_factura_desde_dto()`: retorna `"persisted": True` en el payload (201 y 200)
+- ✅ `importar_documento()`: verifica `status_code >= 400` antes de intentar materializar el DTO
+- ✅ `importar_documento()`: retorna `"persisted": True` también para `NotaCredito` (201)
+
+**Backend (`parser.py`):**
+- ✅ Fix `UnboundLocalError: cannot access local variable 're'`: eliminados dos `import re` locales dentro de `_parse_invoice_ubl21()` (líneas 270 y 316); el módulo `re` ya está importado globalmente (línea 12)
+- ✅ Fix doble timezone en `fecha_emision`: `issue_time` de la DIAN puede incluir `-05:00`; ahora solo se agrega si no hay timezone ya presente
+
+**Frontend (`facturas_ui.js`):**
+- ✅ Fix `manejarSubidaArchivo`: condición cambiada de `!data.persisted` a `!data.id` para detectar de forma fiable si el backend ya persistió la factura
+- ✅ Comentario en línea 1519 actualizado: refleja que `upload-ubl` puede retornar `{id, persisted:true}` (no siempre es parse-only)
+
+**Frontend (`facturas_list.js`):**
+- ✅ Fix `ReferenceError: _eliminandoFactura is not defined`: variable movida de scope local de `initTable()` al scope del módulo (línea 25), compartida correctamente con `initListEvents()`
+
+**Cascade de versión (7 archivos a v2.61.3):**
+- `services.py` docstring, `facturas_ui.js` comentario, `facturas_list.js` header, `ver_detalle_factura.js` header, `assets_facturas.html`, `list.html`, `workspace.html`
+
+---
+
+### v2.61.2 — Optimización Pipeline + Core API Facade + Solo Lectura
+
+**Pre-validación de Idempotencia:**
+- ✅ `fast_get_cufe(xml_bytes)` en `ubl_parser.py`: extrae CUFE con regex antes del parsing completo
+- ✅ `upload_ubl` llama a `fast_get_cufe()` primero; si CUFE existe → `200 OK` inmediato
+
+**Optimización del Pipeline (`ubl_parser.py`):**
+- ✅ `_extraer_invoice_desde_attached_document`: usa `lxml.etree.iterparse` si `>2MB`
+- ✅ `_limpiar_cdata_eficiente()`: limpieza CDATA por regex (no reemplazo manual de strings)
+- ✅ `transaction.atomic` en `guardar_factura_desde_dto()` solo envuelve escritura BD
+
+**Silent Success (`services.py`):**
+- ✅ Si la factura ya existe, actualiza `FacturaAnexos.ubl_xml` si el nuevo XML es `AttachedDocument` (más completo que `Invoice` simple)
+
+**Batch Processing (`viewsets.py`):**
+- ✅ `upload_ubl` acepta `files[]` (múltiples archivos)
+- ✅ Retorna resumen `{"creados": X, "duplicados": Y, "errores": Z, "resultados": [...]}`
+- ✅ Si `>10` archivos → delega a Celery (`batch_upload_facturas_task`) → `202 + task_id`
+
+**Core API Facade:**
+- ✅ Router dedicado: `apps/tenant/core/api/v1/facturas/urls.py`
+- ✅ `FacturaCoreViewSet`, `ItemFacturaCoreViewSet`, `NotaCreditoCoreViewSet`
+- ✅ Serializers workspace: `WorkspaceListSerializer`, `WorkspaceDetailSerializer`
+- ✅ `get_serializer_class()` retorna `None` para acciones que manejan datos directamente
+
+**Frontend Solo Lectura:**
+- ✅ `offcanvas_ver_factura.html`: todos los inputs → `<p class='form-control-plaintext'>`, sin botón Guardar
+- ✅ `ver_detalle_factura.js`: solo GET, cierra offcanvas con warning si recibe 404
+- ✅ `facturas_list.js`: botón "Ver" carga `gestor-offcanvas?readonly=true`
+- ✅ Eliminación: cierra offcanvas, hash → `#facturas`, flag `_eliminandoFactura`
+- ✅ Botones: eliminados `onclick` inline, solo `data-action` (event delegation)
+- ✅ `facturas_editor.js` deshabilitado (comentado en `assets_facturas.html`)
+
+**Frontend `facturas_ui.js`:**
+- ✅ Validación preventiva en `manejarSubidaArchivo`: chequea `emisor` y `naturaleza` antes de persistir
+- ✅ Búsqueda NIT en rutas alternativas para `AttachedDocument` (`sender_party_nit`, `sender_company_id`)
+- ✅ `naturaleza` asignada automáticamente como `'COMPRA'` para `AttachedDocument`
+- ✅ `limpiarNIT()`: elimina caracteres especiales del NIT
+- ✅ `mostrarFormularioCamposFaltantes`: `<select>` para naturaleza, reconstrucción correcta de objetos anidados
+- ✅ Protección doble click en botones de toolbar
+
+---
 
 ### v2.60
 - ✅ Emisión de facturas desde cotizaciones
@@ -1265,7 +1918,26 @@ apps/tenant/facturas/
 
 ---
 
-**Documento generado automáticamente**  
-**Última actualización**: 2026-03-04  
-**Versión del Sistema**: 2.60  
-**Estado**: ✅ Validado y Actualizado
+---
+
+## 🐛 Registro de Bugs Corregidos
+
+| Versión | Bug | Causa | Fix |
+|---------|-----|-------|-----|
+| v2.61.3 | `UnboundLocalError: cannot access local variable 're'` | `import re` dentro de `_parse_invoice_ubl21()` marcaba `re` como local → `re.search()` anterior fallaba | Eliminados `import re` locales (líneas 270 y 316); usa `re` global del módulo |
+| v2.61.3 | `ReferenceError: _eliminandoFactura is not defined` | Declarado con `let` dentro de `initTable()` (scope local), usado en `initListEvents()` (scope hermano) | Movido al scope del módulo IIFE (junto a `let table`) |
+| v2.61.3 | Doble timezone en `fecha_emision` | `issue_time` de DIAN ya incluye `-05:00`; se añadía un segundo offset | Fix: solo agrega `-05:00` si no hay timezone en la cadena |
+| v2.61.3 | Frontend intentaba re-persistir factura ya guardada | Condición usaba `!data.persisted` (flag semántico a veces ausente) | Cambiado a `!data.id` (indicador concreto: si hay id, ya fue guardado) |
+| v2.61.2 | `POST /upload-document/ → 403 Forbidden` | Endpoint incorrecto en frontend | Cambiado a `/upload-ubl/` en `facturas.api.js`, `maildigester.xml.modal.js`, templates |
+| v2.61.2 | `POST /create-from-dto/ → 422` | DRF intentaba crear serializer para acciones que no lo usan | `get_serializer_class()` retorna `None` para acciones directas; `get_serializer()` maneja el caso |
+| v2.61.2 | `GET /facturas/{id}/ → 404` tras eliminación | Frontend intentaba ver la factura recién eliminada | `ver_detalle_factura.js` cierra offcanvas y muestra warning en 404; hash → `#facturas` |
+| v2.61.2 | Botón "Importar" disparaba múltiples eventos | `onclick` inline + listener duplicaban invocaciones | Eliminados `onclick` inline; solo `data-action` + flag `_subirNuevaEnProceso` |
+| v2.61.2 | `422` por `emisor.nit` / `naturaleza` faltantes | `AttachedDocument` expone NIT en `SenderParty`, no en la ruta estándar | `manejarSubidaArchivo` busca NIT en rutas alternativas; `naturaleza='COMPRA'` auto-asignado |
+
+---
+
+**Documento actualizado manualmente**  
+**Última actualización**: 2026-03-12  
+**Versión del Sistema**: 2.61.3  
+**Estado**: ✅ Sincronizado con todos los cambios aplicados hasta 2026-03-12  
+**Módulos cubiertos**: `services.py`, `ubl_parser.py`, `parser.py`, `viewsets.py`, `facturas_ui.js`, `facturas_list.js`, `ver_detalle_factura.js`, `assets_facturas.html`, `list.html`, `workspace.html`

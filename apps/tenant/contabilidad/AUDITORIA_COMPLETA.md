@@ -1,7 +1,7 @@
 # Auditoría Completa - App Contabilidad
 
-**Fecha:** 2024  
-**Versión:** v2.60  
+**Fecha:** Diciembre 2024  
+**Versión:** v2.61  
 **Módulo:** `apps/tenant/contabilidad`
 
 ## 📋 Índice
@@ -39,6 +39,7 @@ La app `contabilidad` gestiona el plan de cuentas contables, asientos contables 
 2. **AsientoContable**: Asientos contables con estados (BORRADOR, APROBADO, CERRADO)
 3. **MovimientoContable**: Partidas de asientos (débito/crédito)
 4. **PeriodoContable**: ⚠️ v2.60 Fase 3 - Periodos contables cerrados para inmutabilidad
+5. **CatalogoMaestroNIIF**: ✅ v2.61 - Catálogo oficial NIIF Colombia (SSoT)
 
 ---
 
@@ -49,8 +50,13 @@ apps/tenant/contabilidad/
 ├── __init__.py
 ├── admin.py                    # Configuración Django Admin
 ├── apps.py                     # Configuración de la app
-├── models.py                   # Modelos: CuentaContable, AsientoContable, MovimientoContable, PeriodoContable
+├── models.py                   # Modelos: CuentaContable, AsientoContable, MovimientoContable, PeriodoContable, CatalogoMaestroNIIF
 ├── services.py                 # Service Layer principal (LIST_FIELDS, DETAIL_FIELDS, qs_*)
+├── choices/
+│   └── choices.py              # ✅ v2.61 - CATALOGO_NIIF_COLOMBIA (catálogo oficial)
+├── management/
+│   └── commands/
+│       └── poblar_catalogo_niif.py  # ✅ v2.61 - Comando para poblar catálogo NIIF
 ├── services/
 │   ├── __init__.py
 │   ├── cuentas_service.py     # Lógica de negocio para CuentaContable
@@ -58,7 +64,7 @@ apps/tenant/contabilidad/
 │   └── movimientos_service.py # Lógica de negocio para MovimientoContable
 ├── api/
 │   ├── __init__.py
-│   ├── viewsets.py            # ViewSets: CuentaContable, AsientoContable, MovimientoContable
+│   ├── viewsets.py            # ViewSets: CuentaContable, AsientoContable, MovimientoContable, CatalogoMaestroNIIF
 │   ├── serializers.py         # Serializers: List/Detail para cada modelo
 │   ├── urls.py                # Router DRF y URLs
 │   ├── filters.py             # Filtros personalizados (vacío, usa filterset_fields)
@@ -84,8 +90,7 @@ apps/tenant/contabilidad/
 │   ├── __init__.py
 │   ├── test_api_contabilidad.py
 │   └── test_templates.py
-├── urls_ui.py                 # ⚠️ DEPRECATED: UI movida a Core
-└── views_ui.py                # ⚠️ DEPRECATED: UI movida a Core
+└── views_ui.py                # ⚠️ DEPRECATED: UI movida a Core (archivo vacío, mantenido por compatibilidad)
 ```
 
 ### Archivos Frontend (Core)
@@ -112,10 +117,23 @@ apps/tenant/core/templates/tenant/core/partials/contabilidad/
 ├── assets_cuentas.html
 └── assets_asientos.html
 
-apps/tenant/core/templates/tenant/core/contabilidad/
-├── offcanvas_crear_asiento.html    # ✅ v2.60 - HTMX Offcanvas creación
-├── offcanvas_detalle_asiento.html  # ✅ v2.60 - HTMX Offcanvas detalle
-└── offcanvas_cargar_desde_documentos.html # ✅ v2.60 - HTMX Asistente documentos
+apps/tenant/core/templates/tenant/core/contabilidad/partials/
+├── asiento_offcanvas_detalle.html      # ✅ v2.60 - HTMX Offcanvas detalle asiento
+├── asiento_offcanvas_form.html         # ✅ v2.60 - HTMX Offcanvas formulario asiento
+├── asiento_offcanvas_cargar_desde_docs.html  # ✅ v2.60 - HTMX Offcanvas asistente documentos
+├── cuenta_offcanvas_detalle.html       # ✅ v2.60 - HTMX Offcanvas detalle cuenta
+├── cuenta_offcanvas_form.html          # ✅ v2.60 - HTMX Offcanvas formulario cuenta
+├── periodo_offcanvas_detalle.html      # ✅ v2.60 - HTMX Offcanvas detalle periodo
+├── periodo_offcanvas_form.html         # ✅ v2.60 - HTMX Offcanvas formulario periodo
+├── list_asientos.html                  # Listado de asientos
+├── list_cuentas.html                   # Listado de cuentas
+├── list_periodos.html                  # ✅ v2.60 - Listado de periodos
+├── assets_asiento.html                 # Assets JS para asientos
+├── assets_asientos.html                 # Assets JS para módulo asientos
+├── assets_cuenta.html                   # Assets JS para cuentas
+├── assets_cuentas.html                  # Assets JS para módulo cuentas
+├── assets_periodo.html                  # ✅ v2.60 - Assets JS para periodos
+└── summary.html                         # Resumen contable
 ```
 
 ---
@@ -268,6 +286,65 @@ self.asiento.save()
 
 ---
 
+### 3.5 CatalogoMaestroNIIF ✅ v2.61
+
+**Ubicación:** `apps/tenant/contabilidad/models.py:19-147`
+
+**Propósito:** Catálogo Maestro de Cuentas NIIF para Colombia (Single Source of Truth). Referencia oficial para el plan de cuentas contables.
+
+**Campos Principales:**
+- `codigo`: CharField(20, unique=True) - Código oficial NIIF Colombia
+- `nombre`: CharField(200, editable=False) - Nombre oficial (auto-seteado)
+- `nivel`: IntegerField(editable=False) - Nivel de la cuenta (1=Clase, 2=Grupo, 4=Cuenta, 6=Subcuenta)
+- `naturaleza`: CharField(1, choices) - D (Débito/Deudora), C (Crédito/Acreedora) (auto-seteado)
+- `activa`: BooleanField(default=True) - Indica si la cuenta está activa
+
+**Índices:**
+- `['codigo']` - Búsqueda por código
+- `['nivel']` - Filtrado por nivel
+
+**Validaciones:**
+- `codigo` único (catálogo oficial)
+- Solo se puede crear con códigos que existan en `CATALOGO_NIIF_COLOMBIA`
+- Campos `nombre`, `nivel` y `naturaleza` son auto-seteados desde el catálogo oficial
+
+**Métodos:**
+- `get_tipo_cuenta()`: Determina el tipo (ACTIVO, PASIVO, PATRIMONIO, INGRESO, GASTO, COSTO) basado en el primer dígito del código
+
+**Auto-Seteo (Model.save):**
+```python
+def save(self, *args, **kwargs):
+    """
+    Auto-setear nombre, nivel y naturaleza desde CATALOGO_NIIF_COLOMBIA.
+    Solo se requiere el campo 'codigo' al crear.
+    """
+    from apps.tenant.contabilidad.choices.choices import CATALOGO_NIIF_COLOMBIA
+    
+    # Buscar código en catálogo oficial
+    cuenta_catalogo = buscar_en_catalogo(self.codigo)
+    if not cuenta_catalogo:
+        raise ValueError(f"El código '{self.codigo}' no existe en CATALOGO_NIIF_COLOMBIA")
+    
+    # Auto-setear campos
+    self.nombre = cuenta_catalogo[1]
+    self.nivel = cuenta_catalogo[2]
+    self.naturaleza = cuenta_catalogo[3]
+    
+    super().save(*args, **kwargs)
+```
+
+**Política:**
+- Cada tenant tiene su propia copia del catálogo maestro
+- Permite que cada tenant personalice su plan de cuentas anclado al estándar NIIF
+- Las `CuentaContable` pueden referenciar este catálogo mediante relación opcional
+
+**Comando de Management:**
+- `python manage.py poblar_catalogo_niif`: Puebla el catálogo desde `CATALOGO_NIIF_COLOMBIA`
+- Elimina registros existentes y recrea desde el catálogo oficial
+- Útil para inicializar o actualizar el catálogo maestro
+
+---
+
 ## 4. Capa de API
 
 ### 4.1 ViewSets
@@ -404,7 +481,19 @@ def balance_prueba(self, request):
         url_path='render-offcanvas/crear')
 def render_offcanvas_crear(self, request):
     """Endpoint HTMX para cargar offcanvas de creación"""
-    return Response({}, template_name='tenant/core/contabilidad/offcanvas_crear_asiento.html')
+    return Response({}, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_form.html')
+```
+
+**render_offcanvas_cargar_desde_documentos()** ✅ v2.60:
+```python
+@action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], 
+        url_path='render-offcanvas/cargar-desde-documentos')
+def render_offcanvas_cargar_desde_documentos(self, request):
+    """
+    Endpoint HTMX para cargar offcanvas de selección de documentos.
+    ⚠️ v2.60 Fase 3: Asistente de Selección - Lista Facturas y Gastos sin asiento
+    """
+    return Response({}, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_cargar_desde_docs.html')
 ```
 
 **documentos_sin_asiento()** ✅ v2.60:
@@ -460,6 +549,79 @@ def get_queryset(self):
         return MovimientoContable.objects.all()
 ```
 
+#### CatalogoMaestroNIIFViewSet ✅ v2.61
+
+**Base:** `BaseTenantViewSet`  
+**Permisos:** `IsAuthenticated, IsTenantAdminOrReadOnly`  
+**Paginación:** `StandardResultsSetPagination`  
+**Filtros:** `nivel`, `naturaleza`, `activa`  
+**Búsqueda:** `codigo`, `nombre`  
+**Ordenamiento:** `codigo`, `nombre`, `nivel`
+
+**Endpoints:**
+- `GET /api/v1/contabilidad/catalogo-niif/` - Lista del catálogo
+- `GET /api/v1/contabilidad/catalogo-niif/{id}/` - Detalle de cuenta del catálogo
+- `POST /api/v1/contabilidad/catalogo-niif/` - Crear cuenta (⚠️ ENFORCED: Solo ADMIN, solo requiere `codigo`)
+- `GET /api/v1/contabilidad/catalogo-niif/por-nivel/{nivel}/` - ✅ v2.61: Filtra por nivel (1, 2, 4, 6)
+- `GET /api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?tipo=ACTIVO` - ✅ v2.61: Busca por tipo de cuenta
+
+**QuerySet Optimizado:**
+```python
+def get_queryset(self):
+    if self.action == "list":
+        return CatalogoMaestroNIIF.objects.only(
+            'id', 'codigo', 'nombre', 'nivel', 'naturaleza', 'activa'
+        ).order_by('codigo')
+    elif self.action == "retrieve":
+        return CatalogoMaestroNIIF.objects.prefetch_related('cuentas_vinculadas')
+    else:
+        return CatalogoMaestroNIIF.objects.all()
+```
+
+**Acciones Personalizadas:**
+
+**por_nivel()** ✅ v2.61:
+```python
+@action(detail=False, methods=['get'], url_path='por-nivel/(?P<nivel>[0-9]+)')
+def por_nivel(self, request, nivel=None):
+    """
+    Filtra cuentas del catálogo por nivel.
+    GET /api/v1/contabilidad/catalogo-niif/por-nivel/1/  - Nivel 1 (Clases)
+    GET /api/v1/contabilidad/catalogo-niif/por-nivel/4/  - Nivel 4 (Cuentas)
+    """
+    queryset = self.get_queryset().filter(nivel=int(nivel))
+    return Response(serializer.data)
+```
+
+**buscar_por_tipo()** ✅ v2.61:
+```python
+@action(detail=False, methods=['get'], url_path='buscar-por-tipo')
+def buscar_por_tipo(self, request):
+    """
+    Busca cuentas del catálogo NIIF filtradas por tipo de cuenta.
+    Query params: tipo (ACTIVO, PASIVO, PATRIMONIO, INGRESO, GASTO, COSTO), search, nivel
+    """
+    # Mapea tipo a primer dígito del código
+    tipo_map = {'ACTIVO': '1', 'PASIVO': '2', ...}
+    queryset = self.get_queryset().filter(codigo__startswith=primer_digito, activa=True)
+    return Response(serializer.data)
+```
+
+**create()** - Auto-Seteo:
+```python
+def create(self, request, *args, **kwargs):
+    """
+    Crea una nueva cuenta en el catálogo NIIF.
+    ⚠️ AUTO-SETEO: Solo se requiere el campo 'codigo'.
+    Los campos nombre, nivel y naturaleza se auto-completan desde CATALOGO_NIIF_COLOMBIA.
+    
+    Body: {"codigo": "1110"}
+    Response: {"id": 1, "codigo": "1110", "nombre": "BANCOS", "nivel": 4, "naturaleza": "D", ...}
+    """
+    # El método save() del modelo se encarga del auto-seteo
+    # Si el código no existe en CATALOGO_NIIF_COLOMBIA, lanza ValueError
+```
+
 ---
 
 ### 4.2 Serializers
@@ -491,6 +653,19 @@ def get_queryset(self):
 - **Campos:** `id`, `asiento`, `cuenta`, `cuenta_nombre`, `cuenta_codigo`, `orden`, `debe`, `haber`, `descripcion`
 - **Read-only:** `id`
 
+#### CatalogoMaestroNIIFListSerializer ✅ v2.61
+- **Campos:** `id`, `codigo`, `nombre`, `nivel`, `naturaleza`, `activa`
+- **Read-only:** `id`
+
+#### CatalogoMaestroNIIFDetailSerializer ✅ v2.61
+- **Campos:** `id`, `codigo`, `nombre`, `nivel`, `naturaleza`, `activa`, `created_at`, `cuentas_vinculadas` (nested)
+- **Read-only:** `id`, `nombre`, `nivel`, `naturaleza`, `created_at`
+- **Método:** `get_tipo_cuenta()` - Calcula tipo basado en primer dígito del código
+
+#### CatalogoMaestroNIIFNestedSerializer ✅ v2.61
+- **Uso:** Serializer anidado usado en `CuentaContableDetailSerializer` para mostrar referencia NIIF
+- **Campos:** `id`, `codigo`, `nombre`, `nivel`, `naturaleza`
+
 ---
 
 ### 4.3 URLs
@@ -503,6 +678,7 @@ router = DefaultRouter(trailing_slash=True)
 router.register(r'cuentas-contables', CuentaContableViewSet, basename='cuenta-contable')
 router.register(r'asientos-contables', AsientoContableViewSet, basename='asiento-contable')
 router.register(r'movimientos-contables', MovimientoContableViewSet, basename='movimiento-contable')
+router.register(r'catalogo-niif', CatalogoMaestroNIIFViewSet, basename='catalogo-niif')  # ✅ v2.61
 ```
 
 **Base URL:** `/api/v1/contabilidad/` (definido en `config/api_urls.py`)
@@ -627,24 +803,29 @@ ASIENTO_DETAIL_FIELDS = ("id", "uuid", "numero", "fecha", "descripcion", "estado
 
 ---
 
-#### cuentas.page.js (v3.3 - Tabulator)
+#### cuentas.page.js (v3.3 - Tabulator) ✅ v2.61
 
 **Ubicación:** `apps/tenant/core/static/core/js/contabilidad/cuentas.page.js`
 
 **Tecnología:** Tabulator (TabulatorFactory)  
-**Dependencias:** `TabulatorFactory`, `Routes`, `http()`, `DOMUtils`
+**Dependencias:** `TabulatorFactory`, `Routes`, `http()`, `DOMUtils`, `UIManager`
 
 **Funcionalidad:**
 - Tabla Tabulator para listado de cuentas
 - CRUD completo con modales Bootstrap
 - Validaciones frontend
 - Integración con `error_injector.js`
+- ✅ v2.61: Eliminación con manejo de errores mejorado
+- ✅ v2.61: Validación y normalización de IDs
+- ✅ v2.61: Logs de depuración para diagnóstico
 
 **API Endpoint:** `/api/v1/contabilidad/cuentas-contables/`
 
 **Estado:**
 - ✅ v3.3 - Migrado a Tabulator
 - ✅ Usa TabulatorFactory (The Engine)
+- ✅ v2.61 - Fix eliminación: Detección inteligente de ID/UUID en backend
+- ✅ v2.61 - Fix UI: Manejo de errores 422 con mensajes de validación
 
 ---
 
@@ -737,7 +918,7 @@ ASIENTO_DETAIL_FIELDS = ("id", "uuid", "numero", "fecha", "descripcion", "estado
 - Manejo de errores y feedback visual
 
 **Integración:**
-- Cargado en `offcanvas_cargar_desde_documentos.html`
+- Cargado en `asiento_offcanvas_cargar_desde_docs.html`
 - Endpoint: `GET /api/v1/contabilidad/asientos-contables/documentos-sin-asiento/`
 - Endpoint: `POST /api/v1/contabilidad/asientos-contables/crear-desde-documentos/`
 
@@ -764,9 +945,9 @@ ASIENTO_DETAIL_FIELDS = ("id", "uuid", "numero", "fecha", "descripcion", "estado
 - ✅ v2.60: Contenedor `#offcanvas-container-asientos` para inyección HTMX
 
 **Templates HTMX** ✅ v2.60:
-- `offcanvas_crear_asiento.html`: Formulario de creación con cuadratura en vivo
-- `offcanvas_detalle_asiento.html`: Vista de solo lectura de asiento aprobado
-- `offcanvas_cargar_desde_documentos.html`: Asistente de selección de documentos
+- `asiento_offcanvas_form.html`: Formulario de creación/edición con cuadratura en vivo
+- `asiento_offcanvas_detalle.html`: Vista de solo lectura de asiento aprobado
+- `asiento_offcanvas_cargar_desde_docs.html`: Asistente de selección de documentos (Facturas y Gastos sin asiento)
 
 ---
 
@@ -796,37 +977,198 @@ ASIENTO_DETAIL_FIELDS = ("id", "uuid", "numero", "fecha", "descripcion", "estado
 10. Frontend cierra modal y refresca tabla
 ```
 
-### 7.2 Flujo: Crear Asiento Contable
+### 7.2 Flujo: Crear Asiento Contable ✅ v2.61 - Actualizado
+
+**⚠️ v2.60: Feature-Sliced Architecture - HTMX Offcanvas + Validación en Tiempo Real**
 
 ```
-1. Usuario hace clic en "Crear Asiento" (frontend)
+1. Usuario hace clic en "Crear Asiento" (workspace/#contabilidad → Asientos Contables)
    ↓
-2. Frontend abre modal con formulario
+2. HTMX: GET /api/v1/contabilidad/asientos-contables/render-offcanvas/crear/
    ↓
-3. Usuario completa: número, fecha, descripción
+3. Backend renderiza template: asiento_offcanvas_form.html
    ↓
-4. POST /api/v1/contabilidad/asientos-contables/
+4. HTMX inyecta HTML en #offcanvas-container-asientos
    ↓
-5. ViewSet.create() → _check_enforced_mode()
+5. asientos_form.js detecta htmx:afterSettle y muestra offcanvas
    ↓
-6. AsientoContable.objects.create() con estado='BORRADOR'
+6. configurarEventosFormulario() se ejecuta cuando offcanvas está visible
    ↓
-7. Usuario agrega movimientos (partidas)
+7. Frontend carga cuentas contables desde API (cache en state.cuentas)
    ↓
-8. POST /api/v1/contabilidad/movimientos-contables/
+8. Usuario completa formulario:
+   - Número (opcional, se genera automáticamente si está vacío)
+   - Fecha * (requerido, fecha por defecto = hoy)
+   - Descripción * (requerido)
+   - Estado (default: BORRADOR)
    ↓
-9. MovimientoContable.save() → Actualiza totales del asiento automáticamente
+9. Usuario hace clic en "Agregar Movimiento"
    ↓
-10. Usuario hace clic en "Aprobar"
+10. agregarMovimiento() clona template-movimiento-row
    ↓
-11. POST /api/v1/contabilidad/asientos-contables/{id}/aprobar/
+11. Se pobla select de cuentas desde state.cuentas
    ↓
-12. ViewSet.aprobar() → Valida total_debe == total_haber
+12. Se agregan event listeners:
+    - input-debe: Si debe > 0, limpiar haber y llamar actualizarTotales()
+    - input-haber: Si haber > 0, limpiar debe y llamar actualizarTotales()
+    - select-cuenta: Al cambiar, llamar actualizarTotales()
+    - btn-eliminar-movimiento: Eliminar movimiento y actualizarTotales()
    ↓
-13. Si válido: estado = 'APROBADO', save()
+13. actualizarTotales() se ejecuta en tiempo real:
+    - Calcula total_debe y total_haber desde DOM
+    - Actualiza estado de movimientos en state.movimientos
+    - Calcula diferencia = |debe - haber|
+    - Valida cuadratura (diferencia < 0.01)
+    - Actualiza displays: total-debe-display, total-haber-display
+    - Actualiza resumen: resumen-total-debe, resumen-total-haber, resumen-diferencia
+    - Actualiza badge de estado: "Cuadrado" (verde) o "No cuadra" (rojo)
+    - Valida que todos los movimientos tengan cuenta seleccionada
+    - Habilita/deshabilita btn-guardar-asiento-crear:
+      * HABILITADO si: cuadra && movimientos.length > 0 && todosTienenCuenta
+      * DESHABILITADO si: !cuadra || movimientos.length === 0 || !todosTienenCuenta
    ↓
-14. Si inválido: Response 400 con error
+14. Usuario completa movimientos:
+    - Selecciona cuenta contable (requerido)
+    - Ingresa descripción (opcional)
+    - Ingresa debe O haber (no ambos, no ambos en cero)
+   ↓
+15. Usuario hace clic en "Guardar Asiento" (solo habilitado si cuadra)
+   ↓
+16. guardar() ejecuta validaciones:
+    - form.checkValidity() (HTML5 validation)
+    - recolectarDatos() extrae datos del formulario y movimientos del DOM
+    - Valida que haya movimientos (length > 0)
+    - Valida cuadratura (calcularTotales() → cuadra === true)
+   ↓
+17. POST /api/v1/contabilidad/asientos-contables/
+   Body: {
+     "numero": "AS-001" | null,
+     "fecha": "2024-12-19",
+     "descripcion": "Descripción del asiento",
+     "estado": "BORRADOR",
+     "movimientos": [
+       {
+         "cuenta": 1,
+         "descripcion": "Descripción movimiento",
+         "debe": 1000.00,
+         "haber": 0.00,
+         "orden": 1
+       },
+       ...
+     ]
+   }
+   ↓
+18. AsientoContableViewSet.create():
+    - _check_enforced_mode() → Verifica STAFF/ADMIN
+    - Si no autorizado: Response 405 Method Not Allowed
+    - Si autorizado: Delega a create_asiento(data)
+   ↓
+19. create_asiento() (Service Layer):
+    a) Extrae movimientos_data del payload
+    b) Valida que tenga movimientos (si está vacío → ValidationError)
+    c) Valida estado (BORRADOR, APROBADO, CERRADO)
+    d) Valida periodo cerrado:
+       - Si fecha está en periodo cerrado → ValidationError
+       - Usa verificar_periodo_cerrado(fecha, empresa_id)
+    e) Obtiene empresa (SSoT):
+       - Si no se proporciona, busca Empresa.objects.first()
+       - Si no existe → ValidationError
+    f) Crea asiento: AsientoContable.objects.create(**data)
+    g) Crea movimientos en loop:
+       - Valida que cada movimiento tenga cuenta
+       - Valida que tenga debe O haber (no ambos, no ambos en cero)
+       - Calcula total_debe y total_haber
+       - Crea MovimientoContable.objects.create()
+    h) Si estado == 'APROBADO':
+       - Valida cuadratura: total_debe == total_haber
+       - Si no cuadra → ValidationError con estructura para error_injector.js
+    i) Actualiza asiento.total_debe y asiento.total_haber
+    j) asiento.save()
+    k) Retorna DTO con datos del asiento creado
+   ↓
+20. ViewSet.create() continúa:
+    - Obtiene asiento completo con prefetch_related('movimientos__cuenta')
+    - Serializa con AsientoContableDetailSerializer
+    - Response 201 Created con datos completos
+   ↓
+21. Frontend recibe respuesta:
+    - Si 201: Cierra offcanvas, refresca tabla Tabulator, muestra feedback de éxito
+    - Si 422: UIManager.handleError() muestra errores de validación
+    - Si 405: Muestra error de permisos
+    - Si 500: Muestra error genérico
+   ↓
+22. Tabla Tabulator se refresca automáticamente (nuevo asiento visible)
 ```
+
+**⚠️ Validaciones Frontend (asientos_form.js):**
+- ✅ Cuadratura en tiempo real (debe == haber con tolerancia 0.01)
+- ✅ Todos los movimientos deben tener cuenta seleccionada
+- ✅ Al menos un movimiento requerido
+- ✅ Formulario HTML5 validation (fecha, descripción requeridos)
+- ✅ Botón guardar se habilita/deshabilita dinámicamente
+
+**⚠️ Validaciones Backend (create_asiento service):**
+- ✅ ENFORCED MODE: Solo STAFF/ADMIN pueden crear
+- ✅ Movimientos requeridos (no puede estar vacío)
+- ✅ Estado válido (BORRADOR, APROBADO, CERRADO)
+- ✅ Periodo no cerrado (verificar_periodo_cerrado)
+- ✅ Empresa existe (SSoT por tenant)
+- ✅ Cada movimiento tiene cuenta
+- ✅ Cada movimiento tiene debe O haber (no ambos, no ambos en cero)
+- ✅ Si estado=APROBADO: Cuadratura obligatoria (total_debe == total_haber)
+
+**⚠️ Manejo de Errores:**
+- ✅ 422 Unprocessable Entity: Errores de validación estructurados
+- ✅ 405 Method Not Allowed: Usuario sin permisos
+- ✅ 500 Internal Server Error: Errores inesperados con logging
+- ✅ UIManager.handleError() muestra errores en contenedor de feedback
+
+**⚠️ IDs Dinámicos v2.61:**
+- ✅ Botón: `btn-guardar-asiento-crear` o `btn-guardar-asiento-editar`
+- ✅ Formulario: `form-asiento-crear` o `form-asiento-editar`
+- ✅ Offcanvas: `offcanvas-asiento-crear` o `offcanvas-asiento-editar`
+- ✅ El código busca ambos IDs posibles para compatibilidad
+
+**Componentes Clave del Flujo:**
+
+1. **Frontend (asientos_form.js):**
+   - `configurarEventosFormulario()`: Inicializa event listeners cuando offcanvas se muestra
+   - `agregarMovimiento()`: Clona template y agrega fila de movimiento con validaciones
+   - `actualizarTotales()`: Calcula totales en tiempo real y habilita/deshabilita botón guardar
+   - `recolectarDatos()`: Extrae datos del formulario y movimientos del DOM
+   - `guardar()`: Valida y envía POST request al backend
+   - `calcularTotales()`: Calcula total_debe y total_haber desde inputs del DOM
+
+2. **Backend (AsientoContableViewSet):**
+   - `create()`: Endpoint POST que valida permisos y delega al servicio
+   - `_check_enforced_mode()`: Verifica que usuario sea STAFF/ADMIN
+
+3. **Service Layer (asientos_service.py):**
+   - `create_asiento()`: Lógica de negocio completa con validaciones:
+     * Validación de movimientos (no vacío)
+     * Validación de estado
+     * Validación de periodo cerrado
+     * Validación de empresa (SSoT)
+     * Validación de movimientos (cuenta, debe/haber)
+     * Validación de cuadratura (si estado=APROBADO)
+     * Creación transaccional (asiento + movimientos)
+
+4. **Template (asiento_offcanvas_form.html):**
+   - Formulario HTMX con validación HTML5
+   - Tabla dinámica de movimientos
+   - Template clonable para filas de movimiento
+   - Displays de totales y cuadratura en tiempo real
+
+**Validaciones en Tiempo Real (Frontend):**
+- ✅ Cuadratura: Se calcula automáticamente al cambiar debe/haber
+- ✅ Cuentas: Se valida que todos los movimientos tengan cuenta seleccionada
+- ✅ Botón Guardar: Se habilita solo si cuadra, hay movimientos y todos tienen cuenta
+- ✅ Feedback Visual: Badges y colores indican estado de cuadratura
+
+**Manejo de Errores:**
+- ✅ Frontend: UIManager.handleError() muestra errores estructurados
+- ✅ Backend: ValidationError con estructura para error_injector.js
+- ✅ Logs: Errores inesperados se registran en logger con stack trace
 
 ### 7.3 Flujo: Aprobar Asiento ✅ v2.60 Mejorado
 
@@ -863,7 +1205,7 @@ ASIENTO_DETAIL_FIELDS = ("id", "uuid", "numero", "fecha", "descripcion", "estado
    ↓
 2. HTMX: GET /api/v1/contabilidad/asientos-contables/render-offcanvas/cargar-desde-documentos/
    ↓
-3. Se inyecta offcanvas_cargar_desde_documentos.html en #offcanvas-container-asientos
+3. Se inyecta asiento_offcanvas_cargar_desde_docs.html en #offcanvas-container-asientos
    ↓
 4. asientos_cargar_desde_docs.js se inicializa
    ↓
@@ -940,6 +1282,12 @@ ASIENTO_DETAIL_FIELDS = ("id", "uuid", "numero", "fecha", "descripcion", "estado
 - ✅ No puede tener `debe > 0` y `haber > 0` simultáneamente
 - ✅ Debe tener al menos uno (`debe` o `haber`) mayor a cero
 - ✅ `asiento` y `cuenta` deben existir
+
+#### CatalogoMaestroNIIF ✅ v2.61
+- ✅ `codigo` único (catálogo oficial)
+- ✅ Solo se puede crear con códigos que existan en `CATALOGO_NIIF_COLOMBIA`
+- ✅ Campos `nombre`, `nivel` y `naturaleza` son auto-seteados (editable=False)
+- ✅ Si el código no existe en el catálogo oficial, lanza `ValueError` en `save()`
 
 ### 8.2 Validaciones de Service Layer
 
@@ -1065,6 +1413,7 @@ qs_cuenta_detail() → CuentaContable.objects.select_related('cuenta_padre').onl
 - ✅ **Materialización Automática**: ✅ v2.60 Fase 3 - "Contabilidad Invisible"
 - ✅ **Balance de Prueba**: ✅ v2.60 Fase 3 - Endpoint implementado
 - ✅ **PeriodoContable**: ✅ v2.60 Fase 3 - Modelo para inmutabilidad
+- ✅ **CatalogoMaestroNIIF**: ✅ v2.61 - Catálogo oficial NIIF Colombia (SSoT)
 
 ### 11.2 Migraciones Pendientes
 
@@ -1080,7 +1429,7 @@ qs_cuenta_detail() → CuentaContable.objects.select_related('cuenta_padre').onl
 2. **✅ HTMX Integration:**
    - Reemplazados modales Bootstrap con Offcanvas HTMX
    - Implementada carga dinámica de formularios
-   - Templates dedicados: `offcanvas_crear_asiento.html`, `offcanvas_detalle_asiento.html`, `offcanvas_cargar_desde_documentos.html`
+   - Templates dedicados: `asiento_offcanvas_form.html`, `asiento_offcanvas_detalle.html`, `asiento_offcanvas_cargar_desde_docs.html`
 
 3. **✅ Error Injector:**
    - Integrado `error_injector.js` para manejo de errores 422
@@ -1155,8 +1504,32 @@ La app `contabilidad` es un módulo completo y bien estructurado que implementa:
 - ✅ **Error Injector:** Análisis detallado de cuadratura con feedback visual
 - ✅ **Balance de Prueba:** Reportes optimizados con agrupación por cuenta
 - ✅ **Periodos Contables:** Inmutabilidad de datos en periodos cerrados
+- ✅ **Catálogo Maestro NIIF:** Referencia oficial NIIF Colombia con auto-seteo y validación estricta
+- ✅ **Fix Eliminación Cuentas v2.61:** Detección inteligente ID/UUID, manejo de errores 422 mejorado
 
-**Estado General:** ✅ **Producción Ready** - Todas las mejoras v2.60 implementadas
+**Estado General:** ✅ **Producción Ready** - Todas las mejoras v2.60 y v2.61 implementadas
+
+---
+
+## 11. Correcciones v2.61
+
+### 11.1 Fix Eliminación Cuentas Contables ✅ v2.61
+
+**Problema:** 
+- Error 404 al eliminar cuentas (ID None) - `BaseTenantViewSet` usa `lookup_field="uuid"` pero frontend envía IDs numéricos
+- Mensajes de error 422 no se mostraban en frontend - `UIManager` no manejaba formato HTTP.js correctamente
+
+**Solución:**
+- ✅ **ViewSet:** Detección automática si identificador es numérico (pk) o UUID
+- ✅ **UIManager:** Soporte para formato HTTP.js y extracción correcta de mensajes de arrays
+- ✅ **Frontend:** Validación y normalización de IDs antes de enviar requests
+
+**Archivos modificados:**
+- `apps/tenant/contabilidad/api/viewsets.py` - Método `destroy()` con detección inteligente
+- `apps/tenant/core/static/core/js/lib/ui-manager.js` - Soporte HTTP.js y arrays
+- `apps/tenant/core/static/core/js/contabilidad/cuentas.page.js` - Validación de IDs
+
+**Documentación completa:** Ver `documentacion/FIX_ELIMINACION_CUENTAS_CONTABLES.md`
 
 ### Mejoras v2.60 Implementadas
 
@@ -1199,8 +1572,498 @@ La app `contabilidad` es un módulo completo y bien estructurado que implementa:
    - QuerySet optimizado con agrupación
    - Modelo `PeriodoContable` para inmutabilidad
 
+10. **✅ Fase 10: Catálogo Maestro NIIF Colombia (v2.61)**
+
+---
+
+## 12. Correcciones v2.61 - Manejo de Errores y Validaciones
+
+**Fecha:** Diciembre 2024  
+**Versión:** v2.61
+
+### 12.1 Error Injector Visual en Offcanvas ✅ v2.61
+
+**Problema:** Los errores de validación solo se mostraban en la consola, no visualmente en el offcanvas.
+
+**Solución Implementada:**
+
+1. **Función Helper `mostrarErrorVisual()`** en `asientos_form.js`:
+   - Busca contenedor de errores en el offcanvas activo
+   - Crea contenedor dinámicamente si no existe
+   - Muestra mensaje de error con formato HTML
+   - Muestra campos faltantes en lista
+   - Hace scroll automático al contenedor de errores
+
+2. **Manejo de Errores 422**:
+   - Intenta usar `ErrorHandler.show()` primero
+   - Si no funciona, usa fallback visual
+   - Muestra detalles adicionales (diferencia, sugerencias)
+   - Muestra campos faltantes en lista
+
+3. **Manejo de Otros Errores (500, 400, etc.)**:
+   - También se muestran visualmente en el offcanvas
+   - Fallback a `SintelFeedback` o `alert` si no se puede mostrar visualmente
+
+4. **Limpieza de Errores**:
+   - Al iniciar `guardar()`, se limpian errores previos
+   - En `limpiarFormulario()`, se limpian los errores visuales
+   - Usa `ErrorHandler.reset()` si está disponible
+
+**Archivos Modificados:**
+- `apps/tenant/core/static/core/js/contabilidad/asientos_form.js`
+- `apps/tenant/core/static/core/js/error_injector.js`
+
+---
+
+### 12.2 Corrección Validador de Cuadratura ✅ v2.61
+
+**Problema:** El validador de cuadratura en `guardar()` usaba `calcularTotales()` directamente, lo que podía causar discrepancias con la lógica que habilita/deshabilita el botón.
+
+**Solución Implementada:**
+
+1. **Validación Unificada**:
+   - `guardar()` ahora usa `actualizarTotales()` para validar la cuadratura
+   - Misma lógica que habilita/deshabilita el botón
+   - Misma tolerancia: `diferencia <= 0.01`
+
+2. **Logs de Depuración**:
+   - Log antes de validar: muestra debe, haber, diferencia, cuadra y número de movimientos
+   - Log de advertencia si no cuadra: bloquea el guardado
+   - Log de éxito si cuadra: procede con el guardado
+
+3. **Manejo de Errores Visual**:
+   - Si no cuadra, muestra el error en el offcanvas
+   - Muestra diferencia, total débito y total crédito
+   - Hace scroll automático al contenedor de errores
+
+**Archivos Modificados:**
+- `apps/tenant/core/static/core/js/contabilidad/asientos_form.js`
+
+---
+
+### 12.3 Corrección Campo `numero` en Payload ✅ v2.61
+
+**Problema:** El campo `numero` se enviaba incluso si estaba vacío, causando errores de validación en el backend.
+
+**Solución Implementada:**
+
+1. **Validación en Frontend**:
+   - Solo se envía `numero` si tiene un valor válido (no vacío, no null)
+   - Si está vacío, no se envía y el backend lo genera automáticamente
+
+2. **Código:**
+```javascript
+// ⚠️ v2.61: Si numero está vacío o es null, no enviarlo (el backend lo generará automáticamente)
+...(datos.numero && datos.numero.trim() ? { numero: datos.numero.trim() } : {}),
+```
+
+**Archivos Modificados:**
+- `apps/tenant/core/static/core/js/contabilidad/asientos_form.js`
+
+---
+
+### 12.4 Manejo de Errores de Campos Específicos (DRF) ✅ v2.61
+
+**Problema:** Los errores de validación de campos específicos en formato DRF (`{campo: [mensaje]}`) no se mostraban correctamente.
+
+**Solución Implementada:**
+
+1. **Detección de Errores de Campos Específicos**:
+   - Detecta errores en formato DRF: `{campo: [mensaje1, mensaje2]}`
+   - Construye mensaje detallado con todos los campos con errores
+   - Muestra los campos en la lista de campos faltantes
+   - Usa `mapearCampoALegible()` para nombres legibles
+
+2. **Código en `error_injector.js`:**
+```javascript
+// ⚠️ v2.61: Manejo de errores de validación de campos específicos (formato DRF)
+const camposConErrores = [];
+if (response && typeof response === 'object') {
+    Object.keys(response).forEach(campo => {
+        if (Array.isArray(response[campo]) && response[campo].length > 0) {
+            // Es un error de campo específico
+            camposConErrores.push({
+                campo: campo,
+                campoLegible: mapearCampoALegible(campo),
+                mensajes: response[campo],
+                mensajeUnificado: response[campo].join(', ')
+            });
+        }
+    });
+}
+```
+
+**Archivos Modificados:**
+- `apps/tenant/core/static/core/js/error_injector.js`
+
+---
+
+### 12.5 Corrección Manejo de Fecha en `create_asiento()` ✅ v2.61
+
+**Problema:** Error `AttributeError: 'str' object has no attribute 'isoformat'` al intentar convertir la fecha en el DTO de retorno.
+
+**Solución Implementada:**
+
+1. **Actualización de `data['fecha']` después de la conversión**:
+   - La fecha se convierte de string a `date` y se actualiza en `data['fecha']` antes de crear el asiento
+
+2. **Manejo Seguro de Fecha en el DTO de Retorno**:
+   - Se verifica si es string o date antes de llamar `isoformat()`
+   - Se recarga el objeto desde la BD para asegurar el tipo correcto
+
+3. **Código:**
+```python
+# ⚠️ v2.61: Actualizar data con el objeto date convertido
+if isinstance(fecha, str):
+    try:
+        fecha = datetime.strptime(fecha, '%Y-%m-%d').date()
+        data['fecha'] = fecha
+    except ValueError:
+        raise ValidationError({
+            'fecha': ['Formato de fecha inválido. Use YYYY-MM-DD.']
+        })
+
+# En el DTO de retorno:
+asiento.refresh_from_db()
+fecha_str = None
+if asiento.fecha:
+    if isinstance(asiento.fecha, str):
+        # Si es string, convertir a date primero
+        try:
+            fecha_obj = datetime.strptime(asiento.fecha, '%Y-%m-%d').date()
+            fecha_str = fecha_obj.isoformat()
+        except (ValueError, AttributeError):
+            fecha_str = str(asiento.fecha)
+    else:
+        # Si es date, usar isoformat() directamente
+        fecha_str = asiento.fecha.isoformat()
+```
+
+**Archivos Modificados:**
+- `apps/tenant/contabilidad/services/asientos_service.py`
+
+---
+
+### 12.6 Resumen de Correcciones v2.61
+
+**Errores Corregidos:**
+1. ✅ Errores de validación ahora se muestran visualmente en el offcanvas
+2. ✅ Validador de cuadratura unificado con la lógica del botón
+3. ✅ Campo `numero` solo se envía si tiene valor válido
+4. ✅ Errores de campos específicos (DRF) se muestran correctamente
+5. ✅ Manejo seguro de fecha en `create_asiento()`
+
+**Mejoras Implementadas:**
+- Función helper `mostrarErrorVisual()` para mostrar errores visualmente
+- Logs de depuración para validación de cuadratura
+- Detección automática de errores de campos específicos (DRF)
+- Manejo robusto de tipos de fecha (string/date)
+
+**Archivos Modificados:**
+- `apps/tenant/core/static/core/js/contabilidad/asientos_form.js`
+- `apps/tenant/core/static/core/js/error_injector.js`
+- `apps/tenant/contabilidad/services/asientos_service.py`
+
+**Estado:** ✅ **Todas las correcciones implementadas y probadas**
+    - Modelo `CatalogoMaestroNIIF` como Single Source of Truth
+    - Auto-seteo de campos desde `CATALOGO_NIIF_COLOMBIA`
+    - ViewSet con endpoints especializados (`por-nivel`, `buscar-por-tipo`)
+    - Comando de management para poblar catálogo
+    - Integración con `CuentaContable` mediante relación opcional
+    - Validación estricta: solo códigos oficiales del catálogo NIIF
+
+---
+
+### 12.7 Sincronización Completa del Módulo PeriodoContable ✅ v2.61
+
+**Problema:** El módulo `PeriodoContable` estaba parcialmente implementado, causando errores de importación al intentar cargar las URLs de la API.
+
+**Errores Encontrados:**
+1. `ImportError: cannot import name 'qs_periodo_list' from 'apps.tenant.contabilidad.services'`
+2. Faltaban serializers `PeriodoContableListSerializer` y `PeriodoContableDetailSerializer`
+3. Orden incorrecto de importaciones en `viewsets.py`
+
+**Solución Implementada:**
+
+#### 1. Serializers de PeriodoContable Agregados
+
+**Archivo:** `apps/tenant/contabilidad/api/serializers.py`
+
+```python
+class PeriodoContableListSerializer(serializers.ModelSerializer):
+    """
+    Serializer mínimo para listado de periodos contables.
+    
+    ⚠️ v2.61: Alineado con PERIODO_LIST_FIELDS del service.
+    """
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)
+    
+    class Meta:
+        model = PeriodoContable
+        fields = list(PERIODO_LIST_FIELDS) + ['estado_display', 'empresa_nombre']
+        read_only_fields = ['id', 'uuid', 'created_at']
+
+
+class PeriodoContableDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo para detalle de periodo contable.
+    
+    ⚠️ v2.61: Alineado con PERIODO_DETAIL_FIELDS del service.
+    """
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)
+    cerrado_por_nombre = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PeriodoContable
+        fields = list(PERIODO_DETAIL_FIELDS) + ['estado_display', 'empresa_nombre', 'cerrado_por_nombre']
+        read_only_fields = ['id', 'uuid', 'created_at', 'updated_at']
+    
+    def get_cerrado_por_nombre(self, obj):
+        """Retorna el nombre del usuario que cerró el periodo."""
+        if obj.cerrado_por:
+            return obj.cerrado_por.get_full_name() or obj.cerrado_por.username
+        return None
+```
+
+#### 2. Corrección de Exportaciones en `services/__init__.py`
+
+**Archivo:** `apps/tenant/contabilidad/services/__init__.py`
+
+**Problema:** Las funciones `qs_periodo_list()` y `qs_periodo_detail()` estaban definidas en `services.py` pero no estaban re-exportadas en `services/__init__.py`, causando errores de importación.
+
+**Solución:**
+```python
+# Re-exportar símbolos desde services.py
+PERIODO_LIST_FIELDS = services_module.PERIODO_LIST_FIELDS  # ⚠️ v2.61
+PERIODO_DETAIL_FIELDS = services_module.PERIODO_DETAIL_FIELDS  # ⚠️ v2.61
+qs_periodo_list = services_module.qs_periodo_list  # ⚠️ v2.61
+qs_periodo_detail = services_module.qs_periodo_detail  # ⚠️ v2.61
+
+# Actualizar __all__
+__all__ = [
+    # ... otros exports ...
+    'PERIODO_LIST_FIELDS', 'PERIODO_DETAIL_FIELDS',  # ⚠️ v2.61
+    'qs_periodo_list', 'qs_periodo_detail',  # ⚠️ v2.61
+    # ...
+]
+```
+
+#### 3. Corrección de Orden de Importaciones
+
+**Archivo:** `apps/tenant/contabilidad/api/viewsets.py`
+
+**Problema:** El `logger` estaba definido antes de todas las importaciones, causando posibles problemas de orden.
+
+**Solución:**
+```python
+import logging
+from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.permissions import IsTenantAdminOrReadOnly
+
+logger = logging.getLogger(__name__)  # ✅ Después de todas las importaciones
+```
+
+#### 4. Verificación de Modelo PeriodoContable
+
+**Archivo:** `apps/tenant/contabilidad/models.py`
+
+**Verificado:**
+- ✅ Campo `uuid` correctamente definido con `default=uuid.uuid4`
+- ✅ Importación de `uuid` presente
+- ✅ Migración `0009_periodocontable_uuid.py` existe
+
+**Archivos Modificados:**
+- `apps/tenant/contabilidad/api/serializers.py` - Serializers agregados
+- `apps/tenant/contabilidad/services/__init__.py` - Exportaciones agregadas
+- `apps/tenant/contabilidad/api/viewsets.py` - Orden de importaciones corregido
+
+**Estado:** ✅ **Módulo PeriodoContable completamente sincronizado y funcional**
+
+**Endpoints Disponibles:**
+- `GET /api/v1/contabilidad/periodos-contables/` - Listado paginado
+- `GET /api/v1/contabilidad/periodos-contables/{id}/` - Detalle
+- `POST /api/v1/contabilidad/periodos-contables/` - Crear (solo STAFF/ADMIN)
+- `PUT /api/v1/contabilidad/periodos-contables/{id}/` - Actualizar (solo STAFF/ADMIN)
+- `DELETE /api/v1/contabilidad/periodos-contables/{id}/` - Eliminar (solo STAFF/ADMIN)
+- `GET /api/v1/contabilidad/periodos-contables/render-offcanvas/crear/` - HTMX crear
+- `GET /api/v1/contabilidad/periodos-contables/{id}/render-offcanvas/editar/` - HTMX editar
+- `GET /api/v1/contabilidad/periodos-contables/{id}/render-offcanvas/detalle/` - HTMX detalle
+
+---
+
+### 12.8 Corrección de Compatibilidad IDs Numéricos vs UUIDs en AsientoContable ✅ v2.61
+
+**Problema:** El frontend envía IDs numéricos (ej: `71`) en las URLs, pero `BaseTenantViewSet` usa `lookup_field="uuid"`, causando errores 404 al intentar obtener, editar o actualizar asientos contables.
+
+**Errores Encontrados:**
+1. `GET /api/v1/contabilidad/asientos-contables/71/` → 404 Not Found
+2. `PUT /api/v1/contabilidad/asientos-contables/71/` → 404 Not Found
+3. `AsientoContableViewSet.render_offcanvas_editar() got an unexpected keyword argument 'uuid'`
+4. `ImportError: cannot import name 'verificar_periodo_cerrado' from 'apps.tenant.contabilidad.services'`
+5. `AttributeError: 'str' object has no attribute 'isoformat'` en `update_asiento()`
+
+**Solución Implementada:**
+
+#### 1. Método `retrieve()` Sobrescrito
+
+**Archivo:** `apps/tenant/contabilidad/api/viewsets.py`
+
+**Problema:** El método `retrieve()` heredado de `BaseTenantViewSet` solo acepta UUIDs, pero el frontend envía IDs numéricos.
+
+**Solución:**
+```python
+def retrieve(self, request, *args, **kwargs):
+    """
+    Sobrescribir retrieve para manejar tanto IDs numéricos como UUIDs.
+    
+    ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+    """
+    try:
+        asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
+        
+        if asiento_identifier:
+            try:
+                # Intentar convertir a entero (es un ID numérico)
+                asiento_id = int(asiento_identifier)
+                asiento = qs_asiento_detail().get(id=asiento_id)
+            except (ValueError, TypeError):
+                # Si no es numérico, intentar como UUID
+                asiento = self.get_object()  # Esto usa lookup_field="uuid"
+        
+        serializer = self.get_serializer(asiento)
+        return Response(serializer.data)
+    except Exception as e:
+        # Manejo de errores...
+```
+
+#### 2. Método `render_offcanvas_editar()` Corregido
+
+**Archivo:** `apps/tenant/contabilidad/api/viewsets.py`
+
+**Problema:** El método recibía `pk=None` pero DRF pasaba `uuid` en `kwargs`, causando un error de argumento inesperado.
+
+**Solución:**
+```python
+@action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+def render_offcanvas_editar(self, request, **kwargs):
+    """
+    ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+    """
+    try:
+        asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
+        # Manejo de IDs numéricos y UUIDs...
+```
+
+#### 3. Método `update()` Corregido
+
+**Archivo:** `apps/tenant/contabilidad/api/viewsets.py`
+
+**Problema:** El método usaba `kwargs.get('pk')` pero el valor venía en `kwargs['uuid']`, causando 404 al actualizar.
+
+**Solución:**
+```python
+def update(self, request, *args, **kwargs):
+    """
+    ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+    """
+    try:
+        asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
+        
+        # Convertir identificador a ID numérico para el servicio
+        asiento_id = None
+        if asiento_identifier:
+            try:
+                asiento_id = int(asiento_identifier)
+            except (ValueError, TypeError):
+                # Si no es numérico, obtener el ID desde el objeto UUID
+                asiento = self.get_object()
+                asiento_id = asiento.id
+        
+        resultado = update_asiento(asiento_id, data)
+        # ...
+```
+
+#### 4. Exportación de `verificar_periodo_cerrado`
+
+**Archivo:** `apps/tenant/contabilidad/services/__init__.py`
+
+**Problema:** La función `verificar_periodo_cerrado` estaba definida en `services.py` pero no estaba re-exportada en `services/__init__.py`, causando `ImportError` en `update_asiento()`.
+
+**Solución:**
+```python
+# Re-exportar funciones de validación
+verificar_periodo_cerrado = services_module.verificar_periodo_cerrado  # ⚠️ v2.61
+get_balance_prueba = services_module.get_balance_prueba
+
+__all__ = [
+    # ...
+    'verificar_periodo_cerrado',  # ⚠️ v2.61
+    'get_balance_prueba',
+]
+```
+
+#### 5. Corrección de Manejo de Fecha en `update_asiento()`
+
+**Archivo:** `apps/tenant/contabilidad/services/asientos_service.py`
+
+**Problema:** Después de actualizar el asiento, `asiento.fecha` podía ser un string en lugar de un objeto `date`, causando `AttributeError: 'str' object has no attribute 'isoformat'` al intentar formatear la fecha en el DTO de retorno.
+
+**Solución:**
+```python
+# ⚠️ v2.61: Asegurar que fecha sea un objeto date antes de llamar isoformat()
+# Recargar desde BD para asegurar que tenga el tipo correcto
+asiento.refresh_from_db()
+fecha_str = None
+if asiento.fecha:
+    if isinstance(asiento.fecha, str):
+        # Si es string, convertir a date primero
+        try:
+            fecha_obj = datetime.strptime(asiento.fecha, '%Y-%m-%d').date()
+            fecha_str = fecha_obj.isoformat()
+        except (ValueError, AttributeError):
+            fecha_str = str(asiento.fecha)
+    else:
+        # Si es date, usar isoformat() directamente
+        fecha_str = asiento.fecha.isoformat()
+
+return {
+    # ...
+    'fecha': fecha_str,
+    # ...
+}
+```
+
+**Archivos Modificados:**
+- `apps/tenant/contabilidad/api/viewsets.py` - Métodos `retrieve()`, `render_offcanvas_editar()` y `update()` corregidos
+- `apps/tenant/contabilidad/services/__init__.py` - Exportación de `verificar_periodo_cerrado` agregada
+- `apps/tenant/contabilidad/services/asientos_service.py` - Manejo seguro de fecha en `update_asiento()`
+
+**Estado:** ✅ **Compatibilidad completa entre IDs numéricos y UUIDs implementada**
+
+**Endpoints Corregidos:**
+- `GET /api/v1/contabilidad/asientos-contables/{id}/` - Ahora acepta IDs numéricos y UUIDs
+- `PUT /api/v1/contabilidad/asientos-contables/{id}/` - Ahora acepta IDs numéricos y UUIDs
+- `GET /api/v1/contabilidad/asientos-contables/{id}/render-offcanvas/editar/` - Ahora acepta IDs numéricos y UUIDs
+
 ---
 
 **Última actualización:** Diciembre 2024  
-**Versión del documento:** 2.60  
+**Versión del documento:** 2.61  
 **Estado:** ✅ **Completo y Alineado con Implementación Actual**
+
+**Correcciones recientes v2.61:**
+- ✅ Template `asiento_offcanvas_cargar_desde_docs.html` creado en ubicación correcta (`tenant/core/contabilidad/partials/`)
+- ✅ Todas las referencias a templates actualizadas con nombres correctos
+- ✅ Documentación del endpoint `render_offcanvas_cargar_desde_documentos()` agregada
+- ✅ **Error Injector Visual en Offcanvas:** Errores de validación ahora se muestran visualmente en el offcanvas
+- ✅ **Corrección Validador de Cuadratura:** Validación unificada con la lógica del botón
+- ✅ **Corrección Campo `numero`:** Solo se envía si tiene valor válido
+- ✅ **Manejo de Errores DRF:** Errores de campos específicos se muestran correctamente
+- ✅ **Corrección Manejo de Fecha:** Manejo seguro de fecha en `create_asiento()`
+- ✅ **Sincronización Completa PeriodoContable:** Serializers, ViewSet, URLs y Services completamente integrados (ver sección 12.7)
+- ✅ **Corrección Importaciones:** `qs_periodo_list` y `qs_periodo_detail` exportados correctamente en `services/__init__.py`
+- ✅ **Compatibilidad IDs Numéricos vs UUIDs:** Métodos `retrieve()`, `render_offcanvas_editar()` y `update()` corregidos para manejar ambos tipos de identificadores (ver sección 12.8)
+- ✅ **Exportación `verificar_periodo_cerrado`:** Función agregada a `services/__init__.py` para evitar ImportError
+- ✅ **Manejo Seguro de Fecha en `update_asiento()`:** Corrección de `AttributeError: 'str' object has no attribute 'isoformat'`

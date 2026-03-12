@@ -83,7 +83,11 @@
           
           if (asientosTab) {
             asientosTab.addEventListener('shown.bs.tab', () => {
-              if (window.asientosDT && typeof window.asientosDT.init === 'function') {
+              // ⚠️ v2.60: asientos_main.js expone window.AppAsientos, no window.asientosDT
+              if (window.AppAsientos && typeof window.AppAsientos.init === 'function') {
+                window.AppAsientos.init();
+              } else if (window.asientosDT && typeof window.asientosDT.init === 'function') {
+                // Fallback para compatibilidad legacy
                 window.asientosDT.init();
               }
             });

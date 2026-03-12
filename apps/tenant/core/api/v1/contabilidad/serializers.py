@@ -15,6 +15,8 @@ from apps.tenant.contabilidad.api.serializers import (
     AsientoContableDetailSerializer,
     MovimientoContableListSerializer,
     MovimientoContableDetailSerializer,
+    PeriodoContableListSerializer,  # ⚠️ v2.61
+    PeriodoContableDetailSerializer,  # ⚠️ v2.61
     CatalogoMaestroNIIFListSerializer,
     CatalogoMaestroNIIFDetailSerializer,
 )
@@ -73,4 +75,20 @@ class CatalogoMaestroNIIFWorkspaceListSerializer(CatalogoMaestroNIIFListSerializ
 class CatalogoMaestroNIIFWorkspaceDetailSerializer(CatalogoMaestroNIIFDetailSerializer):
     """Facade para detalle del Catálogo Maestro NIIF."""
     class Meta(CatalogoMaestroNIIFDetailSerializer.Meta):
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════
+# PERIODOS CONTABLES - Facade Serializers (v2.61)
+# ═══════════════════════════════════════════════════════════════
+
+class PeriodoContableWorkspaceListSerializer(PeriodoContableListSerializer):
+    """Facade para listado de Periodos Contables."""
+    class Meta(PeriodoContableListSerializer.Meta):
+        pass
+
+
+class PeriodoContableWorkspaceDetailSerializer(PeriodoContableDetailSerializer):
+    """Facade para detalle de Periodo Contable."""
+    class Meta(PeriodoContableDetailSerializer.Meta):
         pass

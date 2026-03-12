@@ -46,6 +46,30 @@
           <textarea class="form-control" id="input-descripcion" name="descripcion" rows="2" required placeholder="Descripción del asiento contable"></textarea>
         </div>
 
+        {# ⚠️ NORMATIVA: Campos de comprobante para trazabilidad #}
+        <div class="col-12 mt-3"><h6 class="text-primary border-bottom pb-2 small fw-bold">COMPROBANTE (TRAZABILIDAD)</h6></div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Tipo de Comprobante</label>
+          <select class="form-select" id="select-tipo-comprobante" name="tipo_comprobante">
+            <option value="">Seleccione tipo...</option>
+            <option value="FVE">FVE - Factura de Venta Electrónica</option>
+            <option value="CE">CE - Comprobante de Egreso</option>
+            <option value="RC">RC - Recibo de Caja</option>
+            <option value="GN">GN - General</option>
+            <option value="ND">ND - Nota Débito</option>
+            <option value="NC">NC - Nota Crédito</option>
+          </select>
+          <small class="text-muted">Opcional: Tipo de documento relacionado</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Número de Comprobante</label>
+          <input type="text" class="form-control" id="input-numero-comprobante" name="numero_comprobante" 
+                 placeholder="Ej: FVE-001-00012345">
+          <small class="text-muted">Opcional: Número del documento relacionado</small>
+        </div>
+
         <div class="col-12 mt-4"><h6 class="text-primary border-bottom pb-2 small fw-bold">MOVIMIENTOS CONTABLES</h6></div>
         
         {# Tabla de movimientos #}
@@ -137,6 +161,7 @@
 </div>
 
 {# Template para fila de movimiento (clonado por JavaScript) #}
+{# ⚠️ NORMATIVA: Incluye campos de terceros (opcionales, se pueden poblar automáticamente desde el backend) #}
 <template id="template-movimiento-row">
   <tr data-movimiento-index="">
     <td class="text-center">
@@ -162,6 +187,15 @@
         <span class="input-group-text">$</span>
         <input type="number" step="0.01" min="0" class="form-control text-end input-haber" name="movimientos[][haber]" value="0.00" data-movimiento-field="haber">
       </div>
+    </td>
+    {# ⚠️ NORMATIVA: Campos de terceros (ocultos por defecto, se pueden mostrar si se requiere entrada manual) #}
+    <td class="d-none">
+      <input type="text" class="form-control form-control-sm" name="movimientos[][tercero_nit]" placeholder="NIT/CC (opcional)" maxlength="32">
+      <small class="text-muted d-block">Se pobla automáticamente</small>
+    </td>
+    <td class="d-none">
+      <input type="text" class="form-control form-control-sm" name="movimientos[][tercero_razon_social]" placeholder="Razón Social (opcional)" maxlength="200">
+      <small class="text-muted d-block">Se pobla automáticamente</small>
     </td>
     <td class="text-center">
       <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-movimiento" title="Eliminar movimiento">

@@ -142,6 +142,38 @@
         },
         hozAlign: "center"
       },
+      // ⚠️ NORMATIVA: Campos de comprobante para trazabilidad
+      {
+        title: "Tipo Comprobante",
+        field: "tipo_comprobante",
+        formatter: function(cell) {
+          const val = cell.getValue();
+          if (!val) return '<span class="text-muted">---</span>';
+          
+          const tipos = {
+            'FVE': '<span class="badge bg-primary">FVE</span>',
+            'CE': '<span class="badge bg-info">CE</span>',
+            'RC': '<span class="badge bg-warning">RC</span>',
+            'GN': '<span class="badge bg-secondary">GN</span>',
+            'ND': '<span class="badge bg-danger">ND</span>',
+            'NC': '<span class="badge bg-success">NC</span>'
+          };
+          
+          return tipos[val] || `<span class="badge bg-light text-dark">${val}</span>`;
+        },
+        hozAlign: "center",
+        width: 130
+      },
+      {
+        title: "N° Comprobante",
+        field: "numero_comprobante",
+        formatter: function(cell) {
+          const val = cell.getValue();
+          return val || '<span class="text-muted">---</span>';
+        },
+        hozAlign: "left",
+        width: 150
+      },
       {
         title: "Acciones",
         field: "actions",
@@ -161,6 +193,15 @@
                 <i class="bi bi-eye"></i>
               </button>
           `;
+          
+          // ⚠️ v2.61: Botón de Editar solo si está en BORRADOR
+          if (estado === 'BORRADOR') {
+            botones += `
+              <button type="button" class="btn btn-outline-secondary btn-editar-asiento" data-id="${asientoId}" title="Editar Asiento">
+                <i class="bi bi-pencil"></i>
+              </button>
+            `;
+          }
           
           // ⚠️ v2.60 Fase 2: Botón de Aprobar solo si está en BORRADOR y cuadrado
           if (estado === 'BORRADOR') {
@@ -211,6 +252,11 @@
       paginationSize: 20,
       searchInputSelector: SEARCH_SELECTOR,
       ajaxParams: function(params) {
+        // ⚠️ v2.61: Asegurar que params existe antes de asignar propiedades
+        if (!params) {
+          params = {};
+        }
+        
         // ⚠️ v2.60 Fase 2: Filtrar por estado BORRADOR por defecto
         const filterEstado = d.querySelector(FILTER_ESTADO_SELECTOR);
         const estado = filterEstado ? filterEstado.value : 'BORRADOR';
@@ -237,10 +283,22 @@
       const btnVer = evt.target.closest('.btn-ver-asiento');
       if (btnVer) {
         const asientoId = btnVer.dataset.id;
-        if (asientoId && w.AppContabilidad && typeof w.AppContabilidad.cargarOffcanvasDetalleAsiento === 'function') {
-          w.AppContabilidad.cargarOffcanvasDetalleAsiento(asientoId);
+        if (asientoId && w.AppAsientos && typeof w.AppAsientos.cargarOffcanvasDetalleAsiento === 'function') {
+          w.AppAsientos.cargarOffcanvasDetalleAsiento(asientoId);
         } else {
           console.warn(`${MOD} Función cargarOffcanvasDetalleAsiento no disponible`);
+        }
+        return;
+      }
+      
+      // ⚠️ v2.61: Botón de Editar
+      const btnEditar = evt.target.closest('.btn-editar-asiento');
+      if (btnEditar) {
+        const asientoId = btnEditar.dataset.id;
+        if (asientoId && w.AppAsientos && typeof w.AppAsientos.cargarOffcanvasEditarAsiento === 'function') {
+          w.AppAsientos.cargarOffcanvasEditarAsiento(asientoId);
+        } else {
+          console.warn(`${MOD} Función cargarOffcanvasEditarAsiento no disponible`);
         }
         return;
       }
@@ -490,6 +548,23 @@
   } else {
     init();
   }
+
+  // ⚠️ v2.61: Listener adicional para evento Bootstrap tab (cuando se muestra el tab)
+  // Esto asegura que la tabla se inicialice incluso si DOMUtils.onVisibleOnce no se dispara
+  d.addEventListener('shown.bs.tab', function(e) {
+    if (e.target && (e.target.getAttribute('data-bs-target') === TAB_ID || e.target.id === 'contabilidad-asientos-tab')) {
+      console.log(`${MOD} Tab de asientos mostrado, verificando inicialización...`);
+      const container = d.querySelector(TABLE_SELECTOR);
+      if (container && !table) {
+        console.log(`${MOD} Tabla no inicializada, inicializando desde evento shown.bs.tab...`);
+        initTable();
+      } else if (table && typeof table.replaceData === 'function') {
+        // Si la tabla ya existe, refrescar datos
+        console.log(`${MOD} Tabla ya inicializada, refrescando datos...`);
+        table.replaceData();
+      }
+    }
+  });
 
   console.log(`${MOD} Módulo cargado`);
 

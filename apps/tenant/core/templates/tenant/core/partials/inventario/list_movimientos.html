@@ -1,3 +1,6 @@
+{# list_movimientos.html - Módulo Movimientos de Inventario (Kardex) v2.61.3 #}
+{# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa movimientos_list.js y movimientos_editor.js #}
+{# ⚠️ v2.61.3: Usa Core API Facade (/api/v1/core/v1/inventario/movimientos/) #}
 <div class="ui-module h-100 d-flex flex-column">
     {# ⚠️ v2.40: Elemento de feedback para errores #}
     <div id="feedback-movimientos-list" class="alert d-none mb-2" role="alert"></div>
@@ -8,11 +11,13 @@
             <span class="badge bg-light text-dark border">Movimientos de Inventario</span>
         </div>
         <div class="btn-group shadow-sm">
-            <button type="button" class="btn btn-success" id="btn-nuevo-movimiento" 
-                    onclick="if(window.InventarioMovimientosModule?.abrirModalCrear){window.InventarioMovimientosModule.abrirModalCrear();}else{console.warn('InventarioMovimientosModule no disponible');}">
+            {# ⚠️ v2.61.3: Botón para crear movimiento - Usa movimientos_editor.js #}
+            {# ⚠️ Event delegation: Sin onclick inline, el JavaScript maneja el evento #}
+            <button type="button" class="btn btn-success" id="btn-nuevo-movimiento">
                 <i class="bi bi-plus-lg me-1"></i> Registrar Movimiento
             </button>
-            <button type="button" class="btn btn-outline-secondary" onclick="window.InventarioMovimientosModule?.refresh()">
+            <button type="button" class="btn btn-outline-secondary" 
+                    onclick="if(window.MovimientosList && typeof window.MovimientosList.recargar === 'function'){ window.MovimientosList.recargar(); } else if(window.SintelInventarioTables?.movimientos){ window.SintelInventarioTables.movimientos.replaceData(); }">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
         </div>
@@ -24,5 +29,6 @@
     </div>
     
     {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+    {# ⚠️ v2.61.3: Inicializado por movimientos_list.js (Feature: Listado) #}
     <div id="grid-movimientos" class="flex-grow-1"></div>
 </div>

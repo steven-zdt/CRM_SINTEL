@@ -18,6 +18,9 @@
 
     /**
      * Recolectar datos del formulario de ajuste de inventario
+     * ⚠️ v2.61.3: Mapeo correcto de campos para el backend
+     * Backend espera: producto (FK), tipo (string)
+     * Frontend envía: producto_id -> producto, tipo_movimiento -> tipo
      * @returns {Object} Datos del movimiento
      */
     function recolectarDatosAjuste() {
@@ -37,10 +40,20 @@
             }
         });
 
-        // ⚠️ Conversión de tipos numéricos
+        // ⚠️ v2.61.3: Mapeo de campos para el backend
+        // Backend espera 'producto' (FK), no 'producto_id'
         if (data.producto_id) {
-            data.producto_id = parseInt(data.producto_id);
+            data.producto = parseInt(data.producto_id);
+            delete data.producto_id; // Eliminar campo incorrecto
         }
+        
+        // Backend espera 'tipo', no 'tipo_movimiento'
+        if (data.tipo_movimiento) {
+            data.tipo = data.tipo_movimiento;
+            delete data.tipo_movimiento; // Eliminar campo incorrecto
+        }
+        
+        // ⚠️ Conversión de tipos numéricos
         if (data.cantidad) {
             data.cantidad = parseFloat(data.cantidad);
         }
@@ -105,8 +118,9 @@
      * @returns {Object} {valid: boolean, error: string|null}
      */
     async function validarMovimiento(data, producto) {
+        // ⚠️ v2.61.3: Validar usando campos mapeados (producto, tipo)
         // Validar que se haya seleccionado un producto
-        if (!data.producto_id) {
+        if (!data.producto) {
             return {
                 valid: false,
                 error: 'Debe seleccionar un producto'
@@ -114,7 +128,7 @@
         }
 
         // Validar que se haya seleccionado un tipo de movimiento
-        if (!data.tipo_movimiento) {
+        if (!data.tipo) {
             return {
                 valid: false,
                 error: 'Debe seleccionar un tipo de movimiento'
@@ -130,7 +144,8 @@
         }
 
         // ⚠️ Validación crítica: No permitir salidas mayores al stock existente
-        const esSalida = data.tipo_movimiento && data.tipo_movimiento.startsWith('SALIDA_');
+        // ⚠️ v2.61.3: Usar campo mapeado 'tipo' en lugar de 'tipo_movimiento'
+        const esSalida = data.tipo && data.tipo.startsWith('SALIDA_');
         
         if (esSalida) {
             // Si tenemos datos del producto en el DOM, validar stock
@@ -140,7 +155,9 @@
                 stockActual = parseFloat(producto.stock_actual);
             } else {
                 // Si no tenemos el producto en el DOM, obtenerlo de la API
-                const res = await w.http('GET', `/api/v1/inventario/productos/${data.producto_id}/`);
+                // ⚠️ v2.61.3: Usar Core API Facade para obtener producto
+                // ⚠️ v2.61.3: Usar campo mapeado 'producto' en lugar de 'producto_id'
+                const res = await w.http('GET', `/api/v1/core/v1/inventario/productos/${data.producto}/`);
                 if (res.ok && res.data) {
                     stockActual = parseFloat(res.data.stock_actual || 0);
                 } else {
@@ -226,7 +243,8 @@
         }
 
         // Determinar endpoint según tipo de movimiento
-        let endpoint = '/api/v1/inventario/movimientos/';
+        // ⚠️ v2.61.3: Usar Core API Facade para crear movimientos
+        let endpoint = '/api/v1/core/v1/inventario/movimientos/';
         let method = 'POST';
 
         // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
@@ -310,10 +328,12 @@
         let res;
         if (id) {
             // Actualizar producto existente
-            res = await w.http('PATCH', `/api/v1/inventario/productos/${id}/`, data);
+            // ⚠️ v2.61.3: Usar Core API Facade para actualizar producto
+            res = await w.http('PATCH', `/api/v1/core/v1/inventario/productos/${id}/`, data);
         } else {
             // Crear nuevo producto
-            res = await w.http('POST', '/api/v1/inventario/productos/', data);
+            // ⚠️ v2.61.3: Usar Core API Facade para crear producto
+            res = await w.http('POST', '/api/v1/core/v1/inventario/productos/', data);
         }
 
         // ⚠️ Error Boundary v2.60: Restaurar estado del botón

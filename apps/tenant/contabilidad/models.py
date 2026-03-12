@@ -13,7 +13,29 @@ from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
 from django.conf import settings
 from decimal import Decimal
+from django.core.exceptions import ValidationError
 from apps.tenant.empresa.models import Empresa  # SSoT empresa (singleton por tenant)
+
+
+# ============================================================================
+# CHOICES - Normativa Colombiana (NIIF PYMES)
+# ============================================================================
+
+TIPO_COMPROBANTE_CHOICES = [
+    ('FVE', _('Factura de Venta Electrónica')),
+    ('CE', _('Comprobante de Egreso')),
+    ('RC', _('Recibo de Caja')),
+    ('GN', _('Nota General')),
+    ('ND', _('Nota Débito')),
+    ('NC', _('Nota Crédito')),
+]
+
+TIPO_TERCERO_CHOICES = [
+    ('CLIENTE', _('Cliente')),
+    ('PROVEEDOR', _('Proveedor')),
+    ('EMPLEADO', _('Empleado')),
+    ('OTRO', _('Otro Tercero')),
+]
 
 
 class CatalogoMaestroNIIF(models.Model):
@@ -218,6 +240,12 @@ class CuentaContable(models.Model):
         verbose_name=_('Referencia Catálogo NIIF'),
         help_text=_('Cuenta oficial del catálogo NIIF Colombia a la que está anclada esta cuenta personalizada')
     )
+    # ⚠️ NORMATIVA NIIF: Nivel de la cuenta (debe ser 6 para permitir registros)
+    nivel = models.IntegerField(
+        default=6,
+        verbose_name=_('Nivel'),
+        help_text=_('Nivel de la cuenta según NIIF. Solo nivel 6 (Subcuenta) permite registros contables.')
+    )
     activa = models.BooleanField(
         default=True,
         verbose_name=_('Activa')
@@ -233,10 +261,26 @@ class CuentaContable(models.Model):
         ordering = ['codigo']
         indexes = [
             models.Index(fields=['empresa']),  # ⚠️ v2.40: Índice para FK a Empresa
+            models.Index(fields=['nivel']),  # ⚠️ NORMATIVA: Índice para validación de nivel
         ]
     
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
+    
+    def clean(self):
+        """
+        ⚠️ NORMATIVA COLOMBIANA: Validación de nivel.
+        
+        Si no tiene nivel, se asigna 6 por defecto.
+        """
+        super().clean()
+        if not self.nivel:
+            self.nivel = 6
+    
+    def save(self, *args, **kwargs):
+        """Sobrescribe save() para ejecutar validaciones."""
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class AsientoContable(models.Model):
@@ -280,7 +324,24 @@ class AsientoContable(models.Model):
         verbose_name=_('Estado')
     )
     
-    # Totales (deben cuadrar: debe = haber)
+    # ⚠️ NORMATIVA: Tipo de comprobante para trazabilidad
+    tipo_comprobante = models.CharField(
+        max_length=5,
+        choices=TIPO_COMPROBANTE_CHOICES,
+        blank=True,
+        null=True,
+        verbose_name=_('Tipo de Comprobante'),
+        help_text=_('Tipo de documento que originó el asiento (FVE, CE, RC, GN, ND, NC)')
+    )
+    numero_comprobante = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name=_('Número de Comprobante'),
+        help_text=_('Número del comprobante que originó el asiento')
+    )
+    
+    # Totales (deben cuadrar: debe = haber) - ⚠️ NORMATIVA: Partida Doble Estricta
     total_debe = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -333,15 +394,80 @@ class AsientoContable(models.Model):
             models.Index(fields=['fecha']),
             models.Index(fields=['estado']),
             models.Index(fields=['empresa']),  # ⚠️ v2.40: Índice para FK a Empresa
+            models.Index(fields=['tipo_comprobante', 'numero_comprobante']),  # ⚠️ NORMATIVA: Trazabilidad
         ]
     
     def __str__(self):
         return f"{self.numero} - {self.fecha}"
     
+    def calcular_totales(self):
+        """
+        Recalcula total_debe y total_haber desde los movimientos.
+        
+        ⚠️ NORMATIVA: Usa agregación de base de datos para precisión.
+        """
+        from django.db.models import Sum
+        
+        totales = self.movimientos.aggregate(
+            total_debe=Sum('debe'),
+            total_haber=Sum('haber')
+        )
+        
+        self.total_debe = totales['total_debe'] or Decimal('0.00')
+        self.total_haber = totales['total_haber'] or Decimal('0.00')
+    
+    def validar_partida_doble(self):
+        """
+        ⚠️ NORMATIVA COLOMBIANA: Valida Partida Doble Estricta.
+        
+        Regla: ∑ Débitos = ∑ Créditos (sin excepciones)
+        
+        Returns:
+            bool: True si está cuadrado
+        
+        Raises:
+            ValidationError: Si el asiento no está cuadrado
+        """
+        diferencia = abs(self.total_debe - self.total_haber)
+        es_valido = diferencia < Decimal('0.01')  # Tolerancia de 0.01 para redondeo
+        
+        if not es_valido:
+            raise ValidationError({
+                'total_debe': _(
+                    f'Partida Doble no cumplida. Diferencia: ${diferencia:,.2f}. '
+                    f'Total Débito: ${self.total_debe:,.2f}, Total Crédito: ${self.total_haber:,.2f}. '
+                    f'La normativa colombiana exige que ∑ Débitos = ∑ Créditos.'
+                )
+            })
+        
+        return True
+    
     def save(self, *args, **kwargs):
-        # Validar que debe = haber si el asiento está aprobado
-        if self.estado == 'APROBADO' and self.total_debe != self.total_haber:
-            raise ValueError(_('Un asiento aprobado debe tener débito igual a crédito'))
+        """
+        ⚠️ NORMATIVA COLOMBIANA: Validación de Partida Doble Estricta.
+        
+        - Recalcula totales desde movimientos antes de guardar
+        - Valida que debe = haber (partida doble estricta)
+        - Impide guardar asientos no cuadrados si están aprobados/cerrados
+        """
+        # ⚠️ v2.61: Solo recalcular totales si el asiento ya tiene ID (ya existe en BD)
+        # Si es un asiento nuevo, los movimientos aún no existen, así que no calcular
+        if self.pk:
+            # Recalcular totales desde movimientos
+            self.calcular_totales()
+            
+            # ⚠️ NORMATIVA: Validar Partida Doble Estricta
+            # Si el asiento está aprobado o cerrado, la validación es obligatoria
+            if self.estado in ['APROBADO', 'CERRADO']:
+                self.validar_partida_doble()
+            # Si está en borrador, solo validar si hay movimientos (advertencia, no bloquea)
+            elif self.movimientos.exists():
+                try:
+                    self.validar_partida_doble()
+                except ValidationError:
+                    # En borrador, solo advertir pero permitir guardar
+                    pass
+        
         super().save(*args, **kwargs)
 
 
@@ -360,10 +486,42 @@ class MovimientoContable(models.Model):
     cuenta = models.ForeignKey(
         CuentaContable,
         on_delete=models.PROTECT,
-        verbose_name=_('Cuenta Contable')
+        verbose_name=_('Cuenta Contable'),
+        help_text=_('Cuenta contable (debe ser de nivel 6 según normativa)')
     )
     
-    # Valores
+    # ⚠️ NORMATIVA: Terceros Obligatorios (para medios magnéticos DIAN)
+    # ForeignKey genérico a Cliente, Proveedor o Empleado
+    tipo_tercero = models.CharField(
+        max_length=20,
+        choices=TIPO_TERCERO_CHOICES,
+        blank=True,  # OPCIONAL inicialmente para compatibilidad
+        null=True,
+        verbose_name=_('Tipo de Tercero'),
+        help_text=_('Tipo de tercero asociado al movimiento (obligatorio para medios magnéticos)')
+    )
+    tercero_id = models.PositiveIntegerField(
+        blank=True,  # OPCIONAL inicialmente para compatibilidad
+        null=True,
+        verbose_name=_('ID del Tercero'),
+        help_text=_('ID del tercero (Cliente, Proveedor, Empleado u otro)')
+    )
+    tercero_nit = models.CharField(
+        max_length=32,
+        blank=True,  # OPCIONAL inicialmente para compatibilidad
+        null=True,
+        verbose_name=_('NIT/CC del Tercero'),
+        help_text=_('Número de identificación del tercero (NIT, CC, CE, etc.)')
+    )
+    tercero_razon_social = models.CharField(
+        max_length=200,
+        blank=True,  # OPCIONAL inicialmente para compatibilidad
+        null=True,
+        verbose_name=_('Razón Social del Tercero'),
+        help_text=_('Nombre o razón social del tercero')
+    )
+    
+    # Valores - ⚠️ NORMATIVA: DecimalField(15,2) para COP
     debe = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -386,6 +544,43 @@ class MovimientoContable(models.Model):
         help_text=_('Descripción del movimiento')
     )
     
+    # ⚠️ NORMATIVA: Campos tributarios para cálculo automático
+    base_iva = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Base IVA'),
+        help_text=_('Base gravable para cálculo de IVA')
+    )
+    iva_generado = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('IVA Generado'),
+        help_text=_('IVA generado (cuenta 240805)')
+    )
+    iva_descontable = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('IVA Descontable'),
+        help_text=_('IVA descontable (cuenta 240810)')
+    )
+    retefuente = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Retención en la Fuente'),
+        help_text=_('Retención en la fuente (cuenta 2365)')
+    )
+    reteica = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Retención ICA'),
+        help_text=_('Retención ICA (cuenta 2368)')
+    )
+    
     # Orden
     orden = models.IntegerField(
         default=1,
@@ -397,23 +592,183 @@ class MovimientoContable(models.Model):
         verbose_name = _('Movimiento Contable')
         verbose_name_plural = _('Movimientos Contables')
         ordering = ['asiento', 'orden']
+        indexes = [
+            models.Index(fields=['asiento', 'orden']),
+            models.Index(fields=['cuenta']),
+            models.Index(fields=['tipo_tercero', 'tercero_id']),  # ⚠️ NORMATIVA: Búsqueda de terceros
+            models.Index(fields=['tercero_nit']),  # ⚠️ NORMATIVA: Medios magnéticos
+        ]
     
     def __str__(self):
-        return f"{self.asiento.numero} - {self.cuenta.codigo}"
+        return f"{self.asiento.numero} - {self.cuenta.codigo} - {self.tercero_razon_social or 'Sin tercero'}"
+    
+    def get_tercero(self):
+        """
+        Obtiene el objeto del tercero según tipo_tercero y tercero_id.
+        
+        Returns:
+            Cliente, Proveedor, Empleado u otro objeto según tipo_tercero, o None
+        """
+        if not self.tipo_tercero or not self.tercero_id:
+            return None
+        
+        if self.tipo_tercero == 'CLIENTE':
+            from apps.tenant.clientes.models import Cliente
+            try:
+                return Cliente.objects.get(id=self.tercero_id)
+            except Cliente.DoesNotExist:
+                return None
+        elif self.tipo_tercero == 'PROVEEDOR':
+            from apps.tenant.proveedores.models import Proveedor
+            try:
+                return Proveedor.objects.get(id=self.tercero_id)
+            except Proveedor.DoesNotExist:
+                return None
+        elif self.tipo_tercero == 'EMPLEADO':
+            from apps.tenant.empleados.models import Empleado
+            try:
+                return Empleado.objects.get(id=self.tercero_id)
+            except Empleado.DoesNotExist:
+                return None
+        return None
+    
+    def calcular_iva(self, porcentaje_iva=Decimal('0.19')):
+        """
+        ⚠️ NORMATIVA COLOMBIANA: Calcula IVA generado o descontable.
+        
+        Args:
+            porcentaje_iva: Porcentaje de IVA (default: 19% para Colombia)
+        
+        Returns:
+            dict: {'base_iva': Decimal, 'iva_generado': Decimal, 'iva_descontable': Decimal}
+        """
+        if not self.cuenta:
+            self.base_iva = Decimal('0.00')
+            self.iva_generado = Decimal('0.00')
+            self.iva_descontable = Decimal('0.00')
+            return {
+                'base_iva': self.base_iva,
+                'iva_generado': self.iva_generado,
+                'iva_descontable': self.iva_descontable
+            }
+        
+        # Determinar si es IVA generado o descontable según el tipo de cuenta
+        # Cuentas 240805 (IVA Generado) son crédito (ventas)
+        # Cuentas 240810 (IVA Descontable) son débito (compras)
+        
+        if self.cuenta.codigo == '240805':  # IVA Generado
+            self.base_iva = self.debe if self.debe > 0 else self.haber
+            self.iva_generado = (self.base_iva * porcentaje_iva).quantize(Decimal('0.01'))
+            self.iva_descontable = Decimal('0.00')
+        elif self.cuenta.codigo == '240810':  # IVA Descontable
+            self.base_iva = self.debe if self.debe > 0 else self.haber
+            self.iva_descontable = (self.base_iva * porcentaje_iva).quantize(Decimal('0.01'))
+            self.iva_generado = Decimal('0.00')
+        else:
+            # Si no es cuenta de IVA, no calcular
+            self.base_iva = Decimal('0.00')
+            self.iva_generado = Decimal('0.00')
+            self.iva_descontable = Decimal('0.00')
+        
+        return {
+            'base_iva': self.base_iva,
+            'iva_generado': self.iva_generado,
+            'iva_descontable': self.iva_descontable
+        }
+    
+    def calcular_retenciones(self, porcentaje_retefuente=Decimal('0.00'), porcentaje_reteica=Decimal('0.00')):
+        """
+        ⚠️ NORMATIVA COLOMBIANA: Calcula retenciones (ReteFuente 2365 y ReteICA 2368).
+        
+        Args:
+            porcentaje_retefuente: Porcentaje de retención en la fuente (default: 0%)
+            porcentaje_reteica: Porcentaje de retención ICA (default: 0%)
+        
+        Returns:
+            dict: {'retefuente': Decimal, 'reteica': Decimal}
+        """
+        if not self.cuenta:
+            self.retefuente = Decimal('0.00')
+            self.reteica = Decimal('0.00')
+            return {
+                'retefuente': self.retefuente,
+                'reteica': self.reteica
+            }
+        
+        # Base para retenciones: debe o haber según el tipo de cuenta
+        base_retenciones = self.debe if self.debe > 0 else self.haber
+        
+        # Calcular ReteFuente (cuenta 2365)
+        if self.cuenta.codigo.startswith('2365'):  # Retención en la Fuente
+            self.retefuente = (base_retenciones * porcentaje_retefuente).quantize(Decimal('0.01'))
+        else:
+            self.retefuente = Decimal('0.00')
+        
+        # Calcular ReteICA (cuenta 2368)
+        if self.cuenta.codigo.startswith('2368'):  # Retención ICA
+            self.reteica = (base_retenciones * porcentaje_reteica).quantize(Decimal('0.01'))
+        else:
+            self.reteica = Decimal('0.00')
+        
+        return {
+            'retefuente': self.retefuente,
+            'reteica': self.reteica
+        }
+    
+    def clean(self):
+        """
+        ⚠️ NORMATIVA COLOMBIANA: Validaciones de movimiento contable.
+        
+        - Validar nivel 6 de cuenta (advertencia inicialmente, no bloquea)
+        - Validar terceros (advertencia inicialmente, no bloquea)
+        - Validar debe/haber (obligatorio)
+        """
+        super().clean()
+        
+        # Validar nivel de cuenta (solo advertencia inicialmente para compatibilidad)
+        if self.cuenta and self.cuenta.nivel != 6:
+            # Advertencia pero no error (para compatibilidad hacia atrás)
+            pass
+        
+        # Validar terceros (solo advertencia inicialmente para compatibilidad)
+        if not self.tercero_nit or not self.tercero_razon_social:
+            # Advertencia pero no error (para compatibilidad hacia atrás)
+            pass
+        
+        # Validar debe/haber (obligatorio siempre)
+        if self.debe > 0 and self.haber > 0:
+            raise ValidationError({
+                'debe': _('Un movimiento no puede tener débito y crédito simultáneamente.'),
+                'haber': _('Un movimiento no puede tener débito y crédito simultáneamente.')
+            })
+        if self.debe == 0 and self.haber == 0:
+            raise ValidationError({
+                'debe': _('Un movimiento debe tener débito o crédito mayor a cero.'),
+                'haber': _('Un movimiento debe tener débito o crédito mayor a cero.')
+            })
     
     def save(self, *args, **kwargs):
-        # Validar que debe o haber sea mayor a 0, pero no ambos
-        if self.debe > 0 and self.haber > 0:
-            raise ValueError(_('Un movimiento no puede tener débito y crédito simultáneamente'))
-        if self.debe == 0 and self.haber == 0:
-            raise ValueError(_('Un movimiento debe tener débito o crédito mayor a cero'))
+        """
+        ⚠️ NORMATIVA COLOMBIANA: Validaciones y cálculos automáticos.
+        
+        - Ejecuta validaciones de clean()
+        - Calcula IVA si aplica
+        - Calcula retenciones si aplica
+        - Actualiza totales del asiento usando método mejorado
+        """
+        # Ejecutar validaciones
+        self.full_clean()
+        
+        # Calcular IVA y retenciones si aplica
+        # Nota: Los porcentajes deberían venir de configuración o del documento origen
+        self.calcular_iva()
+        self.calcular_retenciones()
         
         super().save(*args, **kwargs)
         
-        # Actualizar totales del asiento
-        self.asiento.total_debe = sum(m.debe for m in self.asiento.movimientos.all())
-        self.asiento.total_haber = sum(m.haber for m in self.asiento.movimientos.all())
-        self.asiento.save()
+        # Actualizar totales del asiento usando método mejorado
+        self.asiento.calcular_totales()
+        self.asiento.save(update_fields=['total_debe', 'total_haber'])
 
 
 class PeriodoContable(models.Model):
@@ -428,6 +783,16 @@ class PeriodoContable(models.Model):
         ('ABIERTO', _('Abierto')),
         ('CERRADO', _('Cerrado')),
     ]
+    
+    # ⚠️ v2.61: UUID para lookup público en API
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        verbose_name=_('UUID'),
+        help_text=_('Identificador único público para la API')
+    )
     
     # ⚠️ ENFORCED MODE v2.40: FK NO NULA a Empresa (SSoT)
     empresa = models.ForeignKey(

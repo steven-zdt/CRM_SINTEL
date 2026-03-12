@@ -48,11 +48,16 @@ if services_py_path.exists():
     CUENTA_DETAIL_FIELDS = services_module.CUENTA_DETAIL_FIELDS
     ASIENTO_LIST_FIELDS = services_module.ASIENTO_LIST_FIELDS
     ASIENTO_DETAIL_FIELDS = services_module.ASIENTO_DETAIL_FIELDS
+    PERIODO_LIST_FIELDS = services_module.PERIODO_LIST_FIELDS  # ⚠️ v2.61
+    PERIODO_DETAIL_FIELDS = services_module.PERIODO_DETAIL_FIELDS  # ⚠️ v2.61
     qs_cuenta_list = services_module.qs_cuenta_list
     qs_cuenta_detail = services_module.qs_cuenta_detail
     qs_asiento_list = services_module.qs_asiento_list
     qs_asiento_detail = services_module.qs_asiento_detail
-    # ⚠️ v2.61: Re-exportar get_balance_prueba (verificar_periodo_cerrado NO se re-exporta)
+    qs_periodo_list = services_module.qs_periodo_list  # ⚠️ v2.61
+    qs_periodo_detail = services_module.qs_periodo_detail  # ⚠️ v2.61
+    # ⚠️ v2.61: Re-exportar funciones de validación
+    verificar_periodo_cerrado = services_module.verificar_periodo_cerrado  # ⚠️ v2.61
     get_balance_prueba = services_module.get_balance_prueba
 
 __all__ = [
@@ -71,8 +76,11 @@ __all__ = [
     # v2.37: LIST_FIELDS y qs_*
     'CUENTA_LIST_FIELDS', 'CUENTA_DETAIL_FIELDS',
     'ASIENTO_LIST_FIELDS', 'ASIENTO_DETAIL_FIELDS',
+    'PERIODO_LIST_FIELDS', 'PERIODO_DETAIL_FIELDS',  # ⚠️ v2.61
     'qs_cuenta_list', 'qs_cuenta_detail',
     'qs_asiento_list', 'qs_asiento_detail',
-    # v2.61: Balance de prueba
+    'qs_periodo_list', 'qs_periodo_detail',  # ⚠️ v2.61
+    # v2.61: Funciones de validación
+    'verificar_periodo_cerrado',  # ⚠️ v2.61
     'get_balance_prueba',
 ]

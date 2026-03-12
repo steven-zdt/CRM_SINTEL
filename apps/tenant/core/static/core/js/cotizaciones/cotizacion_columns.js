@@ -79,8 +79,10 @@
         "_valor_descuento_interno": valorDescuentoFila
       }, false).then(() => {
         // ⚠️ Este bloque garantiza el tiempo real exacto - Solo se ejecuta cuando Tabulator garantiza que los datos están asentados
-        if (window.CotizacionEditorModule && typeof window.CotizacionEditorModule.recalcularTotalesGlobales === 'function') {
-          window.CotizacionEditorModule.recalcularTotalesGlobales();
+        // ⚠️ v2.61: Buscar módulo activo (Editor, Crear o Editar)
+        const module = getActiveCotizacionModule();
+        if (module && typeof module.recalcularTotalesGlobales === 'function') {
+          module.recalcularTotalesGlobales();
         }
       }).catch(error => {
         console.error('[cotizacion-columns] Error al actualizar fila:', error);
@@ -95,6 +97,42 @@
       }
       console.error('[cotizacion-columns] Error en recalcularFila:', error);
     }
+  }
+
+  /**
+   * ⚠️ v2.61: Helper para obtener el módulo activo de cotización (Editor, Crear o Editar)
+   * Busca el módulo que esté disponible en el contexto actual
+   * @returns {Object|null} Módulo activo o null si ninguno está disponible
+   */
+  function getActiveCotizacionModule() {
+    // ⚠️ v2.61: Prioridad 1 - Verificar módulo de CREACIÓN
+    const editorCrear = document.getElementById('modal-cotizacion-editor');
+    if (window.CotizacionCrearModule && editorCrear) {
+      const uuid = editorCrear.getAttribute('data-cotizacion-uuid');
+      const dataMode = editorCrear.getAttribute('data-mode');
+      // Solo retornar si es modo creación (sin UUID o data-mode="crear")
+      if ((!uuid || uuid === '' || uuid === 'None') && (!dataMode || dataMode === 'crear')) {
+        return window.CotizacionCrearModule;
+      }
+    }
+    
+    // ⚠️ v2.61: Prioridad 2 - Verificar módulo de EDICIÓN
+    const editorEditar = document.getElementById('modal-cotizacion-editar');
+    if (window.CotizacionEditarModule && editorEditar) {
+      const dataMode = editorEditar.getAttribute('data-mode');
+      const uuid = editorEditar.getAttribute('data-cotizacion-uuid');
+      // Solo retornar si es modo edición (con UUID y data-mode="editar")
+      if (uuid && uuid !== '' && uuid !== 'None' && (!dataMode || dataMode === 'editar')) {
+        return window.CotizacionEditarModule;
+      }
+    }
+    
+    // ⚠️ v2.61: DEPRECATED - CotizacionEditorModule ya no existe, no retornar
+    // if (window.CotizacionEditorModule) {
+    //   return window.CotizacionEditorModule;
+    // }
+    
+    return null;
   }
 
   /**
@@ -371,16 +409,17 @@
             // Recalcular subtotal inicial después de añadir la fila usando la función centralizada
             recalcularFila(row);
             // Reindexar todas las filas después de añadir
-            if (window.CotizacionEditorModule && window.CotizacionEditorModule.reindexarFilas) {
-              window.CotizacionEditorModule.reindexarFilas(table);
+            const module = getActiveCotizacionModule();
+            if (module && module.reindexarFilas) {
+              module.reindexarFilas(table);
             }
             
             // Enfocar la celda "descripcion" para edición inmediata
             row.getCell('descripcion').edit();
             
             // Actualizar totales después de añadir la fila
-            if (window.CotizacionEditorModule && window.CotizacionEditorModule.actualizarPanelTotales) {
-              window.CotizacionEditorModule.actualizarPanelTotales();
+            if (module && module.actualizarPanelTotales) {
+              module.actualizarPanelTotales();
             }
           }).catch(function(error) {
             console.error('Error al añadir fila:', error);
@@ -402,13 +441,14 @@
                 cell.getRow().delete();
                 
                 // Reindexar todas las filas después de eliminar
-                if (window.CotizacionEditorModule && window.CotizacionEditorModule.reindexarFilas) {
-                  window.CotizacionEditorModule.reindexarFilas(table);
+                const module = getActiveCotizacionModule();
+                if (module && module.reindexarFilas) {
+                  module.reindexarFilas(table);
                 }
                 
                 // Actualizar totales después de eliminar la fila
-                if (window.CotizacionEditorModule && window.CotizacionEditorModule.actualizarPanelTotales) {
-                  window.CotizacionEditorModule.actualizarPanelTotales();
+                if (module && module.actualizarPanelTotales) {
+                  module.actualizarPanelTotales();
                 }
               }
             });
@@ -555,13 +595,14 @@
         const uuid = cell.getValue();
         if (!uuid) return '-';
         
-        // ⚠️ Usar HTMX para editar y métodos del módulo para otras acciones
+        // ⚠️ v2.61: Usar HTMX para editar con nuevo endpoint render-offcanvas/editar/ (alineado con patrón de contabilidad)
         return `
           <div class='btn-group'>
             <button class='btn btn-sm btn-outline-primary' 
-                    hx-get="/cotizaciones/editor/${uuid}/"
+                    hx-get="/api/v1/cotizaciones/${uuid}/render-offcanvas/editar/"
                     hx-target="#offcanvas-container"
                     hx-swap="innerHTML"
+                    hx-indicator="#spinner"
                     data-bs-toggle="offcanvas"
                     data-bs-target="#offcanvas-container"
                     title="Editar Cotización">

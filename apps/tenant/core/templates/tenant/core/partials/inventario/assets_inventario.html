@@ -1,12 +1,25 @@
 {% load static %}
-{# assets_inventario.html - Assets del módulo Inventario v2.60 #}
+{# assets_inventario.html - Assets del módulo Inventario v2.61.3 #}
 {# ⚠️ SINTEL v2.60: Sincronización Arquitectónica - Carga Perezosa (Lazy Loading) #}
+{# ⚠️ v2.61.3: Categorías, Productos, Servicios, Activos y Movimientos migrados a Feature-Sliced Architecture #}
 {# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
 {# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http.js, ui-manager.js, etc.) - ya cargado en workspace.html #}
 {# 2. inventario.api.js (Capa de Datos - define window.inventarioAPI) - REQUERIDO #}
-{# 3. inventario_editor.js (Feature: Editor y Offcanvas - Modales) - REQUERIDO #}
-{# 4. inventario_list.js (Feature: Listado y Tabulator - Page) - REQUERIDO #}
-{# ⚠️ v2.60: Orden API -> Modals -> Page para garantizar dependencias correctas #}
+{# 3. inventario_editor.js (Feature: Editor productos - Modales) - REQUERIDO #}
+{# 4. inventario_list.js (Feature: Listado productos - Page) - REQUERIDO #}
+{# 5. categorias_editor.js (Feature: CREATE/UPDATE categorías) - REQUERIDO #}
+{# 6. categorias_list.js (Feature: READ categorías - Listado) - REQUERIDO #}
+{# 7. productos_editor.js (Feature: CREATE/UPDATE productos) - REQUERIDO #}
+{# 8. productos_list.js (Feature: READ productos - Listado) - REQUERIDO #}
+{# 9. servicios_editor.js (Feature: CREATE/UPDATE servicios) - REQUERIDO #}
+{# 10. servicios_list.js (Feature: READ servicios - Listado) - REQUERIDO #}
+{# 11. activos_editor.js (Feature: CREATE/UPDATE activos) - REQUERIDO #}
+{# 12. activos_list.js (Feature: READ activos - Listado) - REQUERIDO #}
+{# 11. activos_editor.js (Feature: CREATE/UPDATE activos) - REQUERIDO #}
+{# 12. activos_list.js (Feature: READ activos - Listado) - REQUERIDO #}
+{# 13. movimientos_editor.js (Feature: CREATE movimientos) - REQUERIDO #}
+{# 14. movimientos_list.js (Feature: READ movimientos - Listado) - REQUERIDO #}
+{# ⚠️ v2.60: Orden API -> Editor -> List para garantizar dependencias correctas #}
 
 {# BLOQUE 1: API Wrapper (Capa de Datos) - REQUERIDO #}
 <script src="{% static 'core/js/inventario/inventario.api.js' %}"></script>
@@ -17,11 +30,49 @@
 {# Page: Listado y Tabulator (usa lazy loading con DOMUtils.onVisibleOnce) #}
 <script src="{% static 'core/js/inventario/features/inventario_list.js' %}"></script>
 
-{# BLOQUE 3: Módulos específicos - Servicios, Categorías, Activos #}
+{# BLOQUE 3: Features modulares por CRUD - Categorías v2.61.3 #}
+{# ⚠️ v2.61.3: Categorías migrado a Feature-Sliced Architecture #}
+{# ⚠️ ORDEN CRÍTICO: Editor antes de List (List puede llamar a Editor) #}
+<script src="{% static 'core/js/inventario/features/categorias_editor.js' %}"></script>
+<script src="{% static 'core/js/inventario/features/categorias_list.js' %}"></script>
+
+{# BLOQUE 4: Features modulares por CRUD - Productos v2.61.3 #}
+{# ⚠️ v2.61.3: Productos migrado a Feature-Sliced Architecture #}
+{# ⚠️ ORDEN CRÍTICO: Editor antes de List (List puede llamar a Editor) #}
+<script src="{% static 'core/js/inventario/features/productos_editor.js' %}"></script>
+<script src="{% static 'core/js/inventario/features/productos_list.js' %}"></script>
+
+{# BLOQUE 5: Features modulares por CRUD - Servicios v2.61.3 #}
+{# ⚠️ v2.61.3: Servicios migrado a Feature-Sliced Architecture #}
+{# ⚠️ ORDEN CRÍTICO: Editor antes de List (List puede llamar a Editor) #}
+<script src="{% static 'core/js/inventario/features/servicios_editor.js' %}"></script>
+<script src="{% static 'core/js/inventario/features/servicios_list.js' %}"></script>
+
+{# BLOQUE 6: Features modulares por CRUD - Activos Fijos v2.61.3 #}
+{# ⚠️ v2.61.3: Activos migrado a Feature-Sliced Architecture #}
+{# ⚠️ ORDEN CRÍTICO: Editor antes de List (List puede llamar a Editor) #}
+<script src="{% static 'core/js/inventario/features/activos_editor.js' %}"></script>
+<script src="{% static 'core/js/inventario/features/activos_list.js' %}"></script>
+
+{# BLOQUE 7: Features modulares por CRUD - Movimientos de Inventario (Kardex) v2.61.3 #}
+{# ⚠️ v2.61.3: Movimientos migrado a Feature-Sliced Architecture #}
+{# ⚠️ ORDEN CRÍTICO: Editor antes de List (List puede llamar a Editor) #}
+{# ⚠️ NOTA: Solo CREATE (no UPDATE/DELETE por integridad del Kardex) #}
+<script src="{% static 'core/js/inventario/features/movimientos_editor.js' %}"></script>
+<script src="{% static 'core/js/inventario/features/movimientos_list.js' %}"></script>
+
+{# BLOQUE 8: Módulos legacy .page.js (DEPRECATED) #}
 {# ⚠️ v2.60: Cada módulo tiene su propio .page.js con lazy loading #}
-<script src="{% static 'core/js/inventario/servicios.page.js' %}"></script>
-<script src="{% static 'core/js/inventario/categorias.page.js' %}"></script>
-<script src="{% static 'core/js/inventario/activos.page.js' %}"></script>
+{# ⚠️ v2.61.3: servicios.page.js DEPRECATED - Usar servicios_list.js + servicios_editor.js #}
+{# <script src="{% static 'core/js/inventario/servicios.page.js' %}"></script> #}
+{# ⚠️ v2.61.3: categorias.page.js DEPRECATED - Usar categorias_list.js + categorias_editor.js #}
+{# <script src="{% static 'core/js/inventario/categorias.page.js' %}"></script> #}
+{# ⚠️ v2.61.3: productos.page.js DEPRECATED - Usar productos_list.js + productos_editor.js #}
+{# <script src="{% static 'core/js/inventario/productos.page.js' %}"></script> #}
+{# ⚠️ v2.61.3: activos.page.js DEPRECATED - Usar activos_list.js + activos_editor.js #}
+{# <script src="{% static 'core/js/inventario/activos.page.js' %}"></script> #}
+{# ⚠️ v2.61.3: movimientos.page.js DEPRECATED - Usar movimientos_list.js + movimientos_editor.js #}
+{# <script src="{% static 'core/js/inventario/movimientos.page.js' %}"></script> #}
 
 {# ⚠️ HTMX: Reinicializar listeners cuando se carga el Offcanvas vía HTMX #}
 <script>
@@ -43,14 +94,24 @@
                 });
             };
             
-            // Offcanvas de productos
-            if (targetId === 'offcanvas-container-inventario') {
-                initOffcanvas('offcanvas-container-inventario', '[inventario.assets] Offcanvas de productos cargado vía HTMX');
-            }
+            // ⚠️ v2.61.3: Offcanvas de productos - Inicialización manejada por productos_editor.js
+            // ⚠️ NO inicializar aquí para evitar duplicados - productos_editor.js tiene su propio listener htmx:afterSwap
+            // if (targetId === 'offcanvas-container-inventario') {
+            //     initOffcanvas('offcanvas-container-inventario', '[inventario.assets] Offcanvas de productos cargado vía HTMX', function() {
+            //         if (window.ProductosEditor && typeof window.ProductosEditor.init === 'function') {
+            //             window.ProductosEditor.init();
+            //         }
+            //     });
+            // }
             
             // Offcanvas de servicios
             if (targetId === 'offcanvas-container-servicios') {
-                initOffcanvas('offcanvas-container-servicios', '[inventario.assets] Offcanvas de servicios cargado vía HTMX');
+                initOffcanvas('offcanvas-container-servicios', '[inventario.assets] Offcanvas de servicios cargado vía HTMX', function() {
+                    // ⚠️ v2.61.3: Inicializar editor de servicios (Feature: CREATE/UPDATE)
+                    if (window.ServiciosEditor && typeof window.ServiciosEditor.init === 'function') {
+                        window.ServiciosEditor.init();
+                    }
+                });
             }
             
             // Offcanvas de historial de servicios
@@ -65,12 +126,22 @@
             
             // Offcanvas de categorías
             if (targetId === 'offcanvas-container-categorias') {
-                initOffcanvas('offcanvas-container-categorias', '[inventario.assets] Offcanvas de categorías cargado vía HTMX');
+                initOffcanvas('offcanvas-container-categorias', '[inventario.assets] Offcanvas de categorías cargado vía HTMX', function() {
+                    // ⚠️ v2.61.3: Inicializar editor de categorías (Feature: CREATE/UPDATE)
+                    if (window.CategoriasEditor && typeof window.CategoriasEditor.init === 'function') {
+                        window.CategoriasEditor.init();
+                    }
+                });
             }
             
             // Offcanvas de activos
             if (targetId === 'offcanvas-container-activos') {
-                initOffcanvas('offcanvas-container-activos', '[inventario.assets] Offcanvas de activos cargado vía HTMX');
+                initOffcanvas('offcanvas-container-activos', '[inventario.assets] Offcanvas de activos cargado vía HTMX', function() {
+                    // ⚠️ v2.61.3: Inicializar editor de activos (Feature: CREATE/UPDATE)
+                    if (window.ActivosEditor && typeof window.ActivosEditor.init === 'function') {
+                        window.ActivosEditor.init();
+                    }
+                });
             }
         });
     }

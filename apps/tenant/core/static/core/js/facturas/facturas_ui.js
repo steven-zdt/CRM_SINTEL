@@ -155,9 +155,25 @@
 
     /**
      * Abrir formulario para subir nueva factura
+     * ⚠️ v2.61.2: Protección contra llamadas simultáneas
      */
+    let _subirNuevaEnProceso = false;
     async function subirNueva() {
-        await cargarOffcanvas(null, true);
+        // ⚠️ v2.61.2: Prevenir múltiples llamadas simultáneas
+        if (_subirNuevaEnProceso) {
+            console.warn(`${MOD} subirNueva() ya está en proceso, ignorando llamada duplicada`);
+            return;
+        }
+        
+        _subirNuevaEnProceso = true;
+        try {
+            await cargarOffcanvas(null, true);
+        } finally {
+            // ⚠️ Resetear flag después de un breve delay para permitir que el offcanvas se abra
+            setTimeout(() => {
+                _subirNuevaEnProceso = false;
+            }, 1000);
+        }
     }
 
     /**
@@ -1046,6 +1062,7 @@
             'receptor.direccion': { label: 'Dirección del Receptor', path: ['receptor', 'direccion'] },
             'numero': { label: 'Número de Factura', path: ['numero'] },
             'fecha_emision': { label: 'Fecha de Emisión', path: ['fecha_emision'] },
+            'naturaleza': { label: 'Naturaleza (Venta/Compra)', path: ['naturaleza'], type: 'select' },
         };
         
         return map[field] || { label: field.replace(/\./g, ' ').replace(/_/g, ' '), path: field.split('.') };
@@ -1157,23 +1174,48 @@
             const valorActual = obtenerValorDTO(dto, campoInfo.path) || '';
             const fieldId = `field-${field.replace(/\./g, '-')}`;
             
-            formHTML += `
-                <div class="mb-3">
-                    <label for="${fieldId}" class="form-label">
-                        ${campoInfo.label} <span class="text-danger">*</span>
-                    </label>
-                    <input type="text" 
-                           class="form-control" 
-                           id="${fieldId}" 
-                           name="${field}" 
-                           value="${valorActual}"
-                           data-path='${JSON.stringify(campoInfo.path)}'
-                           required>
-                    <div class="invalid-feedback">
-                        Por favor, complete el campo ${campoInfo.label}.
+            // ⚠️ v2.61.2: Manejo especial para naturaleza (select) y campos normales (input)
+            if (campoInfo.type === 'select' && field === 'naturaleza') {
+                // Campo select para naturaleza
+                formHTML += `
+                    <div class="mb-3">
+                        <label for="${fieldId}" class="form-label">
+                            ${campoInfo.label} <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" 
+                                id="${fieldId}" 
+                                name="${field}" 
+                                data-path='${JSON.stringify(campoInfo.path)}'
+                                required>
+                            <option value="">Seleccione...</option>
+                            <option value="VENTA" ${valorActual === 'VENTA' ? 'selected' : ''}>Venta (emitida por el tenant)</option>
+                            <option value="COMPRA" ${valorActual === 'COMPRA' ? 'selected' : ''}>Compra (recibida por el tenant)</option>
+                        </select>
+                        <div class="invalid-feedback">
+                            Por favor, seleccione la naturaleza de la factura.
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            } else {
+                // Campo input normal
+                formHTML += `
+                    <div class="mb-3">
+                        <label for="${fieldId}" class="form-label">
+                            ${campoInfo.label} <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="${fieldId}" 
+                               name="${field}" 
+                               value="${valorActual}"
+                               data-path='${JSON.stringify(campoInfo.path)}'
+                               required>
+                        <div class="invalid-feedback">
+                            Por favor, complete el campo ${campoInfo.label}.
+                        </div>
+                    </div>
+                `;
+            }
         });
 
         formHTML += `
@@ -1214,21 +1256,131 @@
                 // Crear copia del DTO para no modificar el original
                 const dtoCompleto = JSON.parse(JSON.stringify(dto));
 
-                // Recopilar valores del formulario y actualizar DTO
+                /**
+                 * ⚠️ v2.61.2: Limpiar NIT - Eliminar caracteres especiales y dígito de verificación si es necesario
+                 * @param {string} nit - NIT con posibles caracteres especiales
+                 * @returns {string} NIT limpio
+                 */
+                function limpiarNIT(nit) {
+                    if (!nit) return '';
+                    // Eliminar espacios, guiones, puntos y otros caracteres especiales
+                    let nitLimpio = nit.replace(/[\s\-\.]/g, '');
+                    // Si el backend solo espera el número base (sin dígito de verificación),
+                    // eliminar el último dígito si es numérico y el NIT tiene más de 9 caracteres
+                    // Nota: Esta lógica puede ajustarse según los requisitos del backend
+                    if (nitLimpio.length > 9 && /^\d+$/.test(nitLimpio)) {
+                        // Opcional: eliminar último dígito (dígito de verificación)
+                        // nitLimpio = nitLimpio.slice(0, -1);
+                    }
+                    return nitLimpio;
+                }
+
+                // ⚠️ v2.61.2: Recopilar valores del formulario y actualizar DTO
+                // Asegurar que los objetos anidados (como emisor) se reconstruyan correctamente
                 missingFields.forEach((field) => {
                     const fieldId = `field-${field.replace(/\./g, '-')}`;
                     const input = d.getElementById(fieldId);
                     if (input && input.value.trim()) {
                         const campoInfo = mapearCampoFaltante(field);
-                        establecerValorDTO(dtoCompleto, campoInfo.path, input.value.trim());
+                        let valor = input.value.trim();
+                        
+                        // ⚠️ v2.61.2: Limpiar NIT si es un campo de NIT
+                        if (field.includes('nit') || field.includes('NIT')) {
+                            valor = limpiarNIT(valor);
+                        }
+                        
+                        // ⚠️ v2.61.2: Asegurar que los objetos anidados existan antes de establecer valores
+                        // Por ejemplo, si el path es ['emisor', 'nit'], asegurar que dtoCompleto.emisor existe
+                        if (campoInfo.path.length > 1) {
+                            let current = dtoCompleto;
+                            for (let i = 0; i < campoInfo.path.length - 1; i++) {
+                                const key = campoInfo.path[i];
+                                if (!current[key] || typeof current[key] !== 'object') {
+                                    current[key] = {};
+                                }
+                                current = current[key];
+                            }
+                        }
+                        
+                        establecerValorDTO(dtoCompleto, campoInfo.path, valor);
                     }
                 });
+                
+                // ⚠️ v2.61.2: VALIDACIÓN FINAL - Asegurar que emisor y naturaleza estén definidos
+                // ⚠️ Sincronización de Naturaleza: Detectar si es AttachedDocument y asignar naturaleza automáticamente
+                const esAttachedDocument = metadata?.file_type === 'xml' && (
+                    metadata?.document_type === 'AttachedDocument' ||
+                    dtoCompleto.metadata?.document_type === 'AttachedDocument' ||
+                    dtoCompleto.tipo_documento === 'AttachedDocument'
+                );
+                
+                if (!dtoCompleto.naturaleza || (dtoCompleto.naturaleza !== 'VENTA' && dtoCompleto.naturaleza !== 'COMPRA')) {
+                    // ⚠️ v2.61.2: Si es AttachedDocument de la DIAN, generalmente es COMPRA (recibida)
+                    if (esAttachedDocument) {
+                        dtoCompleto.naturaleza = 'COMPRA';
+                        console.log(`${MOD} AttachedDocument detectado, asignando naturaleza: COMPRA`);
+                    } else {
+                        // Intentar inferir desde el contexto o asignar por defecto
+                        // Si el DTO tiene información del receptor y coincide con empresa del tenant, es COMPRA
+                        // Por defecto, si no se puede inferir, usar VENTA (más común)
+                        dtoCompleto.naturaleza = dtoCompleto.naturaleza || 'VENTA';
+                        console.log(`${MOD} Naturaleza no definida, asignando por defecto: ${dtoCompleto.naturaleza}`);
+                    }
+                }
+                
+                // ⚠️ v2.61.2: ALINEACIÓN - Validar que emisor.nit y emisor.razon_social sean obligatorios
+                if (!dtoCompleto.emisor) {
+                    dtoCompleto.emisor = {};
+                }
+                
+                // ⚠️ v2.61.2: Obtener referencia al botón antes de las validaciones
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+                
+                // Validar que emisor tenga al menos nit o razon_social (ambos son recomendados)
+                if (!dtoCompleto.emisor.nit && !dtoCompleto.emisor.razon_social) {
+                    console.error(`${MOD} DTO incompleto: emisor no tiene nit ni razon_social`);
+                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                        w.SintelFeedback.error('Error: El emisor debe tener al menos NIT o Razón Social');
+                    }
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
+                    }
+                    return;
+                }
+                
+                // ⚠️ v2.61.2: ALINEACIÓN - Asegurar que ambos campos estén presentes antes de persistir
+                // Si falta alguno, mostrar formulario de campos faltantes
+                if (!dtoCompleto.emisor.nit || !dtoCompleto.emisor.razon_social) {
+                    console.warn(`${MOD} Emisor incompleto: nit=${!!dtoCompleto.emisor.nit}, razon_social=${!!dtoCompleto.emisor.razon_social}`);
+                    const camposFaltantes = [];
+                    if (!dtoCompleto.emisor.nit) camposFaltantes.push('emisor.nit');
+                    if (!dtoCompleto.emisor.razon_social) camposFaltantes.push('emisor.razon_social');
+                    
+                    if (w.SintelFeedback && typeof w.SintelFeedback.warning === 'function') {
+                        w.SintelFeedback.warning('El emisor debe tener tanto NIT como Razón Social');
+                    }
+                    
+                    // Mostrar formulario con campos faltantes
+                    // ⚠️ v2.61.2: Obtener calidadExtraccion si no está disponible
+                    let calidadExtraccionLocal = calidadExtraccion;
+                    if (!calidadExtraccionLocal) {
+                        calidadExtraccionLocal = validarCalidadExtraccion(dtoCompleto, metadata || {});
+                    }
+                    mostrarFormularioCamposFaltantes(dtoCompleto, camposFaltantes, metadata || {}, calidadExtraccionLocal);
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
+                    }
+                    return;
+                }
 
                 // Mostrar loading
-                const submitBtn = form.querySelector('button[type="submit"]');
-                const originalBtnText = submitBtn.innerHTML;
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+                }
 
                 try {
                     // Enviar DTO completo al endpoint create-from-dto/
@@ -1364,8 +1516,9 @@
                 return;
             }
 
-            // ⚠️ v2.60: El endpoint universal solo parsea (persisted: false siempre)
-            // Si el usuario no marcó "preview", persistir automáticamente
+            // ⚠️ v2.61.3: El endpoint upload-ubl puede retornar {id, persisted:true} (persistencia directa)
+            // o {dto, missing_fields} (parseo sin persistir). Se usa data.id como indicador fiable.
+            // Si el usuario no marcó "preview" y no hay id devuelto, persistir automáticamente vía create-from-dto
             const previewMode = d.getElementById('previewMode')?.checked || false;
             const dto = data.dto || data;
             const missingFields = data.missing_fields || [];
@@ -1375,7 +1528,8 @@
             
             // ⚠️ PRIORIDAD: Si hay campos faltantes, mostrar formulario dinámico para completarlos
             // El formulario ya incluye las advertencias de calidad, así que se muestra todo junto
-            if (!previewMode && dto && !data.persisted && missingFields.length > 0) {
+            // ⚠️ v2.61.2 FIX: Usar !data.id en vez de !data.persisted para detectar si ya fue persistido
+            if (!previewMode && dto && !data.id && missingFields.length > 0) {
                 console.log(`${MOD} Campos faltantes detectados: ${missingFields.join(', ')}`);
                 // Pasar calidadExtraccion para que el formulario muestre las advertencias correctamente
                 mostrarFormularioCamposFaltantes(dto, missingFields, data.metadata || {}, calidadExtraccion);
@@ -1415,7 +1569,90 @@
                 }
             }
 
-            if (!previewMode && dto && !data.persisted) {
+            if (!previewMode && dto && !data.id) {
+                // ⚠️ v2.61.2 FIX: Usar !data.id (no !data.persisted) para detectar si aún no fue persistido
+                // ⚠️ v2.61.2: VALIDACIÓN PREVENTIVA - Asegurar estructura mínima antes de persistir
+                // La API requiere que emisor y naturaleza estén definidos para procesar la persistencia
+                
+                // ⚠️ v2.61.2: Validación de Etiquetas - Buscar NIT en rutas alternativas para AttachedDocument
+                // Si es AttachedDocument y no se encuentra emisor.nit, intentar buscar en SenderParty
+                const esAttachedDocument = data.metadata?.file_type === 'xml' && (
+                    data.metadata?.document_type === 'AttachedDocument' ||
+                    dto.metadata?.document_type === 'AttachedDocument' ||
+                    dto.tipo_documento === 'AttachedDocument'
+                );
+                
+                // Si es AttachedDocument y falta emisor.nit, intentar extraer desde metadata o rutas alternativas
+                if (esAttachedDocument && (!dto.emisor || !dto.emisor.nit)) {
+                    // Buscar NIT en metadata o rutas alternativas (SenderParty: cac:SenderParty//cbc:CompanyID)
+                    const nitAlternativo = data.metadata?.sender_party_nit || 
+                                         data.metadata?.emisor_nit ||
+                                         data.metadata?.sender_company_id ||
+                                         dto.metadata?.sender_party_nit ||
+                                         dto.metadata?.emisor_nit ||
+                                         dto.metadata?.sender_company_id;
+                    
+                    if (nitAlternativo) {
+                        if (!dto.emisor) {
+                            dto.emisor = {};
+                        }
+                        if (!dto.emisor.nit) {
+                            dto.emisor.nit = nitAlternativo;
+                            console.log(`${MOD} NIT encontrado en ruta alternativa (SenderParty/CompanyID): ${nitAlternativo}`);
+                        }
+                    }
+                }
+                
+                const tieneEmisor = dto.emisor && (
+                    dto.emisor.nit || 
+                    dto.emisor.razon_social || 
+                    (typeof dto.emisor === 'object' && Object.keys(dto.emisor).length > 0)
+                );
+                
+                // ⚠️ v2.61.2: Sincronización de Naturaleza - Asignar automáticamente si es AttachedDocument
+                let tieneNaturaleza = dto.naturaleza && (dto.naturaleza === 'VENTA' || dto.naturaleza === 'COMPRA');
+                
+                if (!tieneNaturaleza && esAttachedDocument) {
+                    // AttachedDocument de la DIAN generalmente es COMPRA (recibida)
+                    dto.naturaleza = 'COMPRA';
+                    tieneNaturaleza = true;
+                    console.log(`${MOD} AttachedDocument detectado, naturaleza asignada automáticamente: COMPRA`);
+                }
+                
+                if (!tieneEmisor || !tieneNaturaleza) {
+                    console.warn(`${MOD} DTO no tiene estructura mínima requerida. Emisor: ${tieneEmisor}, Naturaleza: ${tieneNaturaleza}`);
+                    
+                    // Si falta emisor o naturaleza, mostrar formulario de campos faltantes
+                    const camposFaltantes = [];
+                    if (!tieneEmisor) {
+                        // ⚠️ v2.61.2: ALINEACIÓN - Ambos campos son obligatorios
+                        camposFaltantes.push('emisor.nit', 'emisor.razon_social');
+                    }
+                    if (!tieneNaturaleza) {
+                        camposFaltantes.push('naturaleza');
+                    }
+                    
+                    // Agregar campos faltantes adicionales si existen
+                    if (missingFields && Array.isArray(missingFields)) {
+                        camposFaltantes.push(...missingFields.filter(f => !camposFaltantes.includes(f)));
+                    }
+                    
+                    mostrarFormularioCamposFaltantes(dto, camposFaltantes, data.metadata || {}, calidadExtraccion);
+                    return; // No persistir automáticamente, esperar que el usuario complete el formulario
+                }
+                
+                // ⚠️ v2.61.2: ALINEACIÓN - Validación final antes de persistir
+                // Asegurar que emisor.nit y emisor.razon_social estén presentes
+                if (!dto.emisor.nit || !dto.emisor.razon_social) {
+                    console.warn(`${MOD} Emisor incompleto antes de persistir: nit=${!!dto.emisor.nit}, razon_social=${!!dto.emisor.razon_social}`);
+                    const camposFaltantes = [];
+                    if (!dto.emisor.nit) camposFaltantes.push('emisor.nit');
+                    if (!dto.emisor.razon_social) camposFaltantes.push('emisor.razon_social');
+                    
+                    mostrarFormularioCamposFaltantes(dto, camposFaltantes, data.metadata || {}, calidadExtraccion);
+                    return;
+                }
+                
                 // Persistir automáticamente vía create-from-dto (sin campos faltantes)
                 console.log(`${MOD} Persistiendo factura desde DTO...`);
                 
@@ -1677,8 +1914,33 @@
             if (btnSubir) {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log(`${MOD} Botón "Subir Factura" clickeado`);
-                await subirNueva();
+                
+                // ⚠️ v2.61.2: Protección contra doble click - deshabilitar botón mientras se procesa
+                if (btnSubir.disabled || btnSubir.classList.contains('processing')) {
+                    console.log(`${MOD} Botón "Subir Factura" ya está procesando, ignorando click`);
+                    return;
+                }
+                
+                // Marcar como procesando
+                btnSubir.disabled = true;
+                btnSubir.classList.add('processing');
+                const originalHTML = btnSubir.innerHTML;
+                btnSubir.innerHTML = '<i class="bi bi-hourglass-split"></i> Cargando...';
+                
+                try {
+                    console.log(`${MOD} Botón "Subir Factura" clickeado`);
+                    await subirNueva();
+                } catch (error) {
+                    console.error(`${MOD} Error al subir factura:`, error);
+                    if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+                        w.UIManager.handleError({ ok: false, status: 500, data: { detail: 'Error al cargar el formulario' } }, MOD);
+                    }
+                } finally {
+                    // Restaurar estado del botón
+                    btnSubir.disabled = false;
+                    btnSubir.classList.remove('processing');
+                    btnSubir.innerHTML = originalHTML;
+                }
                 return;
             }
 
@@ -1687,8 +1949,28 @@
             if (btnRefresh) {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log(`${MOD} Botón "Actualizar" clickeado`);
-                refreshGrid();
+                
+                // ⚠️ v2.61.2: Protección contra doble click
+                if (btnRefresh.disabled || btnRefresh.classList.contains('processing')) {
+                    return;
+                }
+                
+                btnRefresh.disabled = true;
+                btnRefresh.classList.add('processing');
+                const originalHTML = btnRefresh.innerHTML;
+                btnRefresh.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+                
+                try {
+                    console.log(`${MOD} Botón "Actualizar" clickeado`);
+                    refreshGrid();
+                } finally {
+                    // Restaurar después de un breve delay
+                    setTimeout(() => {
+                        btnRefresh.disabled = false;
+                        btnRefresh.classList.remove('processing');
+                        btnRefresh.innerHTML = originalHTML;
+                    }, 500);
+                }
                 return;
             }
 
@@ -1697,8 +1979,30 @@
             if (btnSync) {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log(`${MOD} Botón "Sincronizar Buzón" clickeado`);
-                await sincronizarCorreo();
+                
+                // ⚠️ v2.61.2: Protección contra doble click
+                if (btnSync.disabled || btnSync.classList.contains('processing')) {
+                    return;
+                }
+                
+                btnSync.disabled = true;
+                btnSync.classList.add('processing');
+                const spinner = d.getElementById('sync-spinner');
+                if (spinner) {
+                    spinner.classList.remove('d-none');
+                }
+                
+                try {
+                    console.log(`${MOD} Botón "Sincronizar Buzón" clickeado`);
+                    await sincronizarCorreo();
+                } finally {
+                    // Restaurar estado
+                    btnSync.disabled = false;
+                    btnSync.classList.remove('processing');
+                    if (spinner) {
+                        spinner.classList.add('d-none');
+                    }
+                }
                 return;
             }
         };

@@ -35,7 +35,8 @@
   </div>
   
   <!-- Tabla Tabulator -->
-  <div id="grid-cuentas"></div>
+  <!-- ⚠️ v2.61: Límites de ancho para evitar expansión horizontal infinita -->
+  <div id="grid-cuentas" style="max-width: 100%; overflow-x: auto;"></div>
 </div>
 
 {# ⚠️ v2.60: Contenedor HTMX para Offcanvas #}

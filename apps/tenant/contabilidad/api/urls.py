@@ -5,16 +5,26 @@ Arquitectura API-First:
 - Todas las rutas están bajo /api/v1/contabilidad/
 - Usa routers de DRF para generar endpoints automáticamente
 - Referencia: https://www.django-rest-framework.org/api-guide/routers/
+
+⚠️ v2.61: Alineado con sistema de rutas de Core API
+- Rutas directas: /api/v1/contabilidad/ (desde config/api_urls.py)
+- Gateway Core: /api/v1/core/_apps/contabilidad/ (desde apps/tenant/core/api/urls.py)
+- Facades Core v1: /api/v1/core/v1/contabilidad/ (desde apps/tenant/core/api/v1/contabilidad/urls.py)
+  - Facades heredan de ViewSets originales y usan serializers Workspace
+  - Incluye: cuentas, asientos, movimientos, periodos-contables, catalogo-niif
 """
 from django.urls import path
+from django.http import HttpResponseNotFound
 from rest_framework.routers import DefaultRouter
 from apps.tenant.contabilidad.api.viewsets import (
     CuentaContableViewSet,
     AsientoContableViewSet,
     MovimientoContableViewSet,
+    PeriodoContableViewSet,  # ⚠️ v2.61
     CatalogoMaestroNIIFViewSet,
 )
-# ⚠️ DEPRECATED v2.40: datatables.py está deprecado. Use ViewSet.datatables() actions en su lugar.
+# ⚠️ ELIMINADO v2.61: datatables.py y métodos datatables() fueron eliminados.
+# La lógica de DataTables fue migrada completamente a Tabulator.
 # from apps.tenant.contabilidad.api.datatables import (
 #     cuentas_contables_dt,
 #     asientos_contables_dt,
@@ -22,22 +32,37 @@ from apps.tenant.contabilidad.api.viewsets import (
 
 # Router para esta app
 # ⚠️ v2.37: trailing_slash=True unificado (debe coincidir con frontend)
-TRAILING_SLASH = True
-router = DefaultRouter(trailing_slash=TRAILING_SLASH)
+router = DefaultRouter(trailing_slash=True)
 
 # Registrar ViewSets
 router.register(r'cuentas-contables', CuentaContableViewSet, basename='cuenta-contable')
 router.register(r'asientos-contables', AsientoContableViewSet, basename='asiento-contable')
 router.register(r'movimientos-contables', MovimientoContableViewSet, basename='movimiento-contable')
+router.register(r'periodos-contables', PeriodoContableViewSet, basename='periodo-contable')  # ⚠️ v2.61
 router.register(r'catalogo-niif', CatalogoMaestroNIIFViewSet, basename='catalogo-niif')
+
 
 # URLs generadas por el router
 urlpatterns = router.urls
 
-# ⚠️ DEPRECATED v2.40: Endpoints DataTables en datatables.py están deprecados.
-# Use POST /api/v1/contabilidad/cuentas-contables/dt/cuentas-contables/ y
-# POST /api/v1/contabilidad/asientos-contables/dt/asientos-contables/ (actions del ViewSet) en su lugar.
+# ⚠️ ELIMINADO v2.61: Endpoints DataTables fueron eliminados completamente.
+# La lógica de DataTables fue migrada a Tabulator.
+# Los métodos datatables() en ViewSets fueron eliminados.
 # urlpatterns += [
 #     path("dt/cuentas-contables/", cuentas_contables_dt, name="cuentas_contables_dt"),
 #     path("dt/asientos-contables/", asientos_contables_dt, name="asientos_contables_dt"),
 # ]
+
+# ⚠️ DEPRECATED: Ruta migrada desde urls_ui.py
+# Esta ruta está deprecada y retorna 404. La UI se movió a Core.
+def deprecated_summary_view(request):
+    """Vista deprecada que retorna 404."""
+    return HttpResponseNotFound(
+        '<h1>404 - Vista deprecada</h1>'
+        '<p>Esta ruta ha sido movida a Core. Use /static/tenant/core/contabilidad/index.html</p>'
+    )
+
+urlpatterns += [
+    # ⚠️ DEPRECADO: Ruta migrada desde urls_ui.py - Retorna 404
+    path('partials/summary/', deprecated_summary_view, name='contabilidad-summary-partial'),
+]

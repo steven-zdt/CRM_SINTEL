@@ -546,6 +546,15 @@ class ContratoViewSet(EnforcedModeMixin, viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['empleado', 'estado', 'activo']  # ⚠️ v2.40: Permite filtrar por empleado, estado y activo (legacy)
     
+    def get_empresa(self):
+        """
+        ⚠️ v2.61: Zero Trust - Obtiene la empresa del tenant actual.
+        """
+        empresa = Empresa.objects.only('id').first()
+        if not empresa:
+            raise serializers.ValidationError("No se encontró configuración de Empresa para este tenant.")
+        return empresa
+    
     def create(self, request, *args, **kwargs):
         """
         ⚠️ v2.95: Sobrescribir create para manejar errores y validaciones.
@@ -813,6 +822,86 @@ class ContratoViewSet(EnforcedModeMixin, viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"[ContratoViewSet] Error en perform_update: {str(e)}", exc_info=True)
             raise ValidationError({'detail': [f'Error al actualizar contrato: {str(e)}']})
+    
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
+    def render_offcanvas_crear(self, request):
+        """
+        Endpoint HTMX RESTful para cargar offcanvas de creación de contratos.
+        
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado para creación
+        - GET /api/v1/empleados/contratos/render-offcanvas/crear/?empleado={id} → Modo creación
+        
+        Query params:
+        - empleado: ID del empleado (requerido para crear contrato)
+        
+        Returns:
+            Template HTML: tenant/core/partials/empleados/contrato_offcanvas_form.html
+        """
+        empresa = self.get_empresa()
+        
+        empleado_id = request.query_params.get('empleado')
+        if not empleado_id:
+            return Response(
+                {"error": "Se requiere el parámetro 'empleado' para crear un contrato."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            empleado = get_object_or_404(Empleado, id=empleado_id, empresa_id=empresa.id)
+        except Exception as e:
+            logger.error(f"[ContratoViewSet] Error al obtener empleado: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "Empleado no encontrado o no pertenece a este tenant."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        context = {
+            'empleado': empleado,
+            'contrato': None,
+            'empresa': empresa
+        }
+        return Response(context, template_name='tenant/core/partials/empleados/contrato_offcanvas_form.html')
+    
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request, **kwargs):
+        """
+        Endpoint HTMX RESTful para cargar offcanvas de edición de contratos.
+        
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado para edición
+        - GET /api/v1/empleados/contratos/{id}/render-offcanvas/editar/ → Modo edición
+        
+        Returns:
+            Template HTML: tenant/core/partials/empleados/contrato_offcanvas_editar.html
+        """
+        empresa = self.get_empresa()
+        
+        try:
+            contrato = self.get_object()
+            # ⚠️ Zero Trust: Validar que el contrato pertenezca al tenant
+            if contrato.empresa_id != empresa.id:
+                return Response(
+                    {"error": "El contrato no pertenece a este tenant."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except Contrato.DoesNotExist:
+            logger.error(f"[ContratoViewSet] Contrato no encontrado: {kwargs.get('pk')}")
+            return Response(
+                {"error": "Contrato no encontrado."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"[ContratoViewSet] Error al obtener contrato: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "Error al cargar el contrato."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        context = {
+            'contrato': contrato,
+            'empleado': contrato.empleado,
+            'empresa': empresa
+        }
+        return Response(context, template_name='tenant/core/partials/empleados/contrato_offcanvas_editar.html')
     
     @action(detail=True, methods=['post'], url_path='cancelar')
     def cancelar(self, request, pk=None):

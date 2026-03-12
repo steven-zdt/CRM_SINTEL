@@ -14,7 +14,10 @@ from apps.tenant.contabilidad.models import (
     CuentaContable, 
     AsientoContable, 
     MovimientoContable,
-    CatalogoMaestroNIIF
+    PeriodoContable,
+    CatalogoMaestroNIIF,
+    TIPO_COMPROBANTE_CHOICES,
+    TIPO_TERCERO_CHOICES
 )
 # Importar directamente desde services.py para evitar circularidad con services/__init__.py
 import importlib.util
@@ -39,6 +42,8 @@ if services_py_path.exists():
     CUENTA_DETAIL_FIELDS = services_module.CUENTA_DETAIL_FIELDS
     ASIENTO_LIST_FIELDS = services_module.ASIENTO_LIST_FIELDS
     ASIENTO_DETAIL_FIELDS = services_module.ASIENTO_DETAIL_FIELDS
+    PERIODO_LIST_FIELDS = services_module.PERIODO_LIST_FIELDS
+    PERIODO_DETAIL_FIELDS = services_module.PERIODO_DETAIL_FIELDS
 else:
     raise ImportError(f"No se pudo cargar services.py desde {services_py_path}")
 
@@ -71,37 +76,103 @@ class CuentaContableDetailSerializer(serializers.ModelSerializer):
     
     def get_catalogo_referencia_detalle(self, obj):
         """Retorna información detallada del catálogo NIIF si existe referencia."""
-        if obj.catalogo_referencia:
-            return CatalogoMaestroNIIFNestedSerializer(obj.catalogo_referencia).data
+        try:
+            if obj.catalogo_referencia:
+                return CatalogoMaestroNIIFNestedSerializer(obj.catalogo_referencia).data
+        except Exception as e:
+            # ⚠️ Manejar errores silenciosamente para evitar 500 en detalle
+            print(f"Error al serializar catalogo_referencia: {e}")
         return None
 
 
 class MovimientoContableListSerializer(serializers.ModelSerializer):
-    """Serializer mínimo para listado de movimientos contables."""
+    """
+    Serializer mínimo para listado de movimientos contables.
+    
+    ⚠️ NORMATIVA: Incluye campos básicos de terceros para trazabilidad.
+    """
     cuenta_nombre = serializers.CharField(source='cuenta.nombre', read_only=True)
     cuenta_codigo = serializers.CharField(source='cuenta.codigo', read_only=True)
+    tercero_nit = serializers.CharField(read_only=True)
+    tercero_razon_social = serializers.CharField(read_only=True)
     
     class Meta:
         model = MovimientoContable
         fields = (
             'id', 'asiento', 'cuenta', 'cuenta_nombre', 'cuenta_codigo',
-            'orden', 'debe', 'haber', 'descripcion'
+            'orden', 'debe', 'haber', 'descripcion',
+            'tipo_tercero', 'tercero_nit', 'tercero_razon_social'
         )
         read_only_fields = ['id']
 
 
 class MovimientoContableDetailSerializer(serializers.ModelSerializer):
-    """Serializer completo para detalle de movimiento contable."""
+    """
+    Serializer completo para detalle de movimiento contable.
+    
+    ⚠️ NORMATIVA: Incluye campos de terceros y tributarios según normativa colombiana.
+    """
     cuenta_nombre = serializers.CharField(source='cuenta.nombre', read_only=True)
     cuenta_codigo = serializers.CharField(source='cuenta.codigo', read_only=True)
+    
+    # ⚠️ NORMATIVA: Campos de terceros (opcionales inicialmente para compatibilidad)
+    tipo_tercero = serializers.ChoiceField(
+        choices=TIPO_TERCERO_CHOICES,
+        required=False,
+        allow_null=True,
+        allow_blank=True
+    )
+    tercero_id = serializers.IntegerField(required=False, allow_null=True)
+    tercero_nit = serializers.CharField(
+        max_length=32,
+        required=False,
+        allow_null=True,
+        allow_blank=True
+    )
+    tercero_razon_social = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_null=True,
+        allow_blank=True
+    )
+    
+    # ⚠️ NORMATIVA: Campos tributarios (read-only, se calculan automáticamente)
+    base_iva = serializers.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        read_only=True
+    )
+    iva_generado = serializers.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        read_only=True
+    )
+    iva_descontable = serializers.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        read_only=True
+    )
+    retefuente = serializers.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        read_only=True
+    )
+    reteica = serializers.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        read_only=True
+    )
     
     class Meta:
         model = MovimientoContable
         fields = (
             'id', 'asiento', 'cuenta', 'cuenta_nombre', 'cuenta_codigo',
-            'orden', 'debe', 'haber', 'descripcion'
+            'orden', 'debe', 'haber', 'descripcion',
+            # Campos nuevos de normativa
+            'tipo_tercero', 'tercero_id', 'tercero_nit', 'tercero_razon_social',
+            'base_iva', 'iva_generado', 'iva_descontable', 'retefuente', 'reteica'
         )
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'base_iva', 'iva_generado', 'iva_descontable', 'retefuente', 'reteica']
 
 
 class CuentaContableListDTSerializer(serializers.ModelSerializer):
@@ -109,7 +180,7 @@ class CuentaContableListDTSerializer(serializers.ModelSerializer):
     Serializer mínimo para DataTables server-side de cuentas contables.
     
     ⚠️ v2.37: Alineado con CUENTA_LIST_FIELDS del service.
-    ⚠️ DEPRECATED: Usar CuentaContableListSerializer en su lugar.
+    ⚠️ ELIMINADO v2.61: DataTables fue migrado a Tabulator. Este serializer se mantiene solo para compatibilidad histórica.
     """
     class Meta:
         model = CuentaContable
@@ -152,7 +223,7 @@ class AsientoContableListDTSerializer(serializers.ModelSerializer):
     Serializer mínimo para DataTables server-side de asientos contables.
     
     ⚠️ v2.37: Alineado con ASIENTO_LIST_FIELDS del service.
-    ⚠️ DEPRECATED: Usar AsientoContableListSerializer en su lugar.
+    ⚠️ ELIMINADO v2.61: DataTables fue migrado a Tabulator. Este serializer se mantiene solo para compatibilidad histórica.
     """
     class Meta:
         model = AsientoContable
@@ -165,13 +236,32 @@ class AsientoContableDetailSerializer(serializers.ModelSerializer):
     Serializer completo para detalle de asiento contable.
     
     ⚠️ v2.37: Alineado con ASIENTO_DETAIL_FIELDS del service.
+    ⚠️ NORMATIVA: Incluye campos de comprobante para trazabilidad.
     ⚠️ IMPORTANTE: django-tenants maneja automáticamente el aislamiento por esquema.
     """
     movimientos = MovimientoContableDetailSerializer(many=True, read_only=True)
     
+    # ⚠️ NORMATIVA: Campos de comprobante (opcionales inicialmente para compatibilidad)
+    tipo_comprobante = serializers.ChoiceField(
+        choices=TIPO_COMPROBANTE_CHOICES,
+        required=False,
+        allow_null=True,
+        allow_blank=True
+    )
+    numero_comprobante = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_null=True,
+        allow_blank=True
+    )
+    
     class Meta:
         model = AsientoContable
-        fields = tuple(ASIENTO_DETAIL_FIELDS) + ('movimientos',)
+        fields = tuple(ASIENTO_DETAIL_FIELDS) + (
+            'movimientos',
+            'tipo_comprobante',
+            'numero_comprobante'
+        )
         read_only_fields = ['id', 'total_debe', 'total_haber', 'created_at', 'updated_at']
     
     def validate(self, data):
@@ -184,6 +274,47 @@ class AsientoContableDetailSerializer(serializers.ModelSerializer):
         """
         # La validación de cuadratura y periodos cerrados se hace en el servicio
         return data
+
+
+# ═══════════════════════════════════════════════════════════════
+# PERIODOS CONTABLES - Serializers (v2.61)
+# ═══════════════════════════════════════════════════════════════
+
+class PeriodoContableListSerializer(serializers.ModelSerializer):
+    """
+    Serializer mínimo para listado de periodos contables.
+    
+    ⚠️ v2.61: Alineado con PERIODO_LIST_FIELDS del service.
+    """
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)
+    
+    class Meta:
+        model = PeriodoContable
+        fields = list(PERIODO_LIST_FIELDS) + ['estado_display', 'empresa_nombre']
+        read_only_fields = ['id', 'uuid', 'created_at']
+
+
+class PeriodoContableDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo para detalle de periodo contable.
+    
+    ⚠️ v2.61: Alineado con PERIODO_DETAIL_FIELDS del service.
+    """
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    empresa_nombre = serializers.CharField(source='empresa.nombre', read_only=True)
+    cerrado_por_nombre = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PeriodoContable
+        fields = list(PERIODO_DETAIL_FIELDS) + ['estado_display', 'empresa_nombre', 'cerrado_por_nombre']
+        read_only_fields = ['id', 'uuid', 'created_at', 'updated_at']
+    
+    def get_cerrado_por_nombre(self, obj):
+        """Retorna el nombre del usuario que cerró el periodo."""
+        if obj.cerrado_por:
+            return obj.cerrado_por.get_full_name() or obj.cerrado_por.username
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -1,10 +1,12 @@
 /**
- * categorias.page.js - Módulo Categorías v2.60 - Tabulator Implementation
+ * categorias.page.js - Módulo Categorías v2.61.3 - Tabulator Implementation
  * ⚠️ Vanilla JS: Sin dependencias de jQuery
- * ⚠️ API-First: Consume DRF REST API
+ * ⚠️ API-First: Consume DRF REST API (Core API Facade para gestor-offcanvas)
  * ⚠️ Modular: Usa TabulatorFactory (The Engine)
  * ⚠️ Lazy Loading: Usa DOMUtils.onVisibleOnce() para inicialización diferida
  * ⚠️ Aislamiento Gradual v2.60: Sin bloques try/catch, usa UIManager.handleError()
+ * ⚠️ v2.61.3: Templates movidos a subdirectorio categorias/ (list_categorias.html, categorias_offcanvas.html)
+ * ⚠️ v2.61.3: gestor-offcanvas usa Core API Facade (/api/v1/core/v1/inventario/categorias/)
  * 
  * Dependencias globales requeridas:
  * - TabulatorFactory (definido en tabulator.factory.js)
@@ -18,7 +20,8 @@
   const MOD = '[categorias.page]';
   const GRID_ID = '#grid-categorias';
   const SEARCH_ID = '#search-categoria';
-  const API_URL = '/api/v1/inventario/categorias/';
+  const API_URL = '/api/v1/inventario/categorias/'; // Gateway directo para CRUD
+  const CORE_API_GESTOR_OFFCANVAS = '/api/v1/core/v1/inventario/categorias/gestor-offcanvas/'; // Core API Facade para HTMX
   const TAB_ID = '#tab-categorias';
   let table = null;
 
@@ -168,7 +171,8 @@
         const id = btn.getAttribute('data-id');
         if (!id) return;
 
-        await htmx.ajax('GET', `/api/v1/inventario/categorias/gestor-offcanvas/?id=${id}`, {
+        // ⚠️ v2.61.3: Usar Core API Facade
+        await htmx.ajax('GET', `/api/v1/core/v1/inventario/categorias/gestor-offcanvas/?id=${id}`, {
           target: '#offcanvas-container-categorias',
           swap: 'innerHTML'
         });
@@ -229,7 +233,8 @@
         const data = row.getData();
         if (!data || !data.id) return;
 
-        await htmx.ajax('GET', `/api/v1/inventario/categorias/gestor-offcanvas/?id=${data.id}`, {
+        // ⚠️ v2.61.3: Usar Core API Facade
+        await htmx.ajax('GET', `/api/v1/core/v1/inventario/categorias/gestor-offcanvas/?id=${data.id}`, {
           target: '#offcanvas-container-categorias',
           swap: 'innerHTML'
         });

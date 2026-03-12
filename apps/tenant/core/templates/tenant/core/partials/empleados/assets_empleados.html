@@ -22,9 +22,12 @@
 {# ⚠️ ORDEN CRÍTICO: Sin async/defer para garantizar ejecución secuencial #}
 {# 1. empleados_list.js se carga SEGUNDO (usa lazy loading, así que la inicialización espera a que otros módulos estén listos) #}
 <script src="{% static 'core/js/empleados/features/empleados_list.js' %}"></script>
-{# 2-5. Los otros módulos se cargan después (empleados_list.js los llama mediante namespaces globales) #}
+{# 2-7. Los otros módulos se cargan después (empleados_list.js los llama mediante namespaces globales) #}
 <script src="{% static 'core/js/empleados/features/empleados_editor.js' %}"></script>
+{# ⚠️ v2.61: Módulos de contratos - Feature-Sliced Architecture #}
 <script src="{% static 'core/js/empleados/features/contratos_editor.js' %}"></script>
+<script src="{% static 'core/js/empleados/features/contratos_form.js' %}"></script>
+<script src="{% static 'core/js/empleados/features/contratos_editar.js' %}"></script>
 <script src="{% static 'core/js/empleados/features/devengos_editor.js' %}"></script>
 <script src="{% static 'core/js/empleados/features/historial_nominas.js' %}"></script>
 

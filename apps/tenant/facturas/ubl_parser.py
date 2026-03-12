@@ -15,12 +15,76 @@ interno desde CDATA en //cac:Attachment//cbc:Description.
 """
 from lxml import etree
 import re
+import logging
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 from datetime import datetime, date, time
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from apps.services.document_parser.xml_parser.core import xpath, text, parse_xml_bytes
+
+logger = logging.getLogger(__name__)
+
+
+# --- Pre-validación de Idempotencia (Vía Rápida) ---
+
+def fast_get_cufe(xml_bytes: bytes) -> Optional[str]:
+    """
+    ⚠️ v2.61.2: Pre-validación de Idempotencia - Extrae CUFE/CUDE usando regex rápida.
+    
+    Busca el CUFE/CUDE en el XML usando búsqueda de texto plano (regex) antes del parsing completo.
+    Esto permite verificar idempotencia sin cargar todo el XML en memoria, ejecutándose en los primeros milisegundos.
+    
+    Busca el contenido dentro de las etiquetas <cbc:UUID> o variantes con namespaces.
+    
+    Args:
+        xml_bytes: Bytes del XML a analizar
+        
+    Returns:
+        CUFE/CUDE encontrado o None si no se encuentra
+        
+    Example:
+        >>> xml = b'<Invoice><cbc:UUID>ABC123...</cbc:UUID></Invoice>'
+        >>> fast_get_cufe(xml)
+        'ABC123...'
+    """
+    if not xml_bytes:
+        return None
+    
+    # Convertir a string si es necesario (solo para búsqueda, no parsing completo)
+    try:
+        xml_str = xml_bytes.decode('utf-8', errors='ignore') if isinstance(xml_bytes, bytes) else str(xml_bytes)
+    except Exception as e:
+        logger.debug(f"[fast_get_cufe] Error decodificando XML: {e}")
+        return None
+    
+    # ⚠️ v2.61.2: Regex para buscar CUFE/CUDE en el XML
+    # Busca patrones como: <cbc:UUID>CUFE_AQUI</cbc:UUID> o <UUID>CUFE_AQUI</UUID>
+    # También busca con local-name() y namespaces variados
+    # Prioridad: buscar primero <cbc:UUID> (más común en UBL 2.1)
+    patterns = [
+        # Patrón más específico: <cbc:UUID> o <cac:UUID> con cualquier atributo
+        r'<[^>]*:UUID[^>]*>([A-Za-z0-9\-]{20,})</[^>]*:UUID[^>]*>',
+        # Patrón genérico: <UUID> sin namespace
+        r'<UUID[^>]*>([A-Za-z0-9\-]{20,})</UUID>',
+        # Patrón flexible: cualquier etiqueta que contenga UUID
+        r'<[^>]*UUID[^>]*>([A-Za-z0-9\-]{20,})</[^>]*>',
+        # Patrón para CDATA o contenido con UUID
+        r'UUID[^>]*>([A-Za-z0-9\-]{50,})<',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, xml_str, re.IGNORECASE | re.DOTALL)
+        if match:
+            cufe_cude = match.group(1).strip()
+            # Validar que tenga formato razonable (al menos 20 caracteres alfanuméricos)
+            # Los CUFE/CUDE típicamente tienen 50+ caracteres, pero aceptamos desde 20
+            if len(cufe_cude) >= 20 and re.match(r'^[A-Za-z0-9\-]+$', cufe_cude):
+                logger.debug(f"[fast_get_cufe] CUFE encontrado: {cufe_cude[:20]}...")
+                return cufe_cude
+    
+    logger.debug("[fast_get_cufe] No se encontró CUFE/CUDE en el XML")
+    return None
 
 
 # --- Utilidades de parsing seguras (mantenidas para compatibilidad interna) ---
@@ -31,6 +95,10 @@ def _parse_xml(xml_input: str | bytes) -> etree._Element:
     
     ⚠️ FORÉNSICA: Respeta encoding declarado en XML (<?xml version="1.0" encoding="...">).
     Si es str, lo convierte a bytes asumiendo UTF-8; si es bytes, lxml detecta encoding.
+    
+    ⚠️ NOTA: Para archivos grandes (>2MB) con AttachedDocument, el parsing optimizado se hace
+    en _extraer_invoice_desde_attached_document usando iterparse. Esta función se usa para
+    el parsing inicial del root, que es necesario para detectar el tipo de documento.
     
     Args:
         xml_input: XML como string o bytes
@@ -308,17 +376,45 @@ def extraer_entero_xpath(elemento: etree._Element, expr: str, namespaces: dict =
         return default
 
 
-def _extraer_invoice_desde_attached_document(root: etree._Element) -> Optional[etree._Element]:
+def _limpiar_cdata_eficiente(texto: str) -> str:
+    """
+    ⚠️ v2.61.2: Limpia marcadores CDATA de forma eficiente usando regex y buffer de memoria.
+    
+    Usa regex para limpiar CDATA markers de forma más eficiente que reemplazo manual de strings.
+    Optimizado para manejar grandes bloques de texto sin cargar todo en memoria.
+    
+    Args:
+        texto: Texto que puede contener marcadores CDATA
+        
+    Returns:
+        Texto sin marcadores CDATA
+    """
+    if not texto:
+        return texto
+    
+    # ⚠️ v2.61.2: Regex optimizado para limpiar CDATA - más eficiente que reemplazo manual
+    # Patrón: <![CDATA[contenido]]> → contenido
+    # Usa non-greedy matching (.*?) para evitar capturar múltiples bloques CDATA
+    texto_limpio = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', texto, flags=re.DOTALL)
+    
+    return texto_limpio
+
+
+def _extraer_invoice_desde_attached_document(root: etree._Element, xml_bytes: Optional[bytes] = None) -> Optional[etree._Element]:
     """
     Si root es AttachedDocument, extrae el Invoice interno desde CDATA o ExternalReference.
     
+    ⚠️ v2.61.2: OPTIMIZACIÓN - Usa iterparse para archivos grandes (>2MB) para evitar cargar todo en memoria.
     ⚠️ FORÉNSICA: Busca Invoice en múltiples ubicaciones:
     - //cac:Attachment//cbc:Description (CDATA)
     - //cac:Attachment//cac:ExternalReference//cbc:Description (texto)
     
+    ⚠️ LIMPIEZA CDATA: Usa función optimizada _limpiar_cdata_eficiente() con buffer de memoria.
+    
     Args:
-        root: Elemento raíz del XML
-        
+        root: Elemento raíz del XML (ya parseado)
+        xml_bytes: Bytes originales del XML (opcional, para usar iterparse si es grande)
+    
     Returns:
         Elemento Invoice interno o None si no se encuentra
         
@@ -326,12 +422,71 @@ def _extraer_invoice_desde_attached_document(root: etree._Element) -> Optional[e
         ValueError: Si es AttachedDocument pero no se encuentra Invoice embebido
     """
     from lxml.etree import QName
+    from io import BytesIO
+    
     local = QName(root).localname.lower()
     
     if local == "invoice":
         return root
     
     if local == "attacheddocument":
+        # ⚠️ v2.61.2: OPTIMIZACIÓN - Usar iterparse para archivos grandes (>2MB)
+        # Si tenemos xml_bytes y es grande, usar iterparse para evitar cargar todo en memoria
+        use_iterparse = xml_bytes and len(xml_bytes) > 2_000_000  # 2MB
+        
+        if use_iterparse:
+            # Usar iterparse para archivos grandes - procesamiento por chunks
+            try:
+                parser = etree.XMLParser(
+                    ns_clean=True,
+                    remove_blank_text=True,
+                    recover=True,
+                    huge_tree=True
+                )
+                context = etree.iterparse(BytesIO(xml_bytes), events=('end',), parser=parser)
+                
+                invoice_xml_content = None
+                buffer_size = 0
+                max_buffer_size = 10_000_000  # 10MB máximo para el buffer
+                
+                for event, elem in context:
+                    # Buscar Description que contenga Invoice
+                    if elem.tag and 'Description' in elem.tag:
+                        if elem.text:
+                            text_content = elem.text.strip()
+                            buffer_size += len(text_content)
+                            
+                            # ⚠️ v2.61.2: Limpiar CDATA con función optimizada (buffer de memoria)
+                            text_content = _limpiar_cdata_eficiente(text_content)
+                            
+                            # Verificar si contiene Invoice
+                            if text_content and ('<Invoice' in text_content or '<invoice' in text_content):
+                                invoice_xml_content = text_content
+                                break
+                            
+                            # Protección: evitar buffer excesivo
+                            if buffer_size > max_buffer_size:
+                                logger.warning(f"[_extraer_invoice_desde_attached_document] Buffer excedido ({buffer_size} bytes), deteniendo búsqueda")
+                                break
+                    
+                    # ⚠️ v2.61.2: Limpiar elementos procesados para liberar memoria inmediatamente
+                    elem.clear()
+                    while elem.getprevious() is not None:
+                        del elem.getparent()[0]
+                
+                if invoice_xml_content:
+                    try:
+                        invoice_root = _parse_xml(invoice_xml_content.encode("utf-8", errors="ignore") if isinstance(invoice_xml_content, str) else invoice_xml_content)
+                        if QName(invoice_root).localname.lower() == "invoice":
+                            logger.debug(f"[_extraer_invoice_desde_attached_document] Invoice extraído exitosamente usando iterparse (tamaño: {len(invoice_xml_content)})")
+                            return invoice_root
+                    except Exception as e:
+                        logger.warning(f"[_extraer_invoice_desde_attached_document] Error parseando Invoice extraído: {e}")
+            except Exception as e:
+                # Si iterparse falla, continuar con método normal
+                logger.warning(f"[_extraer_invoice_desde_attached_document] Error con iterparse, usando método normal: {e}")
+        
+        # Método normal (para archivos pequeños o fallback)
         # Buscar en múltiples ubicaciones
         # 1. //cac:Attachment//cbc:Description (CDATA o texto)
         attachment_nodes = xpath(root, "//*[local-name()='Attachment']", ns=_ns(root))
@@ -341,8 +496,8 @@ def _extraer_invoice_desde_attached_document(root: etree._Element) -> Optional[e
             for desc in description_nodes:
                 if desc.text:
                     invoice_xml = desc.text.strip()
-                    # Limpiar CDATA markers si existen
-                    invoice_xml = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', invoice_xml, flags=re.DOTALL)
+                    # ⚠️ v2.61.2: Limpiar CDATA markers con función optimizada
+                    invoice_xml = _limpiar_cdata_eficiente(invoice_xml)
                     if invoice_xml:
                         try:
                             invoice_root = _parse_xml(invoice_xml.encode("utf-8", errors="ignore") if isinstance(invoice_xml, str) else invoice_xml)
@@ -358,7 +513,8 @@ def _extraer_invoice_desde_attached_document(root: etree._Element) -> Optional[e
                 for desc in desc_nodes:
                     if desc.text:
                         invoice_xml = desc.text.strip()
-                        invoice_xml = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', invoice_xml, flags=re.DOTALL)
+                        # ⚠️ v2.61.2: Limpiar CDATA markers con función optimizada
+                        invoice_xml = _limpiar_cdata_eficiente(invoice_xml)
                         if invoice_xml:
                             try:
                                 invoice_root = _parse_xml(invoice_xml.encode("utf-8", errors="ignore") if isinstance(invoice_xml, str) else invoice_xml)
@@ -440,9 +596,12 @@ def importar_factura_desde_ubl(xml_text: str):
         # Parsear XML con parser robusto
         root = _parse_xml(xml_text)
         
+        # ⚠️ v2.61.2: Convertir xml_text a bytes para optimización con iterparse
+        xml_bytes_for_parser = xml_text.encode("utf-8") if isinstance(xml_text, str) else xml_text if isinstance(xml_text, bytes) else None
+        
         # Detectar si es AttachedDocument y extraer Invoice interno
         try:
-            invoice_root = _extraer_invoice_desde_attached_document(root)
+            invoice_root = _extraer_invoice_desde_attached_document(root, xml_bytes=xml_bytes_for_parser)
         except ValueError as e:
             # Re-lanzar ValueError con mensaje claro para logging forense
             raise ValueError(str(e))
@@ -808,9 +967,12 @@ def parse_ubl_to_dict(root: etree._Element, xml_bytes: Optional[bytes] = None, n
     """
     try:
         
+        # ⚠️ v2.61.2: Pasar xml_bytes si está disponible para optimización con iterparse
+        xml_bytes_for_parser = xml_bytes if xml_bytes else None
+        
         # Detectar si es AttachedDocument y extraer Invoice interno
         try:
-            invoice_root = _extraer_invoice_desde_attached_document(root)
+            invoice_root = _extraer_invoice_desde_attached_document(root, xml_bytes=xml_bytes_for_parser)
         except ValueError as e:
             # Re-lanzar ValueError con mensaje claro para logging forense
             raise ValueError(str(e))

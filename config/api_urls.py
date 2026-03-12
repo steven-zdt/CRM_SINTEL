@@ -89,7 +89,12 @@ try:
     urlpatterns.append(path('contabilidad/', include('apps.tenant.contabilidad.api.urls')))
     logger.info("✅ URLs de contabilidad registradas correctamente: /api/v1/contabilidad/")
 except (ImportError, AttributeError) as e:
-    logger.warning(f"⚠️ No se pudieron cargar URLs de contabilidad: {e}")
+    logger.error(f"❌ ERROR: No se pudieron cargar URLs de contabilidad: {e}", exc_info=True)
+    # ⚠️ v2.61: Re-raise para que el error sea visible y no se silencie
+    raise
+except Exception as e:
+    logger.error(f"❌ ERROR INESPERADO cargando URLs de contabilidad: {e}", exc_info=True)
+    raise
 
 try:
     urlpatterns.append(path('inventario/', include('apps.tenant.inventario.api.urls')))

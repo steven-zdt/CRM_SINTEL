@@ -14,6 +14,18 @@ para obtener datos del emisor (NO duplica lógica).
 ⚠️ v2.36: Import seguro para Document Ingest Pipeline Universal (FASE 0)
 - Import condicional de document_ingest para migración gradual
 - Permite coexistencia con pipeline XML legacy durante transición
+
+⚠️ v2.61.2: Optimización Pipeline de Procesamiento
+- guardar_factura_desde_dto(): transaction.atomic solo envuelve persistencia (no parsing)
+- Silent Success: actualiza FacturaAnexos si el XML nuevo es AttachedDocument más completo
+- Batch Processing: upload_ubl acepta files[] con resumen {"creados","duplicados","errores"}
+- Pre-validación de idempotencia: fast_get_cufe() extrae CUFE/CUDE con regex antes del parsing
+
+⚠️ v2.61.3: Alineación Frontend-Backend
+- guardar_factura_desde_dto(): retorna "persisted": True en el payload de éxito
+- importar_documento(): verifica status_code >= 400 antes de materializar el DTO
+- importar_documento(): retorna "persisted": True también para NotaCredito (201)
+- frontend facturas_ui.js: usa !data.id (no !data.persisted) para detectar no-persistencia
 """
 from __future__ import annotations
 import re
@@ -453,7 +465,48 @@ def materializar_nc_desde_dto(dto: Dict[str, Any]) -> Tuple[Dict[str, Any], int]
         raise e
 
 
-@transaction.atomic
+def _extraer_cufe_cude_rapido(xml_bytes: bytes) -> Optional[str]:
+    """
+    ⚠️ v2.61.2: Pre-validación de Idempotencia - Extrae CUFE/CUDE usando regex rápida.
+    
+    Busca el CUFE/CUDE en el XML usando búsqueda de texto plano (regex) antes del parsing completo.
+    Esto permite verificar idempotencia sin cargar todo el XML en memoria.
+    
+    Args:
+        xml_bytes: Bytes del XML a analizar
+        
+    Returns:
+        CUFE/CUDE encontrado o None si no se encuentra
+    """
+    if not xml_bytes:
+        return None
+    
+    # Convertir a string si es necesario (solo para búsqueda, no parsing completo)
+    try:
+        xml_str = xml_bytes.decode('utf-8', errors='ignore') if isinstance(xml_bytes, bytes) else str(xml_bytes)
+    except Exception:
+        return None
+    
+    # ⚠️ v2.61.2: Regex para buscar CUFE/CUDE en el XML
+    # Busca patrones como: <cbc:UUID>CUFE_AQUI</cbc:UUID> o <UUID>CUFE_AQUI</UUID>
+    # También busca con local-name() y namespaces variados
+    patterns = [
+        r'<[^>]*UUID[^>]*>([A-Za-z0-9\-]+)</[^>]*UUID[^>]*>',  # <cbc:UUID>...</cbc:UUID>
+        r'<UUID[^>]*>([A-Za-z0-9\-]+)</UUID>',  # <UUID>...</UUID>
+        r'UUID[^>]*>([A-Za-z0-9]{50,})<',  # UUID con contenido largo (típico CUFE tiene ~50+ caracteres)
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, xml_str, re.IGNORECASE)
+        if match:
+            cufe_cude = match.group(1).strip()
+            # Validar que tenga formato razonable (al menos 20 caracteres alfanuméricos)
+            if len(cufe_cude) >= 20 and re.match(r'^[A-Za-z0-9\-]+$', cufe_cude):
+                return cufe_cude
+    
+    return None
+
+
 def guardar_factura_desde_dto(
     dto: Dict[str, Any], 
     xml_text: str = None,
@@ -464,11 +517,12 @@ def guardar_factura_desde_dto(
     Persiste factura desde DTO canónico del pipeline XML (SSoT).
     
     ⚠️ IDEMPOTENCIA: Por CUFE (clave legal) o número (fallback).
-    ⚠️ TRANSACCIONAL: Todo o nada (transaction.atomic).
+    ⚠️ v2.61.2: TRANSACCIONAL OPTIMIZADO - transaction.atomic solo envuelve persistencia, no parsing.
     ⚠️ SSoT: Usa get_empresa_emisor_data() para resolver naturaleza automáticamente.
     ⚠️ DETERMINACIÓN AUTOMÁTICA DE NATURALEZA: Compara NIT del emisor con NIT de la empresa del tenant.
        - Si coinciden → VENTA (el tenant emite la factura)
        - Si difieren → COMPRA (el tenant recibe la factura)
+    ⚠️ v2.61.2: SILENT SUCCESS - Si la factura existe, actualiza FacturaAnexos si el XML es más completo.
     ⚠️ ZERO WASTE: Manejo de anexos (XML/PDF) - solo actualiza lo necesario.
     ⚠️ FALLBACK SSoT: Si el DTO viene de un PDF y faltan datos del emisor (razón social, dirección, etc.),
        intenta recuperarlos desde la empresa del tenant cuando el NIT del emisor coincide con el NIT de la empresa.
@@ -701,60 +755,96 @@ def guardar_factura_desde_dto(
     }
     
     # ⚠️ PASO 5: Persistencia con Idempotencia por CUFE (o número como fallback)
+    # ⚠️ v2.61.2: TRANSACCIONAL OPTIMIZADO - transaction.atomic solo envuelve persistencia, no parsing
     # ⚠️ La naturaleza ya está determinada automáticamente en factura_data
     instance = None
     created = False
     
+    # ⚠️ v2.61.2: Persistencia dentro de transaction.atomic (solo BD, no parsing)
     try:
-        if cufe:
-            # Buscar por CUFE (más confiable) - Idempotencia por clave legal
-            instance, created = Factura.objects.update_or_create(
-                cufe=cufe,
-                defaults={k: v for k, v in factura_data.items() if k != "cufe"}
-            )
-            logger.debug(f"[guardar_factura_desde_dto] Factura {'creada' if created else 'actualizada'} por CUFE: {cufe}")
-        else:
-            # Buscar por número (fallback) - Idempotencia por número de factura
-            instance, created = Factura.objects.update_or_create(
-                numero=numero,
-                defaults={k: v for k, v in factura_data.items() if k != "numero"}
-            )
-            logger.debug(f"[guardar_factura_desde_dto] Factura {'creada' if created else 'actualizada'} por número: {numero}")
+        with transaction.atomic():
+            if cufe:
+                # Buscar por CUFE (más confiable) - Idempotencia por clave legal
+                instance, created = Factura.objects.update_or_create(
+                    cufe=cufe,
+                    defaults={k: v for k, v in factura_data.items() if k != "cufe"}
+                )
+                logger.debug(f"[guardar_factura_desde_dto] Factura {'creada' if created else 'actualizada'} por CUFE: {cufe}")
+            else:
+                # Buscar por número (fallback) - Idempotencia por número de factura
+                instance, created = Factura.objects.update_or_create(
+                    numero=numero,
+                    defaults={k: v for k, v in factura_data.items() if k != "numero"}
+                )
+                logger.debug(f"[guardar_factura_desde_dto] Factura {'creada' if created else 'actualizada'} por número: {numero}")
+            
+            # ⚠️ v2.61.2: SILENT SUCCESS - Actualizar FacturaAnexos si el XML es más completo
+            # Si la factura ya existe, comparar y actualizar anexos si el nuevo XML es más completo
+            if instance:
+                anexo, anexo_created = FacturaAnexos.objects.get_or_create(factura=instance)
+                anexo_updated = False
+                
+                # Determinar contenido XML a guardar
+                xml_content_to_save = None
+                if file_bytes:
+                    if file_type == 'xml':
+                        try:
+                            xml_content_to_save = file_bytes.decode('utf-8') if isinstance(file_bytes, bytes) else file_bytes
+                        except (UnicodeDecodeError, AttributeError) as e:
+                            logger.warning(f"Error decodificando XML: {str(e)}")
+                            xml_content_to_save = str(file_bytes) if not isinstance(file_bytes, str) else file_bytes
+                    elif file_type == 'pdf':
+                        # PDF: guardar como archivo
+                        from django.core.files.base import ContentFile
+                        filename = f"{instance.numero or 'factura'}.pdf"
+                        anexo.pdf_file.save(filename, ContentFile(file_bytes), save=False)
+                        anexo_updated = True
+                elif xml_text:
+                    xml_content_to_save = xml_text
+                
+                # ⚠️ v2.61.2: SILENT SUCCESS - Actualizar solo si el nuevo XML es más completo
+                if xml_content_to_save and file_type == 'xml':
+                    # ⚠️ v2.61.2: Detectar si el nuevo XML es AttachedDocument (más completo que Invoice simple)
+                    nuevo_es_attached = xml_content_to_save.strip().startswith('<AttachedDocument') or '<AttachedDocument' in xml_content_to_save[:500]
+                    existente_es_attached = False
+                    if anexo.ubl_xml:
+                        existente_es_attached = anexo.ubl_xml.strip().startswith('<AttachedDocument') or '<AttachedDocument' in anexo.ubl_xml[:500]
+                    
+                    # ⚠️ v2.61.2: Reglas de actualización:
+                    # 1. Si no hay XML previo → actualizar siempre
+                    # 2. Si el nuevo es AttachedDocument y el existente es Invoice simple → actualizar (más completo)
+                    # 3. Si ambos son del mismo tipo → actualizar solo si el nuevo es más largo
+                    debe_actualizar = False
+                    razon = ""
+                    
+                    if not anexo.ubl_xml:
+                        debe_actualizar = True
+                        razon = "no hay XML previo"
+                    elif nuevo_es_attached and not existente_es_attached:
+                        # Nuevo es AttachedDocument (con firma DIAN) y existente es Invoice simple → actualizar
+                        debe_actualizar = True
+                        razon = "nuevo es AttachedDocument (más completo) y existente es Invoice simple"
+                    elif len(xml_content_to_save) > len(anexo.ubl_xml or ''):
+                        # Mismo tipo pero nuevo es más largo → actualizar
+                        debe_actualizar = True
+                        razon = f"nuevo XML es más largo ({len(xml_content_to_save)} vs {len(anexo.ubl_xml or '')})"
+                    
+                    if debe_actualizar:
+                        anexo.ubl_xml = xml_content_to_save
+                        anexo_updated = True
+                        logger.info(f"[guardar_factura_desde_dto] FacturaAnexos actualizado: {razon} (tamaño: {len(xml_content_to_save)})")
+                    else:
+                        logger.debug(f"[guardar_factura_desde_dto] FacturaAnexos no actualizado (XML existente es igual o más completo)")
+                
+                # Guardar solo si hay cambios
+                if anexo_updated:
+                    anexo.save()
     except IntegrityError as e:
         logger.warning(f"IntegrityError al guardar factura: {str(e)}")
         return {
             "error": "duplicate",
             "message": "La factura ya existe (conflicto de integridad)."
         }, 409
-    
-    # Guardar anexos (XML o PDF) - Zero Waste: solo actualiza lo necesario
-    if instance:
-        anexo, _ = FacturaAnexos.objects.get_or_create(factura=instance)
-        
-        # Manejo de archivos: XML o PDF
-        if file_bytes:
-            if file_type == 'xml':
-                # XML: guardar como texto
-                try:
-                    xml_text_from_bytes = file_bytes.decode('utf-8') if isinstance(file_bytes, bytes) else file_bytes
-                    anexo.ubl_xml = xml_text_from_bytes
-                except (UnicodeDecodeError, AttributeError) as e:
-                    logger.warning(f"Error decodificando XML: {str(e)}")
-                    # Si no se puede decodificar, intentar guardar como está
-                    anexo.ubl_xml = str(file_bytes) if not isinstance(file_bytes, str) else file_bytes
-            elif file_type == 'pdf':
-                # PDF: guardar como archivo
-                from django.core.files.base import ContentFile
-                filename = f"{instance.numero or 'factura'}.pdf"
-                anexo.pdf_file.save(filename, ContentFile(file_bytes), save=False)
-        
-        # Compatibilidad hacia atrás: si se pasa xml_text directamente
-        elif xml_text:
-            anexo.ubl_xml = xml_text
-        
-        # Solo guardar si hay cambios
-        if file_bytes or xml_text:
-            anexo.save()
     
     # ⚠️ v2.60: Contabilidad Invisible - Hook para materializar asiento automático
     # Si la factura está en estado ACEPTADA, crear asiento contable automáticamente
@@ -773,7 +863,8 @@ def guardar_factura_desde_dto(
         "id": instance.id,
         "numero": instance.numero,
         "naturaleza": instance.naturaleza,
-        "created": created
+        "created": created,
+        "persisted": True,  # ⚠️ v2.61.3: Indicar al frontend que ya fue persistido para evitar re-persistencia
     }, 201 if created else 200
 
 
@@ -1281,6 +1372,15 @@ def importar_documento(
         # ⚠️ REVERSIÓN: document_ingest NO persiste automáticamente
         # Si preview=False, materializar manualmente desde el DTO
         if not preview:
+            # ⚠️ v2.61.3: Si el pipeline falló con error HTTP real (400, 415, etc.), no intentar persistir
+            # Solo ignorar status_code 422 de validación (puede tener DTO válido para persistir)
+            if status_code >= 400 and status_code != 422:
+                return {
+                    "error": result.get("error", "pipeline_error"),
+                    "message": result.get("message", "Error al procesar documento"),
+                    "missing_fields": result.get("missing_fields", []),
+                }, status_code
+            
             # El pipeline universal NO persiste, solo parsea
             # Retornar DTO para que la app lo consuma y persista
             dto = result.get("dto", {})
@@ -1331,6 +1431,7 @@ def importar_documento(
                         "numero": nota.numero,
                         "cude": nota.cude,
                         "created": True,
+                        "persisted": True,  # ⚠️ v2.61.3: Indicar al frontend que ya fue persistido
                     }, 201
                 except ValidationError as e:
                     error_dict = e.message_dict if hasattr(e, 'message_dict') else {}

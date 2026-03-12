@@ -24,6 +24,66 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# FUNCIONES HELPER - Normativa NIIF Colombia
+# ============================================================================
+
+def _extraer_tercero_desde_asiento(asiento, movimiento_data=None):
+    """
+    Extrae datos de tercero desde factura o datos del movimiento.
+    
+    ⚠️ NORMATIVA: Pobla terceros automáticamente cuando es posible.
+    
+    Args:
+        asiento: Instancia de AsientoContable
+        movimiento_data: Diccionario con datos del movimiento (opcional)
+    
+    Returns:
+        dict: {
+            'tipo_tercero': str,
+            'tercero_id': int,
+            'tercero_nit': str,
+            'tercero_razon_social': str
+        }
+    """
+    # Estrategia 1: Obtener desde factura relacionada
+    if asiento.factura:
+        factura = asiento.factura
+        if hasattr(factura, 'cliente') and factura.cliente:
+            return {
+                'tipo_tercero': 'CLIENTE',
+                'tercero_id': factura.cliente.id,
+                'tercero_nit': factura.cliente.numero_documento,
+                'tercero_razon_social': factura.cliente.razon_social
+            }
+        elif hasattr(factura, 'proveedor') and factura.proveedor:
+            return {
+                'tipo_tercero': 'PROVEEDOR',
+                'tercero_id': factura.proveedor.id,
+                'tercero_nit': factura.proveedor.numero_documento,
+                'tercero_razon_social': factura.proveedor.razon_social
+            }
+    
+    # Estrategia 2: Obtener desde movimiento_data (si viene del frontend)
+    if movimiento_data:
+        if 'tipo_tercero' in movimiento_data and movimiento_data['tipo_tercero']:
+            return {
+                'tipo_tercero': movimiento_data['tipo_tercero'],
+                'tercero_id': movimiento_data.get('tercero_id'),
+                'tercero_nit': movimiento_data.get('tercero_nit', ''),
+                'tercero_razon_social': movimiento_data.get('tercero_razon_social', '')
+            }
+    
+    # Estrategia 3: Usar empresa como tercero genérico (fallback)
+    empresa = asiento.empresa
+    return {
+        'tipo_tercero': 'OTRO',
+        'tercero_id': empresa.id,
+        'tercero_nit': empresa.nit or '000000000',
+        'tercero_razon_social': empresa.razon_social or empresa.nombre
+    }
+
+
 def list_asientos(
     filters: Optional[Dict[str, Any]] = None,
     ordering: Optional[str] = None,
@@ -44,9 +104,10 @@ def list_asientos(
     """
     from apps.tenant.contabilidad.models import AsientoContable
     
+    # ⚠️ NORMATIVA: Incluir campos de comprobante en only() para optimización
     qs = AsientoContable.objects.only(
         'id', 'numero', 'fecha', 'descripcion', 'estado',
-        'total_debe', 'total_haber', 'created_at'
+        'total_debe', 'total_haber', 'tipo_comprobante', 'numero_comprobante', 'created_at'
     )
     
     # Aplicar filtros
@@ -77,6 +138,7 @@ def list_asientos(
     
     results = []
     for asiento in page_obj:
+        # ⚠️ NORMATIVA: Incluir campos de comprobante en DTO (alineado con AsientoContableListSerializer)
         results.append({
             'id': asiento.id,
             'numero': asiento.numero,
@@ -85,6 +147,8 @@ def list_asientos(
             'estado': asiento.estado,
             'total_debe': str(asiento.total_debe),
             'total_haber': str(asiento.total_haber),
+            'tipo_comprobante': asiento.tipo_comprobante or None,
+            'numero_comprobante': asiento.numero_comprobante or None,
             'created_at': asiento.created_at.isoformat() if asiento.created_at else None,
         })
     
@@ -187,6 +251,8 @@ def create_asiento(data: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(fecha, str):
             try:
                 fecha = datetime.strptime(fecha, '%Y-%m-%d').date()
+                # ⚠️ v2.61: Actualizar data con el objeto date convertido
+                data['fecha'] = fecha
             except ValueError:
                 raise ValidationError({
                     'fecha': ['Formato de fecha inválido. Use YYYY-MM-DD.']
@@ -241,6 +307,14 @@ def create_asiento(data: Dict[str, Any]) -> Dict[str, Any]:
                 'movimientos': [f'Movimiento {orden}: El campo "cuenta" es requerido.']
             })
         
+        # ⚠️ NORMATIVA: Validar nivel 6 de cuenta
+        from apps.tenant.contabilidad.models import CuentaContable
+        cuenta = CuentaContable.objects.get(id=cuenta_id)
+        if cuenta.nivel != 6:
+            raise ValidationError({
+                'movimientos': [f'Movimiento {orden}: La cuenta {cuenta.codigo} no es de nivel 6. Solo se permiten registros en cuentas auxiliares (nivel 6).']
+            })
+        
         debe = Decimal(str(mov_data.get('debe', 0)))
         haber = Decimal(str(mov_data.get('haber', 0)))
         
@@ -254,54 +328,89 @@ def create_asiento(data: Dict[str, Any]) -> Dict[str, Any]:
                 'movimientos': [f'Movimiento {orden}: Debe tener débito o crédito mayor a cero.']
             })
         
+        # ⚠️ NORMATIVA: Extraer tercero automáticamente
+        tercero_data = _extraer_tercero_desde_asiento(asiento, mov_data)
+        
+        # Crear movimiento con datos de tercero
         MovimientoContable.objects.create(
             asiento=asiento,
             cuenta_id=cuenta_id,
             descripcion=mov_data.get('descripcion', ''),
             debe=debe,
             haber=haber,
-            orden=orden
+            orden=orden,
+            # ⚠️ NORMATIVA: Campos de terceros
+            tipo_tercero=tercero_data['tipo_tercero'],
+            tercero_id=tercero_data['tercero_id'],
+            tercero_nit=tercero_data['tercero_nit'],
+            tercero_razon_social=tercero_data['tercero_razon_social']
         )
+        
+        # Los campos tributarios se calculan automáticamente en MovimientoContable.save()
         
         total_debe += debe
         total_haber += haber
         orden += 1
     
-    # Actualizar totales del asiento
-    asiento.total_debe = total_debe
-    asiento.total_haber = total_haber
-    asiento.save(update_fields=['total_debe', 'total_haber'])
+    # ⚠️ NORMATIVA: Actualizar totales usando método mejorado del modelo
+    asiento.calcular_totales()
     
-    # ⚠️ v2.60: Validar cuadratura si el estado es APROBADO
-    if estado == 'APROBADO':
-        diferencia = abs(float(total_debe) - float(total_haber))
-        if diferencia > 0.01:
+    # ⚠️ v2.61: Validar cuadratura usando los totales calculados desde la BD (más preciso)
+    # Usar Decimal para evitar problemas de precisión de punto flotante
+    diferencia = abs(asiento.total_debe - asiento.total_haber)
+    
+    # ⚠️ v2.60: Validar cuadratura si el estado es APROBADO o CERRADO
+    # Para BORRADOR, permitir guardar aunque no cuadre (solo advertir)
+    if estado in ['APROBADO', 'CERRADO']:
+        if diferencia >= Decimal('0.01'):  # Tolerancia de 0.01 para redondeo
             # Construir error estructurado para error_injector.js
             error_details = {
                 'error': 'asiento_no_cuadrado',
-                'message': f'El asiento no está cuadrado. Débito: ${total_debe:.2f}, Crédito: ${total_haber:.2f}. Diferencia: ${diferencia:.2f}.',
+                'message': f'El asiento no está cuadrado. Débito: ${asiento.total_debe:,.2f}, Crédito: ${asiento.total_haber:,.2f}. Diferencia: ${diferencia:,.2f}.',
                 'missing_fields': ['movimientos'],
                 'detalles': {
-                    'total_debe': str(total_debe),
-                    'total_haber': str(total_haber),
-                    'diferencia': f'{diferencia:.2f}',
-                    'diferencia_absoluta': f'{diferencia:.2f}',
-                    'tipo_desbalance': 'falta_credito' if total_debe > total_haber else 'falta_debito',
-                    'valor_faltante': f'{diferencia:.2f}',
+                    'total_debe': str(asiento.total_debe),
+                    'total_haber': str(asiento.total_haber),
+                    'diferencia': f'{diferencia:,.2f}',
+                    'diferencia_absoluta': f'{diferencia:,.2f}',
+                    'tipo_desbalance': 'falta_credito' if asiento.total_debe > asiento.total_haber else 'falta_debito',
+                    'valor_faltante': f'{diferencia:,.2f}',
                     'total_movimientos': len(movimientos_data),
-                    'sugerencia': f'Agregue un movimiento de {"crédito" if total_debe > total_haber else "débito"} por ${diferencia:.2f} o ajuste los movimientos existentes.'
+                    'sugerencia': f'Agregue un movimiento de {"crédito" if asiento.total_debe > asiento.total_haber else "débito"} por ${diferencia:,.2f} o ajuste los movimientos existentes.'
                 }
             }
             raise ValidationError(error_details)
     
+    # Guardar asiento con totales actualizados
+    asiento.save(update_fields=['total_debe', 'total_haber'])
+    
+    # ⚠️ NORMATIVA: Incluir campos de comprobante en DTO
+    # ⚠️ v2.61: Asegurar que fecha sea un objeto date antes de llamar isoformat()
+    # Recargar desde BD para asegurar que tenga el tipo correcto
+    asiento.refresh_from_db()
+    fecha_str = None
+    if asiento.fecha:
+        if isinstance(asiento.fecha, str):
+            # Si es string, convertir a date primero
+            try:
+                fecha_obj = datetime.strptime(asiento.fecha, '%Y-%m-%d').date()
+                fecha_str = fecha_obj.isoformat()
+            except (ValueError, AttributeError):
+                fecha_str = str(asiento.fecha)
+        else:
+            # Si es date, usar isoformat() directamente
+            fecha_str = asiento.fecha.isoformat()
+    
     return {
         'id': asiento.id,
         'numero': asiento.numero,
-        'fecha': asiento.fecha.isoformat() if asiento.fecha else None,
+        'fecha': fecha_str,
         'descripcion': asiento.descripcion,
         'estado': asiento.estado,
         'total_debe': str(asiento.total_debe),
         'total_haber': str(asiento.total_haber),
+        'tipo_comprobante': asiento.tipo_comprobante or None,
+        'numero_comprobante': asiento.numero_comprobante or None,
         'created_at': asiento.created_at.isoformat() if asiento.created_at else None,
         'updated_at': asiento.updated_at.isoformat() if asiento.updated_at else None,
     }
@@ -404,7 +513,8 @@ def update_asiento(asiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
                 })
     
     # Actualizar campos del asiento
-    campos_permitidos = ['numero', 'fecha', 'descripcion', 'estado', 'factura']
+    # ⚠️ NORMATIVA: Incluir campos de comprobante en campos permitidos
+    campos_permitidos = ['numero', 'fecha', 'descripcion', 'estado', 'factura', 'tipo_comprobante', 'numero_comprobante']
     update_fields = []
     for campo in campos_permitidos:
         if campo in data:
@@ -440,6 +550,14 @@ def update_asiento(asiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
                     'movimientos': [f'Movimiento {orden}: El campo "cuenta" es requerido.']
                 })
             
+            # ⚠️ NORMATIVA: Validar nivel 6 de cuenta
+            from apps.tenant.contabilidad.models import CuentaContable
+            cuenta = CuentaContable.objects.get(id=cuenta_id)
+            if cuenta.nivel != 6:
+                raise ValidationError({
+                    'movimientos': [f'Movimiento {orden}: La cuenta {cuenta.codigo} no es de nivel 6. Solo se permiten registros en cuentas auxiliares (nivel 6).']
+                })
+            
             debe = Decimal(str(mov_data.get('debe', 0)))
             haber = Decimal(str(mov_data.get('haber', 0)))
             
@@ -453,34 +571,41 @@ def update_asiento(asiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
                     'movimientos': [f'Movimiento {orden}: Debe tener débito o crédito mayor a cero.']
                 })
             
+            # ⚠️ NORMATIVA: Extraer tercero automáticamente
+            tercero_data = _extraer_tercero_desde_asiento(asiento, mov_data)
+            
+            # Crear movimiento con datos de tercero
             MovimientoContable.objects.create(
                 asiento=asiento,
                 cuenta_id=cuenta_id,
                 descripcion=mov_data.get('descripcion', ''),
                 debe=debe,
                 haber=haber,
-                orden=orden
+                orden=orden,
+                # ⚠️ NORMATIVA: Campos de terceros
+                tipo_tercero=tercero_data['tipo_tercero'],
+                tercero_id=tercero_data['tercero_id'],
+                tercero_nit=tercero_data['tercero_nit'],
+                tercero_razon_social=tercero_data['tercero_razon_social']
             )
+            
+            # Los campos tributarios se calculan automáticamente en MovimientoContable.save()
             
             total_debe += debe
             total_haber += haber
             orden += 1
         
-        # Actualizar totales
-        asiento.total_debe = total_debe
-        asiento.total_haber = total_haber
+        # ⚠️ NORMATIVA: Actualizar totales usando método mejorado del modelo
+        asiento.calcular_totales()
         update_fields.extend(['total_debe', 'total_haber'])
     
     # Guardar cambios
     if update_fields:
         asiento.save(update_fields=update_fields)
     
-    # Recalcular totales si no se actualizaron movimientos
+    # ⚠️ NORMATIVA: Recalcular totales si no se actualizaron movimientos (usar método mejorado)
     if movimientos_data is None:
-        total_debe = sum(m.debe for m in asiento.movimientos.all())
-        total_haber = sum(m.haber for m in asiento.movimientos.all())
-        asiento.total_debe = total_debe
-        asiento.total_haber = total_haber
+        asiento.calcular_totales()
         asiento.save(update_fields=['total_debe', 'total_haber'])
     
     # ⚠️ v2.60: Validar cuadratura si el estado es APROBADO
@@ -505,14 +630,33 @@ def update_asiento(asiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
             }
             raise ValidationError(error_details)
     
+    # ⚠️ NORMATIVA: Incluir campos de comprobante en DTO
+    # ⚠️ v2.61: Asegurar que fecha sea un objeto date antes de llamar isoformat()
+    # Recargar desde BD para asegurar que tenga el tipo correcto
+    asiento.refresh_from_db()
+    fecha_str = None
+    if asiento.fecha:
+        if isinstance(asiento.fecha, str):
+            # Si es string, convertir a date primero
+            try:
+                fecha_obj = datetime.strptime(asiento.fecha, '%Y-%m-%d').date()
+                fecha_str = fecha_obj.isoformat()
+            except (ValueError, AttributeError):
+                fecha_str = str(asiento.fecha)
+        else:
+            # Si es date, usar isoformat() directamente
+            fecha_str = asiento.fecha.isoformat()
+    
     return {
         'id': asiento.id,
         'numero': asiento.numero,
-        'fecha': asiento.fecha.isoformat() if asiento.fecha else None,
+        'fecha': fecha_str,
         'descripcion': asiento.descripcion,
         'estado': asiento.estado,
         'total_debe': str(asiento.total_debe),
         'total_haber': str(asiento.total_haber),
+        'tipo_comprobante': asiento.tipo_comprobante or None,
+        'numero_comprobante': asiento.numero_comprobante or None,
         'created_at': asiento.created_at.isoformat() if asiento.created_at else None,
         'updated_at': asiento.updated_at.isoformat() if asiento.updated_at else None,
     }
@@ -614,6 +758,7 @@ def aprobar_asiento(asiento_id: int) -> Dict[str, Any]:
     asiento.estado = 'APROBADO'
     asiento.save(update_fields=['estado'])
     
+    # ⚠️ NORMATIVA: Incluir campos de comprobante en DTO
     return {
         'id': asiento.id,
         'numero': asiento.numero,
@@ -622,6 +767,8 @@ def aprobar_asiento(asiento_id: int) -> Dict[str, Any]:
         'estado': asiento.estado,
         'total_debe': str(asiento.total_debe),
         'total_haber': str(asiento.total_haber),
+        'tipo_comprobante': asiento.tipo_comprobante or None,
+        'numero_comprobante': asiento.numero_comprobante or None,
         'created_at': asiento.created_at.isoformat() if asiento.created_at else None,
         'updated_at': asiento.updated_at.isoformat() if asiento.updated_at else None,
     }
@@ -793,6 +940,7 @@ def materializar_asiento_desde_factura(factura) -> Dict[str, Any]:
     if AsientoContable.objects.filter(factura=factura).exists():
         asiento_existente = AsientoContable.objects.get(factura=factura)
         logger.info(f"[asientos.service] Asiento ya existe para factura {factura.numero}: {asiento_existente.numero}")
+        # ⚠️ NORMATIVA: Incluir campos de comprobante en DTO
         return {
             'id': asiento_existente.id,
             'numero': asiento_existente.numero,
@@ -801,6 +949,8 @@ def materializar_asiento_desde_factura(factura) -> Dict[str, Any]:
             'estado': asiento_existente.estado,
             'total_debe': str(asiento_existente.total_debe),
             'total_haber': str(asiento_existente.total_haber),
+            'tipo_comprobante': asiento_existente.tipo_comprobante or None,
+            'numero_comprobante': asiento_existente.numero_comprobante or None,
             'created_at': asiento_existente.created_at.isoformat() if asiento_existente.created_at else None,
         }
     
@@ -814,14 +964,16 @@ def materializar_asiento_desde_factura(factura) -> Dict[str, Any]:
     # ⚠️ SSoT: Heredar datos inmutables de la factura
     descripcion = f"Asiento automático desde Factura {factura.numero} - {factura.emisor_razon_social if factura.naturaleza == Factura.Naturaleza.VENTA else factura.receptor_razon_social}"
     
-    # Crear asiento
+    # ⚠️ NORMATIVA: Crear asiento con comprobante
     asiento = AsientoContable.objects.create(
         numero=numero_asiento,
         fecha=factura.fecha_emision.date() if hasattr(factura.fecha_emision, 'date') else factura.fecha_emision,
         descripcion=descripcion,
         estado='APROBADO',  # ⚠️ Automático: Se crea aprobado porque la factura ya está aceptada
         empresa=empresa,
-        factura=factura
+        factura=factura,
+        tipo_comprobante='FVE',  # Factura de Venta Electrónica
+        numero_comprobante=factura.numero
     )
     
     # Crear movimientos según naturaleza
@@ -936,15 +1088,42 @@ def materializar_asiento_desde_factura(factura) -> Dict[str, Any]:
         })
         orden += 1
     
-    # Crear movimientos
+    # ⚠️ NORMATIVA: Poblar terceros en cada movimiento y crear
     for mov_data in movimientos:
+        # Extraer tercero desde factura
+        if factura.naturaleza == Factura.Naturaleza.VENTA and hasattr(factura, 'cliente') and factura.cliente:
+            tercero_data = {
+                'tipo_tercero': 'CLIENTE',
+                'tercero_id': factura.cliente.id,
+                'tercero_nit': factura.cliente.numero_documento,
+                'tercero_razon_social': factura.cliente.razon_social
+            }
+        elif factura.naturaleza == Factura.Naturaleza.COMPRA and hasattr(factura, 'proveedor') and factura.proveedor:
+            tercero_data = {
+                'tipo_tercero': 'PROVEEDOR',
+                'tercero_id': factura.proveedor.id,
+                'tercero_nit': factura.proveedor.numero_documento,
+                'tercero_razon_social': factura.proveedor.razon_social
+            }
+        else:
+            tercero_data = {
+                'tipo_tercero': 'OTRO',
+                'tercero_id': empresa.id,
+                'tercero_nit': empresa.nit or '000000000',
+                'tercero_razon_social': empresa.razon_social or empresa.nombre
+            }
+        
+        # Agregar terceros al movimiento
+        mov_data.update(tercero_data)
         MovimientoContable.objects.create(**mov_data)
     
-    # Recalcular totales del asiento
-    asiento.refresh_from_db()
+    # ⚠️ NORMATIVA: Recalcular totales usando método mejorado
+    asiento.calcular_totales()
+    asiento.save(update_fields=['total_debe', 'total_haber'])
     
     logger.info(f"[asientos.service] Asiento {asiento.numero} materializado desde factura {factura.numero}")
     
+    # ⚠️ NORMATIVA: Incluir campos de comprobante en DTO
     return {
         'id': asiento.id,
         'numero': asiento.numero,
@@ -953,6 +1132,8 @@ def materializar_asiento_desde_factura(factura) -> Dict[str, Any]:
         'estado': asiento.estado,
         'total_debe': str(asiento.total_debe),
         'total_haber': str(asiento.total_haber),
+        'tipo_comprobante': asiento.tipo_comprobante or None,
+        'numero_comprobante': asiento.numero_comprobante or None,
         'created_at': asiento.created_at.isoformat() if asiento.created_at else None,
     }
 
@@ -998,6 +1179,7 @@ def materializar_asiento_desde_gasto(gasto) -> Dict[str, Any]:
     if AsientoContable.objects.filter(descripcion__startswith=descripcion_busqueda).exists():
         asiento_existente = AsientoContable.objects.filter(descripcion__startswith=descripcion_busqueda).first()
         logger.info(f"[asientos.service] Asiento ya existe para gasto {ds.numero_documento}: {asiento_existente.numero}")
+        # ⚠️ NORMATIVA: Incluir campos de comprobante en DTO
         return {
             'id': asiento_existente.id,
             'numero': asiento_existente.numero,
@@ -1006,6 +1188,8 @@ def materializar_asiento_desde_gasto(gasto) -> Dict[str, Any]:
             'estado': asiento_existente.estado,
             'total_debe': str(asiento_existente.total_debe),
             'total_haber': str(asiento_existente.total_haber),
+            'tipo_comprobante': asiento_existente.tipo_comprobante or None,
+            'numero_comprobante': asiento_existente.numero_comprobante or None,
             'created_at': asiento_existente.created_at.isoformat() if asiento_existente.created_at else None,
         }
     
@@ -1019,13 +1203,15 @@ def materializar_asiento_desde_gasto(gasto) -> Dict[str, Any]:
     # ⚠️ SSoT: Heredar datos inmutables del gasto
     descripcion = f"Asiento automático desde Gasto {ds.numero_documento} - {ds.vendedor_nombre}"
     
-    # Crear asiento
+    # ⚠️ NORMATIVA: Crear asiento con comprobante
     asiento = AsientoContable.objects.create(
         numero=numero_asiento,
         fecha=ds.fecha,
         descripcion=descripcion,
         estado='APROBADO',  # ⚠️ Automático: Se crea aprobado porque el gasto está activo
-        empresa=empresa
+        empresa=empresa,
+        tipo_comprobante='CE',  # Comprobante de Egreso
+        numero_comprobante=ds.numero_documento
     )
     
     # ⚠️ v2.60: GASTO - Mapeo Siigo Contador Style
@@ -1100,15 +1286,51 @@ def materializar_asiento_desde_gasto(gasto) -> Dict[str, Any]:
     })
     orden += 1
     
-    # Crear movimientos
+    # ⚠️ NORMATIVA: Poblar terceros en cada movimiento y crear
     for mov_data in movimientos:
+        # Extraer tercero desde gasto (vendedor/proveedor)
+        if hasattr(ds, 'vendedor_nit') and ds.vendedor_nit:
+            # Intentar encontrar proveedor por NIT
+            from apps.tenant.proveedores.models import Proveedor
+            try:
+                proveedor = Proveedor.objects.get(
+                    numero_documento=ds.vendedor_nit,
+                    empresa=empresa
+                )
+                tercero_data = {
+                    'tipo_tercero': 'PROVEEDOR',
+                    'tercero_id': proveedor.id,
+                    'tercero_nit': proveedor.numero_documento,
+                    'tercero_razon_social': proveedor.razon_social
+                }
+            except Proveedor.DoesNotExist:
+                # Si no existe proveedor, usar datos del documento
+                tercero_data = {
+                    'tipo_tercero': 'OTRO',
+                    'tercero_id': empresa.id,
+                    'tercero_nit': ds.vendedor_nit or '000000000',
+                    'tercero_razon_social': ds.vendedor_nombre or empresa.razon_social or empresa.nombre
+                }
+        else:
+            # Fallback: usar empresa
+            tercero_data = {
+                'tipo_tercero': 'OTRO',
+                'tercero_id': empresa.id,
+                'tercero_nit': empresa.nit or '000000000',
+                'tercero_razon_social': empresa.razon_social or empresa.nombre
+            }
+        
+        # Agregar terceros al movimiento
+        mov_data.update(tercero_data)
         MovimientoContable.objects.create(**mov_data)
     
-    # Recalcular totales del asiento
-    asiento.refresh_from_db()
+    # ⚠️ NORMATIVA: Recalcular totales usando método mejorado
+    asiento.calcular_totales()
+    asiento.save(update_fields=['total_debe', 'total_haber'])
     
     logger.info(f"[asientos.service] Asiento {asiento.numero} materializado desde gasto {ds.numero_documento}")
     
+    # ⚠️ NORMATIVA: Incluir campos de comprobante en DTO
     return {
         'id': asiento.id,
         'numero': asiento.numero,
@@ -1117,6 +1339,8 @@ def materializar_asiento_desde_gasto(gasto) -> Dict[str, Any]:
         'estado': asiento.estado,
         'total_debe': str(asiento.total_debe),
         'total_haber': str(asiento.total_haber),
+        'tipo_comprobante': asiento.tipo_comprobante or None,
+        'numero_comprobante': asiento.numero_comprobante or None,
         'created_at': asiento.created_at.isoformat() if asiento.created_at else None,
     }
 

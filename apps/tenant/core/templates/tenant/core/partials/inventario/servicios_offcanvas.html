@@ -1,5 +1,7 @@
-{# servicios_offcanvas.html - Offcanvas del módulo Servicios v2.60 #}
+{# servicios_offcanvas.html - Offcanvas del módulo Servicios v2.61.3 #}
 {# ⚠️ v2.60: HTMX + Offcanvas con Zero Trust #}
+{# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa servicios_editor.js (Feature: CREATE/UPDATE) #}
+{# ⚠️ v2.61.3: El formulario se maneja por JavaScript (servicios_editor.js), no por HTMX POST directo #}
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-servicios" aria-labelledby="offcanvas-servicios-label" style="width: 90%; max-width: 700px;">
   <div class="offcanvas-header border-bottom bg-light">
@@ -15,10 +17,9 @@
     {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
     <div id="form-servicio-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     
-    <form id="form-servicio" method="POST" onsubmit="return false;"
-          hx-post="/api/v1/inventario/servicios/" 
-          hx-target="#grid-servicios" 
-          hx-swap="none">
+    {# ⚠️ v2.61.3: Formulario manejado por servicios_editor.js (Feature: CREATE/UPDATE) #}
+    {# ⚠️ No usar hx-post directo, el JavaScript maneja el submit #}
+    <form id="form-servicio" method="POST" onsubmit="return false;">
       <input type="hidden" id="servicio-id" name="id" value="{% if servicio %}{{ servicio.id }}{% endif %}">
       
       {# Datos Básicos #}

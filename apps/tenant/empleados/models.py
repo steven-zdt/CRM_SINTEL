@@ -342,10 +342,26 @@ class Devengo(models.Model):
         # El service layer se usa solo en el endpoint de previsualización, no en el modelo
         # El modelo solo valida y recalcula neto_pagar como SSoT
         
-        # ⚠️ v2.40: Siempre recalcular neto_pagar con los valores actuales (SSoT)
+        # ⚠️ v2.61: Siempre recalcular neto_pagar con los valores actuales (SSoT)
+        # ⚠️ CRÍTICO: Asegurar que todos los valores sean Decimal y manejar None correctamente
         from decimal import Decimal
-        devengos = (self.salario_base or Decimal('0')) + (self.auxilio_transporte or Decimal('0')) + (self.otros_devengos or Decimal('0'))
-        deducciones = (self.salud_empleado or Decimal('0')) + (self.pension_empleado or Decimal('0')) + (self.prestamos or Decimal('0')) + (self.descuentos_operativos or Decimal('0'))
+        # Convertir todos los valores a Decimal, usando 0 si son None
+        salario_base = Decimal(str(self.salario_base)) if self.salario_base is not None else Decimal('0')
+        auxilio_transporte = Decimal(str(self.auxilio_transporte)) if self.auxilio_transporte is not None else Decimal('0')
+        otros_devengos = Decimal(str(self.otros_devengos)) if self.otros_devengos is not None else Decimal('0')
+        salud_empleado = Decimal(str(self.salud_empleado)) if self.salud_empleado is not None else Decimal('0')
+        pension_empleado = Decimal(str(self.pension_empleado)) if self.pension_empleado is not None else Decimal('0')
+        prestamos = Decimal(str(self.prestamos)) if self.prestamos is not None else Decimal('0')
+        descuentos_operativos = Decimal(str(self.descuentos_operativos)) if self.descuentos_operativos is not None else Decimal('0')
+        
+        # ⚠️ v2.61: Cálculo correcto de Neto a Pagar
+        # Devengos = Salario Base + Auxilio de Transporte + Otros Devengos
+        devengos = salario_base + auxilio_transporte + otros_devengos
+        
+        # Deducciones = Salud + Pensión + Préstamos + Descuentos Operativos
+        deducciones = salud_empleado + pension_empleado + prestamos + descuentos_operativos
+        
+        # Neto a Pagar = Devengos - Deducciones
         self.neto_pagar = devengos - deducciones
         
         super().save(*args, **kwargs)

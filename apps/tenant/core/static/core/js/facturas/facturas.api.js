@@ -1,17 +1,25 @@
-/**
- * facturas.api.js - Wrapper de API Facturas v2.60
- * ⚠️ Aislamiento Gradual: Capa de Datos - Retorna siempre {ok, status, data}
- * 
- * Consume exclusivamente DRF endpoints:
- * - GET /api/v1/facturas/ (listar con filtros)
- * - GET /api/v1/facturas/{id}/ (detalle)
- * - GET /api/v1/facturas/summary/ (resumen financiero)
- * - POST /api/v1/core/documentos/upload/?preview=true|false (subida universal, parse-only)
- * - GET /api/v1/core/documentos/{id}/xml/ (ver XML)
- * - DELETE /api/v1/core/documentos/{id}/ (eliminar)
- * - DELETE /api/v1/facturas/{id}/ (eliminar factura)
- * - POST /api/v1/facturas/create-from-dto/ (persistir desde DTO, opcional)
- */
+  /**
+   * facturas.api.js - Wrapper de API Facturas v2.61.2
+   * ⚠️ Aislamiento Gradual: Capa de Datos - Retorna siempre {ok, status, data}
+   * 
+   * Consume exclusivamente DRF endpoints:
+   * - GET /api/v1/core/v1/facturas/facturas/ (listar con filtros - facade)
+   * - GET /api/v1/core/v1/facturas/facturas/{id}/ (detalle - facade)
+   * - GET /api/v1/core/v1/facturas/facturas/summary/ (resumen financiero - facade)
+   * - POST /api/v1/core/v1/facturas/facturas/upload-ubl/?preview=true|false&async=false (subida XML UBL - facade)
+   *   ⚠️ v2.61.2: Soporta batch processing con files[] (múltiples archivos)
+   *   ⚠️ v2.61.2: Si > 10 archivos, delega automáticamente a Celery (retorna 202 con task_id)
+   * - GET /api/v1/core/v1/facturas/facturas/{id}/xml/ (ver XML - facade)
+   * - DELETE /api/v1/core/v1/facturas/facturas/{id}/ (eliminar factura - facade)
+   * - POST /api/v1/core/v1/facturas/facturas/create-from-dto/ (persistir desde DTO, opcional - facade)
+   * - GET /api/v1/core/v1/facturas/facturas/ingest/{task_id}/status/ (consultar estado de batch upload - facade)
+   * 
+   * ⚠️ v2.61.2: OPTIMIZACIONES:
+   * - Batch processing: upload-ubl soporta files[] (múltiples archivos)
+   * - Pre-validación de idempotencia: extrae CUFE/CUDE con regex antes del parsing completo
+   * - Delegación automática a Celery: si > 10 archivos, procesa asíncronamente
+   * - Silent Success: actualiza FacturaAnexos si XML nuevo es más completo
+   */
 
 (function() {
   'use strict';
@@ -24,9 +32,12 @@
 
   const API_BASE = '/api/v1';
   const CORE_API_BASE = '/api/v1/core';
+  // ⚠️ v2.61.1: Usar Core API facade para facturas
+  const FACTURAS_API_BASE = '/api/v1/core/v1/facturas/facturas';
 
   /**
    * Lista facturas con filtros
+   * ⚠️ v2.61.1: Actualizado para usar Core API facade
    * @param {Object} params - Parámetros de filtro
    * @param {string} [params.naturaleza] - VENTA o COMPRA
    * @param {string} [params.nit] - NIT de emisor o receptor
@@ -45,53 +56,92 @@
       }
     });
     
+    // ⚠️ v2.61.1: Usar Core API facade
     const url = queryParams.toString() 
-      ? `${API_BASE}/facturas/?${queryParams.toString()}`
-      : `${API_BASE}/facturas/`;
+      ? `${FACTURAS_API_BASE}/?${queryParams.toString()}`
+      : `${FACTURAS_API_BASE}/`;
     
     return await window.http('GET', url);
   }
 
   /**
    * Obtiene detalle de una factura
+   * ⚠️ v2.61.1: Actualizado para usar Core API facade
    * @param {number} id - ID de la factura
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function getFactura(id) {
-    return await window.http('GET', `${API_BASE}/facturas/${id}/`);
+    // ⚠️ v2.61.1: Usar Core API facade
+    return await window.http('GET', `${FACTURAS_API_BASE}/${id}/`);
   }
 
   /**
    * Sube un documento XML al endpoint universal (parse-only)
-   * @param {File|FormData} fileOrFormData - Archivo o FormData con el archivo
+   * ⚠️ v2.61.2: Actualizado para usar Core API facade de facturas con soporte de batch processing
+   * @param {File|FormData|File[]} fileOrFormDataOrFiles - Archivo, FormData o array de archivos
    * @param {boolean} preview - Si true, solo parsea (no persiste)
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
+   * 
+   * ⚠️ v2.61.2: BATCH PROCESSING:
+   * - Si se proporciona un array de File, se envía como files[] para batch processing
+   * - Si hay > 10 archivos, el servidor delega automáticamente a Celery (retorna 202 con task_id)
+   * - Para consultar estado de batch > 10 archivos, use getBatchUploadStatus(task_id)
    */
-  async function uploadDocumento(fileOrFormData, preview = true) {
+  async function uploadDocumento(fileOrFormDataOrFiles, preview = true) {
     let formData;
     
-    if (fileOrFormData instanceof FormData) {
-      formData = fileOrFormData;
-    } else if (fileOrFormData instanceof File) {
+    if (fileOrFormDataOrFiles instanceof FormData) {
+      formData = fileOrFormDataOrFiles;
+    } else if (Array.isArray(fileOrFormDataOrFiles)) {
+      // ⚠️ v2.61.2: BATCH PROCESSING - Múltiples archivos
       formData = new FormData();
-      formData.append('file', fileOrFormData);
+      fileOrFormDataOrFiles.forEach((file, index) => {
+        if (file instanceof File) {
+          formData.append('files[]', file);
+        }
+      });
+    } else if (fileOrFormDataOrFiles instanceof File) {
+      formData = new FormData();
+      formData.append('file', fileOrFormDataOrFiles);
     } else {
-      throw new Error('Debe proporcionar un File o FormData');
+      throw new Error('Debe proporcionar un File, FormData o array de Files');
     }
 
-    const url = `${CORE_API_BASE}/documentos/upload/?preview=${preview ? 'true' : 'false'}`;
+    // ⚠️ v2.61.2: Usar Core API facade - endpoint upload-ubl de facturas
+    // Soporta batch processing: files[] para múltiples archivos
+    // Si > 10 archivos, retorna 202 Accepted con task_id para consultar estado
+    const url = `${FACTURAS_API_BASE}/upload-ubl/?preview=${preview ? 'true' : 'false'}&async=false`;
     return await window.http('POST', url, formData);
   }
 
   /**
-   * Obtiene el XML de un documento
-   * @param {number} documentId - ID del documento
+   * Consulta el estado de una tarea de batch upload
+   * ⚠️ v2.61.2: Nueva función para consultar estado de procesamiento asíncrono
+   * @param {string} taskId - ID de la tarea Celery retornado por uploadDocumento cuando hay > 10 archivos
+   * @returns {Promise<{ok: boolean, status: number, data: any}>}
+   * 
+   * Retorna:
+   * - state: PENDING | STARTED | SUCCESS | FAILURE | UNKNOWN
+   * - result: resumen con {"creados": X, "duplicados": Y, "errores": Z, "resultados": [...]} si SUCCESS
+   */
+  async function getBatchUploadStatus(taskId) {
+    if (!taskId) {
+      throw new Error('taskId es requerido');
+    }
+    // ⚠️ v2.61.2: Usar Core API facade - endpoint ingest status
+    return await window.http('GET', `${FACTURAS_API_BASE}/ingest/${taskId}/status/`);
+  }
+
+  /**
+   * Obtiene el XML de una factura
+   * ⚠️ v2.61.1: Actualizado para usar Core API facade de facturas
+   * @param {number} facturaId - ID de la factura
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
-  async function getDocumentXML(documentId) {
-    // ⚠️ v2.60: Usar http() helper para consistencia
+  async function getDocumentXML(facturaId) {
+    // ⚠️ v2.61.1: Usar Core API facade - endpoint xml de facturas
     // El endpoint puede retornar XML directo o JSON con campo xml
-    const response = await fetch(`${CORE_API_BASE}/documentos/${documentId}/xml/`, {
+    const response = await fetch(`${FACTURAS_API_BASE}/${facturaId}/xml/`, {
       method: 'GET',
       headers: {
         'Accept': 'application/xml, application/json, text/xml',
@@ -121,32 +171,39 @@
 
   /**
    * Obtiene resumen financiero (ventas/compras)
+   * ⚠️ v2.61.1: Actualizado para usar Core API facade
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function getSummary() {
-    return await window.http('GET', `${API_BASE}/facturas/summary/`);
+    // ⚠️ v2.61.1: Usar Core API facade
+    return await window.http('GET', `${FACTURAS_API_BASE}/summary/`);
   }
 
   /**
    * Elimina una factura
+   * ⚠️ v2.61.1: Actualizado para usar Core API facade
    * @param {number} id - ID de la factura
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function deleteFactura(id) {
-    return await window.http('DELETE', `${API_BASE}/facturas/${id}/`);
+    // ⚠️ v2.61.1: Usar Core API facade
+    return await window.http('DELETE', `${FACTURAS_API_BASE}/${id}/`);
   }
 
   /**
-   * Elimina un documento
-   * @param {number} documentId - ID del documento
+   * Elimina una factura (alias de deleteFactura para compatibilidad)
+   * ⚠️ v2.61.1: DEPRECATED - Usar deleteFactura() en su lugar
+   * @param {number} facturaId - ID de la factura
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
-  async function deleteDocument(documentId) {
-    return await window.http('DELETE', `${CORE_API_BASE}/documentos/${documentId}/`);
+  async function deleteDocument(facturaId) {
+    // ⚠️ v2.61.1: Redirigir a deleteFactura
+    return await deleteFactura(facturaId);
   }
 
   /**
    * Crea una factura desde DTO (persistencia en app)
+   * ⚠️ v2.61.1: Actualizado para usar Core API facade
    * ⚠️ v2.60: Soporta file_bytes y file_type para anexos (XML/PDF)
    * @param {Object} dto - DTO del documento parseado
    * @param {boolean} persistAnexos - Si true, persiste anexos también
@@ -166,7 +223,8 @@
       payload.file_type = fileType;
     }
     
-    return await window.http('POST', `${API_BASE}/facturas/create-from-dto/`, payload);
+    // ⚠️ v2.61.1: Usar Core API facade
+    return await window.http('POST', `${FACTURAS_API_BASE}/create-from-dto/`, payload);
   }
 
   /**
@@ -219,6 +277,7 @@
       getFactura,
       getSummary,
       uploadDocumento,
+      getBatchUploadStatus,  // ⚠️ v2.61.2: Nueva función para consultar estado de batch upload
       getDocumentXML,
       deleteDocument,
       deleteFactura,

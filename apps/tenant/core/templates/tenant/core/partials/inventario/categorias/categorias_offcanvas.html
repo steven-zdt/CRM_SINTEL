@@ -1,5 +1,8 @@
-{# categorias_offcanvas.html - Offcanvas del módulo Categorías v2.60 #}
+{# categorias_offcanvas.html - Offcanvas del módulo Categorías v2.61.3 #}
 {# ⚠️ v2.60: HTMX + Offcanvas con Zero Trust #}
+{# ⚠️ v2.61.3: Movido a subdirectorio categorias/ para mejor organización #}
+{# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa categorias_editor.js (Feature: CREATE/UPDATE) #}
+{# ⚠️ v2.61.3: El formulario se maneja por JavaScript (categorias_editor.js), no por HTMX POST directo #}
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-categorias" aria-labelledby="offcanvas-categorias-label" style="width: 90%; max-width: 600px;">
   <div class="offcanvas-header border-bottom bg-light">
@@ -15,10 +18,9 @@
     {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
     <div id="form-categoria-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     
-    <form id="form-categoria" method="POST" onsubmit="return false;"
-          hx-post="/api/v1/inventario/categorias/" 
-          hx-target="#grid-categorias" 
-          hx-swap="none">
+    {# ⚠️ v2.61.3: Formulario manejado por categorias_editor.js (Feature: CREATE/UPDATE) #}
+    {# ⚠️ No usar hx-post directo, el JavaScript maneja el submit #}
+    <form id="form-categoria" method="POST" onsubmit="return false;">
       <input type="hidden" id="categoria-id" name="id" value="{% if categoria %}{{ categoria.id }}{% endif %}">
       
       {# Datos Básicos #}

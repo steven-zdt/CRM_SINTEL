@@ -4,15 +4,15 @@
 
 <div class="offcanvas-header bg-success text-white">
   <h5 class="offcanvas-title">
-    <i class="bi bi-layout-text-window me-2"></i>Editor de Cotización
+    <i class="bi bi-plus-circle me-2"></i>Nueva Cotización
   </h5>
   <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
 </div>
 
 <div class="offcanvas-body">
-  <div id="modal-cotizacion-editor" data-cotizacion-uuid="{{ cotizacion.uuid|default:'' }}">
+  <div id="modal-cotizacion-editor" data-mode="crear">
     
-    {# ⚠️ v2.60: Datos del Emisor - Información de la empresa emisora #}
+    {# ⚠️ v2.61: Datos del Emisor - Información de la empresa emisora #}
     <div class="card mb-3 border-secondary" id="modulo-emisor-cotizacion">
       <div class="card-body py-2">
         <div class="d-flex align-items-center">
@@ -27,7 +27,7 @@
       </div>
     </div>
     
-    {# ⚠️ v2.60: Configuración Inicial - Cliente, Perfil, Fecha de Emisión y Fecha de Vencimiento #}
+    {# ⚠️ v2.61: Configuración Inicial - Cliente, Perfil, Fecha de Emisión y Fecha de Vencimiento #}
     <div class="card mb-3 border-primary shadow-sm">
       <div class="card-header bg-light fw-bold text-primary">
         <i class="bi bi-gear me-2"></i>Configuración Inicial
@@ -44,7 +44,7 @@
           </div>
         </div>
         
-        {# ⚠️ v2.60: Panel de Previsualización en Tiempo Real - Folio Proyectado y Fecha de Vencimiento #}
+        {# ⚠️ v2.61: Panel de Previsualización en Tiempo Real - Folio Proyectado y Fecha de Vencimiento #}
         <div class="row g-3 mb-4 p-3 bg-light border rounded">
           <div class="col-md-6">
             <label class="form-label fw-bold text-muted mb-1"><i class="bi bi-hash me-1"></i>Folio Proyectado</label>
@@ -75,7 +75,7 @@
       </div>
     </div>
 
-    {# ⚠️ v2.60: Panel de Configuración Dinámica - User-Driven (Plantilla Maestra) #}
+    {# ⚠️ v2.61: Panel de Configuración Dinámica - User-Driven (Plantilla Maestra) #}
     <div class="card mb-3 border-info shadow-sm">
       <div class="card-header bg-light fw-bold text-info">
         <i class="bi bi-sliders me-2"></i>Configuración Dinámica
@@ -127,7 +127,7 @@
       </div>
     </div>
 
-    {# ⚠️ v2.60: Secciones dinámicas - User-Driven (activadas por switches) #}
+    {# ⚠️ v2.61: Secciones dinámicas - User-Driven (activadas por switches) #}
     <div id="section-equipos" class="editor-module d-none mb-4">
       <h6 class="fw-bold mb-2 text-dark">
         <i class="bi bi-box-seam me-2"></i>Equipos y Suministros
@@ -149,14 +149,14 @@
       <div id="grid-editor-servicios" class="border rounded"></div>
     </div>
 
-    {# ⚠️ FASE 3: Panel de Configuración Financiera - User-Driven (Valores manuales del usuario) #}
+    {# ⚠️ v2.61: Panel de Configuración Financiera - User-Driven (Valores manuales del usuario) #}
     <div class="card mb-3 border-success shadow-sm">
       <div class="card-header bg-light fw-bold text-success">
         <i class="bi bi-calculator me-2"></i>Configuración Financiera (User-Driven)
       </div>
       <div class="card-body">
         <div class="row g-3">
-          {# ⚠️ FASE 3: IVA Global - Campo individual según flujo actual #}
+          {# ⚠️ v2.61: IVA Global - Campo individual según flujo actual #}
           <div class="col-md-6">
             <label class="form-label small fw-bold">IVA (%) *</label>
             <input type="number" 
@@ -172,7 +172,7 @@
           </div>
         </div>
         
-        {# ⚠️ REFACTORIZACIÓN: Switch para activar/desactivar AIU (Opcional) #}
+        {# ⚠️ v2.61: Switch para activar/desactivar AIU (Opcional) #}
         <div class="form-check form-switch mb-3 mt-3">
           <input class="form-check-input" 
                  type="checkbox" 
@@ -187,10 +187,10 @@
           </small>
         </div>
         
-        {# ⚠️ REFACTORIZACIÓN: Contenedor de campos AIU (Oculto por defecto) #}
+        {# ⚠️ v2.61: Contenedor de campos AIU (Oculto por defecto) #}
         <div id="container-aiu-fields" class="d-none">
           <div class="row g-3">
-            {# ⚠️ FASE 3: AIU - Componentes individuales según flujo actual #}
+            {# ⚠️ v2.61: AIU - Componentes individuales según flujo actual #}
             <div class="col-md-4">
               <label class="form-label small fw-bold">AIU Administración (%)</label>
               <input type="number" 
@@ -241,7 +241,7 @@
       </div>
     </div>
 
-    {# ⚠️ v2.60: Dashboard Financiero por Módulo - Resumen de costos, utilidades y descuentos #}
+    {# ⚠️ v2.61: Dashboard Financiero por Módulo - Resumen de costos, utilidades y descuentos #}
     <div class="card mb-4 border-info shadow-sm" id="dashboard-financiero">
       <div class="card-header bg-info text-white fw-bold">
         <i class="bi bi-pie-chart me-2"></i>Resumen Financiero por Módulo
@@ -266,7 +266,7 @@
       </div>
     </div>
 
-    {# ⚠️ v2.60: Panel de Totales - Espejo que suma valores calculados por fila (sin lógica compleja) #}
+    {# ⚠️ v2.61: Panel de Totales - Espejo que suma valores calculados por fila (sin lógica compleja) #}
     <div class="card mb-3 border-primary shadow-sm" id="panel-totales-cotizacion">
       <div class="card-header bg-light fw-bold text-primary">
         <i class="bi bi-cash-stack me-2"></i>Resumen de Totales
@@ -304,7 +304,7 @@
       </div>
     </div>
 
-    {# ⚠️ v2.60: Botones de Acción #}
+    {# ⚠️ v2.61: Botones de Acción #}
     <div class="mt-4 d-flex justify-content-end gap-2 pb-5">
       <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="offcanvas">
         Cancelar
@@ -316,7 +316,34 @@
   </div>
 </div>
 
-{# ⚠️ ORDEN CRÍTICO: cotizacion_columns.js DEBE cargarse ANTES que cotizacion_editor.js #}
-{# cotizacion_columns.js define window.getCotizacionColumns() requerido por el editor #}
-<script src="{% static 'core/js/cotizaciones/cotizacion_columns.js' %}?v=2.60"></script>
-<script src="{% static 'core/js/cotizaciones/features/cotizacion_editor.js' %}?v=2.60"></script>
+{# ⚠️ v2.61: Scripts específicos para CREAR cotizaciones #}
+{# ⚠️ v2.61: Feature-Sliced Architecture - Módulo independiente para creación #}
+<script src="{% static 'core/js/cotizaciones/cotizacion_columns.js' %}?v=2.61"></script>
+<script src="{% static 'core/js/cotizaciones/features/cotizacion_crear.js' %}?v=2.61"></script>
+
+{# ⚠️ v2.61: Mostrar offcanvas automáticamente después de cargar el contenido #}
+<script>
+  (function() {
+    // ⚠️ v2.61: Mostrar offcanvas automáticamente después de que HTMX cargue el contenido
+    // Ejecutar inmediatamente cuando el script se carga (después de que HTMX inserta el contenido)
+    const offcanvasElement = document.getElementById('offcanvas-container');
+    if (offcanvasElement && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+      // Usar requestAnimationFrame para asegurar que el DOM esté completamente renderizado
+      requestAnimationFrame(function() {
+        try {
+          const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasElement, {
+            backdrop: true,
+            keyboard: true,
+            scroll: false
+          });
+          offcanvasInstance.show();
+          console.log('[cotizaciones] Offcanvas de creación mostrado automáticamente después de carga HTMX');
+        } catch (error) {
+          console.error('[cotizaciones] Error al mostrar offcanvas de creación:', error);
+        }
+      });
+    } else {
+      console.warn('[cotizaciones] No se pudo encontrar offcanvas-container o Bootstrap no está disponible');
+    }
+  })();
+</script>

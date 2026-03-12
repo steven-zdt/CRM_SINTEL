@@ -58,11 +58,10 @@
         type="button" 
         class="btn btn-primary" 
         id="btn-cotizaciones-crear"
-        hx-get="{% url 'cotizaciones_ui:ui_editor_draft' %}"
+        hx-get="/api/v1/cotizaciones/render-offcanvas/crear/"
         hx-target="#offcanvas-container"
         hx-swap="innerHTML"
-        data-bs-toggle="offcanvas"
-        data-bs-target="#offcanvas-container"
+        hx-indicator="#spinner"
       >
         <i class="bi bi-plus-lg me-1"></i> Nueva Cotización
       </button>
@@ -92,13 +91,14 @@
 
   {# ⚠️ v2.60: Contenedor para Tabulator - Sincronizado con Modelo Cotizacion #}
   {# ⚠️ ID: tabla-cotizaciones-principal - Atributos de datos para inicialización automática con Tabulator #}
+  {# ⚠️ v2.61: Optimizado para usar todo el ancho disponible #}
   <div class="card shadow-sm border-0">
     <div class="card-body p-0">
       <div id="tabla-cotizaciones-principal" 
            class="table-responsive tabulator-sintel flex-grow-1" 
            data-url="/api/v1/cotizaciones/" 
            data-page-size="20"
-           style="min-height: 400px;" 
+           style="min-height: 400px; width: 100%; overflow-x: auto;" 
            role="grid" 
            aria-label="Tabla de cotizaciones">
       </div>
@@ -126,13 +126,9 @@
   {# Feedback para errores y mensajes #}
   <div id="cotizaciones-list-feedback" class="alert d-none mt-3" role="alert" aria-live="polite"></div>
   
-  {# Offcanvas Container para HTMX - Reemplaza modales #}
-  <div id="offcanvas-container" class="offcanvas offcanvas-top" tabindex="-1" aria-labelledby="offcanvas-cotizacion-label" style="height: auto; max-height: 90vh;">
-    {# El contenido se carga dinámicamente vía HTMX #}
-  </div>
-  
-  {# Offcanvas Container para Editor de Cotización #}
-  <div id="offcanvas-editor-container" class="offcanvas offcanvas-end" tabindex="-1" aria-labelledby="offcanvas-editor-cotizacion-label" style="width: 90%; max-width: 1200px;">
-    {# El editor se carga dinámicamente vía HTMX #}
+  {# ⚠️ v2.61: Offcanvas Container para HTMX - Unificado (alineado con patrón de contabilidad) #}
+  {# Usa offcanvas-end para mejor UX y ancho de 90% (max 1200px) #}
+  <div id="offcanvas-container" class="offcanvas offcanvas-end" tabindex="-1" aria-labelledby="offcanvas-cotizacion-label" style="width: 90%; max-width: 1200px;">
+    {# El contenido se carga dinámicamente vía HTMX desde endpoints render-offcanvas/* #}
   </div>
 </div>

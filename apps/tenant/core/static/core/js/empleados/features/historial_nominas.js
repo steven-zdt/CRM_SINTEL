@@ -154,6 +154,127 @@
           return val ? parseFloat(val).toFixed(2) : '-';
         }
       },
+      // ⚠️ v2.61: DEVENGOS (Ingresos) - Orden secuencial
+      { 
+        title: "Salario Base (COP)", 
+        field: "salario_base", 
+        width: 160,
+        formatter: (cell) => {
+          const val = cell.getValue();
+          if (!val) return '-';
+          const num = parseFloat(val);
+          if (isNaN(num)) return '-';
+          return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(num);
+        }
+      },
+      { 
+        title: "Auxilio Transporte (COP)", 
+        field: "auxilio_transporte", 
+        width: 180,
+        formatter: (cell) => {
+          const val = cell.getValue();
+          if (!val) return '-';
+          const num = parseFloat(val);
+          if (isNaN(num)) return '-';
+          return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(num);
+        }
+      },
+      { 
+        title: "Otros Devengos (COP)", 
+        field: "otros_devengos", 
+        width: 170,
+        formatter: (cell) => {
+          const val = cell.getValue();
+          if (!val || val === '0' || val === 0) return '-';
+          const num = parseFloat(val);
+          if (isNaN(num)) return '-';
+          return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(num);
+        }
+      },
+      // ⚠️ v2.61: DEDUCCIONES (Descuentos) - Orden secuencial
+      { 
+        title: "Salud (COP)", 
+        field: "salud_empleado", 
+        width: 140,
+        formatter: (cell) => {
+          const val = cell.getValue();
+          if (!val) return '-';
+          const num = parseFloat(val);
+          if (isNaN(num)) return '-';
+          return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(num);
+        }
+      },
+      { 
+        title: "Pensión (4%) (COP)", 
+        field: "pension_empleado", 
+        width: 160,
+        formatter: (cell) => {
+          const val = cell.getValue();
+          if (!val) return '-';
+          const num = parseFloat(val);
+          if (isNaN(num)) return '-';
+          return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(num);
+        }
+      },
+      { 
+        title: "Préstamos (COP)", 
+        field: "prestamos", 
+        width: 150,
+        formatter: (cell) => {
+          const val = cell.getValue();
+          if (!val || val === '0' || val === 0) return '-';
+          const num = parseFloat(val);
+          if (isNaN(num)) return '-';
+          return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(num);
+        }
+      },
+      { 
+        title: "Descuentos Operativos (COP)", 
+        field: "descuentos_operativos", 
+        width: 200,
+        formatter: (cell) => {
+          const val = cell.getValue();
+          if (!val || val === '0' || val === 0) return '-';
+          const num = parseFloat(val);
+          if (isNaN(num)) return '-';
+          return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          }).format(num);
+        }
+      },
       { 
         title: "Neto a Pagar (COP)", 
         field: "neto_pagar", 
@@ -222,17 +343,92 @@
       }
     ];
 
-    // ⚠️ v2.60: Configuración de Tabulator con paginación remota
+    // ⚠️ v2.61: Configuración de Tabulator para mostrar TODOS los registros disponibles
+    // El backend tiene max_page_size=200, así que solicitamos el máximo y cargamos todos los registros
     const tableConfig = {
       searchInputSelector: '#search-historial-nominas',
-      pagination: true,
-      paginationMode: "remote",
-      paginationSize: 10,
-      paginationSizeSelector: [10, 25, 50, 100],
-      layout: "fitColumns",
+      pagination: false, // ⚠️ v2.61: Deshabilitar paginación visual para mostrar toda la información
+      layout: "fitColumns", // ⚠️ v2.61: Usar fitColumns pero con scroll horizontal habilitado en el contenedor
       responsiveLayout: "hide",
       placeholder: "No hay nóminas registradas para este empleado",
-      locale: "es"
+      locale: "es",
+      // ⚠️ v2.61: Solicitar el máximo permitido por el backend (200) y cargar todos los registros
+      ajaxParams: function(params) {
+        if (!params) {
+          params = {};
+        }
+        // ⚠️ v2.61: Solicitar el máximo permitido (200 según StandardResultsSetPagination)
+        params.page_size = 200;
+        return params;
+      },
+      // ⚠️ v2.61: Transformar respuesta DRF y cargar todos los registros si hay más páginas
+      // ⚠️ CRÍTICO: Cuando pagination: false, Tabulator espera un ARRAY directo, no {data, last_page}
+      ajaxResponse: async function(url, params, response) {
+        console.log(`${MOD} Respuesta de API recibida:`, {
+          url: url,
+          count: response?.count,
+          results: response?.results?.length,
+          next: response?.next
+        });
+        
+        // Validar estructura de respuesta DRF
+        if (!response || typeof response !== 'object') {
+          console.error(`${MOD} Respuesta de API inválida:`, response);
+          return []; // ⚠️ v2.61: Retornar array directo cuando pagination: false
+        }
+
+        // DRF retorna {count, next, previous, results: [...]}
+        if (response.results && Array.isArray(response.results)) {
+          let allResults = [...response.results];
+          
+          // ⚠️ v2.61: Si hay más páginas, cargar todas las páginas restantes
+          let nextUrl = response.next;
+          let pageNum = 2; // Empezar desde la página 2
+          
+          while (nextUrl && pageNum <= 100) { // Límite de seguridad: máximo 100 páginas (20,000 registros)
+            try {
+              console.log(`${MOD} Cargando página ${pageNum}...`);
+              const nextResponse = await fetch(nextUrl, {
+                credentials: 'same-origin',
+                headers: {
+                  'Accept': 'application/json'
+                }
+              });
+              
+              if (!nextResponse.ok) {
+                console.warn(`${MOD} Error al cargar página ${pageNum}:`, nextResponse.status);
+                break;
+              }
+              
+              const nextData = await nextResponse.json();
+              
+              if (nextData.results && Array.isArray(nextData.results)) {
+                allResults = allResults.concat(nextData.results);
+                nextUrl = nextData.next;
+                pageNum++;
+              } else {
+                break;
+              }
+            } catch (error) {
+              console.error(`${MOD} Error al cargar página ${pageNum}:`, error);
+              break;
+            }
+          }
+          
+          console.log(`${MOD} ✅ Total de registros cargados: ${allResults.length} de ${response.count || 'N/A'}`);
+          
+          // ⚠️ v2.61: Retornar array directo cuando pagination: false
+          return allResults;
+        }
+
+        // Fallback: si es un array directo
+        if (Array.isArray(response)) {
+          return response; // ⚠️ v2.61: Retornar array directo
+        }
+
+        console.warn(`${MOD} Formato de respuesta inesperado:`, response);
+        return []; // ⚠️ v2.61: Retornar array vacío directo
+      }
     };
 
     const table = w.TabulatorFactory.create('#grid-historial-nominas', historialUrl, columns, tableConfig);

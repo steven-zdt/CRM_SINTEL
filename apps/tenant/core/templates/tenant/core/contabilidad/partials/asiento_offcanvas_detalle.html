@@ -49,6 +49,41 @@
         <div class="form-control-plaintext bg-light p-2 rounded">{{ asiento.descripcion|default:'---' }}</div>
       </div>
 
+      {# ⚠️ NORMATIVA: Campos de comprobante para trazabilidad #}
+      {% if asiento.tipo_comprobante or asiento.numero_comprobante %}
+      <div class="col-12 mt-3"><h6 class="text-primary border-bottom pb-2 small fw-bold">COMPROBANTE (TRAZABILIDAD)</h6></div>
+      
+      {% if asiento.tipo_comprobante %}
+      <div class="col-md-6">
+        <label class="form-label small fw-bold text-muted">Tipo de Comprobante</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">
+          {% if asiento.tipo_comprobante == 'FVE' %}
+            <span class="badge bg-primary">FVE - Factura de Venta Electrónica</span>
+          {% elif asiento.tipo_comprobante == 'CE' %}
+            <span class="badge bg-info">CE - Comprobante de Egreso</span>
+          {% elif asiento.tipo_comprobante == 'RC' %}
+            <span class="badge bg-warning">RC - Recibo de Caja</span>
+          {% elif asiento.tipo_comprobante == 'GN' %}
+            <span class="badge bg-secondary">GN - General</span>
+          {% elif asiento.tipo_comprobante == 'ND' %}
+            <span class="badge bg-danger">ND - Nota Débito</span>
+          {% elif asiento.tipo_comprobante == 'NC' %}
+            <span class="badge bg-success">NC - Nota Crédito</span>
+          {% else %}
+            <span class="badge bg-light text-dark">{{ asiento.tipo_comprobante }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+      
+      {% if asiento.numero_comprobante %}
+      <div class="col-md-6">
+        <label class="form-label small fw-bold text-muted">Número de Comprobante</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">{{ asiento.numero_comprobante }}</div>
+      </div>
+      {% endif %}
+      {% endif %}
+
       <div class="col-12 mt-4"><h6 class="text-primary border-bottom pb-2 small fw-bold">MOVIMIENTOS CONTABLES</h6></div>
       
       {% if asiento.movimientos %}
@@ -62,6 +97,9 @@
                 <th>Descripción</th>
                 <th class="text-end">Débito</th>
                 <th class="text-end">Crédito</th>
+                {# ⚠️ NORMATIVA: Columnas de terceros #}
+                <th>NIT/CC</th>
+                <th>Razón Social</th>
               </tr>
             </thead>
             <tbody>
@@ -78,6 +116,21 @@
                 <td>{{ movimiento.descripcion|default:'---' }}</td>
                 <td class="text-end">{{ movimiento.debe|default:'0.00' }}</td>
                 <td class="text-end">{{ movimiento.haber|default:'0.00' }}</td>
+                {# ⚠️ NORMATIVA: Campos de terceros #}
+                <td>
+                  {% if movimiento.tercero_nit %}
+                    <small class="text-muted">{{ movimiento.tercero_nit }}</small>
+                  {% else %}
+                    <span class="text-muted">---</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if movimiento.tercero_razon_social %}
+                    <small>{{ movimiento.tercero_razon_social }}</small>
+                  {% else %}
+                    <span class="text-muted">---</span>
+                  {% endif %}
+                </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -86,6 +139,7 @@
                 <td colspan="3" class="text-end fw-bold">TOTALES:</td>
                 <td class="text-end fw-bold">{{ asiento.total_debe|default:'0.00' }}</td>
                 <td class="text-end fw-bold">{{ asiento.total_haber|default:'0.00' }}</td>
+                <td colspan="2"></td>
               </tr>
               <tr>
                 <td colspan="3" class="text-end fw-bold">

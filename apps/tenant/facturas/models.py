@@ -114,14 +114,16 @@ class Factura(models.Model):
     # DIAN / QR / CUFE y autorización
     # ⚠️ v2.60: Índice único para garantizar idempotencia en guardar_factura_desde_dto()
     # Django permite múltiples NULLs en campos únicos, así que esto garantiza unicidad cuando hay valor
+    # ⚠️ v2.61.2: Pre-validación de idempotencia: fast_get_cufe() extrae CUFE con regex antes del parsing completo
+    # Esto permite verificar duplicados en los primeros milisegundos sin cargar todo el XML en memoria
     cufe = models.CharField(
         max_length=128, 
         blank=True, 
         null=True, 
         unique=True,  # ⚠️ CRÍTICO: Garantiza idempotencia por CUFE (clave legal de la DIAN)
-        db_index=True,  # Índice adicional para búsquedas rápidas
+        db_index=True,  # Índice adicional para búsquedas rápidas (usado por fast_get_cufe para pre-validación)
         verbose_name=_('CUFE'), 
-        help_text=_('Código Único de Facturación Electrónica (clave legal de la DIAN para idempotencia)')
+        help_text=_('Código Único de Facturación Electrónica (clave legal de la DIAN para idempotencia). Usado para pre-validación rápida en batch processing.')
     )
     qr_code = models.TextField(blank=True, null=True, verbose_name=_('QR raw'), help_text=_('Texto multilínea del código QR'))
     qr_url = models.URLField(max_length=1024, blank=True, null=True, verbose_name=_('URL QR DIAN'), help_text=_('URL del código QR (puede ser muy larga)'))

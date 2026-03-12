@@ -53,21 +53,13 @@
             <i class="bi bi-search me-1"></i>Buscar en Catálogo NIIF
           </label>
           <input type="text" class="form-control mb-2" id="input-buscar-niif" 
-                 placeholder="Buscar por código o nombre...">
+                 placeholder="Buscar por código (ej: 1105) o nombre (ej: BANCOS)...">
           <div id="catalogo-niif-resultados" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
             <div class="text-muted text-center py-3">
               <i class="bi bi-info-circle me-2"></i>Seleccione un tipo de cuenta para buscar
             </div>
           </div>
-          <small class="text-muted">Haga clic en una cuenta para autocompletar los campos</small>
-        </div>
-        
-        <div class="col-12">
-          <label class="form-label small fw-bold">Código *</label>
-          <input type="text" class="form-control" id="input-codigo" name="codigo" required 
-                 placeholder="Ej: 1105" maxlength="20" 
-                 value="{% if cuenta %}{{ cuenta.codigo|default:'' }}{% endif %}">
-          <small class="text-muted">Código único de la cuenta (máx. 20 caracteres)</small>
+          <small class="text-muted">Haga clic en una cuenta para autocompletar los campos Código y Nombre</small>
         </div>
         
         <div class="col-12">
@@ -168,6 +160,9 @@
     function buscarEnCatalogo(searchTerm) {
       if (!currentTipo) return;
       
+      // Limpiar espacios y normalizar búsqueda
+      const searchNormalized = searchTerm ? searchTerm.trim() : '';
+      
       // Mostrar loading
       resultadosDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" role="status"></div> Buscando...</div>';
       
@@ -177,8 +172,10 @@
         page_size: 20
       });
       
-      if (searchTerm) {
-        params.append('search', searchTerm);
+      // ⚠️ v2.61: Búsqueda por código (número) o nombre (letras)
+      // El endpoint busca automáticamente en ambos campos: codigo__icontains | nombre__icontains
+      if (searchNormalized) {
+        params.append('search', searchNormalized);
       }
       
       const url = `/api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?${params.toString()}`;
@@ -193,22 +190,95 @@
       })
       .then(response => {
         if (!response.ok) {
-          throw new Error('Error al buscar en el catálogo');
+          return response.json().then(err => {
+            throw new Error(err.error || err.detail || 'Error al buscar en el catálogo');
+          });
         }
         return response.json();
       })
       .then(data => {
-        mostrarResultados(data.results || data);
+        // ⚠️ DEBUG: Log detallado para depuración
+        console.log('[Catálogo NIIF] Respuesta completa:', {
+          url: url,
+          tipo: currentTipo,
+          search: searchNormalized,
+          dataKeys: Object.keys(data || {}),
+          dataStructure: {
+            hasResults: !!(data.results),
+            resultsLength: data.results ? data.results.length : null,
+            isArray: Array.isArray(data),
+            arrayLength: Array.isArray(data) ? data.length : null,
+            hasData: !!(data.data),
+            dataLength: data.data ? data.data.length : null,
+            count: data.count,
+            next: data.next,
+            previous: data.previous
+          },
+          dataSample: data.results ? data.results.slice(0, 2) : (Array.isArray(data) ? data.slice(0, 2) : data)
+        });
+        
+        // Manejar respuesta paginada o directa
+        let cuentas = null;
+        if (data.results && Array.isArray(data.results)) {
+          // Respuesta paginada: {count, next, previous, results: [...]}
+          cuentas = data.results;
+          console.log(`[Catálogo NIIF] Respuesta paginada: ${data.count} total, ${data.results.length} en esta página`);
+        } else if (Array.isArray(data)) {
+          // Respuesta directa: [...]
+          cuentas = data;
+          console.log(`[Catálogo NIIF] Respuesta directa: ${data.length} cuentas`);
+        } else if (data.data && Array.isArray(data.data)) {
+          // Formato alternativo
+          cuentas = data.data;
+          console.log(`[Catálogo NIIF] Formato alternativo: ${data.data.length} cuentas`);
+        } else {
+          console.warn('[Catálogo NIIF] Formato de respuesta inesperado:', {
+            data: data,
+            type: typeof data,
+            isArray: Array.isArray(data),
+            keys: Object.keys(data || {})
+          });
+          cuentas = [];
+        }
+        
+        mostrarResultados(cuentas);
       })
       .catch(error => {
-        console.error('[Catálogo NIIF] Error:', error);
-        resultadosDiv.innerHTML = '<div class="text-danger text-center py-3"><i class="bi bi-exclamation-triangle me-2"></i>Error al buscar en el catálogo</div>';
+        console.error('[Catálogo NIIF] Error completo:', {
+          error: error,
+          message: error.message,
+          url: url,
+          tipo: currentTipo,
+          search: searchNormalized
+        });
+        resultadosDiv.innerHTML = `<div class="text-danger text-center py-3">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          Error al buscar en el catálogo: ${error.message || 'Error desconocido'}
+        </div>`;
       });
     }
     
     function mostrarResultados(cuentas) {
+      console.log('[Catálogo NIIF] Mostrando resultados:', {
+        cuentas: cuentas,
+        cantidad: cuentas ? cuentas.length : 0,
+        tipo: currentTipo
+      });
+      
       if (!cuentas || cuentas.length === 0) {
-        resultadosDiv.innerHTML = '<div class="text-muted text-center py-3"><i class="bi bi-inbox me-2"></i>No se encontraron cuentas</div>';
+        const mensaje = currentTipo 
+          ? `No se encontraron cuentas de tipo ${currentTipo} en el catálogo NIIF. Verifique que el catálogo esté poblado.`
+          : 'Seleccione un tipo de cuenta para buscar en el catálogo NIIF.';
+        resultadosDiv.innerHTML = `
+          <div class="text-muted text-center py-3">
+            <i class="bi bi-inbox me-2"></i>
+            ${mensaje}
+            <br>
+            <small class="text-muted mt-2 d-block">
+              <i class="bi bi-info-circle me-1"></i>
+              Si el catálogo está vacío, ejecute: <code>python manage.py poblar_catalogo_niif</code>
+            </small>
+          </div>`;
         return;
       }
       
@@ -244,20 +314,63 @@
           const codigo = this.dataset.codigo;
           const nombre = this.dataset.nombre;
           
-          // Autocompletar campos
-          inputCodigo.value = codigo;
-          inputNombre.value = nombre;
+          // ⚠️ v2.61: Buscar campos dinámicamente para asegurar que existan
+          // Buscar dentro del offcanvas o en todo el documento
+          const offcanvasId = 'offcanvas-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}';
+          const offcanvas = document.getElementById(offcanvasId);
           
-          // Highlight visual
+          // Buscar campos dentro del offcanvas primero, luego en todo el documento
+          let codigoInput = offcanvas ? offcanvas.querySelector('#input-codigo') : null;
+          let nombreInput = offcanvas ? offcanvas.querySelector('#input-nombre') : null;
+          
+          // Si no se encuentran en el offcanvas, buscar en todo el documento
+          if (!codigoInput) {
+            codigoInput = document.getElementById('input-codigo');
+          }
+          if (!nombreInput) {
+            nombreInput = document.getElementById('input-nombre');
+          }
+          
+          if (codigoInput) {
+            codigoInput.value = codigo;
+            // Disparar eventos para notificar cambios
+            codigoInput.dispatchEvent(new Event('input', { bubbles: true }));
+            codigoInput.dispatchEvent(new Event('change', { bubbles: true }));
+            // Feedback visual
+            codigoInput.classList.add('border-success', 'border-2');
+            setTimeout(() => {
+              codigoInput.classList.remove('border-success', 'border-2');
+            }, 2000);
+            console.log('[Catálogo NIIF] Campo Código actualizado:', codigo);
+          } else {
+            console.error('[Catálogo NIIF] Campo input-codigo no encontrado');
+          }
+          
+          if (nombreInput) {
+            nombreInput.value = nombre;
+            // Disparar eventos para notificar cambios
+            nombreInput.dispatchEvent(new Event('input', { bubbles: true }));
+            nombreInput.dispatchEvent(new Event('change', { bubbles: true }));
+            // Feedback visual
+            nombreInput.classList.add('border-success', 'border-2');
+            setTimeout(() => {
+              nombreInput.classList.remove('border-success', 'border-2');
+            }, 2000);
+            console.log('[Catálogo NIIF] Campo Nombre actualizado:', nombre);
+          } else {
+            console.error('[Catálogo NIIF] Campo input-nombre no encontrado');
+          }
+          
+          // Highlight visual en el item seleccionado
           resultadosDiv.querySelectorAll('.cuenta-niif-item').forEach(i => i.classList.remove('active'));
           this.classList.add('active');
           
-          // Feedback
+          // Feedback con notificación
           if (window.notyf) {
             window.notyf.success(`Cuenta seleccionada: ${codigo} - ${nombre}`);
           }
           
-          console.log('[Catálogo NIIF] Cuenta seleccionada:', { codigo, nombre });
+          console.log('[Catálogo NIIF] Cuenta seleccionada y campos actualizados:', { codigo, nombre });
         });
       });
     }

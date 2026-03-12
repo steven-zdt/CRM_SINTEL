@@ -14,7 +14,9 @@
     'use strict';
 
     const MOD = '[inventario.list]';
+    const CORE_API_BASE = '/api/v1/core/v1/inventario/productos'; // Core API Facade
     let table = null;
+    let _eliminandoProducto = false; // ⚠️ v2.61.3: Flag para prevenir rowClick durante eliminación
 
     // ⚠️ Anti-Zombies v2.60: Singleton global para instancias de Tabulator
     if (window.SintelInventarioTables) {
@@ -118,10 +120,24 @@
                 sorter: "number"
             },
             {
+                title: "Precio Venta",
+                field: "precio_venta",
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === null || value === undefined || value === '') return '$ 0,00';
+                    return formatearMoneda(value);
+                },
+                width: 140,
+                hozAlign: "right",
+                sorter: "number"
+            },
+            {
                 title: "Precio Promedio",
                 field: "costo_promedio",
                 formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
+                    const value = cell.getValue();
+                    if (value === null || value === undefined || value === '') return '$ 0,00';
+                    return formatearMoneda(value);
                 },
                 width: 140,
                 hozAlign: "right",
@@ -131,7 +147,9 @@
                 title: "Valor Inventario",
                 field: "valor_inventario",
                 formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
+                    const value = cell.getValue();
+                    if (value === null || value === undefined || value === '') return '$ 0,00';
+                    return formatearMoneda(value);
                 },
                 width: 150,
                 hozAlign: "right",
@@ -248,7 +266,7 @@
         // Crear tabla usando TabulatorFactory
         table = w.TabulatorFactory.create(
             '#grid-inventario',
-            '/api/v1/inventario/productos/',
+            '/api/v1/core/v1/inventario/productos/', // ⚠️ v2.61.3: Core API Facade
             getColumns(),
             tableConfig
         );
@@ -278,7 +296,8 @@
                 const id = btn.getAttribute('data-id');
                 if (!id) return;
 
-                await htmx.ajax('GET', `/api/v1/inventario/productos/gestor-offcanvas/?id=${id}`, {
+                // ⚠️ v2.61.3: Usar Core API Facade para gestor-offcanvas
+                await htmx.ajax('GET', `/api/v1/core/v1/inventario/productos/gestor-offcanvas/?id=${id}`, {
                     target: '#offcanvas-container-inventario',
                     swap: 'innerHTML'
                 });
@@ -297,7 +316,8 @@
                 const id = btn.getAttribute('data-id');
                 if (!id) return;
 
-                await htmx.ajax('GET', `/api/v1/inventario/productos/gestor-offcanvas/?id=${id}&tipo=ajuste`, {
+                // ⚠️ v2.61.3: Usar Core API Facade para gestor-offcanvas (ajuste)
+                await htmx.ajax('GET', `/api/v1/core/v1/inventario/productos/gestor-offcanvas/?id=${id}&tipo=ajuste`, {
                     target: '#offcanvas-container-inventario',
                     swap: 'innerHTML'
                 });
@@ -313,35 +333,172 @@
             // Botón Eliminar
             if (btn.classList.contains('btn-delete-producto')) {
                 e.preventDefault();
+                e.stopPropagation();
+                
                 const id = btn.getAttribute('data-id');
-                if (!id) return;
-
-                if (!confirm('¿Está seguro de eliminar este producto? Esta acción no se puede deshacer.')) {
+                if (!id) {
+                    console.warn(`${MOD} Botón eliminar sin data-id`);
                     return;
                 }
 
-                // TODO: Implementar eliminación usando API
-                console.warn(`${MOD} Eliminación de producto no implementada aún`);
+                // ⚠️ v2.61.3: Validación: Obtener datos del producto para validar estado
+                let productoRes;
+                if (w.http && typeof w.http === 'function') {
+                    productoRes = await w.http('GET', `${CORE_API_BASE}/${id}/`);
+                } else if (w.inventarioAPI && w.inventarioAPI.productos && typeof w.inventarioAPI.productos.get === 'function') {
+                    productoRes = await w.inventarioAPI.productos.get(id);
+                } else {
+                    console.error(`${MOD} API no disponible`);
+                    return;
+                }
+
+                if (!productoRes.ok || !productoRes.data) {
+                    if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+                        w.UIManager.handleError(productoRes, MOD);
+                    }
+                    return;
+                }
+
+                const producto = productoRes.data;
+
+                // Validar que el producto no esté activo
+                if (producto.activo) {
+                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                        w.SintelFeedback.error('El producto está activo. Desactívelo primero.');
+                    }
+                    return;
+                }
+
+                // Construir mensaje de confirmación
+                let mensajeConfirmacion = '¿Está seguro de eliminar este producto?';
+                const stock = parseFloat(producto.stock_actual || 0);
+                if (stock > 0) {
+                    mensajeConfirmacion += `\n\nEste producto tiene ${stock} unidades en stock.`;
+                }
+                mensajeConfirmacion += '\n\n⚠️ ADVERTENCIA: Esta acción eliminará:';
+                mensajeConfirmacion += '\n- El producto';
+                mensajeConfirmacion += '\n- Todo el stock asociado';
+                mensajeConfirmacion += '\n- Todo el historial de movimientos (Kardex)';
+                mensajeConfirmacion += '\n\nEsta acción es irreversible.';
+
+                if (!confirm(mensajeConfirmacion)) {
+                    return;
+                }
+
+                // ⚠️ v2.61.3: Activar flag para prevenir rowClick durante eliminación
+                _eliminandoProducto = true;
+
+                // ⚠️ Loading state
+                const originalHTML = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+                try {
+                    // ⚠️ v2.61.3: Usar Core API Facade
+                    let deleteRes;
+                    if (w.http && typeof w.http === 'function') {
+                        deleteRes = await w.http('DELETE', `${CORE_API_BASE}/${id}/`);
+                    } else if (w.inventarioAPI && w.inventarioAPI.productos && typeof w.inventarioAPI.productos.delete === 'function') {
+                        deleteRes = await w.inventarioAPI.productos.delete(id);
+                    } else {
+                        console.error(`${MOD} API de eliminación no disponible`);
+                        return;
+                    }
+
+                    // ⚠️ v2.61.3: Aislamiento Gradual - Solo verificar ok
+                    if (!deleteRes.ok) {
+                        if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+                            w.UIManager.handleError(deleteRes, MOD);
+                        }
+                        return;
+                    }
+
+                    // ⚠️ v2.61.3: Cerrar cualquier offcanvas abierto
+                    const offcanvasProducto = d.getElementById('offcanvas-inventario');
+                    if (offcanvasProducto && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                        const instance = bootstrap.Offcanvas.getInstance(offcanvasProducto);
+                        if (instance) {
+                            instance.hide();
+                        }
+                    }
+
+                    if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
+                        w.SintelFeedback.success('Producto eliminado correctamente. Stock y kardex eliminados.');
+                    }
+
+                    // Recargar tabla
+                    if (table) {
+                        table.replaceData();
+                    }
+                } catch (error) {
+                    console.error(`${MOD} Error al eliminar producto:`, error);
+                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                        w.SintelFeedback.error('Error al eliminar el producto');
+                    }
+                } finally {
+                    // Restaurar estado del botón y flag
+                    btn.disabled = false;
+                    btn.innerHTML = originalHTML;
+                    _eliminandoProducto = false;
+                }
+                return;
             }
         });
 
-        // Event Delegation: Clic en fila para editar
+        // ⚠️ Event Delegation: Clic en fila para editar (solo si no se está eliminando)
         if (table) {
             table.on('rowClick', async function(e, row) {
+                // ⚠️ v2.61.3: Prevenir rowClick si se está eliminando un producto
+                if (_eliminandoProducto) {
+                    console.log(`${MOD} rowClick ignorado: eliminación en proceso`);
+                    return;
+                }
+
+                // Evitar abrir si se hizo click en un botón
+                const target = e.target || e.originalEvent?.target;
+                if (target && target.closest && target.closest('button')) {
+                    return;
+                }
+
                 const data = row.getData();
                 if (!data || !data.id) return;
 
-                await htmx.ajax('GET', `/api/v1/inventario/productos/gestor-offcanvas/?id=${data.id}`, {
-                    target: '#offcanvas-container-inventario',
-                    swap: 'innerHTML'
-                });
+                try {
+                    // ⚠️ v2.61.3: Usar Core API Facade para gestor-offcanvas
+                    await htmx.ajax('GET', `/api/v1/core/v1/inventario/productos/gestor-offcanvas/?id=${data.id}`, {
+                        target: '#offcanvas-container-inventario',
+                        swap: 'innerHTML'
+                    });
 
-                const offcanvasEl = d.getElementById('offcanvas-inventario');
-                if (offcanvasEl) {
-                    const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                    offcanvas.show();
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    const offcanvasEl = d.getElementById('offcanvas-inventario');
+                    if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                        offcanvasInstance.show();
+                    }
+                } catch (error) {
+                    console.error(`${MOD} Error al cargar Offcanvas desde rowClick:`, error);
                 }
             });
+        }
+    }
+
+    /**
+     * Recargar tabla de productos
+     * ⚠️ v2.61.3: Función expuesta para recargar la tabla después de crear/actualizar/eliminar
+     */
+    function recargar() {
+        if (table && typeof table.replaceData === 'function') {
+            console.log(`${MOD} Recargando tabla de productos...`);
+            table.replaceData();
+        } else if (window.SintelInventarioTables.main && typeof window.SintelInventarioTables.main.replaceData === 'function') {
+            console.log(`${MOD} Recargando tabla de productos (vía singleton)...`);
+            window.SintelInventarioTables.main.replaceData();
+        } else {
+            console.warn(`${MOD} No se puede recargar: tabla no inicializada`);
+            // Intentar inicializar si no está inicializada
+            init();
         }
     }
 
@@ -349,10 +506,17 @@
      * Escuchar evento de actualización para refrescar tabla
      */
     d.addEventListener('inventarioActualizado', function() {
-        if (window.SintelInventarioTables.main) {
-            window.SintelInventarioTables.main.replaceData();
-        }
+        recargar();
     });
+
+    // ⚠️ v2.61.3: Exponer módulo ProductosList para compatibilidad con productos_editor.js
+    if (!w.ProductosList) {
+        w.ProductosList = {
+            init: init,
+            recargar: recargar,
+            getTable: () => table || window.SintelInventarioTables.main
+        };
+    }
 
     /**
      * ⚠️ v2.60: Inicialización con lazy loading usando DOMUtils.onVisibleOnce
@@ -428,12 +592,33 @@
 
     // ⚠️ Bootstrap Tabs: Inicializar cuando se muestra el tab de productos
     d.addEventListener('shown.bs.tab', function(e) {
-        if (e.target && (e.target.getAttribute('data-bs-target') === '#pane-existencias' || e.target.id === 'tab-existencias')) {
+        const target = e.target.getAttribute('data-bs-target');
+        const targetId = e.target.id;
+        
+        // Verificar si es el tab de productos (existencias)
+        if (target === '#pane-existencias' || targetId === 'tab-existencias' || 
+            (e.target.classList.contains('nav-link') && targetId && targetId.includes('existencias'))) {
             console.log(`${MOD} Tab de productos mostrado, verificando inicialización...`);
+            
+            // Verificar si la tabla existe y está inicializada
+            const gridEl = d.querySelector('#grid-inventario');
+            if (!gridEl) {
+                console.warn(`${MOD} Contenedor #grid-inventario no encontrado`);
+                return;
+            }
+            
+            // Si la tabla no está inicializada, inicializarla
             if (!table || !window.SintelInventarioTables.main) {
+                console.log(`${MOD} Tabla no inicializada, inicializando...`);
                 setTimeout(function() {
                     init();
                 }, 100);
+            } else {
+                // Si ya está inicializada, solo recargar datos
+                console.log(`${MOD} Tabla ya inicializada, recargando datos...`);
+                setTimeout(function() {
+                    recargar();
+                }, 50);
             }
         }
     });

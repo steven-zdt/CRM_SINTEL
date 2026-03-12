@@ -1,27 +1,26 @@
 {% load static %}
-{# asiento_offcanvas_form.html - Formulario Offcanvas para AsientoContable v2.60 #}
-{# ⚠️ Feature-Sliced Design: Template dedicado exclusivamente para AsientoContable #}
-{# ⚠️ HTMX: Cargado dinámicamente desde /api/v1/contabilidad/asientos-contables/render-offcanvas/crear/ o /editar/ #}
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-asiento-{% if asiento %}editar{% else %}crear{% endif %}" 
-     aria-labelledby="offcanvas-asiento-{% if asiento %}editar{% else %}crear{% endif %}-label" 
+{# asiento_offcanvas_form.html - Formulario Offcanvas para CREAR AsientoContable v2.61 #}
+{# ⚠️ Feature-Sliced Design: Template dedicado EXCLUSIVAMENTE para CREAR AsientoContable #}
+{# ⚠️ HTMX: Cargado dinámicamente desde /api/v1/contabilidad/asientos-contables/render-offcanvas/crear/ #}
+{# ⚠️ Separación de responsabilidades: NO mezcla lógica de crear/editar (editar está en asiento_offcanvas_editar.html) #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-asiento-crear" 
+     aria-labelledby="offcanvas-asiento-crear-label" 
      style="width: 90%; max-width: 800px;">
   <div class="offcanvas-header border-bottom bg-primary text-white">
-    <h5 class="offcanvas-title" id="offcanvas-asiento-{% if asiento %}editar{% else %}crear{% endif %}-label">
-      <i class="bi bi-{% if asiento %}pencil-square{% else %}journal-plus{% endif %} me-2"></i>
-      {% if asiento %}Editar{% else %}Crear{% endif %} Asiento Contable
+    <h5 class="offcanvas-title" id="offcanvas-asiento-crear-label">
+      <i class="bi bi-journal-plus me-2"></i>Crear Asiento Contable
     </h5>
     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
   
   <div class="offcanvas-body">
     {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
-    <div id="feedback-asiento-{% if asiento %}edit{% else %}create{% endif %}" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <div id="feedback-asiento-create" class="alert alert-danger d-none mb-3" role="alert"></div>
     
     {# ⚠️ v2.60: Componente modular de manejo de errores HTMX #}
     {% include 'tenant/core/partials/error_handler.html' %}
     
-    <form id="form-asiento-{% if asiento %}editar{% else %}crear{% endif %}" novalidate>
-      {% if asiento %}<input type="hidden" id="input-id" name="id" value="{{ asiento.id }}">{% endif %}
+    <form id="form-asiento-crear" novalidate>
       
       <div class="row g-3">
         <div class="col-12"><h6 class="text-primary border-bottom pb-2 small fw-bold">DATOS DEL ASIENTO</h6></div>
@@ -30,29 +29,54 @@
           <label class="form-label small fw-bold">Número</label>
           <input type="text" class="form-control" id="input-numero" name="numero" 
                  placeholder="Opcional (se genera automáticamente)"
-                 value="{% if asiento %}{{ asiento.numero|default:'' }}{% endif %}">
+                 value="">
           <small class="text-muted">Si se deja vacío, se generará automáticamente</small>
         </div>
         
         <div class="col-md-4">
           <label class="form-label small fw-bold">Fecha *</label>
           <input type="date" class="form-control" id="input-fecha" name="fecha" required
-                 value="{% if asiento and asiento.fecha %}{{ asiento.fecha|date:'Y-m-d' }}{% endif %}">
+                 value="">
         </div>
         
         <div class="col-md-4">
           <label class="form-label small fw-bold">Estado</label>
           <select class="form-select" id="select-estado" name="estado">
-            <option value="BORRADOR" {% if not asiento or asiento.estado == 'BORRADOR' %}selected{% endif %}>Borrador</option>
-            <option value="APROBADO" {% if asiento and asiento.estado == 'APROBADO' %}selected{% endif %}>Aprobado</option>
-            <option value="CERRADO" {% if asiento and asiento.estado == 'CERRADO' %}selected{% endif %}>Cerrado</option>
+            <option value="BORRADOR" selected>Borrador</option>
+            <option value="APROBADO">Aprobado</option>
+            <option value="CERRADO">Cerrado</option>
           </select>
         </div>
         
         <div class="col-12">
           <label class="form-label small fw-bold">Descripción *</label>
           <textarea class="form-control" id="input-descripcion" name="descripcion" rows="2" required 
-                    placeholder="Descripción del asiento contable">{% if asiento %}{{ asiento.descripcion|default:'' }}{% endif %}</textarea>
+                    placeholder="Descripción del asiento contable"></textarea>
+        </div>
+
+        {# ⚠️ NORMATIVA: Campos de comprobante para trazabilidad #}
+        <div class="col-12 mt-3"><h6 class="text-primary border-bottom pb-2 small fw-bold">COMPROBANTE (TRAZABILIDAD)</h6></div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Tipo de Comprobante</label>
+          <select class="form-select" id="select-tipo-comprobante" name="tipo_comprobante">
+            <option value="">Seleccione tipo...</option>
+            <option value="FVE">FVE - Factura de Venta Electrónica</option>
+            <option value="CE">CE - Comprobante de Egreso</option>
+            <option value="RC">RC - Recibo de Caja</option>
+            <option value="GN">GN - General</option>
+            <option value="ND">ND - Nota Débito</option>
+            <option value="NC">NC - Nota Crédito</option>
+          </select>
+          <small class="text-muted">Opcional: Tipo de documento relacionado</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Número de Comprobante</label>
+          <input type="text" class="form-control" id="input-numero-comprobante" name="numero_comprobante" 
+                 placeholder="Ej: FVE-001-00012345"
+                 value="">
+          <small class="text-muted">Opcional: Número del documento relacionado</small>
         </div>
 
         <div class="col-12 mt-4"><h6 class="text-primary border-bottom pb-2 small fw-bold">MOVIMIENTOS CONTABLES</h6></div>
@@ -66,8 +90,11 @@
                   <th width="30">#</th>
                   <th>Cuenta Contable *</th>
                   <th>Descripción</th>
-                  <th class="text-end" width="150">Débito</th>
-                  <th class="text-end" width="150">Crédito</th>
+                  <th class="text-end" width="120">Débito</th>
+                  <th class="text-end" width="120">Crédito</th>
+                  {# ⚠️ NORMATIVA: Columnas de terceros (opcionales, se pueden poblar automáticamente) #}
+                  <th width="120" class="d-none">NIT/CC</th>
+                  <th width="150" class="d-none">Razón Social</th>
                   <th width="50"></th>
                 </tr>
               </thead>
@@ -79,7 +106,7 @@
                   <td colspan="3" class="text-end fw-bold">TOTALES:</td>
                   <td class="text-end fw-bold" id="total-debe-display">$0.00</td>
                   <td class="text-end fw-bold" id="total-haber-display">$0.00</td>
-                  <td></td>
+                  <td colspan="3"></td>
                 </tr>
                 <tr id="row-cuadratura">
                   <td colspan="3" class="text-end fw-bold">
@@ -87,7 +114,7 @@
                       <i class="bi bi-x-circle text-danger me-1"></i>No cuadra
                     </span>
                   </td>
-                  <td colspan="3" class="text-muted small" id="cuadratura-diferencia">
+                  <td colspan="4" class="text-muted small" id="cuadratura-diferencia">
                     Diferencia: $0.00
                   </td>
                 </tr>
@@ -138,7 +165,7 @@
   <div class="offcanvas-footer border-top p-3 bg-light">
     <div class="d-flex gap-2 justify-content-end">
       <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
-      <button type="button" class="btn btn-primary" id="btn-guardar-asiento-{% if asiento %}editar{% else %}crear{% endif %}" disabled>
+      <button type="button" class="btn btn-primary" id="btn-guardar-asiento-crear" disabled>
         <i class="bi bi-save me-2"></i>Guardar Asiento
       </button>
     </div>
@@ -146,6 +173,7 @@
 </div>
 
 {# Template para fila de movimiento (clonado por JavaScript) #}
+{# ⚠️ NORMATIVA: Incluye campos de terceros (opcionales, se pueden poblar automáticamente desde el backend) #}
 <template id="template-movimiento-row">
   <tr data-movimiento-index="">
     <td class="text-center">
@@ -172,6 +200,15 @@
         <input type="number" step="0.01" min="0" class="form-control text-end input-haber" name="movimientos[][haber]" value="0.00" data-movimiento-field="haber">
       </div>
     </td>
+    {# ⚠️ NORMATIVA: Campos de terceros (ocultos por defecto, se pueden mostrar si se requiere entrada manual) #}
+    <td class="d-none">
+      <input type="text" class="form-control form-control-sm" name="movimientos[][tercero_nit]" placeholder="NIT/CC (opcional)" maxlength="32">
+      <small class="text-muted d-block">Se pobla automáticamente</small>
+    </td>
+    <td class="d-none">
+      <input type="text" class="form-control form-control-sm" name="movimientos[][tercero_razon_social]" placeholder="Razón Social (opcional)" maxlength="200">
+      <small class="text-muted d-block">Se pobla automáticamente</small>
+    </td>
     <td class="text-center">
       <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-movimiento" title="Eliminar movimiento">
         <i class="bi bi-trash"></i>
@@ -180,17 +217,4 @@
   </tr>
 </template>
 
-<script>
-(function() {
-  const offcanvasId = 'offcanvas-asiento-{% if asiento %}editar{% else %}crear{% endif %}';
-  const offcanvasEl = document.getElementById(offcanvasId);
-  
-  if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
-    const offcanvasInstance = window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-    offcanvasInstance.show();
-    console.log('[Contabilidad] Offcanvas asiento activado:', offcanvasId);
-  } else {
-    console.error('[Contabilidad] No se pudo activar offcanvas asiento:', offcanvasId);
-  }
-})();
-</script>
+{# ⚠️ v2.61: La lógica de inicialización se maneja en asientos_form.js #}

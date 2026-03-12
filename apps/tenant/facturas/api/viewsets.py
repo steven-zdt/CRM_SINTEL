@@ -26,6 +26,7 @@ from django.db import connection
 from lxml import etree
 from decimal import Decimal
 import logging
+import base64
 from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly
@@ -78,6 +79,7 @@ from apps.tenant.facturas.services import (
     qs_detail,  # ⚠️ v2.37: QuerySet optimizado para detalle
     get_facturacion_summary,  # ⚠️ v2.40: Resumen de facturación neta
 )
+from apps.tenant.facturas.ubl_parser import fast_get_cufe  # ⚠️ v2.61.2: Pre-validación de idempotencia (Vía Rápida)
 # ⚠️ DEPRECATED v2.40: DataTableSpec y DataTableServer eliminados - usar StandardResultsSetPagination
 from django.http import HttpResponse
 from django.conf import settings
@@ -194,10 +196,29 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         return qs.order_by("-fecha_emision", "-id")
     
     def get_serializer_class(self):
-        """Selecciona el serializer según la acción."""
+        """
+        Selecciona el serializer según la acción.
+        
+        ⚠️ v2.61.2: Acciones @action que no usan serializer retornan None.
+        """
+        # ⚠️ v2.61.2: Acciones que no usan serializer (trabajan directamente con request.data)
+        if self.action in ['create-from-dto', 'materialize', 'importar-ubl', 'upload-ubl', 'upload-document', 
+                           'summary', 'xml', 'app-response', 'update-inbox-state', 'gestor-offcanvas']:
+            return None
+        
         if self.action == "list":
             return FacturaListSerializer
         return FacturaDetailSerializer
+    
+    def get_serializer(self, *args, **kwargs):
+        """
+        ⚠️ v2.61.2: Si get_serializer_class retorna None, no crear serializer.
+        Esto evita errores cuando las acciones @action no usan serializer.
+        """
+        serializer_class = self.get_serializer_class()
+        if serializer_class is None:
+            return None
+        return super().get_serializer(*args, **kwargs)
     
     def update(self, request: Request, *args, **kwargs) -> Response:
         """
@@ -431,31 +452,50 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         Use POST /api/v1/core/documentos/upload/ en su lugar.
         Este endpoint será removido en v2.40.
         
-        Sube un archivo XML UBL 2.1 y lo importa (async o sync).
+        ⚠️ v2.61.2: OPTIMIZADO - Pre-validación de idempotencia y batch processing.
+        
+        Sube uno o múltiples archivos XML UBL 2.1 y los importa (async o sync).
         Delega al endpoint universal de documentos.
         
         Body (multipart/form-data):
-        - file: <archivo.xml>
+        - file: <archivo.xml> (archivo único)
+        - files[]: <archivo1.xml>, <archivo2.xml>, ... (múltiples archivos - batch processing)
+        - files: <archivo1.xml>, <archivo2.xml>, ... (alternativa a files[])
         
         Query params:
         - async=true (default): Encola tarea Celery y retorna 202 + task_id
         - async=false: Parsea y materializa en la misma request (201/200)
         - preview=true: Solo retorna DTO sin persistir
         
+        ⚠️ v2.61.2: DELEGACIÓN A CELERY - Si hay más de 10 archivos, el procesamiento se delega
+        automáticamente a Celery para no bloquear la conexión del usuario, independientemente del
+        parámetro async. Use GET /api/v1/facturas/ingest/{task_id}/status/ para consultar el estado.
+        
         Returns:
-            - async=true: 202 Accepted con {"task_id": str, "status": "queued"}
-            - async=false: 201/200 con datos de factura materializada
+            - async=true (single file): 202 Accepted con {"task_id": str, "status": "queued"}
+            - async=false (single file): 201/200 con datos de factura materializada
+            - async=false (batch <= 10 archivos): 200 OK con {"creados": X, "duplicados": Y, "errores": Z, "resultados": [...]}
+            - batch > 10 archivos: 202 Accepted con {"task_id": str, "status": "queued", "total_files": N, "message": "..."}
             - 400 Bad Request si falta archivo XML
             - 409 Conflict si es duplicado
             - 415 Unsupported Media Type si el tipo no es soportado
             - 422 Unprocessable Entity si hay error de validación
+            
+        ⚠️ CONSULTA DE ESTADO: Para batch > 10 archivos, use GET /api/v1/facturas/ingest/{task_id}/status/
         """
         # ⚠️ NORMALIZACIÓN: Obtener contexto para logging
         schema = getattr(connection, "schema_name", "-")
         rid = request.META.get("REQUEST_ID", "-")
         
-        xml_file = request.FILES.get('file')
-        if not xml_file:
+        # ⚠️ v2.61.2: BATCH PROCESSING - Soportar files[] o files (múltiples archivos)
+        xml_files = request.FILES.getlist('files[]') or request.FILES.getlist('files') or []
+        single_file = request.FILES.get('file')
+        
+        # Si hay files[] o files, usar batch processing; si no, usar file único
+        if xml_files:
+            return self._upload_ubl_batch(request, xml_files, rid, schema)
+        
+        if not single_file:
             log_up.warning(
                 "upload_ubl missing file",
                 extra={"request_id": rid, "schema_name": schema}
@@ -466,7 +506,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         preview_mode = request.query_params.get('preview', 'false').lower() == 'true'
         
         try:
-            xml_bytes = xml_file.read()
+            xml_bytes = single_file.read()
             size = len(xml_bytes or b"")
         except Exception as e:
             log_up.warning(
@@ -475,13 +515,46 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             )
             return Response({"error": "read_error", "message": "Error al leer el archivo XML."}, status=400)
         
+        # ⚠️ v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida")
+        # Extraer CUFE con regex antes del parsing completo - ejecuta en los primeros milisegundos
+        if not preview_mode and not use_async:
+            cufe_rapido = fast_get_cufe(xml_bytes)
+            
+            if cufe_rapido:
+                # Verificar si la factura ya existe por CUFE
+                from apps.tenant.facturas.models import Factura
+                factura_existente = Factura.objects.filter(cufe=cufe_rapido).first()
+                
+                if factura_existente:
+                    # ⚠️ v2.61.2: Retornar 200 OK inmediatamente sin parsing completo
+                    # Esto evita desperdiciar CPU en archivos que ya existen en la base de datos
+                    log_up.info(
+                        "upload_ubl duplicate detected (fast pre-validation)",
+                        extra={
+                            "request_id": rid,
+                            "schema_name": schema,
+                            "cufe": cufe_rapido,
+                            "factura_id": factura_existente.id,
+                            "numero": factura_existente.numero,
+                            "skipped_parsing": True
+                        }
+                    )
+                    return Response({
+                        "id": factura_existente.id,
+                        "numero": factura_existente.numero,
+                        "naturaleza": factura_existente.naturaleza,
+                        "cufe": factura_existente.cufe,
+                        "created": False,
+                        "message": "Factura ya existe (idempotente - pre-validación rápida)"
+                    }, status=200)
+        
         # TODO: Deprecar este endpoint - delegar al endpoint universal
         # Usar el servicio universal directamente
         try:
             # Usar importar_documento que internamente usa el pipeline universal
             payload, code = importar_documento(
                 file_bytes=xml_bytes,
-                filename=xml_file.name,
+                filename=single_file.name,
                 preview=preview_mode,
                 async_mode=use_async
             )
@@ -522,6 +595,230 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                 }
             )
             return Response({"error": "internal", "message": str(e)}, status=500)
+    
+    def _upload_ubl_batch(self, request: Request, xml_files: list, rid: str, schema: str) -> Response:
+        """
+        ⚠️ v2.61.2: BATCH PROCESSING - Procesa múltiples archivos XML y retorna resumen.
+        
+        ⚠️ DELEGACIÓN A CELERY: Si hay más de 10 archivos, delega el procesamiento a Celery
+        usando batch_upload_facturas_task para no bloquear la conexión del usuario.
+        
+        Args:
+            request: Request object
+            xml_files: Lista de archivos XML a procesar
+            rid: Request ID para logging
+            schema: Schema name para logging
+            
+        Returns:
+            - Si <= 10 archivos: Response con resumen sincrónico
+            - Si > 10 archivos: 202 Accepted con task_id para consultar estado
+        """
+        from apps.tenant.facturas.models import Factura
+        import base64
+        
+        preview_mode = request.query_params.get('preview', 'false').lower() == 'true'
+        use_async = request.query_params.get('async', 'true').lower() != 'false'
+        
+        if preview_mode:
+            # Batch preview no soportado
+            return Response({
+                "error": "preview_batch_not_supported",
+                "message": "Batch processing no soporta modo preview. Use preview=false."
+            }, status=400)
+        
+        # ⚠️ v2.61.2: DELEGACIÓN A CELERY - Si hay más de 10 archivos, usar Celery
+        BATCH_SIZE_THRESHOLD = 10
+        if len(xml_files) > BATCH_SIZE_THRESHOLD:
+            # Delegar a Celery para no bloquear la conexión del usuario
+            try:
+                # ⚠️ IMPORT LAZY: Importar tarea Celery solo cuando se necesita
+                from apps.services.document_ingest.tasks import batch_upload_facturas_task
+                
+                # Preparar datos de archivos (codificar en base64 para serialización)
+                files_data = []
+                for xml_file in xml_files:
+                    try:
+                        xml_bytes = xml_file.read()
+                        content_b64 = base64.b64encode(xml_bytes).decode('utf-8')
+                        files_data.append({
+                            "filename": xml_file.name,
+                            "content_b64": content_b64
+                        })
+                    except Exception as e:
+                        log_up.warning(
+                            "upload_ubl_batch error reading file for async",
+                            extra={
+                                "request_id": rid,
+                                "schema_name": schema,
+                                "filename": xml_file.name,
+                                "error": str(e)
+                            }
+                        )
+                        # Continuar con otros archivos
+                        continue
+                
+                if not files_data:
+                    return Response({
+                        "error": "no_valid_files",
+                        "message": "No se pudieron leer los archivos para procesamiento asíncrono."
+                    }, status=400)
+                
+                # Obtener esquema del tenant actual
+                tenant_schema = getattr(connection, "schema_name", schema)
+                
+                # Obtener usuario que inició la carga
+                started_by_id = request.user.id if request.user and request.user.is_authenticated else None
+                
+                # Encolar tarea Celery
+                async_res = batch_upload_facturas_task.apply_async(
+                    kwargs={
+                        "schema_name": tenant_schema,
+                        "files_data": files_data,
+                        "started_by_id": started_by_id
+                    },
+                    queue="high_priority"  # Cola de alta prioridad
+                )
+                
+                log_up.info(
+                    "upload_ubl_batch enqueued to Celery",
+                    extra={
+                        "request_id": rid,
+                        "schema_name": schema,
+                        "task_id": async_res.id,
+                        "total_files": len(files_data)
+                    }
+                )
+                
+                return Response({
+                    "task_id": async_res.id,
+                    "status": "queued",
+                    "total_files": len(files_data),
+                    "message": f"Procesamiento de {len(files_data)} archivos encolado. Use GET /api/v1/facturas/ingest/{async_res.id}/status/ para consultar el estado."
+                }, status=202)
+                
+            except Exception as e:
+                log_up.exception(
+                    "upload_ubl_batch error enqueuing to Celery",
+                    extra={
+                        "request_id": rid,
+                        "schema_name": schema,
+                        "total_files": len(xml_files)
+                    }
+                )
+                return Response({
+                    "error": "async_enqueue_error",
+                    "message": f"Error al encolar procesamiento asíncrono: {str(e)}"
+                }, status=500)
+        
+        # ⚠️ PROCESAMIENTO SÍNCRONO - Para <= 10 archivos
+        if use_async:
+            # Para batch pequeño, no usar async (procesar directamente)
+            log_up.info(
+                "upload_ubl_batch processing synchronously (small batch)",
+                extra={
+                    "request_id": rid,
+                    "schema_name": schema,
+                    "total_files": len(xml_files)
+                }
+            )
+        
+        resultados = []
+        creados = 0
+        duplicados = 0
+        errores = 0
+        
+        for xml_file in xml_files:
+            try:
+                xml_bytes = xml_file.read()
+                size = len(xml_bytes or b"")
+                
+                # ⚠️ v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida") - Extraer CUFE con regex
+                cufe_rapido = fast_get_cufe(xml_bytes)
+                
+                if cufe_rapido:
+                    factura_existente = Factura.objects.filter(cufe=cufe_rapido).first()
+                    if factura_existente:
+                        # Duplicado detectado sin parsing completo
+                        resultados.append({
+                            "filename": xml_file.name,
+                            "status": "duplicate",
+                            "factura_id": factura_existente.id,
+                            "numero": factura_existente.numero,
+                            "cufe": cufe_rapido
+                        })
+                        duplicados += 1
+                        continue
+                
+                # Procesar archivo normalmente
+                payload, code = importar_documento(
+                    file_bytes=xml_bytes,
+                    filename=xml_file.name,
+                    preview=False,
+                    async_mode=False
+                )
+                
+                if code == 201:
+                    creados += 1
+                    resultados.append({
+                        "filename": xml_file.name,
+                        "status": "created",
+                        "factura_id": payload.get("id"),
+                        "numero": payload.get("numero")
+                    })
+                elif code == 200:
+                    duplicados += 1
+                    resultados.append({
+                        "filename": xml_file.name,
+                        "status": "duplicate",
+                        "factura_id": payload.get("id"),
+                        "numero": payload.get("numero")
+                    })
+                else:
+                    errores += 1
+                    resultados.append({
+                        "filename": xml_file.name,
+                        "status": "error",
+                        "error": payload.get("error", "unknown"),
+                        "message": payload.get("message", "Error desconocido")
+                    })
+                    
+            except Exception as e:
+                errores += 1
+                resultados.append({
+                    "filename": xml_file.name,
+                    "status": "error",
+                    "error": "exception",
+                    "message": str(e)
+                })
+                log_up.warning(
+                    "upload_ubl_batch error processing file",
+                    extra={
+                        "request_id": rid,
+                        "schema_name": schema,
+                        "filename": xml_file.name,
+                        "error": str(e)
+                    }
+                )
+        
+        log_up.info(
+            "upload_ubl_batch completed",
+            extra={
+                "request_id": rid,
+                "schema_name": schema,
+                "total": len(xml_files),
+                "creados": creados,
+                "duplicados": duplicados,
+                "errores": errores
+            }
+        )
+        
+        return Response({
+            "creados": creados,
+            "duplicados": duplicados,
+            "errores": errores,
+            "total": len(xml_files),
+            "resultados": resultados
+        }, status=200)
     
     @action(detail=False, methods=["post"], url_path="upload-document", parser_classes=[MultiPartParser, FormParser])
     def upload_document(self, request: Request) -> Response:
@@ -659,7 +956,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         payload, code = get_task_status(task_id, request=request)
         return Response(payload, status=code)
     
-    @action(detail=False, methods=["post"], url_path="create-from-dto")
+    @action(detail=False, methods=["post"], url_path="create-from-dto", parser_classes=[JSONParser])
     def create_from_dto(self, request: Request) -> Response:
         """
         ⚠️ REFACTOR: Crea una factura o nota crédito desde DTO parseado por document_ingest.
@@ -700,6 +997,19 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         
         logger = logging.getLogger(__name__)
         
+        # ⚠️ v2.61.2: Logging para debugging
+        schema = getattr(connection, "schema_name", "-")
+        rid = request.META.get("REQUEST_ID", "-")
+        log_up.debug(
+            "create_from_dto called",
+            extra=safe_extra({
+                "request_id": rid,
+                "schema_name": schema,
+                "has_dto": "dto" in request.data,
+                "action": self.action,
+            })
+        )
+        
         dto = request.data.get("dto")
         persist_anexos = bool(request.data.get("persist_anexos", True))
         
@@ -715,6 +1025,13 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                 logger.warning(f"Error decodificando file_content_bytes en create_from_dto: {e}")
         
         if not dto:
+            log_up.warning(
+                "create_from_dto missing dto",
+                extra=safe_extra({
+                    "request_id": rid,
+                    "schema_name": schema,
+                })
+            )
             return Response({"error": "missing_dto", "message": "Falta 'dto' en el cuerpo."}, status=400)
         
         # ⚠️ v2.60: Pasar file_bytes y file_type a materializar_factura_desde_result
@@ -941,24 +1258,49 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                     return Response(context, template_name=template_name)
                 
                 # ⚠️ ZERO WASTE: Solo cargar campos necesarios para el visualizador
+                # ⚠️ v2.61.2: Si es modo readonly, cargar también items para el template de solo lectura
+                readonly_mode = request.query_params.get('readonly', 'false').lower() == 'true'
                 if use_simple_template:
-                    # Template simple: solo campos básicos para detalle/subida
-                    factura = Factura.objects.select_related('anexos').filter(
-                        empresa=empresa,
-                        id=factura_id
-                    ).only(
-                        'id',
-                        'numero',
-                        'receptor_razon_social',
-                        'receptor_nit',
-                        'total',
-                        'moneda',
-                        'estado',
-                        'fecha_emision',
-                        'cufe',
-                        'anexos__pdf_file',
-                        'anexos__ubl_xml'
-                    ).first()
+                    if readonly_mode:
+                        # Template de solo lectura: cargar campos básicos + items
+                        factura = Factura.objects.select_related('anexos').prefetch_related('items').filter(
+                            empresa=empresa,
+                            id=factura_id
+                        ).only(
+                            'id',
+                            'numero',
+                            'emisor_razon_social',
+                            'emisor_nit',
+                            'receptor_razon_social',
+                            'receptor_nit',
+                            'subtotal',
+                            'impuestos',
+                            'total',
+                            'moneda',
+                            'estado',
+                            'fecha_emision',
+                            'cufe',
+                            'anexos__pdf_file',
+                            'anexos__ubl_xml'
+                        ).first()
+                    else:
+                        # Template simple: solo campos básicos para detalle/subida
+                        factura = Factura.objects.select_related('anexos').filter(
+                            empresa=empresa,
+                            id=factura_id
+                        ).only(
+                            'id',
+                            'numero',
+                            'receptor_razon_social',
+                            'receptor_nit',
+                            'total',
+                            'moneda',
+                            'estado',
+                            'fecha_emision',
+                            'cufe',
+                            'anexos__pdf_file',
+                            'anexos__ubl_xml'
+                        ).first()
                 else:
                     # Template completo: más campos para edición
                     factura = Factura.objects.select_related('anexos').prefetch_related('items').filter(
@@ -982,8 +1324,12 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                     Factura.Estado.ANULADA
                 ]
                 
-                # Si es modo simple y la factura está emitida, usar template simple
-                if use_simple_template and context['es_emitida']:
+                # ⚠️ v2.61.2: Si es modo simple y readonly, usar template de solo lectura
+                readonly_mode = request.query_params.get('readonly', 'false').lower() == 'true'
+                if use_simple_template and (context['es_emitida'] or readonly_mode):
+                    # Usar template de solo lectura si está en modo readonly o la factura está emitida
+                    if readonly_mode:
+                        return Response(context, template_name='tenant/core/partials/facturas/offcanvas_ver_factura.html')
                     return Response(context, template_name='tenant/core/partials/facturas/offcanvas_factura.html')
             except Exception as e:
                 log_up.warning(f"Error al obtener factura para Offcanvas: {e}", exc_info=True)

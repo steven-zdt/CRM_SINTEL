@@ -46,6 +46,19 @@
       return false;
     }
 
+    // ⚠️ v2.61: DEBUG - Log detallado de la respuesta para diagnóstico
+    console.log(`${context} [DEBUG] Procesando error:`, {
+      status: response.status,
+      statusText: response.statusText,
+      hasData: !!response.data,
+      dataType: typeof response.data,
+      dataKeys: response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'N/A',
+      dataDetail: response.data?.detail,
+      dataDetailType: typeof response.data?.detail,
+      isDetailArray: Array.isArray(response.data?.detail),
+      fullData: response.data
+    });
+
     // Extraer mensaje de error
     let errorMessage = 'Error desconocido';
     if (response.data) {
@@ -54,7 +67,9 @@
         if (typeof response.data.detail === 'string') {
           errorMessage = response.data.detail;
         } else if (Array.isArray(response.data.detail)) {
+          // ⚠️ v2.61: Si detail es un array, unir los mensajes
           errorMessage = response.data.detail.join(', ');
+          console.log(`${context} [DEBUG] Mensaje extraído de array detail:`, errorMessage);
         } else if (typeof response.data.detail === 'object') {
           // Si detail es un objeto (errores de validación por campo), aplanarlo
           const errorFields = Object.keys(response.data.detail);
@@ -85,8 +100,37 @@
       }
     }
 
+    // ⚠️ v2.61: DEBUG - Log del mensaje final extraído
+    console.log(`${context} [DEBUG] Mensaje de error final:`, errorMessage);
+
     // Decidir dónde mostrar el error
     const { modalSelector, errorContainerSelector } = options;
+    
+    // ⚠️ v2.61: Si hay un contenedor de error (con o sin modal), intentar mostrar ahí primero
+    if (errorContainerSelector) {
+      const errorContainer = d.querySelector(errorContainerSelector);
+      
+      if (errorContainer) {
+        try {
+          // Configurar el contenedor como alerta de error
+          errorContainer.className = 'alert alert-danger';
+          errorContainer.innerHTML = `<strong><i class="bi bi-exclamation-triangle me-2"></i>Error:</strong> ${errorMessage}`;
+          errorContainer.classList.remove('d-none');
+          errorContainer.style.display = 'block';
+          
+          // Scroll al contenedor de error si es necesario
+          errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          
+          console.log(`${context} ✅ Error mostrado en contenedor:`, errorMessage);
+          return true;
+        } catch (err) {
+          console.error(`${context} ❌ Error al mostrar error en contenedor:`, err);
+          // Fallback a notificación flotante
+        }
+      } else {
+        console.warn(`${context} ⚠️ Contenedor de error no encontrado:`, errorContainerSelector);
+      }
+    }
     
     // Si hay un modal abierto y un contenedor de error, mostrar ahí
     if (modalSelector && errorContainerSelector) {

@@ -1,13 +1,14 @@
 /**
  * Modal para agregar/guardar XML (texto o archivo).
  * 
- * ⚠️ v2.36 FASE 5: Actualizado para usar endpoint universal /api/v1/core/documentos/upload/
+ * ⚠️ v2.61.1: Actualizado para usar Core API facade de facturas
  */
 
 (function() {
   'use strict';
 
-  const UPLOAD_DOCUMENT_API = '/api/v1/core/documentos/upload/';  // ⚠️ v2.36: Endpoint universal
+  // ⚠️ v2.61.1: Usar upload-ubl en lugar de upload-document (no requiere feature flag)
+  const UPLOAD_DOCUMENT_API = '/api/v1/core/v1/facturas/facturas/upload-ubl/?async=false';  // Core API facade
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
   function getCookie(name) {

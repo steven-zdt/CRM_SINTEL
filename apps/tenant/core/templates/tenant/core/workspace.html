@@ -77,9 +77,15 @@
         {# {% include 'tenant/core/partials/proyectos/modals.html' %} #}
       </section>
       
-      {# Módulo Facturas v2.60 - HTML Centralizado en Core #}
+      {# Módulo Facturas v2.61.3 - HTML Centralizado en Core #}
+      {# ⚠️ v2.60: Toolbar y contenido centralizados en Core #}
+      {# ⚠️ v2.61.2: Facturas son solo lectura - botón "Ver" carga offcanvas_ver_factura.html #}
+      {# ⚠️ v2.61.2: upload-ubl batch (files[]) + pre-validación CUFE + Celery >10 archivos #}
+      {# ⚠️ v2.61.2: Eliminación redirige a #facturas, flag _eliminandoFactura evita rowClick #}
+      {# ⚠️ v2.61.3: persisted:True en backend + !data.id en frontend = sin 422 post-subida #}
+      {# Flujo URL: workspace.html → list.html → facturas_list.js → gestor-offcanvas?readonly=true #}
+      {#            → ver_detalle_factura.js (GET /api/v1/core/v1/facturas/facturas/{id}/) #}
       <section id="tab-facturas" class="workspace-tab" style="display: none;">
-        {# ⚠️ v2.60: Toolbar y contenido centralizados en Core #}
         {% include 'tenant/core/partials/facturas/list.html' %}
         {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
         {# El contenedor del offcanvas está en list.html: #offcanvas-container-facturas #}
@@ -147,7 +153,10 @@
         </div>
       </section>
       
-      {# Módulo Contabilidad v2.60 - Feature-Sliced Architecture #}
+      {# Módulo Contabilidad v2.61 - Feature-Sliced Architecture #}
+      {# ⚠️ v2.61: Migración completa a Tabulator (DataTables eliminado) #}
+      {# ⚠️ v2.61: Validación de cuadratura actualizada - BORRADOR permite guardar sin cuadrar #}
+      {# ⚠️ v2.61: Validación estricta solo para APROBADO/CERRADO #}
       <section id="tab-contabilidad" class="workspace-tab" style="display: none;">
         {# ⚠️ v2.60: Navegación por Pills (Sub-Tabs) para Cuentas y Asientos #}
         <ul class="nav nav-pills mb-3" id="contabilidad-subnav" role="tablist">
@@ -161,6 +170,12 @@
               <i class="bi bi-journal-text me-2"></i>Asientos Contables
             </button>
           </li>
+          {# ⚠️ v2.61: Tab de Periodos Contables #}
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="contabilidad-periodos-tab" data-bs-toggle="tab" data-bs-target="#subtab-periodos" type="button" role="tab" aria-controls="subtab-periodos" aria-selected="false">
+              <i class="bi bi-calendar-range me-2"></i>Periodos Contables
+            </button>
+          </li>
         </ul>
         
         {# Contenedor de Contenido (Tab Content) #}
@@ -171,6 +186,10 @@
           <div class="tab-pane fade" id="subtab-asientos" role="tabpanel" aria-labelledby="contabilidad-asientos-tab">
             {% include 'tenant/core/partials/contabilidad/list_asientos.html' %}
             {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+          </div>
+          {# ⚠️ v2.61: Tab de Periodos Contables #}
+          <div class="tab-pane fade" id="subtab-periodos" role="tabpanel" aria-labelledby="contabilidad-periodos-tab">
+            {% include 'tenant/core/partials/contabilidad/partials/list_periodos.html' %}
           </div>
         </div>
       </section>
@@ -200,9 +219,11 @@
 <div id="offcanvas-container-devengo"></div>
 <div id="offcanvas-container-historial-nominas"></div>
 
-{# Módulo Contabilidad - Contenedores Offcanvas globales #}
+{# Módulo Contabilidad - Contenedores Offcanvas globales v2.61 #}
+{# ⚠️ v2.61: Contenedores para HTMX - Carga dinámica de offcanvas #}
 <div id="offcanvas-container-cuentas"></div>
 <div id="offcanvas-container-asientos"></div>
+<div id="offcanvas-container-periodo"></div>
 
 {# ⚠️ v2.60: Módulo MailInboxConfig - Contenedor Offcanvas global para Configuraciones de Correo #}
 {# NOTA: También existe un contenedor local en mailinbox_list.html, pero este es el contenedor global #}
@@ -324,7 +345,11 @@
 
   {% include 'tenant/core/partials/gastos/assets_gastos.html' %}
   {% include 'tenant/core/partials/cotizaciones/assets_cotizaciones.html' %}
+  {# ⚠️ v2.61: Módulo Contabilidad - Tabulator (DataTables eliminado) #}
+  {# ⚠️ v2.61: Validación de cuadratura: BORRADOR permite guardar sin cuadrar, APROBADO/CERRADO requiere cuadratura estricta #}
   {% include 'tenant/core/contabilidad/partials/assets_cuentas.html' %}
+  {% include 'tenant/core/contabilidad/partials/assets_asientos.html' %}
+  {% include 'tenant/core/contabilidad/partials/assets_periodos.html' %}
   {% include 'tenant/core/partials/inventario/assets_inventario.html' %}
   {% include 'tenant/core/partials/clientes/assets_clientes.html' %}
   {% include 'tenant/core/partials/proveedores/assets_proveedores.html' %}

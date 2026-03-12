@@ -35,6 +35,12 @@
             return null;
         }
 
+        // ⚠️ v2.61: Asegurar que el contenedor tenga límites de ancho para evitar expansión infinita
+        if (!container.style.maxWidth && !container.style.width) {
+            container.style.maxWidth = "100%";
+            container.style.overflowX = "auto";
+        }
+
         // ⚠️ v2.60: Verificar Tabulator con retry si no está disponible inmediatamente
         if (!w.Tabulator) {
             // Intentar esperar un poco si el script del CDN aún se está cargando
@@ -48,7 +54,13 @@
         
         // Configuración base obligatoria
         const defaultConfig = {
-            layout: "fitColumns",
+            // ⚠️ v2.61: Cambiar de "fitColumns" a "fitDataFill" para evitar expansión horizontal infinita
+            // "fitDataFill" ajusta columnas al ancho disponible sin causar loops de redimensionamiento
+            layout: options.layout || "fitDataFill",
+            // ⚠️ v2.61: Deshabilitar responsiveLayout para evitar loops de expansión
+            responsiveLayout: false,
+            // ⚠️ v2.61: Deshabilitar redimensionamiento automático de columnas
+            resizeColumns: false,
             placeholder: "Sin registros encontrados",
             pagination: true,
             paginationMode: "remote", // Server-Side siempre
@@ -317,13 +329,42 @@
         // Las funciones ajaxResponse, ajaxRequest, ajaxURLGenerator son inmutables
         const finalConfig = Object.assign({}, defaultConfig);
         
+        // ⚠️ v2.61: Detectar si pagination está deshabilitada para ajustar ajaxResponse
+        const isPaginationDisabled = options.pagination === false;
+        
         // Solo permitir sobrescribir opciones no críticas
         Object.keys(options).forEach(key => {
             // ⚠️ PROHIBIDO sobrescribir funciones críticas de AJAX y ajaxURL
+            // ⚠️ v2.61: EXCEPCIÓN: Permitir sobrescribir ajaxResponse si pagination: false
             if (!['ajaxResponse', 'ajaxRequest', 'ajaxURLGenerator', 'ajaxURL', 'ajaxError', 'columns'].includes(key)) {
                 finalConfig[key] = options[key];
+            } else if (key === 'ajaxResponse' && isPaginationDisabled) {
+                // ⚠️ v2.61: Permitir sobrescribir ajaxResponse cuando pagination: false
+                // Esto permite que el módulo retorne arrays directos en lugar de {data, last_page}
+                finalConfig[key] = options[key];
+                console.log('[TabulatorFactory] ⚠️ ajaxResponse personalizado aplicado (pagination: false)');
             }
         });
+        
+        // ⚠️ v2.61: Si pagination está deshabilitada y no hay ajaxResponse personalizado,
+        // modificar el ajaxResponse por defecto para retornar arrays directos
+        if (isPaginationDisabled && !options.ajaxResponse) {
+            const originalAjaxResponse = finalConfig.ajaxResponse;
+            finalConfig.ajaxResponse = function(url, params, response) {
+                const result = originalAjaxResponse.call(this, url, params, response);
+                // Si el resultado es {data, last_page}, retornar solo el array
+                if (result && typeof result === 'object' && result.data && Array.isArray(result.data)) {
+                    console.log('[TabulatorFactory] ⚠️ Convertiendo {data, last_page} a array directo (pagination: false)');
+                    return result.data;
+                }
+                // Si ya es un array, retornarlo directamente
+                if (Array.isArray(result)) {
+                    return result;
+                }
+                // Fallback: retornar array vacío
+                return [];
+            };
+        }
         
         console.log('[TabulatorFactory] Configuración final:', {
             paginationMode: finalConfig.paginationMode,

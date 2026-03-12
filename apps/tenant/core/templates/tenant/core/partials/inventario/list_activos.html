@@ -1,3 +1,6 @@
+{# list_activos.html - Módulo Activos Fijos v2.61.3 #}
+{# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa activos_list.js y activos_editor.js #}
+{# ⚠️ v2.61.3: Usa Core API Facade (/api/v1/core/v1/inventario/activos/) #}
 <div class="ui-module h-100 d-flex flex-column">
     {# ⚠️ v2.40: Elemento de feedback para errores #}
     <div id="feedback-activos-list" class="alert d-none mb-2" role="alert"></div>
@@ -8,15 +11,17 @@
             <span class="badge bg-light text-dark border">Planta y Equipo</span>
         </div>
         <div class="btn-group shadow-sm">
-            {# ⚠️ v2.60: Botón HTMX para crear activo #}
+            {# ⚠️ v2.61.3: Botón HTMX para crear activo - Usa Core API Facade #}
+            {# ⚠️ Event delegation: Sin onclick inline, solo HTMX attributes #}
             <button type="button" class="btn btn-primary" id="btn-nuevo-activo" 
-                    hx-get="/api/v1/inventario/activos/gestor-offcanvas/" 
+                    hx-get="/api/v1/core/v1/inventario/activos/gestor-offcanvas/" 
                     hx-target="#offcanvas-container-activos" 
                     hx-swap="innerHTML"
                     hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-activos'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
                 <i class="bi bi-plus-lg me-1"></i> Nuevo Activo
             </button>
-            <button type="button" class="btn btn-outline-secondary" onclick="if(window.SintelInventarioTables?.activos){window.SintelInventarioTables.activos.replaceData();}">
+            <button type="button" class="btn btn-outline-secondary" 
+                    onclick="if(window.ActivosList && typeof window.ActivosList.recargar === 'function'){ window.ActivosList.recargar(); } else if(window.SintelInventarioTables?.activos){ window.SintelInventarioTables.activos.replaceData(); }">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
         </div>
@@ -28,5 +33,6 @@
     </div>
     
     {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+    {# ⚠️ v2.61.3: Inicializado por activos_list.js (Feature: Listado) #}
     <div id="grid-activos" class="flex-grow-1"></div>
 </div>

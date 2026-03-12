@@ -130,8 +130,9 @@
           {# ⚠️ PROPAGACIÓN AL WORKSPACE: Formulario HTMX para subida de archivos #}
           {# Este formulario dispara el flujo completo: parseo → validación → persistencia #}
           {# Si hay errores 422, error_injector.js los muestra en #error-container (error_handler.html) #}
+          {# ⚠️ v2.61.1: Actualizado para usar Core API facade de facturas (upload-ubl no requiere feature flag) #}
           <form id="form-upload-factura"
-                hx-post="/api/v1/core/documentos/upload/" 
+                hx-post="/api/v1/core/v1/facturas/facturas/upload-ubl/?preview=false&async=false" 
                 hx-encoding="multipart/form-data" 
                 hx-target="#upload-result"
                 hx-indicator="#upload-spinner"

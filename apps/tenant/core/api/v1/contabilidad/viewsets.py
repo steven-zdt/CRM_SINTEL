@@ -13,6 +13,7 @@ from apps.tenant.contabilidad.api.viewsets import (
     CuentaContableViewSet,
     AsientoContableViewSet,
     MovimientoContableViewSet,
+    PeriodoContableViewSet,  # ⚠️ v2.61
     CatalogoMaestroNIIFViewSet,
 )
 
@@ -58,3 +59,17 @@ class CatalogoMaestroNIIFCoreViewSet(CatalogoMaestroNIIFViewSet):
         if self.action == 'retrieve':
             return ws_serializers.CatalogoMaestroNIIFWorkspaceDetailSerializer
         return ws_serializers.CatalogoMaestroNIIFWorkspaceListSerializer
+
+
+class PeriodoContableCoreViewSet(PeriodoContableViewSet):
+    """
+    Facade para PeriodoContable (Periodos Contables).
+    
+    ⚠️ v2.61: Expone los periodos contables a través de Core API.
+    """
+    authentication_classes = [SessionAuthentication]
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return ws_serializers.PeriodoContableWorkspaceDetailSerializer
+        return ws_serializers.PeriodoContableWorkspaceListSerializer

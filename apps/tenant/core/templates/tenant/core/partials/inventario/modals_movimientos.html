@@ -1,3 +1,6 @@
+{# modals_movimientos.html - Modal del módulo Movimientos de Inventario v2.61.3 #}
+{# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa movimientos_editor.js (Feature: CREATE) #}
+{# ⚠️ v2.61.3: El formulario se maneja por JavaScript (movimientos_editor.js), no por HTMX POST directo #}
 <div class="modal fade" id="modal-movimiento" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
@@ -5,7 +8,12 @@
                 <h5 class="modal-title">Registrar Movimiento de Inventario</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form id="form-movimiento">
+            {# ⚠️ v2.61.3: Contenedor de errores para Error Boundary Pattern #}
+            <div id="feedback-movimiento" class="alert alert-danger d-none mb-3 mx-3" role="alert"></div>
+            
+            {# ⚠️ v2.61.3: Formulario manejado por movimientos_editor.js (Feature: CREATE) #}
+            {# ⚠️ No usar hx-post directo, el JavaScript maneja el submit #}
+            <form id="form-movimiento" onsubmit="return false;">
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-12">

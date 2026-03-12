@@ -9,12 +9,16 @@
 from rest_framework import serializers
 
 from apps.tenant.inventario.api.serializers import (
+    ActivoFijoDetailSerializer,
+    ActivoFijoListSerializer,
     CategoriaItemDetailSerializer,
     CategoriaItemListSerializer,
     MovimientoInventarioDetailSerializer,
     MovimientoInventarioListSerializer,
     ProductoDetailSerializer,
     ProductoListSerializer,
+    ServicioDetailSerializer,
+    ServicioListSerializer,
 )
 
 
@@ -60,3 +64,23 @@ class MovimientoInventarioWorkspaceListSerializer(MovimientoInventarioListSerial
 class MovimientoInventarioWorkspaceDetailSerializer(MovimientoInventarioDetailSerializer):
     class Meta(MovimientoInventarioDetailSerializer.Meta):
         pass
+
+
+class ServicioWorkspaceListSerializer(_ImagenUrlMixin, ServicioListSerializer):
+    class Meta(ServicioListSerializer.Meta):
+        fields = tuple(ServicioListSerializer.Meta.fields) + ("imagen_url",)
+
+
+class ServicioWorkspaceDetailSerializer(_ImagenUrlMixin, ServicioDetailSerializer):
+    class Meta(ServicioDetailSerializer.Meta):
+        fields = tuple(ServicioDetailSerializer.Meta.fields) + ("imagen_url",)
+
+
+class ActivoFijoWorkspaceListSerializer(_ImagenUrlMixin, ActivoFijoListSerializer):
+    class Meta(ActivoFijoListSerializer.Meta):
+        fields = tuple(ActivoFijoListSerializer.Meta.fields) + ("imagen_url",)
+
+
+class ActivoFijoWorkspaceDetailSerializer(_ImagenUrlMixin, ActivoFijoDetailSerializer):
+    class Meta(ActivoFijoDetailSerializer.Meta):
+        fields = tuple(ActivoFijoDetailSerializer.Meta.fields) + ("imagen_url",)

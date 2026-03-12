@@ -6,7 +6,7 @@ Service Layer para la app contabilidad.
 from typing import Optional, Dict, Any, Tuple
 from decimal import Decimal
 from django.db.models import Q
-from apps.tenant.contabilidad.models import CuentaContable, AsientoContable
+from apps.tenant.contabilidad.models import CuentaContable, AsientoContable, PeriodoContable
 
 # ⚠️ v2.37: LIST_FIELDS y DETAIL_FIELDS para alineación Serializers ↔ Services ↔ UI
 # ⚠️ v2.37: uuid incluido para lookup público
@@ -30,6 +30,7 @@ CUENTA_DETAIL_FIELDS = (
     "descripcion",
     "cuenta_padre",
     "activa",
+    "nivel",  # ⚠️ NORMATIVA: Campo agregado para validación de nivel 6
     "created_at",
 )
 
@@ -60,6 +61,32 @@ ASIENTO_DETAIL_FIELDS = (
     "updated_at",
 )
 
+# PeriodoContable ⚠️ v2.61
+PERIODO_LIST_FIELDS = (
+    "id",
+    "uuid",
+    "periodo",
+    "fecha_inicio",
+    "fecha_fin",
+    "estado",
+    "fecha_cierre",
+    "created_at",
+)
+
+PERIODO_DETAIL_FIELDS = (
+    "id",
+    "uuid",
+    "periodo",
+    "fecha_inicio",
+    "fecha_fin",
+    "estado",
+    "fecha_cierre",
+    "cerrado_por",
+    "observaciones",
+    "created_at",
+    "updated_at",
+)
+
 
 def qs_cuenta_list():
     """
@@ -76,9 +103,11 @@ def qs_cuenta_detail():
     QuerySet optimizado para detalle de cuenta (retrieve).
     
     ⚠️ v2.37: Usa CUENTA_DETAIL_FIELDS con only() y select_related.
+    ⚠️ v2.61: Incluye select_related para catalogo_referencia (necesario para serializer).
     ✅ Solo carga campos necesarios para el detalle
     """
-    return CuentaContable.objects.select_related("cuenta_padre").only(*CUENTA_DETAIL_FIELDS)
+    # ⚠️ Incluir catalogo_referencia en select_related para evitar N+1 queries
+    return CuentaContable.objects.select_related("cuenta_padre", "catalogo_referencia").only(*CUENTA_DETAIL_FIELDS, "catalogo_referencia")
 
 
 def qs_asiento_list():
@@ -202,6 +231,26 @@ def get_balance_prueba(empresa_id: Optional[int] = None, fecha_desde: Optional[s
             'diferencia': str(diferencia)
         }
     }
+
+
+def qs_periodo_list():
+    """
+    QuerySet optimizado para listado de periodos contables.
+    
+    ⚠️ v2.61: Usa PERIODO_LIST_FIELDS con only() y select_related.
+    ✅ Solo carga campos necesarios para la tabla
+    """
+    return PeriodoContable.objects.select_related("empresa", "cerrado_por").only(*PERIODO_LIST_FIELDS, "empresa", "cerrado_por")
+
+
+def qs_periodo_detail():
+    """
+    QuerySet optimizado para detalle de periodo contable.
+    
+    ⚠️ v2.61: Usa PERIODO_DETAIL_FIELDS con only() y select_related.
+    ✅ Solo carga campos necesarios para el detalle
+    """
+    return PeriodoContable.objects.select_related("empresa", "cerrado_por").only(*PERIODO_DETAIL_FIELDS, "empresa", "cerrado_por")
 
 
 def verificar_periodo_cerrado(fecha, empresa_id: Optional[int] = None) -> Tuple[bool, Optional[str]]:

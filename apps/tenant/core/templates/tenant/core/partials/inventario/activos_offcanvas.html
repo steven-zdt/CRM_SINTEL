@@ -1,5 +1,7 @@
-{# activos_offcanvas.html - Offcanvas del módulo Activos Fijos v2.60 #}
+{# activos_offcanvas.html - Offcanvas del módulo Activos Fijos v2.61.3 #}
 {# ⚠️ v2.60: HTMX + Offcanvas con Zero Trust #}
+{# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa activos_editor.js (Feature: CREATE/UPDATE) #}
+{# ⚠️ v2.61.3: El formulario se maneja por JavaScript (activos_editor.js), no por HTMX POST directo #}
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-activos" aria-labelledby="offcanvas-activos-label" style="width: 90%; max-width: 700px;">
   <div class="offcanvas-header border-bottom bg-light">
@@ -15,10 +17,9 @@
     {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
     <div id="form-activo-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     
-    <form id="form-activo" method="POST" onsubmit="return false;"
-          hx-post="/api/v1/inventario/activos/" 
-          hx-target="#grid-activos" 
-          hx-swap="none">
+    {# ⚠️ v2.61.3: Formulario manejado por activos_editor.js (Feature: CREATE/UPDATE) #}
+    {# ⚠️ No usar hx-post directo, el JavaScript maneja el submit #}
+    <form id="form-activo" method="POST" onsubmit="return false;">
       <input type="hidden" id="activo-id" name="id" value="{% if activo %}{{ activo.id }}{% endif %}">
       
       {# Datos Básicos #}

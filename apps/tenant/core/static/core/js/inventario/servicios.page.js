@@ -262,90 +262,10 @@
   }
 
   /**
-   * Guardar servicio (crear o actualizar)
-   * ⚠️ v2.60: Aislamiento Gradual - Sin try/catch, solo verifica ok
+   * ⚠️ v2.61.3: DEPRECATED - Esta función ha sido movida a servicios_editor.js
+   * La función guardarServicio() ahora está en servicios_editor.js (Feature-Sliced Architecture)
+   * Este archivo solo maneja el listado de servicios, no la creación/edición
    */
-  async function guardarServicio(e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const form = d.querySelector('#form-servicio');
-    if (!form) {
-      console.error(`${MOD} Formulario #form-servicio no encontrado`);
-      return;
-    }
-
-    const formData = new FormData(form);
-    const payload = {
-      codigo: formData.get('codigo')?.trim() || '',
-      nombre: formData.get('nombre')?.trim() || '',
-      categoria: formData.get('categoria') ? parseInt(formData.get('categoria'), 10) : null,
-      descripcion: formData.get('descripcion')?.trim() || '',
-      precio_venta: parseFloat(formData.get('precio_venta') || '0') || 0,
-      activo: formData.get('activo') === 'on' || formData.get('activo') === 'true'
-    };
-
-    // Validación básica
-    if (!payload.codigo || !payload.nombre) {
-      const errorContainer = d.querySelector('#form-servicio-feedback');
-      if (errorContainer) {
-        errorContainer.className = 'alert alert-danger';
-        errorContainer.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>Los campos Código y Nombre son requeridos.';
-        errorContainer.classList.remove('d-none');
-      }
-      return;
-    }
-
-    const servicioId = formData.get('id');
-    let res;
-
-    // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-    if (!w.inventarioAPI || !w.inventarioAPI.servicios) {
-      console.error(`${MOD} inventarioAPI.servicios no está disponible`);
-      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-        w.UIManager.notifyError({ status: 500, data: { detail: 'API no disponible' } }, MOD);
-      }
-      return;
-    }
-
-    if (servicioId) {
-      // Actualizar
-      res = await w.inventarioAPI.servicios.update(servicioId, payload);
-    } else {
-      // Crear
-      res = await w.inventarioAPI.servicios.save(payload);
-    }
-
-    // ⚠️ v2.60: Aislamiento Gradual - Solo verificar ok
-    if (!res.ok) {
-      if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-        w.UIManager.handleError(res, MOD, {
-          modalSelector: '#offcanvas-servicios',
-          errorContainerSelector: '#form-servicio-feedback'
-        });
-      }
-      return;
-    }
-
-    // Éxito
-    if (w.SintelFeedback) {
-      w.SintelFeedback.success(servicioId ? 'Servicio actualizado correctamente' : 'Servicio creado correctamente');
-    }
-
-    // Cerrar offcanvas
-    const offcanvasEl = d.getElementById('offcanvas-servicios');
-    if (offcanvasEl) {
-      const offcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
-      if (offcanvas) {
-        offcanvas.hide();
-      }
-    }
-
-    // Refrescar tabla
-    if (table) {
-      table.replaceData();
-    }
-  }
 
   /**
    * Recolectar datos del formulario de historial de servicio
@@ -578,13 +498,12 @@
 
   /**
    * Configurar eventos del formulario
+   * ⚠️ v2.61.3: El formulario de servicios se maneja por servicios_editor.js
+   * Este archivo solo maneja el historial de servicios
    */
   function configurarEventosFormulario() {
-    // Botón guardar servicio
-    const btnGuardar = d.querySelector('#btn-guardar-servicio');
-    if (btnGuardar) {
-      btnGuardar.addEventListener('click', guardarServicio);
-    }
+    // ⚠️ v2.61.3: NO configurar eventos del formulario de servicios aquí
+    // El formulario se maneja por servicios_editor.js (Feature-Sliced Architecture)
 
     // Botón guardar historial
     const btnGuardarHistorial = d.querySelector('#btn-guardar-historial');

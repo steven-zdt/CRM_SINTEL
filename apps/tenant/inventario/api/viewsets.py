@@ -240,7 +240,7 @@ class CategoriaItemViewSet(BaseViewSet):
                 id=id_instancia
             )
         
-        template_name = 'tenant/core/partials/inventario/categorias_offcanvas.html'
+        template_name = 'tenant/core/partials/inventario/categorias/categorias_offcanvas.html'
         
         context = {
             'categoria': categoria,
@@ -279,9 +279,8 @@ class CategoriaItemViewSet(BaseViewSet):
     
     def destroy(self, request, *args, **kwargs):
         """
-        ⚠️ REGLA DE SEGURIDAD DE ELIMINACIÓN (Inactivar antes de Borrar):
-        - No se puede eliminar una categoría activa.
-        - La categoría debe estar inactiva (activo=False) antes de poder eliminarla.
+        ⚠️ ELIMINACIÓN DE CATEGORÍAS:
+        - ⚠️ v2.61.3: Se permite eliminar categorías activas o inactivas.
         - Al eliminar una categoría, los productos, servicios y activos asociados quedan sin categoría (null).
           Esto es equivalente a "eliminar el kardex de categorías" - los ítems quedan sin categoría asignada.
         
@@ -291,7 +290,6 @@ class CategoriaItemViewSet(BaseViewSet):
         - Al eliminar una categoría, los ítems asociados simplemente quedan sin categoría
         
         Returns:
-            400 Bad Request si la categoría está activa
             204 No Content si se elimina exitosamente
         """
         ok, reason = self._check_enforced_mode(request)
@@ -300,17 +298,7 @@ class CategoriaItemViewSet(BaseViewSet):
         
         instance = self.get_object()
         
-        # Validar que la categoría no esté activa
-        if instance.activo:
-            return Response(
-                {
-                    "error": "active_category",
-                    "message": "No se puede eliminar una categoría activa. Desactívela primero."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # ⚠️ ESTABLECER CATEGORÍA A NULL: Antes de eliminar, establecer la categoría de los ítems asociados a null
+        # ⚠️ v2.61.3: ESTABLECER CATEGORÍA A NULL: Antes de eliminar, establecer la categoría de los ítems asociados a null
         # Esto permite eliminar la categoría sin bloquear por PROTECT
         try:
             conteo_productos = Producto.objects.filter(categoria=instance).update(categoria=None)
@@ -460,6 +448,49 @@ class ProductoViewSet(BaseViewSet):
             raise Producto.DoesNotExist("No se encontró configuración de Empresa para este tenant.")
         
         return qs_producto_detail(empresa_id=empresa.id, producto_id=self.kwargs['pk'])
+    
+    def create(self, request: Request, *args, **kwargs) -> Response:
+        """
+        ⚠️ v2.61.3: Sobrescribe create() para manejar IntegrityError (código duplicado)
+        """
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            from django.db import IntegrityError
+            import re
+            
+            # Capturar IntegrityError por código duplicado
+            if isinstance(e, IntegrityError):
+                error_msg = str(e)
+                # Buscar el código duplicado en el mensaje de error
+                codigo_match = re.search(r'Key \(codigo\)=\(([^)]+)\)', error_msg)
+                if codigo_match:
+                    codigo = codigo_match.group(1)
+                    return Response(
+                        {
+                            "error": "duplicate_code",
+                            "message": f"Ya existe un producto con el código '{codigo}'. Por favor, use un código diferente.",
+                            "detail": f"El código '{codigo}' ya está en uso."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                else:
+                    # IntegrityError genérico
+                    return Response(
+                        {
+                            "error": "integrity_error",
+                            "message": "Error de integridad: El producto no puede ser creado. Verifique que los datos sean únicos.",
+                            "detail": "Violación de restricción de integridad en la base de datos."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Re-lanzar otros errores para que DRF los maneje normalmente
+            raise
 
     @action(detail=False, methods=["get", "post"], url_path="dt")
     def datatables(self, request):

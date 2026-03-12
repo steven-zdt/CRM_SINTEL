@@ -166,7 +166,8 @@ urlpatterns = [
     path('ui/empresa/', include('apps.tenant.empresa.urls_ui')),
     # ⚠️ v2.30: Facturas migrado a API-First - UI deprecada
     # path('ui/facturas/', include('apps.tenant.facturas.urls_ui')),
-    path('ui/contabilidad/', include('apps.tenant.contabilidad.urls_ui')),
+    # ⚠️ v2.61: Contabilidad migrado a API-First - URLs migradas a api/urls.py
+    # path('ui/contabilidad/', include('apps.tenant.contabilidad.urls_ui')),
     path('ui/perfil/', include('apps.tenant.perfil.urls_ui')),
     # ⚠️ v2.60: Cotizaciones - URLs UI desde api/urls.py (única fuente de verdad)
     # Las rutas UI están en apps/tenant/cotizaciones/api/urls.py (ui_urlpatterns)

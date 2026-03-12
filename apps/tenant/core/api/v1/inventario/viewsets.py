@@ -9,9 +9,11 @@
 from rest_framework.authentication import SessionAuthentication
 
 from apps.tenant.inventario.api.viewsets import (
+    ActivoFijoViewSet,
     CategoriaItemViewSet,
     MovimientoInventarioViewSet,
     ProductoViewSet,
+    ServicioViewSet,
 )
 
 from . import serializers as ws_serializers
@@ -42,3 +44,21 @@ class MovimientoInventarioCoreViewSet(MovimientoInventarioViewSet):
         if self.action == "list":
             return ws_serializers.MovimientoInventarioWorkspaceListSerializer
         return ws_serializers.MovimientoInventarioWorkspaceDetailSerializer
+
+
+class ServicioCoreViewSet(ServicioViewSet):
+    authentication_classes = [SessionAuthentication]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ws_serializers.ServicioWorkspaceListSerializer
+        return ws_serializers.ServicioWorkspaceDetailSerializer
+
+
+class ActivoFijoCoreViewSet(ActivoFijoViewSet):
+    authentication_classes = [SessionAuthentication]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ws_serializers.ActivoFijoWorkspaceListSerializer
+        return ws_serializers.ActivoFijoWorkspaceDetailSerializer

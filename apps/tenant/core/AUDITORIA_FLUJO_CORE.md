@@ -85,15 +85,15 @@ Puntos clave:
 
 ### 4.2 Endpoints Core principales
 
-Definidos en `apps/tenant/core/api/views.py`:
+Definidos en `apps/tenant/core/api/viewsets.py`:
 
-- `GET /api/v1/core/routes/` → mapa canónico de rutas API.
-- `GET /api/v1/core/dashboard/` → dashboard compuesto (empresa + facturas + contabilidad + perfil + branding).
-- `GET/PATCH /api/v1/core/empresa/` → singleton/upsert de Empresa para UI.
-- `GET/PATCH /api/v1/core/mi-perfil/` y `PATCH /api/v1/core/mi-perfil/configuracion/`.
-- `POST /api/v1/core/auth/login/` y `POST /api/v1/core/auth/logout/`.
-- Password reset (request/validate/confirm).
-- Landing facade (`/api/v1/core/landing/info/`, `/api/v1/core/landing/auth/activate/`).
+- `GET /api/v1/core/links/` → `CoreLinksViewSet` - Registro de rutas API y UI
+- `GET /api/v1/core/dashboard/sections/` → `DashboardSectionsViewSet` - Dashboard compuesto (empresa + facturas + contabilidad + perfil + branding).
+- `GET/PATCH /api/v1/core/empresa/` → `EmpresaCoreViewSet.mi_empresa` - Singleton/upsert de Empresa para UI.
+- `POST /api/v1/core/auth/login/` → `CoreAuthViewSet.login` ✅ **IMPLEMENTADO v2.61**
+- `POST /api/v1/core/auth/logout/` → `CoreAuthViewSet.logout` ✅ **IMPLEMENTADO v2.61**
+- Password reset (request/validate/confirm) ⚠️ **PENDIENTE**
+- Landing facade (`/api/v1/core/landing/info/`, `/api/v1/core/landing/auth/activate/`) ⚠️ **PENDIENTE**
 
 Otros módulos Core API:
 

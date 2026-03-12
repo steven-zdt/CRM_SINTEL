@@ -1,3 +1,6 @@
+{# list_servicios.html - Módulo Servicios v2.61.3 #}
+{# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa servicios_list.js y servicios_editor.js #}
+{# ⚠️ v2.61.3: Usa Core API Facade (/api/v1/core/v1/inventario/servicios/) #}
 <div class="ui-module h-100 d-flex flex-column">
     {# ⚠️ v2.40: Elemento de feedback para errores #}
     <div id="feedback-servicios-list" class="alert d-none mb-2" role="alert"></div>
@@ -8,9 +11,10 @@
             <span class="badge bg-light text-dark border">Intangibles</span>
         </div>
         <div class="btn-group shadow-sm">
-            {# ⚠️ v2.60: Botón HTMX para crear servicio #}
+            {# ⚠️ v2.61.3: Botón HTMX para crear servicio - Usa Core API Facade #}
+            {# ⚠️ Event delegation: Sin onclick inline, solo HTMX attributes #}
             <button type="button" class="btn btn-primary" id="btn-nuevo-servicio" 
-                    hx-get="/api/v1/inventario/servicios/gestor-offcanvas/" 
+                    hx-get="/api/v1/core/v1/inventario/servicios/gestor-offcanvas/" 
                     hx-target="#offcanvas-container-servicios" 
                     hx-swap="innerHTML"
                     hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-servicios'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
@@ -24,7 +28,8 @@
                     hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-historial-servicio'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
                 <i class="bi bi-clock-history me-1"></i> Registrar Historial
             </button>
-            <button type="button" class="btn btn-outline-secondary" onclick="if(window.SintelInventarioTables?.servicios){window.SintelInventarioTables.servicios.replaceData();}">
+            <button type="button" class="btn btn-outline-secondary" 
+                    onclick="if(window.ServiciosList && typeof window.ServiciosList.recargar === 'function'){ window.ServiciosList.recargar(); } else if(window.SintelInventarioTables?.servicios){ window.SintelInventarioTables.servicios.replaceData(); }">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
         </div>
@@ -36,5 +41,6 @@
     </div>
     
     {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
+    {# ⚠️ v2.61.3: Inicializado por servicios_list.js (Feature: Listado) #}
     <div id="grid-servicios" class="flex-grow-1"></div>
 </div>

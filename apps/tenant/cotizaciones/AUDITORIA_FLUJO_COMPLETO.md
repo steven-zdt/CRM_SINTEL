@@ -1,7 +1,8 @@
 # 🔍 Auditoría Completa: Flujo y Funcionalidad - App Cotizaciones
 
-**Versión:** 2.60  
+**Versión:** 2.61.1  
 **Fecha:** 2026-01-27  
+**Última actualización:** 2026-01-28  
 **Ubicación:** `apps/tenant/cotizaciones/`
 
 ---
@@ -19,7 +20,8 @@
 9. [Servicio de PDF](#servicio-de-pdf)
 10. [Permisos y Seguridad](#permisos-y-seguridad)
 11. [Flujos Completos](#flujos-completos)
-12. [Dependencias y Aislamiento](#dependencias-y-aislamiento)
+12. [Flujo Completo: Workspace → Core API → Models](#-flujo-completo-workspace--core-api--models)
+13. [Dependencias y Aislamiento](#dependencias-y-aislamiento)
 
 ---
 
@@ -459,12 +461,23 @@ def save(self, *args, **kwargs):
     POST   /configuracion/{id}/activar/  # Activa plantilla
 ```
 
-#### URLs UI (HTMX)
+#### URLs UI (HTMX) - ⚠️ v2.61: Nuevos Endpoints RESTful
+
+**⚠️ v2.61:** Nuevos endpoints `render-offcanvas/*` alineados con patrón de contabilidad:
 
 ```
+/api/v1/cotizaciones/
+├── render-offcanvas/crear/          # GET - Cargar offcanvas para crear
+├── {uuid}/render-offcanvas/editar/  # GET - Cargar offcanvas para editar
+├── render-offcanvas/detalle/?id={uuid}  # GET - Cargar offcanvas para ver detalle
+└── estadisticas/                    # GET - Obtener estadísticas (⚠️ v2.61.1)
+```
+
+**URLs UI Legacy (Deprecadas):**
+```
 /cotizaciones/
-├── editor/<uuid>/                   # Editor con cotización existente
-├── editor/draft/                    # Editor en modo borrador
+├── editor/<uuid>/                   # DEPRECATED - Usar render-offcanvas/editar
+├── editor/draft/                    # DEPRECATED - Usar render-offcanvas/crear
 │
 └── partials/configuracion/
     ├── lista/                       # Lista de plantillas
@@ -491,6 +504,11 @@ def save(self, *args, **kwargs):
 
 **Métodos Personalizados:**
 - `recalcular(uuid)`: POST para recalcular totales
+- `render_offcanvas_crear()`: GET para cargar offcanvas de creación (⚠️ v2.61)
+- `render_offcanvas_editar(uuid)`: GET para cargar offcanvas de edición (⚠️ v2.61)
+- `render_offcanvas_detalle()`: GET para cargar offcanvas de detalle (⚠️ v2.61)
+- `estadisticas()`: GET para obtener estadísticas de cotizaciones (⚠️ v2.61.1)
+  - Retorna: `total_neto`, `cantidad_total`, `cantidad_aceptadas`, `cantidad_enviadas`, `cantidad_borrador`
 
 **Flujo de Creación:**
 1. `create()` → Valida serializer
@@ -669,21 +687,65 @@ Agrega `editor_config` con configuración completa del editor desde `CotizacionS
 
 ## 🖥️ Vistas UI
 
-**Ubicación:** `apps/tenant/cotizaciones/ui_views.py`
+**Ubicación:** `apps/tenant/cotizaciones/ui_views.py` y `apps/tenant/cotizaciones/api/viewsets.py`
 
-**Propósito:** Renderizado de templates HTML (UI Shells).
+**Propósito:** Renderizado de templates HTML (UI Shells) y endpoints HTMX RESTful.
 
-### Vistas Principales
+### ⚠️ v2.61: Nuevos Endpoints HTMX RESTful (Alineados con Patrón de Contabilidad)
 
-#### 1. `CotizacionEditorTemplateView`
+#### Endpoints `render-offcanvas/*` en `CotizacionViewSet`
+
+**Ubicación:** `apps/tenant/cotizaciones/api/viewsets.py`
+
+##### 1. `render_offcanvas_crear`
+- **Método:** `GET`
+- **URL:** `/api/v1/cotizaciones/render-offcanvas/crear/`
+- **Template:** `tenant/core/partials/cotizaciones/editor_cotizacion.html`
+- **Contexto:** 
+  - `cotizacion`: `None`
+  - `is_draft`: `True`
+  - `clientes`: Lista de clientes activos
+  - `configuraciones`: Lista de configuraciones activas
+- **Propósito:** Cargar offcanvas para crear nueva cotización
+
+##### 2. `render_offcanvas_editar`
+- **Método:** `GET`
+- **URL:** `/api/v1/cotizaciones/{uuid}/render-offcanvas/editar/`
+- **Template:** `tenant/core/partials/cotizaciones/offcanvas_editar_cotizacion.html`
+- **Contexto:**
+  - `cotizacion`: Objeto Cotizacion (por UUID o ID numérico)
+  - `is_draft`: `False`
+  - `clientes`: Lista de clientes activos
+  - `configuraciones`: Lista de configuraciones activas
+- **Propósito:** Cargar offcanvas para editar cotización existente
+- **Nota:** Soporta tanto UUID como ID numérico para compatibilidad
+
+##### 3. `render_offcanvas_detalle`
+- **Método:** `GET`
+- **URL:** `/api/v1/cotizaciones/render-offcanvas/detalle/?id={uuid}`
+- **Template:** `tenant/core/partials/cotizaciones/offcanvas_ver_detalle.html`
+- **Contexto:**
+  - `cotizacion`: Objeto Cotizacion (por UUID o ID numérico)
+  - `clientes`: Lista de clientes activos
+  - `configuraciones`: Lista de configuraciones activas
+- **Propósito:** Cargar offcanvas para ver detalle de cotización (read-only)
+- **Query Params:** `id` (requerido, puede ser UUID o ID numérico)
+
+### Vistas UI Legacy (Deprecadas para Cotizaciones)
+
+**⚠️ v2.61:** Las siguientes vistas UI se mantienen para compatibilidad pero se recomienda usar los nuevos endpoints `render-offcanvas/*`:
+
+#### 1. `CotizacionEditorTemplateView` (DEPRECATED)
 - **Template:** `tenant/core/partials/cotizaciones/editor_cotizacion.html`
 - **URL:** `/cotizaciones/editor/<uuid>/`
-- **Contexto:** Cotización existente con UUID
+- **Reemplazo:** Usar `render_offcanvas_editar`
 
-#### 2. `CotizacionEditorDraftView`
+#### 2. `CotizacionEditorDraftView` (DEPRECATED)
 - **Template:** `tenant/core/partials/cotizaciones/editor_cotizacion.html`
 - **URL:** `/cotizaciones/editor/draft/`
-- **Contexto:** Modo borrador (sin cotización)
+- **Reemplazo:** Usar `render_offcanvas_crear`
+
+### Vistas UI para Configuraciones (Activas)
 
 #### 3. `ConfiguracionListOffcanvasView`
 - **Template:** `tenant/core/partials/cotizaciones/offcanvas_list_plantillas.html`
@@ -821,7 +883,10 @@ cotizaciones/
 ├── htmx-handlers.js              # Handlers HTMX
 │
 └── features/                     # Feature-Sliced Architecture
-    ├── cotizacion_editor.js      # Editor de cotizaciones
+    ├── cotizacion_crear.js       # ⚠️ v2.61: Crear cotizaciones (POST)
+    ├── cotizacion_editar.js      # ⚠️ v2.61: Editar cotizaciones (PATCH)
+    ├── cotizacion_detalle.js     # ⚠️ v2.61: Ver detalle (read-only)
+    ├── cotizacion_editor.js      # ⚠️ DEPRECATED v2.61: Reemplazado por crear/editar/detalle
     ├── plantillas_list.js        # Lista de plantillas
     ├── plantilla_crear.js        # Crear plantilla
     ├── plantilla_editar.js       # Editar plantilla
@@ -830,19 +895,25 @@ cotizaciones/
 
 ### Características del Frontend
 
-#### 1. **Tabulator Factory Integration**
+#### 1. **Tabulator Factory Integration** (⚠️ v2.61.1: Optimizado)
 - Paginación remota con `StandardResultsSetPagination`
 - Búsqueda en tiempo real con `?search=`
 - Formateo de moneda y fechas
 - Badges de estado con lógica de vencimiento
-- Acciones contextuales (Editar, PDF, Eliminar)
+- Acciones contextuales (Editar, PDF, Eliminar, Ver Detalle)
+- **Layout optimizado**: `fitDataFill` para usar todo el ancho disponible
+- **Columnas con crecimiento proporcional**: `widthGrow` y `minWidth` para distribución inteligente
+- **CLIENTE con mayor crecimiento**: `widthGrow: 3` para mostrar nombres completos
 
-#### 2. **Editor de Cotizaciones**
+#### 2. **Editor de Cotizaciones** (⚠️ v2.61: Modularizado)
+- **Modularización completa**: Separación en `cotizacion_crear.js`, `cotizacion_editar.js`, `cotizacion_detalle.js`
+- **Templates separados**: `offcanvas_crear_cotizacion.html`, `offcanvas_editar_cotizacion.html`, `offcanvas_cotizacion_detalle.html`
 - Modo borrador (draft) y edición (con UUID)
 - Validación de cliente y perfil obligatorios
-- Cálculo en tiempo real de subtotales
+- **Cálculo en tiempo real de subtotales**: Actualización automática del panel "Resumen de Totales" al editar celdas
 - Gestión de items con Tabulator
 - Guardado asíncrono sin recarga de página
+- **Safeguards mejorados**: Prevención de inicializaciones múltiples y conflictos entre módulos
 
 #### 3. **Gestión de Plantillas**
 - Lista de plantillas con filtros
@@ -854,6 +925,17 @@ cotizaciones/
 - Uso de `UIManager.handleError()` para errores de API
 - Mensajes de error estructurados
 - Validación en tiempo real en formularios
+
+#### 5. **Panel de Estadísticas** (⚠️ v2.61.1: Nuevo)
+- **Función `cargarEstadisticas()`**: Consume endpoint `/api/v1/cotizaciones/estadisticas/`
+- **Actualización automática**: Se ejecuta al inicializar el módulo y al refrescar la tabla
+- **Elementos actualizados**:
+  - `#total-cotizaciones-neto`: Total neto formateado
+  - `#cantidad-cotizaciones`: Cantidad total
+  - `#cantidad-aceptadas`: Cotizaciones aceptadas
+  - `#cantidad-enviadas`: Cotizaciones enviadas
+  - `#cantidad-borrador`: Cotizaciones en borrador
+- **Exposición**: `w.cotizacionesPage.cargarEstadisticas()` para uso manual
 
 ---
 
@@ -912,39 +994,56 @@ cotizaciones/
 
 ---
 
-### Flujo 2: Editar Cotización Existente
+### Flujo 2: Editar Cotización Existente (v2.61)
+
+**⚠️ v2.61:** Flujo actualizado con nuevo endpoint `render-offcanvas/editar/`.
 
 ```
-1. Frontend: Usuario click "Editar" en fila
+1. Frontend: Usuario click "Editar" en columna ACCIONES (Tabulator)
+   → Botón con hx-get="/api/v1/cotizaciones/{uuid}/render-offcanvas/editar/"
    ↓
-2. HTMX: GET /cotizaciones/editor/<uuid>/
+2. HTMX: GET /api/v1/cotizaciones/{uuid}/render-offcanvas/editar/
+   → Atributos: hx-get, hx-target="#offcanvas-container", hx-swap="innerHTML"
    ↓
-3. Backend: CotizacionEditorTemplateView.render()
-   → Obtiene cotización por UUID
-   → Carga template con contexto
+3. Backend: CotizacionViewSet.render_offcanvas_editar()
+   → Obtiene cotización por UUID (o ID numérico como fallback)
+   → Renderiza template: tenant/core/partials/cotizaciones/offcanvas_editar_cotizacion.html
+   → Contexto: cotizacion, is_draft=False, clientes, configuraciones
    ↓
-4. Frontend: cotizacion_editor.js detecta UUID
+4. HTMX: Inserta contenido en #offcanvas-container
+   ↓
+5. Frontend: Script en offcanvas_editar_cotizacion.html se ejecuta
+   → Bootstrap.Offcanvas.getOrCreateInstance().show()
+   → Muestra offcanvas automáticamente
+   ↓
+6. Frontend: cotizacion_editar.js se inicializa (listener shown.bs.offcanvas)
    → GET /api/v1/cotizaciones/<uuid>/
    → Carga datos existentes
    → Muestra items en tablas
+   → Recalcula subtotales de todas las filas usando w.recalcularFila()
    ↓
-5. Usuario: Modifica items (añadir/editar/eliminar)
+7. Usuario: Modifica items (añadir/editar/eliminar)
+   → Al editar celda (cantidad, precio, utilidad, IVA):
+     → cellEdited se dispara
+     → recalcularFila() actualiza subtotal de la fila
+     → getActiveCotizacionModule() obtiene CotizacionEditarModule
+     → recalcularTotalesGlobales() actualiza panel "Resumen de Totales" en tiempo real
    ↓
-6. Usuario: Click "Guardar Cotización"
+8. Usuario: Click "Guardar Cotización"
    ↓
-7. Frontend: PATCH /api/v1/cotizaciones/<uuid>/
+9. Frontend: PATCH /api/v1/cotizaciones/<uuid>/
    Payload: {
      items: [...],  // Items actualizados
      fecha_vencimiento: "...",
      ...
    }
    ↓
-8. Backend: CotizacionViewSet.update()
+10. Backend: CotizacionViewSet.update()
     → CotizacionSerializer.validate()
     → Actualiza cotización
     → Actualiza/crea/elimina items
     ↓
-9. CotizacionService.calcular_totales()
+11. CotizacionService.calcular_totales()
     → Recalcula totales
     ↓
 10. Retorna cotización actualizada
@@ -1014,6 +1113,482 @@ cotizaciones/
     ↓
 10. Frontend: Cierra offcanvas y refresca tabla
 ```
+
+---
+
+### Flujo 4: Cargar Estadísticas del Panel (⚠️ v2.61.1: Nuevo)
+
+```
+1. Frontend: Módulo de cotizaciones se inicializa
+   → inicializarModulo() en cotizaciones.page.js
+   ↓
+2. Frontend: cargarEstadisticas() se ejecuta automáticamente
+   ↓
+3. Frontend: GET /api/v1/cotizaciones/estadisticas/
+   ↓
+4. Backend: CotizacionViewSet.estadisticas()
+   → Obtiene empresa del tenant (SSoT)
+   → Agrega: Sum(total_con_impuestos), Count(id)
+   → Filtra por estado: ACEPTADA, ENVIADA, BORRADOR
+   ↓
+5. Backend: Retorna JSON
+   {
+     "total_neto": "1000000.00",
+     "cantidad_total": 50,
+     "cantidad_aceptadas": 10,
+     "cantidad_enviadas": 20,
+     "cantidad_borrador": 20
+   }
+   ↓
+6. Frontend: Actualiza elementos del panel
+   → #total-cotizaciones-neto: fmtMoney(total_neto)
+   → #cantidad-cotizaciones: cantidad_total
+   → #cantidad-aceptadas: cantidad_aceptadas
+   → #cantidad-enviadas: cantidad_enviadas
+   → #cantidad-borrador: cantidad_borrador
+   ↓
+7. Frontend: Se actualiza automáticamente al refrescar tabla
+   → w.cotizacionesPage.refresh() también llama a cargarEstadisticas()
+```
+
+---
+
+## 🌐 Flujo Completo: Workspace → Core API → Models
+
+### Resumen del Flujo Arquitectónico
+
+El flujo completo de la app Cotizaciones se inicia desde el template principal `workspace.html`, pasa por el Core API (`core/api/urls.py`), y finalmente llega a los modelos en `cotizaciones/models.py`. Este flujo garantiza una arquitectura desacoplada y modular.
+
+### Diagrama de Flujo Completo
+
+```
+1. Usuario accede a /workspace/
+   ↓
+2. Django: WorkspaceView.render() (apps/tenant/core/views_ui.py)
+   ↓
+3. Template: tenant/core/workspace.html
+   ├── Incluye: tenant/core/partials/cotizaciones/list.html
+   ├── Incluye: tenant/core/partials/cotizaciones/assets_cotizaciones.html
+   └── Carga JavaScript modular (cotizaciones.page.js)
+   ↓
+4. JavaScript: cotizaciones.page.js se inicializa
+   ├── Detecta tab #tab-cotizaciones visible
+   ├── Inicializa Tabulator con API endpoint
+   └── Configura listeners HTMX
+   ↓
+5. Frontend: Usuario interactúa (click "Nueva Cotización", "Editar", etc.)
+   ↓
+6. HTMX: Request a Core API facade
+   ├── GET /api/v1/core/v1/cotizaciones/cotizaciones/render-offcanvas/crear/
+   ├── GET /api/v1/core/v1/cotizaciones/cotizaciones/{uuid}/render-offcanvas/editar/
+   └── GET /api/v1/core/v1/cotizaciones/cotizaciones/render-offcanvas/detalle/?id={uuid}
+   ↓
+7. Core API: apps/tenant/core/api/urls.py
+   ├── Router dedicado: path("v1/cotizaciones/", include("apps.tenant.core.api.v1.cotizaciones.urls"))
+   └── Gateway directo: path("_apps/cotizaciones/", include("apps.tenant.cotizaciones.api.urls"))
+   ↓
+8. Core API Facade: apps/tenant/core/api/v1/cotizaciones/viewsets.py
+   ├── CotizacionCoreViewSet (hereda de CotizacionViewSet)
+   ├── CotizacionItemCoreViewSet (hereda de CotizacionItemViewSet)
+   └── ConfiguracionCotizacionCoreViewSet (hereda de ConfiguracionCotizacionViewSet)
+   ↓
+9. App API: apps/tenant/cotizaciones/api/viewsets.py
+   ├── CotizacionViewSet.render_offcanvas_crear()
+   ├── CotizacionViewSet.render_offcanvas_editar()
+   └── CotizacionViewSet.render_offcanvas_detalle()
+   ↓
+10. Serializers: apps/tenant/cotizaciones/api/serializers.py
+    ├── CotizacionSerializer (validación)
+    └── CotizacionItemSerializer (validación)
+    ↓
+11. Service Layer: apps/tenant/cotizaciones/services.py
+    ├── CotizacionService.crear_preforma()
+    ├── CotizacionService.calcular_totales()
+    └── CotizacionService.generar_codigo_unico()
+    ↓
+12. Models: apps/tenant/cotizaciones/models.py
+    ├── Cotizacion.save()
+    ├── CotizacionItem.save()
+    └── ConfiguracionCotizacion.save()
+    ↓
+13. Database: PostgreSQL (multi-tenant)
+```
+
+### 1. Punto de Entrada: `workspace.html`
+
+**Ubicación:** `apps/tenant/core/templates/tenant/core/workspace.html`
+
+#### Estructura del Módulo Cotizaciones
+
+```html
+{# Módulo Cotizaciones v2.60 - DNA Dinámico con Edición Completa #}
+<section id="tab-cotizaciones" class="workspace-tab" style="display: none;">
+  <div class="ui-module ui-cotizaciones">
+    {# Navegación por Pills (Sub-Tabs) #}
+    <ul class="nav nav-pills mb-3" id="cotizaciones-subnav" role="tablist">
+      <li class="nav-item">
+        <button class="nav-link active" id="cotizaciones-cotizaciones-tab" ...>
+          <i class="bi bi-file-earmark-text me-2"></i>Cotizaciones
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="cotizaciones-catalogo-tab" ...>
+          <i class="bi bi-box-seam me-2"></i>Catálogo (STS)
+        </button>
+      </li>
+    </ul>
+    
+    {# Contenedor de Contenido (Tab Content) #}
+    <div class="tab-content" id="cotizaciones-tab-content">
+      <div class="tab-pane fade show active" id="subtab-cotizaciones">
+        {% include 'tenant/core/partials/cotizaciones/list.html' %}
+      </div>
+      <div class="tab-pane fade" id="subtab-catalogo">
+        {# Catálogo futuro #}
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+#### Carga de Assets JavaScript
+
+```html
+{# En bloque extra_js de workspace.html #}
+{% include 'tenant/core/partials/cotizaciones/assets_cotizaciones.html' %}
+```
+
+**Orden de Carga Crítico:**
+1. `assets_core.html` (DOMUtils, TabulatorFactory, UIManager)
+2. `cotizaciones.api.js` (API wrapper)
+3. `cotizaciones.helpers.js` (funciones utilitarias)
+4. `cotizaciones.page.js` (módulo principal)
+5. `cotizacion_columns.js` (definición de columnas)
+6. `features/cotizacion_crear.js` (crear cotizaciones)
+7. `features/cotizacion_editar.js` (editar cotizaciones)
+8. `features/cotizacion_detalle.js` (ver detalle)
+
+#### Configuración HTMX
+
+```html
+{# HTMX cargado globalmente en workspace.html #}
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+{# Setup global de CSRF para HTMX #}
+<script>
+  document.body.addEventListener('htmx:configRequest', function(event) {
+    const method = (event.detail.verb || 'GET').toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      const token = getCSRFToken();
+      if (token) {
+        event.detail.headers['X-CSRFToken'] = token;
+      }
+    }
+  });
+</script>
+```
+
+### 2. Core API: `core/api/urls.py`
+
+**Ubicación:** `apps/tenant/core/api/urls.py`
+
+#### Router Dedicado para Cotizaciones
+
+```python
+# ⚠️ v2.61: Routers dedicados por módulo (patrón de contabilidad)
+# ⚠️ COTIZACIONES: Router dedicado con todas las funcionalidades CRUD
+path("v1/cotizaciones/", include("apps.tenant.core.api.v1.cotizaciones.urls")),
+```
+
+**Endpoints Disponibles:**
+- `/api/v1/core/v1/cotizaciones/cotizaciones/` (CRUD principal)
+- `/api/v1/core/v1/cotizaciones/items/` (CRUD items)
+- `/api/v1/core/v1/cotizaciones/configuracion/` (CRUD configuraciones)
+- Todas las acciones `@action` se heredan automáticamente:
+  - `render-offcanvas/crear/`
+  - `{uuid}/render-offcanvas/editar/`
+  - `render-offcanvas/detalle/?id={uuid}`
+  - `{uuid}/exportar-pdf/`
+  - `{uuid}/recalcular/`
+  - `estadisticas/`
+
+#### Gateway Directo
+
+```python
+# Gateway a APIs de apps (acceso directo a las apps sin facades)
+path("_apps/cotizaciones/", include("apps.tenant.cotizaciones.api.urls")),
+```
+
+**Endpoints Disponibles:**
+- `/api/v1/core/_apps/cotizaciones/` (CRUD directo)
+- `/api/v1/core/_apps/cotizaciones/render-offcanvas/crear/`
+- `/api/v1/core/_apps/cotizaciones/{uuid}/render-offcanvas/editar/`
+- `/api/v1/core/_apps/cotizaciones/render-offcanvas/detalle/?id={uuid}`
+- `/api/v1/core/_apps/cotizaciones/{uuid}/exportar-pdf/`
+- `/api/v1/core/_apps/cotizaciones/{uuid}/recalcular/`
+- `/api/v1/core/_apps/cotizaciones/items/` (CRUD items)
+- `/api/v1/core/_apps/cotizaciones/configuracion/` (CRUD configuraciones)
+
+### 3. Core API Facade: `core/api/v1/cotizaciones/`
+
+**Ubicación:** `apps/tenant/core/api/v1/cotizaciones/`
+
+#### Estructura de Archivos
+
+```
+apps/tenant/core/api/v1/cotizaciones/
+├── __init__.py
+├── urls.py                    # Router dedicado
+├── viewsets.py                # Facade ViewSets
+└── serializers.py             # Facade Serializers
+```
+
+#### ViewSets Facade
+
+**Archivo:** `apps/tenant/core/api/v1/cotizaciones/viewsets.py`
+
+```python
+class CotizacionCoreViewSet(CotizacionViewSet):
+    """
+    Facade ViewSet para Cotizaciones en Core API.
+    Hereda todas las funcionalidades de CotizacionViewSet.
+    """
+    authentication_classes = [SessionAuthentication]
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ws_serializers.CotizacionWorkspaceListSerializer
+        elif self.action == 'retrieve':
+            return ws_serializers.CotizacionWorkspaceDetailSerializer
+        return ws_serializers.CotizacionWorkspaceSerializer
+```
+
+**Características:**
+- ✅ **Herencia Completa**: Todas las acciones `@action` se heredan automáticamente
+- ✅ **SessionAuthentication**: Autenticación por sesión (workspace)
+- ✅ **Serializers Especializados**: Serializers optimizados para workspace
+
+#### Router Dedicado
+
+**Archivo:** `apps/tenant/core/api/v1/cotizaciones/urls.py`
+
+```python
+from rest_framework.routers import DefaultRouter
+from .viewsets import (
+    CotizacionCoreViewSet,
+    CotizacionItemCoreViewSet,
+    ConfiguracionCotizacionCoreViewSet,
+)
+
+router = DefaultRouter(trailing_slash=True)
+router.register(r'configuracion', ConfiguracionCotizacionCoreViewSet, basename='core-cotizacion-configuracion')
+router.register(r'items', CotizacionItemCoreViewSet, basename='core-cotizacion-item')
+router.register(r'cotizaciones', CotizacionCoreViewSet, basename='core-cotizacion')
+
+urlpatterns = router.urls
+```
+
+### 4. App API: `cotizaciones/api/`
+
+**Ubicación:** `apps/tenant/cotizaciones/api/`
+
+#### ViewSets Principales
+
+**Archivo:** `apps/tenant/cotizaciones/api/viewsets.py`
+
+##### `CotizacionViewSet`
+
+```python
+class CotizacionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet principal para Cotizaciones.
+    Expone CRUD completo y acciones personalizadas.
+    """
+    queryset = Cotizacion.objects.all()
+    serializer_class = CotizacionSerializer
+    lookup_field = 'uuid'
+    pagination_class = StandardResultsSetPagination
+    
+    @action(detail=False, methods=['get'], url_path='render-offcanvas/crear')
+    def render_offcanvas_crear(self, request):
+        """Renderiza offcanvas para crear nueva cotización."""
+        # ...
+    
+    @action(detail=True, methods=['get'], url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request, uuid=None):
+        """Renderiza offcanvas para editar cotización existente."""
+        # ...
+    
+    @action(detail=False, methods=['get'], url_path='render-offcanvas/detalle')
+    def render_offcanvas_detalle(self, request):
+        """Renderiza offcanvas para ver detalle de cotización."""
+        # ...
+    
+    @action(detail=False, methods=['get'], url_path='estadisticas')
+    def estadisticas(self, request):
+        """Retorna estadísticas de cotizaciones."""
+        # ...
+```
+
+### 5. Service Layer: `cotizaciones/services.py`
+
+**Ubicación:** `apps/tenant/cotizaciones/services.py`
+
+#### Métodos Principales
+
+```python
+class CotizacionService:
+    @staticmethod
+    @transaction.atomic
+    def crear_preforma(empresa, datos):
+        """Crea una cotización completa con DNA de plantilla."""
+        # 1. Validar perfil y cliente
+        # 2. Generar codigo_unico automáticamente
+        # 3. Copiar valores del perfil (DNA Inheritance)
+        # 4. Crear instancia de Cotizacion
+        # 5. Retornar cotización creada
+    
+    @staticmethod
+    def calcular_totales(cotizacion_id):
+        """Calcula todos los totales de una cotización (SSoT)."""
+        # 1. Obtener cotización con items
+        # 2. Calcular subtotal
+        # 3. Calcular IVA y AIU
+        # 4. Calcular total final
+        # 5. Actualizar total_con_impuestos
+    
+    @staticmethod
+    def generar_codigo_unico(perfil_id, empresa_id):
+        """Genera código único automático basado en el perfil."""
+        # 1. Obtener perfil y validar pertenencia
+        # 2. Bloquear fila del perfil (select_for_update)
+        # 3. Incrementar ultimo_numero atómicamente
+        # 4. Formatear número con ceros a la izquierda
+        # 5. Construir código: prefijo + numero + sufijo
+```
+
+### 6. Models: `cotizaciones/models.py`
+
+**Ubicación:** `apps/tenant/cotizaciones/models.py`
+
+#### Modelos Principales
+
+```python
+class Cotizacion(models.Model):
+    """
+    Modelo principal de Cotizaciones.
+    Representa una cotización comercial completa.
+    """
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    numero_cotizacion = models.CharField(max_length=50)
+    codigo_unico = models.CharField(max_length=100, unique=True)
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True)
+    configuracion = models.ForeignKey(ConfiguracionCotizacion, on_delete=models.SET_NULL, null=True, blank=True)
+    # ... más campos
+    
+    class Meta:
+        constraints = [
+            UniqueConstraint(
+                fields=['empresa', 'configuracion', 'numero_cotizacion'],
+                name='unique_numero_cotizacion_por_perfil'
+            )
+        ]
+
+class CotizacionItem(models.Model):
+    """
+    Items individuales dentro de una cotización.
+    Implementa Snapshot Pattern para resiliencia.
+    """
+    cotizacion = models.ForeignKey(Cotizacion, on_delete=models.CASCADE, related_name='items')
+    tipo_item = models.CharField(max_length=20, choices=TipoItem.choices)
+    descripcion = models.TextField()  # Snapshot
+    cantidad = models.DecimalField(max_digits=10, decimal_places=2)
+    costo_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    precio_unitario_venta = models.DecimalField(max_digits=10, decimal_places=2)
+    subtotal_linea = models.DecimalField(max_digits=10, decimal_places=2)
+    # ... más campos
+    
+    def save(self, *args, **kwargs):
+        """Calcula precios y subtotales automáticamente."""
+        factor_utilidad = Decimal('1.00') + (self.porcentaje_utilidad / Decimal('100.00'))
+        self.precio_unitario_venta = self.costo_unitario * factor_utilidad
+        self.subtotal_linea = self.cantidad * self.precio_unitario_venta
+        super().save(*args, **kwargs)
+```
+
+### 7. Flujo de Datos Completo
+
+#### Ejemplo: Crear Nueva Cotización
+
+```
+1. Usuario: Click "Nueva Cotización" en workspace.html
+   ↓
+2. HTMX: GET /api/v1/core/v1/cotizaciones/cotizaciones/render-offcanvas/crear/
+   ↓
+3. Core API: CotizacionCoreViewSet.render_offcanvas_crear()
+   → Hereda de CotizacionViewSet.render_offcanvas_crear()
+   ↓
+4. App API: CotizacionViewSet.render_offcanvas_crear()
+   → Renderiza template: tenant/core/partials/cotizaciones/offcanvas_crear_cotizacion.html
+   → Contexto: clientes, configuraciones activas
+   ↓
+5. Frontend: HTMX inserta contenido en #offcanvas-container
+   → Bootstrap.Offcanvas.getOrCreateInstance().show()
+   → cotizacion_crear.js se inicializa
+   ↓
+6. Usuario: Completa formulario y click "Guardar"
+   ↓
+7. Frontend: POST /api/v1/core/v1/cotizaciones/cotizaciones/
+   Payload: { cliente: <id>, configuracion: <id>, items: [...] }
+   ↓
+8. Core API: CotizacionCoreViewSet.create()
+   → Hereda de CotizacionViewSet.create()
+   ↓
+9. App API: CotizacionViewSet.create()
+   → CotizacionSerializer.validate()
+   → CotizacionSerializer.create()
+   ↓
+10. Service Layer: CotizacionService.crear_preforma()
+    → Valida perfil y cliente (SSoT)
+    → Genera codigo_unico automáticamente
+    → Copia DNA del perfil (IVA, AIU, tipo_cotizacion)
+    → Crea Cotizacion
+    ↓
+11. Models: Cotizacion.save()
+    → Persiste en base de datos
+    ↓
+12. Service Layer: CotizacionService.calcular_totales()
+    → Suma subtotales
+    → Calcula IVA y AIU
+    → Actualiza total_con_impuestos
+    ↓
+13. Response: Cotización serializada con UUID
+    ↓
+14. Frontend: Cierra offcanvas y refresca tabla Tabulator
+```
+
+### 8. Ventajas de la Arquitectura
+
+#### ✅ Desacoplamiento
+- **Core API Facade**: Expone funcionalidades de apps individuales de forma unificada
+- **Gateway Directo**: Permite acceso directo a APIs de apps sin facades
+- **Service Layer**: Lógica de negocio centralizada e independiente
+
+#### ✅ Modularidad
+- **Templates Separados**: `offcanvas_crear_cotizacion.html`, `offcanvas_editar_cotizacion.html`, `offcanvas_cotizacion_detalle.html`
+- **JavaScript Modular**: `cotizacion_crear.js`, `cotizacion_editar.js`, `cotizacion_detalle.js`
+- **ViewSets Especializados**: Serializers optimizados para workspace
+
+#### ✅ Resiliencia
+- **SSoT (Single Source of Truth)**: Empresa siempre del tenant
+- **Snapshot Pattern**: Datos reales guardados en items
+- **DNA Inheritance**: Valores copiados del perfil (integridad histórica)
+
+#### ✅ Escalabilidad
+- **Router Dedicado**: Fácil agregar nuevas funcionalidades
+- **Herencia de Acciones**: Todas las acciones `@action` se heredan automáticamente
+- **Gateway Directo**: Acceso directo para casos especiales
 
 ---
 
@@ -2468,7 +3043,221 @@ body {
 
 ---
 
+## 📋 CHANGELOG v2.61 (2026-01-27)
+
+### 🎯 Integración con Core API y Alineación con Patrón de Contabilidad
+
+#### Nuevos Endpoints HTMX RESTful
+- ✅ **`render_offcanvas_crear`**: GET `/api/v1/cotizaciones/render-offcanvas/crear/`
+  - Template: `editor_cotizacion.html`
+  - Modo: Creación (is_draft=True)
+  - Contexto: clientes y configuraciones activas
+
+- ✅ **`render_offcanvas_editar`**: GET `/api/v1/cotizaciones/{uuid}/render-offcanvas/editar/`
+  - Template: `offcanvas_editar_cotizacion.html`
+  - Modo: Edición (is_draft=False)
+  - Soporte: UUID y ID numérico (compatibilidad)
+
+- ✅ **`render_offcanvas_detalle`**: GET `/api/v1/cotizaciones/render-offcanvas/detalle/?id={uuid}`
+  - Template: `offcanvas_ver_detalle.html`
+  - Modo: Solo lectura
+  - Query params: `id` (UUID o ID numérico)
+
+#### Core API Facade
+- ✅ **Router dedicado**: `apps/tenant/core/api/v1/cotizaciones/urls.py`
+  - Endpoints: `/api/v1/core/v1/cotizaciones/cotizaciones/`
+  - Endpoints: `/api/v1/core/v1/cotizaciones/items/`
+  - Endpoints: `/api/v1/core/v1/cotizaciones/configuracion/`
+  - Todas las acciones `@action` se heredan automáticamente
+
+- ✅ **CoreLinksViewSet actualizado**: Enlaces para cotizaciones en `/api/v1/core/links/`
+  - `cotizaciones`: API y UI links
+  - `cotizaciones-items`: API y UI links
+  - `cotizaciones-configuracion`: API y UI links
+
+#### Frontend: Corrección del Botón "Nueva Cotización"
+- ✅ **Eliminada carga duplicada de HTMX**: Ya cargado en `workspace.html`
+- ✅ **Listener de clic directo como fallback**: `handleButtonClick()` en `cotizaciones.page.js`
+  - Detecta clics incluso si HTMX no procesa atributos
+  - Ejecuta petición HTMX manualmente si es necesario
+  - Logs de debugging en consola
+
+- ✅ **Procesamiento HTMX mejorado**: `htmx.process()` cuando se muestra el tab
+  - Procesa todo el tab cuando se muestra
+  - Procesa específicamente el botón "Nueva Cotización"
+  - Timeout de 200ms para asegurar renderizado completo
+
+- ✅ **Offcanvas automático**: Script en `editor_cotizacion.html` muestra offcanvas después de carga HTMX
+  - Usa `requestAnimationFrame` para asegurar renderizado
+  - Manejo de errores con try/catch
+  - Logs de debugging
+
+#### Templates Actualizados
+- ✅ **`list.html`**: Botón "Nueva Cotización" actualizado
+  - Endpoint: `/api/v1/cotizaciones/render-offcanvas/crear/`
+  - Contenedor: `#offcanvas-container` (unificado)
+  - Eliminados atributos `data-bs-toggle` y `data-bs-target` (conflicto)
+
+- ✅ **`editor_cotizacion.html`**: Script para mostrar offcanvas automáticamente
+  - Ejecución inmediata cuando se carga el contenido
+  - Bootstrap.Offcanvas.getOrCreateInstance()
+
+- ✅ **`assets_cotizaciones.html`**: Eliminada carga duplicada de HTMX
+  - HTMX ya cargado en `workspace.html`
+  - Evita conflictos y doble carga
+
+#### JavaScript Actualizado
+- ✅ **`cotizaciones.page.js`**: 
+  - Función `editar()` actualizada a nuevo endpoint
+  - Listener de clic directo como fallback
+  - Procesamiento HTMX cuando se muestra el tab
+  - Logs de debugging
+
+- ✅ **`cotizacion_columns.js`**: 
+  - Botón Editar actualizado a nuevo endpoint
+  - Atributo `hx-indicator` agregado
+
+#### Sincronización con Core API
+- ✅ **`apps/tenant/core/api/urls.py`**: 
+  - Router dedicado para cotizaciones: `path("v1/cotizaciones/", ...)`
+  - Gateway directo: `path("_apps/cotizaciones/", ...)`
+  - Documentación completa de endpoints
+
+- ✅ **`apps/tenant/core/api/viewsets.py`**: 
+  - Enlaces para cotizaciones en `CoreLinksViewSet.list()`
+
+#### Alineación con Patrón de Contabilidad
+- ✅ Mismo patrón de endpoints `render-offcanvas/*`
+- ✅ Mismo contenedor `#offcanvas-container`
+- ✅ Mismo tipo de offcanvas (`offcanvas-end`)
+- ✅ Mismo ancho y estilo (90%, max 1200px)
+- ✅ Mismo procesamiento HTMX en tabs
+
+### Archivos Modificados
+
+#### Backend
+- `apps/tenant/cotizaciones/api/viewsets.py`: Nuevos endpoints `render-offcanvas/*`
+- `apps/tenant/core/api/v1/cotizaciones/urls.py`: Router dedicado (nuevo)
+- `apps/tenant/core/api/urls.py`: Integración con Core API
+- `apps/tenant/core/api/viewsets.py`: Enlaces para cotizaciones
+
+#### Frontend
+- `apps/tenant/core/templates/tenant/core/partials/cotizaciones/list.html`: Botón actualizado
+- `apps/tenant/core/templates/tenant/core/partials/cotizaciones/editor_cotizacion.html`: Script automático
+- `apps/tenant/core/templates/tenant/core/partials/cotizaciones/assets_cotizaciones.html`: HTMX eliminado
+- `apps/tenant/core/static/core/js/cotizaciones/cotizaciones.page.js`: Listener fallback
+- `apps/tenant/core/static/core/js/cotizaciones/cotizacion_columns.js`: Botón actualizado
+
+---
+
+## 📋 CHANGELOG v2.61.1 (2026-01-28)
+
+### 🎯 Endpoint de Estadísticas y Optimizaciones de UI
+
+#### Nuevo Endpoint de Estadísticas
+- ✅ **`estadisticas`**: GET `/api/v1/cotizaciones/estadisticas/`
+  - Retorna resumen completo de cotizaciones:
+    - `total_neto`: Suma de `total_con_impuestos` de todas las cotizaciones
+    - `cantidad_total`: Total de cotizaciones
+    - `cantidad_aceptadas`: Cotizaciones con estado `ACEPTADA`
+    - `cantidad_enviadas`: Cotizaciones con estado `ENVIADA`
+    - `cantidad_borrador`: Cotizaciones con estado `BORRADOR`
+  - Filtrado por empresa del tenant actual (SSoT)
+  - Disponible en:
+    - `/api/v1/core/v1/cotizaciones/cotizaciones/estadisticas/` (Core API facade)
+    - `/api/v1/core/_apps/cotizaciones/estadisticas/` (Gateway directo)
+
+#### Frontend: Panel de Estadísticas
+- ✅ **Función `cargarEstadisticas()`**: Consume endpoint y actualiza panel
+  - Se ejecuta automáticamente al inicializar el módulo
+  - Se actualiza al refrescar la tabla (`refresh()`)
+  - Actualiza elementos:
+    - `#total-cotizaciones-neto`: Total neto formateado
+    - `#cantidad-cotizaciones`: Cantidad total
+    - `#cantidad-aceptadas`: Cotizaciones aceptadas
+    - `#cantidad-enviadas`: Cotizaciones enviadas
+    - `#cantidad-borrador`: Cotizaciones en borrador
+  - Exposición: `w.cotizacionesPage.cargarEstadisticas()` para uso manual
+
+#### Optimización de Tabla Principal
+- ✅ **Layout optimizado**: Cambio a `fitDataFill` para usar todo el ancho disponible
+- ✅ **Columnas con crecimiento proporcional**:
+  - `NÚMERO`: `minWidth: 160`, `widthGrow: 1.2`
+  - `Fecha`: `minWidth: 110`, `widthGrow: 0.8`
+  - `CLIENTE`: `minWidth: 250`, `widthGrow: 3` (mayor crecimiento)
+  - `TOTAL`: `minWidth: 140`, `widthGrow: 1.5`
+  - `Estado`: `minWidth: 120`, `widthGrow: 1`
+  - `Vencimiento`: `minWidth: 120`, `widthGrow: 1`
+  - `Acciones`: `minWidth: 280`, `widthGrow: 1.5`, `widthShrink: 0`
+- ✅ **Contenedor HTML**: Agregado `width: 100%` y `overflow-x: auto`
+- ✅ **Resultado**: Tabla usa todo el ancho disponible, distribuye columnas proporcionalmente
+
+#### Actualización en Tiempo Real del Resumen de Totales (Edición)
+- ✅ **Exposición de `recalcularTotalesGlobales()`**: Alias en `CotizacionEditarModule`
+  - Compatibilidad con `cotizacion_columns.js`
+  - Permite que `getActiveCotizacionModule()` encuentre y llame a esta función
+- ✅ **Recálculo automático al cargar datos iniciales**:
+  - Usa `w.recalcularFila()` para recalcular cada fila después de cargar datos
+  - Asegura que los subtotales estén correctos desde el inicio
+- ✅ **Actualización en tiempo real**:
+  - Listeners `cellEdited` en columnas ya configurados
+  - Cuando se edita una celda (cantidad, precio, utilidad, IVA):
+    1. Se dispara `cellEdited`
+    2. Se llama a `recalcularFila()` que actualiza el subtotal de la fila
+    3. `recalcularFila()` llama a `getActiveCotizacionModule()`
+    4. Se obtiene `CotizacionEditarModule` y se llama a `recalcularTotalesGlobales()`
+    5. Se actualiza el panel "Resumen de Totales" en tiempo real
+- ✅ **Listeners de inputs financieros**: Ya configurados para IVA y AIU
+
+#### Modularización Completa de Crear/Editar/Detalle
+- ✅ **Separación completa de templates**:
+  - `offcanvas_crear_cotizacion.html`: Exclusivamente para creación
+  - `offcanvas_editar_cotizacion.html`: Exclusivamente para edición
+  - `offcanvas_cotizacion_detalle.html`: Exclusivamente para detalle (read-only)
+- ✅ **Separación completa de JavaScript**:
+  - `cotizacion_crear.js`: Lógica exclusiva de creación (POST)
+  - `cotizacion_editar.js`: Lógica exclusiva de edición (PATCH)
+  - `cotizacion_detalle.js`: Lógica exclusiva de detalle (read-only)
+- ✅ **Safeguards mejorados**:
+  - Verificación de `data-mode` y `data-cotizacion-uuid` antes de inicializar
+  - Prevención de inicializaciones múltiples con flag `data-init`
+  - Listeners `shown.bs.offcanvas` como fallback principal
+  - Limpieza de estado en `hidden.bs.offcanvas`
+- ✅ **Inicialización mejorada**:
+  - Múltiples delays para asegurar DOM y dependencias listos
+  - Verificación de dependencias críticas antes de inicializar
+  - Retry automático si dependencias no están disponibles
+
+#### Mejoras en Inicialización del Módulo
+- ✅ **Flag `tableInitialized`**: Previene inicializaciones múltiples
+- ✅ **Lazy loading de tabla de configuraciones**: Solo se inicializa cuando se expande el collapse
+- ✅ **Verificación de visibilidad**: No inicializa si el tab no está visible
+- ✅ **Limpieza de estado**: Función `limpiarEstado()` para reset completo
+
+### Archivos Modificados
+
+#### Backend
+- `apps/tenant/cotizaciones/api/viewsets.py`: 
+  - Nuevo endpoint `estadisticas()` con agregaciones Django
+  - Imports: `Sum`, `Count`, `Q`, `DecimalField`, `Coalesce`, `Decimal`
+
+#### Frontend
+- `apps/tenant/core/static/core/js/cotizaciones/cotizaciones.page.js`:
+  - Función `cargarEstadisticas()` agregada
+  - Llamada automática en `inicializarModulo()`
+  - Actualización en `refresh()`
+  - Optimización de columnas con `widthGrow` y `minWidth`
+  - Configuración `layout: "fitDataFill"` en `tableConfig`
+- `apps/tenant/core/static/core/js/cotizaciones/features/cotizacion_editar.js`:
+  - Exposición de `recalcularTotalesGlobales()` como alias
+  - Recálculo automático de filas al cargar datos iniciales
+  - Uso de `w.recalcularFila()` para recalcular subtotales
+- `apps/tenant/core/templates/tenant/core/partials/cotizaciones/list.html`:
+  - Contenedor actualizado con `width: 100%` y `overflow-x: auto`
+
+---
+
 **Documento generado automáticamente**  
-**Última actualización**: 2026-03-04  
-**Versión del Sistema**: 2.60  
-**Estado**: ✅ Validado y Actualizado con Modernización del Membrete y Optimización de Espacios
+**Última actualización**: 2026-01-29  
+**Versión del Sistema**: 2.61.2  
+**Estado**: ✅ Validado y Actualizado con Flujo Completo desde Workspace hasta Models, incluyendo Core API y Gateway Directo

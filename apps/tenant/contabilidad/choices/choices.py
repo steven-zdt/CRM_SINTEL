@@ -1,51 +1,98 @@
 # apps/tenant/contabilidad/choices.py
 
 CATALOGO_NIIF_COLOMBIA = [
-    # [Código, Nombre, Nivel, Naturaleza]
+    # Estructura: [Código, Nombre, Nivel, Naturaleza (D: Débito, C: Crédito)]
+    
+    # --- 1. ACTIVO ---
     ('1', 'ACTIVO', 1, 'D'),
-    ('11', 'DISPONIBLE', 2, 'D'),
+    ('11', 'EFECTIVO Y EQUIVALENTES DE EFECTIVO', 2, 'D'),
     ('1105', 'CAJA', 4, 'D'),
     ('110505', 'CAJA GENERAL', 6, 'D'),
     ('1110', 'BANCOS', 4, 'D'),
     ('111005', 'MONEDA NACIONAL', 6, 'D'),
-    ('13', 'CUENTAS POR COBRAR', 2, 'D'),
+    ('12', 'INVERSIONES E INSTRUMENTOS DERIVADOS', 2, 'D'),
+    ('13', 'CUENTAS POR COBRAR COMERCIALES Y OTRAS', 2, 'D'),
     ('1305', 'CLIENTES', 4, 'D'),
+    ('130505', 'CLIENTES NACIONALES', 6, 'D'),
+    ('1355', 'ANTICIPO DE IMPUESTOS Y CONTRIBUCIONES', 4, 'D'),
+    ('135515', 'RETENCIÓN EN LA FUENTE (A FAVOR)', 6, 'D'),
+    ('135517', 'IMPUESTO A LAS VENTAS (IVA) PAGADO', 6, 'D'),
+    ('14', 'INVENTARIOS', 2, 'D'),
+    ('1435', 'MERCANCÍAS NO FABRICADAS POR LA EMPRESA', 4, 'D'),
+    ('15', 'PROPIEDADES, PLANTA Y EQUIPO', 2, 'D'),
+    ('1524', 'EQUIPO DE OFICINA', 4, 'D'),
+    ('1528', 'EQUIPO DE COMPUTACIÓN Y COMUNICACIÓN', 4, 'D'),
+    ('1592', 'DEPRECIACIÓN ACUMULADA', 4, 'C'),
+
+    # --- 2. PASIVO ---
     ('2', 'PASIVO', 1, 'C'),
     ('21', 'OBLIGACIONES FINANCIERAS', 2, 'C'),
-    ('23', 'CUENTAS POR PAGAR', 2, 'C'),
-    ('24', 'IMPUESTOS, GRAVÁMENES Y TASAS', 2, 'C'),
+    ('2105', 'BANCOS NACIONALES', 4, 'C'),
+    ('22', 'PROVEEDORES', 2, 'C'),
+    ('2205', 'PROVEEDORES NACIONALES', 4, 'C'),
+    ('23', 'CUENTAS POR PAGAR COMERCIALES Y OTRAS', 2, 'C'),
     ('2365', 'RETENCIÓN EN LA FUENTE', 4, 'C'),
     ('236505', 'RETENCIÓN EN LA FUENTE - SALARIOS', 6, 'C'),
     ('236510', 'RETENCIÓN EN LA FUENTE - HONORARIOS', 6, 'C'),
     ('236515', 'RETENCIÓN EN LA FUENTE - SERVICIOS', 6, 'C'),
+    ('236540', 'RETENCIÓN EN LA FUENTE - COMPRAS', 6, 'C'),
     ('2368', 'IMPUESTO DE INDUSTRIA Y COMERCIO RETENIDO', 4, 'C'),
     ('236805', 'ICA RETENIDO - ACTIVIDADES COMERCIALES', 6, 'C'),
-    ('236810', 'ICA RETENIDO - ACTIVIDADES DE SERVICIOS', 6, 'C'),
+    ('24', 'IMPUESTOS, GRAVÁMENES Y TASAS', 2, 'C'),
     ('2408', 'IMPUESTO SOBRE LAS VENTAS POR PAGAR', 4, 'C'),
-    ('240805', 'IVA GENERADO - TARIFA 19%', 6, 'C'),
-    ('240810', 'IVA DESCONTABLE - COMPRAS', 6, 'C'),
+    ('240805', 'IVA GENERADO', 6, 'C'),
+    ('240810', 'IVA DESCONTABLE', 6, 'C'),
+    ('25', 'OBLIGACIONES LABORALES', 2, 'C'),
+    ('2505', 'SALARIOS POR PAGAR', 4, 'C'),
+    ('2510', 'CESANTÍAS CONSOLIDADAS', 4, 'C'),
+    ('2515', 'INTERESES SOBRE CESANTÍAS', 4, 'C'),
+    ('2520', 'PRIMA DE SERVICIOS', 4, 'C'),
+    ('2525', 'VACACIONES CONSOLIDADAS', 4, 'C'),
+
+    # --- 3. PATRIMONIO ---
     ('3', 'PATRIMONIO', 1, 'C'),
-    ('31', 'CAPITAL SOCIAL', 2, 'C'),
+    ('31', 'CAPITAL PROPIO', 2, 'C'),
+    ('3105', 'CAPITAL SUSCRITO Y PAGADO', 4, 'C'),
+    ('33', 'RESERVAS', 2, 'C'),
+    ('3305', 'RESERVA LEGAL', 4, 'C'),
+    ('36', 'RESULTADOS DEL EJERCICIO', 2, 'C'),
+    ('3605', 'UTILIDAD DEL EJERCICIO', 4, 'C'),
+    ('3610', 'PÉRDIDA DEL EJERCICIO', 4, 'D'),
+
+    # --- 4. INGRESOS ---
     ('4', 'INGRESOS', 1, 'C'),
     ('41', 'INGRESOS OPERACIONALES', 2, 'C'),
     ('4135', 'COMERCIO AL POR MAYOR Y AL POR MENOR', 4, 'C'),
     ('413505', 'VENTA DE MERCANCÍAS', 6, 'C'),
     ('413510', 'VENTA DE SERVICIOS', 6, 'C'),
+    ('42', 'INGRESOS NO OPERACIONALES', 2, 'C'),
+    ('4210', 'FINANCIEROS', 4, 'C'),
+
+    # --- 5. GASTOS ---
     ('5', 'GASTOS', 1, 'D'),
     ('51', 'GASTOS DE ADMINISTRACIÓN', 2, 'D'),
     ('5105', 'GASTOS DE PERSONAL', 4, 'D'),
     ('510506', 'SUELDOS', 6, 'D'),
     ('510527', 'AUXILIO DE TRANSPORTE', 6, 'D'),
+    ('510530', 'CESANTÍAS', 6, 'D'),
+    ('510533', 'INTERESES SOBRE CESANTÍAS', 6, 'D'),
+    ('510536', 'PRIMA DE SERVICIOS', 6, 'D'),
+    ('510539', 'VACACIONES', 6, 'D'),
     ('5110', 'HONORARIOS', 4, 'D'),
     ('511005', 'HONORARIOS PROFESIONALES', 6, 'D'),
     ('5115', 'IMPUESTOS', 4, 'D'),
     ('511505', 'INDUSTRIA Y COMERCIO', 6, 'D'),
+    ('5120', 'ARRENDAMIENTOS', 4, 'D'),
+    ('5135', 'SERVICIOS', 4, 'D'),
+    ('513505', 'ASEO Y VIGILANCIA', 6, 'D'),
+    ('513520', 'ENERGÍA ELÉCTRICA', 6, 'D'),
+    ('513525', 'ACUEDUCTO Y ALCANTARILLADO', 6, 'D'),
+    ('5160', 'DEPRECIACIONES', 4, 'D'),
+    ('52', 'GASTOS DE VENTAS', 2, 'D'),
+
+    # --- 6. COSTOS DE VENTAS ---
     ('6', 'COSTOS DE VENTAS', 1, 'D'),
     ('61', 'COSTO DE VENTAS Y DE PRESTACIÓN DE SERVICIOS', 2, 'D'),
     ('6135', 'COMERCIO AL POR MAYOR Y AL POR MENOR', 4, 'D'),
     ('613505', 'COSTO DE MERCANCÍAS VENDIDAS', 6, 'D'),
-    # ... se puede extender tanto como necesites
-
-
-    
 ]

@@ -10,8 +10,11 @@ from rest_framework import viewsets, status, permissions, serializers
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.renderers import JSONRenderer
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from django.db import transaction, IntegrityError
+from django.db.models import Sum, Count, Q, DecimalField
+from django.db.models.functions import Coalesce
+from decimal import Decimal
 
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember
@@ -352,6 +355,234 @@ class CotizacionViewSet(BaseTenantViewSet):
                     "detail": str(e),
                     "trace": error_trace if settings.DEBUG else None
                 },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
+    def render_offcanvas_crear(self, request):
+        """
+        Endpoint HTMX RESTful para cargar offcanvas de creación de cotizaciones.
+        
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado EXCLUSIVAMENTE para creación
+        - GET /api/v1/cotizaciones/render-offcanvas/crear/ → Modo creación
+        
+        Returns:
+            Template HTML: tenant/core/partials/cotizaciones/offcanvas_crear_cotizacion.html
+        """
+        from apps.tenant.empresa.models import Empresa
+        from apps.tenant.clientes.models import Cliente
+        from ..configuracion.models import ConfiguracionCotizacion
+        
+        # ⚠️ v2.61: Obtener contexto necesario para el template (clientes y configuraciones)
+        empresa = Empresa.objects.first()
+        context = {
+            'cotizacion': None,
+            'is_draft': True,
+            'clientes': Cliente.objects.filter(activo=True).order_by('razon_social')[:100] if empresa else [],
+            'configuraciones': ConfiguracionCotizacion.objects.filter(es_activo=True).order_by('nombre_configuracion') if empresa else []
+        }
+        return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_crear_cotizacion.html')
+    
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request, **kwargs):
+        """
+        Endpoint HTMX RESTful para cargar offcanvas de edición de cotizaciones.
+        
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado EXCLUSIVAMENTE para edición
+        ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend puede enviar IDs numéricos
+        - GET /api/v1/cotizaciones/{uuid}/render-offcanvas/editar/ → Modo edición
+        
+        Returns:
+            Template HTML: tenant/core/partials/cotizaciones/offcanvas_editar_cotizacion.html
+        """
+        import traceback
+        try:
+            # ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend puede enviar IDs numéricos
+            # El router de DRF pone el valor en kwargs['uuid'] cuando lookup_field="uuid"
+            cotizacion_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            
+            if not cotizacion_identifier:
+                return Response(
+                    {"detail": ["ID de cotización no proporcionado en la URL."]},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Intentar obtener por UUID primero, luego por ID numérico
+            try:
+                cotizacion = self.get_queryset().get(uuid=cotizacion_identifier)
+            except (Cotizacion.DoesNotExist, ValueError):
+                # Si falla con UUID, intentar con ID numérico
+                try:
+                    cotizacion = self.get_queryset().get(id=cotizacion_identifier)
+                except (Cotizacion.DoesNotExist, ValueError):
+                    return Response(
+                        {"detail": [f"Cotización con ID {cotizacion_identifier} no encontrada."]},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+            from apps.tenant.empresa.models import Empresa
+            from apps.tenant.clientes.models import Cliente
+            from ..configuracion.models import ConfiguracionCotizacion
+            
+            empresa = Empresa.objects.first()
+            context = {
+                'cotizacion': cotizacion,
+                'is_draft': False,
+                'clientes': Cliente.objects.filter(activo=True).order_by('razon_social')[:100] if empresa else [],
+                'configuraciones': ConfiguracionCotizacion.objects.filter(es_activo=True).order_by('nombre_configuracion') if empresa else []
+            }
+            return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_editar_cotizacion.html')
+        
+        except Exception as e:
+            logger.error(f"Error en render_offcanvas_editar: {e}")
+            logger.error(traceback.format_exc())
+            return Response(
+                {"detail": [f"Error al cargar cotización: {str(e)}"]},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
+    def render_offcanvas_detalle(self, request):
+        """
+        Endpoint HTMX RESTful para cargar offcanvas de detalle de cotizaciones (read-only).
+        
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado para detalle
+        - GET /api/v1/cotizaciones/render-offcanvas/detalle/?id={uuid} → Modo detalle
+        
+        Query params:
+        - id: ID de la cotización (requerido, puede ser numérico o UUID)
+        
+        Returns:
+            Template HTML: tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html
+        """
+        import traceback
+        try:
+            cotizacion_id = request.query_params.get('id')
+            if not cotizacion_id:
+                context = {
+                    'cotizacion': None,
+                    'error': 'ID de cotización no proporcionado'
+                }
+                return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=400)
+            
+            # Intentar obtener por UUID primero, luego por ID numérico
+            cotizacion = None
+            try:
+                cotizacion = self.get_queryset().select_related('cliente', 'configuracion').prefetch_related('items').get(uuid=cotizacion_id)
+                logger.info(f"[CotizacionViewSet] Cotización encontrada por UUID: {cotizacion_id}")
+            except (Cotizacion.DoesNotExist, ValueError) as e:
+                logger.debug(f"[CotizacionViewSet] No se encontró por UUID {cotizacion_id}, intentando por ID numérico: {e}")
+                # Si falla con UUID, intentar con ID numérico
+                try:
+                    cotizacion = self.get_queryset().select_related('cliente', 'configuracion').prefetch_related('items').get(id=cotizacion_id)
+                    logger.info(f"[CotizacionViewSet] Cotización encontrada por ID numérico: {cotizacion_id}")
+                except (Cotizacion.DoesNotExist, ValueError) as e2:
+                    logger.warning(f"[CotizacionViewSet] Cotización no encontrada con ID {cotizacion_id}: {e2}")
+                    context = {
+                        'cotizacion': None,
+                        'error': f'Cotización con ID {cotizacion_id} no encontrada'
+                    }
+                    return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=404)
+            
+            if not cotizacion:
+                context = {
+                    'cotizacion': None,
+                    'error': f'Cotización con ID {cotizacion_id} no encontrada'
+                }
+                return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=404)
+            
+            # Preparar contexto con validaciones
+            context = {
+                'cotizacion': cotizacion
+            }
+            
+            logger.info(f"[CotizacionViewSet] Renderizando detalle de cotización {cotizacion.id} (UUID: {cotizacion.uuid})")
+            
+            # ⚠️ v2.61: Intentar renderizar el template y capturar errores específicos
+            try:
+                return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html')
+            except Exception as template_error:
+                logger.error(f"[CotizacionViewSet] Error al renderizar template: {template_error}", exc_info=True)
+                logger.error(f"[CotizacionViewSet] Traceback del template: {traceback.format_exc()}")
+                # Retornar error más específico
+                context = {
+                    'cotizacion': None,
+                    'error': f'Error al renderizar template: {str(template_error)}'
+                }
+                return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=500)
+        
+        except Exception as e:
+            logger.error(f"[CotizacionViewSet] Error en render_offcanvas_detalle: {e}", exc_info=True)
+            logger.error(f"[CotizacionViewSet] Traceback completo: {traceback.format_exc()}")
+            context = {
+                'cotizacion': None,
+                'error': f'Error al cargar cotización: {str(e)}'
+            }
+            return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=500)
+
+    @action(detail=False, methods=['get'], url_path='estadisticas')
+    def estadisticas(self, request):
+        """
+        ⚠️ v2.61: Endpoint para obtener estadísticas de cotizaciones.
+        
+        Retorna resumen con:
+        - total_neto: Suma de total_con_impuestos de todas las cotizaciones
+        - cantidad_total: Total de cotizaciones
+        - cantidad_aceptadas: Cotizaciones con estado ACEPTADA
+        - cantidad_enviadas: Cotizaciones con estado ENVIADA
+        - cantidad_borrador: Cotizaciones con estado BORRADOR
+        
+        GET /api/v1/cotizaciones/estadisticas/
+        
+        Returns:
+            {
+                "total_neto": "1000000.00",
+                "cantidad_total": 50,
+                "cantidad_aceptadas": 10,
+                "cantidad_enviadas": 20,
+                "cantidad_borrador": 20
+            }
+        """
+        try:
+            from apps.tenant.empresa.models import Empresa
+            
+            # ⚠️ SSoT: Obtener empresa del tenant actual (singleton)
+            empresa = Empresa.objects.first()
+            if not empresa:
+                return Response({
+                    "total_neto": "0.00",
+                    "cantidad_total": 0,
+                    "cantidad_aceptadas": 0,
+                    "cantidad_enviadas": 0,
+                    "cantidad_borrador": 0
+                }, status=status.HTTP_200_OK)
+            
+            # Base queryset filtrado por empresa
+            base_qs = Cotizacion.objects.filter(empresa=empresa)
+            
+            # Agregaciones para total neto y cantidad total
+            totales = base_qs.aggregate(
+                total_neto=Coalesce(Sum('total_con_impuestos', output_field=DecimalField()), Decimal('0.00')),
+                cantidad_total=Count('id')
+            )
+            
+            # Conteos por estado
+            cantidad_aceptadas = base_qs.filter(estado=Cotizacion.Estado.ACEPTADA).count()
+            cantidad_enviadas = base_qs.filter(estado=Cotizacion.Estado.ENVIADA).count()
+            cantidad_borrador = base_qs.filter(estado=Cotizacion.Estado.BORRADOR).count()
+            
+            return Response({
+                "total_neto": str(totales['total_neto'] or Decimal('0.00')),
+                "cantidad_total": totales['cantidad_total'] or 0,
+                "cantidad_aceptadas": cantidad_aceptadas,
+                "cantidad_enviadas": cantidad_enviadas,
+                "cantidad_borrador": cantidad_borrador
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"[CotizacionViewSet] Error calculando estadísticas: {e}", exc_info=True)
+            return Response(
+                {"error": "error_calculando_estadisticas", "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

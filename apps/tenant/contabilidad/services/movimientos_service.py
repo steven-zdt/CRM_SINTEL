@@ -34,8 +34,10 @@ def list_movimientos(
     """
     from apps.tenant.contabilidad.models import MovimientoContable
     
+    # ⚠️ NORMATIVA: Incluir campos de terceros en only() para optimización (alineado con MovimientoContableListSerializer)
     qs = MovimientoContable.objects.only(
-        'id', 'asiento_id', 'cuenta_id', 'orden', 'debe', 'haber', 'descripcion'
+        'id', 'asiento_id', 'cuenta_id', 'orden', 'debe', 'haber', 'descripcion',
+        'tipo_tercero', 'tercero_nit', 'tercero_razon_social'
     ).select_related('cuenta')
     
     # Aplicar filtros
@@ -66,6 +68,7 @@ def list_movimientos(
     
     results = []
     for movimiento in page_obj:
+        # ⚠️ NORMATIVA: Incluir campos de terceros en listado (alineado con MovimientoContableListSerializer)
         results.append({
             'id': movimiento.id,
             'asiento': movimiento.asiento_id,
@@ -76,6 +79,9 @@ def list_movimientos(
             'debe': str(movimiento.debe),
             'haber': str(movimiento.haber),
             'descripcion': movimiento.descripcion or '',
+            'tipo_tercero': movimiento.tipo_tercero or None,
+            'tercero_nit': movimiento.tercero_nit or '',
+            'tercero_razon_social': movimiento.tercero_razon_social or '',
         })
     
     return {
@@ -113,8 +119,13 @@ def create_movimiento(data: Dict[str, Any]) -> Dict[str, Any]:
     
     if 'cuenta' in data:
         cuenta_id = data['cuenta']
-        if not CuentaContable.objects.filter(id=cuenta_id).exists():
+        cuenta = CuentaContable.objects.filter(id=cuenta_id).first()
+        if not cuenta:
             raise ValueError(f"La cuenta con ID {cuenta_id} no existe.")
+        
+        # ⚠️ NORMATIVA: Validar nivel 6 de cuenta
+        if cuenta.nivel != 6:
+            raise ValueError(f"La cuenta {cuenta.codigo} no es de nivel 6. Solo se permiten registros en cuentas auxiliares (nivel 6).")
     
     debe = Decimal(str(data.get('debe', 0)))
     haber = Decimal(str(data.get('haber', 0)))
@@ -125,14 +136,23 @@ def create_movimiento(data: Dict[str, Any]) -> Dict[str, Any]:
     if debe == 0 and haber == 0:
         raise ValueError("Un movimiento debe tener débito o crédito mayor a cero.")
     
+    # ⚠️ NORMATIVA: Poblar terceros si no vienen en data
+    if 'asiento' in data:
+        from apps.tenant.contabilidad.models import AsientoContable
+        from apps.tenant.contabilidad.services.asientos_service import _extraer_tercero_desde_asiento
+        asiento = AsientoContable.objects.get(id=data['asiento'])
+        if 'tipo_tercero' not in data or not data.get('tipo_tercero'):
+            tercero_data = _extraer_tercero_desde_asiento(asiento, data)
+            data.update(tercero_data)
+    
     movimiento = MovimientoContable.objects.create(**data)
     
-    # Actualizar totales del asiento
+    # ⚠️ NORMATIVA: Actualizar totales usando método mejorado
     asiento = movimiento.asiento
-    asiento.total_debe = sum(m.debe for m in asiento.movimientos.all())
-    asiento.total_haber = sum(m.haber for m in asiento.movimientos.all())
+    asiento.calcular_totales()
     asiento.save(update_fields=['total_debe', 'total_haber'])
     
+    # ⚠️ NORMATIVA: Incluir campos de terceros y tributarios en DTO (alineado con MovimientoContableDetailSerializer)
     return {
         'id': movimiento.id,
         'asiento': movimiento.asiento_id,
@@ -143,6 +163,17 @@ def create_movimiento(data: Dict[str, Any]) -> Dict[str, Any]:
         'debe': str(movimiento.debe),
         'haber': str(movimiento.haber),
         'descripcion': movimiento.descripcion or '',
+        # Campos de terceros
+        'tipo_tercero': movimiento.tipo_tercero or None,
+        'tercero_id': movimiento.tercero_id or None,
+        'tercero_nit': movimiento.tercero_nit or '',
+        'tercero_razon_social': movimiento.tercero_razon_social or '',
+        # Campos tributarios (read-only, calculados automáticamente)
+        'base_iva': str(movimiento.base_iva),
+        'iva_generado': str(movimiento.iva_generado),
+        'iva_descontable': str(movimiento.iva_descontable),
+        'retefuente': str(movimiento.retefuente),
+        'reteica': str(movimiento.reteica),
     }
 
 
@@ -176,8 +207,13 @@ def update_movimiento(movimiento_id: int, data: Dict[str, Any]) -> Dict[str, Any
     
     if 'cuenta' in data:
         cuenta_id = data['cuenta']
-        if not CuentaContable.objects.filter(id=cuenta_id).exists():
+        cuenta = CuentaContable.objects.filter(id=cuenta_id).first()
+        if not cuenta:
             raise ValueError(f"La cuenta con ID {cuenta_id} no existe.")
+        
+        # ⚠️ NORMATIVA: Validar nivel 6 de cuenta
+        if cuenta.nivel != 6:
+            raise ValueError(f"La cuenta {cuenta.codigo} no es de nivel 6. Solo se permiten registros en cuentas auxiliares (nivel 6).")
     
     # Validar debe/haber si se actualizan
     if 'debe' in data or 'haber' in data:
@@ -189,7 +225,17 @@ def update_movimiento(movimiento_id: int, data: Dict[str, Any]) -> Dict[str, Any
         if debe == 0 and haber == 0:
             raise ValueError("Un movimiento debe tener débito o crédito mayor a cero.")
     
-    campos_permitidos = ['asiento', 'cuenta', 'orden', 'debe', 'haber', 'descripcion']
+    # ⚠️ NORMATIVA: Poblar terceros si no vienen en data
+    asiento = movimiento.asiento
+    if 'tipo_tercero' not in data or not data.get('tipo_tercero'):
+        from apps.tenant.contabilidad.services.asientos_service import _extraer_tercero_desde_asiento
+        tercero_data = _extraer_tercero_desde_asiento(asiento, data)
+        data.update(tercero_data)
+    
+    campos_permitidos = [
+        'asiento', 'cuenta', 'orden', 'debe', 'haber', 'descripcion',
+        'tipo_tercero', 'tercero_id', 'tercero_nit', 'tercero_razon_social'
+    ]
     update_fields = []
     for campo in campos_permitidos:
         if campo in data:
@@ -199,12 +245,11 @@ def update_movimiento(movimiento_id: int, data: Dict[str, Any]) -> Dict[str, Any
     if update_fields:
         movimiento.save(update_fields=update_fields)
         
-        # Actualizar totales del asiento
-        asiento = movimiento.asiento
-        asiento.total_debe = sum(m.debe for m in asiento.movimientos.all())
-        asiento.total_haber = sum(m.haber for m in asiento.movimientos.all())
+        # ⚠️ NORMATIVA: Actualizar totales usando método mejorado
+        asiento.calcular_totales()
         asiento.save(update_fields=['total_debe', 'total_haber'])
     
+    # ⚠️ NORMATIVA: Incluir campos de terceros y tributarios en DTO (alineado con MovimientoContableDetailSerializer)
     return {
         'id': movimiento.id,
         'asiento': movimiento.asiento_id,
@@ -215,6 +260,17 @@ def update_movimiento(movimiento_id: int, data: Dict[str, Any]) -> Dict[str, Any
         'debe': str(movimiento.debe),
         'haber': str(movimiento.haber),
         'descripcion': movimiento.descripcion or '',
+        # Campos de terceros
+        'tipo_tercero': movimiento.tipo_tercero or None,
+        'tercero_id': movimiento.tercero_id or None,
+        'tercero_nit': movimiento.tercero_nit or '',
+        'tercero_razon_social': movimiento.tercero_razon_social or '',
+        # Campos tributarios (read-only, calculados automáticamente)
+        'base_iva': str(movimiento.base_iva),
+        'iva_generado': str(movimiento.iva_generado),
+        'iva_descontable': str(movimiento.iva_descontable),
+        'retefuente': str(movimiento.retefuente),
+        'reteica': str(movimiento.reteica),
     }
 
 
@@ -237,7 +293,6 @@ def delete_movimiento(movimiento_id: int) -> None:
     asiento = movimiento.asiento
     movimiento.delete()
     
-    # Actualizar totales del asiento
-    asiento.total_debe = sum(m.debe for m in asiento.movimientos.all())
-    asiento.total_haber = sum(m.haber for m in asiento.movimientos.all())
+    # ⚠️ NORMATIVA: Actualizar totales usando método mejorado
+    asiento.calcular_totales()
     asiento.save(update_fields=['total_debe', 'total_haber'])

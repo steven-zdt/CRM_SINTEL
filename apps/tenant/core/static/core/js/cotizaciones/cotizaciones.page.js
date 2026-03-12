@@ -29,6 +29,7 @@
   const SUBTAB_ID = '#subtab-cotizaciones'; // ⚠️ Sub-tab donde está la tabla
   let table = null;
   let configTable = null; // ⚠️ Tabla de configuraciones
+  let tableInitialized = false; // ⚠️ v2.61: Flag para evitar inicializaciones múltiples
 
   /**
    * Formatear moneda usando localizador del sistema
@@ -430,6 +431,7 @@
   /**
    * Definir columnas de Tabulator (exactamente 7)
    * ⚠️ v2.40: Nombres de campos según CotizacionListSerializer
+   * ⚠️ v2.61: Optimizado para usar todo el ancho disponible de la página
    */
   function getColumns() {
     return [
@@ -440,7 +442,8 @@
           const value = cell.getValue();
           return value || '-';
         },
-        width: 150,
+        minWidth: 160,
+        widthGrow: 1.2,
         headerFilter: "input"
       },
       {
@@ -449,7 +452,8 @@
         formatter: function(cell) {
           return formatDate(cell.getValue());
         },
-        width: 120,
+        minWidth: 110,
+        widthGrow: 0.8,
         sorter: "date",
         headerFilter: false // ⚠️ Explícitamente deshabilitado para evitar errores
       },
@@ -465,7 +469,8 @@
           }
           return value;
         },
-        minWidth: 200,
+        minWidth: 250,
+        widthGrow: 3, // ⚠️ v2.61: Mayor crecimiento para aprovechar espacio disponible
         headerFilter: "input"
       },
       {
@@ -479,7 +484,8 @@
           }
           return fmtMoney(value);
         },
-        width: 150,
+        minWidth: 140,
+        widthGrow: 1.5,
         hozAlign: "right",
         sorter: "number",
         headerFilter: false, // ⚠️ Explícitamente deshabilitado para evitar errores
@@ -496,7 +502,8 @@
           const rowData = cell.getRow().getData();
           return formatEstado(rowData.estado, rowData.estado_display, rowData.fecha_vencimiento);
         },
-        width: 130,
+        minWidth: 120,
+        widthGrow: 1,
         headerFilter: "select",
         headerFilterParams: {
           values: {
@@ -521,7 +528,8 @@
           }
           return fechaFormateada;
         },
-        width: 120,
+        minWidth: 120,
+        widthGrow: 1,
         sorter: "date",
         headerFilter: false // ⚠️ Explícitamente deshabilitado para evitar errores
       },
@@ -536,12 +544,13 @@
           
           let buttons = '';
           
-          // ⚠️ FASE 1: Botón Editar con HTMX
+          // ⚠️ v2.61: Botón Editar con HTMX usando nuevo endpoint render-offcanvas/editar/ (alineado con patrón de contabilidad)
           buttons += `
             <button class="btn btn-sm btn-outline-primary"
-                    hx-get="/cotizaciones/editor/${uuid}/"
+                    hx-get="/api/v1/cotizaciones/${uuid}/render-offcanvas/editar/"
                     hx-target="#offcanvas-container"
                     hx-swap="innerHTML"
+                    hx-indicator="#spinner"
                     data-bs-toggle="offcanvas"
                     data-bs-target="#offcanvas-container"
                     title="Editar Cotización">
@@ -567,10 +576,17 @@
             </button>
           `;
           
-          // Botón Ver Detalle
+          // ⚠️ v2.61: Botón Ver Detalle con HTMX usando nuevo endpoint render-offcanvas/detalle/ (alineado con patrón de contabilidad)
           buttons += `
-            <button class="btn btn-sm btn-link text-info p-0 me-2" data-action="ver" data-uuid="${uuid}" title="Ver Detalle">
-              <i class="fas fa-eye"></i>
+            <button class="btn btn-sm btn-outline-info"
+                    hx-get="/api/v1/cotizaciones/render-offcanvas/detalle/?id=${uuid}"
+                    hx-target="#offcanvas-container"
+                    hx-swap="innerHTML"
+                    hx-indicator="#spinner"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#offcanvas-container"
+                    title="Ver Detalle">
+              <i class="bi bi-eye"></i> Ver Detalle
             </button>
           `;
           
@@ -586,7 +602,9 @@
         headerSort: false,
         headerFilter: false, // ⚠️ Columna de acciones no necesita filtro
         hozAlign: "center",
-        width: 200
+        minWidth: 280,
+        widthGrow: 1.5,
+        widthShrink: 0 // ⚠️ v2.61: No reducir ancho de acciones para mantener botones visibles
       }
     ];
   }
@@ -634,6 +652,12 @@
    * Inicializar tabla Tabulator
    */
   function initTable() {
+    // ⚠️ v2.61: Evitar inicializaciones múltiples
+    if (tableInitialized && table) {
+      console.log(`[${MOD}] Tabla ya inicializada, omitiendo...`);
+      return table;
+    }
+    
     if (!w.TabulatorFactory) {
       if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
         w.UIManager.notifyError({ status: 500, data: { detail: 'TabulatorFactory no está disponible' } }, `[${MOD}]`);
@@ -649,6 +673,7 @@
     // Configurar ajaxURL con fetcher personalizado
     const tableConfig = {
       searchInputSelector: SEARCH_SELECTOR,
+      layout: "fitDataFill", // ⚠️ v2.61: Usar fitDataFill para aprovechar todo el ancho disponible
       ajaxURL: function(url, config, params) {
         // Usar fetcher resiliente
         return fetchCotizacionList(params).then(data => {
@@ -665,6 +690,12 @@
     };
 
     table = w.TabulatorFactory.create(TABLE_SELECTOR, API_URL, columns, tableConfig);
+    
+    // ⚠️ v2.61: Marcar como inicializada si se creó correctamente
+    if (table) {
+      tableInitialized = true;
+      console.log(`[${MOD}] Tabla inicializada correctamente`);
+    }
 
     // ⚠️ FASE 1: Event delegation para botones de acciones (solo para botones sin HTMX)
     if (table) {
@@ -739,7 +770,8 @@
 
   /**
    * Editar cotización
-   * ⚠️ v2.60: Usa UUID - Abre el editor en offcanvas
+   * ⚠️ v2.61: Usa UUID - Abre el editor en offcanvas usando el nuevo endpoint
+   * Alineado con patrón de contabilidad: /api/v1/cotizaciones/{uuid}/render-offcanvas/editar/
    */
   function editar(uuid) {
     if (!uuid) {
@@ -749,8 +781,9 @@
       return;
     }
     
-    const editorUrl = `/cotizaciones/editor/${uuid}/`;
-    const editorContainer = d.getElementById('offcanvas-editor-container');
+    // ⚠️ v2.61: Usar nuevo endpoint render-offcanvas/editar/ alineado con patrón de contabilidad
+    const editorUrl = `/api/v1/cotizaciones/${uuid}/render-offcanvas/editar/`;
+    const editorContainer = d.getElementById('offcanvas-container');
     
     if (!editorContainer) {
       if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
@@ -761,7 +794,7 @@
     
     if (typeof htmx !== 'undefined') {
       htmx.ajax('GET', editorUrl, {
-        target: '#offcanvas-editor-container',
+        target: '#offcanvas-container',
         swap: 'innerHTML'
       }).then(() => {
         if (w.bootstrap && w.bootstrap.Offcanvas) {
@@ -783,11 +816,48 @@
 
   /**
    * Ver detalle de cotización
-   * ⚠️ v2.60: Usa UUID - Abre el editor en modo lectura
+   * ⚠️ v2.61: Usa UUID - Abre el offcanvas de detalle en modo solo lectura usando HTMX
+   * Alineado con patrón de contabilidad: /api/v1/cotizaciones/render-offcanvas/detalle/?id={uuid}
    */
   function verDetalle(uuid) {
-    // Por ahora, usar el editor también para ver detalles
-    editar(uuid);
+    if (!uuid) {
+      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+        w.UIManager.notifyError({ status: 400, data: { detail: 'UUID de cotización no proporcionado' } }, `[${MOD}]`);
+      }
+      return;
+    }
+    
+    // ⚠️ v2.61: Usar nuevo endpoint render-offcanvas/detalle/ alineado con patrón de contabilidad
+    const detalleUrl = `/api/v1/cotizaciones/render-offcanvas/detalle/?id=${uuid}`;
+    const detalleContainer = d.getElementById('offcanvas-container');
+    
+    if (!detalleContainer) {
+      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+        w.UIManager.notifyError({ status: 500, data: { detail: 'Contenedor del offcanvas no disponible' } }, `[${MOD}]`);
+      }
+      return;
+    }
+    
+    if (typeof htmx !== 'undefined') {
+      htmx.ajax('GET', detalleUrl, {
+        target: '#offcanvas-container',
+        swap: 'innerHTML'
+      }).then(() => {
+        if (w.bootstrap && w.bootstrap.Offcanvas) {
+          const detalleOffcanvasInstance = w.bootstrap.Offcanvas.getOrCreateInstance(detalleContainer);
+          detalleOffcanvasInstance.show();
+        }
+      }).catch((error) => {
+        console.error(`[${MOD}] Error al cargar el detalle:`, error);
+        if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+          w.UIManager.notifyError({ status: 500, data: { detail: 'Error al cargar el detalle de cotización' } }, `[${MOD}]`);
+        }
+      });
+    } else {
+      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+        w.UIManager.notifyError({ status: 500, data: { detail: 'HTMX no está disponible' } }, `[${MOD}]`);
+      }
+    }
   }
 
   /**
@@ -920,10 +990,94 @@
   }
 
   /**
+   * ⚠️ v2.61: Limpiar estado del módulo (usado al cambiar de página o reiniciar)
+   */
+  function limpiarEstado() {
+    if (table && typeof table.destroy === 'function') {
+      try {
+        table.destroy();
+      } catch (e) {
+        console.warn(`[${MOD}] Error al destruir tabla principal:`, e);
+      }
+    }
+    if (configTable && typeof configTable.destroy === 'function') {
+      try {
+        configTable.destroy();
+      } catch (e) {
+        console.warn(`[${MOD}] Error al destruir tabla de configuraciones:`, e);
+      }
+    }
+    table = null;
+    configTable = null;
+    tableInitialized = false;
+    console.log(`[${MOD}] Estado limpiado`);
+  }
+
+  /**
+   * ⚠️ v2.61: Cargar estadísticas desde el backend
+   */
+  async function cargarEstadisticas() {
+    try {
+      if (!w.http || typeof w.http !== 'function') {
+        console.warn(`[${MOD}] w.http no disponible para cargar estadísticas`);
+        return;
+      }
+
+      const response = await w.http('GET', `${API_URL}estadisticas/`);
+      
+      if (response && response.ok && response.data) {
+        const stats = response.data;
+        
+        // Actualizar Total Neto
+        const elTotalNeto = d.getElementById('total-cotizaciones-neto');
+        if (elTotalNeto) {
+          elTotalNeto.textContent = fmtMoney(parseFloat(stats.total_neto) || 0);
+        }
+        
+        // Actualizar Cantidad Total
+        const elCantidadTotal = d.getElementById('cantidad-cotizaciones');
+        if (elCantidadTotal) {
+          elCantidadTotal.textContent = stats.cantidad_total || 0;
+        }
+        
+        // Actualizar Aceptadas
+        const elAceptadas = d.getElementById('cantidad-aceptadas');
+        if (elAceptadas) {
+          elAceptadas.textContent = stats.cantidad_aceptadas || 0;
+        }
+        
+        // Actualizar Enviadas
+        const elEnviadas = d.getElementById('cantidad-enviadas');
+        if (elEnviadas) {
+          elEnviadas.textContent = stats.cantidad_enviadas || 0;
+        }
+        
+        // Actualizar Borrador
+        const elBorrador = d.getElementById('cantidad-borrador');
+        if (elBorrador) {
+          elBorrador.textContent = stats.cantidad_borrador || 0;
+        }
+      } else {
+        console.warn(`[${MOD}] Error al cargar estadísticas:`, response);
+      }
+    } catch (error) {
+      console.error(`[${MOD}] Error al cargar estadísticas:`, error);
+      // ⚠️ v2.60: Error silencioso - no interrumpir la inicialización del módulo
+    }
+  }
+
+  /**
    * Inicializar módulo completo
    */
   async function inicializarModulo() {
     // ⚠️ v2.60: Aislamiento Gradual - Sin logs de operación
+    
+    // ⚠️ v2.61: Verificar si el contenedor está visible antes de inicializar
+    const tabElement = d.querySelector(TAB_ID);
+    if (!tabElement || tabElement.style.display === 'none') {
+      console.log(`[${MOD}] Tab no visible, omitiendo inicialización`);
+      return;
+    }
     
     // Verificar dependencias críticas
     if (!w.TabulatorFactory) {
@@ -940,18 +1094,22 @@
       return;
     }
 
+    // ⚠️ v2.61: Limpiar estado previo si existe antes de reinicializar
+    if (tableInitialized) {
+      console.log(`[${MOD}] Reinicializando módulo, limpiando estado previo...`);
+      limpiarEstado();
+    }
+
+    // ⚠️ v2.61: Cargar estadísticas desde el backend
+    cargarEstadisticas();
+
     // Inicializar tabla principal de cotizaciones
     table = initTable();
     
-    // ⚠️ v2.60: Inicializar tabla de configuraciones (puede fallar si el collapse está cerrado)
-    // Intentar inicializar, pero si falla, se inicializará cuando el collapse se expanda
-    // ⚠️ v2.60: Aislamiento Gradual - try/catch interno para inicialización (no es error de API)
-    try {
-      configTable = initConfiguracionesTable();
-    } catch (err) {
-      // ⚠️ v2.60: Error de inicialización local, continuar sin tabla de configuraciones
-      configTable = null;
-    }
+    // ⚠️ v2.61: NO inicializar tabla de configuraciones automáticamente
+    // Solo se inicializará cuando el usuario expanda el collapse (lazy loading)
+    // Esto evita peticiones HTTP innecesarias cuando el collapse está cerrado
+    configTable = null;
     
     // Exponer módulo globalmente ANTES de configurar eventos
     /**
@@ -978,6 +1136,8 @@
         if (table) {
           table.replaceData();
         }
+        // ⚠️ v2.61: Actualizar estadísticas al refrescar
+        cargarEstadisticas();
       },
       refreshConfiguraciones: function() {
         if (configTable) {
@@ -989,7 +1149,8 @@
       crear: crear,
       eliminar: handleDelete,
       convertirAFactura: handleConvertirAFactura,
-      verPDF: verPDF // ⚠️ Método para ver PDF
+      verPDF: verPDF, // ⚠️ Método para ver PDF
+      cargarEstadisticas: cargarEstadisticas // ⚠️ v2.61: Exponer método de estadísticas
     };
     
     // ⚠️ Exponer también como window.CotizacionesPage para compatibilidad
@@ -1000,17 +1161,26 @@
     // Configurar eventos DESPUÉS de inicializar el módulo
     configurarEventos();
     
-    // ⚠️ v2.60: Inicializar tabla de configuraciones cuando el collapse se expanda
+    // ⚠️ v2.61: Inicializar tabla de configuraciones SOLO cuando el collapse se expanda (lazy loading)
+    // Esto evita peticiones HTTP innecesarias cuando el collapse está cerrado
     const collapseElement = d.querySelector('#collapse-configuraciones');
     if (collapseElement) {
       collapseElement.addEventListener('shown.bs.collapse', function() {
+        console.log(`[${MOD}] Collapse de configuraciones expandido, inicializando tabla...`);
         if (!configTable) {
-          configTable = initConfiguracionesTable();
-          if (configTable && w.cotizacionesPage) {
-            w.cotizacionesPage.configTable = configTable;
+          try {
+            configTable = initConfiguracionesTable();
+            if (configTable && w.cotizacionesPage) {
+              w.cotizacionesPage.configTable = configTable;
+              console.log(`[${MOD}] Tabla de configuraciones inicializada correctamente`);
+            }
+          } catch (err) {
+            console.error(`[${MOD}] Error al inicializar tabla de configuraciones:`, err);
+            configTable = null;
           }
         } else {
           // Si ya existe, refrescar datos
+          console.log(`[${MOD}] Tabla de configuraciones ya existe, refrescando datos...`);
           configTable.replaceData();
         }
       });
@@ -1045,11 +1215,28 @@
     initFallback();
   }
   
-  // También configurar eventos cuando el tab de cotizaciones se muestre (Bootstrap event)
+  // ⚠️ v2.61: Limpiar estado cuando se oculta el tab
+  d.addEventListener('hidden.bs.tab', function(e) {
+    if (e.target && (e.target.getAttribute('data-tab') === 'cotizaciones' || e.target.getAttribute('data-bs-target') === TAB_ID)) {
+      console.log(`[${MOD}] Tab ocultado, limpiando estado...`);
+      // No limpiar completamente, solo marcar como no inicializado para permitir reinicialización
+      // tableInitialized = false;
+    }
+  });
+
+  // ⚠️ v2.61: También configurar eventos cuando el tab de cotizaciones se muestre (Bootstrap event)
+  // Asegurar que HTMX procese los atributos cuando el tab se muestra
   d.addEventListener('shown.bs.tab', function(e) {
     if (e.target && (e.target.getAttribute('data-tab') === 'cotizaciones' || e.target.getAttribute('data-bs-target') === TAB_ID)) {
+      // ⚠️ v2.61: Verificar si el tab está visible antes de inicializar
+      const tabElement = d.querySelector(TAB_ID);
+      if (!tabElement || tabElement.style.display === 'none') {
+        console.log(`[${MOD}] Tab no visible, omitiendo inicialización`);
+        return;
+      }
+      
       // Asegurar que el módulo esté inicializado
-      if (!w.cotizacionesPage) {
+      if (!w.cotizacionesPage || !tableInitialized) {
         inicializarModulo().catch(err => {
           // ⚠️ v2.60: Error de inicialización, delegar a UIManager
           if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
@@ -1059,6 +1246,88 @@
       } else {
         setTimeout(configurarEventos, 100);
       }
+      
+      // ⚠️ v2.61: Procesar atributos HTMX cuando se muestra el tab (crítico para botones)
+      setTimeout(function() {
+        if (typeof htmx !== 'undefined' && typeof htmx.process === 'function') {
+          const tabElement = d.querySelector(TAB_ID);
+          if (tabElement) {
+            htmx.process(tabElement);
+            console.log(`[${MOD}] HTMX procesado para tab de cotizaciones`);
+          }
+          
+          // ⚠️ v2.61: Procesar específicamente el botón de crear
+          const btnCrear = d.getElementById('btn-cotizaciones-crear');
+          if (btnCrear) {
+            htmx.process(btnCrear);
+            console.log(`[${MOD}] Botón "Nueva Cotización" procesado por HTMX`);
+          } else {
+            console.warn(`[${MOD}] Botón "Nueva Cotización" no encontrado`);
+          }
+        } else {
+          console.warn(`[${MOD}] HTMX no está disponible`);
+        }
+      }, 200);
+    }
+  });
+  
+  // ⚠️ v2.61: Listener directo para el botón como fallback (si HTMX no procesa correctamente)
+  // Usar event delegation para capturar clics incluso si el botón se carga dinámicamente
+  function setupButtonListener() {
+    const btnCrear = d.getElementById('btn-cotizaciones-crear');
+    if (btnCrear) {
+      // Remover listener anterior si existe
+      btnCrear.removeEventListener('click', handleButtonClick);
+      // Agregar listener de clic directo como fallback
+      btnCrear.addEventListener('click', handleButtonClick);
+      console.log(`[${MOD}] Listener de clic configurado para botón "Nueva Cotización"`);
+    }
+  }
+  
+  function handleButtonClick(e) {
+    const btnCrear = e.currentTarget || d.getElementById('btn-cotizaciones-crear');
+    if (!btnCrear) return;
+    
+    console.log(`[${MOD}] Clic detectado en botón "Nueva Cotización"`);
+    
+    // Verificar si HTMX está disponible y procesando
+    if (typeof htmx !== 'undefined') {
+      const url = btnCrear.getAttribute('hx-get');
+      const target = btnCrear.getAttribute('hx-target');
+      
+      if (url && target) {
+        console.log(`[${MOD}] Ejecutando HTMX request: ${url} -> ${target}`);
+        htmx.ajax('GET', url, {
+          target: target,
+          swap: 'innerHTML',
+          indicator: '#spinner'
+        }).then(() => {
+          console.log(`[${MOD}] HTMX request completado`);
+        }).catch((error) => {
+          console.error(`[${MOD}] Error en HTMX request:`, error);
+          if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+            w.UIManager.notifyError({ status: 500, data: { detail: 'Error al cargar el formulario de cotización' } }, `[${MOD}]`);
+          }
+        });
+      } else {
+        console.error(`[${MOD}] Botón no tiene atributos hx-get o hx-target`);
+      }
+    } else {
+      console.error(`[${MOD}] HTMX no está disponible`);
+    }
+  }
+  
+  // Configurar listener cuando el DOM esté listo
+  if (d.readyState === 'loading') {
+    d.addEventListener('DOMContentLoaded', setupButtonListener);
+  } else {
+    setupButtonListener();
+  }
+  
+  // También configurar cuando se muestra el tab
+  d.addEventListener('shown.bs.tab', function(e) {
+    if (e.target && (e.target.getAttribute('data-tab') === 'cotizaciones' || e.target.getAttribute('data-bs-target') === TAB_ID)) {
+      setTimeout(setupButtonListener, 100);
     }
   });
 

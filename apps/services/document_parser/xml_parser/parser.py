@@ -155,8 +155,14 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
     fecha_emision = issue_date
     if issue_time:
         fecha_emision = f"{issue_date}T{issue_time}"
-    if fecha_emision and "T" in fecha_emision and not fecha_emision.endswith(("Z", "+", "-")):
-        fecha_emision = f"{fecha_emision}-05:00"  # UTC-5 (Colombia)
+    # ⚠️ v2.61.3: Solo agregar timezone si no hay uno ya presente en la cadena
+    # El issue_time puede incluir offset como "13:21:00-05:00" → ya tiene zona horaria
+    if fecha_emision and "T" in fecha_emision:
+        time_part = fecha_emision.split("T", 1)[1]
+        # Verificar si ya tiene timezone: ±HH:MM al final, o Z
+        has_tz = bool(re.search(r'[+-]\d{2}:\d{2}$', time_part)) or time_part.endswith('Z')
+        if not has_tz:
+            fecha_emision = f"{fecha_emision}-05:00"  # UTC-5 (Colombia)
     
     # Emisor
     supplier_party = first(invoice_root, ".//*[local-name()='AccountingSupplierParty']//*[local-name()='Party']")
@@ -261,7 +267,6 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
     consecutivo = 0
     if numero:
         # Intentar separar prefijo y número
-        import re
         match = re.match(r'^([A-Za-z]+)(\d+)$', numero.strip())
         if match:
             prefijo = match.group(1)
@@ -307,7 +312,6 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
             qr_code = text(qr_code_elem) or ""
             # Extraer URL del QR code si está presente
             if qr_code and "https://" in qr_code:
-                import re
                 url_match = re.search(r'https://[^\s]+', qr_code)
                 if url_match:
                     qr_url = url_match.group(0)
@@ -433,8 +437,13 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> Dict[str, Any]
     fecha_emision = issue_date
     if issue_time:
         fecha_emision = f"{issue_date}T{issue_time}"
-    if fecha_emision and "T" in fecha_emision and not fecha_emision.endswith(("Z", "+", "-")):
-        fecha_emision = f"{fecha_emision}-05:00"
+    # ⚠️ v2.61.3: Solo agregar timezone si no hay uno ya presente en la cadena
+    # El issue_time puede incluir offset como "16:59:00-05:00" → ya tiene zona horaria
+    if fecha_emision and "T" in fecha_emision:
+        time_part = fecha_emision.split("T", 1)[1]
+        has_tz = bool(re.search(r'[+-]\d{2}:\d{2}$', time_part)) or time_part.endswith('Z')
+        if not has_tz:
+            fecha_emision = f"{fecha_emision}-05:00"
     
     # Emisor
     supplier_party = first(credit_note_root, ".//*[local-name()='AccountingSupplierParty']//*[local-name()='Party']")

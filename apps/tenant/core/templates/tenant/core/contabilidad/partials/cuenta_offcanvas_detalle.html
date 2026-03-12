@@ -12,6 +12,11 @@
   </div>
   
   <div class="offcanvas-body">
+    {% if error %}
+      <div class="alert alert-danger" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+      </div>
+    {% elif cuenta %}
     <div class="row g-3">
       <div class="col-12"><h6 class="text-primary border-bottom pb-2 small fw-bold">DATOS DE LA CUENTA</h6></div>
       
@@ -63,6 +68,19 @@
         </div>
       </div>
       
+      {# ⚠️ NORMATIVA: Campo nivel agregado para validación de nivel 6 #}
+      {% if cuenta.nivel %}
+      <div class="col-md-6">
+        <label class="form-label small fw-bold text-muted">Nivel</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">
+          <span class="badge bg-info">Nivel {{ cuenta.nivel }}</span>
+          {% if cuenta.nivel == 6 %}
+            <small class="text-muted ms-2">(Cuenta auxiliar - permitida para registros)</small>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+      
       {% if cuenta.created_at %}
       <div class="col-12">
         <label class="form-label small fw-bold text-muted">Fecha de Creación</label>
@@ -70,11 +88,18 @@
       </div>
       {% endif %}
     </div>
+    {% else %}
+      <div class="alert alert-warning" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>No se pudo cargar la información de la cuenta.
+      </div>
+    {% endif %}
   </div>
   
   <div class="offcanvas-footer border-top p-3 bg-light">
     <div class="d-flex gap-2 justify-content-end">
-      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cerrar</button>
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-circle me-2"></i>Cancelar
+      </button>
     </div>
   </div>
 </div>

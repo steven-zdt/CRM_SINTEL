@@ -182,14 +182,32 @@ async function loadBranding() {
                 credentials: 'include', // Incluir cookies
             });
             
+            // ⚠️ v2.61: Manejar respuestas no-JSON (404 HTML, errores del servidor)
             let data = {};
             try {
-                data = await response.json();
+                // Verificar Content-Type antes de parsear
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    // Si no es JSON, leer como texto para debugging
+                    const text = await response.text();
+                    console.error('[Login] Respuesta no-JSON recibida:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        contentType: contentType,
+                        preview: text.substring(0, 200)
+                    });
+                    
+                    // Si es 404, el endpoint no existe
+                    if (response.status === 404) {
+                        data = { detail: 'El endpoint de autenticación no está disponible. Por favor, contacte al administrador.' };
+                    } else {
+                        data = { detail: 'Error al procesar la respuesta del servidor.' };
+                    }
+                }
             } catch (e) {
-                console.error('Error parseando respuesta JSON:', e);
-                // Si no se puede parsear JSON, intentar leer como texto
-                const text = await response.text();
-                console.error('Respuesta del servidor (texto):', text);
+                console.error('[Login] Error parseando respuesta:', e);
                 data = { detail: 'Error al procesar la respuesta del servidor.' };
             }
             

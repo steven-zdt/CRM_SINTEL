@@ -1,0 +1,150 @@
+{# contrato_offcanvas_form.html - Offcanvas para CREAR Contrato v2.61 #}
+{# ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado SOLO para creación #}
+{# ⚠️ HTMX + Offcanvas con Zero Trust #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-contrato-crear" aria-labelledby="offcanvas-contrato-crear-label" style="width: 90%; max-width: 800px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-contrato-crear-label">
+      <i class="bi bi-file-earmark-plus me-2"></i>
+      <span>Nuevo Contrato</span>
+      {% if empleado %}
+        <small class="text-muted d-block mt-1">{{ empleado.nombre_completo }}</small>
+      {% endif %}
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ Contenedor de feedback para UIManager (manejo de errores 400) #}
+    <div id="form-contrato-crear-feedback" class="alert d-none mb-3" role="alert"></div>
+    
+    {# ⚠️ Formulario puramente declarativo - El éxito se maneja en contratos_form.js #}
+    <form id="form-contrato-crear" method="POST" onsubmit="return false;" enctype="multipart/form-data"
+          hx-post="/api/v1/empleados/contratos/"
+          hx-target="#grid-empleados" 
+          hx-swap="none"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[contratos.form]', {errorContainerSelector: '#form-contrato-crear-feedback'})">
+      {% csrf_token %}
+      <input type="hidden" id="contrato-crear-id" name="id" value="">
+      <input type="hidden" id="contrato-crear-empleado-id" name="empleado" value="{% if empleado %}{{ empleado.id }}{% endif %}">
+      
+      {# Tipo y Estado #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-file-earmark-text me-2"></i>Tipo y Estado
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="contrato-crear-tipo" class="form-label text-danger fw-bold">Tipo de Contrato *</label>
+            <select class="form-select" id="contrato-crear-tipo" name="tipo" required>
+              <option value="">Seleccione un tipo</option>
+              <option value="FIJO">Término Fijo</option>
+              <option value="INDEF">Indefinido</option>
+              <option value="OBRA">Obra o Labor</option>
+              <option value="PRESTACION">Prestación de Servicios</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="contrato-crear-estado" class="form-label text-danger fw-bold">Estado *</label>
+            <select class="form-select" id="contrato-crear-estado" name="estado" required>
+              <option value="ACTIVO" selected>Activo</option>
+              <option value="INACTIVO">Inactivo</option>
+              <option value="HISTORICO">Histórico</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      {# Fechas #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar me-2"></i>Fechas
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="contrato-crear-fecha_inicio" class="form-label text-danger fw-bold">Fecha Inicio *</label>
+            <input type="date" class="form-control" id="contrato-crear-fecha_inicio" name="fecha_inicio" required>
+          </div>
+          <div class="col-md-6">
+            <label for="contrato-crear-fecha_fin" class="form-label">Fecha Fin</label>
+            <div class="input-group">
+              <input type="date" class="form-control" id="contrato-crear-fecha_fin" name="fecha_fin">
+              <div class="input-group-text">
+                <input class="form-check-input mt-0" type="checkbox" id="contrato-crear-indefinido" aria-label="Contrato Indefinido">
+                <label class="form-check-label ms-2 small" for="contrato-crear-indefinido">Indefinido</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {# Información del Cargo #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-briefcase me-2"></i>Información del Cargo
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="contrato-crear-cargo" class="form-label text-danger fw-bold">Cargo *</label>
+            <input type="text" class="form-control" id="contrato-crear-cargo" name="cargo" 
+                   placeholder="Cargo del empleado" required>
+          </div>
+        </div>
+      </div>
+      
+      {# Valores Económicos #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-currency-dollar me-2"></i>Valores Económicos (COP)
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="contrato-crear-salario_mensual" class="form-label text-danger fw-bold">Salario Mensual (COP) *</label>
+            <input type="number" class="form-control" id="contrato-crear-salario_mensual" name="salario_mensual" 
+                   step="0.01" min="0" required>
+            <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+          </div>
+          <div class="col-md-6">
+            <label for="contrato-crear-auxilio_transporte" class="form-label">Auxilio de Transporte (COP)</label>
+            <input type="number" class="form-control" id="contrato-crear-auxilio_transporte" name="auxilio_transporte" 
+                   value="0" step="0.01" min="0">
+            <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+          </div>
+          <div class="col-md-12">
+            <label for="contrato-crear-prestamos_empresa" class="form-label">Préstamos de la Empresa (COP)</label>
+            <input type="number" class="form-control" id="contrato-crear-prestamos_empresa" name="prestamos_empresa" 
+                   value="0" step="0.01" min="0" 
+                   placeholder="Préstamos o deudas que la empresa tiene con el empleado (puede ser 0)">
+            <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+          </div>
+        </div>
+      </div>
+      
+      {# Archivo PDF #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-file-pdf me-2"></i>Documento
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="contrato-crear-archivo_pdf" class="form-label">Archivo PDF del Contrato</label>
+            <input type="file" class="form-control" id="contrato-crear-archivo_pdf" name="archivo_pdf" accept=".pdf" 
+                   aria-label="Subir archivo PDF del contrato">
+            <small class="form-text text-muted">Copia digital del contrato firmado (PDF) - Opcional</small>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+  {# ⚠️ Offcanvas Footer para botones de acción #}
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-lg me-1"></i>Cancelar
+      </button>
+      <button type="submit" class="btn btn-success" id="btn-guardar-contrato-crear" form="form-contrato-crear">
+        <i class="bi bi-check-lg me-1"></i>Crear Contrato
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,6 +1,10 @@
 {% load static %}
-{# list.html - Módulo Facturas v2.40+ (Refactorizado) #}
-{# ⚠️ v2.40: Migrado a Tabulator Factory - Consume GET /api/v1/facturas/ con StandardResultsSetPagination #}
+{# list.html - Módulo Facturas v2.61.3 #}
+{# ⚠️ v2.40: Migrado a Tabulator Factory - Consume Core API facade (FACTURAS_API_BASE) #}
+{# ⚠️ v2.61.2: Botones sin onclick inline - event delegation (data-action) evita eventos duplicados #}
+{# ⚠️ v2.61.2: Offcanvas de solo lectura - botón "Ver" carga gestor-offcanvas?readonly=true #}
+{# ⚠️ v2.61.2: upload-ubl soporta batch (files[]) + pre-validación CUFE + delegación Celery >10 archivos #}
+{# ⚠️ v2.61.3: Alineado con backend persisted:True y frontend !data.id - sin regresos de 422 #}
 <div id="tab-facturas-content" class="ui-module ui-facturas">
   <!-- Panel de Totales Netos -->
   <div class="row mb-4" id="panel-totales-netos">
@@ -61,28 +65,27 @@
       {# ⚠️ v2.60: Botones con event delegation (data-action) + fallback onclick para compatibilidad #}
       {# ⚠️ PROPAGACIÓN AL WORKSPACE: Botón "Importar" dispara el Offcanvas que contiene el formulario HTMX #}
       {# Flujo: Botón → AppFacturas.subirNueva() → cargarOffcanvas() → HTMX GET /api/v1/facturas/gestor-offcanvas/ #}
-      {# El Offcanvas incluye el formulario con hx-post="/api/v1/core/documentos/upload/" y error_handler.html #}
+      {# ⚠️ v2.61.2: El Offcanvas incluye el formulario con hx-post="/api/v1/core/v1/facturas/facturas/upload-ubl/" y error_handler.html #}
+     
       <button type="button" 
               class="btn btn-primary" 
               id="btn-subir-factura"
-              data-action="subir-factura"
-              onclick="if(window.AppFacturas && window.AppFacturas.subirNueva) { window.AppFacturas.subirNueva(); } else { console.error('AppFacturas.subirNueva no disponible'); }">
+              data-action="subir-factura">
         <i class="bi bi-cloud-upload"></i> Importar XML / PDF
       </button>
 
+      {# ⚠️ v2.61.2: Botones sin onclick inline - Solo usan event delegation (data-action) para evitar eventos duplicados #}
       <button type="button" 
               class="btn btn-outline-secondary" 
               id="btn-refresh-facturas"
-              data-action="refresh-facturas"
-              onclick="if(window.AppFacturas && window.AppFacturas.refreshGrid) { window.AppFacturas.refreshGrid(); } else { console.error('AppFacturas.refreshGrid no disponible'); }">
+              data-action="refresh-facturas">
         <i class="bi bi-arrow-clockwise"></i> Actualizar
       </button>
 
       <button type="button" 
               class="btn btn-outline-success" 
               id="btn-sync-mail"
-              data-action="sync-mail"
-              onclick="if(window.AppFacturas && window.AppFacturas.sincronizarCorreo) { window.AppFacturas.sincronizarCorreo(); } else { console.error('AppFacturas.sincronizarCorreo no disponible'); }">
+              data-action="sync-mail">
         <i class="bi bi-envelope-arrow-down"></i> Sincronizar Buzón
         <span class="spinner-border spinner-border-sm d-none" id="sync-spinner" role="status" aria-hidden="true"></span>
       </button>

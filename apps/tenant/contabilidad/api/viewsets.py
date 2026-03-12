@@ -19,10 +19,13 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
 import logging
+import traceback
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly
+
+logger = logging.getLogger(__name__)
 from apps.tenant.contabilidad.models import (
     CuentaContable, 
     AsientoContable, 
@@ -32,7 +35,8 @@ from apps.tenant.contabilidad.models import (
 )
 from apps.tenant.contabilidad.services import (
     qs_cuenta_list, qs_cuenta_detail,
-    qs_asiento_list, qs_asiento_detail
+    qs_asiento_list, qs_asiento_detail,
+    qs_periodo_list, qs_periodo_detail
 )
 # ⚠️ v2.61: NO importar verificar_periodo_cerrado y get_balance_prueba aquí
 # Se importarán localmente dentro de las funciones que las necesiten para evitar circular import
@@ -56,6 +60,8 @@ from apps.tenant.contabilidad.api.serializers import (
     AsientoContableListSerializer,
     MovimientoContableListSerializer,
     MovimientoContableDetailSerializer,
+    PeriodoContableListSerializer,
+    PeriodoContableDetailSerializer,
     CatalogoMaestroNIIFListSerializer,
     CatalogoMaestroNIIFDetailSerializer,
 )
@@ -81,7 +87,7 @@ class CuentaContableViewSet(BaseTenantViewSet):
     
     def get_serializer_class(self):
         """Selecciona el serializer según la acción."""
-        if self.action == "retrieve":
+        if self.action in ["retrieve", "render_offcanvas_editar", "render_offcanvas_detalle"]:
             return CuentaContableDetailSerializer
         return CuentaContableListSerializer
     
@@ -93,7 +99,7 @@ class CuentaContableViewSet(BaseTenantViewSet):
         """
         if self.action == "list":
             return qs_cuenta_list().order_by('codigo')
-        elif self.action == "retrieve":
+        elif self.action in ["retrieve", "render_offcanvas_detalle", "render_offcanvas_editar"]:
             return qs_cuenta_detail()
         else:
             # Para create/update/delete necesitamos todos los campos
@@ -220,8 +226,52 @@ class CuentaContableViewSet(BaseTenantViewSet):
         if not ok:
             return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         
+        # ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+        # El router de DRF pone el valor en kwargs['uuid'] cuando lookup_field="uuid"
+        # Necesitamos detectar si es numérico (pk) o UUID válido
+        cuenta_identifier = kwargs.get('uuid') or kwargs.get('pk')
+        
+        # ⚠️ v2.61: DEBUG - Log para diagnóstico
+        logger = logging.getLogger(__name__)
+        logger.info(f"CuentaContableViewSet.destroy llamado con kwargs: {kwargs}, identifier: {cuenta_identifier}")
+        
+        if not cuenta_identifier:
+            logger.error(f"CuentaContableViewSet.destroy: ni uuid ni pk proporcionados. kwargs: {kwargs}, args: {args}")
+            return Response(
+                {"detail": ["ID de cuenta no proporcionado en la URL."]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ⚠️ v2.61: Detectar si el identificador es numérico (pk) o UUID
+        # Si es numérico, buscar por pk directamente
+        # Si es UUID, usar get_object() que usa lookup_field="uuid"
+        cuenta_id = None
         try:
-            cuenta_id = kwargs.get('pk')
+            # Intentar convertir a entero (es un ID numérico)
+            cuenta_id = int(cuenta_identifier)
+            logger.info(f"CuentaContableViewSet.destroy: Identificador numérico detectado, usando pk={cuenta_id}")
+            # Verificar que la cuenta existe
+            cuenta = CuentaContable.objects.get(id=cuenta_id)
+        except (ValueError, TypeError):
+            # No es numérico, intentar como UUID usando get_object()
+            try:
+                logger.info(f"CuentaContableViewSet.destroy: Intentando como UUID: {cuenta_identifier}")
+                cuenta = self.get_object()  # Esto usa lookup_field="uuid" automáticamente
+                cuenta_id = cuenta.id
+            except (CuentaContable.DoesNotExist, ValueError) as e:
+                logger.error(f"CuentaContableViewSet.destroy: Cuenta no encontrada con identificador: {cuenta_identifier}, error: {e}")
+                return Response(
+                    {"detail": ["Cuenta contable no encontrada."]},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        except CuentaContable.DoesNotExist:
+            logger.error(f"CuentaContableViewSet.destroy: Cuenta no encontrada con pk: {cuenta_identifier}")
+            return Response(
+                {"detail": ["Cuenta contable no encontrada."]},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
             delete_cuenta(cuenta_id)
             return Response(status=status.HTTP_204_NO_CONTENT)
         except ValidationError as e:
@@ -244,110 +294,6 @@ class CuentaContableViewSet(BaseTenantViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    @action(detail=False, methods=["post"], url_path="dt/cuentas-contables")
-    def datatables(self, request):
-        """
-        Endpoint DataTables server-side (POST obligatorio v2.40).
-        
-        ⚠️ v2.40: POST obligatorio según arquitectura, acepta JSON y form-urlencoded.
-        ⚠️ OPTIMIZACIÓN: Usa qs_cuenta_list() que ya aplica only() con CUENTA_LIST_FIELDS.
-        ✅ Solo carga campos necesarios para la tabla
-        ✅ Usa CuentaContableListSerializer para serializar datos
-        ✅ Maneja length=-1 cuando paginación está deshabilitada
-        """
-        # ⚠️ MANEJO ROBUSTO: request.data puede ser QueryDict (FormParser) o dict (JSONParser)
-        if hasattr(request, 'data'):
-            if hasattr(request.data, 'dict'):  # QueryDict (FormParser)
-                params = request.data.dict()
-            elif isinstance(request.data, dict):  # dict (JSONParser)
-                params = request.data
-            else:
-                params = dict(request.data) if request.data else {}
-        else:
-            params = request.POST.dict() if hasattr(request.POST, 'dict') else dict(request.POST)
-        
-        try:
-            draw = int(params.get("draw", "1"))
-        except (ValueError, TypeError):
-            draw = 1
-        
-        try:
-            start = int(params.get("start", "0"))
-            length = int(params.get("length", "10"))
-        except (ValueError, TypeError):
-            start, length = 0, 10
-        
-        # Manejar search (puede venir como dict o como string)
-        search_value = ""
-        if isinstance(params.get("search"), dict):
-            search_value = params.get("search", {}).get("value", "") or ""
-        elif "search[value]" in params:
-            search_value = params.get("search[value]", "") or ""
-        elif "search.value" in params:
-            search_value = params.get("search.value", "") or ""
-        search_value = search_value.strip()
-        
-        # Base queryset (usa qs_cuenta_list() del service - CUENTA_LIST_FIELDS)
-        qs = qs_cuenta_list()
-        records_total = qs.count()
-        
-        # Búsqueda simple
-        if search_value:
-            qs = qs.filter(
-                Q(codigo__icontains=search_value) |
-                Q(nombre__icontains=search_value) |
-                Q(descripcion__icontains=search_value)
-            )
-        
-        records_filtered = qs.count()
-        
-        # Orden (mapea columnas 0..n a campos del CUENTA_LIST_FIELDS)
-        col_map = {
-            "0": "id",
-            "1": "codigo",
-            "2": "nombre",
-            "3": "tipo",
-            "4": "activa",
-        }
-        
-        # ⚠️ MANEJO ROBUSTO: order puede venir como lista (JSONParser) o como dict anidado (FormParser)
-        if isinstance(params.get("order"), list) and len(params.get("order", [])) > 0:
-            order_col = str(params.get("order", [{}])[0].get("column", "1"))
-            order_dir = params.get("order", [{}])[0].get("dir", "asc")
-        elif "order[0][column]" in params:
-            order_col = str(params.get("order[0][column]", "1"))
-            order_dir = params.get("order[0][dir]", "asc")
-        elif "order.0.column" in params:
-            order_col = str(params.get("order.0.column", "1"))
-            order_dir = params.get("order.0.dir", "asc")
-        else:
-            order_col = "1"
-            order_dir = "asc"
-        
-        order_field = col_map.get(str(order_col), "codigo")
-        
-        if order_dir == "desc":
-            order_field = f"-{order_field}"
-        
-        qs = qs.order_by(order_field)
-        
-        # Paginación (slice estilo DataTables)
-        # ⚠️ CORRECCIÓN: Si length es -1, DataTables quiere todos los registros (paginación deshabilitada)
-        if length == -1:
-            data_list = list(qs[start:])
-        else:
-            data_list = list(qs[start:start + length])
-        
-        # Serializar datos
-        serializer = CuentaContableListSerializer(data_list, many=True, context={'request': request})
-        
-        return Response({
-            "draw": draw,
-            "recordsTotal": records_total,
-            "recordsFiltered": records_filtered,
-            "data": serializer.data
-        }, status=status.HTTP_200_OK)
-
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
     def render_offcanvas_crear(self, request):
         """
@@ -363,36 +309,131 @@ class CuentaContableViewSet(BaseTenantViewSet):
         return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_form.html')
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
-    def render_offcanvas_editar(self, request, pk=None):
+    def render_offcanvas_editar(self, request, **kwargs):
         """
         Endpoint HTMX RESTful para cargar offcanvas de edición de cuentas contables.
         
         ⚠️ v2.60: Feature-Sliced Architecture - Template dedicado para edición
+        ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
         - GET /api/v1/contabilidad/cuentas-contables/{id}/render-offcanvas/editar/ → Modo edición
         
         Returns:
             Template HTML: tenant/core/contabilidad/partials/cuenta_offcanvas_form.html
         """
-        cuenta = self.get_object()
-        serializer = self.get_serializer(cuenta)
-        context = {'cuenta': serializer.data}
-        return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_form.html')
+        try:
+            # ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+            # El router de DRF pone el valor en kwargs['uuid'] cuando lookup_field="uuid"
+            cuenta_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            
+            if not cuenta_identifier:
+                from rest_framework.response import Response
+                from rest_framework import status
+                return Response(
+                    {"detail": ["ID de cuenta no proporcionado en la URL."]},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # ⚠️ v2.61: Detectar si el identificador es numérico (pk) o UUID
+            try:
+                # Intentar convertir a entero (es un ID numérico)
+                cuenta_id = int(cuenta_identifier)
+                cuenta = CuentaContable.objects.get(id=cuenta_id)
+            except (ValueError, TypeError):
+                # No es numérico, intentar como UUID usando get_object()
+                try:
+                    cuenta = self.get_object()  # Esto usa lookup_field="uuid" automáticamente
+                except CuentaContable.DoesNotExist:
+                    from rest_framework.response import Response
+                    from rest_framework import status
+                    return Response(
+                        {"detail": [f"Cuenta contable no encontrada con identificador: {cuenta_identifier}"]},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            except CuentaContable.DoesNotExist:
+                from rest_framework.response import Response
+                from rest_framework import status
+                return Response(
+                    {"detail": [f"Cuenta contable no encontrada con ID: {cuenta_identifier}"]},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            serializer = self.get_serializer(cuenta)
+            context = {'cuenta': serializer.data}
+            return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_form.html')
+        except Exception as e:
+            import traceback
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error en render_offcanvas_editar: {e}")
+            logger.error(traceback.format_exc())
+            from rest_framework.response import Response
+            from rest_framework import status
+            return Response(
+                {"detail": [f"Error al cargar cuenta: {str(e)}"]},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
-    def render_offcanvas_detalle(self, request, pk=None):
+    def render_offcanvas_detalle(self, request, **kwargs):
         """
         Endpoint HTMX RESTful para cargar offcanvas de detalle de cuentas contables (read-only).
         
         ⚠️ v2.60: Feature-Sliced Architecture - Template dedicado para detalle
+        ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
         - GET /api/v1/contabilidad/cuentas-contables/{id}/render-offcanvas/detalle/ → Modo lectura
         
         Returns:
             Template HTML: tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html
         """
-        cuenta = self.get_object()
-        serializer = self.get_serializer(cuenta)
-        context = {'cuenta': serializer.data}
-        return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html')
+        try:
+            # ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+            # El router de DRF pone el valor en kwargs['uuid'] cuando lookup_field="uuid"
+            cuenta_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            
+            if not cuenta_identifier:
+                context = {
+                    'cuenta': None,
+                    'error': 'ID de cuenta no proporcionado en la URL.'
+                }
+                return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html', status=400)
+            
+            # ⚠️ v2.61: Detectar si el identificador es numérico (pk) o UUID
+            try:
+                # Intentar convertir a entero (es un ID numérico)
+                cuenta_id = int(cuenta_identifier)
+                cuenta = CuentaContable.objects.get(id=cuenta_id)
+            except (ValueError, TypeError):
+                # No es numérico, intentar como UUID usando get_object()
+                try:
+                    cuenta = self.get_object()  # Esto usa lookup_field="uuid" automáticamente
+                except CuentaContable.DoesNotExist:
+                    context = {
+                        'cuenta': None,
+                        'error': f'Cuenta contable no encontrada con identificador: {cuenta_identifier}'
+                    }
+                    return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html', status=404)
+            except CuentaContable.DoesNotExist:
+                context = {
+                    'cuenta': None,
+                    'error': f'Cuenta contable no encontrada con ID: {cuenta_identifier}'
+                }
+                return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html', status=404)
+            
+            serializer = self.get_serializer(cuenta)
+            context = {'cuenta': serializer.data}
+            return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html')
+        except Exception as e:
+            # ⚠️ Manejar errores y retornar contexto con error para debugging
+            import traceback
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error en render_offcanvas_detalle: {e}")
+            logger.error(traceback.format_exc())
+            context = {
+                'cuenta': None,
+                'error': f'Error al cargar cuenta: {str(e)}'
+            }
+            return Response(context, template_name='tenant/core/contabilidad/partials/cuenta_offcanvas_detalle.html', status=500)
 
 
 class AsientoContableViewSet(BaseTenantViewSet):
@@ -431,6 +472,61 @@ class AsientoContableViewSet(BaseTenantViewSet):
         else:
             # Para create/update/delete necesitamos todos los campos
             return AsientoContable.objects.all()
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Sobrescribir retrieve para manejar tanto IDs numéricos como UUIDs.
+        
+        ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+        - GET /api/v1/contabilidad/asientos-contables/{id}/ → Retorna asiento por ID o UUID
+        """
+        try:
+            # ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+            # El router de DRF pone el valor en kwargs['uuid'] cuando lookup_field="uuid"
+            asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            
+            if not asiento_identifier:
+                return Response(
+                    {"detail": ["ID de asiento no proporcionado en la URL."]},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            asiento = None
+            if asiento_identifier:
+                try:
+                    # Intentar convertir a entero (es un ID numérico)
+                    asiento_id = int(asiento_identifier)
+                    asiento = qs_asiento_detail().get(id=asiento_id)
+                except (ValueError, TypeError):
+                    # Si no es numérico, intentar como UUID usando get_object()
+                    try:
+                        asiento = self.get_object()  # Esto usa lookup_field="uuid" automáticamente
+                    except AsientoContable.DoesNotExist:
+                        return Response(
+                            {"detail": [f"Asiento contable no encontrado con identificador: {asiento_identifier}"]},
+                            status=status.HTTP_404_NOT_FOUND
+                        )
+                except AsientoContable.DoesNotExist:
+                    return Response(
+                        {"detail": [f"Asiento contable no encontrado con ID: {asiento_identifier}"]},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+            if not asiento:
+                return Response(
+                    {"detail": [f"Asiento contable no encontrado con identificador: {asiento_identifier}"]},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            serializer = self.get_serializer(asiento)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error en retrieve: {e}")
+            logger.error(traceback.format_exc())
+            return Response(
+                {"detail": [f"Error al obtener asiento: {str(e)}"]},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def _check_enforced_mode(self, request):
         """
@@ -499,13 +595,46 @@ class AsientoContableViewSet(BaseTenantViewSet):
         Actualiza un asiento contable. ⚠️ ENFORCED: Solo STAFF/ADMIN.
         
         ⚠️ v2.60: Service Layer Pattern - Delegación completa a update_asiento()
+        ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
         """
         ok, reason = self._check_enforced_mode(request)
         if not ok:
             return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         
         try:
-            asiento_id = kwargs.get('pk')
+            # ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+            # El router de DRF pone el valor en kwargs['uuid'] cuando lookup_field="uuid"
+            asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            
+            if not asiento_identifier:
+                return Response(
+                    {"detail": ["ID de asiento no proporcionado en la URL."]},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Convertir identificador a ID numérico para el servicio
+            asiento_id = None
+            if asiento_identifier:
+                try:
+                    # Intentar convertir a entero (es un ID numérico)
+                    asiento_id = int(asiento_identifier)
+                except (ValueError, TypeError):
+                    # Si no es numérico, intentar como UUID y obtener el ID
+                    try:
+                        asiento = self.get_object()  # Esto usa lookup_field="uuid" automáticamente
+                        asiento_id = asiento.id
+                    except AsientoContable.DoesNotExist:
+                        return Response(
+                            {"detail": [f"Asiento contable no encontrado con identificador: {asiento_identifier}"]},
+                            status=status.HTTP_404_NOT_FOUND
+                        )
+            
+            if not asiento_id:
+                return Response(
+                    {"detail": [f"Asiento contable no encontrado con identificador: {asiento_identifier}"]},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
             data = request.data.copy()
             resultado = update_asiento(asiento_id, data)
             
@@ -522,7 +651,6 @@ class AsientoContableViewSet(BaseTenantViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            logger = logging.getLogger(__name__)
             logger.error(f"Error al actualizar asiento: {str(e)}", exc_info=True)
             return Response(
                 {
@@ -581,109 +709,6 @@ class AsientoContableViewSet(BaseTenantViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    @action(detail=False, methods=["post"], url_path="dt/asientos-contables")
-    def datatables(self, request):
-        """
-        Endpoint DataTables server-side (POST obligatorio v2.40).
-        
-        ⚠️ v2.40: POST obligatorio según arquitectura, acepta JSON y form-urlencoded.
-        ⚠️ OPTIMIZACIÓN: Usa qs_asiento_list() que ya aplica only() con ASIENTO_LIST_FIELDS.
-        ✅ Solo carga campos necesarios para la tabla
-        ✅ Usa AsientoContableListSerializer para serializar datos
-        ✅ Maneja length=-1 cuando paginación está deshabilitada
-        """
-        # ⚠️ MANEJO ROBUSTO: request.data puede ser QueryDict (FormParser) o dict (JSONParser)
-        if hasattr(request, 'data'):
-            if hasattr(request.data, 'dict'):  # QueryDict (FormParser)
-                params = request.data.dict()
-            elif isinstance(request.data, dict):  # dict (JSONParser)
-                params = request.data
-            else:
-                params = dict(request.data) if request.data else {}
-        else:
-            params = request.POST.dict() if hasattr(request.POST, 'dict') else dict(request.POST)
-        
-        try:
-            draw = int(params.get("draw", "1"))
-        except (ValueError, TypeError):
-            draw = 1
-        
-        try:
-            start = int(params.get("start", "0"))
-            length = int(params.get("length", "10"))
-        except (ValueError, TypeError):
-            start, length = 0, 10
-        
-        # Manejar search (puede venir como dict o como string)
-        search_value = ""
-        if isinstance(params.get("search"), dict):
-            search_value = params.get("search", {}).get("value", "") or ""
-        elif "search[value]" in params:
-            search_value = params.get("search[value]", "") or ""
-        elif "search.value" in params:
-            search_value = params.get("search.value", "") or ""
-        search_value = search_value.strip()
-        
-        # Base queryset (usa qs_asiento_list() del service - ASIENTO_LIST_FIELDS)
-        qs = qs_asiento_list()
-        records_total = qs.count()
-        
-        # Búsqueda simple
-        if search_value:
-            qs = qs.filter(
-                Q(numero__icontains=search_value) |
-                Q(descripcion__icontains=search_value)
-            )
-        
-        records_filtered = qs.count()
-        
-        # Orden (mapea columnas 0..n a campos del ASIENTO_LIST_FIELDS)
-        col_map = {
-            "0": "id",
-            "1": "numero",
-            "2": "fecha",
-            "3": "estado",
-            "4": "total_debe",
-        }
-        
-        # ⚠️ MANEJO ROBUSTO: order puede venir como lista (JSONParser) o como dict anidado (FormParser)
-        if isinstance(params.get("order"), list) and len(params.get("order", [])) > 0:
-            order_col = str(params.get("order", [{}])[0].get("column", "2"))
-            order_dir = params.get("order", [{}])[0].get("dir", "desc")
-        elif "order[0][column]" in params:
-            order_col = str(params.get("order[0][column]", "2"))
-            order_dir = params.get("order[0][dir]", "desc")
-        elif "order.0.column" in params:
-            order_col = str(params.get("order.0.column", "2"))
-            order_dir = params.get("order.0.dir", "desc")
-        else:
-            order_col = "2"
-            order_dir = "desc"
-        
-        order_field = col_map.get(str(order_col), "fecha")
-        
-        if order_dir == "desc":
-            order_field = f"-{order_field}"
-        
-        qs = qs.order_by(order_field)
-        
-        # Paginación (slice estilo DataTables)
-        # ⚠️ CORRECCIÓN: Si length es -1, DataTables quiere todos los registros (paginación deshabilitada)
-        if length == -1:
-            data_list = list(qs[start:])
-        else:
-            data_list = list(qs[start:start + length])
-        
-        # Serializar datos
-        serializer = AsientoContableListSerializer(data_list, many=True, context={'request': request})
-        
-        return Response({
-            "draw": draw,
-            "recordsTotal": records_total,
-            "recordsFiltered": records_filtered,
-            "data": serializer.data
-        }, status=status.HTTP_200_OK)
-    
     @action(detail=True, methods=['post'], url_path='aprobar')
     def aprobar(self, request, pk=None):
         """
@@ -792,20 +817,65 @@ class AsientoContableViewSet(BaseTenantViewSet):
         return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_cargar_desde_docs.html')
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
-    def render_offcanvas_editar(self, request, pk=None):
+    def render_offcanvas_editar(self, request, **kwargs):
         """
         Endpoint HTMX RESTful para cargar offcanvas de edición de asientos contables.
         
-        ⚠️ v2.60: Feature-Sliced Architecture - Template dedicado para edición
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado EXCLUSIVAMENTE para edición
+        ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
         - GET /api/v1/contabilidad/asientos-contables/{id}/render-offcanvas/editar/ → Modo edición
         
         Returns:
-            Template HTML: tenant/core/contabilidad/partials/asiento_offcanvas_form.html
+            Template HTML: tenant/core/contabilidad/partials/asiento_offcanvas_editar.html
         """
-        asiento = self.get_object()
-        serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
-        context = {'asiento': serializer.data}
-        return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_form.html')
+        try:
+            # ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend envía IDs numéricos
+            # El router de DRF pone el valor en kwargs['uuid'] cuando lookup_field="uuid"
+            asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            
+            if not asiento_identifier:
+                return Response(
+                    {"detail": ["ID de asiento no proporcionado en la URL."]},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            asiento = None
+            if asiento_identifier:
+                try:
+                    # Intentar convertir a entero (es un ID numérico)
+                    asiento_id = int(asiento_identifier)
+                    asiento = AsientoContable.objects.get(id=asiento_id)
+                except (ValueError, TypeError):
+                    # Si no es numérico, intentar como UUID usando get_object()
+                    try:
+                        asiento = self.get_object()  # Esto usa lookup_field="uuid" automáticamente
+                    except AsientoContable.DoesNotExist:
+                        return Response(
+                            {"detail": [f"Asiento contable no encontrado con identificador: {asiento_identifier}"]},
+                            status=status.HTTP_404_NOT_FOUND
+                        )
+                except AsientoContable.DoesNotExist:
+                    return Response(
+                        {"detail": [f"Asiento contable no encontrado con ID: {asiento_identifier}"]},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+            if not asiento:
+                return Response(
+                    {"detail": [f"Asiento contable no encontrado con identificador: {asiento_identifier}"]},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
+            context = {'asiento': serializer.data}
+            return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_editar.html')
+        except Exception as e:
+            logger.error(f"Error en render_offcanvas_editar: {e}")
+            logger.error(traceback.format_exc())
+            return Response(
+                {"detail": [f"Error al cargar asiento: {str(e)}"]},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=False, methods=['get'], url_path='documentos-sin-asiento')
     def documentos_sin_asiento(self, request):
@@ -871,11 +941,13 @@ class AsientoContableViewSet(BaseTenantViewSet):
         - GET /api/v1/contabilidad/asientos-contables/render-offcanvas/detalle/?id=123 → Modo detalle
         
         Query params:
-        - id: ID del asiento (requerido)
+        - id: ID del asiento (requerido, puede ser numérico o UUID)
         
         Returns:
             Template HTML: tenant/core/contabilidad/partials/asiento_offcanvas_detalle.html
         """
+        from apps.tenant.contabilidad.services import qs_asiento_detail
+        
         asiento_id = request.query_params.get('id')
         context = {}
         
@@ -884,13 +956,42 @@ class AsientoContableViewSet(BaseTenantViewSet):
             return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_detalle.html')
         
         try:
-            asiento = self.get_queryset().get(id=asiento_id)
+            # ⚠️ v2.61: Intentar obtener por ID numérico primero, luego por UUID
+            asiento = None
+            try:
+                # Intentar como ID numérico
+                asiento_id_int = int(asiento_id)
+                asiento = qs_asiento_detail().get(id=asiento_id_int)
+            except (ValueError, TypeError):
+                # Si no es numérico, intentar como UUID
+                try:
+                    asiento = qs_asiento_detail().get(uuid=asiento_id)
+                except (ValueError, TypeError):
+                    # Si tampoco es UUID válido, intentar con get_object() que usa lookup_field
+                    try:
+                        # Temporalmente cambiar lookup_field para este caso
+                        original_lookup = self.lookup_field
+                        self.lookup_field = 'uuid'
+                        self.kwargs['uuid'] = asiento_id
+                        asiento = self.get_object()
+                        self.lookup_field = original_lookup
+                        if 'uuid' in self.kwargs:
+                            del self.kwargs['uuid']
+                    except Exception:
+                        pass
+            
+            if not asiento:
+                raise AsientoContable.DoesNotExist(f"Asiento contable con identificador '{asiento_id}' no encontrado.")
+            
             # Usar el serializer de detalle para obtener movimientos
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             context['asiento'] = serializer.data
-        except AsientoContable.DoesNotExist:
-            context['error'] = f"Asiento contable con ID {asiento_id} no encontrado."
+        except AsientoContable.DoesNotExist as e:
+            context['error'] = str(e)
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error en render_offcanvas_detalle: {e}", exc_info=True)
             context['error'] = f"Error al cargar asiento: {str(e)}"
         
         return Response(context, template_name='tenant/core/contabilidad/partials/asiento_offcanvas_detalle.html')
@@ -971,8 +1072,8 @@ class CatalogoMaestroNIIFViewSet(BaseTenantViewSet):
         
         ⚠️ v2.61: El catálogo es compartido por todos los tenants (cada tenant tiene su copia).
         """
-        if self.action == "list":
-            # Campos mínimos para LIST
+        if self.action == "list" or self.action == "buscar_por_tipo":
+            # Campos mínimos para LIST y buscar_por_tipo
             return CatalogoMaestroNIIF.objects.only(
                 'id', 'codigo', 'nombre', 'nivel', 'naturaleza', 'activa'
             ).order_by('codigo')
@@ -1051,17 +1152,22 @@ class CatalogoMaestroNIIFViewSet(BaseTenantViewSet):
         """
         Busca cuentas del catálogo NIIF filtradas por tipo de cuenta.
         
+        ⚠️ v2.61: Búsqueda directa en CATALOGO_NIIF_COLOMBIA (choices.py)
+        No busca en la base de datos, busca directamente en el catálogo estático.
+        
         Query params:
         - tipo: ACTIVO, PASIVO, PATRIMONIO, INGRESO, GASTO, COSTO
-        - search: Búsqueda por código o nombre (opcional)
+        - search: Búsqueda por código (número) o nombre (letras) - opcional
         - nivel: Filtro por nivel (opcional)
         
         GET /api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?tipo=ACTIVO
         GET /api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?tipo=ACTIVO&search=banco
         GET /api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?tipo=ACTIVO&nivel=4
         """
+        from apps.tenant.contabilidad.choices.choices import CATALOGO_NIIF_COLOMBIA
+        
         tipo = request.query_params.get('tipo', None)
-        search = request.query_params.get('search', '')
+        search = request.query_params.get('search', '').strip()
         nivel = request.query_params.get('nivel', None)
         
         if not tipo:
@@ -1087,28 +1193,229 @@ class CatalogoMaestroNIIFViewSet(BaseTenantViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Filtrar por primer dígito del código
-        queryset = self.get_queryset().filter(codigo__startswith=primer_digito, activa=True)
+        # ⚠️ v2.61: Buscar directamente en CATALOGO_NIIF_COLOMBIA (choices.py)
+        # Estructura: (codigo, nombre, nivel, naturaleza)
+        resultados = []
         
-        # Aplicar búsqueda si se proporciona
-        if search:
-            queryset = queryset.filter(
-                Q(codigo__icontains=search) | Q(nombre__icontains=search)
-            )
+        for codigo, nombre, nivel_cuenta, naturaleza in CATALOGO_NIIF_COLOMBIA:
+            # Filtrar por primer dígito del código (tipo)
+            if not codigo.startswith(primer_digito):
+                continue
+            
+            # Filtrar por nivel si se proporciona
+            if nivel and nivel_cuenta != int(nivel):
+                continue
+            
+            # ⚠️ v2.61: Búsqueda por código (número) o nombre (letras)
+            if search:
+                search_lower = search.lower()
+                codigo_match = search_lower in codigo.lower()
+                nombre_match = search_lower in nombre.lower()
+                if not (codigo_match or nombre_match):
+                    continue
+            
+            # Agregar resultado
+            resultados.append({
+                'id': None,  # No tiene ID en el catálogo estático
+                'codigo': codigo,
+                'nombre': nombre,
+                'nivel': nivel_cuenta,
+                'naturaleza': naturaleza,
+                'activa': True,  # Todas las cuentas del catálogo están activas
+                'tipo_cuenta': tipo.upper()  # Tipo calculado
+            })
         
-        # Aplicar filtro de nivel si se proporciona
-        if nivel:
-            queryset = queryset.filter(nivel=int(nivel))
+        # Ordenar por código
+        resultados.sort(key=lambda x: x['codigo'])
         
-        # Paginar resultados
-        page = self.paginate_queryset(queryset)
+        # ⚠️ DEBUG: Log para depuración
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f'[Catálogo NIIF] Búsqueda en choices.py: tipo={tipo}, search={search}, nivel={nivel}, total={len(resultados)}')
         
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+        # Paginar resultados manualmente
+        try:
+            page_size = int(request.query_params.get('page_size', 20))
+        except (ValueError, TypeError):
+            page_size = 20
         
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        try:
+            page = int(request.query_params.get('page', 1))
+        except (ValueError, TypeError):
+            page = 1
+        
+        # Calcular paginación
+        total = len(resultados)
+        start = (page - 1) * page_size
+        end = start + page_size
+        resultados_paginados = resultados[start:end]
+        
+        # Construir URLs de paginación
+        base_url = request.build_absolute_uri().split('?')[0]  # URL sin query params
+        query_params = request.query_params.copy()
+        
+        next_url = None
+        if end < total:
+            query_params['page'] = page + 1
+            next_url = f"{base_url}?{query_params.urlencode()}"
+        
+        previous_url = None
+        if page > 1:
+            query_params['page'] = page - 1
+            previous_url = f"{base_url}?{query_params.urlencode()}"
+        
+        # Retornar respuesta paginada (formato DRF estándar)
+        return Response({
+            'count': total,
+            'next': next_url,
+            'previous': previous_url,
+            'results': resultados_paginados
+        }, status=status.HTTP_200_OK)
+
+
+class PeriodoContableViewSet(BaseTenantViewSet):
+    """
+    ViewSet para PeriodoContable.
+    
+    ⚠️ v2.40: ENFORCED MODE - POST/PATCH/PUT/DELETE solo para STAFF/ADMIN.
+    ⚠️ v2.61: Usa qs_periodo_list() y qs_periodo_detail() del service.
+    ⚠️ OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
+    """
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [permissions.IsAuthenticated, IsTenantAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['estado', 'periodo']
+    search_fields = ['periodo', 'observaciones']
+    ordering_fields = ['periodo', 'fecha_inicio', 'fecha_fin', 'created_at']
+    ordering = ['-periodo']
+    
+    def get_serializer_class(self):
+        """Selecciona el serializer según la acción."""
+        if self.action in ["retrieve", "render_offcanvas_editar", "render_offcanvas_detalle"]:
+            return PeriodoContableDetailSerializer
+        return PeriodoContableListSerializer
+    
+    def get_queryset(self):
+        """
+        QuerySet optimizado usando qs_periodo_list() y qs_periodo_detail() del service.
+        
+        ⚠️ v2.61: Alineado con Service Layer Pattern.
+        """
+        if self.action == "list":
+            return qs_periodo_list().order_by('-periodo')
+        elif self.action == "retrieve":
+            return qs_periodo_detail()
+        else:
+            return PeriodoContable.objects.all()
+    
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
+    def render_offcanvas_crear(self, request):
+        """
+        Endpoint HTMX RESTful para cargar offcanvas de creación de periodos contables.
+        
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado para creación
+        - GET /api/v1/contabilidad/periodos-contables/render-offcanvas/crear/ → Modo creación
+        
+        Returns:
+            Template HTML: tenant/core/contabilidad/partials/periodo_offcanvas_form.html
+        """
+        context = {}
+        return Response(context, template_name='tenant/core/contabilidad/partials/periodo_offcanvas_form.html')
+    
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request, **kwargs):
+        """
+        Endpoint HTMX RESTful para cargar offcanvas de edición de periodos contables.
+        
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado para edición
+        - GET /api/v1/contabilidad/periodos-contables/{id}/render-offcanvas/editar/ → Modo edición
+        
+        Returns:
+            Template HTML: tenant/core/contabilidad/partials/periodo_offcanvas_form.html
+        """
+        try:
+            periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            periodo = None
+            if periodo_identifier:
+                try:
+                    periodo_id = int(periodo_identifier)
+                    periodo = PeriodoContable.objects.get(id=periodo_id)
+                except (ValueError, TypeError):
+                    try:
+                        periodo = self.get_object()
+                    except PeriodoContable.DoesNotExist:
+                        pass
+            
+            if not periodo:
+                raise PeriodoContable.DoesNotExist(f"Periodo contable con identificador '{periodo_identifier}' no encontrado.")
+            
+            serializer = self.get_serializer(periodo)
+            context = {'periodo': serializer.data}
+            return Response(context, template_name='tenant/core/contabilidad/partials/periodo_offcanvas_form.html')
+        except PeriodoContable.DoesNotExist as e:
+            logger.error(f"Error en render_offcanvas_editar: {e}")
+            context = {
+                'error': str(e),
+                'message': _('El periodo contable solicitado no existe o no está disponible.'),
+                'periodo': None
+            }
+            return Response(context, template_name='tenant/core/contabilidad/partials/periodo_offcanvas_form.html', status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error inesperado en render_offcanvas_editar: {e}", exc_info=True)
+            context = {
+                'error': str(e),
+                'message': _('Ocurrió un error inesperado al cargar el formulario de edición.'),
+                'periodo': None
+            }
+            return Response(context, template_name='tenant/core/contabilidad/partials/periodo_offcanvas_form.html', status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
+    def render_offcanvas_detalle(self, request, **kwargs):
+        """
+        Endpoint HTMX RESTful para cargar offcanvas de detalle de periodos contables (read-only).
+        
+        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado para detalle
+        - GET /api/v1/contabilidad/periodos-contables/{id}/render-offcanvas/detalle/ → Modo lectura
+        
+        Returns:
+            Template HTML: tenant/core/contabilidad/partials/periodo_offcanvas_detalle.html
+        """
+        try:
+            periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            periodo = None
+            if periodo_identifier:
+                try:
+                    periodo_id = int(periodo_identifier)
+                    periodo = PeriodoContable.objects.get(id=periodo_id)
+                except (ValueError, TypeError):
+                    try:
+                        periodo = self.get_object()
+                    except PeriodoContable.DoesNotExist:
+                        pass
+            
+            if not periodo:
+                raise PeriodoContable.DoesNotExist(f"Periodo contable con identificador '{periodo_identifier}' no encontrado.")
+            
+            serializer = self.get_serializer(periodo)
+            context = {'periodo': serializer.data}
+            return Response(context, template_name='tenant/core/contabilidad/partials/periodo_offcanvas_detalle.html')
+        except PeriodoContable.DoesNotExist as e:
+            logger.error(f"Error en render_offcanvas_detalle: {e}")
+            context = {
+                'error': str(e),
+                'message': _('El periodo contable solicitado no existe o no está disponible.'),
+                'periodo': None
+            }
+            return Response(context, template_name='tenant/core/contabilidad/partials/periodo_offcanvas_detalle.html', status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error inesperado en render_offcanvas_detalle: {e}", exc_info=True)
+            context = {
+                'error': str(e),
+                'message': _('Ocurrió un error inesperado al cargar el detalle del periodo contable.'),
+                'periodo': None
+            }
+            return Response(context, template_name='tenant/core/contabilidad/partials/periodo_offcanvas_detalle.html', status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # Lista de ViewSets para registro automático en el router
@@ -1116,5 +1423,6 @@ VIEWSETS = [
     (r'cuentas-contables', CuentaContableViewSet, 'cuenta-contable'),
     (r'asientos-contables', AsientoContableViewSet, 'asiento-contable'),
     (r'movimientos-contables', MovimientoContableViewSet, 'movimiento-contable'),
+    (r'periodos-contables', PeriodoContableViewSet, 'periodo-contable'),  # ⚠️ v2.61
     (r'catalogo-niif', CatalogoMaestroNIIFViewSet, 'catalogo-niif'),
 ]

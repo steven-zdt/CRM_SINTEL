@@ -1,7 +1,7 @@
-# Auditoría y Flujo Completo: Módulo de Empleados v2.60
+# Auditoría y Flujo Completo: Módulo de Empleados v2.61
 
 **Fecha de Auditoría:** 2026-03-XX  
-**Versión de Arquitectura:** SINTEL v2.60 (Standalone Architecture)  
+**Versión de Arquitectura:** SINTEL v2.61 (Feature-Sliced Architecture + Modularización Completa)  
 **Módulo:** `apps/tenant/empleados`  
 **Estado:** ✅ Producción - Completamente funcional
 
@@ -51,10 +51,12 @@ El módulo de **Empleados** gestiona el ciclo completo de recursos humanos:
 - Deducciones de ley (Salud 4%, Pensión 4%)
 - Neto a pagar calculado en backend
 
-✅ **Arquitectura v2.60**
+✅ **Arquitectura v2.61**
 - HTMX + Offcanvas (sin modales)
 - Tabulator Factory para tablas interactivas
 - API-First con DRF
+- Feature-Sliced Architecture: Módulos separados para crear/editar
+- Scroll horizontal en tablas con muchas columnas
 
 ✅ **Validaciones Robustas**
 - Zero Trust: Validación de tenant en cada operación
@@ -151,9 +153,11 @@ apps/tenant/empleados/
 apps/tenant/core/templates/tenant/core/partials/empleados/
 ├── list.html                          # Vista principal con Tabulator
 ├── empleado_offcanvas.html           # Formulario CRUD Empleado
-├── contrato_offcanvas.html            # Formulario CRUD Contrato
+├── contrato_offcanvas.html            # ⚠️ DEPRECATED (v2.61: Separado en form/editar)
+├── contrato_offcanvas_form.html       # ⚠️ v2.61: Formulario CREAR Contrato
+├── contrato_offcanvas_editar.html     # ⚠️ v2.61: Formulario EDITAR Contrato
 ├── devengo_offcanvas.html             # Formulario CRUD Nómina
-├── historial_nominas_offcanvas.html   # Historial de nóminas
+├── historial_nominas_offcanvas.html   # Historial de nóminas (v2.61: Scroll horizontal)
 ├── devengo_calculo_partial.html       # Partial HTMX para preview
 ├── devengo_calculo_error.html         # Partial HTMX para errores
 ├── assets_empleados.html              # Carga de scripts JS
@@ -164,9 +168,11 @@ apps/tenant/core/static/core/js/empleados/
 └── features/              # ⚠️ v2.60: Feature-Sliced Architecture
     ├── empleados_list.js      # Tabla principal y delegación de eventos
     ├── empleados_editor.js    # CRUD de empleados + listeners HTMX
-    ├── contratos_editor.js    # CRUD de contratos + listeners HTMX
+    ├── contratos_editor.js    # ⚠️ v2.61: Router/Delegador de contratos
+    ├── contratos_form.js      # ⚠️ v2.61: Lógica CREAR Contrato (exclusiva)
+    ├── contratos_editar.js    # ⚠️ v2.61: Lógica EDITAR Contrato (exclusiva)
     ├── devengos_editor.js     # CRUD de nóminas + listeners HTMX (409/400)
-    └── historial_nominas.js   # Historial de nóminas + event delegation
+    └── historial_nominas.js   # Historial de nóminas + event delegation (v2.61: Columnas completas)
 ```
 
 ### 3.2 Dependencias de la Aplicación
@@ -535,9 +541,20 @@ def validar_limite_dias_mes(empleado_id, periodo_mes, nuevos_dias, empresa_id, d
    - Filtra por `empresa_id`
    - Soporta `?empleado={id}` para filtrar por empleado
 
-2. **`GET /api/v1/empleados/gestor-offcanvas/?tipo=contrato&empleado={id}`** - HTMX Offcanvas
+2. **`GET /api/v1/empleados/contratos/render-offcanvas/crear/?empleado={id}`** - ⚠️ v2.61: HTMX Offcanvas CREAR
+   - Endpoint RESTful dedicado para creación de contratos
+   - Retorna `contrato_offcanvas_form.html` (template exclusivo para crear)
+   - Requiere parámetro `empleado` (ID del empleado)
+   - Zero Trust: Valida que el empleado pertenezca al tenant
+
+3. **`GET /api/v1/empleados/contratos/{id}/render-offcanvas/editar/`** - ⚠️ v2.61: HTMX Offcanvas EDITAR
+   - Endpoint RESTful dedicado para edición de contratos
+   - Retorna `contrato_offcanvas_editar.html` (template exclusivo para editar)
+   - Zero Trust: Valida que el contrato pertenezca al tenant
+
+4. **`GET /api/v1/empleados/gestor-offcanvas/?tipo=contrato&empleado={id}`** - ⚠️ DEPRECATED (v2.61: Usar endpoints dedicados)
    - ⚠️ Paso 4: Usa `gestor_offcanvas` centralizado en `EmpleadoViewSet`
-   - Retorna `contrato_offcanvas.html`
+   - Retorna `contrato_offcanvas.html` (deprecated, usar form/editar separados)
    - Si `empleado` está presente, pre-carga datos del empleado
    - Si `id` está presente, carga datos del contrato existente
 
@@ -657,12 +674,14 @@ def validar_limite_dias_mes(empleado_id, periodo_mes, nuevos_dias, empresa_id, d
 
 ### 7.1 Estructura de JavaScript
 
-**Archivos Principales (Feature-Sliced Architecture):**
+**Archivos Principales (Feature-Sliced Architecture v2.61):**
 - `apps/tenant/core/static/core/js/empleados/features/empleados_list.js` - Tabla principal
 - `apps/tenant/core/static/core/js/empleados/features/empleados_editor.js` - CRUD empleados
-- `apps/tenant/core/static/core/js/empleados/features/contratos_editor.js` - CRUD contratos
+- `apps/tenant/core/static/core/js/empleados/features/contratos_editor.js` - ⚠️ v2.61: Router/Delegador de contratos
+- `apps/tenant/core/static/core/js/empleados/features/contratos_form.js` - ⚠️ v2.61: Lógica CREAR Contrato (exclusiva)
+- `apps/tenant/core/static/core/js/empleados/features/contratos_editar.js` - ⚠️ v2.61: Lógica EDITAR Contrato (exclusiva)
 - `apps/tenant/core/static/core/js/empleados/features/devengos_editor.js` - CRUD nóminas
-- `apps/tenant/core/static/core/js/empleados/features/historial_nominas.js` - Historial
+- `apps/tenant/core/static/core/js/empleados/features/historial_nominas.js` - Historial (v2.61: Columnas completas)
 
 **Dependencias Globales:**
 - `TabulatorFactory` (tabulator.factory.js)
@@ -688,9 +707,22 @@ window.EmpleadosEditor = {
   eliminarEmpleado: eliminarEmpleado
 };
 
-// contratos_editor.js
+// contratos_editor.js (v2.61: Router/Delegador)
 window.ContratosEditor = {
+  open: openContratoOffcanvas, // Delega a ContratosForm o ContratosEditar según el modo
   openContratoOffcanvas: openContratoOffcanvas
+};
+
+// contratos_form.js (v2.61: Módulo exclusivo para CREAR)
+window.ContratosForm = {
+  cargarOffcanvasCrearContrato: cargarOffcanvasCrearContrato,
+  open: cargarOffcanvasCrearContrato
+};
+
+// contratos_editar.js (v2.61: Módulo exclusivo para EDITAR)
+window.ContratosEditar = {
+  cargarOffcanvasEditarContrato: cargarOffcanvasEditarContrato,
+  open: cargarOffcanvasEditarContrato
 };
 
 // devengos_editor.js
@@ -812,19 +844,33 @@ document.addEventListener('click', function(e) {
      - Valida Zero Trust
    - Frontend: `htmx:afterOnLoad` cierra offcanvas y refresca tabla
 
-### 8.2 Flujo: Crear Contrato
+### 8.2 Flujo: Crear Contrato (v2.61)
 
 **1. Usuario hace clic en "Registrar Contrato" (desde tabla de empleados)**
-   - JavaScript: `openContratoOffcanvas(empleadoId)`
-   - HTMX: `GET /api/v1/empleados/gestor-offcanvas/?tipo=contrato&empleado={id}`
-   - Backend: `EmpleadoViewSet.gestor_offcanvas()` retorna `contrato_offcanvas.html` (con datos del empleado pre-cargados)
+   - JavaScript: `ContratosEditor.open(empleadoId)` → Delega a `ContratosForm.cargarOffcanvasCrearContrato(empleadoId)`
+   - HTMX: `GET /api/v1/empleados/contratos/render-offcanvas/crear/?empleado={id}`
+   - Backend: `ContratoViewSet.render_offcanvas_crear()` retorna `contrato_offcanvas_form.html` (con datos del empleado pre-cargados)
 
 **2. Usuario completa formulario y hace clic en "Guardar"**
    - HTMX: `POST /api/v1/empleados/contratos/`
    - Backend: `ContratoViewSet.create()`
      - Valida que solo haya UN contrato ACTIVO por empleado (constraint)
      - Usa `gestionar_contrato_service()` del service layer
-   - Frontend: `htmx:afterOnLoad` cierra offcanvas y refresca tabla
+   - Frontend: `ContratosForm` maneja éxito vía `htmx:afterOnLoad` (cierra offcanvas y refresca tabla)
+
+### 8.2.1 Flujo: Editar Contrato (v2.61)
+
+**1. Usuario hace clic en "Editar Contrato" (desde tabla de empleados o historial)**
+   - JavaScript: `ContratosEditor.open(empleadoId, contratoId)` → Delega a `ContratosEditar.cargarOffcanvasEditarContrato(contratoId)`
+   - HTMX: `GET /api/v1/empleados/contratos/{id}/render-offcanvas/editar/`
+   - Backend: `ContratoViewSet.render_offcanvas_editar()` retorna `contrato_offcanvas_editar.html` (con datos del contrato y empleado)
+
+**2. Usuario modifica formulario y hace clic en "Actualizar"**
+   - HTMX: `PATCH /api/v1/empleados/contratos/{id}/`
+   - Backend: `ContratoViewSet.update()`
+     - Valida que solo se pueda editar si el contrato está ACTIVO (excepto campo `estado`)
+     - Usa `gestionar_contrato_service()` del service layer
+   - Frontend: `ContratosEditar` maneja éxito vía `htmx:afterOnLoad` (cierra offcanvas y refresca tabla)
 
 ### 8.3 Flujo: Crear Nómina
 
@@ -918,7 +964,7 @@ class Meta:
 @action(detail=True, methods=["get"], renderer_classes=[TemplateHTMLRenderer, JSONRenderer], url_path="historial-nominas")
 def historial_nominas(self, request, pk=None):
     """
-    ⚠️ v2.60: Devuelve el HTML del historial de nóminas para un empleado específico (HTMX)
+    ⚠️ v2.61: Devuelve el HTML del historial de nóminas para un empleado específico (HTMX)
     o los datos JSON para Tabulator (paginación remota).
     """
     empresa = Empresa.objects.only('id').first()
@@ -942,7 +988,35 @@ def historial_nominas(self, request, pk=None):
     return Response(serializer.data)
 ```
 
-### 10.2 Inicialización JavaScript
+### 10.2 Columnas del Historial (v2.61)
+
+**⚠️ v2.61: Columnas completas con devengos y deducciones**
+
+**Orden Secuencial de Columnas:**
+
+1. **Periodo** - `periodo_mes` (YYYY-MM)
+2. **Fecha de Pago** - `fecha_pago` (formato fecha)
+3. **Días Laborados** - `dias_laborados` (decimal)
+4. **DEVENGOS (Ingresos):**
+   - **Salario Base (COP)** - `salario_base` (formato moneda)
+   - **Auxilio Transporte (COP)** - `auxilio_transporte` (formato moneda)
+   - **Otros Devengos (COP)** - `otros_devengos` (formato moneda, muestra '-' si es 0)
+5. **DEDUCCIONES (Descuentos):**
+   - **Salud (COP)** - `salud_empleado` (formato moneda)
+   - **Pensión (4%) (COP)** - `pension_empleado` (formato moneda)
+   - **Préstamos (COP)** - `prestamos` (formato moneda, muestra '-' si es 0)
+   - **Descuentos Operativos (COP)** - `descuentos_operativos` (formato moneda, muestra '-' si es 0)
+6. **Neto a Pagar (COP)** - `neto_pagar` (formato moneda)
+7. **Estado** - `anulado` (badge: Activo/Anulado)
+8. **Acciones** - Botones Ver/Editar y Eliminar
+
+**Características:**
+- Todas las columnas monetarias usan formato COP (pesos colombianos)
+- Valores opcionales (`otros_devengos`, `prestamos`, `descuentos_operativos`) muestran '-' cuando son 0 o null
+- Scroll horizontal habilitado para ver todas las columnas
+- Ancho mínimo del contenedor: 2200px para asegurar visibilidad completa
+
+### 10.3 Inicialización JavaScript
 
 **Función:** `initHistorialNominas(empleadoId)`
 
@@ -951,6 +1025,19 @@ def historial_nominas(self, request, pk=None):
 - Event Delegation: Botones "Ver/Editar" y "Eliminar" manejados por event delegation
 - Validación: Verifica que `empleadoId` sea válido antes de inicializar
 - Integración con UIManager: Manejo de errores centralizado
+- **v2.61:** Carga todos los registros disponibles (paginación deshabilitada, `page_size=200`)
+- **v2.61:** Scroll horizontal automático cuando el contenido excede el ancho del contenedor
+- **v2.61:** Layout `fitColumns` con contenedor wrapper con `overflow-x: auto`
+
+### 10.4 Template Offcanvas (v2.61)
+
+**Ubicación:** `apps/tenant/core/templates/tenant/core/partials/empleados/historial_nominas_offcanvas.html`
+
+**Características:**
+- Ancho del offcanvas: `width: 98%; max-width: 1600px;`
+- Contenedor wrapper con scroll horizontal: `overflow-x: auto; overflow-y: auto; max-height: 70vh;`
+- Contenedor de Tabulator con ancho mínimo: `min-width: 2200px;` para asegurar visibilidad de todas las columnas
+- Clase Bootstrap `table-responsive` para mejor compatibilidad
 
 ---
 
@@ -1193,6 +1280,40 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
 
 ## 14. Historial de Cambios (Changelog)
 
+### v2.61 - Modularización Completa de Contratos + Columnas Completas en Historial (2026-03-XX)
+
+#### Cambios Principales:
+
+1. **Modularización del Módulo "Editar Contrato" (Feature-Sliced Architecture)**
+   - ✅ Separación de templates: `contrato_offcanvas_form.html` (crear) y `contrato_offcanvas_editar.html` (editar)
+   - ✅ Separación de JavaScript: `contratos_form.js` (crear) y `contratos_editar.js` (editar)
+   - ✅ `contratos_editor.js` actúa como router/delegador que llama a los módulos específicos según el modo
+   - ✅ Endpoints RESTful dedicados:
+     - `GET /api/v1/empleados/contratos/render-offcanvas/crear/?empleado={id}` → Modo creación
+     - `GET /api/v1/empleados/contratos/{id}/render-offcanvas/editar/` → Modo edición
+   - ✅ Método `get_empresa()` agregado a `ContratoViewSet` para consistencia
+   - ✅ Sincronización completa con lógica actual del sistema
+
+2. **Columnas Completas en Historial de Nóminas**
+   - ✅ Agregadas todas las columnas de devengos y deducciones:
+     - Devengos: Salario Base, Auxilio Transporte, Otros Devengos
+     - Deducciones: Salud, Pensión (4%), Préstamos, Descuentos Operativos
+     - Neto a Pagar, Estado, Acciones
+   - ✅ Formato de moneda COP para todas las columnas monetarias
+   - ✅ Valores opcionales muestran '-' cuando son 0 o null
+   - ✅ Orden secuencial lógico: Devengos → Deducciones → Neto a Pagar
+
+3. **Scroll Horizontal en Historial de Nóminas**
+   - ✅ Contenedor wrapper con `overflow-x: auto` para scroll horizontal
+   - ✅ Ancho mínimo del contenedor de Tabulator: `min-width: 2200px;`
+   - ✅ Ancho del offcanvas aumentado: `width: 98%; max-width: 1600px;`
+   - ✅ Clase Bootstrap `table-responsive` para mejor compatibilidad
+   - ✅ Scroll suave en dispositivos táctiles: `-webkit-overflow-scrolling: touch;`
+
+4. **Mejoras en Assets y Carga de Módulos**
+   - ✅ Actualizado `assets_empleados.html` para incluir `contratos_form.js` y `contratos_editar.js`
+   - ✅ Orden de carga mantenido: módulos base primero, luego módulos específicos
+
 ### v2.60 - Feature-Sliced Architecture + HTMX Integration (2026-03-XX)
 
 #### Cambios Principales:
@@ -1425,6 +1546,7 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
 ## 📝 Notas Finales
 
 ### Versión de Arquitectura
+- **v2.61**: Feature-Sliced Architecture + Modularización Completa (Contratos separados, Columnas completas en Historial)
 - **v2.60**: Standalone Architecture con HTMX + Offcanvas
 - **v2.40**: API-First Architecture con Tabulator Factory
 - **v2.95**: Flujo Secuencial (Máquina de Estados)
@@ -1447,6 +1569,6 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
 ---
 
 **Documento generado automáticamente**  
-**Última actualización:** 2026-03-XX (Feature-Sliced Architecture + HTMX Integration)  
-**Versión del Módulo:** v2.60  
+**Última actualización:** 2026-03-XX (v2.61: Modularización Completa de Contratos + Columnas Completas en Historial)  
+**Versión del Módulo:** v2.61  
 **Estado:** ✅ Producción - Completamente funcional

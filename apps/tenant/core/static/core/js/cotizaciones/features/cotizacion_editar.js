@@ -244,16 +244,31 @@
 
     // 6. Cargar datos en tablas con delay para que Tabulator esté inicializado
     setTimeout(function () {
-      if (equipos.length > 0 && _tables['equipos']) {
-        _tables['equipos'].setData(equipos.map(mapItem));
+      // ⚠️ v2.61: Recalcular subtotales para todas las filas después de cargar datos
+      // Esto asegura que los cálculos estén correctos desde el inicio
+      function recargarYRecalcularTabla(seccion, items) {
+        if (items.length > 0 && _tables[seccion]) {
+          _tables[seccion].setData(items.map(mapItem));
+          
+          // Recalcular subtotales para todas las filas usando recalcularFila de cotizacion_columns.js
+          setTimeout(function() {
+            var allData = _tables[seccion].getData();
+            allData.forEach(function(rowData) {
+              var row = _tables[seccion].getRowFromData(rowData);
+              if (row && typeof w.recalcularFila === 'function') {
+                w.recalcularFila(row);
+              }
+            });
+          }, 50);
+        }
       }
-      if (materiales.length > 0 && _tables['materiales']) {
-        _tables['materiales'].setData(materiales.map(mapItem));
-      }
-      if (servicios.length > 0 && _tables['servicios']) {
-        _tables['servicios'].setData(servicios.map(mapItem));
-      }
-      setTimeout(recalcularTotales, 150);
+      
+      recargarYRecalcularTabla('equipos', equipos);
+      recargarYRecalcularTabla('materiales', materiales);
+      recargarYRecalcularTabla('servicios', servicios);
+      
+      // Recalcular totales globales después de un breve delay
+      setTimeout(recalcularTotales, 200);
     }, 300);
   }
 
@@ -346,7 +361,7 @@
 
     console.log('[' + MOD + '] PATCH payload:', payload);
 
-    var url = '/api/v1/core/v1/cotizaciones/' + _uuid + '/';
+    var url = '/api/v1/cotizaciones/' + _uuid + '/';
     try {
       var res = await w.http('PATCH', url, payload);
 
@@ -479,24 +494,84 @@
 
   // ─── Exponer módulo globalmente ──────────────────────────────────────────────
   w.CotizacionEditarModule = {
-    init:              init,
-    resetState:        resetState,
-    recalcularTotales: recalcularTotales,
-    getTables:         function () { return _tables; }
+    init:                      init,
+    resetState:                resetState,
+    recalcularTotales:          recalcularTotales,
+    recalcularTotalesGlobales:  recalcularTotales, // ⚠️ v2.61: Alias para compatibilidad con cotizacion_columns.js
+    getTables:                  function () { return _tables; }
   };
 
   // ─── Listeners de ciclo de vida ──────────────────────────────────────────────
 
-  // HTMX: se disparará cuando el partial cargue vía hx-get
+  // ⚠️ v2.61: HTMX: se disparará cuando el partial cargue vía hx-get - Con safeguards mejorados
   d.body.addEventListener('htmx:afterSwap', function (e) {
-    if (e.detail.target && e.detail.target.id === 'offcanvas-container') {
-      var editorDiv = d.getElementById('modal-cotizacion-editar');
-      if (editorDiv) {
-        console.log('[' + MOD + '] HTMX swap detectado → init()');
+    // ⚠️ SAFEGUARD 1: Solo inicializar si el target es el contenedor del editor
+    if (!e.detail || !e.detail.target || e.detail.target.id !== 'offcanvas-container') {
+      return; // No es nuestro contenedor, ignorar silenciosamente
+    }
+
+    // ⚠️ SAFEGUARD 2: PRIORIDAD - Verificar PRIMERO dentro del target si existe el editor de EDICIÓN
+    // Buscar dentro del contenido recién cargado por HTMX (más confiable que buscar en todo el DOM)
+    var editorEditarDiv = e.detail.target.querySelector('#modal-cotizacion-editar');
+    if (!editorEditarDiv) {
+      // No mostrar warning si es un swap de creación (no es nuestro caso)
+      return;
+    }
+
+    // ⚠️ SAFEGUARD 3: Verificar el atributo data-mode para mayor seguridad
+    var dataMode = editorEditarDiv.getAttribute('data-mode');
+    if (dataMode && dataMode !== 'editar') {
+      console.log('[' + MOD + '] HTMX swap detectado pero data-mode="' + dataMode + '" (no es editar). Abortando.');
+      return;
+    }
+
+    // ⚠️ SAFEGUARD 4: Verificar que tenga UUID (es modo edición)
+    var uuid = editorEditarDiv.getAttribute('data-cotizacion-uuid');
+    if (!uuid || uuid === '' || uuid === 'None') {
+      console.log('[' + MOD + '] HTMX swap detectado pero NO tiene UUID (modo creación). Abortando.');
+      return;
+    }
+
+    // ⚠️ SAFEGUARD 3: Verificar dependencias críticas antes de inicializar
+    if (!w.CotizacionesHelpers) {
+      console.error('[' + MOD + '] CotizacionesHelpers no está disponible. Esperando...');
+      setTimeout(function() {
+        if (w.CotizacionesHelpers && d.getElementById('modal-cotizacion-editar')) {
+          console.log('[' + MOD + '] Dependencias disponibles, reinicializando...');
+          resetState();
+          init();
+        }
+      }, 500);
+      return;
+    }
+
+    if (typeof w.getCotizacionColumns !== 'function') {
+      console.error('[' + MOD + '] getCotizacionColumns no está disponible. Esperando...');
+      setTimeout(function() {
+        if (typeof w.getCotizacionColumns === 'function' && d.getElementById('modal-cotizacion-editar')) {
+          console.log('[' + MOD + '] Dependencias disponibles, reinicializando...');
+          resetState();
+          init();
+        }
+      }, 500);
+      return;
+    }
+
+    console.log('[' + MOD + '] HTMX swap detectado → init()');
+    
+    // ⚠️ v2.61: Usar setTimeout para asegurar que el DOM esté completamente renderizado
+    setTimeout(function() {
+      // Verificar nuevamente que el editor de edición existe y el de creación NO existe
+      var editorEditarDiv = d.getElementById('modal-cotizacion-editar');
+      var editorCrearDiv = d.getElementById('modal-cotizacion-editor');
+      
+      if (editorEditarDiv && (!editorCrearDiv || editorCrearDiv.getAttribute('data-cotizacion-uuid'))) {
         resetState();
         init();
+      } else {
+        console.warn('[' + MOD + '] Verificación fallida en setTimeout: editor de edición no encontrado o editor de creación presente.');
       }
-    }
+    }, 100);
   });
 
   // Fallback: cuando el offcanvas ya está visible pero init aún no corrió
@@ -506,6 +581,17 @@
       if (editorDiv && !editorDiv.getAttribute('data-init')) {
         console.log('[' + MOD + '] shown.bs.offcanvas fallback → init()');
         init();
+      }
+    }
+  });
+
+  // ⚠️ v2.61: Limpiar estado cuando se cierra el offcanvas
+  d.body.addEventListener('hidden.bs.offcanvas', function (e) {
+    if (e.target && e.target.id === 'offcanvas-container') {
+      var editorDiv = d.getElementById('modal-cotizacion-editar');
+      if (editorDiv && editorDiv.getAttribute('data-mode') === 'editar') {
+        console.log('[' + MOD + '] Offcanvas cerrado, limpiando estado...');
+        resetState();
       }
     }
   });

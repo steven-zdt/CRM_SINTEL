@@ -86,6 +86,33 @@
             'cuenta': 'Cuenta Contable',
             'debe': 'Valor Débito',
             'haber': 'Valor Crédito',
+            // Campos de Inventario - Productos
+            'codigo': 'Código del Producto (SKU)',
+            'nombre': 'Nombre del Producto',
+            'categoria': 'Categoría del Producto',
+            'precio_venta': 'Precio de Venta',
+            'stock_actual': 'Stock Actual',
+            'stock_minimo': 'Stock Mínimo',
+            'unidad': 'Unidad de Medida',
+            'descripcion': 'Descripción del Producto',
+            'activo': 'Estado del Producto (Activo/Inactivo)',
+            'producto': 'Producto',
+            'producto_id': 'ID del Producto',
+            'tipo_movimiento': 'Tipo de Movimiento',
+            'cantidad': 'Cantidad',
+            'costo_unitario': 'Costo Unitario',
+            'origen_referencia': 'Referencia Externa',
+            'observaciones': 'Observaciones',
+            // Campos de Inventario - Categorías
+            'aplicacion': 'Aplicación de la Categoría (PRODUCTO, SERVICIO, ACTIVO, TODO)',
+            // Campos de Inventario - Servicios
+            'precio': 'Precio del Servicio',
+            // Campos de Inventario - Activos Fijos
+            'estado': 'Estado del Activo (ACTIVO, MANTENIMIENTO, BAJA)',
+            'costo_adquisicion': 'Costo de Adquisición',
+            'fecha_adquisicion': 'Fecha de Adquisición',
+            'ubicacion': 'Ubicación del Activo',
+            'responsable': 'Responsable del Activo',
         };
         
         return map[field] || field.replace(/\./g, ' ').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -168,12 +195,54 @@
                 }
             }
         }
-        
-        // 4. Si aún no se encuentra, crear un contenedor temporal en el contenedor HTMX
+
+        // 3d. Buscar en el offcanvas de inventario/productos si está cargado
         if (!container || !msgDiv) {
-            // Intentar en contenedor de asientos primero
-            const asientosContainer = d.getElementById('offcanvas-container-asiento') || d.getElementById('offcanvas-container-asientos');
-            if (asientosContainer && xhr.status >= 400) {
+            const offcanvasInventario = d.getElementById('offcanvas-inventario');
+            if (offcanvasInventario) {
+                container = offcanvasInventario.querySelector(`#${ERROR_CONTAINER_ID}`);
+                if (container) {
+                    msgDiv = container.querySelector(`#${ERROR_MESSAGE_ID}`);
+                    fieldsUl = container.querySelector(`#${FIELDS_UL_ID}`);
+                    fieldsContainer = container.querySelector(`#${MISSING_FIELDS_LIST_ID}`);
+                } else {
+                    // Buscar en contenedor HTMX de productos
+                    const inventarioContainer = d.getElementById('offcanvas-container-inventario');
+                    if (inventarioContainer) {
+                        container = inventarioContainer.querySelector(`#${ERROR_CONTAINER_ID}`);
+                        if (container) {
+                            msgDiv = container.querySelector(`#${ERROR_MESSAGE_ID}`);
+                            fieldsUl = container.querySelector(`#${FIELDS_UL_ID}`);
+                            fieldsContainer = container.querySelector(`#${MISSING_FIELDS_LIST_ID}`);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 4. Si aún no se encuentra, buscar en contenedores HTMX comunes
+        if (!container || !msgDiv) {
+            // 4a. Buscar en contenedor de inventario/productos
+            const inventarioContainer = d.getElementById('offcanvas-container-inventario');
+            if (inventarioContainer) {
+                // Buscar dentro del offcanvas cargado
+                const offcanvasInventario = inventarioContainer.querySelector('#offcanvas-inventario');
+                if (offcanvasInventario) {
+                    container = offcanvasInventario.querySelector(`#${ERROR_CONTAINER_ID}`);
+                    if (container) {
+                        msgDiv = container.querySelector(`#${ERROR_MESSAGE_ID}`);
+                        fieldsUl = container.querySelector(`#${FIELDS_UL_ID}`);
+                        fieldsContainer = container.querySelector(`#${MISSING_FIELDS_LIST_ID}`);
+                    }
+                }
+            }
+        }
+
+        // 5. Si aún no se encuentra, crear un contenedor temporal en el contenedor HTMX
+        if (!container || !msgDiv) {
+            // Intentar en contenedor de inventario primero
+            const inventarioContainer = d.getElementById('offcanvas-container-inventario');
+            if (inventarioContainer && xhr.status >= 400) {
                 // Crear contenedor temporal de error
                 const tempErrorHtml = `
                     <div id="${ERROR_CONTAINER_ID}" class="mt-3">
@@ -189,15 +258,15 @@
                         </div>
                     </div>
                 `;
-                asientosContainer.insertAdjacentHTML('afterbegin', tempErrorHtml);
+                inventarioContainer.insertAdjacentHTML('afterbegin', tempErrorHtml);
                 container = d.getElementById(ERROR_CONTAINER_ID);
                 msgDiv = d.getElementById(ERROR_MESSAGE_ID);
                 fieldsUl = d.getElementById(FIELDS_UL_ID);
                 fieldsContainer = d.getElementById(MISSING_FIELDS_LIST_ID);
             } else {
-                // Fallback: intentar en mailinbox
-                const mailinboxContainer = d.getElementById('offcanvas-container-mailinbox');
-                if (mailinboxContainer && xhr.status >= 400) {
+                // Intentar en contenedor de asientos
+                const asientosContainer = d.getElementById('offcanvas-container-asiento') || d.getElementById('offcanvas-container-asientos');
+                if (asientosContainer && xhr.status >= 400) {
                     // Crear contenedor temporal de error
                     const tempErrorHtml = `
                         <div id="${ERROR_CONTAINER_ID}" class="mt-3">
@@ -213,11 +282,61 @@
                             </div>
                         </div>
                     `;
-                    mailinboxContainer.insertAdjacentHTML('afterbegin', tempErrorHtml);
+                    asientosContainer.insertAdjacentHTML('afterbegin', tempErrorHtml);
                     container = d.getElementById(ERROR_CONTAINER_ID);
                     msgDiv = d.getElementById(ERROR_MESSAGE_ID);
                     fieldsUl = d.getElementById(FIELDS_UL_ID);
                     fieldsContainer = d.getElementById(MISSING_FIELDS_LIST_ID);
+                } else {
+                    // Fallback: intentar en mailinbox
+                    const mailinboxContainer = d.getElementById('offcanvas-container-mailinbox');
+                    if (mailinboxContainer && xhr.status >= 400) {
+                        // Crear contenedor temporal de error
+                        const tempErrorHtml = `
+                            <div id="${ERROR_CONTAINER_ID}" class="mt-3">
+                                <div class="alert alert-danger d-flex align-items-start" role="alert">
+                                    <i class="bi bi-exclamation-triangle-fill me-2 mt-1"></i>
+                                    <div class="flex-grow-1">
+                                        <div id="${ERROR_MESSAGE_ID}" class="mb-0"></div>
+                                        <div id="${MISSING_FIELDS_LIST_ID}" class="mt-2 d-none">
+                                            <small class="text-muted text-uppercase fw-bold d-block mb-1">Campos Requeridos Faltantes:</small>
+                                            <ul class="list-group list-group-flush small mb-0" id="${FIELDS_UL_ID}"></ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        mailinboxContainer.insertAdjacentHTML('afterbegin', tempErrorHtml);
+                        container = d.getElementById(ERROR_CONTAINER_ID);
+                        msgDiv = d.getElementById(ERROR_MESSAGE_ID);
+                        fieldsUl = d.getElementById(FIELDS_UL_ID);
+                        fieldsContainer = d.getElementById(MISSING_FIELDS_LIST_ID);
+                    } else {
+                        // Fallback: intentar en inventario/productos
+                        const inventarioContainer = d.getElementById('offcanvas-container-inventario');
+                        if (inventarioContainer && xhr.status >= 400) {
+                            // Crear contenedor temporal de error
+                            const tempErrorHtml = `
+                                <div id="${ERROR_CONTAINER_ID}" class="mt-3">
+                                    <div class="alert alert-danger d-flex align-items-start" role="alert">
+                                        <i class="bi bi-exclamation-triangle-fill me-2 mt-1"></i>
+                                        <div class="flex-grow-1">
+                                            <div id="${ERROR_MESSAGE_ID}" class="mb-0"></div>
+                                            <div id="${MISSING_FIELDS_LIST_ID}" class="mt-2 d-none">
+                                                <small class="text-muted text-uppercase fw-bold d-block mb-1">Campos Requeridos Faltantes:</small>
+                                                <ul class="list-group list-group-flush small mb-0" id="${FIELDS_UL_ID}"></ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            inventarioContainer.insertAdjacentHTML('afterbegin', tempErrorHtml);
+                            container = d.getElementById(ERROR_CONTAINER_ID);
+                            msgDiv = d.getElementById(ERROR_MESSAGE_ID);
+                            fieldsUl = d.getElementById(FIELDS_UL_ID);
+                            fieldsContainer = d.getElementById(MISSING_FIELDS_LIST_ID);
+                        }
+                    }
                 }
             }
         }
@@ -253,6 +372,39 @@
             // Mensaje principal
             // ⚠️ v2.60: Priorizar mensajes específicos de validación
             let errorMessage = response.message || response.error || response.detail || 'Error al procesar el documento.';
+            
+            // ⚠️ v2.61: Manejo de errores de validación de campos específicos (formato DRF: {campo: [mensaje]})
+            // Si la respuesta tiene campos con errores (formato DRF), construir mensaje detallado
+            const camposConErrores = [];
+            if (response && typeof response === 'object') {
+                // Buscar campos que sean arrays (formato DRF: {campo: [mensaje1, mensaje2]})
+                Object.keys(response).forEach(campo => {
+                    if (Array.isArray(response[campo]) && response[campo].length > 0) {
+                        // Es un error de campo específico
+                        const mensajesCampo = response[campo].join(', ');
+                        const campoLegible = mapearCampoALegible(campo);
+                        camposConErrores.push({
+                            campo: campo,
+                            campoLegible: campoLegible,
+                            mensajes: response[campo],
+                            mensajeUnificado: mensajesCampo
+                        });
+                    }
+                });
+            }
+            
+            // Si hay campos con errores, construir mensaje detallado
+            if (camposConErrores.length > 0) {
+                const mensajesCampos = camposConErrores.map(ce => 
+                    `<strong>${ce.campoLegible}:</strong> ${ce.mensajeUnificado}`
+                ).join('<br>');
+                errorMessage = `⚠️ Errores de validación:<br>${mensajesCampos}`;
+                
+                // Agregar campos a missing_fields para mostrarlos en la lista
+                if (!response.missing_fields || !Array.isArray(response.missing_fields)) {
+                    response.missing_fields = camposConErrores.map(ce => ce.campo);
+                }
+            }
             
             // ⚠️ Manejo específico para errores conocidos
             if (response.error === "document_not_for_tenant") {
@@ -401,21 +553,32 @@
 
     /**
      * Resetear el contenedor de errores
+     * ⚠️ v2.61.3: Busca en múltiples contenedores (facturas, asientos, inventario, etc.)
      */
     function resetError() {
-        const container = d.getElementById(ERROR_CONTAINER_ID);
-        const fieldsContainer = d.getElementById(MISSING_FIELDS_LIST_ID);
-        const fieldsUl = d.getElementById(FIELDS_UL_ID);
+        // Buscar en todos los contenedores posibles
+        const containers = [
+            d.getElementById(ERROR_CONTAINER_ID),
+            d.querySelector('#offcanvas-inventario')?.querySelector(`#${ERROR_CONTAINER_ID}`),
+            d.querySelector('#offcanvas-container-inventario')?.querySelector(`#${ERROR_CONTAINER_ID}`),
+            d.querySelector('#offcanvas-container-asientos')?.querySelector(`#${ERROR_CONTAINER_ID}`),
+            d.querySelector('#offcanvas-container-mailinbox')?.querySelector(`#${ERROR_CONTAINER_ID}`),
+        ].filter(Boolean);
 
-        if (container) {
-            container.classList.add('d-none');
-        }
-        if (fieldsContainer) {
-            fieldsContainer.classList.add('d-none');
-        }
-        if (fieldsUl) {
-            fieldsUl.innerHTML = '';
-        }
+        containers.forEach(container => {
+            if (container) {
+                container.classList.add('d-none');
+            }
+            const fieldsContainer = container?.querySelector(`#${MISSING_FIELDS_LIST_ID}`);
+            const fieldsUl = container?.querySelector(`#${FIELDS_UL_ID}`);
+            
+            if (fieldsContainer) {
+                fieldsContainer.classList.add('d-none');
+            }
+            if (fieldsUl) {
+                fieldsUl.innerHTML = '';
+            }
+        });
     }
 
     /**

@@ -8,13 +8,14 @@ Tareas Celery para procesamiento asíncrono de documentos (tenant-aware).
 - Nombre canónico (dotted path) para evitar "unregistered task"
 
 ⚠️ v2.36: Migrado desde apps/services/xml_ingest/tasks.py
+⚠️ v2.61.2: Agregada tarea para batch upload de facturas
 """
 from celery import shared_task
 from celery.result import AsyncResult
 import base64
 import time
 import logging
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, List
 from django_tenants.utils import schema_context
 from django.conf import settings
 from django.db import connection
@@ -83,6 +84,161 @@ def document_ingest_task(schema_name: str, file_b64: str, filename: Optional[str
         dt = time.monotonic() - t0
         log_task.exception(
             "document_ingest_task error",
+            extra={
+                "schema_name": schema_name,
+                "elapsed_s": round(dt, 3)
+            }
+        )
+        raise
+
+
+@shared_task(name="apps.services.document_ingest.tasks.batch_upload_facturas_task")
+def batch_upload_facturas_task(
+    schema_name: str,
+    files_data: List[Dict[str, str]],
+    started_by_id: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    ⚠️ v2.61.2: Tarea Celery para procesamiento asíncrono de carga masiva de facturas.
+    
+    Procesa múltiples archivos XML UBL en una sola tarea Celery, ideal para cuando los usuarios
+    cargan el historial del mes (más de 10 archivos).
+    
+    Args:
+        schema_name: Nombre del esquema del tenant
+        files_data: Lista de diccionarios con {"filename": str, "content_b64": str}
+        started_by_id: ID del usuario que inició la carga (opcional)
+        
+    Returns:
+        Dict con resumen: {"creados": X, "duplicados": Y, "errores": Z, "resultados": [...]}
+    """
+    t0 = time.monotonic()
+    
+    try:
+        with schema_context(schema_name):
+            log_task.info(
+                "batch_upload_facturas_task start",
+                extra={
+                    "schema_name": schema_name,
+                    "total_files": len(files_data),
+                    "started_by_id": started_by_id
+                }
+            )
+            
+            # ⚠️ IMPORT LAZY: Importar servicios dentro de schema_context
+            from apps.tenant.facturas.services import importar_documento
+            from apps.tenant.facturas.ubl_parser import fast_get_cufe
+            from apps.tenant.facturas.models import Factura
+            
+            resultados = []
+            creados = 0
+            duplicados = 0
+            errores = 0
+            
+            for idx, file_data in enumerate(files_data, 1):
+                filename = file_data.get("filename", f"file_{idx}.xml")
+                content_b64 = file_data.get("content_b64", "")
+                
+                try:
+                    # Decodificar archivo desde base64
+                    file_bytes = base64.b64decode(content_b64.encode("utf-8"))
+                    size = len(file_bytes)
+                    
+                    # ⚠️ v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida")
+                    cufe_rapido = fast_get_cufe(file_bytes)
+                    
+                    if cufe_rapido:
+                        factura_existente = Factura.objects.filter(cufe=cufe_rapido).first()
+                        if factura_existente:
+                            # Duplicado detectado sin parsing completo
+                            resultados.append({
+                                "filename": filename,
+                                "status": "duplicate",
+                                "factura_id": factura_existente.id,
+                                "numero": factura_existente.numero,
+                                "cufe": cufe_rapido
+                            })
+                            duplicados += 1
+                            continue
+                    
+                    # Procesar archivo normalmente
+                    payload, code = importar_documento(
+                        file_bytes=file_bytes,
+                        filename=filename,
+                        preview=False,
+                        async_mode=False
+                    )
+                    
+                    if code == 201:
+                        creados += 1
+                        resultados.append({
+                            "filename": filename,
+                            "status": "created",
+                            "factura_id": payload.get("id"),
+                            "numero": payload.get("numero")
+                        })
+                    elif code == 200:
+                        duplicados += 1
+                        resultados.append({
+                            "filename": filename,
+                            "status": "duplicate",
+                            "factura_id": payload.get("id"),
+                            "numero": payload.get("numero")
+                        })
+                    else:
+                        errores += 1
+                        resultados.append({
+                            "filename": filename,
+                            "status": "error",
+                            "error": payload.get("error", "unknown") if isinstance(payload, dict) else "unknown",
+                            "message": payload.get("message", "Error desconocido") if isinstance(payload, dict) else str(payload)
+                        })
+                        
+                except Exception as e:
+                    errores += 1
+                    resultados.append({
+                        "filename": filename,
+                        "status": "error",
+                        "error": "exception",
+                        "message": str(e)
+                    })
+                    log_task.warning(
+                        "batch_upload_facturas_task error processing file",
+                        extra={
+                            "schema_name": schema_name,
+                            "filename": filename,
+                            "file_index": idx,
+                            "error": str(e)
+                        }
+                    )
+            
+            dt = time.monotonic() - t0
+            summary = {
+                "creados": creados,
+                "duplicados": duplicados,
+                "errores": errores,
+                "total": len(files_data),
+                "resultados": resultados
+            }
+            
+            log_task.info(
+                "batch_upload_facturas_task completed",
+                extra={
+                    "schema_name": schema_name,
+                    "elapsed_s": round(dt, 3),
+                    "total": len(files_data),
+                    "creados": creados,
+                    "duplicados": duplicados,
+                    "errores": errores
+                }
+            )
+            
+            return summary
+            
+    except Exception as e:
+        dt = time.monotonic() - t0
+        log_task.exception(
+            "batch_upload_facturas_task error",
             extra={
                 "schema_name": schema_name,
                 "elapsed_s": round(dt, 3)
