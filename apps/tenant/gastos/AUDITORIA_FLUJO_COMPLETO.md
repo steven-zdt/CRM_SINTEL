@@ -1,8 +1,9 @@
-# Auditoría Completa del Módulo de Gastos - Proyecto SINTEL v2.40
+# Auditoría Completa del Módulo de Gastos - Proyecto SINTEL v2.61.4
 
-**Fecha de Auditoría:** 2026-01-XX  
-**Versión del Sistema:** v2.40  
-**Módulo:** `apps/tenant/gastos`
+**Fecha de Auditoría:** 2026-03-12  
+**Versión del Sistema:** v2.61.4  
+**Módulo:** `apps/tenant/gastos`  
+**Última actualización:** 2026-03-12
 
 ---
 
@@ -13,15 +14,20 @@
 3. [Modelos de Datos](#modelos-de-datos)
 4. [Capa de Servicios](#capa-de-servicios)
 5. [Capa de API (DRF)](#capa-de-api-drf)
+   - 5.0. [Core API Facade (v2.61.4)](#50-core-api-facade-v2614)
 6. [Serializers](#serializers)
-7. [Flujos Completos](#flujos-completos)
-8. [Reglas de Negocio Críticas](#reglas-de-negocio-críticas)
-9. [Inmutabilidad y Seguridad](#inmutabilidad-y-seguridad)
-10. [Endpoints y URLs](#endpoints-y-urls)
-11. [Admin Interface](#admin-interface)
-12. [Choices y Configuración](#choices-y-configuración)
-13. [Optimizaciones y Performance](#optimizaciones-y-performance)
-14. [Casos de Uso](#casos-de-uso)
+7. [Frontend](#frontend)
+8. [Flujos Completos](#flujos-completos)
+9. [Reglas de Negocio Críticas](#reglas-de-negocio-críticas)
+10. [Inmutabilidad y Seguridad](#inmutabilidad-y-seguridad)
+11. [Endpoints y URLs](#endpoints-y-urls)
+12. [Admin Interface](#admin-interface)
+13. [Choices y Configuración](#choices-y-configuración)
+14. [Optimizaciones y Performance](#optimizaciones-y-performance)
+15. [Casos de Uso](#casos-de-uso)
+16. [Flujo Completo: Workspace → Core API → Models](#16-flujo-completo-workspace--core-api--models)
+17. [Conclusión](#17-conclusión)
+18. [Notas de Versión](#18-notas-de-versión)
 
 ---
 
@@ -61,6 +67,28 @@ apps/tenant/gastos/
 │   ├── categoria_contable.py   # Choices para categorías contables
 │   └── centros_costo.py        # Choices para centros de costo
 └── migrations/                 # Migraciones de base de datos
+
+apps/tenant/core/
+├── api/v1/gastos/
+│   ├── viewsets.py            # Core API Facade ViewSets (GastoCoreViewSet, ResolucionDIANCoreViewSet)
+│   └── serializers.py         # Workspace Serializers (GastoWorkspaceListSerializer, GastoWorkspaceDetailSerializer)
+├── static/core/js/gastos/
+│   ├── gastos.api.js          # Wrapper API (Capa de Datos)
+│   ├── gastos.page.js         # Módulo principal (Tabulator)
+│   ├── gastos_main.js         # Lógica principal
+│   ├── gastos_crear.js        # Creación de gastos
+│   ├── gastos_anular.js       # Anulación de gastos
+│   ├── gastos_resolucion.js   # Gestión de resoluciones
+│   ├── gastos_resoluciones_list.js  # Listado de resoluciones
+│   └── resoluciones.page.js    # Página de resoluciones
+└── templates/tenant/core/partials/gastos/
+    ├── list.html               # Vista principal (Tabulator + Panel de totales)
+    ├── modals.html             # Modals (legacy, migrado a Offcanvas)
+    ├── offcanvas_crear.html    # Offcanvas para crear gasto
+    ├── offcanvas_detalle.html  # Offcanvas para ver detalle
+    ├── offcanvas_resolucion.html  # Offcanvas para configurar resolución
+    ├── partial_summary.html    # Panel de totales netos
+    └── assets_gastos.html      # Assets y eventos HTMX
 ```
 
 ---
@@ -453,11 +481,61 @@ Empresa (SSoT)
 - Crea o actualiza una resolución DIAN para la empresa del tenant
 - ⚠️ **REGLA CRÍTICA**: Si se marca como vigente, desactiva automáticamente las anteriores
 
-### 5.2. ResolucionDIANViewSet
+### 5.0. Core API Facade (v2.61.4)
 
-**Archivo:** `apps/tenant/gastos/api/viewsets.py` (líneas 463-678)
+**Ubicación:** `apps/tenant/core/api/v1/gastos/`
 
-**Propósito:** ViewSet independiente para gestión de Resoluciones DIAN
+**Propósito:** Facade ViewSets para exponer funcionalidades de Gastos a través de Core API para workspace.
+
+**ViewSets Facade:**
+- `GastoCoreViewSet`: Hereda de `GastoViewSet`, expone serializers Workspace
+- `ResolucionDIANCoreViewSet`: Hereda de `ResolucionDIANViewSet`, expone serializers Workspace
+
+**Endpoints Core API:**
+- `/api/v1/core/v1/gastos/operativos/` → `GastoCoreViewSet` ✅ v2.61.4
+- `/api/v1/core/v1/gastos/resoluciones-dian/` → `ResolucionDIANCoreViewSet` ✅ v2.61.4
+
+**Registro en Router:**
+```python
+# apps/tenant/core/api/urls.py
+router_v1.register(r"gastos/operativos", GastoCoreViewSet, basename="core-gastos")
+router_v1.register(r"gastos/resoluciones-dian", ResolucionDIANCoreViewSet, basename="core-gastos-resoluciones")
+```
+
+**Serializers Workspace:**
+- `GastoWorkspaceListSerializer`: Hereda de `GastoListSerializer`
+- `GastoWorkspaceDetailSerializer`: Hereda de `GastoDetailSerializer`, incluye `DocumentoSoporteWorkspaceDetailSerializer` con `adjunto_url`
+- `DocumentoSoporteWorkspaceDetailSerializer`: Agrega `adjunto_url` (URL absoluta del adjunto)
+
+**Características:**
+- ✅ Hereda todas las acciones `@action` automáticamente (summary, anular, desactivar, render-offcanvas, etc.)
+- ✅ Serializers Workspace con URLs absolutas de adjuntos
+- ✅ Links centralizados en `CoreLinksViewSet`:
+  - `"gastos-operativos": {"api": "/api/v1/core/v1/gastos/operativos/", "ui": "/workspace/#gastos"}`
+  - `"gastos-resoluciones": {"api": "/api/v1/core/v1/gastos/resoluciones-dian/", "ui": "/workspace/#gastos"}`
+
+**Acciones Heredadas:**
+- `GET /api/v1/core/v1/gastos/operativos/` - Lista gastos
+- `POST /api/v1/core/v1/gastos/operativos/` - Crear gasto
+- `GET /api/v1/core/v1/gastos/operativos/{id}/` - Detalle gasto
+- `DELETE /api/v1/core/v1/gastos/operativos/{id}/` - Eliminar gasto
+- `POST /api/v1/core/v1/gastos/operativos/{id}/anular/` - Anular gasto
+- `POST /api/v1/core/v1/gastos/operativos/{id}/desactivar/` - Desactivar gasto
+- `GET /api/v1/core/v1/gastos/operativos/summary/` - Resumen financiero
+- `GET /api/v1/core/v1/gastos/operativos/render-offcanvas/crear/` - Renderizar offcanvas crear
+- `GET /api/v1/core/v1/gastos/operativos/render-offcanvas/detalle/` - Renderizar offcanvas detalle
+- `GET /api/v1/core/v1/gastos/resoluciones-dian/` - Lista resoluciones
+- `POST /api/v1/core/v1/gastos/resoluciones-dian/` - Crear resolución
+- `GET /api/v1/core/v1/gastos/resoluciones-dian/activa/` - Obtener resolución activa
+- `POST /api/v1/core/v1/gastos/resoluciones-dian/{id}/desactivar/` - Desactivar resolución
+
+---
+
+### 5.1. GastoViewSet
+
+**Archivo:** `apps/tenant/gastos/api/viewsets.py` (líneas 48-345)
+
+**Propósito:** ViewSet principal para gestión de gastos
 
 **Configuración:**
 - `authentication_classes`: `[SessionAuthentication]`
@@ -677,7 +755,230 @@ Empresa (SSoT)
 
 ---
 
-## 7. Flujos Completos
+## 7. Frontend
+
+### 7.1. Arquitectura Frontend
+
+**Patrón**: Feature-Sliced Architecture (v2.60)
+
+**Estructura:**
+```
+apps/tenant/core/static/core/js/gastos/
+├── gastos.api.js              # Wrapper API (Capa de Datos)
+├── gastos.page.js             # Módulo principal (Tabulator)
+├── gastos_main.js             # Lógica principal
+├── gastos_crear.js            # Creación de gastos
+├── gastos_anular.js           # Anulación de gastos
+├── gastos_resolucion.js       # Gestión de resoluciones
+├── gastos_resoluciones_list.js # Listado de resoluciones
+└── resoluciones.page.js       # Página de resoluciones
+```
+
+**Templates:**
+```
+apps/tenant/core/templates/tenant/core/partials/gastos/
+├── list.html                  # Vista principal (Tabulator + Panel de totales)
+├── modals.html                # Modals (legacy, migrado a Offcanvas)
+├── offcanvas_crear.html       # Offcanvas para crear gasto
+├── offcanvas_detalle.html     # Offcanvas para ver detalle
+├── offcanvas_resolucion.html  # Offcanvas para configurar resolución
+├── partial_summary.html       # Panel de totales netos
+└── assets_gastos.html         # Assets y eventos HTMX
+```
+
+**Características:**
+- ✅ **Tabulator Factory**: Tabla principal con paginación remota
+- ✅ **HTMX**: Carga dinámica de offcanvas
+- ✅ **Bootstrap Offcanvas**: Modales deslizantes para formularios
+- ✅ **Panel de Totales**: Resumen financiero neto (excluye anulados)
+- ✅ **API-First**: Consume DRF REST API exclusivamente
+- ✅ **Aislamiento Gradual**: Sin bloques try/catch, usa `UIManager.handleError()`
+
+**Endpoints JavaScript:**
+- `gastos.api.js` usa `/api/v1/gastos/` (App API directa)
+- ⚠️ **NOTA**: No usa Core API Facade aún (pendiente migración)
+
+**Inicialización:**
+- Lazy loading con `DOMUtils.onVisibleOnce('#tab-gastos')`
+- Auto-inicialización cuando el tab se muestra
+- Carga de resumen financiero automática
+
+---
+
+## 8. Flujos Completos
+
+### 8.1. Flujo Completo: Workspace → Core API → Models
+
+#### 8.1.1. Flujo: Crear Gasto (Paso a Paso)
+
+```
+1. Usuario: En workspace.html → #gastos
+   → Hace clic en botón "Nuevo Gasto"
+   ↓
+2. Frontend: list.html
+   → HTMX: GET /api/v1/gastos/render-offcanvas/crear/
+   → Target: #offcanvas-container-gastos
+   ↓
+3. Backend: GastoViewSet.render_offcanvas_crear()
+   → Renderiza offcanvas_crear.html
+   → Retorna HTML del formulario
+   ↓
+4. Frontend: HTMX carga HTML en #offcanvas-container-gastos
+   → Bootstrap Offcanvas se muestra automáticamente
+   → gastos_crear.js inicializa eventos del formulario
+   ↓
+5. Usuario: Completa formulario y hace clic en "Guardar"
+   → gastos_crear.js recolecta datos del formulario
+   → Valida que exista resolución activa (si no, abre modal de configuración)
+   ↓
+6. Frontend: gastos.api.js
+   → POST /api/v1/gastos/
+   → Payload: {vendedor_nit, vendedor_nombre, subtotal, retefuente, reteica, ...}
+   ↓
+7. Backend: GastoViewSet.create()
+   → Valida permisos (IsTenantAdminOrReadOnly)
+   → Obtiene empresa singleton (SSoT)
+   → Obtiene resolución vigente automáticamente (si no se proporciona)
+   → Obtiene siguiente consecutivo usando obtener_siguiente_numero_soporte()
+   → Calcula retenciones usando calcular_retenciones()
+   ↓
+8. Service Layer: services.py
+   → crear_gasto_completo() crea DocumentoSoporte y Gasto en transacción atómica
+   → Valida que el consecutivo esté dentro del rango
+   → Valida que no exista ya el consecutivo
+   ↓
+9. Models: DocumentoSoporte.save()
+   → Asigna consecutivo inmutable
+   → Calcula total = subtotal - retefuente - reteica
+   → Guarda en BD con constraints únicos
+   ↓
+10. Models: Gasto.save()
+    → Asocia con DocumentoSoporte (OneToOne)
+    → Guarda clasificación contable
+    ↓
+11. Response: 201 Created
+    → Payload: GastoDetailSerializer con DocumentoSoporte anidado
+    ↓
+12. Frontend: gastos_crear.js maneja respuesta
+    → Si res.ok: muestra notificación de éxito
+    → Cierra offcanvas
+    → Recarga tabla Tabulator
+    → Recarga panel de totales (summary)
+    ↓
+13. Frontend: gastos.page.js
+    → GET /api/v1/gastos/?page=1&page_size=10
+    → GET /api/v1/gastos/summary/
+    → Actualiza tabla y panel de totales
+```
+
+#### 8.1.2. Flujo: Anular Gasto (Paso a Paso)
+
+```
+1. Usuario: En workspace.html → #gastos
+   → Hace clic en botón "Anular" en fila de gasto
+   ↓
+2. Frontend: gastos.page.js
+   → Detecta click en botón con data-action="anular-gasto"
+   → Obtiene gasto_id desde data-id
+   → Muestra confirmación
+   ↓
+3. Si usuario confirma: gastos_anular.js
+   → Verifica que el gasto esté desactivado (paso previo obligatorio)
+   → POST /api/v1/gastos/{id}/anular/
+   ↓
+4. Backend: GastoViewSet.anular()
+   → Valida que documento_soporte.activo == False
+   → Llama a anular_gasto_service()
+   ↓
+5. Service Layer: services.py
+   → anular_gasto_service() marca documento_soporte.anulado = True
+   → Registra fecha_anulacion
+   → ⚠️ INMUTABILIDAD: No modifica valores monetarios
+   ↓
+6. Response: 200 OK
+   → Payload: GastoDetailSerializer actualizado
+   ↓
+7. Frontend: gastos_anular.js maneja respuesta
+   → Si res.ok: muestra notificación de éxito
+   → Recarga tabla Tabulator
+   → Recarga panel de totales (summary excluye anulados)
+```
+
+#### 8.1.3. Flujo: Configurar Resolución DIAN (Paso a Paso)
+
+```
+1. Usuario: En workspace.html → #gastos
+   → Hace clic en botón "Configurar Resolución"
+   ↓
+2. Frontend: list.html
+   → HTMX: GET /api/v1/gastos/render-offcanvas/resolucion/
+   → Target: #offcanvas-container-gastos
+   ↓
+3. Backend: GastoViewSet.render_offcanvas_resolucion()
+   → Renderiza offcanvas_resolucion.html
+   → Retorna HTML del formulario
+   ↓
+4. Frontend: HTMX carga HTML
+   → Bootstrap Offcanvas se muestra
+   → gastos_resolucion.js inicializa eventos
+   ↓
+5. Usuario: Completa formulario y hace clic en "Guardar"
+   → gastos_resolucion.js recolecta datos
+   → POST /api/v1/resoluciones-dian/
+   ↓
+6. Backend: ResolucionDIANViewSet.create()
+   → Valida permisos
+   → Obtiene empresa singleton
+   → Llama a crear_resolucion()
+   ↓
+7. Service Layer: services.py
+   → crear_resolucion() valida fechas y rangos
+   → ⚠️ REGLA CRÍTICA: Si vigente=True, desactiva automáticamente las anteriores
+   → Crea ResolucionDIAN en BD
+   ↓
+8. Response: 201 Created
+   → Payload: ResolucionDIANDetailSerializer
+   ↓
+9. Frontend: gastos_resolucion.js maneja respuesta
+   → Si res.ok: muestra notificación de éxito
+   → Cierra offcanvas
+   → Recarga tabla de resoluciones
+```
+
+#### 8.1.4. Flujo: Consultar Resumen Financiero (Paso a Paso)
+
+```
+1. Frontend: gastos.page.js (auto-inicialización)
+   → GET /api/v1/gastos/summary/
+   ↓
+2. Backend: GastoViewSet.summary()
+   → Llama a get_gastos_summary()
+   ↓
+3. Service Layer: services.py
+   → get_gastos_summary() filtra documentos activos y no anulados
+   → Calcula agregaciones: subtotal_neto, retefuente_neto, reteica_neto, total_neto
+   → Cuenta cantidad de documentos
+   ↓
+4. Response: 200 OK
+   → Payload: {
+       "subtotal_neto": Decimal,
+       "retefuente_neto": Decimal,
+       "reteica_neto": Decimal,
+       "total_neto": Decimal,
+       "cantidad": int
+     }
+   ↓
+5. Frontend: gastos.page.js renderSummary()
+   → Actualiza elementos del DOM:
+     - #gasto-total-neto
+     - #gasto-retefuente
+     - #gasto-reteica
+     - #gasto-cantidad
+```
+
+---
+
+### 8.2. Flujos Legacy (v2.40)
 
 ### 7.1. Flujo de Creación de Gasto
 
@@ -1145,6 +1446,8 @@ Empresa (SSoT)
 
 ---
 
+---
+
 ## 15. Notas de Implementación
 
 ### 15.1. Cambios en v2.40
@@ -1167,6 +1470,8 @@ Empresa (SSoT)
 - ⚠️ **Materialización desde DTO**: Implementar `materializar_gasto_desde_dto()` para integración con Document Ingest Pipeline
 - ⚠️ **Distribución Contable**: Permitir múltiples Gastos por DocumentoSoporte (OneToMany)
 - ⚠️ **Exportación PDF**: Generar PDF de Documento Soporte según formato DIAN
+- ⚠️ **Migración Frontend**: Migrar `gastos.api.js` a usar Core API Facade
+- ⚠️ **Feature-Sliced Architecture**: Modularizar frontend siguiendo patrón de Inventario
 
 ---
 
@@ -1175,7 +1480,15 @@ Empresa (SSoT)
 - **Normativa DIAN**: Art. 1.6.1.4.12 DR 1625 de 2016
 - **Arquitectura General**: `documentacion/arquitectura_general.md`
 - **Reglas Core**: `.cursor/rules/reglas.mdc`
+- **Core API Facade**: `apps/tenant/core/api/v1/gastos/`
+- **Workspace Integration**: `apps/tenant/core/templates/tenant/core/workspace.html`
 
 ---
 
-**Fin del Documento de Auditoría**
+**Fin del Documento**  
+**Última actualización**: 2026-03-12  
+**Versión del Sistema**: 2.61.4  
+**Estado**: ✅ Sincronizado con flujos completos desde workspace.html hasta models.py  
+**Estado Core API**: ✅ Completo (2 ViewSets facade: GastoCoreViewSet, ResolucionDIANCoreViewSet)  
+**Estado Frontend**: ✅ Tabulator Factory + HTMX + Bootstrap Offcanvas  
+**Estado Endpoints**: ✅ Core API Facade disponible, App API directa también disponible

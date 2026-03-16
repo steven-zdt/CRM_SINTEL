@@ -18,7 +18,7 @@ from rest_framework.decorators import action, api_view, permission_classes, auth
 from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.parsers import JSONParser, FormParser
+from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from apps.tenant.empresa.models import Empresa, MailInboxConfig
 from apps.tenant.empresa.api.serializers import (
@@ -73,7 +73,7 @@ class EmpresaViewSet(viewsets.ModelViewSet):
     """
     authentication_classes = [SessionAuthentication]
     permission_classes = [permissions.IsAuthenticated, IsTenantAdminOrReadOnly]
-    parser_classes = [JSONParser, FormParser]  # FormParser legacy
+    parser_classes = [JSONParser, FormParser, MultiPartParser]  # FormParser legacy
     renderer_classes = [JSONRenderer]
     pagination_class = StandardResultsSetPagination
     
@@ -340,11 +340,6 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         
         # ⚠️ Zero Trust: Validar que existe empresa en el tenant
         empresa = self.get_queryset().first()
-        if not empresa:
-            return Response(
-                {'detail': 'No existe una empresa para actualizar. Use POST para crear una nueva.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
         
         # Validar datos con serializer
         serializer = self.get_serializer(
@@ -355,7 +350,82 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         
-        # ⚠️ Service Layer: Usar servicio para actualizar
+        # ⚠️ Service Layer: Usar servicio para actualizar o crear
+        from apps.tenant.empresa.services import actualizar_empresa, crear_empresa
+        if empresa:
+            empresa_result = actualizar_empresa(serializer.validated_data)
+        else:
+            empresa_result = crear_empresa(serializer.validated_data)
+        
+        return Response(
+            EmpresaDetailSerializer(empresa_result, context=self.get_serializer_context()).data,
+            status=status.HTTP_200_OK if empresa else status.HTTP_201_CREATED
+        )
+    
+    @transaction.atomic
+    def partial_update(self, request: Request, *args, **kwargs) -> Response:
+        """
+        ⚠️ v2.60: Actualiza parcialmente la empresa del tenant (singleton) usando Service Layer.
+        
+        Endpoint: PATCH /api/v1/empresas/{id}/
+        
+        ⚠️ ENFORCED MODE: Solo STAFF/ADMIN pueden actualizar. No-staff recibe 405.
+        ⚠️ Service Layer: Usa services.actualizar_empresa() para lógica de negocio.
+        ⚠️ UI: La UI debe usar SOLO PATCH /api/v1/core/empresa/ (Core Orchestrator).
+        """
+        # ⚠️ ENFORCED: Verificar permisos antes de procesar
+        if not self._check_enforced_mode(request):
+            return Response(
+                {
+                    "error": "method_not_allowed",
+                    "detail": "PATCH solo está permitido para usuarios ADMIN/STAFF."
+                },
+                status=status.HTTP_405_METHOD_NOT_ALLOWED
+            )
+        
+        # ⚠️ Zero Trust: Validar si existe la empresa
+        empresa = self.get_queryset().first()
+        
+        # Validar datos con serializer
+        serializer = self.get_serializer(
+            empresa,
+            data=request.data,
+            partial=True,
+            context=self.get_serializer_context()
+        )
+        serializer.is_valid(raise_exception=True)
+        
+        from apps.tenant.empresa.services import actualizar_empresa, crear_empresa
+        
+        try:
+            if empresa:
+                empresa_result = actualizar_empresa(serializer.validated_data)
+                return Response(EmpresaDetailSerializer(empresa_result, context=self.get_serializer_context()).data)
+            else:
+                empresa_result = crear_empresa(serializer.validated_data)
+                return Response(EmpresaDetailSerializer(empresa_result, context=self.get_serializer_context()).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'detail': f'Error al procesar la solicitud: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # ⚠️ Zero Trust: Validar que existe empresa en el tenant
+        empresa = self.get_queryset().first()
+        
+        if not empresa:
+            return Response(
+                {'detail': 'No existe empresa para actualizar.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Validar datos con serializer
+        serializer = self.get_serializer(
+            empresa,
+            data=request.data,
+            partial=True,
+            context=self.get_serializer_context()
+        )
+        serializer.is_valid(raise_exception=True)
+        
+        # ⚠️ Service Layer: Usar servicio para actualizar o crear
         from apps.tenant.empresa.services import actualizar_empresa
         empresa_actualizada = actualizar_empresa(serializer.validated_data)
         
@@ -380,18 +450,13 @@ class EmpresaViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     "error": "method_not_allowed",
-                    "detail": "PATCH /api/v1/empresas/{id}/ solo está permitido para usuarios ADMIN/STAFF. Use PATCH /api/v1/core/empresa/ desde la UI."
+                    "detail": "PATCH solo está permitido para usuarios ADMIN/STAFF."
                 },
                 status=status.HTTP_405_METHOD_NOT_ALLOWED
             )
         
-        # ⚠️ Zero Trust: Validar que existe empresa en el tenant
+        # ⚠️ Zero Trust: Validar si existe la empresa
         empresa = self.get_queryset().first()
-        if not empresa:
-            return Response(
-                {'detail': 'No existe una empresa para actualizar. Use POST para crear una nueva.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
         
         # Validar datos con serializer
         serializer = self.get_serializer(
@@ -400,6 +465,34 @@ class EmpresaViewSet(viewsets.ModelViewSet):
             partial=True,
             context=self.get_serializer_context()
         )
+        serializer.is_valid(raise_exception=True)
+        
+        from apps.tenant.empresa.services import actualizar_empresa, crear_empresa
+        
+        try:
+            if empresa:
+                empresa_result = actualizar_empresa(serializer.validated_data)
+                return Response(EmpresaDetailSerializer(empresa_result, context=self.get_serializer_context()).data)
+            else:
+                empresa_result = crear_empresa(serializer.validated_data)
+                return Response(EmpresaDetailSerializer(empresa_result, context=self.get_serializer_context()).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'detail': f'Error al procesar la solicitud: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # ⚠️ Zero Trust: Validar que existe empresa en el tenant
+        empresa = self.get_queryset().first()
+        
+        # Validar datos con serializer
+        serializer = self.get_serializer(
+            empresa,
+            data=request.data,
+            partial=True,
+            context=self.get_serializer_context()
+        )
+        if not serializer.is_valid():
+            log.error(f"[EmpresaViewSet.partial_update] Errores de validación: {serializer.errors}")
+            raise serializers.ValidationError(serializer.errors)
+        
         serializer.is_valid(raise_exception=True)
         
         # ⚠️ Service Layer: Usar servicio para actualizar

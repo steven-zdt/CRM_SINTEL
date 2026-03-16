@@ -161,7 +161,7 @@ def crear_empresa(data: dict):
     """
     Crea una nueva empresa para el tenant actual (singleton).
     
-    ⚠️ DEPRECATED: Esta función está deprecada. Usa apps.tenant.empresa.impl.get_or_create_empresa() en su lugar.
+    ⚠️ Service Layer: Lógica para creación de empresa (Singleton).
     
     Args:
         data: Dict con datos de la empresa (contrato canónico del serializer)
@@ -172,16 +172,14 @@ def crear_empresa(data: dict):
     Raises:
         ValueError: Si ya existe una empresa
     """
-    from apps.tenant.empresa.impl import get_or_create_empresa
     from apps.tenant.empresa.models import Empresa
     
-    # Usar get_or_create_empresa (si ya existe, retorna la existente)
-    empresa_dto = get_or_create_empresa(defaults=data)
-    empresa = Empresa.objects.get(id=empresa_dto['id'])
-    
-    # Si ya existía, lanzar error
-    if empresa.created_at != empresa.updated_at:
+    # ⚠️ Zero Trust: Verificar si ya existe
+    if Empresa.objects.exists():
         raise ValueError("Ya existe Empresa en este tenant.")
+    
+    # Crear nueva empresa
+    empresa = Empresa.objects.create(**data)
     
     return empresa
 

@@ -30,10 +30,9 @@
             <button class="btn btn-outline-secondary" type="button"><i class="bi bi-search"></i></button>
           </div>
           <button class="btn btn-primary btn-sm" 
-                  hx-get="/api/v1/clientes/offcanvas/" 
+                  hx-get="/api/v1/clientes/render-offcanvas/crear/" 
                   hx-target="#offcanvas-container-clientes" 
-                  hx-swap="innerHTML"
-                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-cliente'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                  hx-swap="innerHTML">
             <i class="bi bi-plus-lg me-1"></i>Nuevo Cliente
           </button>
         </div>

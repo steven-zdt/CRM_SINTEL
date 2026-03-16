@@ -70,6 +70,14 @@
                     
                     return `
                         <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-secondary btn-view" 
+                                    hx-get="/api/v1/clientes/render-offcanvas/detalle/?id=${id}" 
+                                    hx-target="#offcanvas-container-clientes" 
+                                    hx-swap="innerHTML"
+                                    hx-on::after-swap="const oc=document.querySelector('#offcanvas-cliente-detalle');if(oc && window.bootstrap){window.bootstrap.Offcanvas.getOrCreateInstance(oc).show();}"
+                                    title="Ver Detalle">
+                                <i class="fas fa-eye"></i>
+                            </button>
                             <button type="button" class="btn btn-outline-primary btn-edit" data-id="${id}" title="Editar Cliente">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -84,7 +92,7 @@
                 },
                 headerSort: false,
                 hozAlign: "center",
-                width: 120
+                width: 160
             }
         ];
     }
@@ -105,6 +113,17 @@
                 searchInputSelector: '#search-cliente'
             }
         );
+
+        // ⚠️ v2.61: Procesar HTMX después de cargar datos en Tabulator
+        if (table && typeof htmx !== 'undefined') {
+            table.on('dataLoaded', function() {
+                const tableContainer = d.querySelector('#grid-clientes');
+                if (tableContainer) {
+                    htmx.process(tableContainer);
+                    console.log('[clientes.list] HTMX procesado en tabla después de cargar datos');
+                }
+            });
+        }
     }
 
     // Eventos del listado
@@ -142,22 +161,17 @@
                     btn.disabled = true;
                     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-                    // ⚠️ v2.60: Usar HTMX para cargar offcanvas de edición (HTML, no JSON)
+                    // ⚠️ v2.61: Usar nuevo endpoint RESTful render-offcanvas/editar
                     (async () => {
                         try {
                             // Pedimos a HTMX que traiga el HTML y lo inyecte automáticamente
-                            await htmx.ajax('GET', `/api/v1/clientes/offcanvas/?id=${id}`, {
+                            await htmx.ajax('GET', `/api/v1/clientes/${id}/render-offcanvas/editar/`, {
                                 target: '#offcanvas-container-clientes',
                                 swap: 'innerHTML'
                             });
                             
-                            // Si HTMX termina con éxito, buscamos el elemento y lo abrimos con Bootstrap
-                            const offcanvasEl = d.getElementById('offcanvas-cliente');
-                            if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                                bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
-                            } else {
-                                console.warn('[clientes.list] Offcanvas no encontrado en el DOM o Bootstrap no disponible');
-                            }
+                            // El template incluye script de auto-activación del offcanvas
+                            // No es necesario activarlo manualmente aquí
                         } catch (error) {
                             console.error('[clientes.list] Error cargando offcanvas de edición:', error);
                             if (w.SintelFeedback) {

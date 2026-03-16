@@ -166,15 +166,33 @@ def crear_cliente(empresa, data, contactos_data=None):
         
         return cliente
     except IntegrityError as e:
-        # ⚠️ CRÍTICO: Capturar IntegrityError de restricción única
-        # La restricción uniq_doc_cliente_empresa valida: empresa + tipo_documento + numero_documento
+        # ⚠️ CRÍTICO: Capturar IntegrityError de restricciones únicas
         error_msg = str(e)
-        if 'uniq_doc_cliente_empresa' in error_msg or 'UNIQUE constraint' in error_msg:
+        
+        # Error de documento duplicado
+        if 'uniq_doc_cliente_empresa' in error_msg:
             raise ValidationError({
                 'numero_documento': [
                     'Ya existe un cliente registrado con este tipo y número de documento en esta empresa.'
                 ]
             })
+        
+        # Error de contacto duplicado (cliente_id + email)
+        if 'contactocliente_cliente_id_email' in error_msg or 'cliente_id_email' in error_msg:
+            raise ValidationError({
+                'contactos': [
+                    'Ya existe un contacto con este correo electrónico para este cliente.'
+                ]
+            })
+        
+        # Error genérico de constraint única
+        if 'UNIQUE constraint' in error_msg or 'unique constraint' in error_msg:
+            raise ValidationError({
+                'non_field_errors': [
+                    'Error de integridad: Ya existe un registro con estos datos únicos.'
+                ]
+            })
+        
         # Re-lanzar otros IntegrityError sin modificar
         raise
 
@@ -219,11 +237,15 @@ def actualizar_cliente(cliente, data, contactos_data=None):
         
         # Actualizar contactos si se proporcionaron
         if contactos_data is not None and isinstance(contactos_data, list):
-            # ⚠️ Zero Trust: Eliminar contactos existentes y crear nuevos (reemplazo completo)
-            # Esto garantiza que solo existan los contactos enviados en el payload
-            ContactoCliente.objects.filter(cliente=cliente).delete()
+            # ⚠️ v2.61: Lógica mejorada - Actualizar existentes, crear nuevos, eliminar faltantes
+            contactos_ids_enviados = []
             
             for contacto_data in contactos_data:
+                # ⚠️ DEBUG: Log del contacto recibido
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f'[actualizar_cliente] Procesando contacto: {contacto_data}')
+                
                 # ⚠️ Zero Trust: Validar que cada contacto tenga campos requeridos
                 if not contacto_data.get('nombre_completo'):
                     raise ValidationError({
@@ -234,38 +256,97 @@ def actualizar_cliente(cliente, data, contactos_data=None):
                         'contactos': ['Todos los contactos deben tener un email.']
                     })
                 
-                # Crear contacto asociado al cliente
-                try:
-                    ContactoCliente.objects.create(
-                        cliente=cliente,
-                        nombre_completo=contacto_data.get('nombre_completo'),
-                        cargo=contacto_data.get('cargo', ''),
-                        email=contacto_data.get('email'),
-                        telefono=contacto_data.get('telefono', ''),
-                        activo=contacto_data.get('activo', True),
-                        is_principal=contacto_data.get('is_principal', False)
-                    )
-                except IntegrityError as e:
-                    # ⚠️ CRÍTICO: Capturar IntegrityError de restricción única (cliente + email)
-                    error_msg = str(e)
-                    if 'unique_together' in error_msg.lower() or 'UNIQUE constraint' in error_msg:
-                        raise ValidationError({
-                            'contactos': [
-                                f'Ya existe un contacto con el email {contacto_data.get("email")} para este cliente.'
-                            ]
-                        })
-                    raise
+                contacto_id = contacto_data.get('id')
+                logger.info(f'[actualizar_cliente] Contacto ID extraído: {contacto_id}')
+                
+                # Si tiene ID, actualizar contacto existente
+                if contacto_id:
+                    try:
+                        # Convertir id a int si viene como string
+                        contacto_id = int(contacto_id) if isinstance(contacto_id, str) else contacto_id
+                        
+                        # ⚠️ Zero Trust: Solo actualizar contactos del cliente actual
+                        contacto = ContactoCliente.objects.filter(
+                            id=contacto_id,
+                            cliente=cliente
+                        ).first()
+                        
+                        if contacto:
+                            contacto.nombre_completo = contacto_data.get('nombre_completo')
+                            contacto.cargo = contacto_data.get('cargo', '')
+                            contacto.email = contacto_data.get('email')
+                            contacto.telefono = contacto_data.get('telefono', '')
+                            contacto.activo = contacto_data.get('activo', True)
+                            contacto.is_principal = contacto_data.get('is_principal', False)
+                            contacto.save()
+                            contactos_ids_enviados.append(contacto.id)
+                        else:
+                            # Si no existe el contacto con ese ID, ignorar
+                            pass
+                    except (ValueError, TypeError):
+                        # Si el ID no es válido, ignorar
+                        pass
+                else:
+                    # Si no tiene ID, crear nuevo contacto
+                    try:
+                        nuevo_contacto = ContactoCliente.objects.create(
+                            cliente=cliente,
+                            nombre_completo=contacto_data.get('nombre_completo'),
+                            cargo=contacto_data.get('cargo', ''),
+                            email=contacto_data.get('email'),
+                            telefono=contacto_data.get('telefono', ''),
+                            activo=contacto_data.get('activo', True),
+                            is_principal=contacto_data.get('is_principal', False)
+                        )
+                        contactos_ids_enviados.append(nuevo_contacto.id)
+                    except IntegrityError as e:
+                        # ⚠️ CRÍTICO: Capturar IntegrityError de restricción única (cliente + email)
+                        error_msg = str(e)
+                        if 'unique_together' in error_msg.lower() or 'UNIQUE constraint' in error_msg:
+                            raise ValidationError({
+                                'contactos': [
+                                    f'Ya existe un contacto con el email {contacto_data.get("email")} para este cliente.'
+                                ]
+                            })
+                        raise
+            
+            # ⚠️ Eliminar contactos que no vinieron en el payload (fueron removidos en el frontend)
+            if contactos_ids_enviados:
+                ContactoCliente.objects.filter(cliente=cliente).exclude(
+                    id__in=contactos_ids_enviados
+                ).delete()
+            else:
+                # Si no hay contactos enviados, eliminar todos
+                ContactoCliente.objects.filter(cliente=cliente).delete()
         
         return cliente
     except IntegrityError as e:
-        # ⚠️ CRÍTICO: Capturar IntegrityError de restricción única
-        # La restricción uniq_doc_cliente_empresa valida: empresa + tipo_documento + numero_documento
+        # ⚠️ CRÍTICO: Capturar IntegrityError de restricciones únicas
         error_msg = str(e)
-        if 'uniq_doc_cliente_empresa' in error_msg or 'UNIQUE constraint' in error_msg:
+        
+        # Error de documento duplicado
+        if 'uniq_doc_cliente_empresa' in error_msg:
             raise ValidationError({
                 'numero_documento': [
                     'Ya existe un cliente registrado con este tipo y número de documento en esta empresa.'
                 ]
             })
+        
+        # Error de contacto duplicado (cliente_id + email)
+        if 'contactocliente_cliente_id_email' in error_msg or 'cliente_id_email' in error_msg:
+            raise ValidationError({
+                'contactos': [
+                    'Ya existe un contacto con este correo electrónico para este cliente.'
+                ]
+            })
+        
+        # Error genérico de constraint única
+        if 'UNIQUE constraint' in error_msg or 'unique constraint' in error_msg:
+            raise ValidationError({
+                'non_field_errors': [
+                    'Error de integridad: Ya existe un registro con estos datos únicos.'
+                ]
+            })
+        
         # Re-lanzar otros IntegrityError sin modificar
         raise

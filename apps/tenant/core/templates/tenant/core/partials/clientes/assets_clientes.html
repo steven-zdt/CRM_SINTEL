@@ -8,8 +8,10 @@
 {# 2. clientes.api.js (define window.clientesAPI) - REQUERIDO por features #}
 {# 3. features/clientes_list.js (Listado y Tabulator de Clientes) #}
 {# 4. features/contactos_list.js (Listado y Tabulator de Contactos) #}
-{# 5. features/clientes_editor.js (Editor de Clientes con HTMX + Offcanvas) #}
-{# 6. features/contactos_editor.js (Editor de Contactos con HTMX + Offcanvas) #}
+{# 5. features/cliente_crear.js (Crear Cliente - Feature-Sliced v2.61) #}
+{# 6. features/cliente_editar.js (Editar Cliente - Feature-Sliced v2.61) #}
+{# 7. features/cliente_detalle.js (Ver Detalle - Read-Only) #}
+{# 8. features/contactos_editor.js (Editor de Contactos con HTMX + Offcanvas) #}
 
 {# BLOQUE 1: API Wrapper - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'core/js/clientes/clientes.api.js' %}"></script>
@@ -18,9 +20,11 @@
 <script src="{% static 'core/js/clientes/features/clientes_list.js' %}"></script>
 <script src="{% static 'core/js/clientes/features/contactos_list.js' %}"></script>
 
-{# BLOQUE 3: Features - Editores (HTMX + Offcanvas) #}
-<script src="{% static 'core/js/clientes/features/clientes_editor.js' %}"></script>
-<script src="{% static 'core/js/clientes/features/contactos_editor.js' %}"></script>
+{# BLOQUE 3: Features - Editores (HTMX + Offcanvas) - Feature-Sliced v2.61 #}
+<script src="{% static 'core/js/clientes/features/cliente_crear.js' %}"></script>
+<script src="{% static 'core/js/clientes/features/cliente_editar.js' %}"></script>
+<script src="{% static 'core/js/clientes/features/cliente_detalle.js' %}"></script>
+<script src="{% static 'core/js/clientes/contactos_editor.js' %}"></script>
 
 {# BLOQUE 4: Orquestación HTMX - Sincronización de tablas tras operaciones #}
 <script>
@@ -76,6 +80,12 @@
     d.addEventListener('contactoEliminado', function() {
         if (w.ContactosListModule && typeof w.ContactosListModule.refresh === 'function') {
             w.ContactosListModule.refresh();
+        }
+    });
+    
+    d.addEventListener('clienteEliminado', function() {
+        if (w.ClientesListModule && typeof w.ClientesListModule.refresh === 'function') {
+            w.ClientesListModule.refresh();
         }
     });
     

@@ -163,8 +163,9 @@
             paginationMode: "remote",
             paginationSize: 10,
             paginationSizeSelector: [10, 25, 50, 100],
-            layout: "fitColumns",
-            responsiveLayout: "hide",
+            layout: "fitDataStretch",
+            responsiveLayout: true,
+            responsiveLayoutCollapseStartOpen: false,
             placeholder: "No hay categorías registradas",
             locale: "es"
         };

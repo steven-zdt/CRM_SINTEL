@@ -56,9 +56,11 @@ class ClienteViewSet(
     def get_queryset(self):
         """
         ⚠️ v2.60: Retorna queryset filtrado por empresa del tenant (SSoT).
-        Usado por la acción offcanvas para validación Zero Trust.
         """
         empresa = self.get_empresa()
+        if not empresa:
+            return Cliente.objects.none()
+        
         # ⚠️ PERFORMANCE BIBLE: Usar .only() con campos necesarios para el template
         return Cliente.objects.filter(empresa_id=empresa.id).only(
             'id',
@@ -79,103 +81,44 @@ class ClienteViewSet(
     def get_empresa(self):
         """
         ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
-        
-        ⚠️ PERFORMANCE BIBLE:
-        - Usa .first() en lugar de .all()[0] (más eficiente)
-        - Singleton pattern: Solo debe existir una empresa por tenant
-        
-        ⚠️ MANEJO DE ERRORES NO INVASIVO:
-        - No se agrega try/except aquí (lógica de negocio pura)
-        - Los errores se propagan naturalmente
-        - El módulo inyectable (error_injector.js) maneja la presentación en HTML
-        
-        Returns:
-            Empresa: Instancia de la empresa del tenant
-            
-        Raises:
-            APIException: Si no se encuentra la empresa (manejado por error_injector.js)
         """
-        from rest_framework.exceptions import APIException
         empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise APIException(
-                detail='No se encontró empresa para este tenant. Por favor, configure la empresa primero.',
-                code='empresa_not_found'
-            )
+        # ⚠️ v2.61.5: Si no existe, no lanzar excepción. Retornar None.
         return empresa
 
     def list(self, request):
         """
         Endpoint para Tabulator (GET /api/v1/clientes/).
-        
-        Parámetros de consulta:
-        - search: Búsqueda en razon_social, numero_documento, email
-        - page: Número de página
-        - page_size: Tamaño de página (máx 100)
-        
-        Retorna: {count, next, previous, results: [...]}
         """
         empresa = self.get_empresa()
+        if not empresa:
+            return Response({'count': 0, 'results': []})
+            
         search = request.query_params.get('search', '').strip()
         
         queryset = qs_list(empresa.id, search if search else None)
         
-        # ⚠️ DEBUG: Log temporal para auditoría forense
-        total_count = queryset.count()
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f'[ClienteViewSet.list] Empresa ID: {empresa.id}, Total registros: {total_count}, Search: "{search}"')
-        
-        # Paginación DRF estándar
+        # ... resto del método list igual ...
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(queryset, request)
         if page is not None:
             serializer = ClienteListSerializer(page, many=True)
-            logger.info(f'[ClienteViewSet.list] Página actual: {len(page)} registros, Serializados: {len(serializer.data)}')
-            response = paginator.get_paginated_response(serializer.data)
-            logger.info(f'[ClienteViewSet.list] Respuesta: count={response.data.get("count")}, results={len(response.data.get("results", []))}')
-            return response
+            return paginator.get_paginated_response(serializer.data)
         
-        # Fallback: sin paginación
         serializer = ClienteListSerializer(queryset, many=True)
-        logger.info(f'[ClienteViewSet.list] Sin paginación: {len(serializer.data)} registros')
-        return Response(serializer.data)
-
-    def get_object(self):
-        """Obtiene el objeto Cliente para retrieve/update/partial_update."""
-        empresa = self.get_empresa()
-        pk = self.kwargs.get('pk')
-        cliente = qs_detail(empresa.id, pk)
-        if not cliente:
-            from rest_framework.exceptions import NotFound
-            raise NotFound('Cliente no encontrado')
-        return cliente
-    
-    def retrieve(self, request, *args, **kwargs):
-        """Obtiene detalle de un cliente."""
-        cliente = self.get_object()
-        serializer = ClienteDetailSerializer(cliente)
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        """
-        Crea un nuevo cliente.
-        
-        ⚠️ v2.60: Soporta creación de contactos asociados en el mismo payload.
-        
-        ⚠️ Manejo de errores:
-        - ValidationError del servicio (duplicados) se convierte automáticamente en HTTP 400
-        - DRF maneja automáticamente ValidationError a través de exception_handler
-        """
+        """Crea un nuevo cliente."""
         empresa = self.get_empresa()
+        if not empresa:
+            return Response({'detail': 'Configure la empresa antes de crear clientes.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         serializer = ClienteDetailSerializer(data=request.data)
         if serializer.is_valid():
-            # ⚠️ v2.60: Extraer contactos del validated_data antes de pasarlo al servicio
             validated_data = serializer.validated_data.copy()
             contactos_data = validated_data.pop('contactos', None)
             
-            # ⚠️ crear_cliente puede lanzar ValidationError si hay duplicados
-            # DRF lo manejará automáticamente y retornará HTTP 400 con el mensaje
             cliente = crear_cliente(empresa, validated_data, contactos_data=contactos_data)
             return Response(
                 ClienteDetailSerializer(cliente).data, 
@@ -213,16 +156,29 @@ class ClienteViewSet(
         ⚠️ Manejo de errores:
         - ValidationError del servicio (duplicados) se convierte automáticamente en HTTP 400
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         cliente = self.get_object()
         serializer = ClienteDetailSerializer(cliente, data=request.data, partial=True)
+        
+        # ⚠️ DEBUG: Log del payload recibido
+        logger.info(f'[ClienteViewSet.partial_update] Payload recibido: {request.data}')
+        
         if serializer.is_valid():
             # ⚠️ v2.60: Extraer contactos del validated_data antes de pasarlo al servicio
             validated_data = serializer.validated_data.copy()
             contactos_data = validated_data.pop('contactos', None)
             
+            logger.info(f'[ClienteViewSet.partial_update] Validated data: {validated_data}')
+            logger.info(f'[ClienteViewSet.partial_update] Contactos data: {contactos_data}')
+            
             # ⚠️ actualizar_cliente puede lanzar ValidationError si hay duplicados
             cliente = actualizar_cliente(cliente, validated_data, contactos_data=contactos_data)
             return Response(ClienteDetailSerializer(cliente).data)
+        
+        # ⚠️ DEBUG: Log de errores de validación
+        logger.error(f'[ClienteViewSet.partial_update] Errores de validación: {serializer.errors}')
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def destroy(self, request, *args, **kwargs):
@@ -288,6 +244,91 @@ class ClienteViewSet(
         
         # Retorna el template HTML vacío o con datos
         return Response(context, template_name='tenant/core/partials/clientes/offcanvas_form.html')
+    
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
+    def render_offcanvas_crear(self, request):
+        """
+        ⚠️ v2.61: Endpoint HTMX RESTful para cargar offcanvas de creación de clientes.
+        
+        GET /api/v1/clientes/render-offcanvas/crear/
+        
+        Returns:
+            Template HTML: tenant/core/partials/clientes/offcanvas_crear_cliente.html
+        """
+        context = {
+            'cliente': None,
+            'contactos': [],
+            'is_draft': True,
+            'modo': 'crear'
+        }
+        
+        return Response(context, template_name='tenant/core/partials/clientes/offcanvas_crear_cliente.html')
+    
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request, pk=None):
+        """
+        ⚠️ v2.61: Endpoint HTMX RESTful para cargar offcanvas de edición de clientes.
+        
+        GET /api/v1/clientes/{id}/render-offcanvas/editar/
+        
+        Returns:
+            Template HTML: tenant/core/partials/clientes/offcanvas_editar_cliente.html
+        """
+        # ⚠️ Zero Trust: Obtener cliente validando el tenant
+        cliente = self.get_object()
+        
+        # ⚠️ PERFORMANCE BIBLE: Cargar contactos con .only()
+        contactos = ContactoCliente.objects.filter(cliente=cliente).only(
+            'id', 'nombre_completo', 'cargo', 'email', 'telefono', 'activo', 'is_principal'
+        ).order_by('-is_principal', 'nombre_completo')
+        
+        context = {
+            'cliente': cliente,
+            'contactos': contactos,
+            'is_draft': False,
+            'modo': 'editar'
+        }
+        
+        return Response(context, template_name='tenant/core/partials/clientes/offcanvas_editar_cliente.html')
+    
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
+    def render_offcanvas_detalle(self, request):
+        """
+        ⚠️ v2.61: Endpoint HTMX RESTful para cargar offcanvas de detalle de clientes (read-only).
+        
+        GET /api/v1/clientes/render-offcanvas/detalle/?id={id}
+        
+        Query params:
+        - id: ID del cliente (requerido)
+        
+        Returns:
+            Template HTML: tenant/core/partials/clientes/offcanvas_detalle_cliente.html
+        """
+        cliente_id = request.query_params.get('id')
+        
+        if not cliente_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'id': 'El parámetro "id" es requerido'})
+        
+        # ⚠️ Zero Trust: Obtener cliente validando el tenant
+        cliente = self.get_queryset().filter(id=cliente_id).first()
+        
+        if not cliente:
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Cliente no encontrado')
+        
+        # ⚠️ PERFORMANCE BIBLE: Cargar contactos con .only()
+        contactos = ContactoCliente.objects.filter(cliente=cliente).only(
+            'id', 'nombre_completo', 'cargo', 'email', 'telefono', 'activo', 'is_principal'
+        ).order_by('-is_principal', 'nombre_completo')
+        
+        context = {
+            'cliente': cliente,
+            'contactos': contactos,
+            'modo': 'detalle'
+        }
+        
+        return Response(context, template_name='tenant/core/partials/clientes/offcanvas_detalle_cliente.html')
 
 
 class ContactoClienteViewSet(viewsets.ModelViewSet):
@@ -425,30 +466,9 @@ class ContactoClienteViewSet(viewsets.ModelViewSet):
     def get_empresa(self):
         """
         ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
-        Reutiliza la lógica de ClienteViewSet.
-        
-        ⚠️ PERFORMANCE BIBLE:
-        - Usa .first() en lugar de .all()[0] (más eficiente)
-        - Singleton pattern: Solo debe existir una empresa por tenant
-        
-        ⚠️ MANEJO DE ERRORES NO INVASIVO:
-        - No se agrega try/except aquí (lógica de negocio pura)
-        - Los errores se propagan naturalmente
-        - El módulo inyectable (error_injector.js) maneja la presentación en HTML
-        
-        Returns:
-            Empresa: Instancia de la empresa del tenant
-            
-        Raises:
-            APIException: Si no se encuentra la empresa (manejado por error_injector.js)
         """
-        from rest_framework.exceptions import APIException
         empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise APIException(
-                detail='No se encontró empresa para este tenant. Por favor, configure la empresa primero.',
-                code='empresa_not_found'
-            )
+        # ⚠️ v2.61.5: Si no existe, no lanzar excepción. Retornar None.
         return empresa
     
     def perform_create(self, serializer):
@@ -524,7 +544,6 @@ class ContactoClienteViewSet(viewsets.ModelViewSet):
         else:
             # ⚠️ v2.60: Modo creación global - crear un cliente temporal para el contexto
             # El formulario permitirá seleccionar el cliente
-            from apps.tenant.clientes.models import Cliente
             cliente = Cliente(
                 id=None,
                 razon_social='Seleccionar Cliente',

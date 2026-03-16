@@ -1,0 +1,159 @@
+{# offcanvas_detalle_cliente.html - Offcanvas para VER DETALLE cliente v2.61 #}
+{# ⚠️ Feature-Sliced: Template modular solo para vista de lectura #}
+{# ⚠️ HTMX: Auto-inicialización del offcanvas #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente-detalle" 
+     data-cliente-id="{{ cliente.id }}" aria-labelledby="offcanvas-cliente-detalle-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-cliente-detalle-label">
+      <i class="bi bi-eye me-2"></i>Detalle del Cliente
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# Sección: Identificación #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-card-text me-2"></i>Identificación
+      </h6>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Tipo Persona</label>
+          <p class="form-control-plaintext">{{ cliente.get_tipo_persona_display }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Tipo Documento</label>
+          <p class="form-control-plaintext">{{ cliente.get_tipo_documento_display }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Número Documento</label>
+          <p class="form-control-plaintext">{{ cliente.numero_documento }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Razón Social</label>
+          <p class="form-control-plaintext">{{ cliente.razon_social }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombre Comercial</label>
+          <p class="form-control-plaintext">{{ cliente.nombre_comercial|default:'-' }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Régimen Tributario</label>
+          <p class="form-control-plaintext">{{ cliente.get_regimen_tributario_display }}</p>
+        </div>
+      </div>
+    </div>
+
+    {# Sección: Contacto y Ubicación #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
+      </h6>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Email</label>
+          <p class="form-control-plaintext">{{ cliente.email|default:'-' }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Teléfono</label>
+          <p class="form-control-plaintext">{{ cliente.telefono|default:'-' }}</p>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Dirección</label>
+          <p class="form-control-plaintext">{{ cliente.direccion|default:'-' }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Ciudad</label>
+          <p class="form-control-plaintext">{{ cliente.ciudad|default:'-' }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Estado</label>
+          <p class="form-control-plaintext">
+            {% if cliente.activo %}
+              <span class="badge bg-success">Activo</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactivo</span>
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {# Sección: Personas de Contacto (Solo lectura) #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-people me-2"></i>Personas de Contacto
+      </h6>
+      {% if contactos %}
+        {% for contacto in contactos %}
+        <div class="card mb-2">
+          <div class="card-body p-3">
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label small fw-bold">Nombre Completo</label>
+                <p class="form-control-plaintext small">{{ contacto.nombre_completo }}</p>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-bold">Cargo</label>
+                <p class="form-control-plaintext small">{{ contacto.cargo|default:'-' }}</p>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-bold">Email</label>
+                <p class="form-control-plaintext small">{{ contacto.email }}</p>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-bold">Teléfono</label>
+                <p class="form-control-plaintext small">{{ contacto.telefono|default:'-' }}</p>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-bold">Estado</label>
+                <p class="form-control-plaintext small">
+                  {% if contacto.activo %}
+                    <span class="badge bg-success">Activo</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Inactivo</span>
+                  {% endif %}
+                  {% if contacto.is_principal %}
+                    <span class="badge bg-primary ms-1">Principal</span>
+                  {% endif %}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted">No hay contactos registrados</p>
+      {% endif %}
+    </div>
+
+    {# Sección: Observaciones #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-file-text me-2"></i>Observaciones
+      </h6>
+      <p class="form-control-plaintext">{{ cliente.observaciones|default:'-' }}</p>
+    </div>
+  </div>
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+{# ⚠️ HTMX: Auto-inicialización del offcanvas cuando se inyecta en el DOM #}
+<script>
+(function() {
+  const offcanvasEl = document.getElementById('offcanvas-cliente-detalle');
+  if (offcanvasEl && window.bootstrap) {
+    const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+    offcanvasInstance.show();
+    
+    // ⚠️ Disparar evento para que cliente_detalle.js inicialice la lógica
+    offcanvasEl.addEventListener('shown.bs.offcanvas', function() {
+      document.dispatchEvent(new CustomEvent('initClienteDetalle'));
+    }, { once: true });
+  }
+})();
+</script>

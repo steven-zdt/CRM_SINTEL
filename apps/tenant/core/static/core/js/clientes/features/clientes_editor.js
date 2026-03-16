@@ -355,15 +355,77 @@
             }
         });
 
-        // TODO: Implementar eliminación (puede requerir confirmación con SweetAlert2)
+        // ⚠️ v2.61: Implementación completa de eliminación con confirmación
         d.addEventListener('clienteEliminar', function(e) {
             if (e.detail && e.detail.id) {
-                // Por ahora, delegar a la API pública existente si existe
-                if (w.ClientesModule && typeof w.ClientesModule.eliminar === 'function') {
-                    w.ClientesModule.eliminar(e.detail.id);
+                const clienteId = e.detail.id;
+                
+                // Confirmación con SweetAlert2
+                if (w.Swal) {
+                    w.Swal.fire({
+                        title: '¿Eliminar Cliente?',
+                        text: "Esta acción no se puede deshacer. El cliente debe estar inactivo para poder eliminarlo.",
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#d33',
+                        cancelButtonColor: '#3085d6',
+                        confirmButtonText: 'Sí, eliminar',
+                        cancelButtonText: 'Cancelar'
+                    }).then(async (result) => {
+                        if (result.isConfirmed) {
+                            await eliminarCliente(clienteId);
+                        }
+                    });
+                } else {
+                    // Fallback: confirmación simple
+                    if (confirm('¿Está seguro que desea eliminar este cliente?')) {
+                        eliminarCliente(clienteId);
+                    }
                 }
             }
         });
+        
+        /**
+         * Eliminar un cliente
+         * @param {number} clienteId - ID del cliente a eliminar
+         */
+        async function eliminarCliente(clienteId) {
+            try {
+                // ⚠️ Llamar a la API para eliminar
+                const response = await w.clientesAPI.delete(clienteId);
+                
+                if (response.ok || response.status === 204) {
+                    // Éxito
+                    if (w.SintelFeedback) {
+                        w.SintelFeedback.success('Cliente eliminado exitosamente');
+                    }
+                    
+                    // Disparar evento para recargar la tabla
+                    d.dispatchEvent(new CustomEvent('clienteEliminado'));
+                } else {
+                    // Error específico del backend
+                    let errorMessage = 'Error al eliminar el cliente';
+                    
+                    if (response.status === 400 && response.data) {
+                        // Error de validación (cliente activo)
+                        if (response.data.activo || response.data.detail) {
+                            errorMessage = 'No se puede eliminar un cliente activo. Cámbielo a "Inactivo" en el formulario de edición antes de intentar borrarlo.';
+                        }
+                    } else if (response.status === 404) {
+                        errorMessage = 'Cliente no encontrado';
+                    }
+                    
+                    if (w.SintelFeedback) {
+                        w.SintelFeedback.error(errorMessage);
+                    }
+                }
+            } catch (error) {
+                console.error('[clientes.editor] Error eliminando cliente:', error);
+                if (w.SintelFeedback) {
+                    w.SintelFeedback.error('Error de conexión al eliminar el cliente');
+                }
+            }
+        }
     }
 
     // Inicialización

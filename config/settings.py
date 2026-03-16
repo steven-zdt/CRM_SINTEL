@@ -333,7 +333,7 @@ STORAGES = {
 }
 
 # WhiteNoise: configuración adicional
-WHITENOISE_USE_FINDERS = False  # Solo servir desde STATIC_ROOT (más rápido)
+WHITENOISE_USE_FINDERS = not DEBUG  # Solo servir desde STATIC_ROOT en producción, finder en desarrollo
 WHITENOISE_AUTOREFRESH = DEBUG  # Solo en desarrollo
 
 # Test Runner Configuration
@@ -386,9 +386,9 @@ Seguridad Host Header (prod) y soporte HTTPS detrás de proxy.
 # ⚠️ SEGURIDAD: En producción, usar lista explícita desde ENV (NO usar '*')
 # ⚠️ v2.60: Siempre incluir sintel.com y dominios públicos para permitir acceso desde ambos dominios
 base_allowed_hosts = (
-    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,sintel.com").split(",")
+    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,sintel.com,186.117.247.166,186.117.247.167").split(",")
     if DEBUG
-    else os.getenv("ALLOWED_HOSTS", "sintel.com,.sintel.com").split(",")
+    else os.getenv("ALLOWED_HOSTS", "sintel.com,.sintel.com,186.117.247.166,186.117.247.167").split(",")
 )
 
 # Limpiar espacios y filtrar vacíos
@@ -408,6 +408,7 @@ if DEBUG:
         "127.0.0.1",  # Para desarrollo local estándar
         "sintel.com",  # Dominio de producción (también disponible en desarrollo)
         ".sintel.com",
+        "sintel.com.co",
     ]
     for host in _dev_hosts:
         if host not in ALLOWED_HOSTS:
@@ -471,7 +472,7 @@ else:
     # En producción, agregar orígenes HTTPS explícitos si no están en ENV
     _prod_csrf_origins = [
         "https://sintel.com",  # Dominio público principal
-        "https://.sintel.com",  # Subdominios de sintel.com
+        "https://.sintel.com.co",  # Subdominios de sintel.com
     ]
     for origin in _prod_csrf_origins:
         if origin not in CSRF_TRUSTED_ORIGINS:

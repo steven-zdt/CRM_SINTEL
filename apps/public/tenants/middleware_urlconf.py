@@ -45,6 +45,8 @@ class TenantSecurityAndURLConfMiddleware:
         'localhost',       # Desarrollo local
         '127.0.0.1',       # Desarrollo local (IP)
         '0.0.0.0',         # Desarrollo local (bind all)
+        '186.117.247.166', # Servidor IP
+        '186.117.247.167', # Servidor IP adicional
     ])
     
     # 2. Configuración del Esquema Privado (Sufijo obligatorio)

@@ -1,0 +1,158 @@
+{# offcanvas_crear_cliente.html - Offcanvas para CREAR cliente v2.61 #}
+{# ⚠️ Feature-Sliced: Template modular solo para creación #}
+{# ⚠️ HTMX: Auto-inicialización del offcanvas #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente-crear" aria-labelledby="offcanvas-cliente-crear-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-cliente-crear-label">
+      <i class="bi bi-person-plus me-2"></i>Nuevo Cliente
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ Contenedor de errores para Error Boundary Pattern #}
+    <div id="form-cliente-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <div id="cliente-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+    
+    <form id="form-cliente-crear" method="POST" onsubmit="return false;">
+      {# Sección: Identificación #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-card-text me-2"></i>Identificación
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="cliente-tipo_persona" class="form-label">Tipo Persona *</label>
+            <select class="form-select" id="cliente-tipo_persona" name="tipo_persona" required>
+              <option value="">Seleccionar...</option>
+              <option value="NATURAL">Persona natural</option>
+              <option value="JURIDICA">Persona jurídica</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-tipo_documento" class="form-label">Tipo Documento *</label>
+            <select class="form-select" id="cliente-tipo_documento" name="tipo_documento" required>
+              <option value="">Seleccionar...</option>
+              <option value="CC">Cédula de ciudadanía</option>
+              <option value="CE">Cédula de extranjería</option>
+              <option value="NIT">NIT</option>
+              <option value="PA">Pasaporte</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-numero_documento" class="form-label">Número Documento *</label>
+            <input type="text" class="form-control" id="cliente-numero_documento" name="numero_documento" 
+                   required placeholder="Número de documento" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-razon_social" class="form-label">Razón Social *</label>
+            <input type="text" class="form-control" id="cliente-razon_social" name="razon_social" 
+                   required placeholder="Razón social o nombre completo" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-nombre_comercial" class="form-label">Nombre Comercial</label>
+            <input type="text" class="form-control" id="cliente-nombre_comercial" name="nombre_comercial" 
+                   placeholder="Nombre comercial" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-regimen_tributario" class="form-label">Régimen Tributario *</label>
+            <select class="form-select" id="cliente-regimen_tributario" name="regimen_tributario" required>
+              <option value="">Seleccionar...</option>
+              <option value="SIMPLE">Régimen Simple</option>
+              <option value="ORDINARIO">Régimen Ordinario</option>
+              <option value="NO_RESP">No responsable de IVA</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {# Sección: Contacto y Ubicación #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="cliente-email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="cliente-email" name="email" 
+                   placeholder="Email de contacto" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-telefono" class="form-label">Teléfono</label>
+            <input type="text" class="form-control" id="cliente-telefono" name="telefono" 
+                   placeholder="Teléfono" />
+          </div>
+          <div class="col-12">
+            <label for="cliente-direccion" class="form-label">Dirección</label>
+            <input type="text" class="form-control" id="cliente-direccion" name="direccion" 
+                   placeholder="Dirección" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-ciudad" class="form-label">Ciudad</label>
+            <input type="text" class="form-control" id="cliente-ciudad" name="ciudad" 
+                   placeholder="Ciudad" />
+          </div>
+          <div class="col-md-6">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="cliente-activo" name="activo" checked />
+              <label class="form-check-label" for="cliente-activo">Activo</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# Sección: Personas de Contacto (Dinámica) #}
+      <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="text-primary border-bottom pb-2 mb-0">
+            <i class="bi bi-people me-2"></i>Personas de Contacto
+          </h6>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="btn-agregar-contacto">
+            <i class="bi bi-plus-lg me-1"></i>Agregar Contacto
+          </button>
+        </div>
+        <div id="contenedor-contactos">
+          {# Los contactos se agregarán dinámicamente aquí mediante JS #}
+        </div>
+      </div>
+
+      {# Sección: Observaciones #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-file-text me-2"></i>Observaciones
+        </h6>
+        <div class="row">
+          <div class="col-12">
+            <label for="cliente-observaciones" class="form-label">Observaciones</label>
+            <textarea class="form-control" id="cliente-observaciones" name="observaciones" rows="3" 
+                      placeholder="Observaciones adicionales"></textarea>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="btn-guardar-cliente">
+        <i class="bi bi-save me-1"></i>Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+{# ⚠️ HTMX: Auto-inicialización del offcanvas cuando se inyecta en el DOM #}
+<script>
+(function() {
+  const offcanvasEl = document.getElementById('offcanvas-cliente-crear');
+  if (offcanvasEl && window.bootstrap) {
+    const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+    offcanvasInstance.show();
+    
+    // ⚠️ Disparar evento para que cliente_crear.js inicialice la lógica
+    offcanvasEl.addEventListener('shown.bs.offcanvas', function() {
+      document.dispatchEvent(new CustomEvent('initClienteCrear'));
+    }, { once: true });
+  }
+})();
+</script>

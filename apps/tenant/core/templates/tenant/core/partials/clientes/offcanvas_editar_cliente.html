@@ -1,0 +1,214 @@
+{# offcanvas_editar_cliente.html - Offcanvas para EDITAR cliente v2.61 #}
+{# ⚠️ Feature-Sliced: Template modular solo para edición #}
+{# ⚠️ HTMX: Auto-inicialización del offcanvas #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente-editar" 
+     data-cliente-id="{{ cliente.id }}" aria-labelledby="offcanvas-cliente-editar-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-cliente-editar-label">
+      <i class="bi bi-pencil me-2"></i>Editar Cliente
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# ⚠️ Contenedor de errores para Error Boundary Pattern #}
+    <div id="form-cliente-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <div id="cliente-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
+    
+    <form id="form-cliente-editar" method="PATCH" onsubmit="return false;">
+      <input type="hidden" id="cliente-id" name="id" value="{{ cliente.id }}">
+      
+      {# Sección: Identificación #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-card-text me-2"></i>Identificación
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="cliente-tipo_persona" class="form-label">Tipo Persona *</label>
+            <select class="form-select" id="cliente-tipo_persona" name="tipo_persona" required>
+              <option value="">Seleccionar...</option>
+              <option value="NATURAL" {% if cliente.tipo_persona == 'NATURAL' %}selected{% endif %}>Persona natural</option>
+              <option value="JURIDICA" {% if cliente.tipo_persona == 'JURIDICA' %}selected{% endif %}>Persona jurídica</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-tipo_documento" class="form-label">Tipo Documento *</label>
+            <select class="form-select" id="cliente-tipo_documento" name="tipo_documento" required>
+              <option value="">Seleccionar...</option>
+              <option value="CC" {% if cliente.tipo_documento == 'CC' %}selected{% endif %}>Cédula de ciudadanía</option>
+              <option value="CE" {% if cliente.tipo_documento == 'CE' %}selected{% endif %}>Cédula de extranjería</option>
+              <option value="NIT" {% if cliente.tipo_documento == 'NIT' %}selected{% endif %}>NIT</option>
+              <option value="PA" {% if cliente.tipo_documento == 'PA' %}selected{% endif %}>Pasaporte</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-numero_documento" class="form-label">Número Documento *</label>
+            <input type="text" class="form-control" id="cliente-numero_documento" name="numero_documento" 
+                   value="{{ cliente.numero_documento }}" required placeholder="Número de documento" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-razon_social" class="form-label">Razón Social *</label>
+            <input type="text" class="form-control" id="cliente-razon_social" name="razon_social" 
+                   value="{{ cliente.razon_social }}" required placeholder="Razón social o nombre completo" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-nombre_comercial" class="form-label">Nombre Comercial</label>
+            <input type="text" class="form-control" id="cliente-nombre_comercial" name="nombre_comercial" 
+                   value="{{ cliente.nombre_comercial|default:'' }}" placeholder="Nombre comercial" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-regimen_tributario" class="form-label">Régimen Tributario *</label>
+            <select class="form-select" id="cliente-regimen_tributario" name="regimen_tributario" required>
+              <option value="">Seleccionar...</option>
+              <option value="SIMPLE" {% if cliente.regimen_tributario == 'SIMPLE' %}selected{% endif %}>Régimen Simple</option>
+              <option value="ORDINARIO" {% if cliente.regimen_tributario == 'ORDINARIO' %}selected{% endif %}>Régimen Ordinario</option>
+              <option value="NO_RESP" {% if cliente.regimen_tributario == 'NO_RESP' %}selected{% endif %}>No responsable de IVA</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {# Sección: Contacto y Ubicación #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="cliente-email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="cliente-email" name="email" 
+                   value="{{ cliente.email|default:'' }}" placeholder="Email de contacto" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-telefono" class="form-label">Teléfono</label>
+            <input type="text" class="form-control" id="cliente-telefono" name="telefono" 
+                   value="{{ cliente.telefono|default:'' }}" placeholder="Teléfono" />
+          </div>
+          <div class="col-12">
+            <label for="cliente-direccion" class="form-label">Dirección</label>
+            <input type="text" class="form-control" id="cliente-direccion" name="direccion" 
+                   value="{{ cliente.direccion|default:'' }}" placeholder="Dirección" />
+          </div>
+          <div class="col-md-6">
+            <label for="cliente-ciudad" class="form-label">Ciudad</label>
+            <input type="text" class="form-control" id="cliente-ciudad" name="ciudad" 
+                   value="{{ cliente.ciudad|default:'' }}" placeholder="Ciudad" />
+          </div>
+          <div class="col-md-6">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="cliente-activo" name="activo" 
+                     {% if cliente.activo %}checked{% endif %} />
+              <label class="form-check-label" for="cliente-activo">Activo</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# Sección: Personas de Contacto (Dinámica) #}
+      <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="text-primary border-bottom pb-2 mb-0">
+            <i class="bi bi-people me-2"></i>Personas de Contacto
+          </h6>
+          <button type="button" class="btn btn-sm btn-outline-primary" id="btn-agregar-contacto">
+            <i class="bi bi-plus-lg me-1"></i>Agregar Contacto
+          </button>
+        </div>
+        <div id="contenedor-contactos">
+          {# Contactos pre-cargados del servidor #}
+          {% if contactos %}
+            {% for contacto in contactos %}
+            <div class="card mb-2 contacto-item" data-contacto-id="{{ contacto.id }}">
+              <div class="card-body p-3">
+                <div class="row g-2">
+                  <div class="col-md-5">
+                    <label class="form-label small">Nombre Completo *</label>
+                    <input type="text" class="form-control form-control-sm contacto-nombre" 
+                           value="{{ contacto.nombre_completo }}" required />
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label small">Cargo</label>
+                    <input type="text" class="form-control form-control-sm contacto-cargo" 
+                           value="{{ contacto.cargo|default:'' }}" />
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label small">Teléfono</label>
+                    <input type="text" class="form-control form-control-sm contacto-telefono" 
+                           value="{{ contacto.telefono|default:'' }}" />
+                  </div>
+                  <div class="col-md-5">
+                    <label class="form-label small">Email *</label>
+                    <input type="email" class="form-control form-control-sm contacto-email" 
+                           value="{{ contacto.email }}" required />
+                  </div>
+                  <div class="col-md-4">
+                    <div class="form-check mt-4">
+                      <input class="form-check-input contacto-activo" type="checkbox" 
+                             {% if contacto.activo %}checked{% endif %} />
+                      <label class="form-check-label small">Activo</label>
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="form-check mt-4">
+                      <input class="form-check-input contacto-principal" type="checkbox" 
+                             {% if contacto.is_principal %}checked{% endif %} />
+                      <label class="form-check-label small">Principal</label>
+                    </div>
+                  </div>
+                  <div class="col-12 text-end">
+                    <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-contacto">
+                      <i class="bi bi-trash"></i> Eliminar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      {# Sección: Observaciones #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-file-text me-2"></i>Observaciones
+        </h6>
+        <div class="row">
+          <div class="col-12">
+            <label for="cliente-observaciones" class="form-label">Observaciones</label>
+            <textarea class="form-control" id="cliente-observaciones" name="observaciones" rows="3" 
+                      placeholder="Observaciones adicionales">{{ cliente.observaciones|default:'' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="btn-guardar-cliente">
+        <i class="bi bi-save me-1"></i>Actualizar
+      </button>
+    </div>
+  </div>
+</div>
+
+{# ⚠️ HTMX: Auto-inicialización del offcanvas cuando se inyecta en el DOM #}
+<script>
+(function() {
+  const offcanvasEl = document.getElementById('offcanvas-cliente-editar');
+  if (offcanvasEl && window.bootstrap) {
+    const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+    offcanvasInstance.show();
+    
+    // ⚠️ Disparar evento para que cliente_editar.js inicialice la lógica
+    offcanvasEl.addEventListener('shown.bs.offcanvas', function() {
+      const clienteId = offcanvasEl.getAttribute('data-cliente-id');
+      document.dispatchEvent(new CustomEvent('initClienteEditar', { 
+        detail: { clienteId: clienteId } 
+      }));
+    }, { once: true });
+  }
+})();
+</script>

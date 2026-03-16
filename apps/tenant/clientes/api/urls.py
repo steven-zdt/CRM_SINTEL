@@ -1,9 +1,13 @@
 """
-URLs de la API de clientes (DRF Router) v2.60.
+URLs de la API de clientes (DRF Router) v2.61.
 
 ⚠️ API-First: Solo endpoints RESTful para Tabulator
 ⚠️ IMPORTANTE: El prefijo 'clientes/' ya está en config/api_urls.py
-⚠️ v2.60: La acción @action 'offcanvas' del ViewSet genera automáticamente la ruta /api/v1/clientes/offcanvas/
+⚠️ v2.61: Endpoints HTMX para offcanvas (Feature-Sliced Architecture):
+  - /api/v1/clientes/render-offcanvas/crear/ (crear cliente)
+  - /api/v1/clientes/{id}/render-offcanvas/editar/ (editar cliente)
+  - /api/v1/clientes/render-offcanvas/detalle/?id={id} (ver detalle)
+  - /api/v1/clientes/offcanvas/?id={id} (legacy - compatibilidad)
 ⚠️ v2.60: CRUD independiente para ContactoCliente con Zero Trust
 """
 import logging

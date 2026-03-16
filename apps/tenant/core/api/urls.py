@@ -166,6 +166,18 @@ urlpatterns = [
     # - /api/v1/core/v1/contabilidad/catalogo-niif/ (CRUD catálogo NIIF)
     path("v1/contabilidad/", include("apps.tenant.core.api.v1.contabilidad.urls")),
     
+    # ⚠️ CLIENTES: Router dedicado con todas las funcionalidades CRUD + HTMX
+    # Endpoints REST:
+    # - /api/v1/clientes/ (CRUD clientes)
+    # - /api/v1/clientes/contactos/ (CRUD contactos)
+    # Endpoints HTMX heredados automáticamente:
+    #   - /api/v1/clientes/render-offcanvas/crear/ (crear cliente)
+    #   - /api/v1/clientes/{id}/render-offcanvas/editar/ (editar cliente)
+    #   - /api/v1/clientes/render-offcanvas/detalle/?id={id} (ver detalle)
+    #   - /api/v1/clientes/offcanvas/?id={id} (legacy - compatibilidad)
+    #   - /api/v1/clientes/contactos/gestor-offcanvas/ (gestor de contactos)
+    path("v1/clientes/", include("apps.tenant.core.api.v1.clientes.urls")),
+    
     # ⚠️ v2.61.2: FACTURAS: Router dedicado con todas las funcionalidades CRUD
     # Endpoints disponibles:
     # - /api/v1/core/v1/facturas/facturas/ (CRUD principal - ReadOnly)

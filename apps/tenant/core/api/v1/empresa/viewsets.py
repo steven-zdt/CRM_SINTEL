@@ -7,6 +7,7 @@
 """
 
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
 
 from apps.tenant.empresa.api.viewsets import EmpresaViewSet, MailInboxConfigViewSet
 
@@ -15,6 +16,8 @@ from . import serializers as ws_serializers
 
 class EmpresaCoreViewSet(EmpresaViewSet):
     authentication_classes = [SessionAuthentication]
+    # ⚠️ CRÍTICO: Asegurar parser_classes en facade
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_serializer_class(self):
         if self.action == 'list':

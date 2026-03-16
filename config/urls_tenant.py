@@ -65,6 +65,7 @@ class TenantRootView(View):
     El shell estático de landing consume /api/v1/landing/info/ para obtener información del tenant.
     """
     def get(self, request):
+        print(f"DEBUG: TenantRootView host={request.get_host()}, user={request.user}")
         if request.user.is_authenticated:
             # Redirigir al shell estático del dashboard (API-First)
             # ⚠️ v2.30+: Shell estático en Core
