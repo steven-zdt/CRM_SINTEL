@@ -135,31 +135,3 @@
 {# ========================================= #}
 <div id="offcanvas-container-clientes"></div>
 <div id="offcanvas-container-contactos"></div>
-
-{# ========================================= #}
-{# NOTES #}
-{# ========================================= #}
-{# 
-  ARCHITECTURE: Zero JS in HTML v2.61
-  
-  All logic is in: apps/tenant/core/static/core/js/clientes/clientes.list.js
-  
-  HTML Structure:
-  - data-module="clientes|contactos" - Module identifier
-  - data-spinner="type" - Spinner container
-  - data-grid="type" - Table grid container
-  - data-empty-state="type" - Empty state message
-  - data-search-input - Search input field
-  - data-action="search|edit|delete|view" - Action trigger
-  - data-create-button - Create button
-  
-  Event System:
-  - 'tab-shown' event from workspace.js when tab clicked in sidebar
-  - 'shown.bs.tab' event from Bootstrap when internal tabs clicked
-  - 'clienteGuardado', 'clienteEliminado' events trigger table reload
-  - 'contactoGuardado', 'contactoEliminado' events trigger table reload
-  
-  No inline event handlers (@, :, x-, onclick, etc.)
-  No embedded <script> blocks
-  All interaction via event delegation in clientes.list.js
-#}

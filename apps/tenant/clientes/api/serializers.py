@@ -46,6 +46,7 @@ class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer)
     """
     # CRÍTICO: required=False y allow_null=True obliga a DRF a retener el ID en validated_data
     id = serializers.IntegerField(required=False, allow_null=True) 
+    cliente = serializers.PrimaryKeyRelatedField(queryset=Cliente.objects.all(), required=False)
     
     def get_cliente_nombre(self, obj):
         return obj.cliente.razon_social if obj.cliente else None

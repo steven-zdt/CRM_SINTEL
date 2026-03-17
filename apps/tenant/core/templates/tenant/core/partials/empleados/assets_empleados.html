@@ -31,47 +31,6 @@
 <script src="{% static 'core/js/empleados/features/devengos_editor.js' %}"></script>
 <script src="{% static 'core/js/empleados/features/historial_nominas.js' %}"></script>
 
-{# ⚠️ v2.60: HTMX - Reinicializar listeners cuando se carga el Offcanvas vía HTMX #}
-{# Los contenedores offcanvas están definidos globalmente en workspace.html #}
-<script>
-    if (typeof htmx !== 'undefined') {
-        document.addEventListener('htmx:afterSwap', function(event) {
-            const targetId = event.detail.target.id;
-            
-            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
-            // Los eventos htmx:afterSwap ya garantizan que el DOM está actualizado
-            const initOffcanvas = function(offcanvasId, logMessage) {
-                requestAnimationFrame(() => {
-                    const offcanvasEl = document.getElementById(offcanvasId);
-                    if (offcanvasEl) {
-                        console.log(logMessage);
-                    }
-                });
-            };
-            
-            // Offcanvas de empleado
-            if (targetId === 'offcanvas-container-empleado') {
-                initOffcanvas('offcanvas-container-empleado', '[empleados.assets] ✅ Offcanvas de empleado cargado vía HTMX');
-            }
-            
-            // Offcanvas de contrato
-            if (targetId === 'offcanvas-container-contrato') {
-                initOffcanvas('offcanvas-container-contrato', '[empleados.assets] ✅ Offcanvas de contrato cargado vía HTMX');
-            }
-            
-            // Offcanvas de devengo/nómina
-            if (targetId === 'offcanvas-container-devengo') {
-                initOffcanvas('offcanvas-container-devengo', '[empleados.assets] ✅ Offcanvas de devengo/nómina cargado vía HTMX');
-            }
-            
-            // Offcanvas de historial de nóminas
-            if (targetId === 'offcanvas-container-historial-nominas') {
-                initOffcanvas('offcanvas-container-historial-nominas', '[empleados.assets] ✅ Offcanvas de historial de nóminas cargado vía HTMX');
-            }
-        });
-    }
-</script>
-
 {# Estilos #}
 {% if 'empleados.styles.css' %}
 <link rel="stylesheet" href="{% static 'core/css/empleados/empleados.styles.css' %}">

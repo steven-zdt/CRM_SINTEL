@@ -13,7 +13,6 @@
     'use strict';
 
         console.log('[clientes.contactos] Formulario de contactos inicializado');
-    }
 
     /**
      * Eliminar contacto del contenedor dinámico

@@ -1,15 +1,5 @@
 {% load static %}
-{# Assets del módulo Clientes v2.61 - Clean Code (Zero JS in HTML) #}
-{# ⚠️ v2.61: Refactorización completa con separación de concerns #}
-{# ⚠️ v2.61: HTML puro (list.html) + Lógica en JS (clientes.list.js) #}
-{# ⚠️ CRÍTICO: Cargar Factory ANTES del módulo específico #}
-{# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
-{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http(), UIManager, etc.) - ya cargado en workspace.html #}
-{# 2. clientes.api.js (define window.clientesAPI y window.contactosAPI) - REQUERIDO por clientes.list.js #}
-{# 3. clientes.list.js (módulo principal - 11 event listeners centralizados) #}
-{# 5. clientes.editor.js (Editor de Clientes con HTMX + Offcanvas) #}
-{# 6. clientes.detalle.js (Ver Detalle de Cliente - Read-Only) #}
-{# 7. clientes.contactos.js (Editor de Contactos con HTMX + Offcanvas) #}
+
 
 {# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'core/js/clientes/clientes.api.js' %}"></script>
@@ -21,8 +11,3 @@
 <script src="{% static 'core/js/clientes/clientes.detalle.js' %}"></script>
 <script src="{% static 'core/js/clientes/clientes.contactos.js' %}"></script>
 
-{# BLOQUE 3: Orquestación HTMX - Sincronización de tablas tras operaciones #}
-{# ⚠️ v2.61: Sincronización automática de tablas tras operaciones HTMX #}
-{# Los eventos personalizados (clienteGuardado, clienteEliminado, etc.) son #}
-{# escuchados directamente en clientes.list.js mediante event listeners #}
-{# Este bloque ahora está integrado directamente en clientes.list.js para cumplir con Zero JS in HTML #}

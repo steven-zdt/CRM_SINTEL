@@ -54,8 +54,24 @@
     }
   });
 
-  const DEBUG = (w.__DEBUG__ === true) || (w.API_HELPERS?.DEBUG === true);
-  if (DEBUG) {
-    console.log('[ajax-setup-csrf] Setup global de CSRF para jQuery activado');
+  // ⚠️ HTMX: Setup global de CSRF para HTMX (usa XMLHttpRequest internamente)
+  if (typeof document !== 'undefined') {
+    document.body.addEventListener('htmx:configRequest', function(event) {
+      const method = (event.detail.verb || 'GET').toUpperCase();
+      // Solo mutaciones necesitan CSRF
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        const token = (w.API_HELPERS && typeof w.API_HELPERS.getCSRF === 'function')
+          ? w.API_HELPERS.getCSRF()
+          : null;
+        if (token) {
+          event.detail.headers['X-CSRFToken'] = token;
+        } else {
+          const DEBUG = (w.__DEBUG__ === true) || (w.API_HELPERS?.DEBUG === true);
+          if (DEBUG) {
+            console.warn('[ajax-setup-csrf] Token CSRF no encontrado para método HTMX', method);
+          }
+        }
+      }
+    });
   }
 })(window);

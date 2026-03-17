@@ -252,44 +252,8 @@
     })();
   </script>
   
-  {# ⚠️ CRÍTICO: Setup global de CSRF para HTMX - Inyecta token en todas las peticiones POST/PUT/PATCH/DELETE #}
-  <script>
-    (function() {
-      // Función helper para obtener el token CSRF
-      function getCSRFToken() {
-        // Intentar desde meta tag
-        const metaToken = document.querySelector('meta[name="csrf-token"]');
-        if (metaToken && metaToken.content) {
-          return metaToken.content;
-        }
-        // Intentar desde cookie
-        const name = 'csrftoken';
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) {
-          return decodeURIComponent(parts.pop().split(';').shift());
-        }
-        return null;
-      }
-      
-      // Configurar HTMX para inyectar CSRF automáticamente
-      if (typeof htmx !== 'undefined') {
-        document.body.addEventListener('htmx:configRequest', function(event) {
-          const method = (event.detail.verb || 'GET').toUpperCase();
-          // Solo mutaciones necesitan CSRF
-          if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-            const token = getCSRFToken();
-            if (token) {
-              event.detail.headers['X-CSRFToken'] = token;
-            } else {
-              console.warn('[HTMX CSRF] Token CSRF no encontrado para método', method);
-            }
-          }
-        });
-        console.log('[HTMX CSRF] Setup global de CSRF para HTMX activado');
-      }
-    })();
-  </script>
+  {# ⚠️ CRÍTICO: Setup global de CSRF para HTMX - Inyecta token automáticamente (ahora gestionado en ajax-setup-csrf.js) #}
+  {# ⚠️ NOTA: CSRF para jQuery y HTMX gestionado centralmente en ajax-setup-csrf.js #}
   
   {# 1. LIBRERÍAS CORE - v2.95 #}
   {# ⚠️ Incluye: http.js, api-helpers.js, ui-manager.js (requiere HTMX), tabulator.factory.js #}

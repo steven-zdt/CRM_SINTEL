@@ -116,9 +116,18 @@
      * Initialize clientes table (lazy loading)
      */
     async function loadClientesTable() {
-        if (state.clientesLoaded) {
-            log.info('Clientes table already loaded, skipping');
+        const gridElement = d.querySelector('#grid-clientes');
+        
+        // ⚠️ v2.61.4: Verificar si la tabla ya está cargada Y existe en el DOM
+        if (state.clientesLoaded && gridElement && gridElement.children.length > 0) {
+            log.info('Clientes table already loaded and exists in DOM, skipping');
             return;
+        }
+
+        // Si el contenedor no existe o está vacío, resetear estado
+        if (!gridElement || gridElement.children.length === 0) {
+            log.info('Clientes grid missing or empty, resetting state');
+            state.clientesLoaded = false;
         }
 
         state.clientesLoading = true;
@@ -164,9 +173,18 @@
      * Initialize contactos table (lazy loading)
      */
     async function loadContactosTable() {
-        if (state.contactosLoaded) {
-            log.info('Contactos table already loaded, skipping');
+        const gridElement = d.querySelector('#grid-contactos');
+        
+        // ⚠️ v2.61.4: Verificar si la tabla ya está cargada Y existe en el DOM
+        if (state.contactosLoaded && gridElement && gridElement.children.length > 0) {
+            log.info('Contactos table already loaded and exists in DOM, skipping');
             return;
+        }
+
+        // Si el contenedor no existe o está vacío, resetear estado
+        if (!gridElement || gridElement.children.length === 0) {
+            log.info('Contactos grid missing or empty, resetting state');
+            state.contactosLoaded = false;
         }
 
         state.contactosLoading = true;

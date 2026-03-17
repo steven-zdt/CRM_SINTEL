@@ -249,6 +249,40 @@
         });
     }
 
+    // ⚠️ HTMX: Escuchar después de que el swap termine y el DOM esté estable
+    if (typeof htmx !== 'undefined') {
+        d.body.addEventListener('htmx:afterSettle', (event) => {
+            const target = event.detail.target;
+            
+            // 1. Refrescar Tabulator si el contenedor principal fue recargado
+            if (target && (target.id === 'ui-empresa-list' || target.closest('#ui-empresa-list'))) {
+                if (w.EmpresaListModule && typeof w.EmpresaListModule.refresh === 'function') {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            w.EmpresaListModule.refresh();
+                            console.log('[empresa.list] Tabulator refrescado tras recarga HTMX');
+                        });
+                    });
+                }
+            }
+
+            // 2. Mostrar Offcanvas si fue inyectado
+            if (target && target.id === 'offcanvas-container-empresa') {
+                console.log('[empresa.list] Offcanvas de empresa cargado, inicializando...');
+                
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        const offcanvasEl = d.getElementById('offcanvas-empresa');
+                        if (offcanvasEl && typeof bootstrap !== 'undefined') {
+                            bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                            console.log('[empresa.list] Offcanvas de empresa mostrado');
+                        }
+                    });
+                });
+            }
+        });
+    }
+
     // Auto-inicializar cuando el DOM esté listo
     if (d.readyState === 'loading') {
         d.addEventListener('DOMContentLoaded', init);
