@@ -2,10 +2,10 @@
 {# ⚠️ Feature-Sliced: Template modular solo para vista de lectura #}
 {# ⚠️ HTMX: Auto-inicialización del offcanvas #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente-detalle" 
-     data-cliente-id="{{ cliente.id }}" aria-labelledby="offcanvas-cliente-detalle-label">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente" 
+     data-cliente-id="{{ cliente.id }}" aria-labelledby="offcanvas-cliente-label">
   <div class="offcanvas-header border-bottom">
-    <h5 class="offcanvas-title" id="offcanvas-cliente-detalle-label">
+    <h5 class="offcanvas-title" id="offcanvas-cliente-label">
       <i class="bi bi-eye me-2"></i>Detalle del Cliente
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
@@ -142,18 +142,4 @@
   </div>
 </div>
 
-{# ⚠️ HTMX: Auto-inicialización del offcanvas cuando se inyecta en el DOM #}
-<script>
-(function() {
-  const offcanvasEl = document.getElementById('offcanvas-cliente-detalle');
-  if (offcanvasEl && window.bootstrap) {
-    const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-    offcanvasInstance.show();
-    
-    // ⚠️ Disparar evento para que cliente_detalle.js inicialice la lógica
-    offcanvasEl.addEventListener('shown.bs.offcanvas', function() {
-      document.dispatchEvent(new CustomEvent('initClienteDetalle'));
-    }, { once: true });
-  }
-})();
-</script>
+{# ⚠️ Zero JS in HTML - All logic handled in clientes.list.js #}

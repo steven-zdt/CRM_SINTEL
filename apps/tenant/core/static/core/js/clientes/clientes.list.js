@@ -277,30 +277,15 @@
     /**
      * Edit cliente - Load form and show offcanvas
      */
-    async function editCliente(id) {
+    function editCliente(id) {
         const url = `/api/v1/clientes/${id}/render-offcanvas/editar/`;
         try {
             log.info(`Loading edit form for cliente ${id}`);
             
-            // Make HTMX request to load offcanvas HTML
-            await htmx.ajax('GET', url, {
+            // Use htmx.ajax with swap listener pattern
+            htmx.ajax('GET', url, {
                 target: '#offcanvas-container-clientes',
-                swap: 'innerHTML',
-                // Wait for HTMX to complete the swap
-                onComplete: () => {
-                    log.info(`Offcanvas HTML loaded for cliente ${id}`);
-                    // Now show the offcanvas
-                    setTimeout(() => {
-                        const offcanvasEl = d.getElementById('offcanvas-cliente');
-                        if (offcanvasEl) {
-                            const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                            offcanvasInstance.show();
-                            log.info(`Offcanvas shown for cliente ${id}`);
-                        } else {
-                            log.error('Offcanvas element #offcanvas-cliente not found');
-                        }
-                    }, 100);
-                }
+                swap: 'innerHTML'
             });
         } catch (error) {
             log.error(`Error loading edit form for cliente ${id}`, error);
@@ -311,30 +296,15 @@
     /**
      * View cliente details - Load form and show offcanvas
      */
-    async function viewCliente(id) {
+    function viewCliente(id) {
         const url = `/api/v1/clientes/render-offcanvas/detalle/?id=${id}`;
         try {
             log.info(`Loading detail view for cliente ${id}`);
             
-            // Make HTMX request to load offcanvas HTML
-            await htmx.ajax('GET', url, {
+            // Use htmx.ajax with swap listener pattern
+            htmx.ajax('GET', url, {
                 target: '#offcanvas-container-clientes',
-                swap: 'innerHTML',
-                // Wait for HTMX to complete the swap
-                onComplete: () => {
-                    log.info(`Offcanvas HTML loaded for cliente ${id}`);
-                    // Now show the offcanvas
-                    setTimeout(() => {
-                        const offcanvasEl = d.getElementById('offcanvas-cliente');
-                        if (offcanvasEl) {
-                            const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                            offcanvasInstance.show();
-                            log.info(`Offcanvas shown for cliente ${id}`);
-                        } else {
-                            log.error('Offcanvas element #offcanvas-cliente not found');
-                        }
-                    }, 100);
-                }
+                swap: 'innerHTML'
             });
         } catch (error) {
             log.error(`Error loading detail view for cliente ${id}`, error);
@@ -512,6 +482,37 @@
         } else if (tabId === 'tab-contactos') {
             log.info('Bootstrap tab shown: contactos');
             loadContactosTable();
+        }
+    });
+
+    /**
+     * HTMX swap events - Show offcanvas after HTML is injected
+     */
+    d.body.addEventListener('htmx:afterSwap', (e) => {
+        const target = e.detail.target;
+        
+        if (target && target.id === 'offcanvas-container-clientes') {
+            // Cliente offcanvas loaded (create/edit/view)
+            log.info('Cliente offcanvas loaded, showing...');
+            const offcanvasEl = d.getElementById('offcanvas-cliente');
+            if (offcanvasEl && w.bootstrap) {
+                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                offcanvasInstance.show();
+                log.info('Cliente offcanvas shown');
+            } else {
+                log.error('offcanvas-cliente not found or bootstrap not available');
+            }
+        } else if (target && target.id === 'offcanvas-container-contactos') {
+            // Contactos offcanvas loaded
+            log.info('Contactos offcanvas loaded, showing...');
+            const offcanvasEl = d.getElementById('offcanvas-contactos');
+            if (offcanvasEl && w.bootstrap) {
+                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                offcanvasInstance.show();
+                log.info('Contactos offcanvas shown');
+            } else {
+                log.error('offcanvas-contactos not found or bootstrap not available');
+            }
         }
     });
 

@@ -141,13 +141,4 @@
   </div>
 </div>
 
-{# ⚠️ HTMX: Auto-inicialización del offcanvas cuando se inyecta en el DOM #}
-<script>
-(function() {
-  const offcanvasEl = document.getElementById('offcanvas-cliente');
-  if (offcanvasEl && window.bootstrap) {
-    const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-    offcanvasInstance.show();
-  }
-})();
-</script>
+{# ⚠️ Zero JS in HTML - All logic handled in clientes.list.js #}
