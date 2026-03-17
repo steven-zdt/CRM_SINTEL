@@ -2,10 +2,10 @@
 {# ⚠️ Feature-Sliced: Template modular solo para edición #}
 {# ⚠️ HTMX: Auto-inicialización del offcanvas #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente-editar" 
-     data-cliente-id="{{ cliente.id }}" aria-labelledby="offcanvas-cliente-editar-label">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente" 
+     data-cliente-id="{{ cliente.id }}" aria-labelledby="offcanvas-cliente-label">
   <div class="offcanvas-header border-bottom">
-    <h5 class="offcanvas-title" id="offcanvas-cliente-editar-label">
+    <h5 class="offcanvas-title" id="offcanvas-cliente-label">
       <i class="bi bi-pencil me-2"></i>Editar Cliente
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
@@ -15,7 +15,7 @@
     <div id="form-cliente-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     <div id="cliente-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
     
-    <form id="form-cliente-editar" method="PATCH" onsubmit="return false;">
+    <form id="form-cliente" method="PATCH" onsubmit="return false;">
       <input type="hidden" id="cliente-id" name="id" value="{{ cliente.id }}">
       
       {# Sección: Identificación #}
@@ -197,18 +197,10 @@
 {# ⚠️ HTMX: Auto-inicialización del offcanvas cuando se inyecta en el DOM #}
 <script>
 (function() {
-  const offcanvasEl = document.getElementById('offcanvas-cliente-editar');
+  const offcanvasEl = document.getElementById('offcanvas-cliente');
   if (offcanvasEl && window.bootstrap) {
     const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
     offcanvasInstance.show();
-    
-    // ⚠️ Disparar evento para que cliente_editar.js inicialice la lógica
-    offcanvasEl.addEventListener('shown.bs.offcanvas', function() {
-      const clienteId = offcanvasEl.getAttribute('data-cliente-id');
-      document.dispatchEvent(new CustomEvent('initClienteEditar', { 
-        detail: { clienteId: clienteId } 
-      }));
-    }, { once: true });
   }
 })();
 </script>

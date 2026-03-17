@@ -16,17 +16,13 @@
 {# BLOQUE 1: API Wrapper - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'core/js/clientes/clientes.api.js' %}"></script>
 
-{# BLOQUE 2: Features - Listados (Tabulator) #}
-<script src="{% static 'core/js/clientes/features/clientes_list.js' %}"></script>
-<script src="{% static 'core/js/clientes/features/contactos_list.js' %}"></script>
+{# BLOQUE 2: Features - Módulos Refactorizados #}
+<script src="{% static 'core/js/clientes/clientes.list.js' %}"></script>
+<script src="{% static 'core/js/clientes/clientes.editor.js' %}"></script>
+<script src="{% static 'core/js/clientes/clientes.detalle.js' %}"></script>
+<script src="{% static 'core/js/clientes/clientes.contactos.js' %}"></script>
 
-{# BLOQUE 3: Features - Editores (HTMX + Offcanvas) - Feature-Sliced v2.61 #}
-<script src="{% static 'core/js/clientes/features/cliente_crear.js' %}"></script>
-<script src="{% static 'core/js/clientes/features/cliente_editar.js' %}"></script>
-<script src="{% static 'core/js/clientes/features/cliente_detalle.js' %}"></script>
-<script src="{% static 'core/js/clientes/contactos_editor.js' %}"></script>
-
-{# BLOQUE 4: Orquestación HTMX - Sincronización de tablas tras operaciones #}
+{# BLOQUE 3: Orquestación HTMX - Sincronización de tablas tras operaciones #}
 <script>
 (function(w, d) {
     'use strict';

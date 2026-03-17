@@ -59,42 +59,86 @@
             },
             {
                 title: "Acciones",
+                field: "acciones",
+                hozAlign: "center",
+                headerSort: false,
+                width: 150,
                 formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    const id = rowData.id;
-                    const isActive = rowData.activo === true;
-                    
-                    // Deshabilitar botón eliminar si está activo
-                    const deleteDisabled = isActive ? 'disabled' : '';
-                    const deleteClass = isActive ? 'opacity-50' : '';
-                    
                     return `
                         <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-secondary btn-view" 
-                                    hx-get="/api/v1/clientes/render-offcanvas/detalle/?id=${id}" 
-                                    hx-target="#offcanvas-container-clientes" 
-                                    hx-swap="innerHTML"
-                                    hx-on::after-swap="const oc=document.querySelector('#offcanvas-cliente-detalle');if(oc && window.bootstrap){window.bootstrap.Offcanvas.getOrCreateInstance(oc).show();}"
-                                    title="Ver Detalle">
-                                <i class="fas fa-eye"></i>
+                            <button class="btn btn-outline-primary btn-edit-cliente" title="Editar" style="z-index: 10;">
+                                <i class="bi bi-pencil"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-primary btn-edit" data-id="${id}" title="Editar Cliente">
-                                <i class="fas fa-edit"></i>
+                            <button class="btn btn-outline-info btn-view-cliente" title="Ver Detalle" style="z-index: 10;">
+                                <i class="bi bi-eye"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-info btn-contactos" data-id="${id}" title="Gestionar Contactos">
-                                <i class="fas fa-users"></i>
+                            <button class="btn btn-outline-danger btn-delete-cliente" title="Eliminar" style="z-index: 10;">
+                                <i class="bi bi-trash"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete ${deleteClass}" data-id="${id}" ${deleteDisabled} title="${isActive ? 'Desactive primero para eliminar' : 'Eliminar Cliente'}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    `;
+                        </div>`;
                 },
-                headerSort: false,
-                hozAlign: "center",
-                width: 160
+                cellClick: function(e, cell) {
+                    const btn = e.target.closest('button');
+                    if (!btn) return;
+                    
+                    const data = cell.getData();
+                    console.log("Evento capturado para ID:", data.id);
+
+                    if (btn.classList.contains('btn-edit-cliente')) {
+                        abrirClienteOffcanvas(data.id);
+                    } else if (btn.classList.contains('btn-delete-cliente')) {
+                        eliminarCliente(cell.getRow(), data.id);
+                    } else if (btn.classList.contains('btn-view-cliente')) {
+                        abrirDetalle(data.id);
+                    }
+                }
             }
         ];
+    }
+
+    /**
+     * Abrir offcanvas de edición (Reutilizando lógica HTMX)
+     */
+    async function abrirClienteOffcanvas(id) {
+        const url = `/api/v1/clientes/${id}/render-offcanvas/editar/`;
+        await htmx.ajax('GET', url, { target: '#offcanvas-container-clientes', swap: 'innerHTML' });
+        const offcanvasEl = d.getElementById('offcanvas-cliente');
+        if (offcanvasEl) {
+            bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+        }
+    }
+
+    /**
+     * Ver detalle
+     */
+    async function abrirDetalle(id) {
+        const url = `/api/v1/clientes/render-offcanvas/detalle/?id=${id}`;
+        await htmx.ajax('GET', url, { target: '#offcanvas-container-clientes', swap: 'innerHTML' });
+        const offcanvasEl = d.getElementById('offcanvas-cliente-detalle');
+        if (offcanvasEl) {
+            bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+        }
+    }
+
+    /**
+     * Eliminar Cliente (Atomic Flow)
+     */
+    async function eliminarCliente(row, id) {
+        if (!confirm('¿Está seguro de eliminar este cliente?')) return;
+        
+        try {
+            const res = await w.http('DELETE', `/api/v1/clientes/${id}/`);
+            
+            if (res.ok) {
+                w.SintelFeedback.success('Cliente eliminado correctamente');
+                row.delete();
+            } else {
+                w.UIManager.handleError(res, MOD);
+            }
+        } catch (err) {
+            console.error('[clientes.list] Error en DELETE:', err);
+            w.SintelFeedback.error('Error de conexión');
+        }
     }
 
     // Inicializar Tabulator usando Factory (The Engine)
@@ -161,14 +205,21 @@
                     btn.disabled = true;
                     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-                    // ⚠️ v2.61: Usar nuevo endpoint RESTful render-offcanvas/editar
-                    (async () => {
-                        try {
-                            // Pedimos a HTMX que traiga el HTML y lo inyecte automáticamente
-                            await htmx.ajax('GET', `/api/v1/clientes/${id}/render-offcanvas/editar/`, {
-                                target: '#offcanvas-container-clientes',
-                                swap: 'innerHTML'
-                            });
+                            // ⚠️ v2.61: Usar nuevo endpoint RESTful render-offcanvas/editar
+                            const url = `/api/v1/clientes/${id}/render-offcanvas/editar/`;
+                            try {
+                                await htmx.ajax('GET', url, {
+                                    target: '#offcanvas-container-clientes',
+                                    swap: 'innerHTML'
+                                });
+                                // El template incluye script de auto-activación del offcanvas
+                                console.log('[clientes.list] Offcanvas de edición cargado para cliente ID:', id);
+                            } catch (error) {
+                                console.error('[clientes.list] Error cargando offcanvas de edición:', error);
+                                if (w.SintelFeedback) {
+                                    w.SintelFeedback.error('Error al cargar el formulario de edición');
+                                }
+                            }
                             
                             // El template incluye script de auto-activación del offcanvas
                             // No es necesario activarlo manualmente aquí

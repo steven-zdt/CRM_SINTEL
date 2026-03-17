@@ -5,7 +5,7 @@ ViewSet para Clientes v2.60 - Tabulator Implementation + HTMX Offcanvas
 ⚠️ SSoT: Empresa se inyecta automáticamente desde el tenant
 ⚠️ v2.60: Soporte para renderizado HTML mediante TemplateHTMLRenderer (HTMX)
 """
-from rest_framework import viewsets, mixins, status, filters
+from rest_framework import viewsets, mixins, status, filters, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
@@ -119,11 +119,14 @@ class ClienteViewSet(
             validated_data = serializer.validated_data.copy()
             contactos_data = validated_data.pop('contactos', None)
             
-            cliente = crear_cliente(empresa, validated_data, contactos_data=contactos_data)
-            return Response(
-                ClienteDetailSerializer(cliente).data, 
-                status=status.HTTP_201_CREATED
-            )
+            try:
+                cliente = crear_cliente(empresa, validated_data, contactos_data=contactos_data)
+                data = ClienteDetailSerializer(cliente).data
+                data['redirect'] = '/workspace/#clientes'
+                return Response(data, status=status.HTTP_201_CREATED)
+            except serializers.ValidationError as e:
+                # ⚠️ Capturar ValidationError del servicio y retornar 400 amigable
+                return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def update(self, request, *args, **kwargs):
@@ -144,7 +147,9 @@ class ClienteViewSet(
             
             # ⚠️ actualizar_cliente puede lanzar ValidationError si hay duplicados
             cliente = actualizar_cliente(cliente, validated_data, contactos_data=contactos_data)
-            return Response(ClienteDetailSerializer(cliente).data)
+            data = ClienteDetailSerializer(cliente).data
+            data['redirect'] = '/workspace/#clientes'
+            return Response(data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def partial_update(self, request, *args, **kwargs):
@@ -175,7 +180,9 @@ class ClienteViewSet(
             
             # ⚠️ actualizar_cliente puede lanzar ValidationError si hay duplicados
             cliente = actualizar_cliente(cliente, validated_data, contactos_data=contactos_data)
-            return Response(ClienteDetailSerializer(cliente).data)
+            data = ClienteDetailSerializer(cliente).data
+            data['redirect'] = '/workspace/#clientes'
+            return Response(data)
         
         # ⚠️ DEBUG: Log de errores de validación
         logger.error(f'[ClienteViewSet.partial_update] Errores de validación: {serializer.errors}')

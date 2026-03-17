@@ -1,20 +1,16 @@
 /**
- * Feature: Editar Cliente v2.61
- * ⚠️ Feature-Sliced Architecture: Módulo específico para edición de clientes
+ * Feature: Edición de Clientes v2.61 (Refactored)
+ * ⚠️ Feature-Sliced Architecture: Modulo para edición con contactos
  * ⚠️ Vanilla JS: Sin dependencias de jQuery
  * ⚠️ API-First: Consume DRF REST API
  * ⚠️ Aislamiento Gradual: Sin bloques try/catch, usa UIManager.handleError()
  * 
  * Dependencias globales requeridas:
  * - w.clientesAPI (definido en clientes.api.js) - Capa de Datos
- * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
  * - w.SintelFeedback (definido en feedback.js) - Sistema de notificaciones
  */
 (function(w, d) {
     'use strict';
-
-    let offcanvasInstance = null;
-    let clienteId = null;
 
     /**
      * Agregar un nuevo contacto al contenedor dinámico
@@ -82,13 +78,13 @@
     }
 
     /**
-     * Recolectar datos del formulario de edición
+     * Recolectar datos del formulario
      * @returns {Object} Datos del cliente y array de contactos
      */
     function recolectarDatosFormulario() {
-        const form = d.querySelector('#form-cliente-editar');
+        const form = d.querySelector('#form-cliente');
         if (!form) {
-            console.error('[cliente.editar] Formulario no encontrado');
+            console.error('[clientes.editor] Formulario no encontrado');
             return null;
         }
 
@@ -136,17 +132,9 @@
     }
 
     /**
-     * Actualizar cliente existente (PATCH)
+     * Guardar cliente (crear o actualizar)
      */
-    async function actualizarCliente() {
-        if (!clienteId) {
-            console.error('[cliente.editar] No se encontró el ID del cliente');
-            if (w.SintelFeedback) {
-                w.SintelFeedback.error('Error: No se pudo identificar el cliente');
-            }
-            return;
-        }
-
+    async function guardarCliente() {
         const payload = recolectarDatosFormulario();
         if (!payload) {
             if (w.SintelFeedback) {
@@ -155,25 +143,33 @@
             return;
         }
 
-        // Deshabilitar botón mientras se actualiza
+        const clienteId = d.querySelector('#cliente-id')?.value;
+        const offcanvasEl = d.querySelector('#offcanvas-cliente');
+        
+        // Deshabilitar botón mientras se guarda
         const btnGuardar = d.querySelector('#btn-guardar-cliente');
         if (btnGuardar) {
             btnGuardar.disabled = true;
-            btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Actualizando...';
+            btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Guardando...';
         }
 
-        // ⚠️ Aislamiento Gradual: No usar try/catch, dejar que los errores se propaguen
-        const response = await w.clientesAPI.update(clienteId, payload);
+        // ⚠️ Aislamiento Gradual: Llamar a la API
+        const response = clienteId 
+            ? await w.clientesAPI.update(clienteId, payload)
+            : await w.clientesAPI.create(payload);
         
-        if (response && response.id) {
+        if (response && response.ok) {
             // Éxito
             if (w.SintelFeedback) {
-                w.SintelFeedback.success('Cliente actualizado exitosamente');
+                w.SintelFeedback.success(clienteId ? 'Cliente actualizado exitosamente' : 'Cliente creado exitosamente');
             }
 
             // Cerrar offcanvas
-            if (offcanvasInstance) {
-                offcanvasInstance.hide();
+            if (offcanvasEl && window.bootstrap) {
+                const offcanvasInstance = bootstrap.Offcanvas.getInstance(offcanvasEl);
+                if (offcanvasInstance) {
+                    offcanvasInstance.hide();
+                }
             }
 
             // Disparar evento para recargar la tabla
@@ -182,33 +178,39 @@
             // Error (manejado por UIManager)
             if (btnGuardar) {
                 btnGuardar.disabled = false;
-                btnGuardar.innerHTML = '<i class="bi bi-save me-1"></i>Actualizar';
+                btnGuardar.innerHTML = clienteId 
+                    ? '<i class="bi bi-save me-1"></i>Actualizar'
+                    : '<i class="bi bi-save me-1"></i>Guardar';
+            }
+            
+            // Mostrar error
+            if (response?.status === 400 && response?.data) {
+                const errorContainer = offcanvasEl?.querySelector('#form-cliente-feedback');
+                if (errorContainer) {
+                    const errorFields = Object.keys(response.data).filter(k => k !== 'detail');
+                    if (errorFields.length > 0) {
+                        const errorList = errorFields.map(field => {
+                            const msg = Array.isArray(response.data[field]) 
+                                ? response.data[field].join(', ')
+                                : response.data[field];
+                            return `<li><strong>${field}:</strong> ${msg}</li>`;
+                        }).join('');
+                        errorContainer.innerHTML = `<ul class="mb-0">${errorList}</ul>`;
+                    } else if (response.data.detail) {
+                        errorContainer.textContent = response.data.detail;
+                    }
+                    errorContainer.classList.remove('d-none');
+                }
             }
         }
     }
 
     /**
-     * Inicializar eventos del formulario de edición
+     * Inicializar eventos del formulario
      */
-    function initFormularioEditar(detail) {
-        const offcanvasEl = d.getElementById('offcanvas-cliente-editar');
-        if (!offcanvasEl) {
-            console.warn('[cliente.editar] Offcanvas no encontrado');
-            return;
-        }
-
-        // Obtener ID del cliente desde el evento o desde el atributo data
-        clienteId = detail?.clienteId || offcanvasEl.getAttribute('data-cliente-id');
-        
-        if (!clienteId) {
-            console.error('[cliente.editar] No se encontró el ID del cliente');
-            return;
-        }
-
-        // Obtener instancia de Bootstrap Offcanvas
-        if (w.bootstrap && w.bootstrap.Offcanvas) {
-            offcanvasInstance = w.bootstrap.Offcanvas.getInstance(offcanvasEl);
-        }
+    function initFormulario() {
+        const offcanvasEl = d.querySelector('#offcanvas-cliente');
+        if (!offcanvasEl) return;
 
         // Botón agregar contacto
         const btnAgregarContacto = d.querySelector('#btn-agregar-contacto');
@@ -228,43 +230,46 @@
             btnGuardar.addEventListener('click', async function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                await actualizarCliente();
+                await guardarCliente();
             });
         }
 
         // Formulario submit
-        const form = d.querySelector('#form-cliente-editar');
+        const form = d.querySelector('#form-cliente');
         if (form) {
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                await actualizarCliente();
+                await guardarCliente();
             });
         }
 
-        // Limpiar al cerrar
-        offcanvasEl.addEventListener('hidden.bs.offcanvas', function() {
-            const container = d.querySelector('#offcanvas-container-clientes');
-            if (container) {
-                container.innerHTML = '';
-            }
-            clienteId = null;
-        }, { once: true });
-
-        console.log('[cliente.editar] Formulario de edición inicializado para cliente ID:', clienteId);
+        console.log('[clientes.editor] Formulario inicializado');
     }
 
     /**
-     * Escuchar evento de inicialización desde el template
+     * Escuchar evento cuando el offcanvas se inyecta en el DOM
      */
-    d.addEventListener('initClienteEditar', function(e) {
-        console.log('[cliente.editar] Evento initClienteEditar recibido', e.detail);
-        initFormularioEditar(e.detail);
+    d.addEventListener('shown.bs.offcanvas', function(e) {
+        if (e.target?.id === 'offcanvas-cliente') {
+            initFormulario();
+        }
     });
 
-    // Exponer API pública (opcional)
-    w.ClienteEditarModule = {
-        init: initFormularioEditar
+    // Inicialización en DOMContentLoaded (por si ya existe el offcanvas)
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', function() {
+            if (d.querySelector('#offcanvas-cliente')) {
+                initFormulario();
+            }
+        });
+    } else if (d.querySelector('#offcanvas-cliente')) {
+        initFormulario();
+    }
+
+    // Exponer API pública
+    w.ClientesEditorModule = {
+        guardar: guardarCliente
     };
 
 })(window, document);

@@ -2,9 +2,9 @@
 {# ⚠️ Feature-Sliced: Template modular solo para creación #}
 {# ⚠️ HTMX: Auto-inicialización del offcanvas #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente-crear" aria-labelledby="offcanvas-cliente-crear-label">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente" aria-labelledby="offcanvas-cliente-label">
   <div class="offcanvas-header border-bottom">
-    <h5 class="offcanvas-title" id="offcanvas-cliente-crear-label">
+    <h5 class="offcanvas-title" id="offcanvas-cliente-label">
       <i class="bi bi-person-plus me-2"></i>Nuevo Cliente
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
@@ -14,7 +14,7 @@
     <div id="form-cliente-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     <div id="cliente-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
     
-    <form id="form-cliente-crear" method="POST" onsubmit="return false;">
+    <form id="form-cliente" method="POST" onsubmit="return false;">
       {# Sección: Identificación #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
@@ -144,15 +144,10 @@
 {# ⚠️ HTMX: Auto-inicialización del offcanvas cuando se inyecta en el DOM #}
 <script>
 (function() {
-  const offcanvasEl = document.getElementById('offcanvas-cliente-crear');
+  const offcanvasEl = document.getElementById('offcanvas-cliente');
   if (offcanvasEl && window.bootstrap) {
     const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
     offcanvasInstance.show();
-    
-    // ⚠️ Disparar evento para que cliente_crear.js inicialice la lógica
-    offcanvasEl.addEventListener('shown.bs.offcanvas', function() {
-      document.dispatchEvent(new CustomEvent('initClienteCrear'));
-    }, { once: true });
   }
 })();
 </script>
