@@ -85,8 +85,12 @@ class ClienteViewSet(
         """
         ⚠️ v2.60: Zero Trust - Obtiene la empresa del usuario.
         """
-        return self.request.user.empresa if hasattr(self.request.user, 'empresa') else None
-
+        empresa = getattr(self.request.user, 'empresa', None)
+        if not empresa:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'[ClienteViewSet] Usuario {self.request.user} no tiene empresa asociada')
+        return empresa
 
     def list(self, request):
         """
@@ -395,7 +399,12 @@ class ContactoClienteViewSet(BaseTenantViewSet):
         """
         ⚠️ v2.60: Zero Trust - Obtiene la empresa del usuario.
         """
-        return self.request.user.empresa if hasattr(self.request.user, 'empresa') else None
+        empresa = getattr(self.request.user, 'empresa', None)
+        if not empresa:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'[ContactoClienteViewSet] Usuario {self.request.user} no tiene empresa asociada')
+        return empresa
     
     def perform_create(self, serializer):
         """

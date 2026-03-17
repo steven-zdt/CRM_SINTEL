@@ -28,21 +28,6 @@
       const welcome = document.getElementById('workspace-welcome');
       if (welcome) welcome.style.display = 'none';
       
-      // ⚠️ v2.61: Disparar evento personalizado para componentes Alpine.js
-      // El Bootstrap shown.bs.tab no se dispara cuando usamos showTab() programáticamente
-      console.log('[workspace.showTab] Dispatching tab-shown event for:', tabName);
-      tab.dispatchEvent(new CustomEvent('tab-shown', { detail: { tabName }, bubbles: true }));
-      
-      // ⚠️ También disparar directamente en componentes Alpine internos
-      // Alpine.js puede no recibir eventos bubbling desde section → card
-      setTimeout(() => {
-        const card = tab.querySelector('[x-data]');
-        if (card) {
-          console.log('[workspace.showTab] Found Alpine component, dispatching directly');
-          card.dispatchEvent(new CustomEvent('tab-shown', { detail: { tabName }, bubbles: true }));
-        }
-      }, 5);
-      
       // Actualizar título
       const title = document.getElementById('viewTitle');
       if (title) {
@@ -62,135 +47,8 @@
         title.textContent = titles[tabName] || 'Workspace';
       }
       
-      // Inicializar DataTables del módulo usando la API estándar
-      // ⚠️ v2.37: Tab empresa contiene dos módulos independientes
-      // ⚠️ v2.37: Tab contabilidad contiene tabs internos (cuentas y asientos)
-      if (tabName === 'empresa') {
-        // Inicializar ambos módulos independientes
-        setTimeout(() => {
-          if (window.empresaDT && typeof window.empresaDT.init === 'function') {
-            window.empresaDT.init();
-          }
-          if (window.mailinboxDT && typeof window.mailinboxDT.init === 'function') {
-            window.mailinboxDT.init();
-          }
-        }, 200);
-      } else if (tabName === 'contabilidad') {
-        // Inicializar módulo de cuentas (tab activo por defecto)
-        setTimeout(() => {
-          if (window.cuentasDT && typeof window.cuentasDT.init === 'function') {
-            window.cuentasDT.init();
-          }
-        }, 200);
-        
-        // Listener para tabs internos de contabilidad
-        setTimeout(() => {
-          const cuentasTab = document.getElementById('contabilidad-cuentas-tab');
-          const asientosTab = document.getElementById('contabilidad-asientos-tab');
-          
-          if (cuentasTab) {
-            cuentasTab.addEventListener('shown.bs.tab', () => {
-              if (window.cuentasDT && typeof window.cuentasDT.init === 'function') {
-                window.cuentasDT.init();
-              }
-            });
-          }
-          
-          if (asientosTab) {
-            asientosTab.addEventListener('shown.bs.tab', () => {
-              // ⚠️ v2.60: asientos_main.js expone window.AppAsientos, no window.asientosDT
-              if (window.AppAsientos && typeof window.AppAsientos.init === 'function') {
-                window.AppAsientos.init();
-              } else if (window.asientosDT && typeof window.asientosDT.init === 'function') {
-                // Fallback para compatibilidad legacy
-                window.asientosDT.init();
-              }
-            });
-          }
-        }, 300);
-      } else if (tabName === 'inventario') {
-        // ⚠️ v2.40: Los módulos se inicializan automáticamente con DOMUtils.onVisibleOnce
-        // Solo necesitamos ajustar DataTables cuando se muestre el tab principal
-        setTimeout(() => {
-          // ⚠️ v3.3: ajustarDataTablesInventario() eliminado - Migrado a Tabulator
-        }, 200);
-        
-        // Listener para tabs internos de inventario (Bootstrap 5 tabs) - Solo agregar una vez
-        // ⚠️ v2.40: IDs correctos son inventario-*-tab, no tab-*-tab
-        // ⚠️ v2.40: Todos los módulos (Categorías, Productos, Servicios, Activos, Movimientos) 
-        // usan TabulatorFactory y se inicializan automáticamente con DOMUtils.onVisibleOnce
-        if (!window._inventarioTabsInitialized) {
-          setTimeout(() => {
-            const categoriasTab = document.getElementById('inventario-categorias-tab');
-            const productosTab = document.getElementById('inventario-productos-tab');
-            const serviciosTab = document.getElementById('inventario-servicios-tab');
-            const activosTab = document.getElementById('inventario-activos-tab');
-            const movimientosTab = document.getElementById('inventario-movimientos-tab');
-            
-            // Función helper para redraw de Tabulator
-            const redrawTabulator = (moduleName) => {
-              setTimeout(() => {
-                const module = window[moduleName];
-                if (module && module.table && typeof module.table.redraw === 'function') {
-                  module.table.redraw();
-                }
-              }, 100);
-            };
-            
-            // Todos los módulos usan TabulatorFactory ahora
-            if (categoriasTab) {
-              categoriasTab.addEventListener('shown.bs.tab', () => redrawTabulator('categoriasPage'));
-            }
-            
-            if (productosTab) {
-              productosTab.addEventListener('shown.bs.tab', () => redrawTabulator('InventarioProductosModule'));
-            }
-            
-            if (serviciosTab) {
-              serviciosTab.addEventListener('shown.bs.tab', () => redrawTabulator('InventarioServiciosModule'));
-            }
-            
-            if (activosTab) {
-              activosTab.addEventListener('shown.bs.tab', () => redrawTabulator('InventarioActivosModule'));
-            }
-            
-            if (movimientosTab) {
-              movimientosTab.addEventListener('shown.bs.tab', () => redrawTabulator('InventarioMovimientosModule'));
-            }
-            
-            window._inventarioTabsInitialized = true;
-          }, 300);
-        }
-      } else if (tabName === 'clientes') {
-         // ⚠️ v2.61: Módulo de clientes usa Alpine.js con lazy loading
-         // El evento @shown.bs.tab en list.html se dispara automáticamente
-         // No necesitamos inicializar manualmente aquí
-         console.log('[workspace] Clientes tab mostrado - Alpine.js manejará la carga lazy');
-       } else {
-         // Mapeo de nombres de módulo a objetos DT para otros tabs
-         const dtModules = {
-           'facturas': window.facturasDT,
-           'contabilidad': window.contabilidadDT,
-           'empleados': window.empleadosDT,
-           'gastos': window.gastosDT,
-           'proveedores': window.ProveedoresModule,
-           'proyectos': window.ProyectosModule,
-           'perfil': window.perfilDT,
-         };
-         
-         const dtModule = dtModules[tabName];
-         if (dtModule && typeof dtModule.init === 'function') {
-           setTimeout(() => {
-             dtModule.init();
-           }, 100);
-         } else {
-           // Fallback: usar función genérica si existe
-           const initFunc = window[`init${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Page`];
-           if (typeof initFunc === 'function') {
-             setTimeout(initFunc, 100);
-           }
-         }
-       }
+      // ⚠️ v3.0: No hay lógica de inicialización de módulos aquí.
+      // Cada módulo debe ser responsable de auto-inicializarse mediante DOMUtils.onVisibleOnce()
     }
   }
   
