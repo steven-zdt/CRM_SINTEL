@@ -338,7 +338,7 @@
     async function editContacto(id) {
         if (!confirm('¿Desea editar este contacto?')) return;
 
-        const url = `/api/v1/clientes/contactos/gestor-offcanvas/`;
+        const url = `/api/v1/clientes/contactos/gestor-offcanvas/?id=${id}`;
         try {
             await htmx.ajax('GET', url, {
                 target: '#offcanvas-container-contactos',
@@ -475,7 +475,7 @@
      * Bootstrap tab change events
      */
     d.addEventListener('shown.bs.tab', (e) => {
-        const tabId = e.detail?.relatedTarget?.id;
+        const tabId = e.target.id;
         if (tabId === 'tab-clientes') {
             log.info('Bootstrap tab shown: clientes');
             loadClientesTable();
