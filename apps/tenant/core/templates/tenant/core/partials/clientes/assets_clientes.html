@@ -1,17 +1,16 @@
 {% load static %}
-{# Assets del módulo Clientes v2.60 - Feature-Sliced Architecture #}
-{# ⚠️ v2.60: Aislamiento Gradual - API Wrapper + Error Boundary Pattern #}
-{# ⚠️ v2.60: The Purge - Código monolítico eliminado, solo features modulares #}
+{# Assets del módulo Clientes v2.61 - Clean Code (Zero JS in HTML) #}
+{# ⚠️ v2.61: Refactorización completa con separación de concerns #}
+{# ⚠️ v2.61: HTML puro (list.html) + Lógica en JS (clientes.list.js) #}
 {# ⚠️ CRÍTICO: Cargar Factory ANTES del módulo específico #}
 {# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
 {# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http(), UIManager, etc.) - ya cargado en workspace.html #}
-{# 2. clientes.api.js (define window.clientesAPI) - REQUERIDO por features #}
-{# 3. features/clientes_list.js (Listado y Tabulator de Clientes) #}
-{# 4. features/contactos_list.js (Listado y Tabulator de Contactos) #}
-{# 5. features/cliente_crear.js (Crear Cliente - Feature-Sliced v2.61) #}
-{# 6. features/cliente_editar.js (Editar Cliente - Feature-Sliced v2.61) #}
-{# 7. features/cliente_detalle.js (Ver Detalle - Read-Only) #}
-{# 8. features/contactos_editor.js (Editor de Contactos con HTMX + Offcanvas) #}
+{# 2. clientes.api.js (define window.clientesAPI) - REQUERIDO por clientes.list.js #}
+{# 3. contactos.api.js (define window contactosAPI) - REQUERIDO por clientes.list.js #}
+{# 4. clientes.list.js (módulo principal - 11 event listeners centralizados) #}
+{# 5. clientes.editor.js (Editor de Clientes con HTMX + Offcanvas) #}
+{# 6. clientes.detalle.js (Ver Detalle de Cliente - Read-Only) #}
+{# 7. clientes.contactos.js (Editor de Contactos con HTMX + Offcanvas) #}
 
 {# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'core/js/clientes/clientes.api.js' %}"></script>
@@ -24,30 +23,50 @@
 <script src="{% static 'core/js/clientes/clientes.contactos.js' %}"></script>
 
 {# BLOQUE 3: Orquestación HTMX - Sincronización de tablas tras operaciones #}
+{# ⚠️ v2.61: Sincronización automática de tablas tras operaciones HTMX #}
+{# Los eventos personalizados (clienteGuardado, clienteEliminado, etc.) son #}
+{# escuchados directamente en clientes.list.js mediante event listeners #}
+{# Este bloque proporciona una capa adicional para compatibilidad legacy #}
 <script>
 (function(w, d) {
     'use strict';
     
-    // ⚠️ v2.60: Sincronización automática de tablas tras operaciones HTMX
+    // ⚠️ v2.61: Verificar que clientes.list.js haya cargado correctamente
+    if (!w.ClientesListModule) {
+        console.warn('[clientes.assets] ClientesListModule no está disponible aún');
+        return;
+    }
+    
+    console.log('[clientes.assets] Módulo ClientesListModule disponible', w.ClientesListModule);
+    
+    // ⚠️ v2.61: Agregar método refresh() si no existe (compatibilidad con legacy code)
+    if (!w.ClientesListModule.refresh) {
+        w.ClientesListModule.refresh = function() {
+            console.log('[clientes.assets] refresh() called on ClientesListModule');
+            if (w.ClientesListModule.state.clientesLoaded) {
+                w.ClientesListModule.reloadTable('clientes');
+            }
+        };
+    }
+    
+    // ⚠️ v2.61: Sincronización automática de tablas tras operaciones HTMX
     d.body.addEventListener('htmx:afterSwap', function(event) {
-        // Verificar si el swap fue de un offcanvas de clientes o contactos
         const target = event.detail.target;
         
         if (target && target.id === 'offcanvas-container-clientes') {
-            // Offcanvas de clientes cargado - no hacer nada, se maneja por eventos personalizados
+            // Offcanvas de clientes cargado - se maneja por eventos personalizados
             console.log('[clientes.assets] Offcanvas de clientes cargado');
         } else if (target && target.id === 'offcanvas-container-contactos') {
             // Offcanvas de contactos cargado - disparar evento para inicializar el editor
             console.log('[clientes.assets] Offcanvas de contactos cargado');
             
-            // ⚠️ v2.60: Obtener cliente_id del offcanvas si está disponible
+            // Obtener cliente_id del offcanvas si está disponible
             const offcanvasEl = d.getElementById('offcanvas-contactos');
             if (offcanvasEl) {
                 const clienteIdInput = offcanvasEl.querySelector('#contacto-cliente-id');
                 const clienteId = clienteIdInput ? parseInt(clienteIdInput.value, 10) : null;
                 
-                // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
-                // Esto es más eficiente y no bloquea el hilo principal
+                // Usar requestAnimationFrame para esperar renderizado (más eficiente que setTimeout)
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                         d.dispatchEvent(new CustomEvent('initContactosEditor', { 
@@ -58,31 +77,6 @@
                     });
                 });
             }
-        }
-    });
-    
-    // ⚠️ v2.60: Escuchar eventos personalizados para refrescar tablas
-    d.addEventListener('clienteGuardado', function() {
-        if (w.ClientesListModule && typeof w.ClientesListModule.refresh === 'function') {
-            w.ClientesListModule.refresh();
-        }
-    });
-    
-    d.addEventListener('contactoGuardado', function() {
-        if (w.ContactosListModule && typeof w.ContactosListModule.refresh === 'function') {
-            w.ContactosListModule.refresh();
-        }
-    });
-    
-    d.addEventListener('contactoEliminado', function() {
-        if (w.ContactosListModule && typeof w.ContactosListModule.refresh === 'function') {
-            w.ContactosListModule.refresh();
-        }
-    });
-    
-    d.addEventListener('clienteEliminado', function() {
-        if (w.ClientesListModule && typeof w.ClientesListModule.refresh === 'function') {
-            w.ClientesListModule.refresh();
         }
     });
     
