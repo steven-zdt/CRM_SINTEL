@@ -275,16 +275,33 @@
     }
 
     /**
-     * Edit cliente
+     * Edit cliente - Load form and show offcanvas
      */
     async function editCliente(id) {
         const url = `/api/v1/clientes/${id}/render-offcanvas/editar/`;
         try {
+            log.info(`Loading edit form for cliente ${id}`);
+            
+            // Make HTMX request to load offcanvas HTML
             await htmx.ajax('GET', url, {
                 target: '#offcanvas-container-clientes',
-                swap: 'innerHTML'
+                swap: 'innerHTML',
+                // Wait for HTMX to complete the swap
+                onComplete: () => {
+                    log.info(`Offcanvas HTML loaded for cliente ${id}`);
+                    // Now show the offcanvas
+                    setTimeout(() => {
+                        const offcanvasEl = d.getElementById('offcanvas-cliente');
+                        if (offcanvasEl) {
+                            const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                            offcanvasInstance.show();
+                            log.info(`Offcanvas shown for cliente ${id}`);
+                        } else {
+                            log.error('Offcanvas element #offcanvas-cliente not found');
+                        }
+                    }, 100);
+                }
             });
-            log.info(`Loaded edit form for cliente ${id}`);
         } catch (error) {
             log.error(`Error loading edit form for cliente ${id}`, error);
             showError('Error al cargar el formulario');
@@ -292,16 +309,33 @@
     }
 
     /**
-     * View cliente details
+     * View cliente details - Load form and show offcanvas
      */
     async function viewCliente(id) {
         const url = `/api/v1/clientes/render-offcanvas/detalle/?id=${id}`;
         try {
+            log.info(`Loading detail view for cliente ${id}`);
+            
+            // Make HTMX request to load offcanvas HTML
             await htmx.ajax('GET', url, {
                 target: '#offcanvas-container-clientes',
-                swap: 'innerHTML'
+                swap: 'innerHTML',
+                // Wait for HTMX to complete the swap
+                onComplete: () => {
+                    log.info(`Offcanvas HTML loaded for cliente ${id}`);
+                    // Now show the offcanvas
+                    setTimeout(() => {
+                        const offcanvasEl = d.getElementById('offcanvas-cliente');
+                        if (offcanvasEl) {
+                            const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                            offcanvasInstance.show();
+                            log.info(`Offcanvas shown for cliente ${id}`);
+                        } else {
+                            log.error('Offcanvas element #offcanvas-cliente not found');
+                        }
+                    }, 100);
+                }
             });
-            log.info(`Loaded detail view for cliente ${id}`);
         } catch (error) {
             log.error(`Error loading detail view for cliente ${id}`, error);
             showError('Error al cargar detalles');
