@@ -4,14 +4,12 @@
 {# ⚠️ v2.60: API-First Architecture - Backend DRF + Frontend Tabulator #}
 {# ⚠️ Feature-Sliced: Módulos dedicados por funcionalidad #}
 {# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
-{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, etc.) - ya cargado en workspace.html #}
-{# 2. cotizaciones.api.js (define window.cotizacionesAPI) - DEBE cargarse PRIMERO #}
-{# 3. cotizaciones.helpers.js (define window.CotizacionesHelpers) - Funciones utilitarias #}
-{# 4. cotizaciones.page.js (depende de CotizacionesHelpers y TabulatorFactory) - Workspace principal #}
-{# 5. cotizacion_columns.js (define window.getCotizacionColumns) - DEBE cargarse ANTES del Editor #}
-{# 6. cotizacion_editor.js (depende de getCotizacionColumns) - Editor de cotizaciones #}
-
-{% include 'tenant/core/partials/assets_core.html' %}
+{# ⚠️ IMPORTANTE: assets_core.html YA se carga en workspace.html - NO duplicar aquí #}
+{# 1. cotizaciones.api.js (define window.cotizacionesAPI) - DEBE cargarse PRIMERO #}
+{# 2. cotizaciones.helpers.js (define window.CotizacionesHelpers) - Funciones utilitarias #}
+{# 3. cotizaciones.page.js (depende de CotizacionesHelpers y TabulatorFactory) - Workspace principal #}
+{# 4. cotizacion_columns.js (define window.getCotizacionColumns) - DEBE cargarse ANTES del Editor #}
+{# 5. cotizacion_editor.js (depende de getCotizacionColumns) - Editor de cotizaciones #}
 
 {# ⚠️ v2.61: HTMX ya está cargado en workspace.html, no es necesario cargarlo aquí #}
 {# ⚠️ v2.61: Eliminado para evitar conflictos y doble carga #}

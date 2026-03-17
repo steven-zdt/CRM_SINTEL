@@ -1,7 +1,6 @@
 {% load static %}
 {# ⚠️ v2.61: Assets del módulo Contabilidad Asientos - Feature-Sliced Architecture #}
-{# BLOQUE 1: Helpers Core (DEBEN ir primero) #}
-{% include 'tenant/core/partials/assets_core.html' %}
+{# ⚠️ IMPORTANTE: assets_core.html YA se carga en workspace.html - NO duplicar aquí #}
 
 {# BLOQUE 2: Archivos del módulo Contabilidad Asientos #}
 {# ⚠️ v2.61: Migración a Tabulator Factory v2.40 - Orden de carga crítico #}
