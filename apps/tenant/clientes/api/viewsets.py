@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.renderers import TemplateHTMLRenderer
 from django_filters.rest_framework import DjangoFilterBackend
+from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.clientes.models import Cliente, ContactoCliente
 from apps.tenant.clientes.services import qs_list, qs_detail, crear_cliente, actualizar_cliente
@@ -338,7 +339,7 @@ class ClienteViewSet(
         return Response(context, template_name='tenant/core/partials/clientes/offcanvas_detalle_cliente.html')
 
 
-class ContactoClienteViewSet(viewsets.ModelViewSet):
+class ContactoClienteViewSet(BaseTenantViewSet):
     """
     ⚠️ v2.60: ViewSet para Contactos de Cliente con Zero Trust estricto.
     
@@ -359,6 +360,9 @@ class ContactoClienteViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre_completo', 'email', 'telefono', 'cargo', 'cliente__razon_social']
+    
+    # ⚠️ v2.61: Restringir métodos HTTP según requerimiento
+    http_method_names = ['get', 'post', 'patch', 'delete']
     
     def list(self, request, *args, **kwargs):
         """

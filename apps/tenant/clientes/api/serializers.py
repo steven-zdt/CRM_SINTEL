@@ -1,6 +1,16 @@
 from rest_framework import serializers
 from apps.tenant.clientes.models import Cliente, ContactoCliente
 
+class NormalizationMixin:
+    """
+    Mixin para normalización de datos de entrada (Zero Trust).
+    """
+    def normalize_data(self, attrs):
+        for key, value in attrs.items():
+            if isinstance(value, str):
+                attrs[key] = value.strip()
+        return attrs
+
 class ClienteListSerializer(serializers.ModelSerializer):
     """
     ⚠️ v2.40: Serializer optimizado para listas (Tabulator).
@@ -28,56 +38,22 @@ class ClienteListSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tipo_documento_display', 'tipo_persona_display', 'regimen_tributario_display']
 
 
-class ContactoClienteSerializer(serializers.ModelSerializer):
+class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     ⚠️ v2.60: Serializer para Contactos de Cliente (CRUD independiente).
     ⚠️ v2.61: Campo id explícito y forzado para preservarlo en actualizaciones anidadas.
+    ⚠️ v2.61: Integración con NormalizationMixin para Zero Trust.
     """
     # CRÍTICO: required=False y allow_null=True obliga a DRF a retener el ID en validated_data
     id = serializers.IntegerField(required=False, allow_null=True) 
     cliente_nombre = serializers.SerializerMethodField()
     cliente_documento = serializers.SerializerMethodField()
-    
-    def get_cliente_nombre(self, obj):
-        try:
-            if not obj: return None
-            cliente = getattr(obj, 'cliente', None)
-            if cliente:
-                razon_social = getattr(cliente, 'razon_social', None)
-                return razon_social if razon_social else None
-        except Exception as e:
-            pass
-        return None
-    
-    def get_cliente_documento(self, obj):
-        try:
-            if not obj: return None
-            cliente = getattr(obj, 'cliente', None)
-            if cliente:
-                numero_documento = getattr(cliente, 'numero_documento', None)
-                return numero_documento if numero_documento else None
-        except Exception as e:
-            pass
-        return None
-    
-    class Meta:
-        model = ContactoCliente
-        fields = [
-            'id',
-            'cliente',
-            'cliente_nombre',
-            'cliente_documento',
-            'nombre_completo',
-            'cargo',
-            'email',
-            'telefono',
-            'activo',
-            'is_principal'
-        ]
-        read_only_fields = ['cliente_nombre', 'cliente_documento', 'cliente']
-    
+
     def validate(self, attrs):
         """Validar unique_together (cliente + email) solo si es operación unitaria."""
+        # Aplicar normalización (Zero Trust)
+        attrs = self.normalize_data(attrs)
+        
         email = attrs.get('email')
         cliente = attrs.get('cliente')
         
@@ -97,10 +73,11 @@ class ContactoClienteSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class ClienteDetailSerializer(serializers.ModelSerializer):
+class ClienteDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     ⚠️ v2.60: Serializer completo para detalle/edición de Clientes.
     Soporta creación/actualización sincrónica de contactos asociados.
+    ⚠️ v2.61: Integración con NormalizationMixin para Zero Trust.
     """
     contactos = ContactoClienteSerializer(many=True, required=False)
     
@@ -123,6 +100,11 @@ class ClienteDetailSerializer(serializers.ModelSerializer):
             'contactos'
         ]
         read_only_fields = ['id']
+    
+    def validate(self, attrs):
+        """Normalizar datos (Zero Trust)."""
+        attrs = self.normalize_data(attrs)
+        return attrs
     
     def to_representation(self, instance):
         representation = super().to_representation(instance)
