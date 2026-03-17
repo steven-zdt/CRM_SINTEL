@@ -193,9 +193,27 @@
     /**
      * Inicializar formulario de contactos
      */
-    function initFormulario() {
+    async function initFormulario() {
         const offcanvasEl = d.querySelector('#offcanvas-contactos');
         if (!offcanvasEl) return;
+        
+        // ⚠️ Poblar select si es creación global
+        const selectContainer = d.querySelector('#contacto-cliente-select-container');
+        if (selectContainer && selectContainer.style.display !== 'none') {
+            const selectEl = d.querySelector('#contacto-cliente-select');
+            if (selectEl) {
+                try {
+                    const response = await w.clientesAPI.list({ page_size: 1000 });
+                    if (response.ok) {
+                        const clientes = response.data.results || response.data;
+                        selectEl.innerHTML = '<option value="">Seleccione un cliente...</option>' + 
+                            clientes.map(c => `<option value="${c.id}">${c.razon_social}</option>`).join('');
+                    }
+                } catch (e) {
+                    console.error('[clientes.contactos] Error cargando lista de clientes', e);
+                }
+            }
+        }
 
         // Botón guardar
         const btnGuardar = d.querySelector('#btn-guardar-contacto');

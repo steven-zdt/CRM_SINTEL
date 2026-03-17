@@ -102,10 +102,6 @@
                   hx-get="/api/v1/clientes/contactos/gestor-offcanvas/" 
                   hx-target="#offcanvas-container-contactos" 
                   hx-swap="innerHTML"
-                  hx-on::after-request="if(event.detail.successful){ 
-                    const el = document.getElementById('offcanvas-contactos'); 
-                    if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); 
-                  }"
                   data-module="contactos"
                   data-create-button>
             <i class="bi bi-person-plus me-1"></i>Nuevo Contacto
