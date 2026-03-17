@@ -12,88 +12,46 @@
 (function(w) {
   'use strict';
   
-  // Asegurar que http() esté disponible
   if (typeof w.http !== 'function') {
-    console.error('[clientes.api] http() no está disponible. Cargar lib/api.js primero.');
+    console.error('[clientes.api] http() no está disponible.');
     return;
   }
   
-  const API_BASE = '/api/v1/clientes';
+  const CLIENTES_BASE = '/api/v1/clientes';
+  const CONTACTOS_BASE = '/api/v1/clientes/contactos';
 
-  w.clientesAPI = {
-    /**
-     * Obtiene lista de clientes (paginada, con búsqueda)
-     * @param {Object} params - Parámetros de consulta (page, page_size, search)
-     * @returns {Promise<{ok: boolean, status: number, data: any}>}
-     */
-    list: (params = {}) => {
-      const query = new URLSearchParams(params).toString();
-      const url = query ? `${API_BASE}/?${query}` : `${API_BASE}/`;
-      return w.http('GET', url);
-    },
-    
-    /**
-     * Obtiene detalle completo de un cliente
-     * @param {number|string} id - ID del cliente
-     * @returns {Promise<{ok: boolean, status: number, data: any}>}
-     */
-    get: (id) => w.http('GET', `${API_BASE}/${id}/`),
-    
-    /**
-     * Crea un nuevo cliente
-     * @param {Object} payload - Datos del cliente
-     * @returns {Promise<{ok: boolean, status: number, data: any}>}
-     */
-    create: (payload) => w.http('POST', `${API_BASE}/`, payload),
-    
-    /**
-     * Actualiza un cliente existente
-     * @param {number|string} id - ID del cliente
-     * @param {Object} payload - Datos a actualizar
-     * @returns {Promise<{ok: boolean, status: number, data: any}>}
-     */
-    update: (id, payload) => w.http('PATCH', `${API_BASE}/${id}/`, payload),
-    
-    /**
-     * Elimina un cliente
-     * @param {number|string} id - ID del cliente
-     * @returns {Promise<{ok: boolean, status: number, data: any}>}
-     */
-    delete: (id) => w.http('DELETE', `${API_BASE}/${id}/`)
-  };
+  // ⚠️ Inmutable APIs
+  if (!w.clientesAPI) {
+    w.clientesAPI = Object.freeze({
+      list: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        const url = query ? `${CLIENTES_BASE}/?${query}` : `${CLIENTES_BASE}/`;
+        return w.http('GET', url);
+      },
+      get: (id) => w.http('GET', `${CLIENTES_BASE}/${id}/`),
+      create: (payload) => w.http('POST', `${CLIENTES_BASE}/`, payload),
+      update: (id, payload) => w.http('PATCH', `${CLIENTES_BASE}/${id}/`, payload),
+      delete: (id) => w.http('DELETE', `${CLIENTES_BASE}/${id}/`)
+    });
+  }
 
-  const CONTACTOS_API = '/api/v1/clientes/contactos';
-
-  /**
-   * ⚠️ v2.61: Integración Maestro-Detalle - Directorio de Contactos
-   */
-  w.contactosAPI = {
-    /**
-     * Lista contactos de un cliente
-     * @param {number|string} clienteId - ID del cliente
-     */
-    listByCliente: (clienteId) => w.http('GET', `${CONTACTOS_API}/?cliente=${clienteId}`),
-
-    /**
-     * Obtiene detalle de un contacto
-     */
-    get: (id) => w.http('GET', `${CONTACTOS_API}/${id}/`),
-
-    /**
-     * Crea un contacto
-     */
-    create: (payload) => w.http('POST', `${CONTACTOS_API}/`, payload),
-
-    /**
-     * Actualiza un contacto
-     */
-    update: (id, payload) => w.http('PATCH', `${CONTACTOS_API}/${id}/`, payload),
-
-    /**
-     * Elimina un contacto
-     */
-    delete: (id) => w.http('DELETE', `${CONTACTOS_API}/${id}/`)
-  };
+  if (!w.contactosAPI) {
+    w.contactosAPI = Object.freeze({
+      // Listado global
+      list: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        const url = query ? `${CONTACTOS_BASE}/?${query}` : `${CONTACTOS_BASE}/`;
+        return w.http('GET', url);
+      },
+      // Listado por cliente
+      listByCliente: (clienteId) => w.http('GET', `${CONTACTOS_BASE}/?cliente=${clienteId}`),
+      
+      get: (id) => w.http('GET', `${CONTACTOS_BASE}/${id}/`),
+      create: (payload) => w.http('POST', `${CONTACTOS_BASE}/`, payload),
+      update: (id, payload) => w.http('PATCH', `${CONTACTOS_BASE}/${id}/`, payload),
+      delete: (id) => w.http('DELETE', `${CONTACTOS_BASE}/${id}/`)
+    });
+  }
   
-  console.log('[clientes.api] ✅ Módulo clientesAPI y contactosAPI inicializados');
+  console.log('[clientes.api] ✅ clientesAPI y contactosAPI inmutables inicializados');
 })(window);

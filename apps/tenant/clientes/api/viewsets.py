@@ -62,8 +62,10 @@ class ClienteViewSet(
         if not empresa:
             return Cliente.objects.none()
         
-        # ⚠️ PERFORMANCE BIBLE: Usar .only() con campos necesarios para el template
-        return Cliente.objects.filter(empresa_id=empresa.id).only(
+        # ⚠️ PERFORMANCE BIBLE: Usar .only() con campos necesarios y prefetch_related para contactos
+        return Cliente.objects.filter(empresa_id=empresa.id).prefetch_related(
+            models.Prefetch('contactos', queryset=ContactoCliente.objects.all().order_by('-is_principal', 'nombre_completo'), to_attr='contactos_prefetched')
+        ).only(
             'id',
             'tipo_persona',
             'tipo_documento',
@@ -81,11 +83,10 @@ class ClienteViewSet(
 
     def get_empresa(self):
         """
-        ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
+        ⚠️ v2.60: Zero Trust - Obtiene la empresa del usuario.
         """
-        empresa = Empresa.objects.only('id').first()
-        # ⚠️ v2.61.5: Si no existe, no lanzar excepción. Retornar None.
-        return empresa
+        return self.request.user.empresa if hasattr(self.request.user, 'empresa') else None
+
 
     def list(self, request):
         """
@@ -342,19 +343,10 @@ class ClienteViewSet(
 class ContactoClienteViewSet(BaseTenantViewSet):
     """
     ⚠️ v2.60: ViewSet para Contactos de Cliente con Zero Trust estricto.
-    
-    Endpoints:
-    - GET /api/v1/clientes/contactos/ - Lista de contactos (filtrado por cliente, búsqueda global)
-    - GET /api/v1/clientes/contactos/{id}/ - Detalle de contacto
-    - POST /api/v1/clientes/contactos/ - Crear contacto
-    - PATCH /api/v1/clientes/contactos/{id}/ - Actualizar contacto
-    - DELETE /api/v1/clientes/contactos/{id}/ - Eliminar contacto
-    - GET /api/v1/clientes/contactos/gestor-offcanvas/ - Renderizar HTML del gestor (HTMX)
-    
-    ⚠️ v2.60: Grid global (Directorio de Contactos) con búsqueda y filtrado.
     """
-    # ⚠️ CRÍTICO: DRF necesita un queryset definido como atributo de clase para generar las rutas del router
-    # Usamos .none() como base porque el filtrado real se hace en get_queryset()
+    lookup_field = 'id'
+    lookup_url_kwarg = 'id'
+    
     queryset = ContactoCliente.objects.none()
     serializer_class = ContactoClienteSerializer
     pagination_class = StandardResultsSetPagination
@@ -366,121 +358,44 @@ class ContactoClienteViewSet(BaseTenantViewSet):
     
     def list(self, request, *args, **kwargs):
         """
-        ⚠️ v2.60: Override list para agregar manejo de errores robusto y logging detallado.
+        Lista paginada de contactos.
         """
-        import logging
-        logger = logging.getLogger(__name__)
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         
-        try:
-            # ⚠️ DEBUG: Log del queryset antes de la paginación
-            queryset = self.filter_queryset(self.get_queryset())
-            logger.info(f'[ContactoClienteViewSet.list] Queryset count: {queryset.count()}')
-            
-            # Paginación DRF estándar
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True)
-                logger.info(f'[ContactoClienteViewSet.list] Página serializada: {len(serializer.data)} registros')
-                return self.get_paginated_response(serializer.data)
-            
-            # Sin paginación
-            serializer = self.get_serializer(queryset, many=True)
-            logger.info(f'[ContactoClienteViewSet.list] Sin paginación: {len(serializer.data)} registros')
-            return Response(serializer.data)
-            
-        except Exception as e:
-            logger.error(f'[ContactoClienteViewSet.list] Error: {str(e)}', exc_info=True)
-            from rest_framework.response import Response
-            from rest_framework import status
-            return Response(
-                {'detail': f'Error al listar contactos: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     def get_queryset(self):
         """
         ⚠️ Zero Trust: Retorna queryset filtrado por empresa del tenant (SSoT).
-        Solo contactos de clientes que pertenecen a la empresa del tenant actual.
-        
-        ⚠️ PERFORMANCE BIBLE: Usar select_related para optimizar acceso a campos relacionados.
-        ⚠️ v2.60: Soporta filtrado por cliente mediante query param 'cliente'.
-        ⚠️ v2.60: Grid global - Mantiene Zero Trust pero permite búsqueda y filtrado global.
-        ⚠️ CRÍTICO: select_related('cliente') trae el objeto Cliente completo para acceso a razon_social y numero_documento.
         """
-        try:
-            empresa = self.get_empresa()
-            if not empresa:
-                # Si no hay empresa, retornar queryset vacío
-                return ContactoCliente.objects.none()
-            
-            # ⚠️ CRÍTICO: Filtrar por cliente__empresa para Zero Trust
-            # ⚠️ v2.60: Usar select_related para traer Cliente en una sola query (necesario para cliente_nombre y cliente_documento en el serializer)
-            # ⚠️ IMPORTANTE: select_related debe ir después del filter para evitar problemas con relaciones
-            # ⚠️ PERFORMANCE BIBLE: Usar .only() para especificar campos necesarios del ContactoCliente
-            # ⚠️ CRÍTICO: No usar .only() cuando se necesita acceder a campos del modelo relacionado con select_related
-            # select_related('cliente') carga el objeto Cliente completo, pero .only() puede interferir
-            # Solución: Cargar todos los campos del ContactoCliente (es un modelo pequeño) y usar select_related para Cliente
-            queryset = ContactoCliente.objects.filter(
-                cliente__empresa_id=empresa.id
-            ).select_related('cliente')
-            # ⚠️ NOTA: No usar .only() aquí porque necesitamos acceso completo a los campos del Cliente relacionado
-            # El modelo ContactoCliente es pequeño, así que cargar todos los campos no es un problema de performance
-            
-            # ⚠️ DEBUG: Verificar que el queryset es válido y que los campos del Cliente están disponibles
-            # Esto ayuda a detectar problemas antes de la serialización
-            try:
-                # Hacer una consulta de prueba para verificar que no hay errores
-                test_exists = queryset.exists()
-                # Verificar que select_related está funcionando correctamente
-                if test_exists:
-                    test_obj = queryset.first()
-                    if test_obj and hasattr(test_obj, 'cliente'):
-                        # Verificar que los campos necesarios están disponibles
-                        if not hasattr(test_obj.cliente, 'razon_social'):
-                            import logging
-                            logger = logging.getLogger(__name__)
-                            logger.warning(f'[ContactoClienteViewSet.get_queryset] Cliente no tiene razon_social, puede causar error en serializer')
-                        if not hasattr(test_obj.cliente, 'numero_documento'):
-                            import logging
-                            logger = logging.getLogger(__name__)
-                            logger.warning(f'[ContactoClienteViewSet.get_queryset] Cliente no tiene numero_documento, puede causar error en serializer')
-            except Exception as qs_error:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f'[ContactoClienteViewSet.get_queryset] Error en queryset: {str(qs_error)}', exc_info=True)
-                return ContactoCliente.objects.none()
-            
-            # ⚠️ v2.60: Filtrar por cliente específico si se proporciona en query params
-            cliente_id = self.request.query_params.get('cliente')
-            if cliente_id:
-                try:
-                    cliente_id = int(cliente_id)
-                    # ⚠️ Zero Trust: Validar que el cliente pertenezca al tenant
-                    cliente = Cliente.objects.filter(id=cliente_id, empresa_id=empresa.id).only('id').first()
-                    if cliente:
-                        queryset = queryset.filter(cliente_id=cliente_id)
-                    else:
-                        # Si el cliente no existe o no pertenece al tenant, retornar queryset vacío
-                        queryset = queryset.none()
-                except (ValueError, TypeError):
-                    # Si cliente_id no es un entero válido, retornar queryset vacío
-                    queryset = queryset.none()
-            
-            return queryset
-        except Exception as e:
-            # ⚠️ Error Boundary: Capturar cualquier error y retornar queryset vacío
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f'[ContactoClienteViewSet.get_queryset] Error: {str(e)}', exc_info=True)
+        empresa = self.get_empresa()
+        if not empresa:
             return ContactoCliente.objects.none()
+            
+        queryset = ContactoCliente.objects.filter(
+            cliente__empresa_id=empresa.id
+        ).select_related('cliente')
+        
+        # Filtrado por cliente
+        cliente_id = self.request.query_params.get('cliente')
+        if cliente_id:
+            try:
+                queryset = queryset.filter(cliente_id=int(cliente_id))
+            except ValueError:
+                queryset = queryset.none()
+        
+        return queryset
     
     def get_empresa(self):
         """
-        ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
+        ⚠️ v2.60: Zero Trust - Obtiene la empresa del usuario.
         """
-        empresa = Empresa.objects.only('id').first()
-        # ⚠️ v2.61.5: Si no existe, no lanzar excepción. Retornar None.
-        return empresa
+        return self.request.user.empresa if hasattr(self.request.user, 'empresa') else None
     
     def perform_create(self, serializer):
         """
@@ -492,7 +407,6 @@ class ContactoClienteViewSet(BaseTenantViewSet):
         
         if cliente_id:
             empresa = self.get_empresa()
-            # ⚠️ Zero Trust: Verificar que el cliente pertenezca al tenant
             cliente = Cliente.objects.filter(id=cliente_id, empresa_id=empresa.id).only('id').first()
             if not cliente:
                 from rest_framework.exceptions import ValidationError
@@ -508,7 +422,6 @@ class ContactoClienteViewSet(BaseTenantViewSet):
         """
         contacto = self.get_object()  # Ya está filtrado por get_queryset()
         
-        # Si se intenta cambiar el cliente, validar Zero Trust
         nuevo_cliente_id = serializer.validated_data.get('cliente_id') or (
             serializer.validated_data.get('cliente').id if serializer.validated_data.get('cliente') else None
         )
@@ -527,13 +440,7 @@ class ContactoClienteViewSet(BaseTenantViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):
         """
-        ⚠️ v2.60: Devuelve el HTML del gestor de contactos para un cliente (vía HTMX).
-        
-        Query params:
-        - cliente_id: ID del cliente (opcional - si no se proporciona, se crea contacto sin cliente específico)
-        
-        Returns:
-            Template HTML renderizado con contexto del cliente y sus contactos
+        ⚠️ v2.60: Devuelve el HTML del gestor de contactos (vía HTMX).
         """
         empresa = self.get_empresa()
         cliente = None
@@ -541,20 +448,16 @@ class ContactoClienteViewSet(BaseTenantViewSet):
         
         cliente_id = request.query_params.get('cliente_id')
         if cliente_id:
-            # ⚠️ Zero Trust: Validar que el cliente pertenezca al tenant
             from django.shortcuts import get_object_or_404
             cliente = get_object_or_404(
                 Cliente.objects.filter(empresa_id=empresa.id).only('id', 'razon_social'),
                 id=cliente_id
             )
             
-            # ⚠️ PERFORMANCE BIBLE: Cargar contactos con .only()
             contactos = ContactoCliente.objects.filter(cliente=cliente).only(
                 'id', 'nombre_completo', 'cargo', 'email', 'telefono', 'activo', 'is_principal'
             ).order_by('-is_principal', 'nombre_completo')
         else:
-            # ⚠️ v2.60: Modo creación global - crear un cliente temporal para el contexto
-            # El formulario permitirá seleccionar el cliente
             cliente = Cliente(
                 id=None,
                 razon_social='Seleccionar Cliente',

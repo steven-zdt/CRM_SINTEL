@@ -5,16 +5,14 @@
 {# ⚠️ CRÍTICO: Cargar Factory ANTES del módulo específico #}
 {# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
 {# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http(), UIManager, etc.) - ya cargado en workspace.html #}
-{# 2. clientes.api.js (define window.clientesAPI) - REQUERIDO por clientes.list.js #}
-{# 3. contactos.api.js (define window contactosAPI) - REQUERIDO por clientes.list.js #}
-{# 4. clientes.list.js (módulo principal - 11 event listeners centralizados) #}
+{# 2. clientes.api.js (define window.clientesAPI y window.contactosAPI) - REQUERIDO por clientes.list.js #}
+{# 3. clientes.list.js (módulo principal - 11 event listeners centralizados) #}
 {# 5. clientes.editor.js (Editor de Clientes con HTMX + Offcanvas) #}
 {# 6. clientes.detalle.js (Ver Detalle de Cliente - Read-Only) #}
 {# 7. clientes.contactos.js (Editor de Contactos con HTMX + Offcanvas) #}
 
 {# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'core/js/clientes/clientes.api.js' %}"></script>
-<script src="{% static 'core/js/clientes/contactos.api.js' %}"></script>
 
 {# BLOQUE 2: Features - Módulos Refactorizados #}
 <script src="{% static 'core/js/clientes/clientes.list.js' %}"></script>

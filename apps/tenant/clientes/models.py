@@ -9,7 +9,6 @@ class Cliente(models.Model):
     TIPO_PERSONA = [("NATURAL", "Persona natural"), ("JURIDICA", "Persona jurídica")]
     TIPO_DOCUMENTO = [("CC", "Cédula de ciudadanía"), ("CE", "Cédula de extranjería"), ("NIT", "NIT"), ("PA", "Pasaporte")]
     REGIMEN = [("SIMPLE", "Régimen Simple"), ("ORDINARIO", "Régimen Ordinario"), ("NO_RESP", "No responsable de IVA")]
-    SEGMENTO = [("B2B", "B2B"), ("B2C", "B2C"), ("MIXTO", "Mixto")]
 
     # Identificación
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='clientes', help_text='SSoT')

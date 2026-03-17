@@ -46,8 +46,16 @@ class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer)
     """
     # CRÍTICO: required=False y allow_null=True obliga a DRF a retener el ID en validated_data
     id = serializers.IntegerField(required=False, allow_null=True) 
-    cliente_nombre = serializers.SerializerMethodField()
-    cliente_documento = serializers.SerializerMethodField()
+    
+    def get_cliente_nombre(self, obj):
+        return obj.cliente.razon_social if obj.cliente else None
+
+    def get_cliente_documento(self, obj):
+        return obj.cliente.numero_documento if obj.cliente else None
+
+    class Meta:
+        model = ContactoCliente
+        fields = ['id', 'cliente', 'nombre_completo', 'cargo', 'email', 'telefono', 'activo', 'is_principal', 'cliente_nombre', 'cliente_documento']
 
     def validate(self, attrs):
         """Validar unique_together (cliente + email) solo si es operación unitaria."""
@@ -108,8 +116,12 @@ class ClienteDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        contactos = ContactoCliente.objects.filter(cliente=instance).only(
-            'id', 'nombre_completo', 'cargo', 'email', 'telefono', 'activo', 'is_principal'
-        ).order_by('-is_principal', 'nombre_completo')
-        representation['contactos'] = ContactoClienteSerializer(contactos, many=True).data
+        # La lógica de carga de contactos se movió al ViewSet (prefetch_related)
+        if hasattr(instance, 'contactos_prefetched'):
+            contactos = instance.contactos_prefetched
+            representation['contactos'] = ContactoClienteSerializer(contactos, many=True).data
+        else:
+            # Fallback en caso de que no se haya precargado
+            contactos = instance.contactos.all().order_by('-is_principal', 'nombre_completo')
+            representation['contactos'] = ContactoClienteSerializer(contactos, many=True).data
         return representation
