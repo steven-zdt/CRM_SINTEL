@@ -95,38 +95,36 @@
       <section id="tab-clientes" class="workspace-tab" style="display: none;">
         {% include 'tenant/core/partials/clientes/list.html' %}
         {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
+        <div id="offcanvas-container-clientes"></div>
+        <div id="offcanvas-container-contactos"></div>
       </section>
       
       {# Módulo Proveedores #}
       <section id="tab-proveedores" class="workspace-tab" style="display: none;">
         {% include 'tenant/core/partials/proveedores/list.html' %}
         {% include 'tenant/core/partials/proveedores/modals.html' %}
+        <div id="offcanvas-container-proveedor"></div>
       </section>
       
       {# Módulo Empleados #}
       <section id="tab-empleados" class="workspace-tab" style="display: none;">
         {% include 'tenant/core/partials/empleados/list.html' %}
-        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
-        {# {% include 'tenant/core/partials/empleados/modals.html' %} #}
+        <div id="offcanvas-container-empleado"></div>
+        <div id="offcanvas-container-contrato"></div>
+        <div id="offcanvas-container-devengo"></div>
+        <div id="offcanvas-container-historial-nominas"></div>
       </section>
       
       {# Módulo Gastos v2.60 - Feature-Sliced Architecture #}
       <section id="tab-gastos" class="workspace-tab" style="display: none;">
         {% include 'tenant/core/partials/gastos/list.html' %}
-        {# ⚠️ v2.60: Modal de configuración de resolución se mantiene (no usa HTMX) #}
         {% include 'tenant/core/partials/gastos/modals.html' %}
+        <div id="offcanvas-container-gastos"></div>
       </section>
       
       {# Módulo Cotizaciones v2.60 - DNA Dinámico con Edición Completa #}
       <section id="tab-cotizaciones" class="workspace-tab" style="display: none;">
-        {# ⚠️ v2.60: Estructura de sub-navegación para Cotizaciones (Cotizaciones, Catálogo) #}
-        {# ⚠️ FASE 1: HTMX integrado para cargar editor directamente desde lista #}
-        {# ⚠️ FASE 2: Carga automática de datos cuando se abre editor con UUID #}
-        {# ⚠️ FASE 3: Actualización (PATCH) sincronizada con backend #}
-        {# ⚠️ Sincronización con Modelo Cotizacion: La tabla principal está en list.html con ID "tabla-cotizaciones-principal" #}
-        {# ⚠️ Atributos de datos: data-url="/api/v1/cotizaciones/" y data-page-size="20" para inicialización automática #}
         <div class="ui-module ui-cotizaciones">
-          {# Navegación por Pills (Sub-Tabs) #}
           <ul class="nav nav-pills mb-3" id="cotizaciones-subnav" role="tablist">
             <li class="nav-item" role="presentation">
               <button class="nav-link active" id="cotizaciones-cotizaciones-tab" data-bs-toggle="tab" data-bs-target="#subtab-cotizaciones" type="button" role="tab" aria-controls="subtab-cotizaciones" aria-selected="true">
@@ -140,25 +138,19 @@
             </li>
           </ul>
           
-          {# Contenedor de Contenido (Tab Content) #}
           <div class="tab-content" id="cotizaciones-tab-content">
             <div class="tab-pane fade show active" id="subtab-cotizaciones" role="tabpanel" aria-labelledby="cotizaciones-cotizaciones-tab">
               {% include 'tenant/core/partials/cotizaciones/list.html' %}
             </div>
             <div class="tab-pane fade" id="subtab-catalogo" role="tabpanel" aria-labelledby="cotizaciones-catalogo-tab">
-            
-          
             </div>
           </div>
         </div>
+        <div id="offcanvas-container-cotizaciones"></div>
       </section>
       
       {# Módulo Contabilidad v2.61 - Feature-Sliced Architecture #}
-      {# ⚠️ v2.61: Migración completa a Tabulator (DataTables eliminado) #}
-      {# ⚠️ v2.61: Validación de cuadratura actualizada - BORRADOR permite guardar sin cuadrar #}
-      {# ⚠️ v2.61: Validación estricta solo para APROBADO/CERRADO #}
       <section id="tab-contabilidad" class="workspace-tab" style="display: none;">
-        {# ⚠️ v2.60: Navegación por Pills (Sub-Tabs) para Cuentas y Asientos #}
         <ul class="nav nav-pills mb-3" id="contabilidad-subnav" role="tablist">
           <li class="nav-item" role="presentation">
             <button class="nav-link active" id="contabilidad-cuentas-tab" data-bs-toggle="tab" data-bs-target="#subtab-cuentas" type="button" role="tab" aria-controls="subtab-cuentas" aria-selected="true">
@@ -170,7 +162,6 @@
               <i class="bi bi-journal-text me-2"></i>Asientos Contables
             </button>
           </li>
-          {# ⚠️ v2.61: Tab de Periodos Contables #}
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="contabilidad-periodos-tab" data-bs-toggle="tab" data-bs-target="#subtab-periodos" type="button" role="tab" aria-controls="subtab-periodos" aria-selected="false">
               <i class="bi bi-calendar-range me-2"></i>Periodos Contables
@@ -178,20 +169,20 @@
           </li>
         </ul>
         
-        {# Contenedor de Contenido (Tab Content) #}
         <div class="tab-content" id="contabilidad-tab-content">
           <div class="tab-pane fade show active" id="subtab-cuentas" role="tabpanel" aria-labelledby="contabilidad-cuentas-tab">
             {% include 'tenant/core/contabilidad/partials/list_cuentas.html' %}
           </div>
           <div class="tab-pane fade" id="subtab-asientos" role="tabpanel" aria-labelledby="contabilidad-asientos-tab">
             {% include 'tenant/core/partials/contabilidad/list_asientos.html' %}
-            {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
           </div>
-          {# ⚠️ v2.61: Tab de Periodos Contables #}
           <div class="tab-pane fade" id="subtab-periodos" role="tabpanel" aria-labelledby="contabilidad-periodos-tab">
             {% include 'tenant/core/partials/contabilidad/partials/list_periodos.html' %}
           </div>
         </div>
+        <div id="offcanvas-container-cuentas"></div>
+        <div id="offcanvas-container-asientos"></div>
+        <div id="offcanvas-container-periodo"></div>
       </section>
       
       {# Módulo Inventario #}
@@ -209,31 +200,6 @@
     </div>
   </main>
 </div>
-
-{# ⚠️ v2.61: Módulo Clientes - Contenedores Offcanvas globales (HTMX) #}
-<div id="offcanvas-container-clientes"></div>
-<div id="offcanvas-container-contactos"></div>
-
-{# Módulo Empleados - Contenedores Offcanvas globales #}
-<div id="offcanvas-container-empleado"></div>
-<div id="offcanvas-container-contrato"></div>
-<div id="offcanvas-container-devengo"></div>
-<div id="offcanvas-container-historial-nominas"></div>
-
-{# Módulo Contabilidad - Contenedores Offcanvas globales v2.61 #}
-{# ⚠️ v2.61: Contenedores para HTMX - Carga dinámica de offcanvas #}
-<div id="offcanvas-container-cuentas"></div>
-<div id="offcanvas-container-asientos"></div>
-<div id="offcanvas-container-periodo"></div>
-
-{# ⚠️ v2.60: Módulo MailInboxConfig - Contenedor Offcanvas global para Configuraciones de Correo #}
-{# NOTA: También existe un contenedor local en mailinbox_list.html, pero este es el contenedor global #}
-<div id="offcanvas-container-mailinbox"></div>
-
-{# ⚠️ FASE 1: Módulo Cotizaciones - Contenedor Offcanvas global para Editor #}
-{# ⚠️ NOTA: El contenedor #offcanvas-container está definido en list.html dentro de la sección de cotizaciones #}
-{# El contenedor se carga cuando se accede a la sección de cotizaciones y está disponible para HTMX #}
-{# El botón "Editar" en la lista usa hx-target="#offcanvas-container" para cargar el editor #}
 
 {% endblock content %}
 
