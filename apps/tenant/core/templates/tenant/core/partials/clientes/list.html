@@ -4,9 +4,11 @@
 
 <div class="card shadow-sm" 
      x-data="clientesListModule()"
-     @shown.bs.tab="if ($event.detail.relatedTarget?.id === 'tab-clientes') { loadClientesTable() }"
+     @shown.bs.tab="handleTabChange($event)"
      @clienteGuardado="reloadClientesTable()"
-     @clienteEliminado="reloadClientesTable()">
+     @clienteEliminado="reloadClientesTable()"
+     @contactoGuardado="reloadContactosTable()"
+     @contactoEliminado="reloadContactosTable()">
   <div class="card-header bg-white">
     <ul class="nav nav-tabs card-header-tabs" id="clientes-tabs" role="tablist">
       <li class="nav-item" role="presentation">
@@ -129,6 +131,22 @@ function clientesListModule() {
         contactosLoaded: false,
         clientesCount: 0,
         contactosCount: 0,
+        
+        // ⚠️ Referencias a tablas
+        clientesTable: null,
+        contactosTable: null,
+
+        /**
+         * Manejo centralizado de cambios de tabs
+         */
+        handleTabChange(event) {
+            const tabId = event.detail?.relatedTarget?.id;
+            if (tabId === 'tab-clientes') {
+                this.loadClientesTable();
+            } else if (tabId === 'tab-contactos') {
+                this.loadContactosTable();
+            }
+        },
 
         /**
          * Cargar tabla de clientes (Lazy Loading)
@@ -146,7 +164,7 @@ function clientesListModule() {
                 }
 
                 // Inicializar tabla
-                const table = window.TabulatorFactory.create(
+                this.clientesTable = window.TabulatorFactory.create(
                     '#grid-clientes',
                     '/api/v1/clientes/',
                     this.getClientesColumns(),
@@ -157,20 +175,11 @@ function clientesListModule() {
                 this.clientesLoaded = true;
 
                 // Contar filas cuando se cargan datos
-                if (table) {
-                    table.on('dataLoaded', () => {
-                        this.clientesCount = table.getDataCount('active');
+                if (this.clientesTable) {
+                    this.clientesTable.on('dataLoaded', () => {
+                        this.clientesCount = this.clientesTable.getDataCount('active');
                     });
                 }
-
-                // Escuchar eventos personalizados
-                document.addEventListener('clienteGuardado', () => {
-                    if (table) table.replaceData();
-                });
-
-                document.addEventListener('clienteEliminado', () => {
-                    if (table) table.replaceData();
-                });
 
                 console.log('[clientes.list] Tabla de clientes cargada');
             } catch (error) {
@@ -190,9 +199,8 @@ function clientesListModule() {
             if (!this.clientesLoaded) {
                 await this.loadClientesTable();
             } else {
-                const table = window.Tabulator.findTable('#grid-clientes')[0];
-                if (table) {
-                    table.replaceData();
+                if (this.clientesTable) {
+                    this.clientesTable.replaceData();
                 }
             }
         },
@@ -210,7 +218,7 @@ function clientesListModule() {
                     return;
                 }
 
-                const table = window.TabulatorFactory.create(
+                this.contactosTable = window.TabulatorFactory.create(
                     '#grid-contactos',
                     '/api/v1/clientes/contactos/',
                     this.getContactosColumns(),
@@ -219,9 +227,9 @@ function clientesListModule() {
 
                 this.contactosLoaded = true;
 
-                if (table) {
-                    table.on('dataLoaded', () => {
-                        this.contactosCount = table.getDataCount('active');
+                if (this.contactosTable) {
+                    this.contactosTable.on('dataLoaded', () => {
+                        this.contactosCount = this.contactosTable.getDataCount('active');
                     });
                 }
 
@@ -243,9 +251,8 @@ function clientesListModule() {
             if (!this.contactosLoaded) {
                 await this.loadContactosTable();
             } else {
-                const table = window.Tabulator.findTable('#grid-contactos')[0];
-                if (table) {
-                    table.replaceData();
+                if (this.contactosTable) {
+                    this.contactosTable.replaceData();
                 }
             }
         },
@@ -303,18 +310,46 @@ function clientesListModule() {
                 { title: 'Nombre', field: 'nombre_completo', widthGrow: 2 },
                 { title: 'Email', field: 'email' },
                 { title: 'Teléfono', field: 'telefono' },
-                { title: 'Cargo', field: 'cargo' },
+                { 
+                    title: 'Cargo', 
+                    field: 'cargo',
+                    formatter: (cell) => cell.getValue() || '<span class="text-muted">-</span>'
+                },
+                {
+                    title: 'Estado',
+                    field: 'activo',
+                    width: 80,
+                    hozAlign: 'center',
+                    formatter: (cell) => {
+                        const value = cell.getValue();
+                        return value 
+                            ? '<span class="badge bg-success">Activo</span>'
+                            : '<span class="badge bg-danger">Inactivo</span>';
+                    }
+                },
                 { 
                     title: 'Acciones', 
-                    width: 100,
+                    width: 120,
                     hozAlign: 'center',
+                    headerSort: false,
                     formatter: 'html',
+                    cellClick: (e, cell) => {
+                        const btn = e.target.closest('button');
+                        if (!btn) return;
+
+                        const rowData = cell.getRow().getData();
+                        if (btn.classList.contains('btn-editar')) {
+                            this.editarContacto(rowData.id);
+                        } else if (btn.classList.contains('btn-eliminar')) {
+                            this.eliminarContacto(rowData.id);
+                        }
+                    },
                     formatter: () => `
                         <div class="btn-group btn-group-sm" role="group">
-                            <button class="btn btn-outline-primary" title="Editar">
+                            <button class="btn btn-outline-primary btn-editar" title="Editar">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <button class="btn btn-outline-danger" title="Eliminar">
+                            <button class="btn btn-outline-danger btn-eliminar" title="Eliminar">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
@@ -377,6 +412,66 @@ function clientesListModule() {
                 }
             } catch (error) {
                 console.error('[clientes.list] Error eliminando:', error);
+            }
+        },
+
+        /**
+         * Editar contacto
+         */
+        async editarContacto(id) {
+            if (!confirm('¿Desea editar este contacto?')) return;
+
+            try {
+                // Obtener datos del contacto
+                const response = await window.http('GET', `/api/v1/clientes/contactos/${id}/`);
+                if (!response.ok) {
+                    if (window.SintelFeedback) {
+                        window.SintelFeedback.error('Error al cargar datos del contacto');
+                    }
+                    return;
+                }
+
+                // Abrir offcanvas de gestor de contactos
+                const url = '/api/v1/clientes/contactos/gestor-offcanvas/';
+                await htmx.ajax('GET', url, {
+                    target: '#offcanvas-container-contactos',
+                    swap: 'innerHTML'
+                });
+                
+                console.log('[contactos.list] Offcanvas de edición cargado para contacto ID:', id);
+            } catch (error) {
+                console.error('[contactos.list] Error editando contacto:', error);
+                if (window.SintelFeedback) {
+                    window.SintelFeedback.error('Error al editar el contacto');
+                }
+            }
+        },
+
+        /**
+         * Eliminar contacto
+         */
+        async eliminarContacto(id) {
+            if (!confirm('¿Está seguro de eliminar este contacto?')) return;
+
+            try {
+                // Usar endpoint CORE que tiene el alias URL correcto
+                const response = await window.http('DELETE', `/api/v1/clientes/contactos/${id}/`);
+                
+                if (response.ok || response.status === 204) {
+                    if (window.SintelFeedback) {
+                        window.SintelFeedback.success('Contacto eliminado');
+                    }
+                    document.dispatchEvent(new CustomEvent('contactoEliminado'));
+                } else {
+                    if (window.SintelFeedback) {
+                        window.SintelFeedback.error('No se puede eliminar este contacto');
+                    }
+                }
+            } catch (error) {
+                console.error('[contactos.list] Error eliminando:', error);
+                if (window.SintelFeedback) {
+                    window.SintelFeedback.error('Error al eliminar el contacto');
+                }
             }
         }
     };

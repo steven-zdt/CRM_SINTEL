@@ -13,8 +13,9 @@
 {# 7. features/cliente_detalle.js (Ver Detalle - Read-Only) #}
 {# 8. features/contactos_editor.js (Editor de Contactos con HTMX + Offcanvas) #}
 
-{# BLOQUE 1: API Wrapper - DEBE cargarse PRIMERO (requerido por features) #}
+{# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'core/js/clientes/clientes.api.js' %}"></script>
+<script src="{% static 'core/js/clientes/contactos.api.js' %}"></script>
 
 {# BLOQUE 2: Features - Módulos Refactorizados #}
 <script src="{% static 'core/js/clientes/clientes.list.js' %}"></script>
