@@ -20,7 +20,7 @@
     'use strict';
 
     const MOD = '[movimientos.editor]';
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/movimientos'; // Core API Facade
+    const CORE_API_BASE = '/api/v1/inventario/movimientos'; // Core API Facade
     const FORM_ID = '#form-movimiento';
     const FEEDBACK_ID = '#feedback-movimiento';
     const MODAL_ID = '#modal-movimiento';
@@ -89,7 +89,7 @@
 
         try {
             // ⚠️ v2.61.3: Usar Core API Facade para cargar productos
-            const res = await w.http('GET', '/api/v1/core/v1/inventario/productos/');
+            const res = await w.http('GET', '/api/v1/inventario/productos/');
             
             if (!res.ok || !res.data) {
                 console.warn(`${MOD} Error al cargar productos`);

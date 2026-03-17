@@ -20,7 +20,7 @@
     'use strict';
 
     const MOD = '[activos.editor]';
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/activos'; // Core API Facade
+    const CORE_API_BASE = '/api/v1/inventario/activos'; // Core API Facade
     const FORM_ID = '#form-activo';
     const FEEDBACK_ID = '#form-activo-feedback';
     const OFFCANVAS_ID = '#offcanvas-activos';
@@ -111,7 +111,7 @@
 
         try {
             // ⚠️ v2.61.3: Usar Core API Facade para cargar categorías
-            const res = await w.http('GET', '/api/v1/core/v1/inventario/categorias/?page_size=200');
+            const res = await w.http('GET', '/api/v1/inventario/categorias/?page_size=200');
             
             if (!res.ok || !res.data) {
                 console.warn(`${MOD} Error al cargar categorías`);

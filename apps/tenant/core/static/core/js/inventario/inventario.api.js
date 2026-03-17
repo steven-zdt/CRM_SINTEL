@@ -73,7 +73,7 @@
         const base = await getApiBase();
         // Si el base es el fallback, usar Core API Facade
         if (base === API_BASE_FALLBACK) {
-          return w.http('GET', buildUrlWithParams('/api/v1/core/v1/inventario/productos/', params));
+          return w.http('GET', buildUrlWithParams('/api/v1/inventario/productos/', params));
         }
         return w.http('GET', buildUrlWithParams(`${base}/productos/`, params));
       },

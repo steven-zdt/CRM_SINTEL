@@ -3,16 +3,16 @@
    * ⚠️ Aislamiento Gradual: Capa de Datos - Retorna siempre {ok, status, data}
    * 
    * Consume exclusivamente DRF endpoints:
-   * - GET /api/v1/core/v1/facturas/facturas/ (listar con filtros - facade)
-   * - GET /api/v1/core/v1/facturas/facturas/{id}/ (detalle - facade)
-   * - GET /api/v1/core/v1/facturas/facturas/summary/ (resumen financiero - facade)
-   * - POST /api/v1/core/v1/facturas/facturas/upload-ubl/?preview=true|false&async=false (subida XML UBL - facade)
+   * - GET /api/v1/facturas/facturas/ (listar con filtros - facade)
+   * - GET /api/v1/facturas/facturas/{id}/ (detalle - facade)
+   * - GET /api/v1/facturas/facturas/summary/ (resumen financiero - facade)
+   * - POST /api/v1/facturas/facturas/upload-ubl/?preview=true|false&async=false (subida XML UBL - facade)
    *   ⚠️ v2.61.2: Soporta batch processing con files[] (múltiples archivos)
    *   ⚠️ v2.61.2: Si > 10 archivos, delega automáticamente a Celery (retorna 202 con task_id)
-   * - GET /api/v1/core/v1/facturas/facturas/{id}/xml/ (ver XML - facade)
-   * - DELETE /api/v1/core/v1/facturas/facturas/{id}/ (eliminar factura - facade)
-   * - POST /api/v1/core/v1/facturas/facturas/create-from-dto/ (persistir desde DTO, opcional - facade)
-   * - GET /api/v1/core/v1/facturas/facturas/ingest/{task_id}/status/ (consultar estado de batch upload - facade)
+   * - GET /api/v1/facturas/facturas/{id}/xml/ (ver XML - facade)
+   * - DELETE /api/v1/facturas/facturas/{id}/ (eliminar factura - facade)
+   * - POST /api/v1/facturas/facturas/create-from-dto/ (persistir desde DTO, opcional - facade)
+   * - GET /api/v1/facturas/facturas/ingest/{task_id}/status/ (consultar estado de batch upload - facade)
    * 
    * ⚠️ v2.61.2: OPTIMIZACIONES:
    * - Batch processing: upload-ubl soporta files[] (múltiples archivos)
@@ -33,7 +33,7 @@
   const API_BASE = '/api/v1';
   const CORE_API_BASE = '/api/v1/core';
   // ⚠️ v2.61.1: Usar Core API facade para facturas
-  const FACTURAS_API_BASE = '/api/v1/core/v1/facturas/facturas';
+  const FACTURAS_API_BASE = '/api/v1/facturas/facturas';
 
   /**
    * Lista facturas con filtros

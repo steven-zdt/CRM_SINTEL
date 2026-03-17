@@ -14,7 +14,7 @@
     'use strict';
 
     const MOD = '[inventario.list]';
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/productos'; // Core API Facade
+    const CORE_API_BASE = '/api/v1/inventario/productos'; // Core API Facade
     let table = null;
     let _eliminandoProducto = false; // ⚠️ v2.61.3: Flag para prevenir rowClick durante eliminación
 
@@ -267,7 +267,7 @@
         // Crear tabla usando TabulatorFactory
         table = w.TabulatorFactory.create(
             '#grid-inventario',
-            '/api/v1/core/v1/inventario/productos/', // ⚠️ v2.61.3: Core API Facade
+            '/api/v1/inventario/productos/', // ⚠️ v2.61.3: Core API Facade
             getColumns(),
             tableConfig
         );
@@ -298,7 +298,7 @@
                 if (!id) return;
 
                 // ⚠️ v2.61.3: Usar Core API Facade para gestor-offcanvas
-                await htmx.ajax('GET', `/api/v1/core/v1/inventario/productos/gestor-offcanvas/?id=${id}`, {
+                await htmx.ajax('GET', `/api/v1/inventario/productos/gestor-offcanvas/?id=${id}`, {
                     target: '#offcanvas-container-inventario',
                     swap: 'innerHTML'
                 });
@@ -318,7 +318,7 @@
                 if (!id) return;
 
                 // ⚠️ v2.61.3: Usar Core API Facade para gestor-offcanvas (ajuste)
-                await htmx.ajax('GET', `/api/v1/core/v1/inventario/productos/gestor-offcanvas/?id=${id}&tipo=ajuste`, {
+                await htmx.ajax('GET', `/api/v1/inventario/productos/gestor-offcanvas/?id=${id}&tipo=ajuste`, {
                     target: '#offcanvas-container-inventario',
                     swap: 'innerHTML'
                 });
@@ -466,7 +466,7 @@
 
                 try {
                     // ⚠️ v2.61.3: Usar Core API Facade para gestor-offcanvas
-                    await htmx.ajax('GET', `/api/v1/core/v1/inventario/productos/gestor-offcanvas/?id=${data.id}`, {
+                    await htmx.ajax('GET', `/api/v1/inventario/productos/gestor-offcanvas/?id=${data.id}`, {
                         target: '#offcanvas-container-inventario',
                         swap: 'innerHTML'
                     });

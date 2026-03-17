@@ -20,7 +20,7 @@
     'use strict';
 
     const MOD = '[productos.editor]';
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/productos'; // Core API Facade
+    const CORE_API_BASE = '/api/v1/inventario/productos'; // Core API Facade
     const FORM_PRODUCTO_ID = '#form-producto';
     const FORM_AJUSTE_ID = '#form-ajuste-inventario';
     const FEEDBACK_ID = '#form-inventario-feedback';
@@ -184,7 +184,7 @@
 
         try {
             // ⚠️ v2.61.3: Usar Core API Facade para cargar categorías
-            const res = await w.http('GET', '/api/v1/core/v1/inventario/categorias/');
+            const res = await w.http('GET', '/api/v1/inventario/categorias/');
             
             if (!res.ok || !res.data) {
                 console.warn(`${MOD} Error al cargar categorías`);
@@ -447,7 +447,7 @@
 
             // Crear movimiento
             // ⚠️ v2.61.3: Usar Core API Facade para crear movimientos
-            const res = await w.http('POST', '/api/v1/core/v1/inventario/movimientos/', payload);
+            const res = await w.http('POST', '/api/v1/inventario/movimientos/', payload);
 
             // Restaurar estado del botón
             if (btnGuardar) {

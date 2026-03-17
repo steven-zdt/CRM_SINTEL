@@ -180,7 +180,7 @@
       // Intentar usar el nuevo módulo si está disponible
       const offcanvasContainer = d.getElementById('offcanvas-container-inventario');
       if (offcanvasContainer && typeof htmx !== 'undefined') {
-        await htmx.ajax('GET', `/api/v1/core/v1/inventario/productos/gestor-offcanvas/?id=${id}`, {
+        await htmx.ajax('GET', `/api/v1/inventario/productos/gestor-offcanvas/?id=${id}`, {
           target: '#offcanvas-container-inventario',
           swap: 'innerHTML'
         });
@@ -212,7 +212,7 @@
     if (w.ProductosEditor && typeof w.ProductosEditor.init === 'function') {
       const offcanvasContainer = d.getElementById('offcanvas-container-inventario');
       if (offcanvasContainer && typeof htmx !== 'undefined') {
-        htmx.ajax('GET', '/api/v1/core/v1/inventario/productos/gestor-offcanvas/', {
+        htmx.ajax('GET', '/api/v1/inventario/productos/gestor-offcanvas/', {
           target: '#offcanvas-container-inventario',
           swap: 'innerHTML'
         }).then(() => {

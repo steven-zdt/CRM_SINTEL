@@ -16,7 +16,7 @@
     'use strict';
 
     const MOD = '[categorias.editor]';
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/categorias'; // Core API Facade
+    const CORE_API_BASE = '/api/v1/inventario/categorias'; // Core API Facade
     const FORM_ID = '#form-categoria';
     const FEEDBACK_ID = '#form-categoria-feedback';
     const OFFCANVAS_ID = '#offcanvas-categorias';

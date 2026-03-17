@@ -21,8 +21,8 @@
     const MOD = '[activos.list]';
     const GRID_ID = '#grid-activos';
     const SEARCH_ID = '#search-activo';
-    const API_URL = '/api/v1/core/v1/inventario/activos/'; // ⚠️ v2.61.3: Core API Facade para CRUD
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/activos'; // Core API Facade
+    const API_URL = '/api/v1/inventario/activos/'; // ⚠️ v2.61.3: Core API Facade para CRUD
+    const CORE_API_BASE = '/api/v1/inventario/activos'; // Core API Facade
     let table = null;
     let _eliminandoActivo = false; // Flag para prevenir rowClick durante eliminación
 

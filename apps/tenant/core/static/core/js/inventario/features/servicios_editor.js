@@ -20,7 +20,7 @@
     'use strict';
 
     const MOD = '[servicios.editor]';
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/servicios'; // Core API Facade
+    const CORE_API_BASE = '/api/v1/inventario/servicios'; // Core API Facade
     const FORM_ID = '#form-servicio';
     const FEEDBACK_ID = '#form-servicio-feedback';
     const OFFCANVAS_ID = '#offcanvas-servicios';
@@ -109,7 +109,7 @@
 
         try {
             // ⚠️ v2.61.3: Usar Core API Facade para cargar categorías
-            const res = await w.http('GET', '/api/v1/core/v1/inventario/categorias/');
+            const res = await w.http('GET', '/api/v1/inventario/categorias/');
             
             if (!res.ok || !res.data) {
                 console.warn(`${MOD} Error al cargar categorías`);

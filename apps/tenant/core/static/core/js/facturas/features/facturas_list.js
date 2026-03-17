@@ -292,7 +292,7 @@
                             }
 
                             // ⚠️ HTMX: Cargar template de solo lectura
-                            await htmx.ajax('GET', `/api/v1/core/v1/facturas/facturas/gestor-offcanvas/?id=${id}&simple=true&readonly=true`, {
+                            await htmx.ajax('GET', `/api/v1/facturas/facturas/gestor-offcanvas/?id=${id}&simple=true&readonly=true`, {
                                 target: '#offcanvas-container-facturas',
                                 swap: 'innerHTML'
                             });
@@ -329,7 +329,7 @@
                                     });
                                     // ⚠️ Fallback: Intentar cargar datos directamente
                                     try {
-                                        const response = await w.http('GET', `/api/v1/core/v1/facturas/facturas/${id}/`);
+                                        const response = await w.http('GET', `/api/v1/facturas/facturas/${id}/`);
                                         if (response.ok && response.data) {
                                             console.log(`${MOD} Datos cargados directamente desde API (fallback)`);
                                         }
@@ -390,7 +390,7 @@
 
                     // ⚠️ HTMX: Cargar template de solo lectura desde el servidor
                     // Usar el endpoint gestor-offcanvas pero con modo solo lectura
-                    await htmx.ajax('GET', `/api/v1/core/v1/facturas/facturas/gestor-offcanvas/?id=${id}&simple=true&readonly=true`, {
+                    await htmx.ajax('GET', `/api/v1/facturas/facturas/gestor-offcanvas/?id=${id}&simple=true&readonly=true`, {
                         target: '#offcanvas-container-facturas',
                         swap: 'innerHTML'
                     });
@@ -428,7 +428,7 @@
                             });
                             // ⚠️ Fallback: Intentar cargar datos directamente
                             try {
-                                const response = await w.http('GET', `/api/v1/core/v1/facturas/facturas/${id}/`);
+                                const response = await w.http('GET', `/api/v1/facturas/facturas/${id}/`);
                                 if (response.ok && response.data) {
                                     console.log(`${MOD} Datos cargados directamente desde API (fallback)`);
                                 }
@@ -482,7 +482,7 @@
 
                 try {
                     // ⚠️ v2.61.2: Usar Core API facade
-                    const res = await w.http('DELETE', `/api/v1/core/v1/facturas/facturas/${id}/`);
+                    const res = await w.http('DELETE', `/api/v1/facturas/facturas/${id}/`);
                     
                     if (res.ok) {
                         // ⚠️ v2.61.2: Cerrar cualquier offcanvas abierto que muestre esta factura

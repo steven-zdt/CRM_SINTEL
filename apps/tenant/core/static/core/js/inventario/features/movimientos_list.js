@@ -22,8 +22,8 @@
     const MOD = '[movimientos.list]';
     const GRID_ID = '#grid-movimientos';
     const SEARCH_ID = '#search-movimiento';
-    const API_URL = '/api/v1/core/v1/inventario/movimientos/'; // ⚠️ v2.61.3: Core API Facade para CRUD
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/movimientos'; // Core API Facade
+    const API_URL = '/api/v1/inventario/movimientos/'; // ⚠️ v2.61.3: Core API Facade para CRUD
+    const CORE_API_BASE = '/api/v1/inventario/movimientos'; // Core API Facade
     let table = null;
 
     // ⚠️ Anti-Zombies v2.61.3: Singleton global para instancias de Tabulator

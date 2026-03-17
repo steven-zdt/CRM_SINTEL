@@ -8,7 +8,7 @@
   'use strict';
 
   // ⚠️ v2.61.1: Usar upload-ubl en lugar de upload-document (no requiere feature flag)
-  const UPLOAD_DOCUMENT_API = '/api/v1/core/v1/facturas/facturas/upload-ubl/?async=false';  // Core API facade
+  const UPLOAD_DOCUMENT_API = '/api/v1/facturas/facturas/upload-ubl/?async=false';  // Core API facade
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
   function getCookie(name) {

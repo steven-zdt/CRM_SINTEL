@@ -17,8 +17,8 @@
     const MOD = '[categorias.list]';
     const GRID_ID = '#grid-categorias';
     const SEARCH_ID = '#search-categoria';
-    const API_URL = '/api/v1/core/v1/inventario/categorias/'; // ⚠️ v2.61.3: Core API Facade para CRUD
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/categorias'; // Core API Facade
+    const API_URL = '/api/v1/inventario/categorias/'; // ⚠️ v2.61.3: Core API Facade para CRUD
+    const CORE_API_BASE = '/api/v1/inventario/categorias'; // Core API Facade
     let table = null;
     let _eliminandoCategoria = false; // Flag para prevenir rowClick durante eliminación
 

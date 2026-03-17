@@ -157,7 +157,7 @@
                 // Si no tenemos el producto en el DOM, obtenerlo de la API
                 // ⚠️ v2.61.3: Usar Core API Facade para obtener producto
                 // ⚠️ v2.61.3: Usar campo mapeado 'producto' en lugar de 'producto_id'
-                const res = await w.http('GET', `/api/v1/core/v1/inventario/productos/${data.producto}/`);
+                const res = await w.http('GET', `/api/v1/inventario/productos/${data.producto}/`);
                 if (res.ok && res.data) {
                     stockActual = parseFloat(res.data.stock_actual || 0);
                 } else {
@@ -244,7 +244,7 @@
 
         // Determinar endpoint según tipo de movimiento
         // ⚠️ v2.61.3: Usar Core API Facade para crear movimientos
-        let endpoint = '/api/v1/core/v1/inventario/movimientos/';
+        let endpoint = '/api/v1/inventario/movimientos/';
         let method = 'POST';
 
         // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
@@ -329,11 +329,11 @@
         if (id) {
             // Actualizar producto existente
             // ⚠️ v2.61.3: Usar Core API Facade para actualizar producto
-            res = await w.http('PATCH', `/api/v1/core/v1/inventario/productos/${id}/`, data);
+            res = await w.http('PATCH', `/api/v1/inventario/productos/${id}/`, data);
         } else {
             // Crear nuevo producto
             // ⚠️ v2.61.3: Usar Core API Facade para crear producto
-            res = await w.http('POST', '/api/v1/core/v1/inventario/productos/', data);
+            res = await w.http('POST', '/api/v1/inventario/productos/', data);
         }
 
         // ⚠️ Error Boundary v2.60: Restaurar estado del botón

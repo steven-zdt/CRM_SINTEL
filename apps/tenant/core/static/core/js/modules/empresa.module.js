@@ -10,7 +10,7 @@
     'use strict';
     
     const MOD = '[empresa.module]';
-    const API_URL = '/api/v1/core/v1/empresa/configuracion/';
+    const API_URL = '/api/v1/empresa/configuracion/';
     const FORM_SELECTOR = '#form-empresa-config';
     const LOGO_INPUT_SELECTOR = '#input-empresa-logo';
     const LOGO_PREVIEW_SELECTOR = '#img-empresa-logo-preview';
@@ -34,7 +34,7 @@
         }
 
         try {
-            // endpoint singleton: /api/v1/core/v1/empresa/configuracion/
+            // endpoint singleton: /api/v1/empresa/configuracion/
             // El backend retorna una lista paginada (estándar DRF) o el objeto directo si se usa retrieve
             // Dado que es singleton, usamos list y tomamos el primero, o esperamos que el backend maneje el singleton
             const response = await w.http('GET', API_URL);
@@ -141,7 +141,7 @@
         }
 
         try {
-            // PATCH /api/v1/core/v1/empresa/configuracion/{id}/
+            // PATCH /api/v1/empresa/configuracion/{id}/
             const response = await w.http('PATCH', `${API_URL}${id}/`, formData);
 
             if (response.ok) {

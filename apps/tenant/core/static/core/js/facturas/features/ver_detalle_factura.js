@@ -12,7 +12,7 @@
     'use strict';
 
     const MOD = '[facturas.ver-detalle]';
-    const FACTURAS_API_BASE = '/api/v1/core/v1/facturas/facturas';
+    const FACTURAS_API_BASE = '/api/v1/facturas/facturas';
 
     /**
      * Formatear moneda usando Intl.NumberFormat

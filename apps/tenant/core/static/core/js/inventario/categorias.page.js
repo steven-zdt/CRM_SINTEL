@@ -6,7 +6,7 @@
  * ⚠️ Lazy Loading: Usa DOMUtils.onVisibleOnce() para inicialización diferida
  * ⚠️ Aislamiento Gradual v2.60: Sin bloques try/catch, usa UIManager.handleError()
  * ⚠️ v2.61.3: Templates movidos a subdirectorio categorias/ (list_categorias.html, categorias_offcanvas.html)
- * ⚠️ v2.61.3: gestor-offcanvas usa Core API Facade (/api/v1/core/v1/inventario/categorias/)
+ * ⚠️ v2.61.3: gestor-offcanvas usa Core API Facade (/api/v1/inventario/categorias/)
  * 
  * Dependencias globales requeridas:
  * - TabulatorFactory (definido en tabulator.factory.js)
@@ -21,7 +21,7 @@
   const GRID_ID = '#grid-categorias';
   const SEARCH_ID = '#search-categoria';
   const API_URL = '/api/v1/inventario/categorias/'; // Gateway directo para CRUD
-  const CORE_API_GESTOR_OFFCANVAS = '/api/v1/core/v1/inventario/categorias/gestor-offcanvas/'; // Core API Facade para HTMX
+  const CORE_API_GESTOR_OFFCANVAS = '/api/v1/inventario/categorias/gestor-offcanvas/'; // Core API Facade para HTMX
   const TAB_ID = '#tab-categorias';
   let table = null;
 
@@ -172,7 +172,7 @@
         if (!id) return;
 
         // ⚠️ v2.61.3: Usar Core API Facade
-        await htmx.ajax('GET', `/api/v1/core/v1/inventario/categorias/gestor-offcanvas/?id=${id}`, {
+        await htmx.ajax('GET', `/api/v1/inventario/categorias/gestor-offcanvas/?id=${id}`, {
           target: '#offcanvas-container-categorias',
           swap: 'innerHTML'
         });
@@ -234,7 +234,7 @@
         if (!data || !data.id) return;
 
         // ⚠️ v2.61.3: Usar Core API Facade
-        await htmx.ajax('GET', `/api/v1/core/v1/inventario/categorias/gestor-offcanvas/?id=${data.id}`, {
+        await htmx.ajax('GET', `/api/v1/inventario/categorias/gestor-offcanvas/?id=${data.id}`, {
           target: '#offcanvas-container-categorias',
           swap: 'innerHTML'
         });

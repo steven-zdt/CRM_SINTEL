@@ -21,8 +21,8 @@
     const MOD = '[servicios.list]';
     const GRID_ID = '#grid-servicios';
     const SEARCH_ID = '#search-servicio';
-    const API_URL = '/api/v1/core/v1/inventario/servicios/'; // ⚠️ v2.61.3: Core API Facade para CRUD
-    const CORE_API_BASE = '/api/v1/core/v1/inventario/servicios'; // Core API Facade
+    const API_URL = '/api/v1/inventario/servicios/'; // ⚠️ v2.61.3: Core API Facade para CRUD
+    const CORE_API_BASE = '/api/v1/inventario/servicios'; // Core API Facade
     let table = null;
     let _eliminandoServicio = false; // Flag para prevenir rowClick durante eliminación
 
