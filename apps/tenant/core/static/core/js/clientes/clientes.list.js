@@ -486,33 +486,53 @@
     });
 
     /**
-     * HTMX swap events - Show offcanvas after HTML is injected
+     * HTMX settle events - Show offcanvas after HTML is injected and rendered
+     * ⚠️ Use htmx:afterSettle instead of afterSwap for better timing
      */
-    d.body.addEventListener('htmx:afterSwap', (e) => {
+    d.body.addEventListener('htmx:afterSettle', (e) => {
         const target = e.detail.target;
         
         if (target && target.id === 'offcanvas-container-clientes') {
             // Cliente offcanvas loaded (create/edit/view)
-            log.info('Cliente offcanvas loaded, showing...');
-            const offcanvasEl = d.getElementById('offcanvas-cliente');
-            if (offcanvasEl && w.bootstrap) {
-                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                offcanvasInstance.show();
-                log.info('Cliente offcanvas shown');
-            } else {
-                log.error('offcanvas-cliente not found or bootstrap not available');
-            }
+            log.info('Cliente offcanvas loaded, waiting for DOM...');
+            
+            // Wait for next frame to ensure DOM is fully updated
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const offcanvasEl = d.getElementById('offcanvas-cliente');
+                    if (offcanvasEl && w.bootstrap) {
+                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                        offcanvasInstance.show();
+                        log.info('Cliente offcanvas shown successfully');
+                    } else {
+                        log.error('offcanvas-cliente not found or bootstrap not available', {
+                            found: !!offcanvasEl,
+                            bootstrap: !!w.bootstrap,
+                            container: target.innerHTML.substring(0, 100)
+                        });
+                    }
+                });
+            });
         } else if (target && target.id === 'offcanvas-container-contactos') {
             // Contactos offcanvas loaded
-            log.info('Contactos offcanvas loaded, showing...');
-            const offcanvasEl = d.getElementById('offcanvas-contactos');
-            if (offcanvasEl && w.bootstrap) {
-                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                offcanvasInstance.show();
-                log.info('Contactos offcanvas shown');
-            } else {
-                log.error('offcanvas-contactos not found or bootstrap not available');
-            }
+            log.info('Contactos offcanvas loaded, waiting for DOM...');
+            
+            // Wait for next frame to ensure DOM is fully updated
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const offcanvasEl = d.getElementById('offcanvas-contactos');
+                    if (offcanvasEl && w.bootstrap) {
+                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                        offcanvasInstance.show();
+                        log.info('Contactos offcanvas shown successfully');
+                    } else {
+                        log.error('offcanvas-contactos not found or bootstrap not available', {
+                            found: !!offcanvasEl,
+                            bootstrap: !!w.bootstrap
+                        });
+                    }
+                });
+            });
         }
     });
 
