@@ -30,7 +30,18 @@
       
       // ⚠️ v2.61: Disparar evento personalizado para componentes Alpine.js
       // El Bootstrap shown.bs.tab no se dispara cuando usamos showTab() programáticamente
-      tab.dispatchEvent(new CustomEvent('tab-shown', { detail: { tabName } }));
+      console.log('[workspace.showTab] Dispatching tab-shown event for:', tabName);
+      tab.dispatchEvent(new CustomEvent('tab-shown', { detail: { tabName }, bubbles: true }));
+      
+      // ⚠️ También disparar directamente en componentes Alpine internos
+      // Alpine.js puede no recibir eventos bubbling desde section → card
+      setTimeout(() => {
+        const card = tab.querySelector('[x-data]');
+        if (card) {
+          console.log('[workspace.showTab] Found Alpine component, dispatching directly');
+          card.dispatchEvent(new CustomEvent('tab-shown', { detail: { tabName }, bubbles: true }));
+        }
+      }, 5);
       
       // Actualizar título
       const title = document.getElementById('viewTitle');

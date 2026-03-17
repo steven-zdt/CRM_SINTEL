@@ -4,6 +4,7 @@
 
 <div class="card shadow-sm" 
      x-data="clientesListModule()"
+     x-init="init()"
      @shown.bs.tab="handleTabChange($event)"
      @tab-shown="handleWorkspaceTabChange($event)"
      @clienteGuardado="reloadClientesTable()"
@@ -138,6 +139,21 @@ function clientesListModule() {
         contactosTable: null,
 
         /**
+         * ⚠️ v2.61: Inicialización de Alpine.js
+         * Se ejecuta cuando el módulo está listo en el DOM
+         */
+        init() {
+            console.log('[clientes.list.init] Alpine.js module initialized');
+            // Verificar si el tab está visible (ya mostrado antes de la inicialización)
+            const section = document.getElementById('tab-clientes');
+            if (section && section.style.display !== 'none') {
+                console.log('[clientes.list.init] Section is visible, loading clientes table immediately');
+                this.loadClientesTable();
+            }
+            // Si no está visible, esperamos el evento @tab-shown o @shown.bs.tab
+        },
+
+        /**
          * Manejo centralizado de cambios de tabs (desde Bootstrap tabs)
          * ⚠️ Solo se dispara si el usuario hace clic en el tab dentro del card
          */
@@ -173,16 +189,35 @@ function clientesListModule() {
          * ⚠️ Spinner muestra brevemente durante inicialización, luego desaparece
          */
         async loadClientesTable() {
-            if (this.clientesLoaded) return; // Ya cargada
+            if (this.clientesLoaded) {
+                console.log('[clientes.list] Tabla ya cargada, skipping');
+                return; // Ya cargada
+            }
             
+            console.log('[clientes.list] Starting table load...');
             this.loadingClientes = true;
             try {
                 // Esperar a que TabulatorFactory esté disponible
                 if (!window.TabulatorFactory) {
-                    console.warn('[clientes.list] TabulatorFactory no disponible aún');
-                    return;
+                    console.warn('[clientes.list] TabulatorFactory no disponible, intentando con timeout...');
+                    // ⚠️ CRÍTICO: Si TabulatorFactory no está disponible, esperar a que lo esté
+                    // Pero asegurarse de que eventualmente se oculte el spinner
+                    await new Promise((resolve, reject) => {
+                        let attempts = 0;
+                        const checkInterval = setInterval(() => {
+                            attempts++;
+                            if (window.TabulatorFactory) {
+                                clearInterval(checkInterval);
+                                resolve();
+                            } else if (attempts > 50) { // 5 segundos de espera máximo
+                                clearInterval(checkInterval);
+                                reject(new Error('TabulatorFactory timeout'));
+                            }
+                        }, 100);
+                    });
                 }
 
+                console.log('[clientes.list] TabulatorFactory available, creating table...');
                 // ⚠️ Inicializar tabla (operación síncrona - crea instancia)
                 this.clientesTable = window.TabulatorFactory.create(
                     '#grid-clientes',
@@ -191,9 +226,14 @@ function clientesListModule() {
                     { searchInputSelector: '#search-cliente' }
                 );
 
+                if (!this.clientesTable) {
+                    throw new Error('TabulatorFactory.create returned null');
+                }
+
                 // ⚠️ INMEDIATAMENTE marcar como cargada (tabla está en DOM)
                 // Los datos se cargan asincronicamente en background sin spinner
                 this.clientesLoaded = true;
+                console.log('[clientes.list] Table marked as loaded');
 
                 // Contar filas cuando se cargan datos (background)
                 if (this.clientesTable) {
@@ -203,15 +243,18 @@ function clientesListModule() {
                     });
                 }
 
-                console.log('[clientes.list] Tabla de clientes inicializada');
+                console.log('[clientes.list] Tabla de clientes inicializada correctamente');
             } catch (error) {
                 console.error('[clientes.list] Error cargando tabla:', error);
+                // ⚠️ Marcar como cargada incluso si hay error para ocultar el spinner
+                this.clientesLoaded = true;
                 if (window.SintelFeedback) {
-                    window.SintelFeedback.error('Error al cargar la tabla de clientes');
+                    window.SintelFeedback.error('Error al cargar la tabla de clientes: ' + error.message);
                 }
             } finally {
-                // ⚠️ Spinner desaparece inmediatamente (tabla ya está en DOM)
+                // ⚠️ SIEMPRE ocultar el spinner (tabla ya está en DOM o hubo error)
                 this.loadingClientes = false;
+                console.log('[clientes.list] Loading state set to false');
             }
         },
 
@@ -233,15 +276,33 @@ function clientesListModule() {
          * ⚠️ Spinner muestra brevemente durante inicialización, luego desaparece
          */
         async loadContactosTable() {
-            if (this.contactosLoaded) return;
+            if (this.contactosLoaded) {
+                console.log('[contactos.list] Tabla ya cargada, skipping');
+                return;
+            }
 
+            console.log('[contactos.list] Starting table load...');
             this.loadingContactos = true;
             try {
                 if (!window.TabulatorFactory) {
-                    console.warn('[contactos.list] TabulatorFactory no disponible aún');
-                    return;
+                    console.warn('[contactos.list] TabulatorFactory no disponible, intentando con timeout...');
+                    // ⚠️ CRÍTICO: Esperar a que TabulatorFactory esté disponible
+                    await new Promise((resolve, reject) => {
+                        let attempts = 0;
+                        const checkInterval = setInterval(() => {
+                            attempts++;
+                            if (window.TabulatorFactory) {
+                                clearInterval(checkInterval);
+                                resolve();
+                            } else if (attempts > 50) { // 5 segundos de espera máximo
+                                clearInterval(checkInterval);
+                                reject(new Error('TabulatorFactory timeout'));
+                            }
+                        }, 100);
+                    });
                 }
 
+                console.log('[contactos.list] TabulatorFactory available, creating table...');
                 // ⚠️ Inicializar tabla (operación síncrona)
                 this.contactosTable = window.TabulatorFactory.create(
                     '#grid-contactos',
@@ -250,8 +311,13 @@ function clientesListModule() {
                     { searchInputSelector: '#search-contacto' }
                 );
 
+                if (!this.contactosTable) {
+                    throw new Error('TabulatorFactory.create returned null');
+                }
+
                 // ⚠️ INMEDIATAMENTE marcar como cargada (tabla está en DOM)
                 this.contactosLoaded = true;
+                console.log('[contactos.list] Table marked as loaded');
 
                 if (this.contactosTable) {
                     this.contactosTable.on('dataLoaded', () => {
@@ -260,15 +326,18 @@ function clientesListModule() {
                     });
                 }
 
-                console.log('[contactos.list] Tabla de contactos inicializada');
+                console.log('[contactos.list] Tabla de contactos inicializada correctamente');
             } catch (error) {
                 console.error('[contactos.list] Error cargando tabla:', error);
+                // ⚠️ Marcar como cargada incluso si hay error para ocultar el spinner
+                this.contactosLoaded = true;
                 if (window.SintelFeedback) {
-                    window.SintelFeedback.error('Error al cargar la tabla de contactos');
+                    window.SintelFeedback.error('Error al cargar la tabla de contactos: ' + error.message);
                 }
             } finally {
-                // ⚠️ Spinner desaparece inmediatamente
+                // ⚠️ SIEMPRE ocultar el spinner
                 this.loadingContactos = false;
+                console.log('[contactos.list] Loading state set to false');
             }
         },
 
