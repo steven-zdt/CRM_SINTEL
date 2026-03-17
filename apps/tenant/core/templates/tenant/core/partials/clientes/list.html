@@ -1,20 +1,26 @@
-{# list.html - Vista de Clientes y Contactos con Tabs v2.60 #}
-{# ⚠️ v2.60: Migrado a Tabs de Bootstrap 5 (Clientes | Contactos) #}
-{# ⚠️ v2.60: HTMX + Offcanvas (sin modales legacy) #}
+{# list.html - Vista de Clientes y Contactos con Tabs v2.61 #}
+{# ⚠️ v2.61: Lazy Loading con Alpine.js + HTMX + Offcanvas #}
+{# ⚠️ Feature-Sliced: Contenedor listo para inicializar tablas bajo demanda #}
 
-<div class="card shadow-sm">
+<div class="card shadow-sm" 
+     x-data="clientesListModule()"
+     @shown.bs.tab="if ($event.detail.relatedTarget?.id === 'tab-clientes') { loadClientesTable() }"
+     @clienteGuardado="reloadClientesTable()"
+     @clienteEliminado="reloadClientesTable()">
   <div class="card-header bg-white">
     <ul class="nav nav-tabs card-header-tabs" id="clientes-tabs" role="tablist">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="tab-clientes" data-bs-toggle="tab" data-bs-target="#tab-pane-clientes" 
                 type="button" role="tab" aria-controls="tab-pane-clientes" aria-selected="true">
           <i class="bi bi-people me-2"></i>Directorio de Clientes
+          <span x-show="loadingClientes" class="ms-2"><i class="bi bi-hourglass-split"></i></span>
         </button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="tab-contactos" data-bs-toggle="tab" data-bs-target="#tab-pane-contactos" 
                 type="button" role="tab" aria-controls="tab-pane-contactos" aria-selected="false">
           <i class="bi bi-person-lines-fill me-2"></i>Directorio de Contactos
+          <span x-show="loadingContactos" class="ms-2"><i class="bi bi-hourglass-split"></i></span>
         </button>
       </li>
     </ul>
@@ -26,17 +32,38 @@
            aria-labelledby="tab-clientes" tabindex="0">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <div class="input-group input-group-sm w-auto">
-            <input type="text" id="search-cliente" class="form-control" placeholder="Buscar cliente...">
-            <button class="btn btn-outline-secondary" type="button"><i class="bi bi-search"></i></button>
+            <input type="text" id="search-cliente" class="form-control" placeholder="Buscar cliente..."
+                   @keyup.debounce="300ms='reloadClientesTable()'">
+            <button class="btn btn-outline-secondary" type="button" @click="reloadClientesTable()">
+              <i class="bi bi-search"></i>
+            </button>
           </div>
           <button class="btn btn-primary btn-sm" 
                   hx-get="/api/v1/clientes/render-offcanvas/crear/" 
                   hx-target="#offcanvas-container-clientes" 
-                  hx-swap="innerHTML">
+                  hx-swap="innerHTML"
+                  :disabled="loadingClientes">
             <i class="bi bi-plus-lg me-1"></i>Nuevo Cliente
           </button>
         </div>
-        <div id="grid-clientes"></div>
+        
+        {# ⚠️ Loading State #}
+        <div x-show="loadingClientes && !clientesLoaded" class="text-center py-5">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Cargando clientes...</p>
+        </div>
+        
+        {# ⚠️ Grid Container (Lazy) #}
+        <div id="grid-clientes" x-show="clientesLoaded || !loadingClientes"></div>
+        
+        {# ⚠️ Empty State #}
+        <div x-show="!loadingClientes && clientesLoaded && clientesCount === 0" class="text-center py-5">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay clientes registrados
+          </p>
+        </div>
       </div>
 
       {# Tab 2: Directorio de Contactos #}
@@ -44,23 +71,314 @@
            aria-labelledby="tab-contactos" tabindex="0">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <div class="input-group input-group-sm w-auto">
-            <input type="text" id="search-contacto" class="form-control" placeholder="Buscar contacto...">
-            <button class="btn btn-outline-secondary" type="button"><i class="bi bi-search"></i></button>
+            <input type="text" id="search-contacto" class="form-control" placeholder="Buscar contacto..."
+                   @keyup.debounce="300ms='reloadContactosTable()'">
+            <button class="btn btn-outline-secondary" type="button" @click="reloadContactosTable()">
+              <i class="bi bi-search"></i>
+            </button>
           </div>
           <button class="btn btn-primary btn-sm" 
                   hx-get="/api/v1/clientes/contactos/gestor-offcanvas/" 
                   hx-target="#offcanvas-container-contactos" 
                   hx-swap="innerHTML"
-                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-contactos'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-contactos'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }"
+                  :disabled="loadingContactos">
             <i class="bi bi-person-plus me-1"></i>Nuevo Contacto
           </button>
         </div>
-        <div id="grid-contactos"></div>
+        
+        {# ⚠️ Loading State #}
+        <div x-show="loadingContactos && !contactosLoaded" class="text-center py-5">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Cargando contactos...</p>
+        </div>
+        
+        {# ⚠️ Grid Container (Lazy) #}
+        <div id="grid-contactos" x-show="contactosLoaded || !loadingContactos"></div>
+        
+        {# ⚠️ Empty State #}
+        <div x-show="!loadingContactos && contactosLoaded && contactosCount === 0" class="text-center py-5">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay contactos registrados
+          </p>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-{# ⚠️ v2.60: Contenedores HTMX para Offcanvas #}
+{# ⚠️ v2.61: Contenedores HTMX para Offcanvas #}
 <div id="offcanvas-container-clientes"></div>
 <div id="offcanvas-container-contactos"></div>
+
+{# ⚠️ v2.61: Alpine.js Module para Lazy Loading #}
+<script>
+/**
+ * Lazy Loading Module para Clientes & Contactos v2.61
+ * ⚠️ Coordina: Estado de carga, inicialización de tablas, eventos personalizados
+ * ⚠️ Dependencias: Alpine.js, w.clientesAPI, w.TabulatorFactory
+ */
+function clientesListModule() {
+    return {
+        // ⚠️ Estado de carga
+        loadingClientes: false,
+        loadingContactos: false,
+        clientesLoaded: false,
+        contactosLoaded: false,
+        clientesCount: 0,
+        contactosCount: 0,
+
+        /**
+         * Cargar tabla de clientes (Lazy Loading)
+         * ⚠️ Solo ejecuta una vez por sesión
+         */
+        async loadClientesTable() {
+            if (this.clientesLoaded) return; // Ya cargada
+            
+            this.loadingClientes = true;
+            try {
+                // Esperar a que TabulatorFactory esté disponible
+                if (!window.TabulatorFactory) {
+                    console.warn('[clientes.list] TabulatorFactory no disponible aún');
+                    return;
+                }
+
+                // Inicializar tabla
+                const table = window.TabulatorFactory.create(
+                    '#grid-clientes',
+                    '/api/v1/clientes/',
+                    this.getClientesColumns(),
+                    { searchInputSelector: '#search-cliente' }
+                );
+
+                // Marcar como cargada
+                this.clientesLoaded = true;
+
+                // Contar filas cuando se cargan datos
+                if (table) {
+                    table.on('dataLoaded', () => {
+                        this.clientesCount = table.getDataCount('active');
+                    });
+                }
+
+                // Escuchar eventos personalizados
+                document.addEventListener('clienteGuardado', () => {
+                    if (table) table.replaceData();
+                });
+
+                document.addEventListener('clienteEliminado', () => {
+                    if (table) table.replaceData();
+                });
+
+                console.log('[clientes.list] Tabla de clientes cargada');
+            } catch (error) {
+                console.error('[clientes.list] Error cargando tabla:', error);
+                if (window.SintelFeedback) {
+                    window.SintelFeedback.error('Error al cargar la tabla de clientes');
+                }
+            } finally {
+                this.loadingClientes = false;
+            }
+        },
+
+        /**
+         * Recargar tabla de clientes
+         */
+        async reloadClientesTable() {
+            if (!this.clientesLoaded) {
+                await this.loadClientesTable();
+            } else {
+                const table = window.Tabulator.findTable('#grid-clientes')[0];
+                if (table) {
+                    table.replaceData();
+                }
+            }
+        },
+
+        /**
+         * Cargar tabla de contactos (Lazy Loading)
+         */
+        async loadContactosTable() {
+            if (this.contactosLoaded) return;
+
+            this.loadingContactos = true;
+            try {
+                if (!window.TabulatorFactory) {
+                    console.warn('[contactos.list] TabulatorFactory no disponible aún');
+                    return;
+                }
+
+                const table = window.TabulatorFactory.create(
+                    '#grid-contactos',
+                    '/api/v1/clientes/contactos/',
+                    this.getContactosColumns(),
+                    { searchInputSelector: '#search-contacto' }
+                );
+
+                this.contactosLoaded = true;
+
+                if (table) {
+                    table.on('dataLoaded', () => {
+                        this.contactosCount = table.getDataCount('active');
+                    });
+                }
+
+                console.log('[contactos.list] Tabla de contactos cargada');
+            } catch (error) {
+                console.error('[contactos.list] Error cargando tabla:', error);
+                if (window.SintelFeedback) {
+                    window.SintelFeedback.error('Error al cargar la tabla de contactos');
+                }
+            } finally {
+                this.loadingContactos = false;
+            }
+        },
+
+        /**
+         * Recargar tabla de contactos
+         */
+        async reloadContactosTable() {
+            if (!this.contactosLoaded) {
+                await this.loadContactosTable();
+            } else {
+                const table = window.Tabulator.findTable('#grid-contactos')[0];
+                if (table) {
+                    table.replaceData();
+                }
+            }
+        },
+
+        /**
+         * Definición de columnas para tabla de clientes
+         */
+        getClientesColumns() {
+            return [
+                { title: 'Razón Social', field: 'razon_social', widthGrow: 2 },
+                { title: 'Documento', field: 'numero_documento' },
+                { title: 'Email', field: 'email' },
+                { title: 'Teléfono', field: 'telefono' },
+                { title: 'Ciudad', field: 'ciudad' },
+                { 
+                    title: 'Acciones', 
+                    width: 150,
+                    hozAlign: 'center',
+                    formatter: 'html',
+                    cellClick: (e, cell) => {
+                        const btn = e.target.closest('button');
+                        if (!btn) return;
+
+                        const rowData = cell.getRow().getData();
+                        if (btn.classList.contains('btn-editar')) {
+                            this.editarCliente(rowData.id);
+                        } else if (btn.classList.contains('btn-ver')) {
+                            this.verCliente(rowData.id);
+                        } else if (btn.classList.contains('btn-eliminar')) {
+                            this.eliminarCliente(rowData.id);
+                        }
+                    },
+                    formatter: () => `
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn btn-outline-primary btn-editar" title="Editar">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-info btn-ver" title="Ver">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-eliminar" title="Eliminar">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    `
+                }
+            ];
+        },
+
+        /**
+         * Definición de columnas para tabla de contactos
+         */
+        getContactosColumns() {
+            return [
+                { title: 'Nombre', field: 'nombre_completo', widthGrow: 2 },
+                { title: 'Email', field: 'email' },
+                { title: 'Teléfono', field: 'telefono' },
+                { title: 'Cargo', field: 'cargo' },
+                { 
+                    title: 'Acciones', 
+                    width: 100,
+                    hozAlign: 'center',
+                    formatter: 'html',
+                    formatter: () => `
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn btn-outline-primary" title="Editar">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" title="Eliminar">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    `
+                }
+            ];
+        },
+
+        /**
+         * Editar cliente
+         */
+        async editarCliente(id) {
+            const url = `/api/v1/clientes/${id}/render-offcanvas/editar/`;
+            try {
+                await htmx.ajax('GET', url, {
+                    target: '#offcanvas-container-clientes',
+                    swap: 'innerHTML'
+                });
+                console.log('[clientes.list] Offcanvas de edición cargado para cliente ID:', id);
+            } catch (error) {
+                console.error('[clientes.list] Error cargando offcanvas:', error);
+                if (window.SintelFeedback) {
+                    window.SintelFeedback.error('Error al cargar el formulario');
+                }
+            }
+        },
+
+        /**
+         * Ver cliente
+         */
+        async verCliente(id) {
+            const url = `/api/v1/clientes/render-offcanvas/detalle/?id=${id}`;
+            try {
+                await htmx.ajax('GET', url, {
+                    target: '#offcanvas-container-clientes',
+                    swap: 'innerHTML'
+                });
+            } catch (error) {
+                console.error('[clientes.list] Error cargando detalle:', error);
+            }
+        },
+
+        /**
+         * Eliminar cliente
+         */
+        async eliminarCliente(id) {
+            if (!confirm('¿Está seguro de eliminar este cliente?')) return;
+
+            try {
+                const response = await window.clientesAPI.delete(id);
+                if (response.ok || response.status === 204) {
+                    if (window.SintelFeedback) {
+                        window.SintelFeedback.success('Cliente eliminado');
+                    }
+                    document.dispatchEvent(new CustomEvent('clienteEliminado'));
+                } else {
+                    if (window.SintelFeedback) {
+                        window.SintelFeedback.error('No se puede eliminar un cliente activo');
+                    }
+                }
+            } catch (error) {
+                console.error('[clientes.list] Error eliminando:', error);
+            }
+        }
+    };
+}
+</script>
