@@ -28,6 +28,10 @@
       const welcome = document.getElementById('workspace-welcome');
       if (welcome) welcome.style.display = 'none';
       
+      // ⚠️ v2.61: Disparar evento personalizado para componentes Alpine.js
+      // El Bootstrap shown.bs.tab no se dispara cuando usamos showTab() programáticamente
+      tab.dispatchEvent(new CustomEvent('tab-shown', { detail: { tabName } }));
+      
       // Actualizar título
       const title = document.getElementById('viewTitle');
       if (title) {
@@ -146,32 +150,36 @@
             window._inventarioTabsInitialized = true;
           }, 300);
         }
-      } else {
-        // Mapeo de nombres de módulo a objetos DT para otros tabs
-        const dtModules = {
-          'facturas': window.facturasDT,
-          'contabilidad': window.contabilidadDT,
-          'empleados': window.empleadosDT,
-          'gastos': window.gastosDT,
-          'proveedores': window.ProveedoresModule,
-          'clientes': window.clientesDT,
-          'proyectos': window.ProyectosModule,
-          'perfil': window.perfilDT,
-        };
-        
-        const dtModule = dtModules[tabName];
-        if (dtModule && typeof dtModule.init === 'function') {
-          setTimeout(() => {
-            dtModule.init();
-          }, 100);
-        } else {
-          // Fallback: usar función genérica si existe
-          const initFunc = window[`init${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Page`];
-          if (typeof initFunc === 'function') {
-            setTimeout(initFunc, 100);
-          }
-        }
-      }
+      } else if (tabName === 'clientes') {
+         // ⚠️ v2.61: Módulo de clientes usa Alpine.js con lazy loading
+         // El evento @shown.bs.tab en list.html se dispara automáticamente
+         // No necesitamos inicializar manualmente aquí
+         console.log('[workspace] Clientes tab mostrado - Alpine.js manejará la carga lazy');
+       } else {
+         // Mapeo de nombres de módulo a objetos DT para otros tabs
+         const dtModules = {
+           'facturas': window.facturasDT,
+           'contabilidad': window.contabilidadDT,
+           'empleados': window.empleadosDT,
+           'gastos': window.gastosDT,
+           'proveedores': window.ProveedoresModule,
+           'proyectos': window.ProyectosModule,
+           'perfil': window.perfilDT,
+         };
+         
+         const dtModule = dtModules[tabName];
+         if (dtModule && typeof dtModule.init === 'function') {
+           setTimeout(() => {
+             dtModule.init();
+           }, 100);
+         } else {
+           // Fallback: usar función genérica si existe
+           const initFunc = window[`init${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Page`];
+           if (typeof initFunc === 'function') {
+             setTimeout(initFunc, 100);
+           }
+         }
+       }
     }
   }
   

@@ -5,6 +5,7 @@
 <div class="card shadow-sm" 
      x-data="clientesListModule()"
      @shown.bs.tab="handleTabChange($event)"
+     @tab-shown="handleWorkspaceTabChange($event)"
      @clienteGuardado="reloadClientesTable()"
      @clienteEliminado="reloadClientesTable()"
      @contactoGuardado="reloadContactosTable()"
@@ -137,14 +138,32 @@ function clientesListModule() {
         contactosTable: null,
 
         /**
-         * Manejo centralizado de cambios de tabs
+         * Manejo centralizado de cambios de tabs (desde Bootstrap tabs)
+         * ⚠️ Solo se dispara si el usuario hace clic en el tab dentro del card
          */
         handleTabChange(event) {
             const tabId = event.detail?.relatedTarget?.id;
+            console.log('[clientes.list.handleTabChange] TabId:', tabId, 'Event:', event);
             if (tabId === 'tab-clientes') {
+                console.log('[clientes.list.handleTabChange] Cargando tabla de clientes...');
                 this.loadClientesTable();
             } else if (tabId === 'tab-contactos') {
+                console.log('[clientes.list.handleTabChange] Cargando tabla de contactos...');
                 this.loadContactosTable();
+            }
+        },
+
+        /**
+         * Manejo de cambios de tabs desde workspace sidebar (evento personalizado)
+         * ⚠️ Se dispara cuando el usuario hace clic en "Clientes" en el sidebar
+         */
+        handleWorkspaceTabChange(event) {
+            const tabName = event.detail?.tabName;
+            console.log('[clientes.list.handleWorkspaceTabChange] TabName:', tabName, 'Event:', event);
+            if (tabName === 'clientes') {
+                // ⚠️ La pestaña de clientes es la primera (activa por defecto dentro del card)
+                console.log('[clientes.list.handleWorkspaceTabChange] Cargando tabla de clientes desde workspace...');
+                this.loadClientesTable();
             }
         },
 
