@@ -488,7 +488,17 @@
     /**
      * HTMX settle events - Show offcanvas after HTML is injected and rendered
      * ⚠️ Use htmx:afterSettle instead of afterSwap for better timing
+     * ⚠️ Wait for Bootstrap to be available (CDN loading)
      */
+    function waitForBootstrap(callback) {
+        if (w.bootstrap) {
+            callback();
+        } else {
+            // Bootstrap still loading from CDN, retry
+            setTimeout(() => waitForBootstrap(callback), 50);
+        }
+    }
+    
     d.body.addEventListener('htmx:afterSettle', (e) => {
         const target = e.detail.target;
         
@@ -500,14 +510,19 @@
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     const offcanvasEl = d.getElementById('offcanvas-cliente');
-                    if (offcanvasEl && w.bootstrap) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
-                        log.info('Cliente offcanvas shown successfully');
+                    if (offcanvasEl) {
+                        // Wait for Bootstrap to be available
+                        waitForBootstrap(() => {
+                            try {
+                                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                                offcanvasInstance.show();
+                                log.info('Cliente offcanvas shown successfully');
+                            } catch (err) {
+                                log.error('Error showing offcanvas', err);
+                            }
+                        });
                     } else {
-                        log.error('offcanvas-cliente not found or bootstrap not available', {
-                            found: !!offcanvasEl,
-                            bootstrap: !!w.bootstrap,
+                        log.error('offcanvas-cliente not found in DOM', {
                             container: target.innerHTML.substring(0, 100)
                         });
                     }
@@ -521,15 +536,19 @@
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     const offcanvasEl = d.getElementById('offcanvas-contactos');
-                    if (offcanvasEl && w.bootstrap) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
-                        log.info('Contactos offcanvas shown successfully');
-                    } else {
-                        log.error('offcanvas-contactos not found or bootstrap not available', {
-                            found: !!offcanvasEl,
-                            bootstrap: !!w.bootstrap
+                    if (offcanvasEl) {
+                        // Wait for Bootstrap to be available
+                        waitForBootstrap(() => {
+                            try {
+                                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                                offcanvasInstance.show();
+                                log.info('Contactos offcanvas shown successfully');
+                            } catch (err) {
+                                log.error('Error showing offcanvas', err);
+                            }
                         });
+                    } else {
+                        log.error('offcanvas-contactos not found in DOM');
                     }
                 });
             });
