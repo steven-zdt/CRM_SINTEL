@@ -61,6 +61,39 @@
      */
     delete: (id) => w.http('DELETE', `${API_BASE}/${id}/`)
   };
+
+  const CONTACTOS_API = '/api/v1/clientes/contactos';
+
+  /**
+   * ⚠️ v2.61: Integración Maestro-Detalle - Directorio de Contactos
+   */
+  w.contactosAPI = {
+    /**
+     * Lista contactos de un cliente
+     * @param {number|string} clienteId - ID del cliente
+     */
+    listByCliente: (clienteId) => w.http('GET', `${CONTACTOS_API}/?cliente=${clienteId}`),
+
+    /**
+     * Obtiene detalle de un contacto
+     */
+    get: (id) => w.http('GET', `${CONTACTOS_API}/${id}/`),
+
+    /**
+     * Crea un contacto
+     */
+    create: (payload) => w.http('POST', `${CONTACTOS_API}/`, payload),
+
+    /**
+     * Actualiza un contacto
+     */
+    update: (id, payload) => w.http('PATCH', `${CONTACTOS_API}/${id}/`, payload),
+
+    /**
+     * Elimina un contacto
+     */
+    delete: (id) => w.http('DELETE', `${CONTACTOS_API}/${id}/`)
+  };
   
-  console.log('[clientes.api] ✅ Módulo clientesAPI inicializado correctamente');
+  console.log('[clientes.api] ✅ Módulo clientesAPI y contactosAPI inicializados');
 })(window);

@@ -232,6 +232,12 @@ def ingest_document(
             }
         )
     except ValueError as e:
+        # ⚠️ v2.61.5: Captura y mejora de presentación de errores para inyección en UI
+        error_detail = {
+            "error_code": "unknown_document_type",
+            "message": f"Tipo de documento no reconocido o no soportado: {str(e)}",
+            "technical_detail": str(e)
+        }
         logger.warning(
             "document_ingest_routing_failed",
             extra={
@@ -247,8 +253,9 @@ def ingest_document(
             "dto": {},
             "sha256": sha256_hash,
             "metadata": metadata,
-            "error": "unknown_document_type",
-            "message": str(e),
+            "error": error_detail["error_code"],
+            "message": error_detail["message"],
+            "ui_feedback": error_detail, # ⚠️ Inyectable por error_injector
         }, 400
     except Exception as e:
         error_message = str(e)

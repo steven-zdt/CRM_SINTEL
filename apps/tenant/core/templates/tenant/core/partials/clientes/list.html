@@ -49,16 +49,16 @@
           </button>
         </div>
         
-        {# ⚠️ Loading State #}
-        <div x-show="loadingClientes && !clientesLoaded" class="text-center py-5">
+        {# ⚠️ Loading State - Solo muestra si aún no se ha inicializado la tabla #}
+        <div x-show="!clientesLoaded && loadingClientes" class="text-center py-5">
           <div class="spinner-border" role="status">
             <span class="visually-hidden">Cargando...</span>
           </div>
-          <p class="mt-2 text-muted">Cargando clientes...</p>
+          <p class="mt-2 text-muted">Inicializando tabla de clientes...</p>
         </div>
         
-        {# ⚠️ Grid Container (Lazy) #}
-        <div id="grid-clientes" x-show="clientesLoaded || !loadingClientes"></div>
+        {# ⚠️ Grid Container - Se muestra una vez que la tabla está inicializada #}
+        <div id="grid-clientes" x-show="clientesLoaded"></div>
         
         {# ⚠️ Empty State #}
         <div x-show="!loadingClientes && clientesLoaded && clientesCount === 0" class="text-center py-5">
@@ -89,16 +89,16 @@
           </button>
         </div>
         
-        {# ⚠️ Loading State #}
-        <div x-show="loadingContactos && !contactosLoaded" class="text-center py-5">
+        {# ⚠️ Loading State - Solo muestra si aún no se ha inicializado la tabla #}
+        <div x-show="!contactosLoaded && loadingContactos" class="text-center py-5">
           <div class="spinner-border" role="status">
             <span class="visually-hidden">Cargando...</span>
           </div>
-          <p class="mt-2 text-muted">Cargando contactos...</p>
+          <p class="mt-2 text-muted">Inicializando tabla de contactos...</p>
         </div>
         
-        {# ⚠️ Grid Container (Lazy) #}
-        <div id="grid-contactos" x-show="contactosLoaded || !loadingContactos"></div>
+        {# ⚠️ Grid Container - Se muestra una vez que la tabla está inicializada #}
+        <div id="grid-contactos" x-show="contactosLoaded"></div>
         
         {# ⚠️ Empty State #}
         <div x-show="!loadingContactos && contactosLoaded && contactosCount === 0" class="text-center py-5">
@@ -151,6 +151,7 @@ function clientesListModule() {
         /**
          * Cargar tabla de clientes (Lazy Loading)
          * ⚠️ Solo ejecuta una vez por sesión
+         * ⚠️ Spinner muestra brevemente durante inicialización, luego desaparece
          */
         async loadClientesTable() {
             if (this.clientesLoaded) return; // Ya cargada
@@ -163,7 +164,7 @@ function clientesListModule() {
                     return;
                 }
 
-                // Inicializar tabla
+                // ⚠️ Inicializar tabla (operación síncrona - crea instancia)
                 this.clientesTable = window.TabulatorFactory.create(
                     '#grid-clientes',
                     '/api/v1/clientes/',
@@ -171,23 +172,26 @@ function clientesListModule() {
                     { searchInputSelector: '#search-cliente' }
                 );
 
-                // Marcar como cargada
+                // ⚠️ INMEDIATAMENTE marcar como cargada (tabla está en DOM)
+                // Los datos se cargan asincronicamente en background sin spinner
                 this.clientesLoaded = true;
 
-                // Contar filas cuando se cargan datos
+                // Contar filas cuando se cargan datos (background)
                 if (this.clientesTable) {
                     this.clientesTable.on('dataLoaded', () => {
                         this.clientesCount = this.clientesTable.getDataCount('active');
+                        console.log('[clientes.list] Datos de clientes cargados:', this.clientesCount);
                     });
                 }
 
-                console.log('[clientes.list] Tabla de clientes cargada');
+                console.log('[clientes.list] Tabla de clientes inicializada');
             } catch (error) {
                 console.error('[clientes.list] Error cargando tabla:', error);
                 if (window.SintelFeedback) {
                     window.SintelFeedback.error('Error al cargar la tabla de clientes');
                 }
             } finally {
+                // ⚠️ Spinner desaparece inmediatamente (tabla ya está en DOM)
                 this.loadingClientes = false;
             }
         },
@@ -207,6 +211,7 @@ function clientesListModule() {
 
         /**
          * Cargar tabla de contactos (Lazy Loading)
+         * ⚠️ Spinner muestra brevemente durante inicialización, luego desaparece
          */
         async loadContactosTable() {
             if (this.contactosLoaded) return;
@@ -218,6 +223,7 @@ function clientesListModule() {
                     return;
                 }
 
+                // ⚠️ Inicializar tabla (operación síncrona)
                 this.contactosTable = window.TabulatorFactory.create(
                     '#grid-contactos',
                     '/api/v1/clientes/contactos/',
@@ -225,21 +231,24 @@ function clientesListModule() {
                     { searchInputSelector: '#search-contacto' }
                 );
 
+                // ⚠️ INMEDIATAMENTE marcar como cargada (tabla está en DOM)
                 this.contactosLoaded = true;
 
                 if (this.contactosTable) {
                     this.contactosTable.on('dataLoaded', () => {
                         this.contactosCount = this.contactosTable.getDataCount('active');
+                        console.log('[contactos.list] Datos de contactos cargados:', this.contactosCount);
                     });
                 }
 
-                console.log('[contactos.list] Tabla de contactos cargada');
+                console.log('[contactos.list] Tabla de contactos inicializada');
             } catch (error) {
                 console.error('[contactos.list] Error cargando tabla:', error);
                 if (window.SintelFeedback) {
                     window.SintelFeedback.error('Error al cargar la tabla de contactos');
                 }
             } finally {
+                // ⚠️ Spinner desaparece inmediatamente
                 this.loadingContactos = false;
             }
         },
@@ -371,8 +380,8 @@ function clientesListModule() {
                 console.log('[clientes.list] Offcanvas de edición cargado para cliente ID:', id);
             } catch (error) {
                 console.error('[clientes.list] Error cargando offcanvas:', error);
-                if (window.SintelFeedback) {
-                    window.SintelFeedback.error('Error al cargar el formulario');
+                if (window.UIManager) {
+                    window.UIManager.error('Error al cargar el formulario');
                 }
             }
         },
@@ -401,13 +410,13 @@ function clientesListModule() {
             try {
                 const response = await window.clientesAPI.delete(id);
                 if (response.ok || response.status === 204) {
-                    if (window.SintelFeedback) {
-                        window.SintelFeedback.success('Cliente eliminado');
+                    if (window.UIManager) {
+                        window.UIManager.success('Cliente eliminado');
                     }
                     document.dispatchEvent(new CustomEvent('clienteEliminado'));
                 } else {
-                    if (window.SintelFeedback) {
-                        window.SintelFeedback.error('No se puede eliminar un cliente activo');
+                    if (window.UIManager) {
+                        window.UIManager.error('No se puede eliminar un cliente activo');
                     }
                 }
             } catch (error) {
@@ -425,8 +434,8 @@ function clientesListModule() {
                 // Obtener datos del contacto
                 const response = await window.http('GET', `/api/v1/clientes/contactos/${id}/`);
                 if (!response.ok) {
-                    if (window.SintelFeedback) {
-                        window.SintelFeedback.error('Error al cargar datos del contacto');
+                    if (window.UIManager) {
+                        window.UIManager.error('Error al cargar datos del contacto');
                     }
                     return;
                 }
@@ -441,8 +450,8 @@ function clientesListModule() {
                 console.log('[contactos.list] Offcanvas de edición cargado para contacto ID:', id);
             } catch (error) {
                 console.error('[contactos.list] Error editando contacto:', error);
-                if (window.SintelFeedback) {
-                    window.SintelFeedback.error('Error al editar el contacto');
+                if (window.UIManager) {
+                    window.UIManager.error('Error al editar el contacto');
                 }
             }
         },
@@ -458,19 +467,19 @@ function clientesListModule() {
                 const response = await window.http('DELETE', `/api/v1/clientes/contactos/${id}/`);
                 
                 if (response.ok || response.status === 204) {
-                    if (window.SintelFeedback) {
-                        window.SintelFeedback.success('Contacto eliminado');
+                    if (window.UIManager) {
+                        window.UIManager.success('Contacto eliminado');
                     }
                     document.dispatchEvent(new CustomEvent('contactoEliminado'));
                 } else {
-                    if (window.SintelFeedback) {
-                        window.SintelFeedback.error('No se puede eliminar este contacto');
+                    if (window.UIManager) {
+                        window.UIManager.error('No se puede eliminar este contacto');
                     }
                 }
             } catch (error) {
                 console.error('[contactos.list] Error eliminando:', error);
-                if (window.SintelFeedback) {
-                    window.SintelFeedback.error('Error al eliminar el contacto');
+                if (window.UIManager) {
+                    window.UIManager.error('Error al eliminar el contacto');
                 }
             }
         }
