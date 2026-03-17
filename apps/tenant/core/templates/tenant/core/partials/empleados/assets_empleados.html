@@ -2,15 +2,15 @@
 {# assets_empleados.html - Assets del módulo Empleados v2.60 #}
 {# ⚠️ Feature-Sliced Architecture v2.60: Módulos independientes por dominio #}
 {# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (SIN async/defer) #}
-{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, etc.) - ya cargado en workspace.html #}
-{# 2. empleados.api.js (define window.empleadosAPI) - DEBE cargarse PRIMERO #}
-{# 3. features/empleados_editor.js (define w.EmpleadosEditor) #}
-{# 4. features/contratos_editor.js (define w.ContratosEditor) #}
-{# 5. features/devengos_editor.js (define w.DevengosEditor) #}
-{# 6. features/historial_nominas.js (define w.HistorialNominas) #}
-{# 7. features/empleados_list.js (define w.EmpleadosList) - DEBE cargarse ÚLTIMO #}
+{# ⚠️ IMPORTANTE: assets_core.html YA se carga en workspace.html (NO duplicar aquí) #}
+{# 1. empleados.api.js (define window.empleadosAPI) - DEBE cargarse PRIMERO #}
+{# 2. features/empleados_editor.js (define w.EmpleadosEditor) #}
+{# 3. features/contratos_editor.js (define w.ContratosEditor) #}
+{# 4. features/devengos_editor.js (define w.DevengosEditor) #}
+{# 5. features/historial_nominas.js (define w.HistorialNominas) #}
+{# 6. features/empleados_list.js (define w.EmpleadosList) - DEBE cargarse ÚLTIMO #}
 
-{% include 'tenant/core/partials/assets_core.html' %}
+{# ⚠️ NO incluir assets_core.html aquí - ya está cargado en workspace.html línea 330 #}
 
 {# ⚠️ v2.60: ORDEN CRÍTICO DE CARGA - Sin async/defer #}
 {# BLOQUE 1: API Wrapper - DEBE cargarse PRIMERO #}
