@@ -1,6 +1,6 @@
 {# list_productos.html - Módulo Productos v2.61.3 #}
 {# ⚠️ v2.61.3: Feature-Sliced Architecture - Usa productos_list.js y productos_editor.js #}
-{# ⚠️ v2.61.3: Usa Core API Facade (/api/v1/core/v1/inventario/productos/) #}
+{# ⚠️ v2.61.3: Usa Core API Facade (/api/v1/inventario/productos/) #}
 <div class="ui-module h-100 d-flex flex-column">
     {# ⚠️ v2.40: Elemento de feedback para errores #}
     <div id="feedback-productos-list" class="alert d-none mb-2" role="alert"></div>
@@ -14,7 +14,7 @@
             {# ⚠️ v2.61.3: Botón HTMX para crear producto - Usa Core API Facade #}
             {# ⚠️ Event delegation: Sin onclick inline, solo HTMX attributes #}
             <button type="button" class="btn btn-primary" id="btn-nuevo-producto"
-                    hx-get="/api/v1/core/v1/inventario/productos/gestor-offcanvas/" 
+                    hx-get="/api/v1/inventario/productos/gestor-offcanvas/" 
                     hx-target="#offcanvas-container-inventario" 
                     hx-swap="innerHTML"
                     hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-inventario'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
