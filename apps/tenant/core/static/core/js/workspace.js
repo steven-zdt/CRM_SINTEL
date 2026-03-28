@@ -19,38 +19,39 @@
     if (welcome) welcome.style.display = 'block';
   }
   
-  // Mostrar un tab específico
-  function showTab(tabName) {
-    hideAllTabs();
-    const tab = document.getElementById('tab-' + tabName);
-    if (tab) {
-      tab.style.display = 'block';
-      const welcome = document.getElementById('workspace-welcome');
-      if (welcome) welcome.style.display = 'none';
-      
-      // Actualizar título
-      const title = document.getElementById('viewTitle');
-      if (title) {
-        const titles = {
-          'empresa': '🏢 Empresa',
-          'facturas': '🧾 Facturas',
-          'contabilidad': '📚 Contabilidad',
-          'inventario': '📦 Inventario',
-          'empleados': '👥 Empleados',
-          'gastos': '💰 Gastos',
-          'proveedores': '🏪 Proveedores',
-          'clientes': '👤 Clientes',
-          'proyectos': '📋 Proyectos',
-          'perfil': '👤 Perfil',
-          'mailinbox': '📧 Correo Entrante'
-        };
-        title.textContent = titles[tabName] || 'Workspace';
+    // Mostrar un tab específico
+    function showTab(tabName) {
+      hideAllTabs();
+      const tab = document.getElementById('tab-' + tabName);
+      if (tab) {
+        tab.style.display = 'block';
+        const welcome = document.getElementById('workspace-welcome');
+        if (welcome) welcome.style.display = 'none';
+        
+        // Actualizar título
+        const title = document.getElementById('viewTitle');
+        if (title) {
+          const titles = {
+            'empresa': '🏢 Empresa',
+            'facturas': '🧾 Facturas',
+            'contabilidad': '📚 Contabilidad',
+            'inventario': '📦 Inventario',
+            'empleados': '👥 Empleados',
+            'gastos': '💰 Gastos',
+            'proveedores': '🏪 Proveedores',
+            'clientes': '👤 Clientes',
+            'proyectos': '📋 Proyectos',
+            'perfil': '👤 Perfil',
+            'mailinbox': '📧 Correo Entrante'
+          };
+          title.textContent = titles[tabName] || 'Workspace';
+        }
+        
+        // ⚠️ v3.0: Disparar evento personalizado para que cada módulo se auto-inicialice
+        console.log('[workspace] Dispatching tab-activated:', tabName);
+        document.dispatchEvent(new CustomEvent('tab-activated', { detail: { tabName } }));
       }
-      
-      // ⚠️ v3.0: No hay lógica de inicialización de módulos aquí.
-      // Cada módulo debe ser responsable de auto-inicializarse mediante DOMUtils.onVisibleOnce()
     }
-  }
   
   /**
    * Maneja el logout del usuario.
@@ -124,6 +125,30 @@
   
   // Bind eventos del sidebar
   document.addEventListener('DOMContentLoaded', function() {
+    // Ensure API calls include credentials so HttpOnly cookies are sent
+    (function setupFetchForCookies(){
+      try {
+        const _fetch = window.fetch;
+        window.fetch = function(resource, init){
+          try {
+            const url = (typeof resource === 'string') ? resource : resource.url || '';
+            const isApi = url.startsWith('/api/') || url.includes('/api/');
+            if (isApi) {
+              init = init || {};
+              // ensure credentials include cookies for cross-origin or same-origin
+              if (!init.credentials) init.credentials = 'include';
+            }
+          } catch (err) {
+            console.warn('[workspace] setupFetchForCookies error', err);
+          }
+          return _fetch.apply(this, arguments);
+        };
+        console.log('[workspace] fetch patched to include credentials for API calls');
+      } catch (e) {
+        console.warn('[workspace] Could not patch fetch for cookies', e);
+      }
+    })();
+
     // ⚠️ LIMPIEZA: Eliminar parámetros de descuento al cargar la página
     limpiarParametrosDescuento();
     
