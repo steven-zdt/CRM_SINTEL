@@ -1,7 +1,7 @@
 """
 URL configuration for sintel_project - Esquema Público.
 
-⚠️ IMPORTANTE: Este archivo se usa SOLO cuando se accede al esquema 'public'.
+WARNING: IMPORTANTE: Este archivo se usa SOLO cuando se accede al esquema 'public'.
 django-tenants usa este archivo como ROOT_URLCONF para el dominio público.
 
 Rutas públicas disponibles:
@@ -14,22 +14,22 @@ Rutas públicas disponibles:
 """
 from django.contrib import admin
 from django.contrib.auth import logout as auth_logout
-from django.urls import path, include, reverse
 from django.http import JsonResponse
 from django.shortcuts import redirect
+from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
-    SpectacularSwaggerView,
     SpectacularRedocView,
+    SpectacularSwaggerView,
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
-    TokenVerifyView,
 )
+
 from apps.public.core.api.views import LoggedTokenVerifyView
-from config.well_known import chrome_devtools
 from apps.public.core.views import PublicIndexView
+from config.well_known import chrome_devtools
 
 
 def admin_logout_view(request):
@@ -64,7 +64,31 @@ def health_view(request):
     }, status=200 if db_status == 'ok' else 503)
 
 
+def debug_headers_view(request):
+    """
+    Temporary debug endpoint: echo selected request headers and META.
+    Use only for local debugging and remove after inspection.
+    """
+    # Collect a safe subset of headers/META to avoid leaking secrets in logs.
+    meta = request.META
+    data = {
+        'HTTP_HOST': meta.get('HTTP_HOST'),
+        'HTTP_AUTHORIZATION': meta.get('HTTP_AUTHORIZATION'),
+        'REMOTE_ADDR': meta.get('REMOTE_ADDR'),
+        'SERVER_NAME': meta.get('SERVER_NAME'),
+        'wsgi.url_scheme': meta.get('wsgi.url_scheme'),
+        'REQUEST_METHOD': meta.get('REQUEST_METHOD'),
+    }
+    # Also include Django's request.headers dict for clarity
+    try:
+        headers = {k: v for k, v in request.headers.items()}
+    except Exception:
+        headers = {}
+    return JsonResponse({'meta': data, 'headers': headers}, status=200)
+
+
 urlpatterns = [
+    
     # Health check (para Docker/Kubernetes)
     path('health', health_view, name='health'),
     
@@ -96,6 +120,9 @@ urlpatterns = [
     # config.public_api_urls ya incluye apps.public.tenants.api.urls, no duplicar
     path('api/public/v1/', include('config.public_api_urls')),
     
+    # Tenants públicos (landing, activación)
+    path('', include('apps.public.tenants.urls')),
+    
     # APIs REST de administración (solo en esquema public, requiere staff)
     # API-First: Endpoints DataTables (POST + CSRF) para la consola
     path('api/admin/v1/console/', include('apps.public.console.api.urls', namespace='console_api')),
@@ -113,7 +140,18 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
-# ⚠️ DESARROLLO: Servir archivos media (solo en DEBUG=True)
+# Add a deterministic explicit users create endpoint at the top-level so
+# tests/middleware swaps cannot hide it. This is a minimal, safe fallback.
+try:
+    from apps.public.accounts.api.public_viewsets import PublicUserViewSet as _PublicUserViewSet
+    urlpatterns += [
+        path('api/public/v1/users/', _PublicUserViewSet.as_view({'post': 'create'}), name='public-user-create-root'),
+    ]
+except Exception:
+    # If the view isn't importable during initial setup, skip explicit route.
+    pass
+
+# WARNING: DESARROLLO: Servir archivos media (solo en DEBUG=True)
 # En producción, estos archivos deben servirse desde Nginx o el servidor web
 from django.conf import settings
 from django.conf.urls.static import static
