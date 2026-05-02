@@ -1,7 +1,7 @@
 """
 Módulo central de branding para tenants.
 
-⚠️ POLÍTICA DE BRANDING AGNÓSTICO:
+# WARNING: POLÍTICA DE BRANDING AGNÓSTICO:
 - NINGÚN nombre, logo ni texto de empresa hardcodeado
 - Todo branding viene de la BASE DE DATOS del esquema activo (tenant)
 - Fallback documentado cuando no hay datos de empresa
@@ -9,16 +9,15 @@ Módulo central de branding para tenants.
 Este módulo proporciona un punto único de acceso para obtener
 información de branding del tenant actual.
 """
-from typing import Dict, Optional
+
 from django.http import HttpRequest
-from django.conf import settings
 
 
-def get_tenant_branding(request: HttpRequest) -> Dict[str, Optional[str]]:
+def get_tenant_branding(request: HttpRequest) -> dict[str, str | None]:
     """
     Obtiene información de branding del tenant actual.
     
-    ⚠️ POLÍTICA: Todo branding viene de la base de datos del tenant.
+    # WARNING: POLÍTICA: Todo branding viene de la base de datos del tenant.
     No se permiten hardcodes de marca en ningún componente.
     
     Orden de prioridad:
@@ -98,11 +97,11 @@ def get_tenant_branding(request: HttpRequest) -> Dict[str, Optional[str]]:
     return branding
 
 
-def get_tenant_branding_for_serializer(request: HttpRequest) -> Dict[str, Optional[str]]:
+def get_tenant_branding_for_serializer(request: HttpRequest) -> dict[str, str | None]:
     """
     Versión de get_tenant_branding() optimizada para serializers DRF.
     
-    ⚠️ USO: Solo en serializers cuando se necesita branding en respuestas JSON.
+    # WARNING: USO: Solo en serializers cuando se necesita branding en respuestas JSON.
     Para templates, usar el templatetag {% tenant_branding_header %}.
     
     Args:

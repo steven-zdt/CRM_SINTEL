@@ -8,6 +8,7 @@ Valida que:
 3. Los módulos no críticos manejen 401 localmente sin expulsar del workspace
 """
 import pytest
+
 from apps.public.tenants.models import TenantMembership
 
 

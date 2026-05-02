@@ -6,7 +6,8 @@ Uso:
     python manage.py tenant_command audit_naturaleza_mismatches --schema=tenant1
 """
 from django.core.management.base import BaseCommand
-from django_tenants.utils import schema_context, get_tenant_model
+from django_tenants.utils import get_tenant_model, schema_context
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 from apps.tenant.facturas.services import _norm_nit
@@ -100,5 +101,5 @@ class Command(BaseCommand):
             )
         else:
             self.stdout.write(
-                self.style.SUCCESS(f"\n✅ Todos los tenants están correctos (0 mismatches)")
+                self.style.SUCCESS("\n[OK] Todos los tenants están correctos (0 mismatches)")
             )

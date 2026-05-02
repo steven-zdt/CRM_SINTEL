@@ -1,0 +1,78 @@
+{# offcanvas_detalle_contacto_cliente.html - Offcanvas para VER detalle de contacto (read-only) v2.61 #}
+{# Feature-Sliced: Template modular solo para lectura #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-contacto-cliente" aria-labelledby="offcanvas-contacto-cliente-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-contacto-cliente-label">
+      <i class="bi bi-person-check me-2"></i>Detalle del Contacto
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# Sección: Cliente #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-building me-2"></i>Cliente
+      </h6>
+      <div class="form-control-plaintext">
+        <p class="mb-1">
+          <strong>{{ contacto.cliente.razon_social }}</strong>
+        </p>
+        <small class="text-muted">{{ contacto.cliente.numero_documento }}</small>
+      </div>
+    </div>
+
+    {# Sección: Información Personal #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-person me-2"></i>Información Personal
+      </h6>
+      <div class="form-control-plaintext">
+        <p class="mb-2">
+          <strong>Nombre:</strong><br>
+          {{ contacto.nombre_completo }}
+          {% if contacto.is_principal %}
+            <span class="badge bg-primary ms-2">Principal</span>
+          {% endif %}
+        </p>
+        {% if contacto.cargo %}
+          <p class="mb-2">
+            <strong>Cargo:</strong><br>
+            {{ contacto.cargo }}
+          </p>
+        {% endif %}
+        <p class="mb-2">
+          <strong>Email:</strong><br>
+          <a href="mailto:{{ contacto.email }}">{{ contacto.email }}</a>
+        </p>
+        {% if contacto.telefono %}
+          <p class="mb-0">
+            <strong>Teléfono:</strong><br>
+            <a href="tel:{{ contacto.telefono }}">{{ contacto.telefono }}</a>
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Sección: Estado #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-info-circle me-2"></i>Estado
+      </h6>
+      <div class="form-control-plaintext">
+        <p class="mb-0">
+          {% if contacto.activo %}
+            <span class="badge bg-success">Activo</span>
+          {% else %}
+            <span class="badge bg-secondary">Inactivo</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="offcanvas">
+      <i class="bi bi-x-lg me-1"></i>Cerrar
+    </button>
+  </div>
+</div>

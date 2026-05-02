@@ -1,13 +1,14 @@
 """
 Comando de backfill para calcular naturaleza (VENTA/COMPRA) en facturas existentes.
 
-⚠️ MULTI-TENANT: Usa schema_context y tenant_command/all_tenants_command de django-tenants.
+# WARNING: MULTI-TENANT: Usa schema_context y tenant_command/all_tenants_command de django-tenants.
 """
 from django.core.management.base import BaseCommand
-from django_tenants.utils import schema_context, get_tenant_model
+from django_tenants.utils import get_tenant_model, schema_context
+
+from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 from apps.tenant.facturas.services import _determinar_naturaleza
-from apps.tenant.empresa.models import Empresa
 
 
 class Command(BaseCommand):
@@ -76,5 +77,5 @@ class Command(BaseCommand):
                     )
         
         self.stdout.write(
-            self.style.SUCCESS(f"\n✅ Total de facturas actualizadas: {total_updated}")
+            self.style.SUCCESS(f"\n[OK] Total de facturas actualizadas: {total_updated}")
         )

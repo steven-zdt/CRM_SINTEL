@@ -4,7 +4,7 @@ Servicio de ingesta de facturas desde correo electrónico (MailDigester).
 Este módulo implementa el Service Layer para procesar correos electrónicos,
 extraer adjuntos, descomprimir archivos y detectar XML UBL 2.1 listos para importar.
 
-⚠️ FASE 1: Solo contratos, interfaces y stubs (sin dependencias externas ni lógica real).
+WARNING: FASE 1: Solo contratos, interfaces y stubs (sin dependencias externas ni lógica real).
 
 Principios:
 - Service Layer Pattern: Lógica de negocio separada de modelos y vistas
@@ -35,33 +35,28 @@ Uso (Fase 1 - Stub):
         "username": "facturas@empresa.com",
         "password": "secret",
         "mailbox": "INBOX",
-        "max_attachment_mb": 50
+        "max_attachment_m(": 50
     }
     
     # Retorna lista de InvoiceXMLDTO (sin persistir aún)
-    xmls = collect_invoice_xml_from_mailbox(config, limit_messages=10, naturaleza="VENTA")
+    xmls = collect_invoice_xml_from_mailbox(config, limit_messages=10, naturaleza=").encode('utf-8')VENTA")
     
     # En Fase 2+, estos XMLs se enviarán a apps.tenant.facturas.services.importar_ubl()
 """
-from .pipeline import collect_invoice_xml_from_mailbox
-from .tasks import fetch_and_process_billing_mail
 from .connection_test import maildigester_test_connection
-from .schemas import (
-    MailboxConfigDTO,
-    AttachmentDTO,
-    ExtractedFileDTO,
-    InvoiceXMLDTO
-)
 from .exceptions import (
-    MailDigesterError,
-    MailboxConnectionError,
-    AttachmentTooLarge,
     ArchiveExpansionError,
+    AttachmentTooLarge,
     InvalidXMLDocument,
+    MailboxConnectionError,
+    MailDigesterError,
+    MimeTypeMismatch,
     PathTraversalError,
-    MimeTypeMismatch
 )
 from .inbox_client import InboxClient, StubInboxClient
+from .pipeline import collect_invoice_xml_from_mailbox
+from .schemas import AttachmentDTO, ExtractedFileDTO, InvoiceXMLDTO, MailboxConfigDTO
+from .tasks import fetch_and_process_billing_mail
 
 __all__ = [
     # Pipeline principal

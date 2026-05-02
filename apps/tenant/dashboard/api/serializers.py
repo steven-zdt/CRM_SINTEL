@@ -1,10 +1,9 @@
 """
 Serializadores DRF para el dashboard de tenants.
 
-⚠️ v2.30: API-First - Todos los datos del dashboard se exponen vía JSON.
+WARNING: v2.30: API-First - Todos los datos del dashboard se exponen vía JSON.
 """
 from rest_framework import serializers
-from apps.tenant.dashboard.services import get_user_role_in_tenant, get_dashboard_context
 
 
 class DashboardKPI(serializers.Serializer):
@@ -44,7 +43,7 @@ class DashboardPayload(serializers.Serializer):
     """
     Contrato canónico para el payload completo del dashboard.
     
-    ⚠️ API-First: Este serializer define el contrato estable de datos del dashboard.
+    WARNING: API-First: Este serializer define el contrato estable de datos del dashboard.
     Todos los datos se obtienen vía JSON desde este endpoint.
     """
     header = serializers.DictField(child=serializers.CharField(), required=False)
@@ -58,7 +57,7 @@ class DashboardSummarySerializer(serializers.Serializer):
     """
     Serializador para el resumen del dashboard (legacy).
     
-    ⚠️ DEPRECADO: Usar DashboardPayload en su lugar.
+    WARNING: DEPRECADO: Usar DashboardPayload en su lugar.
     """
     tenant = serializers.DictField(read_only=True)
     user = serializers.DictField(read_only=True)
@@ -72,7 +71,7 @@ class KPISerializer(serializers.Serializer):
     """
     Serializador para KPIs del dashboard (legacy).
     
-    ⚠️ DEPRECADO: Usar DashboardPayload en su lugar.
+    WARNING: DEPRECADO: Usar DashboardPayload en su lugar.
     """
     total_facturas = serializers.IntegerField(read_only=True)
     facturas_pendientes = serializers.IntegerField(read_only=True)

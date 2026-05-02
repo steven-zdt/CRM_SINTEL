@@ -1,0 +1,10 @@
+{% load static %}
+{# ⚠️ v2.61: Assets del módulo Contabilidad Asientos - Feature-Sliced Architecture #}
+{# ⚠️ IMPORTANTE: assets_core.html YA se carga en workspace.html - NO duplicar aquí #}
+
+{# BLOQUE 2: Archivos del módulo Contabilidad Asientos #}
+{# ⚠️ v2.61: Migración a Tabulator Factory v2.40 - Orden de carga crítico #}
+<script src="{% static 'contabilidad/js/asiento/asiento.api.js' %}"></script>
+<script src="{% static 'contabilidad/js/asiento/features/asiento_list.js' %}"></script>
+<script src="{% static 'contabilidad/js/asiento/features/asiento_editor.js' %}"></script>
+<script src="{% static 'contabilidad/js/asiento/features/asiento_cargar_desde_docs.js' %}"></script>

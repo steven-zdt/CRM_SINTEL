@@ -1,11 +1,8 @@
-import sys
-from typing import Optional
 
-from django.core.management.base import BaseCommand
 from django.conf import settings
+from django.core.management.base import BaseCommand
 from django.db import connection
 from django.urls import get_resolver
-
 from django_tenants.utils import get_public_schema_name
 
 from apps.public.tenants.models import Client, Domain
@@ -54,26 +51,27 @@ class Command(BaseCommand):
                 self.stdout.write("      (sin dominios asociados)")
             else:
                 for d in domains:
-                    self.stdout.write(
-                        f"      · Domain: '{d.domain}' "
-                        f"(is_primary={d.is_primary})"
-                    )
+                    self.stdout.write(f"      · Domain: '{d.domain}' (is_primary={d.is_primary})")
 
     # ------------------------------------------------------------------
     # 2) Simular resolución para un host dado
     # ------------------------------------------------------------------
     def _simulate_resolution(self, host: str):
         self.stdout.write("")
-        self.stdout.write(self.style.MIGRATE_LABEL("-> Simulación de resolución de tenant para host:"))
+        self.stdout.write(
+            self.style.MIGRATE_LABEL("-> Simulación de resolución de tenant para host:")
+        )
 
         # Emular lógica típica de django-tenants: quitar puerto del host
         hostname = host.split(":", 1)[0].strip().lower()
         self.stdout.write(f"  Host completo recibido : {host}")
         self.stdout.write(f"  Hostname sin puerto    : {hostname}")
 
-        domain_obj: Optional[Domain] = Domain.objects.filter(domain=hostname).first()
+        domain_obj: Domain | None = Domain.objects.filter(domain=hostname).first()
         if not domain_obj:
-            self.stdout.write(self.style.ERROR(f"  ✗ No se encontró Domain.domain='{hostname}' en BD."))
+            self.stdout.write(
+                self.style.ERROR(f"  ✗ No se encontró Domain.domain='{hostname}' en BD.")
+            )
             return
 
         tenant = domain_obj.tenant
@@ -119,11 +117,15 @@ class Command(BaseCommand):
     # 3) Listar URLs raíz para un URLConf dado
     # ------------------------------------------------------------------
     def _list_root_urls(self, urlconf: str):
-        self.stdout.write(self.style.MIGRATE_LABEL("-> Rutas registradas en la raíz ('') para este URLConf:"))
+        self.stdout.write(
+            self.style.MIGRATE_LABEL("-> Rutas registradas en la raíz ('') para este URLConf:")
+        )
         try:
             resolver = get_resolver(urlconf)
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f"  ✗ No se pudo obtener resolver para '{urlconf}': {e}"))
+            self.stdout.write(
+                self.style.ERROR(f"  ✗ No se pudo obtener resolver para '{urlconf}': {e}")
+            )
             return
 
         found_any = False
@@ -134,9 +136,7 @@ class Command(BaseCommand):
                 name = getattr(pattern, "name", None)
                 callback = getattr(pattern, "callback", None)
                 callback_name = getattr(callback, "__name__", str(callback)) if callback else "N/A"
-                self.stdout.write(
-                    f"  - pattern='' name='{name}' view='{callback_name}'"
-                )
+                self.stdout.write(f"  - pattern='' name='{name}' view='{callback_name}'")
 
         if not found_any:
             self.stdout.write("  (no se encontró ninguna ruta explícita para la raíz '')")
@@ -161,4 +161,3 @@ class Command(BaseCommand):
             return regex.pattern
 
         return str(pat)
-

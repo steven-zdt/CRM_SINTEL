@@ -1,0 +1,29 @@
+{# list_contacto_cliente.html - Tabla de contactos con Tabulator v2.61 #}
+{# Feature-Sliced: Template modular para listado reactivo #}
+
+<div class="card shadow-sm">
+  <div class="card-header bg-white border-bottom">
+    <div class="d-flex justify-content-between align-items-center">
+      <h6 class="mb-0">
+        <i class="bi bi-people me-2"></i>Contactos de Clientes
+      </h6>
+      <div class="btn-group btn-group-sm">
+        <button type="button" class="btn btn-outline-primary" id="btn-crear-contacto" title="Crear nuevo contacto">
+          <i class="bi bi-plus-lg me-1"></i>Nuevo Contacto
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    {# Contenedor para Tabulator #}
+    <div id="tabla-contactos-cliente"></div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    if (typeof window.ContactoClienteModule !== 'undefined' && window.ContactoClienteModule.initTable) {
+      window.ContactoClienteModule.initTable('#tabla-contactos-cliente');
+    }
+  });
+</script>

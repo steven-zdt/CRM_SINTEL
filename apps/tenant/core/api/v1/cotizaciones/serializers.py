@@ -1,17 +1,17 @@
 """Core API v1 - Cotizaciones serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Composición vía herencia de serializers existentes de la app cotizaciones.
 """
 
 from apps.tenant.cotizaciones.api.serializers import (
-    CotizacionSerializer,
     CotizacionItemSerializer,
+    CotizacionSerializer,
 )
 from apps.tenant.cotizaciones.configuracion.serializers import (
-    ConfiguracionCotizacionListSerializer,
     ConfiguracionCotizacionDetailSerializer,
+    ConfiguracionCotizacionListSerializer,
 )
 
 

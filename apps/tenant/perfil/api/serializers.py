@@ -3,9 +3,10 @@ Serializers para la app de perfil.
 
 Referencia: https://www.django-rest-framework.org/api-guide/serializers/
 """
-from rest_framework import serializers
-from apps.tenant.perfil.models import TenantProfile
 from django.contrib.auth import get_user_model
+from rest_framework import serializers
+
+from apps.tenant.perfil.models import TenantProfile, RolTenant
 
 User = get_user_model()
 
@@ -14,7 +15,7 @@ class UserNestedSerializer(serializers.ModelSerializer):
     """
     Serializer anidado para datos básicos del User global.
     
-    ⚠️ IMPORTANTE: Este serializer solo expone datos básicos del User
+    WARNING: IMPORTANTE: Este serializer solo expone datos básicos del User
     para mostrar en el frontend. NO permite modificar el User desde aquí.
     """
     class Meta:
@@ -27,7 +28,7 @@ class TenantProfileSerializer(serializers.ModelSerializer):
     """
     Serializer para el modelo TenantProfile.
     
-    ⚠️ v2.30: Contrato canónico para consumo desde workspace.html
+    WARNING: v2.30: Contrato canónico para consumo desde workspace.html
     - django-tenants maneja automáticamente el aislamiento por esquema
     - Incluye datos básicos del User global como campos de solo lectura
     - El campo `configuracion` es un JSONField para almacenar preferencias de UI
@@ -43,7 +44,13 @@ class TenantProfileSerializer(serializers.ModelSerializer):
     
     # Avatar URL (read-only, retorna URL absoluta)
     avatar_url = serializers.SerializerMethodField()
-    
+
+    # Acciones disponibles para el usuario que realiza la peticion (basado en su rol)
+    available_actions = serializers.SerializerMethodField()
+
+    # Contexto de permisos UI: habilita/deshabilita modulos de configuracion en frontend
+    permissions_context = serializers.SerializerMethodField()
+
     class Meta:
         model = TenantProfile
         fields = [
@@ -53,19 +60,24 @@ class TenantProfileSerializer(serializers.ModelSerializer):
             'user_username',
             'user_first_name',
             'user_last_name',
-            'user_full_name',  # ⚠️ v2.30: Campo esperado por workspace.html
+            'user_full_name',
             'cargo',
             'departamento',
             'telefono_corporativo',
             'avatar',
-            'avatar_url',  # ⚠️ v2.30: URL absoluta del avatar
+            'avatar_url',
             'configuracion',
+            'rol',
+            'available_actions',
+            'permissions_context',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'user_id', 'user_email', 'user_username', 
+        read_only_fields = ['id', 'user_id', 'user_email', 'user_username',
                           'user_first_name', 'user_last_name', 'user_full_name',
-                          'avatar_url', 'created_at', 'updated_at']
+                          'avatar_url', 'available_actions', 'permissions_context',
+                          'created_at', 'updated_at',
+                          'rol']  # [RULE 15] rol solo modificable via assign_rol endpoint
         extra_kwargs = {
             'avatar': {
                 'required': False,
@@ -81,7 +93,7 @@ class TenantProfileSerializer(serializers.ModelSerializer):
         """
         Retorna el nombre completo del usuario (first_name + last_name).
         
-        ⚠️ v2.30: Campo esperado por workspace.html
+        WARNING: v2.30: Campo esperado por workspace.html
         """
         parts = [obj.user.first_name, obj.user.last_name]
         return ' '.join(filter(None, parts)) or obj.user.email
@@ -89,8 +101,6 @@ class TenantProfileSerializer(serializers.ModelSerializer):
     def get_avatar_url(self, obj):
         """
         Retorna la URL absoluta del avatar si existe.
-        
-        ⚠️ v2.30: Campo esperado por workspace.html
         """
         if obj.avatar:
             request = self.context.get('request')
@@ -98,12 +108,44 @@ class TenantProfileSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.avatar.url)
             return obj.avatar.url
         return None
-    
+
+    def get_available_actions(self, obj):
+        """[RULE 12] Retorna la lista de acciones permitidas para el solicitante.
+
+        Usa el rol del perfil del usuario que realiza la peticion (no el objeto
+        serializado) para determinar que botones/acciones debe mostrar la UI.
+        Retorna [] si el request no contiene un usuario autenticado con perfil.
+        """
+        request = self.context.get('request')
+        if not request or not getattr(request, 'user', None):
+            return []
+        requester_perfil = getattr(request.user, 'tenant_profile', None)
+        if not requester_perfil:
+            return []
+        from apps.tenant.perfil.api.permissions import get_available_actions
+        return get_available_actions(requester_perfil)
+
+    def get_permissions_context(self, obj):
+        """[AUTO-ADMIN] Devuelve el contexto de permisos del solicitante para la UI.
+
+        Calcula is_owner via TenantMembership.is_primary_admin (DSV: schema activo).
+        El resultado habilita/deshabilita modulos de configuracion en el frontend
+        (Tabulator actionsFormatter, botones de accion, settings panel).
+        """
+        request = self.context.get('request')
+        if not request or not getattr(request, 'user', None):
+            return {}
+        requester_perfil = getattr(request.user, 'tenant_profile', None)
+        if not requester_perfil:
+            return {}
+        from apps.tenant.perfil.api.permissions import get_permissions_context
+        return get_permissions_context(requester_perfil, user=request.user)
+
     def validate_configuracion(self, value):
         """
         Validar y normalizar configuracion.
         
-        ⚠️ v2.30: Normaliza null a {} para evitar errores 400.
+        WARNING: v2.30: Normaliza null a {} para evitar errores 400.
         - Si value is None: convierte a {} (reset seguro)
         - Valida que el tipo final sea dict (no string/array/number)
         
@@ -124,7 +166,7 @@ class TenantProfileMeUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer para actualización parcial del perfil (endpoint /me/).
     
-    ⚠️ v2.30: Serializer específico para PATCH /api/v1/perfil/perfiles/me/
+    WARNING: v2.30: Serializer específico para PATCH /api/v1/perfil/perfiles/me/
     - Solo incluye campos editables: cargo, departamento, telefono_corporativo, configuracion
     - Todos los campos son opcionales (partial=True)
     - Valida que configuracion sea dict
@@ -176,17 +218,21 @@ class TenantProfileMeUpdateSerializer(serializers.ModelSerializer):
     def validate_configuracion(self, value):
         """
         Validar y normalizar configuracion.
-        
-        ⚠️ v2.30: Normaliza null a {} para evitar errores 400.
-        - Si value is None: convierte a {} (reset seguro)
-        - Valida que el tipo final sea dict (no string/array/number)
         """
-        # Normalizar None a {} (reset seguro)
         if value is None:
             return {}
-        
-        # Validar que sea un diccionario
         if not isinstance(value, dict):
-            raise serializers.ValidationError("La configuración debe ser un objeto JSON válido.")
-        
+            raise serializers.ValidationError("La configuracion debe ser un objeto JSON valido.")
         return value
+
+
+class TenantProfileRolSerializer(serializers.Serializer):
+    """[RULE 5] Serializer para el endpoint assign_rol.
+
+    Valida que el valor de 'rol' sea uno de los choices definidos en RolTenant.
+    Solo expone el campo 'rol' para minimizar la superficie de escritura.
+    """
+    rol = serializers.ChoiceField(
+        choices=RolTenant.choices,
+        help_text="Rol a asignar: 'ADMIN', 'OPERADOR' o 'VISOR'.",
+    )

@@ -1,27 +1,31 @@
 """
 Parser Excel específico para Facturas (v2.40).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Parser exclusivo para el módulo de facturas
 - Lógica separada del parser genérico de Excel
 - Retorna DTO específico para facturas/notas crédito
 """
-from typing import Dict, Any, Optional
+from typing import Any
+
 from apps.services.document_parser.normalizers import (
-    normalize_excel_to_dataframe, sanitize_text, normalize_nit, 
-    normalize_currency, normalize_numeric_to_decimal_string
+    normalize_currency,
+    normalize_excel_to_dataframe,
+    normalize_nit,
+    normalize_numeric_to_decimal_string,
+    sanitize_text,
 )
 
 
 def parse_factura_excel_to_dto(
     file_bytes: bytes,
-    filename: Optional[str] = None,
-    kind_hint: Optional[str] = None
-) -> Dict[str, Any]:
+    filename: str | None = None,
+    kind_hint: str | None = None
+) -> dict[str, Any]:
     """
     Parsea un Excel de factura/nota crédito para Facturas.
     
-    ⚠️ v2.40: Parser específico para el módulo de facturas.
+    WARNING: v2.40: Parser específico para el módulo de facturas.
     
     Args:
         file_bytes: Contenido del archivo Excel en bytes
@@ -132,7 +136,7 @@ def _is_credit_note(df) -> bool:
     return any(pattern in text for pattern in patterns)
 
 
-def _extract_from_dataframe(df, possible_columns: list) -> Optional[Any]:
+def _extract_from_dataframe(df, possible_columns: list) -> Any | None:
     """Extrae valor del DataFrame buscando en columnas posibles."""
     for col in possible_columns:
         if col in df.columns:
@@ -147,7 +151,6 @@ def _normalize_fecha(fecha_str: str) -> str:
     """Normaliza fecha a formato ISO 8601."""
     # Intentar parsear diferentes formatos
     import re
-    from datetime import datetime
     
     patterns = [
         r'(\d{4})[-/](\d{2})[-/](\d{2})',

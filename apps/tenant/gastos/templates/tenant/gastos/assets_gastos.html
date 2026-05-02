@@ -1,0 +1,13 @@
+{# assets_gastos.html - Carga de assets para módulo Gastos #}
+{% load static %}
+
+<!-- Gastos API -->
+<script src="{% static 'gastos/js/gastos.api.js' %}"></script>
+
+<!-- Gastos Utils (cache proveedores/cuentas) -->
+<script src="{% static 'gastos/js/gastos.utils.js' %}"></script>
+
+<!-- Feature Modules -->
+<script src="{% static 'gastos/js/features/gasto_list.js' %}"></script>
+<script src="{% static 'gastos/js/features/gasto_editor.js' %}"></script>
+<script src="{% static 'gastos/js/features/resolucion_editor.js' %}"></script>

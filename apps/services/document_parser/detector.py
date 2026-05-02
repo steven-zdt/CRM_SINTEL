@@ -1,17 +1,16 @@
 """
 Detector de tipo de documento (FASE 2.1).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Detecta tipo de documento por cabeceras, heurísticas, contenido parcial
 - Retorna media_type y confidence (0.0-1.0)
 - Agnóstico del formato: Puede detectar XML, PDF, XLS, CSV, TXT
 - Extensible: Permite agregar nuevos detectores sin modificar código existente
 """
-from typing import Optional, Dict, Any
-import mimetypes
+from typing import Any
 
 
-def detect_by_extension(filename: Optional[str]) -> Optional[str]:
+def detect_by_extension(filename: str | None) -> str | None:
     """
     Detecta tipo de documento por extensión de archivo.
     
@@ -41,7 +40,7 @@ def detect_by_extension(filename: Optional[str]) -> Optional[str]:
     return extension_map.get(ext)
 
 
-def detect_by_mime_type(mime_type: Optional[str]) -> Optional[str]:
+def detect_by_mime_type(mime_type: str | None) -> str | None:
     """
     Detecta tipo de documento por MIME type.
     
@@ -67,11 +66,11 @@ def detect_by_mime_type(mime_type: Optional[str]) -> Optional[str]:
     return mime_map.get(mime_type.lower())
 
 
-def detect_by_magic_bytes(content: bytes) -> Optional[str]:
+def detect_by_magic_bytes(content: bytes) -> str | None:
     """
     Detecta tipo de documento por magic bytes (firma de archivo).
     
-    ⚠️ FASE 2.1: Detecta por cabeceras (%PDF, <?xml, PK\\x03\\x04 para XLSX).
+    WARNING: FASE 2.1: Detecta por cabeceras (%PDF, <?xml, PK\\x03\\x04 para XLSX).
     
     Args:
         content: Primeros bytes del archivo (mínimo 4 bytes recomendado)
@@ -102,9 +101,9 @@ def detect_by_magic_bytes(content: bytes) -> Optional[str]:
 
 def detect_document_type(
     content: bytes,
-    filename: Optional[str] = None,
-    mime_type: Optional[str] = None
-) -> Dict[str, Any]:
+    filename: str | None = None,
+    mime_type: str | None = None
+) -> dict[str, Any]:
     """
     Detecta el tipo de documento usando múltiples estrategias (FASE 2.1).
     
@@ -158,7 +157,7 @@ def detect_document_type(
     return {"media_type": None, "confidence": 0.0}
 
 
-def detect_by_content_heuristics(content: bytes) -> tuple[Optional[str], float]:
+def detect_by_content_heuristics(content: bytes) -> tuple[str | None, float]:
     """
     Detecta tipo de documento por heurísticas de contenido parcial.
     

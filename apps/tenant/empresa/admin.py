@@ -1,9 +1,10 @@
 """
 Admin para la app empresa (por tenant).
 
-⚠️ v2.40: Alineado con arquitectura Tabulator Factory.
+# WARNING: v2.40: Alineado con arquitectura Tabulator Factory.
 """
 from django.contrib import admin
+
 from .models import Empresa, MailInboxConfig
 
 
@@ -40,8 +41,8 @@ class MailInboxConfigAdmin(admin.ModelAdmin):
     """
     Admin para el modelo MailInboxConfig.
     
-    ⚠️ v2.40: Alineado con arquitectura Tabulator Factory.
-    ⚠️ SEGURIDAD: Passwords nunca se muestran en list_display.
+    # WARNING: v2.40: Alineado con arquitectura Tabulator Factory.
+    # WARNING: SEGURIDAD: Passwords nunca se muestran en list_display.
     """
     list_display = ['nombre', 'email_address', 'provider', 'imap_host', 'imap_port', 'is_active', 'created_at']
     list_filter = ['provider', 'is_active', 'imap_ssl', 'created_at']
@@ -72,7 +73,7 @@ class MailInboxConfigAdmin(admin.ModelAdmin):
                 'mailbox', 'mark_as_seen', 'move_processed_to', 'max_attachment_mb'
             ),
             'classes': ('collapse',),
-            'description': '⚠️ DEPRECADO: Estos campos se mantienen solo para compatibilidad.'
+            'description': '# WARNING: DEPRECADO: Estos campos se mantienen solo para compatibilidad.'
         }),
         ('Metadatos', {
             'fields': ('created_at', 'updated_at'),

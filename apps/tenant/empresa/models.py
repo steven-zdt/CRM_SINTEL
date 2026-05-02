@@ -1,22 +1,23 @@
 """
 Modelos de empresa por tenant.
 
-⚠️ IMPORTANTE: Estos modelos están en TENANT_APPS, por lo que:
+# WARNING: IMPORTANTE: Estos modelos están en TENANT_APPS, por lo que:
 - Cada tenant tiene sus propios datos de empresa
 - NO usar foreign keys al esquema público (excepto User si es necesario)
 - django-tenants maneja automáticamente el aislamiento por esquema
 - No es necesario filtrar manualmente por tenant_id
 """
 from django.db import models
-from django.core.validators import RegexValidator
 from django.utils.translation import gettext_lazy as _
 
+from apps.tenant.core.models import SintelTenantBaseModel
 
-class Empresa(models.Model):
+
+class Empresa(SintelTenantBaseModel):
     """
     Datos fiscales y de configuración de la empresa (por tenant).
     
-    ⚠️ PATRÓN SINGLETON: Cada tenant tiene una única instancia de Empresa.
+    PATRÓN SINGLETON: Cada tenant tiene una única instancia de Empresa.
     La constraint UniqueConstraint sobre singleton_key garantiza singleton a nivel de base de datos.
     
     Principios:
@@ -25,8 +26,24 @@ class Empresa(models.Model):
     - Service Layer: El cálculo del DV y la lógica de negocio están en servicios
     - DB-First: UniqueConstraint garantiza singleton a nivel de base de datos
     """
+    # Nota: `SintelTenantBaseModel` añade un FK obligatorio `empresa`.
+    # Para el modelo `Empresa` (la entidad SSoT raíz dentro del schema)
+    # permitimos que `empresa` sea NULL durante la creación inicial y
+    # la sobreescribimos aquí para evitar que `full_clean()` falle
+    # con "Este campo no puede ser nulo." cuando se crea la instancia
+    # por primera vez dentro del seed del onboarding.
+    empresa = models.ForeignKey(
+        'empresa.Empresa',
+        on_delete=models.PROTECT,
+        related_name='%(app_label)s_%(class)s_related',
+        verbose_name=_('Empresa'),
+        help_text=_('Empresa propietaria (SSoT por tenant). Puede ser NULL durante creación inicial.'),
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     # Campo singleton para garantizar única instancia por tenant (esquema)
-    # ⚠️ IMPORTANTE: Debe ser PositiveSmallIntegerField (entero) para coincidir con la migración
     singleton_key = models.PositiveSmallIntegerField(
         default=1,
         editable=False,
@@ -34,14 +51,11 @@ class Empresa(models.Model):
         help_text=_('Campo técnico para garantizar singleton por tenant (siempre 1)')
     )
     
-    # Información básica
     razon_social = models.CharField(
         max_length=255,
         verbose_name=_('Razón Social'),
         help_text=_('Nombre legal de la empresa')
     )
-    
-    # Datos fiscales
     nit = models.CharField(
         max_length=20,
         unique=True,
@@ -56,19 +70,41 @@ class Empresa(models.Model):
         verbose_name=_('Dígito de Verificación'),
         help_text=_('Dígito verificador del NIT (calculado automáticamente)')
     )
-    
-    # Dirección
     direccion = models.CharField(
         max_length=500,
         default="",
         verbose_name=_('Dirección'),
         help_text=_('Dirección completa de la empresa')
     )
-    
-    # Contacto
+    ciudad = models.CharField(
+        max_length=100,
+        default="",
+        blank=True,
+        verbose_name=_('Ciudad'),
+        help_text=_('Ciudad principal de la empresa')
+    )
+    departamento = models.CharField(
+        max_length=100,
+        default="",
+        blank=True,
+        verbose_name=_('Departamento'),
+        help_text=_('Departamento o estado de la empresa')
+    )
+    email = models.EmailField(
+        default="",
+        blank=True,
+        verbose_name=_('Email'),
+        help_text=_('Email principal de la empresa (alias de email_contacto)')
+    )
+    activa = models.BooleanField(
+        default=True,
+        verbose_name=_('Activa'),
+        help_text=_('Indica si la empresa está activa')
+    )
     telefono = models.CharField(
         max_length=20,
         default="",
+        blank=True,
         verbose_name=_('Teléfono'),
         help_text=_('Teléfono de contacto')
     )
@@ -78,8 +114,13 @@ class Empresa(models.Model):
         verbose_name=_('Email de Contacto'),
         help_text=_('Email de contacto de la empresa')
     )
-    
-    # Régimen tributario (canonical field)
+    owner_email = models.EmailField(
+        default="",
+        blank=True,
+        db_index=True,
+        verbose_name=_('Email del Propietario'),
+        help_text=_('Email del admin primario del tenant. Poblado durante el onboarding para Auto-Admin Elevation. No exponer en la UI de clientes.')
+    )
     regimen_tributario = models.CharField(
         max_length=50,
         default="NO_RESPONDE",
@@ -87,7 +128,12 @@ class Empresa(models.Model):
         verbose_name=_('Régimen Tributario'),
         help_text=_('Régimen tributario de la empresa')
     )
-    
+    moneda = models.CharField(
+        max_length=8,
+        default='COP',
+        verbose_name=_('Moneda'),
+        help_text=_('Código de moneda (ISO 4217)')
+    )
     # Opcionales
     logo = models.ImageField(
         upload_to='logos/',
@@ -102,24 +148,8 @@ class Empresa(models.Model):
         verbose_name=_('Sitio Web'),
         help_text=_('URL del sitio web de la empresa')
     )
-    moneda = models.CharField(
-        max_length=8,
-        default='COP',
-        verbose_name=_('Moneda'),
-        help_text=_('Código de moneda (ISO 4217)')
-    )
     
-    # Timestamps
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-        verbose_name=_('Fecha de Creación')
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        db_index=True,
-        verbose_name=_('Fecha de Actualización')
-    )
+    # created_at y updated_at heredados de SintelTenantBaseModel
     
     class Meta:
         verbose_name = _('Empresa')
@@ -127,6 +157,7 @@ class Empresa(models.Model):
         ordering = ['razon_social']
         db_table = 'empresa_empresa'
         indexes = [
+            models.Index(fields=["empresa"]),
             models.Index(fields=["nit"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["updated_at"]),
@@ -134,7 +165,7 @@ class Empresa(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['singleton_key'],
-                name='unique_singleton_empresa_per_schema',  # ⚠️ Nombre debe coincidir con la migración 0002
+                name='unique_singleton_empresa_per_schema',
                 violation_error_message=_('Solo se permite una empresa por tenant.')
             )
         ]
@@ -152,31 +183,50 @@ class Empresa(models.Model):
                 self.dv = self.dv[:2]
         if self.email_contacto:
             self.email_contacto = self.email_contacto.lower().strip()
+        if self.owner_email:
+            self.owner_email = self.owner_email.lower().strip()
+        if self.email:
+            self.email = self.email.lower().strip()
         if self.razon_social:
             self.razon_social = self.razon_social.strip()
         if self.direccion:
             self.direccion = self.direccion.strip()
+        if self.ciudad:
+            self.ciudad = self.ciudad.strip()
+        if self.departamento:
+            self.departamento = self.departamento.strip()
         if self.telefono:
             self.telefono = self.telefono.strip()
         if self.website:
             self.website = self.website.strip()
     
     def save(self, *args, **kwargs):
-        """Asegura que clean() se ejecute antes de guardar."""
-        self.full_clean()
-        super().save(*args, **kwargs)
+                """Normalizar y guardar.
+
+                Notas:
+                - `SintelTenantBaseModel.save()` contiene una guardia que obliga a que
+                    `empresa` no sea NULL. Eso impide crear la instancia `Empresa` misma
+                    (bootstrap) ya que no existe aún una empresa a la que apuntar.
+                - Para permitir el seed inicial dentro del onboarding, realizamos
+                    `full_clean()` pero guardamos usando `models.Model.save()` para
+                    evitar la validación adicional de la clase base.
+                - Una vez creada la instancia, otros registros del tenant pueden
+                    referenciarla explícitamente.
+                """
+                self.full_clean()
+                # Guardar saltando la comprobación de SintelTenantBaseModel
+                models.Model.save(self, *args, **kwargs)
 
 
-# --- Configuración de buzones de correo (SSoT por tenant) ---
-class MailInboxConfig(models.Model):
+class MailInboxConfig(SintelTenantBaseModel):
     """
     Configuración de buzones de correo para ingesta de facturas (por tenant).
     
-    ⚠️ TENANT_APPS: Cada tenant tiene sus propias configuraciones (aislamiento por esquema).
-    ⚠️ SSoT: Este es el único lugar donde se gestionan credenciales de correo.
-    ⚠️ SEGURIDAD: En fase posterior, cifrar password (TODO: usar django-encrypted-model-fields o similar).
-    ⚠️ CERO SIGNALS: Toda la lógica es explícita.
-    ⚠️ GMAIL: Soporta preset Gmail con autocompletado de IMAP/SMTP.
+    # WARNING: TENANT_APPS: Cada tenant tiene sus propias configuraciones (aislamiento por esquema).
+    # WARNING: SSoT: Este es el único lugar donde se gestionan credenciales de correo.
+    # WARNING: SEGURIDAD: En fase posterior, cifrar password (TODO: usar django-encrypted-model-fields o similar).
+    # WARNING: CERO SIGNALS: Toda la lógica es explícita.
+    # WARNING: GMAIL: Soporta preset Gmail con autocompletado de IMAP/SMTP.
     """
     PROTOCOL_CHOICES = (
         ("imap", "IMAP"),
@@ -218,40 +268,40 @@ class MailInboxConfig(models.Model):
         verbose_name=_('Servidor (Legacy)'),
         blank=True,
         null=True,
-        help_text=_('⚠️ DEPRECADO: Usar imap_host. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_host. Se mantiene para compatibilidad.')
     )
     port = models.PositiveIntegerField(
         default=993,
         verbose_name=_('Puerto (Legacy)'),
         blank=True,
         null=True,
-        help_text=_('⚠️ DEPRECADO: Usar imap_port. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_port. Se mantiene para compatibilidad.')
     )
     protocol = models.CharField(
         max_length=10,
         choices=PROTOCOL_CHOICES,
         default="imap",
         verbose_name=_('Protocolo (Legacy)'),
-        help_text=_('⚠️ DEPRECADO: Siempre IMAP. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Siempre IMAP. Se mantiene para compatibilidad.')
     )
     ssl = models.BooleanField(
         default=True,
         verbose_name=_('SSL (Legacy)'),
-        help_text=_('⚠️ DEPRECADO: Usar imap_ssl. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_ssl. Se mantiene para compatibilidad.')
     )
     username = models.CharField(
         max_length=255,
         verbose_name=_('Usuario (Legacy)'),
         blank=True,
         null=True,
-        help_text=_('⚠️ DEPRECADO: Usar imap_username. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_username. Se mantiene para compatibilidad.')
     )
     password = models.CharField(
         max_length=255,
         verbose_name=_('Contraseña (Legacy)'),
         blank=True,
         null=True,
-        help_text=_('⚠️ DEPRECADO: Usar imap_password. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_password. Se mantiene para compatibilidad.')
     )
     mailbox = models.CharField(
         max_length=255,
@@ -259,24 +309,24 @@ class MailInboxConfig(models.Model):
         verbose_name=_('Carpeta (Legacy)'),
         blank=True,
         null=True,
-        help_text=_('⚠️ DEPRECADO: Usar imap_mailbox. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_mailbox. Se mantiene para compatibilidad.')
     )
     mark_as_seen = models.BooleanField(
         default=True,
         verbose_name=_('Marcar como leído (Legacy)'),
-        help_text=_('⚠️ DEPRECADO: Usar imap_mark_as_seen. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_mark_as_seen. Se mantiene para compatibilidad.')
     )
     move_processed_to = models.CharField(
         max_length=255,
         null=True,
         blank=True,
         verbose_name=_('Mover procesados a (Legacy)'),
-        help_text=_('⚠️ DEPRECADO: Usar imap_move_processed_to. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_move_processed_to. Se mantiene para compatibilidad.')
     )
     max_attachment_mb = models.PositiveIntegerField(
         default=50,
         verbose_name=_('Límite adjuntos (MB) (Legacy)'),
-        help_text=_('⚠️ DEPRECADO: Usar imap_max_attachment_mb. Se mantiene para compatibilidad.')
+        help_text=_('# WARNING: DEPRECADO: Usar imap_max_attachment_mb. Se mantiene para compatibilidad.')
     )
     
     # === CAMPOS IMAP (recepción) ===

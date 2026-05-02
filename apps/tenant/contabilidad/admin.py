@@ -1,11 +1,13 @@
 """
 Admin para la app contabilidad (por tenant).
 
-⚠️ NORMATIVA: Actualizado para mostrar campos de normativa NIIF Colombia.
+WARNING: NORMATIVA: Actualizado para mostrar campos de normativa NIIF Colombia.
 """
-from django.contrib import admin
 from decimal import Decimal
-from .models import CuentaContable, AsientoContable, MovimientoContable
+
+from django.contrib import admin
+
+from .models import AsientoContable, CuentaContable, MovimientoContable
 
 
 @admin.register(CuentaContable)
@@ -13,7 +15,7 @@ class CuentaContableAdmin(admin.ModelAdmin):
     """
     Admin para el modelo CuentaContable.
     
-    ⚠️ NORMATIVA: Incluye campo nivel para validación de normativa.
+    WARNING: NORMATIVA: Incluye campo nivel para validación de normativa.
     """
     list_display = ['codigo', 'nombre', 'tipo', 'nivel', 'activa', 'created_at']
     list_filter = ['tipo', 'nivel', 'activa', 'created_at']
@@ -40,7 +42,7 @@ class MovimientoContableInline(admin.TabularInline):
     """
     Inline para movimientos de asiento.
     
-    ⚠️ NORMATIVA: Incluye campos de terceros y tributarios.
+    WARNING: NORMATIVA: Incluye campos de terceros y tributarios.
     """
     model = MovimientoContable
     extra = 2
@@ -56,7 +58,7 @@ class AsientoContableAdmin(admin.ModelAdmin):
     """
     Admin para el modelo AsientoContable.
     
-    ⚠️ NORMATIVA: Incluye campos de comprobante y validación de partida doble.
+    WARNING: NORMATIVA: Incluye campos de comprobante y validación de partida doble.
     """
     list_display = [
         'numero', 'fecha', 'descripcion', 'estado',
@@ -92,7 +94,7 @@ class AsientoContableAdmin(admin.ModelAdmin):
         diferencia = abs(obj.total_debe - obj.total_haber)
         if diferencia < Decimal('0.01'):
             return f"✓ ${diferencia:,.2f}"
-        return f"❌ ${diferencia:,.2f}"
+        return f"ERROR: ${diferencia:,.2f}"
     diferencia_display.short_description = 'Diferencia (Partida Doble)'
 
 
@@ -101,7 +103,7 @@ class MovimientoContableAdmin(admin.ModelAdmin):
     """
     Admin para el modelo MovimientoContable.
     
-    ⚠️ NORMATIVA: Incluye campos de terceros y tributarios según normativa colombiana.
+    WARNING: NORMATIVA: Incluye campos de terceros y tributarios según normativa colombiana.
     """
     list_display = [
         'asiento', 'orden', 'cuenta', 'tercero_razon_social', 'tercero_nit',

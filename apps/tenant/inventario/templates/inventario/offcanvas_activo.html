@@ -1,0 +1,80 @@
+{# offcanvas_activo.html - Offcanvas Activos Fijos v3.5 - Nucleus #}
+{% load static %}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-activos" aria-labelledby="offcanvas-activos-label" style="width: 90%; max-width: 700px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-activos-label">
+      <i class="bi bi-building me-2"></i>
+      <span id="offcanvas-activos-titulo">{% if activo %}Editar Activo Fijo{% else %}Nuevo Activo Fijo{% endif %}</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="form-activo-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <form id="form-activo" method="POST" onsubmit="return false;">
+      <input type="hidden" id="activo-id" name="id" value="{% if activo %}{{ activo.id }}{% endif %}">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="activo-codigo" class="form-label text-danger fw-bold">Código *</label>
+          <input type="text" class="form-control" id="activo-codigo" name="codigo" value="{% if activo %}{{ activo.codigo }}{% endif %}" required>
+        </div>
+        <div class="col-md-6">
+          <label for="activo-nombre" class="form-label text-danger fw-bold">Nombre *</label>
+          <input type="text" class="form-control" id="activo-nombre" name="nombre" value="{% if activo %}{{ activo.nombre }}{% endif %}" required>
+        </div>
+        <div class="col-md-6">
+          <label for="activo-categoria" class="form-label">Categoría</label>
+          <select class="form-select" id="activo-categoria" name="categoria">
+            <option value="">Sin categoría</option>
+            {% for categoria in categorias %}
+              <option value="{{ categoria.id }}" {% if activo and activo.categoria_id == categoria.id %}selected{% endif %}>{{ categoria.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="activo-marca" class="form-label">Marca</label>
+          <input type="text" class="form-control" id="activo-marca" name="marca" value="{% if activo %}{{ activo.marca|default:'' }}{% endif %}">
+        </div>
+        <div class="col-md-6">
+          <label for="activo-modelo" class="form-label">Modelo</label>
+          <input type="text" class="form-control" id="activo-modelo" name="modelo" value="{% if activo %}{{ activo.modelo|default:'' }}{% endif %}">
+        </div>
+        <div class="col-md-6">
+          <label for="activo-estado" class="form-label text-danger fw-bold">Estado *</label>
+          <select class="form-select" id="activo-estado" name="estado" required>
+            <option value="ACTIVO" {% if not activo or activo.estado == 'ACTIVO' %}selected{% endif %}>Activo / En Uso</option>
+            <option value="MANTENIMIENTO" {% if activo and activo.estado == 'MANTENIMIENTO' %}selected{% endif %}>En Mantenimiento</option>
+            <option value="BAJA" {% if activo and activo.estado == 'BAJA' %}selected{% endif %}>De Baja</option>
+            <option value="VENDIDO" {% if activo and activo.estado == 'VENDIDO' %}selected{% endif %}>Vendido</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="activo-ubicacion" class="form-label">Ubicación</label>
+          <input type="text" class="form-control" id="activo-ubicacion" name="ubicacion" value="{% if activo %}{{ activo.ubicacion|default:'' }}{% endif %}">
+        </div>
+        <div class="col-md-6">
+          <label for="activo-responsable" class="form-label">Responsable</label>
+          <input type="text" class="form-control" id="activo-responsable" name="responsable" value="{% if activo %}{{ activo.responsable|default:'' }}{% endif %}">
+        </div>
+        <div class="col-md-6">
+          <label for="activo-fecha-adquisicion" class="form-label">Fecha de Adquisición</label>
+          <input type="date" class="form-control" id="activo-fecha-adquisicion" name="fecha_adquisicion" value="{% if activo and activo.fecha_adquisicion %}{{ activo.fecha_adquisicion|date:'Y-m-d' }}{% endif %}">
+        </div>
+        <div class="col-md-6">
+          <label for="activo-costo-adquisicion" class="form-label">Costo de Adquisición</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" class="form-control" id="activo-costo-adquisicion" name="costo_adquisicion" step="0.01" value="{% if activo %}{{ activo.costo_adquisicion|stringformat:'.2f' }}{% else %}0.00{% endif %}">
+          </div>
+        </div>
+        <div class="col-12">
+          <label for="activo-descripcion" class="form-label">Descripción</label>
+          <textarea class="form-control" id="activo-descripcion" name="descripcion" rows="2">{% if activo %}{{ activo.descripcion|default:'' }}{% endif %}</textarea>
+        </div>
+      </div>
+      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-activo">{% if activo %}Actualizar{% else %}Crear{% endif %} Activo</button>
+      </div>
+    </form>
+  </div>
+</div>

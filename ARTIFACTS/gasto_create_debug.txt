@@ -1,0 +1,508 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-7.4.4, pluggy-1.6.0 -- /usr/local/bin/python3.12
+cachedir: .pytest_cache
+django: version: 5.0.14, settings: config.settings (from env)
+rootdir: /app
+plugins: Faker-40.11.0, django-4.12.0
+collecting ... collected 1 item
+
+apps/tenant/gastos/tests/test_gastos_api_and_service.py::test_api_create_gasto_crea_documento_soporte_y_gasto FAILED [100%]
+
+=================================== FAILURES ===================================
+_____________ test_api_create_gasto_crea_documento_soporte_y_gasto _____________
+
+client = <django.test.client.Client object at 0x7ef8fa57c4a0>
+django_user_model = <class 'apps.public.accounts.models.User'>
+tenant = <Client: home ┬╖ Home Test Tenant>
+
+    @pytest.mark.django_db
+    def test_api_create_gasto_crea_documento_soporte_y_gasto(client, django_user_model, tenant):
+        """POST debe crear el DocumentoSoporte y el Gasto respetando SSoT actual."""
+        with schema_context(tenant.schema_name):
+            empresa = _get_or_create_empresa_test()
+            resolucion = _crear_resolucion_test(empresa, consecutivo=20)
+    
+        _login_tenant_member(client, django_user_model, tenant, username="gastos-create")
+    
+        resp = client.post(
+            "/api/v1/gastos/",
+            data=_payload_crear_gasto(resolucion_dian=resolucion.id),
+            content_type="application/json",
+            HTTP_HOST=f"{tenant.schema_name}.sintel.com",
+        )
+    
+>       assert resp.status_code == 201
+E       assert 400 == 201
+E        +  where 400 = <Response status_code=400, "application/json">.status_code
+
+apps/tenant/gastos/tests/test_gastos_api_and_service.py:163: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+=== Starting migration
+Operations to perform:
+  Synchronize unmigrated apps: corsheaders, django_filters, django_tenants, drf_spectacular, messages, rest_framework, rest_framework_simplejwt, staticfiles
+  Apply all migrations: accounts, admin, auth, console, contabilidad, contenttypes, empresa, facturas, impuestos, perfil, sessions, tenant_clientes, tenant_cotizaciones, tenant_empleados, tenant_gastos, tenant_inventario, tenant_proveedores, tenant_proyectos, tenants, token_blacklist
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial...
+ OK
+  Applying contenttypes.0002_remove_content_type_name...
+ OK
+  Applying auth.0001_initial...
+ OK
+  Applying auth.0002_alter_permission_name_max_length...
+ OK
+  Applying auth.0003_alter_user_email_max_length...
+ OK
+  Applying auth.0004_alter_user_username_opts...
+ OK
+  Applying auth.0005_alter_user_last_login_null...
+ OK
+  Applying auth.0006_require_contenttypes_0002...
+ OK
+  Applying auth.0007_alter_validators_add_error_messages...
+ OK
+  Applying auth.0008_alter_user_username_max_length...
+ OK
+  Applying auth.0009_alter_user_last_name_max_length...
+ OK
+  Applying auth.0010_alter_group_name_max_length...
+ OK
+  Applying auth.0011_update_proxy_permissions...
+ OK
+  Applying auth.0012_alter_user_first_name_max_length...
+ OK
+  Applying accounts.0001_initial...
+ OK
+  Applying admin.0001_initial...
+ OK
+  Applying admin.0002_logentry_remove_auto_add...
+ OK
+  Applying admin.0003_logentry_add_action_flag_choices...
+ OK
+  Applying tenants.0001_initial...
+ OK
+  Applying console.0001_initial...
+ OK
+  Applying empresa.0001_initial...
+ OK
+  Applying perfil.0001_initial...
+ OK
+  Applying facturas.0001_initial...
+ OK
+  Applying facturas.0002_alter_factura_table_alter_itemfactura_table...
+ OK
+  Applying empresa.0002_alter_empresa_direccion_alter_empresa_email_contacto_and_more...
+ OK
+  Applying facturas.0003_alter_factura_cufe_alter_notacredito_cude_and_more...
+ OK
+  Applying contabilidad.0001_initial...
+ OK
+  Applying contabilidad.0002_initial...
+ OK
+  Applying contabilidad.0003_rename_contabilida_codigo_772198_idx_contabilida_codigo_9c6315_idx_and_more...
+ OK
+  Applying contabilidad.0004_v2614_documento_origen_hash_indexes...
+ OK
+  Applying contabilidad.0005_rename_contabilida_documen_hash_idx_contabilida_documen_c4b6ba_idx_and_more...
+ OK
+  Applying contabilidad.0006_alter_asientocontable_documento_origen_hash_and_more...
+ OK
+  Applying impuestos.0001_initial...
+ OK
+  Applying perfil.0002_tenantprofile_perfil_tena_empresa_078fc1_idx_and_more...
+ OK
+  Applying sessions.0001_initial...
+ OK
+  Applying tenant_clientes.0001_initial...
+ OK
+  Applying tenant_clientes.0002_rename_tenant_clie_empresa_39ba10_idx_clientes_cl_empresa_8e803f_idx_and_more...
+ OK
+  Applying tenant_clientes.0003_direccioncliente_and_more...
+ OK
+  Applying tenant_clientes.0004_ventacliente_ventacliente_uniq_venta_cliente_factura...
+ OK
+  Applying tenant_cotizaciones.0001_initial...
+ OK
+  Applying tenant_cotizaciones.0002_rename_tenant_coti_empresa_dc949d_idx_cotizacione_empresa_5d7cdb_idx_and_more...
+ OK
+  Applying tenant_cotizaciones.0003_cotizacionanexo_and_more...
+ OK
+  Applying tenant_empleados.0001_initial...
+ OK
+  Applying tenant_empleados.0002_rename_tenant_empl_empresa_ed2ce6_idx_empleados_c_empresa_9b1ea6_idx_and_more...
+ OK
+  Applying tenant_empleados.0003_remove_contrato_uniq_contrato_activo_per_empleado_and_more...
+ OK
+  Applying tenant_empleados.0004_nomina_alter_empleado_unique_together...
+ OK
+  Applying tenant_proveedores.0001_initial...
+ OK
+  Applying tenant_proveedores.0002_rename_tenant_prov_empresa_520153_idx_proveedores_empresa_5c6a8a_idx_and_more...
+ OK
+  Applying tenant_proveedores.0003_contactoproveedor_and_more...
+ OK
+  Applying tenant_gastos.0001_initial...
+ OK
+  Applying tenant_gastos.0002_rename_tenant_gast_empresa_2af54f_idx_gastos_docu_empresa_8d94a9_idx_and_more...
+ OK
+  Applying tenant_gastos.0003_gastoanexo_itemgasto_gasto_asiento_contable_and_more...
+ OK
+  Applying tenant_gastos.0004_backfill_gasto_proveedor_and_alter_field...
+ OK
+  Applying tenant_gastos.0005_remove_gasto_unique_gasto_empresa_factura_proveedor_and_more...
+ OK
+  Applying tenant_inventario.0001_initial...
+ OK
+  Applying tenant_inventario.0002_rename_tenant_inve_empresa_33292b_idx_inventario__empresa_b5e77f_idx_and_more...
+ OK
+  Applying tenant_proyectos.0001_initial...
+ OK
+  Applying tenant_proyectos.0002_rename_tenant_proy_empresa_1d37f7_idx_proyectos_a_empresa_86a53b_idx_and_more...
+ OK
+  Applying tenant_proyectos.0003_remove_proyecto_proyectos_p_empresa_55a82f_idx_and_more...
+ OK
+  Applying token_blacklist.0001_initial...
+ OK
+  Applying token_blacklist.0002_outstandingtoken_jti_hex...
+ OK
+  Applying token_blacklist.0003_auto_20171017_2007...
+ OK
+  Applying token_blacklist.0004_auto_20171017_2013...
+ OK
+  Applying token_blacklist.0005_remove_outstandingtoken_jti...
+ OK
+  Applying token_blacklist.0006_auto_20171017_2113...
+ OK
+  Applying token_blacklist.0007_auto_20171017_2214...
+ OK
+  Applying token_blacklist.0008_migrate_to_bigautofield...
+ OK
+  Applying token_blacklist.0010_fix_migrate_to_bigautofield...
+ OK
+  Applying token_blacklist.0011_linearizes_history...
+ OK
+  Applying token_blacklist.0012_alter_outstandingtoken_user...
+ OK
+  Applying token_blacklist.0013_alter_blacklistedtoken_options_and_more...
+ OK
+=== Starting migration
+Operations to perform:
+  Apply all migrations: accounts, admin, auth, console, contabilidad, contenttypes, empresa, facturas, impuestos, perfil, sessions, tenant_clientes, tenant_cotizaciones, tenant_empleados, tenant_gastos, tenant_inventario, tenant_proveedores, tenant_proyectos, tenants, token_blacklist
+Running migrations:
+  Applying contenttypes.0001_initial...
+ OK
+  Applying contenttypes.0002_remove_content_type_name...
+ OK
+  Applying auth.0001_initial...
+ OK
+  Applying auth.0002_alter_permission_name_max_length...
+ OK
+  Applying auth.0003_alter_user_email_max_length...
+ OK
+  Applying auth.0004_alter_user_username_opts...
+ OK
+  Applying auth.0005_alter_user_last_login_null...
+ OK
+  Applying auth.0006_require_contenttypes_0002...
+ OK
+  Applying auth.0007_alter_validators_add_error_messages...
+ OK
+  Applying auth.0008_alter_user_username_max_length...
+ OK
+  Applying auth.0009_alter_user_last_name_max_length...
+ OK
+  Applying auth.0010_alter_group_name_max_length...
+ OK
+  Applying auth.0011_update_proxy_permissions...
+ OK
+  Applying auth.0012_alter_user_first_name_max_length...
+ OK
+  Applying accounts.0001_initial...
+ OK
+  Applying admin.0001_initial...
+ OK
+  Applying admin.0002_logentry_remove_auto_add...
+ OK
+  Applying admin.0003_logentry_add_action_flag_choices...
+ OK
+  Applying tenants.0001_initial...
+ OK
+  Applying console.0001_initial...
+ OK
+  Applying empresa.0001_initial...
+ OK
+  Applying perfil.0001_initial...
+ OK
+  Applying facturas.0001_initial...
+ OK
+  Applying facturas.0002_alter_factura_table_alter_itemfactura_table...
+ OK
+  Applying empresa.0002_alter_empresa_direccion_alter_empresa_email_contacto_and_more...
+ OK
+  Applying facturas.0003_alter_factura_cufe_alter_notacredito_cude_and_more...
+ OK
+  Applying contabilidad.0001_initial...
+ OK
+  Applying contabilidad.0002_initial...
+ OK
+  Applying contabilidad.0003_rename_contabilida_codigo_772198_idx_contabilida_codigo_9c6315_idx_and_more...
+ OK
+  Applying contabilidad.0004_v2614_documento_origen_hash_indexes...
+ OK
+  Applying contabilidad.0005_rename_contabilida_documen_hash_idx_contabilida_documen_c4b6ba_idx_and_more...
+ OK
+  Applying contabilidad.0006_alter_asientocontable_documento_origen_hash_and_more...
+ OK
+  Applying impuestos.0001_initial...
+ OK
+  Applying perfil.0002_tenantprofile_perfil_tena_empresa_078fc1_idx_and_more...
+ OK
+  Applying sessions.0001_initial...
+ OK
+  Applying tenant_clientes.0001_initial...
+ OK
+  Applying tenant_clientes.0002_rename_tenant_clie_empresa_39ba10_idx_clientes_cl_empresa_8e803f_idx_and_more...
+ OK
+  Applying tenant_clientes.0003_direccioncliente_and_more...
+ OK
+  Applying tenant_clientes.0004_ventacliente_ventacliente_uniq_venta_cliente_factura...
+ OK
+  Applying tenant_cotizaciones.0001_initial...
+ OK
+  Applying tenant_cotizaciones.0002_rename_tenant_coti_empresa_dc949d_idx_cotizacione_empresa_5d7cdb_idx_and_more...
+ OK
+  Applying tenant_cotizaciones.0003_cotizacionanexo_and_more...
+ OK
+  Applying tenant_empleados.0001_initial...
+ OK
+  Applying tenant_empleados.0002_rename_tenant_empl_empresa_ed2ce6_idx_empleados_c_empresa_9b1ea6_idx_and_more...
+ OK
+  Applying tenant_empleados.0003_remove_contrato_uniq_contrato_activo_per_empleado_and_more...
+ OK
+  Applying tenant_empleados.0004_nomina_alter_empleado_unique_together...
+ OK
+  Applying tenant_proveedores.0001_initial...
+ OK
+  Applying tenant_proveedores.0002_rename_tenant_prov_empresa_520153_idx_proveedores_empresa_5c6a8a_idx_and_more...
+ OK
+  Applying tenant_proveedores.0003_contactoproveedor_and_more...
+ OK
+  Applying tenant_gastos.0001_initial...
+ OK
+  Applying tenant_gastos.0002_rename_tenant_gast_empresa_2af54f_idx_gastos_docu_empresa_8d94a9_idx_and_more...
+ OK
+  Applying tenant_gastos.0003_gastoanexo_itemgasto_gasto_asiento_contable_and_more...
+ OK
+  Applying tenant_gastos.0004_backfill_gasto_proveedor_and_alter_field...
+ OK
+  Applying tenant_gastos.0005_remove_gasto_unique_gasto_empresa_factura_proveedor_and_more...
+ OK
+  Applying tenant_inventario.0001_initial...
+ OK
+  Applying tenant_inventario.0002_rename_tenant_inve_empresa_33292b_idx_inventario__empresa_b5e77f_idx_and_more...
+ OK
+  Applying tenant_proyectos.0001_initial...
+ OK
+  Applying tenant_proyectos.0002_rename_tenant_proy_empresa_1d37f7_idx_proyectos_a_empresa_86a53b_idx_and_more...
+ OK
+  Applying tenant_proyectos.0003_remove_proyecto_proyectos_p_empresa_55a82f_idx_and_more...
+ OK
+  Applying token_blacklist.0001_initial...
+ OK
+  Applying token_blacklist.0002_outstandingtoken_jti_hex...
+ OK
+  Applying token_blacklist.0003_auto_20171017_2007...
+ OK
+  Applying token_blacklist.0004_auto_20171017_2013...
+ OK
+  Applying token_blacklist.0005_remove_outstandingtoken_jti...
+ OK
+  Applying token_blacklist.0006_auto_20171017_2113...
+ OK
+  Applying token_blacklist.0007_auto_20171017_2214...
+ OK
+  Applying token_blacklist.0008_migrate_to_bigautofield...
+ OK
+  Applying token_blacklist.0010_fix_migrate_to_bigautofield...
+ OK
+  Applying token_blacklist.0011_linearizes_history...
+ OK
+  Applying token_blacklist.0012_alter_outstandingtoken_user...
+ OK
+  Applying token_blacklist.0013_alter_blacklistedtoken_options_and_more...
+ OK
+---------------------------- Captured stderr setup -----------------------------
+Creating test database for alias 'default' ('test_sintel')...
+----------------------------- Captured stderr call -----------------------------
+[INFO] apps.public.tenants.middleware_urlconf: [OK] TenantSecurityAndURLConfMiddleware inicializado | Public schema: public | Allowed public domains: ['0.0.0.0', '127.0.0.1', '186.117.247.166', '186.117.247.167', 'localhost', 'sintel.com']
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_parser.register_parsers: Parsers de cotizaciones registrados correctamente
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_parser.register_parsers: Parsers de facturas registrados correctamente
+[INFO] apps.services.document_ingest.validations: validator_registered_cotizaciones_override
+[WARNING] apps.services.document_ingest.validations: validator_registered_inventario_skipped
+[INFO] config.api_urls: [OK] URLs de contabilidad registradas correctamente: /api/v1/contabilidad/
+[INFO] config.api_urls: [OK] URLs de inventario registradas correctamente: /api/v1/inventario/
+[INFO] config.api_urls:    - Categor├¡as: GET /api/v1/inventario/categorias/ (DataTables client-side)
+[INFO] config.api_urls:    - Productos: GET /api/v1/inventario/productos/ (Tabulator v2.40)
+[INFO] config.api_urls:    - Servicios: GET /api/v1/inventario/servicios/ (Tabulator v2.40)
+[INFO] config.api_urls:    - Activos: GET /api/v1/inventario/activos/ (Tabulator v2.40)
+[INFO] config.api_urls:    - Movimientos: GET /api/v1/inventario/movimientos/ (Tabulator v2.40)
+[INFO] apps.tenant.empleados.api.urls: [OK] URLs de empleados configuradas correctamente
+[INFO] apps.tenant.empleados.api.urls: ≡ƒôï URLs generadas: 36 patrones
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/$ -> contrato-list
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos\.(?P<format>[a-z0-9]+)/?$ -> contrato-list
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/render-offcanvas/crear/$ -> contrato-render-offcanvas-crear
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-crear
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<pk>[^/.]+)/$ -> contrato-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<pk>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> contrato-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<pk>[^/.]+)/cancelar/$ -> contrato-cancelar
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<pk>[^/.]+)/cancelar\.(?P<format>[a-z0-9]+)/?$ -> contrato-cancelar
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<pk>[^/.]+)/render-offcanvas/editar/$ -> contrato-render-offcanvas-editar
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<pk>[^/.]+)/render-offcanvas/editar\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-editar
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/$ -> devengo-list
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos\.(?P<format>[a-z0-9]+)/?$ -> devengo-list
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/preview-calculo/$ -> devengo-preview-calculo
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/preview-calculo\.(?P<format>[a-z0-9]+)/?$ -> devengo-preview-calculo
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/previsualizar/$ -> devengo-previsualizar
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/previsualizar\.(?P<format>[a-z0-9]+)/?$ -> devengo-previsualizar
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/ultima-nomina/$ -> devengo-ultima-nomina
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/ultima-nomina\.(?P<format>[a-z0-9]+)/?$ -> devengo-ultima-nomina
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<pk>[^/.]+)/$ -> devengo-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<pk>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> devengo-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<pk>[^/.]+)/anular/$ -> devengo-anular
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<pk>[^/.]+)/anular\.(?P<format>[a-z0-9]+)/?$ -> devengo-anular
+[INFO] apps.tenant.empleados.api.urls:    - ^$ -> empleado-list
+[INFO] apps.tenant.empleados.api.urls:    - ^\.(?P<format>[a-z0-9]+)/?$ -> empleado-list
+[INFO] apps.tenant.empleados.api.urls:    - ^gestor-offcanvas/$ -> empleado-gestor-offcanvas
+[INFO] apps.tenant.empleados.api.urls:    - ^gestor-offcanvas\.(?P<format>[a-z0-9]+)/?$ -> empleado-gestor-offcanvas
+[INFO] apps.tenant.empleados.api.urls:    - ^summary/$ -> empleado-summary
+[INFO] apps.tenant.empleados.api.urls:    - ^summary\.(?P<format>[a-z0-9]+)/?$ -> empleado-summary
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<pk>[^/.]+)/$ -> empleado-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<pk>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> empleado-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<pk>[^/.]+)/contrato-disponible/$ -> empleado-contrato-disponible
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<pk>[^/.]+)/contrato-disponible\.(?P<format>[a-z0-9]+)/?$ -> empleado-contrato-disponible
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<pk>[^/.]+)/historial-nominas/$ -> empleado-historial-nominas
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<pk>[^/.]+)/historial-nominas\.(?P<format>[a-z0-9]+)/?$ -> empleado-historial-nominas
+[INFO] apps.tenant.empleados.api.urls:    -  -> api-root
+[INFO] apps.tenant.empleados.api.urls:    - <drf_format_suffix:format> -> api-root
+[INFO] apps.tenant.gastos.api.urls: [OK] GastoViewSet registrado correctamente en router con basename='gastos'
+[INFO] apps.tenant.proveedores.api.urls: [proveedores:urls] ProveedorCoreViewSet registrado correctamente. URLs generadas: 12
+[INFO] apps.tenant.proveedores.api.urls:    - ^$ -> proveedores-list
+[INFO] apps.tenant.proveedores.api.urls:    - ^\.(?P<format>[a-z0-9]+)/?$ -> proveedores-list
+[INFO] apps.tenant.proveedores.api.urls:    - ^render-offcanvas/crear/$ -> proveedores-render-offcanvas-crear
+[INFO] apps.tenant.proveedores.api.urls:    - ^render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> proveedores-render-offcanvas-crear
+[INFO] apps.tenant.proveedores.api.urls:    - ^(?P<uuid>[^/.]+)/$ -> proveedores-detail
+[INFO] apps.tenant.proveedores.api.urls:    - ^(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> proveedores-detail
+[INFO] apps.tenant.proveedores.api.urls:    - ^(?P<uuid>[^/.]+)/render-offcanvas/detalle/$ -> proveedores-render-offcanvas-detalle
+[INFO] apps.tenant.proveedores.api.urls:    - ^(?P<uuid>[^/.]+)/render-offcanvas/detalle\.(?P<format>[a-z0-9]+)/?$ -> proveedores-render-offcanvas-detalle
+[INFO] apps.tenant.proveedores.api.urls:    - ^(?P<uuid>[^/.]+)/render-offcanvas/editar/$ -> proveedores-render-offcanvas-editar
+[INFO] apps.tenant.proveedores.api.urls:    - ^(?P<uuid>[^/.]+)/render-offcanvas/editar\.(?P<format>[a-z0-9]+)/?$ -> proveedores-render-offcanvas-editar
+[INFO] apps.tenant.proveedores.api.urls:    -  -> api-root
+[INFO] apps.tenant.proveedores.api.urls:    - <drf_format_suffix:format> -> api-root
+[INFO] apps.tenant.clientes.api.urls: [OK] ClienteViewSet registrado correctamente. URLs generadas: 26
+[INFO] apps.tenant.proyectos.api.urls: [OK] ProyectoViewSet (v3.3) registrado correctamente. URLs generadas: 10
+[INFO] config.api_urls: [OK] URLs de landing expuestas tambi├⌐n bajo /api/v1/core/landing/
+[INFO] config.api_urls: [OK] URLs de empleados registradas correctamente: /api/v1/empleados/
+[INFO] config.api_urls: [OK] URLs de gastos registradas correctamente: /api/v1/gastos/
+[INFO] config.api_urls: [OK] URLs de resoluciones-dian registradas correctamente: /api/v1/resoluciones-dian/
+[INFO] config.api_urls: [OK] URLs de proveedores registradas correctamente: /api/v1/proveedores/
+[INFO] config.api_urls: [OK] URLs de clientes registradas correctamente: /api/v1/clientes/
+[INFO] config.api_urls: [OK] URLs API de cotizaciones registradas correctamente: /api/v1/cotizaciones/
+[INFO] config.api_urls: [OK] URLs de proyectos registradas correctamente: /api/v1/proyectos/
+[WARNING] django.request: Bad Request: /api/v1/gastos/
+------------------------------ Captured log call -------------------------------
+INFO     apps.public.tenants.middleware_urlconf:middleware_urlconf.py:69 [OK] TenantSecurityAndURLConfMiddleware inicializado | Public schema: public | Allowed public domains: ['0.0.0.0', '127.0.0.1', '186.117.247.166', '186.117.247.167', 'localhost', 'sintel.com']
+INFO     apps.services.document_ingest.app_router:app_router.py:37 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:37 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:37 app_parser_registered
+INFO     apps.services.document_parser.register_parsers:register_parsers.py:27 Parsers de cotizaciones registrados correctamente
+INFO     apps.services.document_ingest.app_router:app_router.py:37 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:37 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:37 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:37 app_parser_registered
+INFO     apps.services.document_parser.register_parsers:register_parsers.py:41 Parsers de facturas registrados correctamente
+INFO     apps.services.document_ingest.validations:router.py:58 validator_registered_cotizaciones_override
+WARNING  apps.services.document_ingest.validations:router.py:98 validator_registered_inventario_skipped
+INFO     config.api_urls:api_urls.py:90 [OK] URLs de contabilidad registradas correctamente: /api/v1/contabilidad/
+INFO     config.api_urls:api_urls.py:101 [OK] URLs de inventario registradas correctamente: /api/v1/inventario/
+INFO     config.api_urls:api_urls.py:102    - Categor├¡as: GET /api/v1/inventario/categorias/ (DataTables client-side)
+INFO     config.api_urls:api_urls.py:103    - Productos: GET /api/v1/inventario/productos/ (Tabulator v2.40)
+INFO     config.api_urls:api_urls.py:104    - Servicios: GET /api/v1/inventario/servicios/ (Tabulator v2.40)
+INFO     config.api_urls:api_urls.py:105    - Activos: GET /api/v1/inventario/activos/ (Tabulator v2.40)
+INFO     config.api_urls:api_urls.py:106    - Movimientos: GET /api/v1/inventario/movimientos/ (Tabulator v2.40)
+INFO     apps.tenant.empleados.api.urls:urls.py:35 [OK] URLs de empleados configuradas correctamente
+INFO     apps.tenant.empleados.api.urls:urls.py:37 ≡ƒôï URLs generadas: 36 patrones
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/$ -> contrato-list
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos\.(?P<format>[a-z0-9]+)/?$ -> contrato-list
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/render-offcanvas/crear/$ -> contrato-render-offcanvas-crear
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-crear
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/(?P<pk>[^/.]+)/$ -> contrato-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/(?P<pk>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> contrato-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/(?P<pk>[^/.]+)/cancelar/$ -> contrato-cancelar
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/(?P<pk>[^/.]+)/cancelar\.(?P<format>[a-z0-9]+)/?$ -> contrato-cancelar
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/(?P<pk>[^/.]+)/render-offcanvas/editar/$ -> contrato-render-offcanvas-editar
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^contratos/(?P<pk>[^/.]+)/render-offcanvas/editar\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-editar
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/$ -> devengo-list
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos\.(?P<format>[a-z0-9]+)/?$ -> devengo-list
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/preview-calculo/$ -> devengo-preview-calculo
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/preview-calculo\.(?P<format>[a-z0-9]+)/?$ -> devengo-preview-calculo
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/previsualizar/$ -> devengo-previsualizar
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/previsualizar\.(?P<format>[a-z0-9]+)/?$ -> devengo-previsualizar
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/ultima-nomina/$ -> devengo-ultima-nomina
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/ultima-nomina\.(?P<format>[a-z0-9]+)/?$ -> devengo-ultima-nomina
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/(?P<pk>[^/.]+)/$ -> devengo-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/(?P<pk>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> devengo-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/(?P<pk>[^/.]+)/anular/$ -> devengo-anular
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^devengos/(?P<pk>[^/.]+)/anular\.(?P<format>[a-z0-9]+)/?$ -> devengo-anular
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^$ -> empleado-list
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^\.(?P<format>[a-z0-9]+)/?$ -> empleado-list
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^gestor-offcanvas/$ -> empleado-gestor-offcanvas
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^gestor-offcanvas\.(?P<format>[a-z0-9]+)/?$ -> empleado-gestor-offcanvas
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^summary/$ -> empleado-summary
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^summary\.(?P<format>[a-z0-9]+)/?$ -> empleado-summary
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^(?P<pk>[^/.]+)/$ -> empleado-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^(?P<pk>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> empleado-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^(?P<pk>[^/.]+)/contrato-disponible/$ -> empleado-contrato-disponible
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^(?P<pk>[^/.]+)/contrato-disponible\.(?P<format>[a-z0-9]+)/?$ -> empleado-contrato-disponible
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^(?P<pk>[^/.]+)/historial-nominas/$ -> empleado-historial-nominas
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - ^(?P<pk>[^/.]+)/historial-nominas\.(?P<format>[a-z0-9]+)/?$ -> empleado-historial-nominas
+INFO     apps.tenant.empleados.api.urls:urls.py:41    -  -> api-root
+INFO     apps.tenant.empleados.api.urls:urls.py:41    - <drf_format_suffix:format> -> api-root
+INFO     apps.tenant.gastos.api.urls:urls.py:49 [OK] GastoViewSet registrado correctamente en router con basename='gastos'
+INFO     apps.tenant.proveedores.api.urls:urls.py:22 [proveedores:urls] ProveedorCoreViewSet registrado correctamente. URLs generadas: 12
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^$ -> proveedores-list
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^\.(?P<format>[a-z0-9]+)/?$ -> proveedores-list
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^render-offcanvas/crear/$ -> proveedores-render-offcanvas-crear
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> proveedores-render-offcanvas-crear
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^(?P<uuid>[^/.]+)/$ -> proveedores-detail
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> proveedores-detail
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^(?P<uuid>[^/.]+)/render-offcanvas/detalle/$ -> proveedores-render-offcanvas-detalle
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^(?P<uuid>[^/.]+)/render-offcanvas/detalle\.(?P<format>[a-z0-9]+)/?$ -> proveedores-render-offcanvas-detalle
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^(?P<uuid>[^/.]+)/render-offcanvas/editar/$ -> proveedores-render-offcanvas-editar
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - ^(?P<uuid>[^/.]+)/render-offcanvas/editar\.(?P<format>[a-z0-9]+)/?$ -> proveedores-render-offcanvas-editar
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    -  -> api-root
+INFO     apps.tenant.proveedores.api.urls:urls.py:24    - <drf_format_suffix:format> -> api-root
+INFO     apps.tenant.clientes.api.urls:urls.py:39 [OK] ClienteViewSet registrado correctamente. URLs generadas: 26
+INFO     apps.tenant.proyectos.api.urls:urls.py:25 [OK] ProyectoViewSet (v3.3) registrado correctamente. URLs generadas: 10
+INFO     config.api_urls:api_urls.py:130 [OK] URLs de landing expuestas tambi├⌐n bajo /api/v1/core/landing/
+INFO     config.api_urls:api_urls.py:136 [OK] URLs de empleados registradas correctamente: /api/v1/empleados/
+INFO     config.api_urls:api_urls.py:144 [OK] URLs de gastos registradas correctamente: /api/v1/gastos/
+INFO     config.api_urls:api_urls.py:157 [OK] URLs de resoluciones-dian registradas correctamente: /api/v1/resoluciones-dian/
+INFO     config.api_urls:api_urls.py:165 [OK] URLs de proveedores registradas correctamente: /api/v1/proveedores/
+INFO     config.api_urls:api_urls.py:173 [OK] URLs de clientes registradas correctamente: /api/v1/clientes/
+INFO     config.api_urls:api_urls.py:183 [OK] URLs API de cotizaciones registradas correctamente: /api/v1/cotizaciones/
+INFO     config.api_urls:api_urls.py:191 [OK] URLs de proyectos registradas correctamente: /api/v1/proyectos/
+--------------------------- Captured stderr teardown ---------------------------
+Destroying test database for alias 'default' ('test_sintel')...
+=========================== short test summary info ============================
+FAILED apps/tenant/gastos/tests/test_gastos_api_and_service.py::test_api_create_gasto_crea_documento_soporte_y_gasto
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+============================== 1 failed in 33.03s ==============================

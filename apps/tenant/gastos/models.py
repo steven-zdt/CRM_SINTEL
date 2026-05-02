@@ -1,7 +1,7 @@
 """
 Modelos de gastos (TENANT_APP).
 
-⚠️ v2.40: Sistema de Documento Soporte Inmutable
+WARNING: v2.40: Sistema de Documento Soporte Inmutable
 - DocumentoSoporte: Evidencia legal inmutable según Art. 1.6.1.4.12 DR 1625 de 2016
 - Gasto: Clasificación contable (centro de costos/categoría)
 
@@ -9,19 +9,25 @@ REGLA DE ORO: Una vez generado el consecutivo, los valores monetarios son INMUTA
 El formato del documento debe cumplir con la normativa DIAN colombiana.
 """
 import datetime
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
-from django.core.validators import FileExtensionValidator, MinValueValidator, MaxValueValidator
-from django.core.exceptions import ValidationError
-from decimal import Decimal
-from apps.tenant.empresa.models import Empresa  # SSoT empresa (singleton por tenant)
-from .choices.centros_costo import CENTRO_COSTO_CHOICES
-from .choices.categoria_contable import CATEGORIA_CONTABLE_CHOICES
 
-class ResolucionDIAN(models.Model):
+from apps.tenant.core.models import SintelTenantBaseModel  # auto-inserted by autocorrect
+from apps.tenant.empresa.models import Empresa  # SSoT empresa (singleton por tenant)
+
+from .choices.categoria_contable import CATEGORIA_CONTABLE_CHOICES
+from .choices.centros_costo import CENTRO_COSTO_CHOICES
+from .choices.niif_gastos_choices import GASTOS_NIIF_CHOICES
+
+
+class ResolucionDIAN(SintelTenantBaseModel):
     """
     Resolución DIAN para Documentos Soporte.
-    ⚠️ v2.40: Configuración manual de rangos y fechas de vigencia.
+    WARNING: v2.40: Configuración manual de rangos y fechas de vigencia.
     """
     empresa = models.ForeignKey(
         'empresa.Empresa', # Asegúrate de que el path sea correcto
@@ -49,7 +55,7 @@ class ResolucionDIAN(models.Model):
         verbose_name=_('Rango Hasta')
     )
     
-    # ⚠️ FECHAS DE APLICACIÓN MANUAL
+    # WARNING: FECHAS DE APLICACIÓN MANUAL
     fecha_resolucion = models.DateField(
         verbose_name=_('Fecha de Emisión'),
         help_text=_('Fecha en la que la DIAN emitió la resolución')
@@ -57,7 +63,7 @@ class ResolucionDIAN(models.Model):
     fecha_inicio = models.DateField(
         verbose_name=_('Fecha Inicio Aplicación'),
         help_text=_('Fecha desde la cual se empezará a usar en el sistema'),
-        default=datetime.date.today  # ⚠️ Callable: se evalúa en tiempo de creación, no en tiempo de definición
+        default=datetime.date.today  # WARNING: Callable: se evalúa en tiempo de creación, no en tiempo de definición
     )
     fecha_fin = models.DateField(
         verbose_name=_('Fecha Final Aplicación'),
@@ -128,11 +134,11 @@ class ResolucionDIAN(models.Model):
         return self.fecha_inicio <= fecha_referencia <= self.fecha_fin
         
 
-class DocumentoSoporte(models.Model):
+class DocumentoSoporte(SintelTenantBaseModel):
     """
     Documento Soporte Inmutable - Evidencia legal de gasto.
     
-    ⚠️ v2.40: REGLA DE ORO - Una vez generado el consecutivo, los valores son INMUTABLES.
+    WARNING: v2.40: REGLA DE ORO - Una vez generado el consecutivo, los valores son INMUTABLES.
     Formato según Art. 1.6.1.4.12 DR 1625 de 2016.
     
     El documento debe incluir:
@@ -141,7 +147,7 @@ class DocumentoSoporte(models.Model):
     - Detalle económico con retenciones (Retefuente, ReteICA)
     - Total = Subtotal - Retefuente - ReteICA
     """
-    # ⚠️ ENFORCED MODE v2.40: FK NO NULA a Empresa (SSoT)
+    # WARNING: ENFORCED MODE v2.40: FK NO NULA a Empresa (SSoT)
     empresa = models.ForeignKey(
         Empresa,
         on_delete=models.PROTECT,
@@ -149,7 +155,7 @@ class DocumentoSoporte(models.Model):
         help_text='Empresa propietaria del documento (SSoT por tenant).'
     )
     
-    # ⚠️ Resolución DIAN asociada
+    # WARNING: Resolución DIAN asociada
     resolucion_dian = models.ForeignKey(
         ResolucionDIAN,
         on_delete=models.PROTECT,
@@ -168,7 +174,7 @@ class DocumentoSoporte(models.Model):
     # Consecutivo (entero, dentro del rango de la resolución)
     consecutivo = models.IntegerField(
         db_index=True,
-        editable=False,  # ⚠️ INMUTABLE: No editable una vez asignado
+        editable=False,  # WARNING: INMUTABLE: No editable una vez asignado
         verbose_name=_('Consecutivo'),
         help_text=_('Número consecutivo del documento (dentro del rango de la resolución)')
     )
@@ -220,7 +226,7 @@ class DocumentoSoporte(models.Model):
     
     # ======================
     # DETALLE ECONÓMICO (INMUTABLE una vez asignado el consecutivo)
-    # ⚠️ v2.40: Total = Subtotal - Retefuente - ReteICA
+    # WARNING: v2.40: Total = Subtotal - Retefuente - ReteICA
     # ======================
     subtotal = models.DecimalField(
         max_digits=15,
@@ -230,7 +236,7 @@ class DocumentoSoporte(models.Model):
         help_text=_('Subtotal del documento (antes de retenciones)')
     )
     
-    # ⚠️ v2.40: Choices para Retefuente (porcentajes comunes en Colombia)
+    # WARNING: v2.40: Choices para Retefuente (porcentajes comunes en Colombia)
     RETEFUENTE_CHOICES = [
         ('0.00', '0% - Sin Retefuente'),
         ('0.04', '4% - Servicios (Declarantes)'),
@@ -256,7 +262,7 @@ class DocumentoSoporte(models.Model):
         help_text=_('Valor calculado de retención en la fuente (subtotal * porcentaje)')
     )
     
-    # ⚠️ v2.40: Choices para ReteICA (tarifas comunes en Colombia)
+    # WARNING: v2.40: Choices para ReteICA (tarifas comunes en Colombia)
     RETEICA_CHOICES = [
         ('0.00', '0% - Exento'),
         ('0.0069', '0.69% - Tarifa 0.69% (6.9/1000)'),
@@ -331,8 +337,14 @@ class DocumentoSoporte(models.Model):
             models.Index(fields=['resolucion_dian', 'consecutivo']),
             models.Index(fields=['prefijo', 'consecutivo']),  # Para búsqueda por "SI 150"
             models.Index(fields=['vendedor_nit', 'numero_factura_proveedor']),  # Para evitar duplicados
-            models.Index(fields=['activo']),  # ⚠️ v2.40: Índice para campo activo
-            models.Index(fields=['anulado']),
+            
+            # WARNING: v2.61: SINTEL ADVANCED INDEXING (Partial Index para estados concurrentes)
+            # Reemplaza índices estáticos booleanos por índice filtrado de alto rendimiento
+            models.Index(
+                fields=['fecha'], 
+                condition=models.Q(activo=True, anulado=False), 
+                name='idx_gastos_activos'
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -351,7 +363,7 @@ class DocumentoSoporte(models.Model):
     def clean(self):
         """
         Valida coherencia de totales y rango de consecutivo.
-        ⚠️ v2.40: Calcula automáticamente las retenciones basándose en los porcentajes.
+        WARNING: v2.40: Calcula automáticamente las retenciones basándose en los porcentajes.
         """
         # Validar que el consecutivo esté dentro del rango de la resolución
         if self.resolucion_dian and self.consecutivo:
@@ -364,7 +376,7 @@ class DocumentoSoporte(models.Model):
                     )
                 })
         
-        # ⚠️ v2.40: Calcular retenciones automáticamente basándose en los porcentajes
+        # WARNING: v2.40: Calcular retenciones automáticamente basándose en los porcentajes
         if self.subtotal is not None and self.subtotal >= 0:
             # Calcular Retefuente
             if self.retefuente_porcentaje:
@@ -381,7 +393,7 @@ class DocumentoSoporte(models.Model):
                 self.reteica = Decimal('0.00')
         
         # Validar fórmula: Total = Subtotal - Retefuente - ReteICA
-        # ⚠️ v2.40: Tolerancia aumentada para manejar errores de redondeo en cálculos grandes
+        # WARNING: v2.40: Tolerancia aumentada para manejar errores de redondeo en cálculos grandes
         # Tolerancia de 100.00 para permitir diferencias por redondeo acumulado en documentos grandes
         # Esto es necesario porque los cálculos de retenciones pueden tener pequeñas diferencias por redondeo
         if self.subtotal is not None and self.retefuente is not None and self.reteica is not None:
@@ -416,7 +428,7 @@ class DocumentoSoporte(models.Model):
         """Retorna el número completo del documento (Prefijo + Consecutivo)."""
         return f"{self.prefijo} {self.consecutivo}"
     
-    # ⚠️ v2.40: Propiedades para formatear valores monetarios como dinero en COP
+    # WARNING: v2.40: Propiedades para formatear valores monetarios como dinero en COP
     @property
     def subtotal_cop(self):
         """Retorna el subtotal formateado como dinero en pesos colombianos (COP)."""
@@ -452,19 +464,19 @@ class DocumentoSoporte(models.Model):
         return f"${total_retenciones:,.0f}".replace(',', '.')
 
 
-class Gasto(models.Model):
+class Gasto(SintelTenantBaseModel):
     """
     Clasificación contable de un Documento Soporte.
     
-    ⚠️ v2.40: El Gasto es la clasificación contable (centro de costos/categoría).
+    WARNING: v2.40: El Gasto es la clasificación contable (centro de costos/categoría).
     El DocumentoSoporte es la evidencia legal inmutable.
     
     REGLA: Un DocumentoSoporte puede tener múltiples Gastos (distribución contable).
     Por simplicidad inicial, implementamos OneToOneField (1 DS = 1 Gasto).
     
-    ⚠️ LIMPIEZA: Eliminadas categorías de personal (Salarios, Aportes).
+    WARNING: LIMPIEZA: Eliminadas categorías de personal (Salarios, Aportes).
     """
-    # ⚠️ RELACIÓN CON DOCUMENTO SOPORTE (OneToOne)
+    # WARNING: RELACIÓN CON DOCUMENTO SOPORTE (OneToOne)
     documento_soporte = models.OneToOneField(
         DocumentoSoporte,
         on_delete=models.PROTECT,
@@ -473,7 +485,7 @@ class Gasto(models.Model):
         help_text=_('Documento Soporte asociado (evidencia legal)')
     )
     
-    # ⚠️ ENFORCED MODE v2.40: FK NO NULA a Empresa (SSoT)
+    # WARNING: ENFORCED MODE v2.40: FK NO NULA a Empresa (SSoT)
     empresa = models.ForeignKey(
         Empresa,
         on_delete=models.PROTECT,
@@ -495,8 +507,22 @@ class Gasto(models.Model):
         blank=True,
         null=True,
         choices=CATEGORIA_CONTABLE_CHOICES,
-        verbose_name=_('Categoría Contable'),
-        help_text=_('Categoría contable del gasto (excluye personal)')
+        verbose_name=_('Categoria Contable'),
+        help_text=_('Categoria contable del gasto (excluye personal)')
+    )
+
+    # v2.61.7: Codigo NIIF para vinculacion con plan de cuentas del tenant
+    codigo_contable = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+        choices=GASTOS_NIIF_CHOICES,
+        db_index=True,
+        verbose_name=_('Codigo Contable NIIF'),
+        help_text=_(
+            'Codigo del PUC (ej: 510506) para vinculacion con CuentaContable del tenant. '
+            'Si se configura, el asiento contable usara esta cuenta como debito de gastos.'
+        )
     )
     
     # Periodo contable
@@ -568,7 +594,7 @@ class Gasto(models.Model):
         """Delega al DocumentoSoporte."""
         return self.documento_soporte.numero_documento
     
-    # ⚠️ v2.40: Propiedades para formatear valores monetarios como dinero en COP (delegadas)
+    # WARNING: v2.40: Propiedades para formatear valores monetarios como dinero en COP (delegadas)
     @property
     def subtotal_cop(self):
         """Delega al DocumentoSoporte."""

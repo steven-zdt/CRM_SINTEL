@@ -1,24 +1,25 @@
 """
 Tareas Celery para procesamiento asíncrono de documentos (tenant-aware).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Tenant-aware: Usa schema_context para aislamiento por esquema
 - Agnóstico: Retorna DTO serializable (sin acoplar a modelos de negocio)
 - Soporta múltiples formatos: XML, PDF, XLS/XLSX, CSV, TXT
 - Nombre canónico (dotted path) para evitar "unregistered task"
 
-⚠️ v2.36: Migrado desde apps/services/xml_ingest/tasks.py
-⚠️ v2.61.2: Agregada tarea para batch upload de facturas
+WARNING: v2.36: Migrado desde apps/services/xml_ingest/tasks.py
+WARNING: v2.61.2: Agregada tarea para batch upload de facturas
 """
+import base64
+import logging
+import time
+from typing import Any
+
 from celery import shared_task
 from celery.result import AsyncResult
-import base64
-import time
-import logging
-from typing import Dict, Any, Tuple, Optional, List
-from django_tenants.utils import schema_context
 from django.conf import settings
 from django.db import connection
+from django_tenants.utils import schema_context
 
 from apps.services.document_ingest.ingest_service import ingest_document
 
@@ -32,13 +33,13 @@ def _safe_len(v):
         return 0
 
 @shared_task(name="apps.services.document_ingest.tasks.document_ingest_task")
-def document_ingest_task(schema_name: str, file_b64: str, filename: Optional[str] = None) -> Dict[str, Any]:
+def document_ingest_task(schema_name: str, file_b64: str, filename: str | None = None) -> dict[str, Any]:
     """
     Tarea tenant-aware: abre schema_context(schema_name) antes de cualquier acceso.
     Nombre canónico (dotted path) para evitar 'unregistered task'.
     
-    ⚠️ v2.36: Migrado desde xml_ingest_task para usar pipeline universal.
-    ⚠️ NORMALIZACIÓN: Logging estructurado con inicio, duración y resultado.
+    WARNING: v2.36: Migrado desde xml_ingest_task para usar pipeline universal.
+    WARNING: NORMALIZACIÓN: Logging estructurado con inicio, duración y resultado.
     
     Args:
         schema_name: Nombre del esquema del tenant (ej: "tenant1", "cliente_acme")
@@ -80,7 +81,7 @@ def document_ingest_task(schema_name: str, file_b64: str, filename: Optional[str
                 }
             )
             return result
-    except Exception as e:
+    except Exception:
         dt = time.monotonic() - t0
         log_task.exception(
             "document_ingest_task error",
@@ -95,11 +96,11 @@ def document_ingest_task(schema_name: str, file_b64: str, filename: Optional[str
 @shared_task(name="apps.services.document_ingest.tasks.batch_upload_facturas_task")
 def batch_upload_facturas_task(
     schema_name: str,
-    files_data: List[Dict[str, str]],
-    started_by_id: Optional[int] = None
-) -> Dict[str, Any]:
+    files_data: list[dict[str, str]],
+    started_by_id: int | None = None
+) -> dict[str, Any]:
     """
-    ⚠️ v2.61.2: Tarea Celery para procesamiento asíncrono de carga masiva de facturas.
+    WARNING: v2.61.2: Tarea Celery para procesamiento asíncrono de carga masiva de facturas.
     
     Procesa múltiples archivos XML UBL en una sola tarea Celery, ideal para cuando los usuarios
     cargan el historial del mes (más de 10 archivos).
@@ -125,10 +126,10 @@ def batch_upload_facturas_task(
                 }
             )
             
-            # ⚠️ IMPORT LAZY: Importar servicios dentro de schema_context
-            from apps.tenant.facturas.services import importar_documento
-            from apps.tenant.facturas.ubl_parser import fast_get_cufe
+            # WARNING: IMPORT LAZY: Importar servicios dentro de schema_context
             from apps.tenant.facturas.models import Factura
+            from apps.tenant.facturas.services import importar_documento
+            from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
             
             resultados = []
             creados = 0
@@ -144,7 +145,7 @@ def batch_upload_facturas_task(
                     file_bytes = base64.b64decode(content_b64.encode("utf-8"))
                     size = len(file_bytes)
                     
-                    # ⚠️ v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida")
+                    # WARNING: v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida")
                     cufe_rapido = fast_get_cufe(file_bytes)
                     
                     if cufe_rapido:
@@ -235,7 +236,7 @@ def batch_upload_facturas_task(
             
             return summary
             
-    except Exception as e:
+    except Exception:
         dt = time.monotonic() - t0
         log_task.exception(
             "batch_upload_facturas_task error",
@@ -247,7 +248,7 @@ def batch_upload_facturas_task(
         raise
 
 
-def get_task_status(task_id: str, request=None) -> Tuple[Dict[str, Any], int]:
+def get_task_status(task_id: str, request=None) -> tuple[dict[str, Any], int]:
     """
     Devuelve un JSON apto para UI:
       - state: PENDING | STARTED | SUCCESS | FAILURE | UNKNOWN
@@ -255,8 +256,8 @@ def get_task_status(task_id: str, request=None) -> Tuple[Dict[str, Any], int]:
       - error_code/message/hint cuando hay problemas
     Nunca levanta excepción; siempre retorna (payload, 200).
     
-    ⚠️ v2.36: Migrado desde apps/services/xml_ingest/service.py
-    ⚠️ NORMALIZACIÓN: Acepta request opcional para extraer contexto (request_id, schema_name).
+    WARNING: v2.36: Migrado desde apps/services/xml_ingest/service.py
+    WARNING: NORMALIZACIÓN: Acepta request opcional para extraer contexto (request_id, schema_name).
     
     Args:
         task_id: ID de la tarea Celery
@@ -272,7 +273,7 @@ def get_task_status(task_id: str, request=None) -> Tuple[Dict[str, Any], int]:
             "hint": str opcional
         }
     """
-    # ⚠️ NORMALIZACIÓN: Extraer contexto de logging
+    # WARNING: NORMALIZACIÓN: Extraer contexto de logging
     schema = "-"
     rid = "-"
     if request:

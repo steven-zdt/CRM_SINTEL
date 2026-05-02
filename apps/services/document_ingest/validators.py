@@ -1,22 +1,26 @@
 """
 Validadores de integridad y campos obligatorios para DTOs de documentos (FASE 4.4).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Usa el sistema de validation plugins (validations/)
 - Mantiene compatibilidad con código existente
 - Delega a validadores específicos por app cuando están disponibles
-- ⚠️ v2.40: NUNCA usa fallback genérico para inventario/cotizaciones (valida campos de facturas)
+- WARNING: v2.40: NUNCA usa fallback genérico para inventario/cotizaciones (valida campos de facturas)
 - Fallback a validación genérica solo para otros tipos (facturas, gastos, etc.)
 """
-from typing import Dict, Any, Tuple, List, Optional
-from apps.services.document_ingest.validations.router import get_validator, get_validator_by_document_type
+from typing import Any
+
+from apps.services.document_ingest.validations.router import (
+    get_validator,
+    get_validator_by_document_type,
+)
 
 
 def validate_document_dto(
-    dto: Dict[str, Any],
+    dto: dict[str, Any],
     document_type: str,
-    app_name: Optional[str] = None
-) -> Tuple[bool, Optional[str], List[str]]:
+    app_name: str | None = None
+) -> tuple[bool, str | None, list[str]]:
     """
     Valida un DTO de documento (FASE 4.4).
     
@@ -25,7 +29,7 @@ def validate_document_dto(
     2. Si no, intenta usar validador genérico por tipo de documento
     3. Si no hay validador, usa validación genérica básica (SOLO para facturas/gastos, NO para inventario/cotizaciones)
     
-    ⚠️ v2.40: NUNCA usa fallback genérico para inventario/cotizaciones.
+    WARNING: v2.40: NUNCA usa fallback genérico para inventario/cotizaciones.
     El fallback genérico valida campos de facturas (emisor, receptor, CUFE, etc.)
     
     Args:
@@ -39,7 +43,7 @@ def validate_document_dto(
         - error_code: Código de error si no es válido
         - missing_fields: Lista de campos faltantes o inválidos
     """
-    # ⚠️ CRÍTICO: Detectar si es inventario/cotizaciones para NO usar fallback genérico
+    # WARNING: CRÍTICO: Detectar si es inventario/cotizaciones para NO usar fallback genérico
     doc_type_base = document_type.split('.')[0] if '.' in document_type else document_type
     dto_type = dto.get("type") or dto.get("document_type", "")
     dto_type_base = dto_type.split('.')[0] if '.' in dto_type else dto_type
@@ -61,7 +65,7 @@ def validate_document_dto(
         return validator.validate(dto, document_type)
     
     # 3. Fallback: validación genérica básica
-    # ⚠️ CRÍTICO: NUNCA usar fallback genérico para inventario/cotizaciones
+    # WARNING: CRÍTICO: NUNCA usar fallback genérico para inventario/cotizaciones
     # El fallback genérico valida campos de facturas (emisor, receptor, CUFE, etc.)
     if is_inventario_cotizaciones:
         # Para inventario/cotizaciones, retornar error específico sin usar fallback genérico
@@ -73,7 +77,7 @@ def validate_document_dto(
     return _validate_document_dto_generic(dto, document_type)
 
 
-def _validate_document_dto_generic(dto: Dict[str, Any], document_type: str) -> Tuple[bool, Optional[str], List[str]]:
+def _validate_document_dto_generic(dto: dict[str, Any], document_type: str) -> tuple[bool, str | None, list[str]]:
     """
     Validación genérica básica (fallback cuando no hay validador específico).
     
@@ -211,7 +215,7 @@ def _is_valid_date(date_str: str) -> bool:
     return False
 
 
-def validate_invoice_dto(dto: Dict[str, Any]) -> Tuple[bool, Optional[str], List[str]]:
+def validate_invoice_dto(dto: dict[str, Any]) -> tuple[bool, str | None, list[str]]:
     """
     Valida un DTO de factura (alias para compatibilidad).
     
@@ -224,7 +228,7 @@ def validate_invoice_dto(dto: Dict[str, Any]) -> Tuple[bool, Optional[str], List
     return validate_document_dto(dto, "invoice.ubl21")
 
 
-def validate_credit_note_dto(dto: Dict[str, Any]) -> Tuple[bool, Optional[str], List[str]]:
+def validate_credit_note_dto(dto: dict[str, Any]) -> tuple[bool, str | None, list[str]]:
     """
     Valida un DTO de nota crédito (alias para compatibilidad).
     

@@ -4,6 +4,7 @@ Smoke tests de templates para la app facturas.
 Verifica que los endpoints API no renderizan templates HTML.
 """
 from decimal import Decimal
+
 from apps.config.tests.base_tenant import TenantAPITestCase
 from apps.tenant.facturas.models import Factura
 

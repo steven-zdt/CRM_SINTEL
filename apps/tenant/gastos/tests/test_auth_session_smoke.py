@@ -8,6 +8,7 @@ Valida que:
 3. El handler del workspace NO redirija a login para este módulo no crítico
 """
 import pytest
+
 from apps.public.tenants.models import TenantMembership
 
 

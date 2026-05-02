@@ -7,11 +7,14 @@ Verifica:
 - Paginación y filtros
 """
 from decimal import Decimal
+
 from rest_framework import status
+
 from apps.config.tests.base_tenant import TenantAPITestCase
+from apps.tenant.empresa.models import Empresa
 from apps.tenant.contabilidad.models import (
-    CuentaContable,
     AsientoContable,
+    CuentaContable,
     MovimientoContable,
 )
 
@@ -22,8 +25,17 @@ class CuentaContableViewSetTests(TenantAPITestCase):
     def setUp(self):
         """Configuración inicial."""
         super().setUp()
+        self.empresa = Empresa.objects.first()
+        if not self.empresa:
+            self.empresa = Empresa.objects.create(
+                razon_social='Empresa Test',
+                nit='123456789',
+                dv='0',
+                direccion='Calle Test'
+            )
         
         self.cuenta = CuentaContable.objects.create(
+            empresa=self.empresa,
             codigo='110505',
             nombre='Caja',
             tipo='ACTIVO',
@@ -32,7 +44,7 @@ class CuentaContableViewSetTests(TenantAPITestCase):
     
     def test_list_cuentas(self):
         """Test: GET /api/v1/cuentas-contables/ devuelve lista paginada."""
-        response = self.tget('/api/v1/cuentas-contables/')
+        response = self.tget('/api/v1/contabilidad/cuentas-contables/')
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
         self.assertPaginationFormat(data)
@@ -45,7 +57,7 @@ class CuentaContableViewSetTests(TenantAPITestCase):
             'tipo': 'ACTIVO',
             'activa': True,
         }
-        response = self.tpost('/api/v1/cuentas-contables/', data)
+        response = self.tpost('/api/v1/contabilidad/cuentas-contables/', data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         response_data = response.json()
         self.assertEqual(response_data['codigo'], '110510')
@@ -57,8 +69,17 @@ class AsientoContableViewSetTests(TenantAPITestCase):
     def setUp(self):
         """Configuración inicial."""
         super().setUp()
+        self.empresa = Empresa.objects.first()
+        if not self.empresa:
+            self.empresa = Empresa.objects.create(
+                razon_social='Empresa Test',
+                nit='123456789',
+                dv='0',
+                direccion='Calle Test'
+            )
         
         self.cuenta_debe = CuentaContable.objects.create(
+            empresa=self.empresa,
             codigo='110505',
             nombre='Caja',
             tipo='ACTIVO',
@@ -66,6 +87,7 @@ class AsientoContableViewSetTests(TenantAPITestCase):
         )
         
         self.cuenta_haber = CuentaContable.objects.create(
+            empresa=self.empresa,
             codigo='240805',
             nombre='Ingresos',
             tipo='INGRESO',
@@ -73,6 +95,7 @@ class AsientoContableViewSetTests(TenantAPITestCase):
         )
         
         self.asiento = AsientoContable.objects.create(
+            empresa=self.empresa,
             numero='AS-001',
             fecha='2024-01-15',
             descripcion='Asiento de prueba',
@@ -81,6 +104,7 @@ class AsientoContableViewSetTests(TenantAPITestCase):
         
         # Crear movimientos balanceados
         MovimientoContable.objects.create(
+            empresa=self.empresa,
             asiento=self.asiento,
             cuenta=self.cuenta_debe,
             debe=Decimal('100000.00'),
@@ -90,6 +114,7 @@ class AsientoContableViewSetTests(TenantAPITestCase):
         )
         
         MovimientoContable.objects.create(
+            empresa=self.empresa,
             asiento=self.asiento,
             cuenta=self.cuenta_haber,
             debe=Decimal('0.00'),
@@ -103,7 +128,7 @@ class AsientoContableViewSetTests(TenantAPITestCase):
     
     def test_list_asientos(self):
         """Test: GET /api/v1/asientos-contables/ devuelve lista paginada."""
-        response = self.tget('/api/v1/asientos-contables/')
+        response = self.tget('/api/v1/contabilidad/asientos-contables/')
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
         self.assertPaginationFormat(data)
@@ -116,14 +141,14 @@ class AsientoContableViewSetTests(TenantAPITestCase):
             'descripcion': 'Nuevo asiento',
             'estado': 'BORRADOR',
         }
-        response = self.tpost('/api/v1/asientos-contables/', data)
+        response = self.tpost('/api/v1/contabilidad/asientos-contables/', data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         response_data = response.json()
         self.assertEqual(response_data['numero'], 'AS-002')
     
     def test_aprobar_action(self):
         """Test: POST /api/v1/asientos-contables/{id}/aprobar/ aprueba asiento balanceado."""
-        response = self.tpost(f'/api/v1/asientos-contables/{self.asiento.id}/aprobar/', {})
+        response = self.tpost(f'/api/v1/contabilidad/asientos-contables/{self.asiento.id}/aprobar/', {})
         self.assertJSONResponse(response, status.HTTP_200_OK)
         response_data = response.json()
         self.assertEqual(response_data['estado'], 'APROBADO')
@@ -136,6 +161,7 @@ class AsientoContableViewSetTests(TenantAPITestCase):
         """Test: No se puede aprobar asiento desbalanceado."""
         # Crear asiento desbalanceado
         asiento_desbalanceado = AsientoContable.objects.create(
+            empresa=self.empresa,
             numero='AS-003',
             fecha='2024-01-17',
             descripcion='Asiento desbalanceado',
@@ -143,6 +169,7 @@ class AsientoContableViewSetTests(TenantAPITestCase):
         )
         
         MovimientoContable.objects.create(
+            empresa=self.empresa,
             asiento=asiento_desbalanceado,
             cuenta=self.cuenta_debe,
             debe=Decimal('100000.00'),
@@ -152,12 +179,12 @@ class AsientoContableViewSetTests(TenantAPITestCase):
         )
         
         # Intentar aprobar
-        response = self.tpost(f'/api/v1/asientos-contables/{asiento_desbalanceado.id}/aprobar/', {})
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        response = self.tpost(f'/api/v1/contabilidad/asientos-contables/{asiento_desbalanceado.id}/aprobar/', {})
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
     
     def test_filter_by_estado(self):
         """Test: Filtrar por estado."""
-        response = self.tget('/api/v1/asientos-contables/?estado=BORRADOR')
+        response = self.tget('/api/v1/contabilidad/asientos-contables/?estado=BORRADOR')
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
         for result in data['results']:
@@ -170,8 +197,17 @@ class MovimientoContableViewSetTests(TenantAPITestCase):
     def setUp(self):
         """Configuración inicial."""
         super().setUp()
+        self.empresa = Empresa.objects.first()
+        if not self.empresa:
+            self.empresa = Empresa.objects.create(
+                razon_social='Empresa Test',
+                nit='123456789',
+                dv='0',
+                direccion='Calle Test'
+            )
         
         self.cuenta = CuentaContable.objects.create(
+            empresa=self.empresa,
             codigo='110505',
             nombre='Caja',
             tipo='ACTIVO',
@@ -179,6 +215,7 @@ class MovimientoContableViewSetTests(TenantAPITestCase):
         )
         
         self.asiento = AsientoContable.objects.create(
+            empresa=self.empresa,
             numero='AS-001',
             fecha='2024-01-15',
             descripcion='Asiento de prueba',
@@ -186,6 +223,7 @@ class MovimientoContableViewSetTests(TenantAPITestCase):
         )
         
         self.movimiento = MovimientoContable.objects.create(
+            empresa=self.empresa,
             asiento=self.asiento,
             cuenta=self.cuenta,
             debe=Decimal('100000.00'),
@@ -196,7 +234,7 @@ class MovimientoContableViewSetTests(TenantAPITestCase):
     
     def test_list_movimientos(self):
         """Test: GET /api/v1/movimientos-contables/ devuelve lista paginada."""
-        response = self.tget('/api/v1/movimientos-contables/')
+        response = self.tget('/api/v1/contabilidad/movimientos-contables/')
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
         self.assertPaginationFormat(data)
@@ -211,7 +249,7 @@ class MovimientoContableViewSetTests(TenantAPITestCase):
             'descripcion': 'Nuevo movimiento',
             'orden': 2,
         }
-        response = self.tpost('/api/v1/movimientos-contables/', data)
+        response = self.tpost('/api/v1/contabilidad/movimientos-contables/', data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         response_data = response.json()
         self.assertEqual(response_data['descripcion'], 'Nuevo movimiento')

@@ -1,0 +1,16 @@
+{% load static %}
+{# Partial: Formulario rápido para edición de campos esenciales de Empresa #}
+<form id="form-empresa-quick" class="mb-3">
+  <input type="hidden" id="empresa-id" name="id" />
+  <div class="mb-2">
+    <label for="empresa-razon_social" class="form-label">Razón Social</label>
+    <input type="text" id="empresa-razon_social" name="razon_social" class="form-control" />
+  </div>
+  <div class="mb-2">
+    <label for="empresa-nit" class="form-label">NIT</label>
+    <input type="text" id="empresa-nit" name="nit" class="form-control" />
+  </div>
+  <div class="d-flex justify-content-end">
+    <button type="button" class="btn btn-primary" id="btn-empresa-quick-save">Guardar</button>
+  </div>
+</form>

@@ -1,18 +1,18 @@
 """Core API v1 - Empresa serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Composición vía herencia de serializers existentes de la app empresa.
 """
 
 from apps.tenant.empresa.api.serializers import (
-    EmpresaListSerializer,
     EmpresaDetailSerializer,
-    EmpresaUpsertSerializer,
     EmpresaHeaderSerializer,
-    MailInboxConfigListSerializer,
+    EmpresaListSerializer,
+    EmpresaUpsertSerializer,
     MailInboxConfigDetailSerializer,
-    MailInboxConfigTestConnectionSerializer
+    MailInboxConfigListSerializer,
+    MailInboxConfigTestConnectionSerializer,
 )
 
 

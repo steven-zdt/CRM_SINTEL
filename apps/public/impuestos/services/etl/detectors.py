@@ -3,9 +3,9 @@ Detección del tipo de documento fuente.
 
 Detecta el tipo de archivo por extensión, MIME type y tipo declarado.
 """
+
 import mimetypes
 from pathlib import Path
-
 
 EXT_KIND = {
     ".pdf": "PDF",
@@ -21,10 +21,10 @@ EXT_KIND = {
 def detect_kind(documento) -> dict:
     """
     Detecta el tipo de documento fuente.
-    
+
     Args:
         documento: Instancia de DocumentoFuente
-        
+
     Returns:
         dict con 'kind' ('PDF'|'HTML'|'XML'|'XLS'|'XLSX'|'OTRO') y 'subkind'
     """
@@ -49,24 +49,24 @@ def detect_kind(documento) -> dict:
             kind = "HTML"
         else:
             url_lower = documento.url_origen.lower()
-            if url_lower.endswith('.pdf'):
-                kind = 'PDF'
-            elif url_lower.endswith(('.html', '.htm')):
-                kind = 'HTML'
-            elif url_lower.endswith('.xml'):
-                kind = 'XML'
-            elif url_lower.endswith(('.xls', '.xlsx')):
-                kind = 'XLS'
-            elif url_lower.endswith('.csv'):
-                kind = 'CSV'
+            if url_lower.endswith(".pdf"):
+                kind = "PDF"
+            elif url_lower.endswith((".html", ".htm")):
+                kind = "HTML"
+            elif url_lower.endswith(".xml"):
+                kind = "XML"
+            elif url_lower.endswith((".xls", ".xlsx")):
+                kind = "XLS"
+            elif url_lower.endswith(".csv"):
+                kind = "CSV"
             else:
-                kind = documento.tipo or 'OTRO'
+                kind = documento.tipo or "OTRO"
         subkind = None
     else:
-        kind = documento.tipo or 'OTRO'
+        kind = documento.tipo or "OTRO"
         subkind = None
-    
+
     return {
-        'kind': kind,
-        'subkind': subkind,
+        "kind": kind,
+        "subkind": subkind,
     }

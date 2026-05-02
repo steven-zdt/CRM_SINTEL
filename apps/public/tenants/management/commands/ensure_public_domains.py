@@ -14,13 +14,15 @@ Variables de entorno:
     PUBLIC_TENANT_DOMAINS: Lista de dominios separados por coma (default: sintel.com,localhost,127.0.0.1)
     PUBLIC_DOMAIN_PROTECT: Si es True, no modifica dominios existentes (default: False)
 """
+
+import os
+
 from django.core.management.base import BaseCommand
-from django.conf import settings
 from django.db import transaction
 from django_tenants.utils import schema_context
+
 from apps.public.tenants.models import Client, Domain
 from apps.public.tenants.utils import normalize_domain, validate_fqdn
-import os
 
 
 class Command(BaseCommand):
@@ -28,104 +30,118 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--domains',
+            "--domains",
             type=str,
-            help='Lista de dominios separados por coma (sobrescribe PUBLIC_TENANT_DOMAINS)',
+            help="Lista de dominios separados por coma (sobrescribe PUBLIC_TENANT_DOMAINS)",
         )
         parser.add_argument(
-            '--primary',
+            "--primary",
             type=str,
-            help='Dominio que debe ser primario (sobrescribe el primero de la lista)',
+            help="Dominio que debe ser primario (sobrescribe el primero de la lista)",
         )
         parser.add_argument(
-            '--dry-run',
-            action='store_true',
-            help='Simular cambios sin guardar en la base de datos',
+            "--dry-run",
+            action="store_true",
+            help="Simular cambios sin guardar en la base de datos",
         )
 
     def handle(self, *args, **options):
         # Obtener lista de dominios desde variables de entorno o argumento
-        domains_str = options.get('domains') or os.getenv('PUBLIC_TENANT_DOMAINS', 'sintel.com,localhost,127.0.0.1')
-        protect = os.getenv('PUBLIC_DOMAIN_PROTECT', 'False').lower() == 'true'
-        dry_run = options.get('dry_run', False)
-        primary_domain = options.get('primary') or domains_str.split(',')[0].strip()
-        
+        domains_str = options.get("domains") or os.getenv(
+            "PUBLIC_TENANT_DOMAINS", "sintel.com,localhost,127.0.0.1"
+        )
+        protect = os.getenv("PUBLIC_DOMAIN_PROTECT", "False").lower() == "true"
+        dry_run = options.get("dry_run", False)
+        primary_domain = options.get("primary") or domains_str.split(",")[0].strip()
+
         # Parsear lista de dominios
-        domains = [d.strip() for d in domains_str.split(',') if d.strip()]
-        
+        domains = [d.strip() for d in domains_str.split(",") if d.strip()]
+
         if not domains:
-            self.stdout.write(self.style.ERROR("❌ No se proporcionaron dominios"))
+            self.stdout.write(self.style.ERROR("ERROR: No se proporcionaron dominios"))
             return 1
-        
+
         self.stdout.write("=" * 60)
         self.stdout.write(self.style.SUCCESS("🛡️ GARANTIZANDO DOMINIOS DEL TENANT PÚBLICO"))
         self.stdout.write("=" * 60)
-        self.stdout.write(f"\n📋 Configuración:")
+        self.stdout.write("\n📋 Configuración:")
         self.stdout.write(f"   Dominios requeridos: {', '.join(domains)}")
         self.stdout.write(f"   Dominio primario: {primary_domain}")
         self.stdout.write(f"   Modo protección: {'Activado' if protect else 'Desactivado'}")
         self.stdout.write(f"   Modo: {'DRY RUN (simulación)' if dry_run else 'EJECUCIÓN REAL'}")
-        
-        with schema_context('public'):
+
+        with schema_context("public"):
             # Obtener tenant público
             try:
-                public = Client.objects.get(schema_name='public')
-                self.stdout.write(f"\n✅ Tenant público encontrado: {public.nombre}")
+                public = Client.objects.get(schema_name="public")
+                self.stdout.write(f"\nOK: Tenant público encontrado: {public.nombre}")
             except Client.DoesNotExist:
-                self.stdout.write(self.style.ERROR("\n❌ ERROR: Tenant público (schema_name='public') no encontrado"))
+                self.stdout.write(
+                    self.style.ERROR(
+                        "\nERROR: ERROR: Tenant público (schema_name='public') no encontrado"
+                    )
+                )
                 self.stdout.write("   Ejecuta primero: python manage.py setup_public_tenant")
                 return 1
-            
+
             created = 0
             updated = 0
             skipped = 0
             errors = 0
-            
+
             with transaction.atomic():
                 # Procesar cada dominio
                 for domain_str in domains:
                     domain_str = domain_str.strip()
                     if not domain_str:
                         continue
-                    
+
                     # Normalizar dominio
                     normalized = normalize_domain(domain_str)
-                    
+
                     # Validar FQDN (permitir localhost y 127.0.0.1 para desarrollo)
-                    if normalized not in ('localhost', '127.0.0.1') and not validate_fqdn(normalized):
+                    if normalized not in ("localhost", "127.0.0.1") and not validate_fqdn(
+                        normalized
+                    ):
                         self.stdout.write(
-                            self.style.WARNING(f"  ⚠️  {domain_str} → {normalized} (FQDN inválido, omitiendo)")
+                            self.style.WARNING(
+                                f"  WARNING:  {domain_str} → {normalized} (FQDN inválido, omitiendo)"
+                            )
                         )
                         errors += 1
                         continue
-                    
+
                     # Verificar si existe
                     domain_obj = Domain.objects.filter(domain=normalized, tenant=public).first()
-                    
+
                     if domain_obj:
                         # Dominio existe
                         is_primary = domain_obj.is_primary
                         should_be_primary = normalized == normalize_domain(primary_domain)
-                        
+
                         if should_be_primary and not is_primary:
                             # Debe ser primario pero no lo es
                             if protect:
                                 self.stdout.write(
                                     self.style.WARNING(
-                                        f"  ⚠️  {normalized} (existe, debería ser primario pero modo protección activado)"
+                                        f"  WARNING:  {normalized} (existe, debería ser primario pero modo protección activado)"
                                     )
                                 )
                                 skipped += 1
                             else:
                                 # Desactivar otros primarios primero
-                                Domain.objects.filter(tenant=public, is_primary=True).exclude(pk=domain_obj.pk).update(is_primary=False)
-                                
+                                Domain.objects.filter(tenant=public, is_primary=True).exclude(
+                                    pk=domain_obj.pk
+                                ).update(is_primary=False)
+
                                 if not dry_run:
                                     domain_obj.is_primary = True
-                                    domain_obj.save(update_fields=['is_primary'])
-                                
+                                    domain_obj.save(update_fields=["is_primary"])
+
                                 self.stdout.write(
-                                    self.style.SUCCESS(f"  🔄 {normalized} (actualizado a primario)")
+                                    self.style.SUCCESS(
+                                        f"  🔄 {normalized} (actualizado a primario)"
+                                    )
                                 )
                                 updated += 1
                         else:
@@ -138,24 +154,24 @@ class Command(BaseCommand):
                     else:
                         # Dominio no existe, crearlo
                         should_be_primary = normalized == normalize_domain(primary_domain)
-                        
+
                         # Si va a ser primario, desactivar otros primero
                         if should_be_primary:
-                            Domain.objects.filter(tenant=public, is_primary=True).update(is_primary=False)
-                        
+                            Domain.objects.filter(tenant=public, is_primary=True).update(
+                                is_primary=False
+                            )
+
                         if not dry_run:
                             Domain.objects.create(
                                 tenant=public,
                                 domain=normalized,
                                 is_primary=should_be_primary,
                             )
-                        
+
                         status = "⭐ PRIMARIO" if should_be_primary else "  "
-                        self.stdout.write(
-                            self.style.SUCCESS(f"  {status} {normalized} (creado)")
-                        )
+                        self.stdout.write(self.style.SUCCESS(f"  {status} {normalized} (creado)"))
                         created += 1
-            
+
             # Resumen
             self.stdout.write("\n" + "=" * 60)
             self.stdout.write(self.style.SUCCESS("📋 RESUMEN"))
@@ -164,32 +180,32 @@ class Command(BaseCommand):
             self.stdout.write(f"  Dominios actualizados: {updated}")
             self.stdout.write(f"  Dominios sin cambios: {skipped}")
             self.stdout.write(f"  Errores/omitidos: {errors}")
-            
+
             if dry_run:
                 self.stdout.write(
                     self.style.WARNING(
-                        "\n⚠️  MODO DRY RUN: No se guardaron cambios. "
+                        "\nWARNING:  MODO DRY RUN: No se guardaron cambios. "
                         "Ejecuta sin --dry-run para aplicar los cambios."
                     )
                 )
             elif created > 0 or updated > 0:
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f"\n✅ {created + updated} dominio(s) procesado(s) exitosamente"
+                        f"\nOK: {created + updated} dominio(s) procesado(s) exitosamente"
                     )
                 )
             else:
                 self.stdout.write(
                     self.style.SUCCESS(
-                        "\n✅ Todos los dominios ya están configurados correctamente"
+                        "\nOK: Todos los dominios ya están configurados correctamente"
                     )
                 )
-            
+
             # Verificación final
             self.stdout.write("\n📋 Dominios finales del tenant público:")
-            final_domains = Domain.objects.filter(tenant=public).order_by('-is_primary', 'domain')
+            final_domains = Domain.objects.filter(tenant=public).order_by("-is_primary", "domain")
             for d in final_domains:
                 status = "⭐ PRIMARIO" if d.is_primary else "  "
                 self.stdout.write(f"  {status} {d.domain}")
-            
+
             return 0

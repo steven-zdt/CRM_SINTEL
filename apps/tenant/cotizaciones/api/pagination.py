@@ -1,7 +1,7 @@
 """
 Paginación estándar para el módulo de cotizaciones.
 
-⚠️ MÓDULO AUTÓNOMO: Este módulo no depende de otras apps.
+# WARNING: MÓDULO AUTÓNOMO: Este módulo no depende de otras apps.
 """
 from rest_framework.pagination import PageNumberPagination
 

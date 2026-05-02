@@ -1,5 +1,4 @@
 # apps/public/impuestos/choices/ciiu.py
-# -*- coding: utf-8 -*-
 """
 Choices dinámicos para Actividad Económica (CIIU) según DIAN (CIIU Rev. 4 A.C.),
 adoptado en Colombia por la Resolución DIAN 000114 de 2020.           # cite: turn15search13
@@ -12,21 +11,21 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import List, Tuple, Optional
 
-from django_tenants.utils import schema_context
 from django.db.models import QuerySet
+from django_tenants.utils import schema_context
 
 from apps.public.impuestos.models import ActividadEconomica
 
 log = logging.getLogger("impuestos.ciiu.choices")
 
-CHOICE = Tuple[str, str]  # (value=code, label="code — descripcion")
+CHOICE = tuple[str, str]  # (value=code, label="code — descripcion")
 
 
 # --------- Utilidades de normalización/validación ---------
 
-def normalize_ciiu_code(code: Optional[str]) -> Optional[str]:
+
+def normalize_ciiu_code(code: str | None) -> str | None:
     """
     Normaliza un código CIIU a 4 dígitos (ej.: '80' -> '0080').
     Acepta 1–4 dígitos numéricos. Devuelve None si el formato es inválido.
@@ -41,8 +40,9 @@ def normalize_ciiu_code(code: Optional[str]) -> Optional[str]:
 
 # --------- Resolvedores ---------
 
+
 @lru_cache(maxsize=1024)
-def get_ciiu_label(code: str) -> Optional[str]:
+def get_ciiu_label(code: str) -> str | None:
     """
     Devuelve la descripción (label) de un código CIIU si existe en catálogo.
     """
@@ -56,6 +56,7 @@ def get_ciiu_label(code: str) -> Optional[str]:
 
 # --------- Choices dinámicos ---------
 
+
 def _qs_all() -> QuerySet:
     """
     QuerySet base (público) para CIIU. Usa only() para menor carga.
@@ -64,11 +65,11 @@ def _qs_all() -> QuerySet:
         return ActividadEconomica.objects.only("codigo", "descripcion")
 
 
-def _to_choice_pairs(rows) -> List[CHOICE]:
+def _to_choice_pairs(rows) -> list[CHOICE]:
     """
     Transforma filas en [(value, label), ...] usando formato 'XXXX — Descripción'.
     """
-    out: List[CHOICE] = []
+    out: list[CHOICE] = []
     for r in rows:
         code = getattr(r, "codigo", None) or r.get("codigo")
         desc = getattr(r, "descripcion", None) or r.get("descripcion")
@@ -78,7 +79,7 @@ def _to_choice_pairs(rows) -> List[CHOICE]:
 
 
 @lru_cache(maxsize=1)
-def get_ciiu_choices_all(limit: int = 5000) -> List[CHOICE]:
+def get_ciiu_choices_all(limit: int = 5000) -> list[CHOICE]:
     """
     Devuelve una lista grande (capada por 'limit') de choices (solo si realmente lo necesitas).
     NO recomendado para selects masivos en UI; mejor usar prefijo/paginación.
@@ -91,7 +92,7 @@ def get_ciiu_choices_all(limit: int = 5000) -> List[CHOICE]:
     return _to_choice_pairs(rows)
 
 
-def get_ciiu_choices_prefix(prefix: str, limit: int = 50) -> List[CHOICE]:
+def get_ciiu_choices_prefix(prefix: str, limit: int = 50) -> list[CHOICE]:
     """
     Devuelve choices filtrados por prefijo de código (1–4 dígitos) o por búsqueda simple.
     - Si 'prefix' es numérico 1–4 dígitos, aplica startswith al código (zfill si hace falta).
@@ -103,9 +104,8 @@ def get_ciiu_choices_prefix(prefix: str, limit: int = 50) -> List[CHOICE]:
         canon = s.zfill(4)
         with schema_context("public"):
             qs = (
-                ActividadEconomica.objects
-                .only("codigo", "descripcion")
-                .filter(codigo__startswith=canon[:len(s)])
+                ActividadEconomica.objects.only("codigo", "descripcion")
+                .filter(codigo__startswith=canon[: len(s)])
                 .order_by("codigo")[:limit]
             )
             rows = qs.values("codigo", "descripcion")
@@ -113,7 +113,7 @@ def get_ciiu_choices_prefix(prefix: str, limit: int = 50) -> List[CHOICE]:
     return []
 
 
-def get_ciiu_choices_search(query: str, limit: int = 50) -> List[CHOICE]:
+def get_ciiu_choices_search(query: str, limit: int = 50) -> list[CHOICE]:
     """
     Devuelve choices por búsqueda en descripción (mín. 2 caracteres) o por código exacto.
     - Si 'query' es numérica 1–4 dígitos → buscar por prefijo de código.
@@ -131,8 +131,7 @@ def get_ciiu_choices_search(query: str, limit: int = 50) -> List[CHOICE]:
         return []
     with schema_context("public"):
         qs = (
-            ActividadEconomica.objects
-            .only("codigo", "descripcion")
+            ActividadEconomica.objects.only("codigo", "descripcion")
             .filter(descripcion__icontains=q)
             .order_by("descripcion")[:limit]
         )

@@ -1,0 +1,46 @@
+{% load static %}
+{# assets_inventario.html - Assets del módulo Inventario v3.5 - Nucleus #}
+
+{# ⚠️ v3.5: Namespace unificado window.Sintel.Inventario #}
+<script src="{% static 'inventario/js/inventario.api.js' %}"></script>
+<script src="{% static 'inventario/js/inventario.utils.js' %}"></script>
+
+{# ⚠️ v3.5: Feature-Sliced JS Assets #}
+<script src="{% static 'inventario/js/features/inventario_editor.js' %}"></script>
+<script src="{% static 'inventario/js/features/inventario_list.js' %}"></script>
+<script src="{% static 'inventario/js/features/categorias_editor.js' %}"></script>
+<script src="{% static 'inventario/js/features/categorias_list.js' %}"></script>
+<script src="{% static 'inventario/js/features/productos_editor.js' %}"></script>
+<script src="{% static 'inventario/js/features/productos_list.js' %}"></script>
+<script src="{% static 'inventario/js/features/servicios_editor.js' %}"></script>
+<script src="{% static 'inventario/js/features/servicios_list.js' %}"></script>
+<script src="{% static 'inventario/js/features/activos_editor.js' %}"></script>
+<script src="{% static 'inventario/js/features/activos_list.js' %}"></script>
+<script src="{% static 'inventario/js/features/movimientos_editor.js' %}"></script>
+<script src="{% static 'inventario/js/features/movimientos_list.js' %}"></script>
+
+{# Reinicialización HTMX para Offcanvas #}
+<script>
+    if (typeof htmx !== 'undefined') {
+        document.addEventListener('htmx:afterSwap', function(event) {
+            const targetId = event.detail.target.id;
+            
+            const initOffcanvas = function(offcanvasId, logMessage, callback) {
+                requestAnimationFrame(() => {
+                    const offcanvasEl = document.getElementById(offcanvasId);
+                    if (offcanvasEl) {
+                        console.log(logMessage);
+                        if (typeof callback === 'function') callback();
+                    }
+                });
+            };
+            
+            if (targetId === 'offcanvas-container-servicios') {
+                initOffcanvas('offcanvas-container-servicios', '[inventario.assets] Offcanvas servicios', function() {
+                    if (window.Sintel?.Inventario?.Servicios?.Editor?.init) window.Sintel.Inventario.Servicios.Editor.init();
+                });
+            }
+            // ... Otros listeners se actualizarán conforme se refactorice el JS
+        });
+    }
+</script>

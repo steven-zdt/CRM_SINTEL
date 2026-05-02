@@ -1,15 +1,16 @@
 """
 Motor modular de generación de PDF para Cotizaciones v2.60.
 
-⚠️ ARQUITECTURA MODULAR: Separado de la lógica de negocio.
+# WARNING: ARQUITECTURA MODULAR: Separado de la lógica de negocio.
 - Único punto de importación de xhtml2pdf en el proyecto
 - Desacoplado de servicios y vistas
 - Fácil de reemplazar por otra librería si es necesario
 """
 from io import BytesIO
+
 from django.template.loader import get_template
 
-# ⚠️ ÚNICO PUNTO DE IMPORTACIÓN: xhtml2pdf solo se importa aquí
+# # WARNING: ÚNICO PUNTO DE IMPORTACIÓN: xhtml2pdf solo se importa aquí
 try:
     from xhtml2pdf import pisa
     HAS_XHTML2PDF = True
@@ -22,7 +23,7 @@ class CotizacionPDFGenerator:
     """
     Motor modular de PDF. Separado de la lógica de negocio.
     
-    ⚠️ ARQUITECTURA: Este es el único módulo que conoce xhtml2pdf.
+    # WARNING: ARQUITECTURA: Este es el único módulo que conoce xhtml2pdf.
     Si en el futuro se necesita cambiar de librería, solo se modifica aquí.
     """
     
@@ -53,16 +54,16 @@ class CotizacionPDFGenerator:
             )
         
         try:
-            # ⚠️ RUTA: La ruta debe ser relativa al directorio templates/ de la app
+            # # WARNING: RUTA: La ruta debe ser relativa al directorio templates/ de la app
             # Con APP_DIRS: True, Django busca en apps/tenant/cotizaciones/templates/
             # Ejemplo: 'cotizaciones/pdf/formato_profesional.html'
             # Django buscará en: apps/tenant/cotizaciones/templates/cotizaciones/pdf/formato_profesional.html
-            # ⚠️ DEBUG: Intentar cargar el template y capturar el error específico
+            # # WARNING: DEBUG: Intentar cargar el template y capturar el error específico
             try:
                 template = get_template(template_path)
-                logger.info(f"[PDF Generator] ✅ Template cargado exitosamente: {template_path}")
+                logger.info(f"[PDF Generator] [OK] Template cargado exitosamente: {template_path}")
             except Exception as template_error:
-                logger.error(f"[PDF Generator] ❌ Error cargando template '{template_path}': {str(template_error)}")
+                logger.error(f"[PDF Generator] [ERROR] Error cargando template '{template_path}': {str(template_error)}")
                 # Re-lanzar el error para que el ViewSet lo maneje
                 raise
             

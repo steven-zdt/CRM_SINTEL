@@ -1,28 +1,30 @@
 """
 Parser Excel específico para Cotizaciones - Catálogos de Productos (v2.40).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Parser exclusivo para el módulo de cotizaciones
 - Lógica separada del parser genérico de Excel
 - Usa SemanticMapper para mapeo inteligente de columnas
 - Retorna DTO específico para catálogos de productos
 """
-from typing import Dict, Any, Optional
-# ⚠️ v2.40: Usar normalizers específicos de cotizaciones (que reutilizan los genéricos)
+from typing import Any
+
+# WARNING: v2.40: Usar normalizers específicos de cotizaciones (que reutilizan los genéricos)
 from apps.services.document_parser.cotizaciones.normalizers import (
-    normalize_excel_to_dataframe, SemanticMapper
+    SemanticMapper,
+    normalize_excel_to_dataframe,
 )
 
 
 def parse_catalogo_to_dto(
     file_bytes: bytes,
-    filename: Optional[str] = None,
-    kind_hint: Optional[str] = None
-) -> Dict[str, Any]:
+    filename: str | None = None,
+    kind_hint: str | None = None
+) -> dict[str, Any]:
     """
     Parsea un Excel de catálogo de productos para Cotizaciones.
     
-    ⚠️ v2.40: Parser específico para el módulo de cotizaciones.
+    WARNING: v2.40: Parser específico para el módulo de cotizaciones.
     Convierte cada fila del Excel en un DTO de producto usando mapeo semántico.
     
     Args:
@@ -77,7 +79,7 @@ def parse_catalogo_to_dto(
     
     items = []
     
-    # ⚠️ v2.40: Usar SemanticMapper para mapeo inteligente de columnas
+    # WARNING: v2.40: Usar SemanticMapper para mapeo inteligente de columnas
     try:
         mapper = SemanticMapper(threshold=0.6)
         

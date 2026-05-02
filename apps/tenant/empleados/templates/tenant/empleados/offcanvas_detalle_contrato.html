@@ -1,0 +1,111 @@
+{# offcanvas_detalle_contrato.html - Vista de DETALLE de Contrato v2.61 #}
+{# ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado SOLO para visualización #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-contrato-detalle" aria-labelledby="offcanvas-contrato-detalle-label" style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-contrato-detalle-label">
+      <i class="bi bi-file-earmark-text me-2"></i>
+      <span>Detalle del Contrato</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {% if contrato %}
+      {# Encabezado del Empleado #}
+      <div class="d-flex align-items-center mb-4 p-3 bg-light rounded border">
+        <div class="avatar-circle me-3 bg-primary text-white d-flex align-items-center justify-content-center" style="width: 50px; height: 50px; border-radius: 50%; font-size: 1.5rem;">
+          {{ contrato.empleado.primer_nombre|first }}{{ contrato.empleado.primer_apellido|first }}
+        </div>
+        <div>
+          <h6 class="mb-0">{{ contrato.empleado.nombre_completo }}</h6>
+          <small class="text-muted">{{ contrato.empleado.numero_documento }}</small>
+        </div>
+      </div>
+
+      {# Información General #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-info-circle me-2"></i>Información General
+        </h6>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="small text-muted d-block">Tipo</label>
+            <span class="fw-bold">{{ contrato.get_tipo_display }}</span>
+          </div>
+          <div class="col-6">
+            <label class="small text-muted d-block">Estado</label>
+            <span class="badge {% if contrato.estado == 'ACTIVO' %}bg-success{% elif contrato.estado == 'INACTIVO' %}bg-danger{% else %}bg-secondary{% endif %}">
+              {{ contrato.get_estado_display }}
+            </span>
+          </div>
+          <div class="col-12">
+            <label class="small text-muted d-block">Cargo</label>
+            <span class="fw-bold">{{ contrato.cargo }}</span>
+          </div>
+        </div>
+      </div>
+
+      {# Fechas #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar me-2"></i>Fechas
+        </h6>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="small text-muted d-block">Fecha Inicio</label>
+            <span class="fw-bold">{{ contrato.fecha_inicio|date:"d/m/Y" }}</span>
+          </div>
+          <div class="col-6">
+            <label class="small text-muted d-block">Fecha Fin</label>
+            <span class="fw-bold">{% if contrato.fecha_fin %}{{ contrato.fecha_fin|date:"d/m/Y" }}{% else %}Indefinido{% endif %}</span>
+          </div>
+        </div>
+      </div>
+
+      {# Valores Económicos #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-currency-dollar me-2"></i>Valores Económicos
+        </h6>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="small text-muted d-block">Salario Mensual</label>
+            <span class="fw-bold text-success">${{ contrato.salario_mensual|floatformat:2 }}</span>
+          </div>
+          <div class="col-6">
+            <label class="small text-muted d-block">Auxilio Transporte</label>
+            <span class="fw-bold">${{ contrato.auxilio_transporte|floatformat:2 }}</span>
+          </div>
+          <div class="col-12">
+            <label class="small text-muted d-block">Préstamos Empresa</label>
+            <span class="fw-bold text-danger">${{ contrato.prestamos_empresa|floatformat:2 }}</span>
+          </div>
+        </div>
+      </div>
+
+      {# Documentos #}
+      {% if contrato.archivo_pdf %}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-file-earmark-pdf me-2"></i>Documentos
+        </h6>
+        <div class="d-grid">
+          <a href="{{ contrato.archivo_pdf.url }}" target="_blank" class="btn btn-outline-primary">
+            <i class="bi bi-file-pdf me-1"></i>Ver Contrato Firmado (PDF)
+          </a>
+        </div>
+      </div>
+      {% endif %}
+
+    {% else %}
+      <div class="alert alert-warning">
+        No se encontró información del contrato.
+      </div>
+    {% endif %}
+  </div>
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-grid">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cerrar</button>
+    </div>
+  </div>
+</div>

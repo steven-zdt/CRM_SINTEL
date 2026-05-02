@@ -13,14 +13,14 @@ def exception_handler(exc, context):
     Formatea las respuestas de error de manera consistente.
     Agrega un campo detail_code para facilitar el manejo de errores en el frontend.
     
-    ⚠️ v2.60: Maneja tanto diccionarios como listas en response.data
+    WARNING: v2.60: Maneja tanto diccionarios como listas en response.data
     """
     # Llamar al handler por defecto de DRF
     response = drf_exception_handler(exc, context)
     
     if response is not None:
         # Agregar código de detalle si está disponible
-        # ⚠️ v2.60: response.data puede ser un dict, list o str (dependiendo del tipo de error)
+        # WARNING: v2.60: response.data puede ser un dict, list o str (dependiendo del tipo de error)
         detail_code = getattr(exc, "default_code", "error")
         
         if isinstance(response.data, dict):

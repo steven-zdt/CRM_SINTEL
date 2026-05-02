@@ -1,11 +1,13 @@
 """
 Tests for facturas.services consuming xml_ingest service.
 
-⚠️ INTEGRATION TESTS: Verify that importar_ubl_sync invokes ingest_ubl_sync
+# WARNING: INTEGRATION TESTS: Verify that importar_ubl_sync invokes ingest_ubl_sync
 and then materializes correctly.
 """
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
 from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos
 from apps.tenant.facturas.services import importar_ubl_sync
@@ -16,7 +18,13 @@ class ServicesIngestIntegrationTests(TenantTestCase):
     
     def setUp(self):
         super().setUp()
-        Empresa.objects.create(razon_social="SINTEL", nit="901123299")
+        Empresa.objects.create(
+            razon_social="SINTEL",
+            nit="901123299",
+            dv="1",
+            direccion="Calle 123",
+            telefono="3001234567",
+        )
     
     def test_importar_ubl_sync_invokes_ingest_ubl_sync(self):
         """Verify that importar_ubl_sync calls ingest_ubl_sync from xml_ingest."""

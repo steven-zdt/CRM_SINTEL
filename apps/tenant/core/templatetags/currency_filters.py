@@ -1,12 +1,13 @@
 """
 Filtros personalizados para formateo de moneda COP.
 
-⚠️ v2.40: Filtros para formatear valores monetarios en formato colombiano
+# WARNING: v2.40: Filtros para formatear valores monetarios en formato colombiano
 con separadores de miles y símbolo de peso.
 """
-from django import template
-from decimal import Decimal
 import re
+from decimal import Decimal
+
+from django import template
 
 register = template.Library()
 
@@ -41,7 +42,7 @@ def currency_cop(value):
         # Ejemplo: 1000000.50 -> "1.000.000,50"
         formatted = f"{decimal_value:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
         
-        # ⚠️ REPARACIÓN: Sin espacio entre $ y número para evitar saltos de línea en PDF
+        # # WARNING: REPARACIÓN: Sin espacio entre $ y número para evitar saltos de línea en PDF
         return f"${formatted}"
     except (ValueError, TypeError, AttributeError):
         return "$0,00"

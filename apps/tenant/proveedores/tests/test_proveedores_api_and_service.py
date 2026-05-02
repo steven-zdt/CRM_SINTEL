@@ -1,16 +1,19 @@
 """
 Pruebas de humo para API y servicios de proveedores (DRF + multitenancy).
 
-⚠️ v2.40: Actualizado para usar services.py directamente (proveedor_service.py eliminado).
+WARNING: v2.40: Actualizado para usar services.py directamente (proveedor_service.py eliminado).
 Verifica que los endpoints respondan correctamente y que el aislamiento
 por esquema funcione correctamente.
 """
 import pytest
 from django_tenants.utils import schema_context
-from apps.tenant.proveedores.models import Proveedor
+
 from apps.tenant.empresa.models import Empresa
+from apps.tenant.proveedores.models import Proveedor
 from apps.tenant.proveedores.services import (
-    crear_proveedor, actualizar_proveedor, qs_list, qs_detail
+    actualizar_proveedor,
+    crear_proveedor,
+    qs_list,
 )
 
 

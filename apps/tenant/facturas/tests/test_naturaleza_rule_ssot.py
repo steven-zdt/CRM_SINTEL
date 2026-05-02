@@ -2,9 +2,10 @@
 Tests para validar regla de naturaleza (VENTA/COMPRA) con SSoT y normalización.
 """
 from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.services import _norm_nit, _determinar_naturaleza
 from apps.tenant.facturas.models import NaturalezaFactura
+from apps.tenant.facturas.services import _determinar_naturaleza, _norm_nit
 
 
 class NaturalezaRuleSSoTTests(TenantTestCase):
@@ -80,7 +81,7 @@ class NaturalezaRuleSSoTTests(TenantTestCase):
     
     def test_compra_si_empresa_nit_none(self):
         """Valida que si empresa_nit es None, naturaleza es COMPRA."""
-        # ⚠️ NOTA: En producción, esto no debería ocurrir porque get_empresa_emisor_data()
+        # # WARNING: NOTA: En producción, esto no debería ocurrir porque get_empresa_emisor_data()
         # lanza EmpresaNotConfiguredError si no hay NIT. Este test valida el comportamiento
         # defensivo de _determinar_naturaleza.
         self.assertEqual(

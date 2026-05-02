@@ -1,380 +1,367 @@
-"""
-ViewSets para la app de perfil.
+"""ViewSets para la app de perfil.
 
-⚠️ v2.30: API-First + SSoT - Solo endpoints REST (JSON-only)
-- django-tenants maneja automáticamente el aislamiento por esquema
-- NO es necesario filtrar manualmente por tenant_id
-- El endpoint `/me/` siempre trabaja sobre `request.user`
-- Service Layer: Toda la lógica de negocio está en perfil_service.py
-- SessionAuthentication: Habilitado para consumo desde workspace (cookies de sesión)
+Implementacion simplificada: el ViewSet es un enrutador puro que delega
+completamente en PerfilServiceMixin (Service Layer). Expone:
+- GET  /api/v1/perfil/perfiles/                              -> list
+- POST /api/v1/perfil/perfiles/                              -> create (ADMIN)
+- GET  /api/v1/perfil/perfiles/me/                           -> perfil del usuario actual
+- PATCH /api/v1/perfil/perfiles/me/                          -> actualizar perfil propio (OPERADOR+)
+- PATCH /api/v1/perfil/perfiles/<id>/assign-rol/             -> asignar rol (ADMIN)
+- GET  /api/v1/perfil/perfiles/render-offcanvas/crear/       -> offcanvas HTML (HTMX)
 
-Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
+[RULE 15] Permisos por accion:
+  - list / retrieve       : IsAuthenticated
+  - create                : IsAuthenticated + IsTenantProfileAdmin
+  - update (by admin)     : IsAuthenticated + IsTenantProfileAdmin
+  - destroy               : IsAuthenticated + IsTenantProfileAdmin
+  - me (GET/PATCH)        : IsAuthenticated (cualquier rol, propio perfil)
+  - assign_rol            : IsAuthenticated + IsTenantProfileAdmin
 """
-import json
+
 import logging
-from django.db import connection
-from django.db.utils import ProgrammingError, OperationalError
-from django.core.exceptions import ImproperlyConfigured
-from rest_framework import viewsets, permissions, status
+
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.request import Request
-from django.conf import settings
-from rest_framework.authentication import SessionAuthentication
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
-from apps.tenant.perfil.models import TenantProfile
-from apps.tenant.perfil.api.serializers import TenantProfileSerializer, TenantProfileMeUpdateSerializer
-from apps.services.perfil.perfil_service import (
-    obtener_o_crear_perfil,
-    actualizar_perfil,
-    actualizar_configuracion_ui,
-    actualizar_avatar
-)
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
+from rest_framework.response import Response
+
+from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantMember
-from apps.tenant.api.authentication import UnsafeSessionAuthentication
-from rest_framework.permissions import BasePermission
+from .mixins import PerfilServiceMixin
+from .permissions import IsTenantProfileAdmin, IsTenantProfileOperadorOrAdmin
+from .serializers import TenantProfileSerializer, TenantProfileRolSerializer
 
-log = logging.getLogger("perfil.api")
-
-
-class IsOwnerOrReadOnly(BasePermission):
-    """
-    Permiso que permite al usuario autenticado leer/editar su propio perfil.
-    
-    ⚠️ IMPORTANTE: Para endpoints '/me/', la comprobación es trivial:
-    request.user == perfil.user (siempre es True porque el endpoint siempre
-    retorna/actualiza el perfil del usuario actual).
-    
-    Este permiso garantiza que solo el dueño puede editar su perfil,
-    no solo tener membresía en el tenant.
-    """
-    def has_permission(self, request, view):
-        """Verifica que el usuario esté autenticado."""
-        return bool(request.user and request.user.is_authenticated)
-    
-    def has_object_permission(self, request, view, obj):
-        """
-        Verifica que el usuario sea dueño del perfil.
-        
-        Para endpoints '/me/', este método no se llama porque no hay objeto
-        en la URL, pero se mantiene para consistencia.
-        """
-        # El usuario solo puede editar su propio perfil
-        return obj.user == request.user
+logger = logging.getLogger(__name__)
 
 
-class PerfilViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para Perfil del Colaborador.
-    
-    ⚠️ IMPORTANTE:
-    - El endpoint `/me/` siempre trabaja sobre `request.user`
-    - No requiere ID en la URL
-    - Usa `perfil_service.obtener_o_crear_perfil` para garantizar que el objeto exista
-    - Service Layer: La lógica de negocio está en perfil_service.py
-    
-    ⚠️ v2.30: SessionAuthentication habilitado para compatibilidad con workspace (cookies de sesión)
-    ⚠️ DESARROLLO: En DEBUG=True, usa UnsafeSessionAuthentication (CSRF relajado) para evitar 403
-    ⚠️ PRODUCCIÓN: En DEBUG=False, usa SessionAuthentication estricto (CSRF obligatorio)
-    
-    ⚠️ OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
-    """
+class PerfilViewSet(PerfilServiceMixin, viewsets.GenericViewSet):
+    """Router puro: delega la logica al Service Layer (PerfilServiceMixin)."""
+    permission_classes = [IsTenantMember]
     serializer_class = TenantProfileSerializer
-    permission_classes = [IsAuthenticated, IsTenantMember, IsOwnerOrReadOnly]  # ✅ SEGURIDAD: Cross-Tenant Isolation + autenticación + dueño puede editar
-    
-    def get_authenticators(self):
+    pagination_class = StandardResultsSetPagination
+
+    def list(self, request):
+        """GET /api/v1/perfil/perfiles/ - Lista todos los perfiles del tenant.
+
+        Retorna respuesta paginada compatible con TabulatorFactory:
+        {count, next, previous, results: [...]}
         """
-        Retorna las instancias de autenticación según el entorno.
+        from apps.tenant.empresa.models import Empresa
         
-        ⚠️ DESARROLLO: En DEBUG=True, usa UnsafeSessionAuthentication (CSRF relajado)
-        ⚠️ PRODUCCIÓN: En DEBUG=False, usa SessionAuthentication estricto (CSRF obligatorio)
-        
-        Returns:
-            List[BaseAuthentication]: Lista de instancias de autenticación
+        # Django-tenants: request.tenant is the Client object, not the Empresa object.
+        # We need to get the Empresa singleton from the current schema.
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            return Response({
+                "empresa": "No se encontraron datos de Empresa en el tenant actual.",
+                "detail_code": "invalid"
+            }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        queryset = self.perfil_service.list_profiles(empresa)
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def create(self, request):
+        """POST /api/v1/perfil/perfiles/ - Crea un usuario + perfil en el tenant.
+
+        Si el email ya existe como User, vincula el perfil.
+        Si no existe, crea el User (unusable password) y el perfil.
+
+        [RULE 15] Requiere rol ADMIN en el tenant.
+        Double Semantic Verification (anti-IDOR):
+        Resuelve el Empresa desde el schema del tenant usando empresa_id del payload.
         """
-        if settings.DEBUG:
-            return [UnsafeSessionAuthentication()]  # ✅ Desarrollo: permite PATCH sin CSRF válido
-        else:
-            return [SessionAuthentication()]  # ✅ Producción: CSRF estricto
-    
-    def get_serializer_context(self):
+        # [RULE 15] Guard: solo ADMIN puede crear perfiles
+        if not IsTenantProfileAdmin().has_permission(request, self):
+            raise PermissionDenied(
+                "Se requiere rol ADMIN en este tenant para crear perfiles."
+            )
+
+        from apps.tenant.empresa.models import Empresa
+
+        payload_empresa_id = request.data.get("empresa_id")
+        if not payload_empresa_id:
+            return Response({
+                "error": "empresa_requerida",
+                "message": "Debes seleccionar una empresa para el perfil.",
+                "missing_fields": ["empresa_id"]
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            empresa_id_int = int(payload_empresa_id)
+        except (ValueError, TypeError):
+            return Response({
+                "error": "empresa_id_invalido",
+                "message": "El valor de empresa_id debe ser un entero valido.",
+                "missing_fields": ["empresa_id"]
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # DSV: buscar empresa en el schema actual. Si no existe = IDOR o dato invalido.
+        try:
+            empresa = Empresa.objects.only("id", "razon_social").get(pk=empresa_id_int)
+        except Empresa.DoesNotExist:
+            return Response({
+                "error": "empresa_no_encontrada",
+                "message": "La empresa seleccionada no existe en este tenant.",
+                "missing_fields": ["empresa_id"]
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            profile = self.perfil_service.create_profile_for_user(
+                empresa=empresa,
+                data=request.data
+            )
+            serializer = self.get_serializer(profile)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            from django.core.exceptions import ValidationError
+            logger.error("[perfil:create] Error creando perfil: %s", str(e))
+            
+            error_msg = str(e)
+            if isinstance(e, ValidationError) and hasattr(e, 'messages'):
+                error_msg = e.messages[0] if e.messages else str(e)
+                
+            missing = []
+            if "email" in error_msg.lower() or "username" in error_msg.lower():
+                missing.append("email")
+            if "ya existe" in error_msg.lower() or "already" in error_msg.lower():
+                return Response({
+                    "error": "perfil_duplicado",
+                    "message": error_msg,
+                    "missing_fields": []
+                }, status=status.HTTP_409_CONFLICT)
+            return Response({
+                "error": "error_creacion",
+                "message": error_msg,
+                "missing_fields": missing
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+    @action(
+        detail=False,
+        methods=['get'],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path='render-offcanvas/crear'
+    )
+    def render_offcanvas_crear(self, request):
+        """GET - Renderiza el offcanvas de creacion de perfil (HTMX).
+
+        Inyecta la lista de empresas del tenant en el contexto para poblar
+        el selector de empresa con datos reales (Zero Waste).
         """
-        Asegura que el request esté disponible en el contexto del serializer.
-        Necesario para SerializerMethodField que construyen URLs absolutas (avatar_url).
-        """
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
-    
-    def get_queryset(self):
-        """
-        QuerySet optimizado - NO usa .all() sin limitar columnas.
-        """
-        # Campos necesarios para perfil
-        perfil_fields = (
-            'id', 'user_id', 'cargo', 'departamento', 'telefono_corporativo',
-            'avatar', 'configuracion', 'created_at', 'updated_at'
+        from apps.tenant.empresa.models import Empresa
+
+        empresas = Empresa.objects.only(
+            'id', 'razon_social', 'nit'
+        ).order_by('razon_social')
+
+        from apps.tenant.perfil.models import RolTenant
+        context = {
+            'empresas': empresas,
+            'rol_choices': RolTenant.choices,
+        }
+        return Response(
+            context,
+            template_name='tenant/perfil/offcanvas_crear_perfil.html'
         )
-        
-        if self.action in ("list", "retrieve", "me"):
-            qs = TenantProfile.objects.only(*perfil_fields).select_related('user')
-        else:
-            # Para create/update/delete necesitamos todos los campos
-            qs = TenantProfile.objects.all()
-        
-        return qs
-    
-    def _safe_get_me_profile_response(self, request: Request, method: str = 'GET') -> Response:
-        """
-        Obtiene o actualiza el perfil del usuario de forma segura, manejando errores de tabla faltante.
-        
-        ⚠️ v2.30: Robustez multi-tenant - Maneja ProgrammingError/OperationalError
-        cuando la tabla no existe (esquema sin migrar).
-        
-        Returns:
-            Response: 200 OK con perfil, 503 si tabla no existe, 400/500 en otros errores
-        """
+
+    def retrieve(self, request, pk=None):
+        """GET /api/v1/perfil/perfiles/<id>/ - Detalles de un perfil."""
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            return Response({"error": "No se encontraron datos de Empresa en el tenant actual."}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            
         try:
-            # Intentar obtener o crear el perfil usando el servicio
-            perfil = obtener_o_crear_perfil(request.user)
-            
-            if method == 'GET':
-                # GET: Retornar el perfil
-                serializer = self.get_serializer(perfil, context={'request': request})
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            
-            elif method == 'PATCH':
-                # PATCH: Actualizar el perfil usando el servicio
-                # ⚠️ v2.30: Si se envía avatar en multipart, actualizarlo primero
-                if 'avatar' in request.FILES:
-                    archivo_avatar = request.FILES['avatar']
-                    try:
-                        perfil = actualizar_avatar(request.user, archivo_avatar)
-                    except ValueError as e:
-                        return Response(
-                            {'error': str(e)},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-                
-                # Preparar datos para validación
-                # ⚠️ v2.30: En multipart, configuracion puede venir como string JSON
-                data_para_validar = request.data.copy()
-                if 'configuracion' in data_para_validar and isinstance(data_para_validar['configuracion'], str):
-                    try:
-                        data_para_validar['configuracion'] = json.loads(data_para_validar['configuracion'])
-                    except (json.JSONDecodeError, TypeError):
-                        data_para_validar['configuracion'] = {}
-                
-                # Validar datos con serializer de actualización parcial
-                serializer = TenantProfileMeUpdateSerializer(perfil, data=data_para_validar, partial=True, context={'request': request})
-                serializer.is_valid(raise_exception=True)
-                
-                # Extraer solo campos permitidos para actualizar
-                # ⚠️ v2.30: Incluir configuracion (normalizada a {} si es null por el serializer)
-                campos_permitidos = ['cargo', 'departamento', 'telefono_corporativo', 'configuracion']
-                data_actualizar = {k: v for k, v in serializer.validated_data.items() if k in campos_permitidos}
-                
-                # Actualizar campos básicos usando el servicio
-                if data_actualizar:
-                    perfil = actualizar_perfil(request.user, data_actualizar)
-                
-                # Retornar perfil actualizado
-                serializer = self.get_serializer(perfil, context={'request': request})
-                return Response(serializer.data, status=status.HTTP_200_OK)
-        
-        except (ProgrammingError, OperationalError) as e:
-            # Error de tabla faltante (esquema sin migrar)
-            error_msg = str(e).lower()
-            if 'does not exist' in error_msg or 'relation' in error_msg or 'table' in error_msg:
-                log.warning(
-                    f"Tabla TenantProfile no existe en schema '{connection.schema_name}'. "
-                    f"Esquema sin migrar. Error: {e}"
-                )
-                return Response(
-                    {
-                        'detail': 'El esquema del tenant no ha sido migrado aún. '
-                                 'Contacta al administrador o intenta en unos segundos.',
-                        'detail_code': 'tenant_schema_unmigrated'
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-            # Otro error de BD (re-lanzar)
-            raise
-        
+            profile = self.perfil_service.get_profile(pk, empresa)
+            serializer = self.get_serializer(profile)
+            return Response(serializer.data)
         except Exception as e:
-            log.error(
-                f"Error {'obteniendo' if method == 'GET' else 'actualizando'} perfil "
-                f"para usuario {request.user.id}: {e}",
-                exc_info=True
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    def update(self, request, pk=None):
+        """PUT /api/v1/perfil/perfiles/<id>/ - Actualiza un perfil."""
+        return self._update_profile(request, pk, partial=False)
+
+    def partial_update(self, request, pk=None):
+        """PATCH /api/v1/perfil/perfiles/<id>/ - Actualiza parcialmente un perfil."""
+        return self._update_profile(request, pk, partial=True)
+
+    def _update_profile(self, request, pk, partial=False):
+        # [SEG-2] Guard: solo ADMIN puede editar perfiles de otros usuarios
+        if not IsTenantProfileAdmin().has_permission(request, self):
+            raise PermissionDenied(
+                "Se requiere rol ADMIN en este tenant para editar perfiles."
             )
-            return Response(
-                {'detail': f'Error al {"obtener" if method == "GET" else "actualizar"} el perfil del usuario.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR if method == 'GET' else status.HTTP_400_BAD_REQUEST
+
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            return Response({"error": "No se encontraron datos de Empresa en el tenant actual."}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            
+        try:
+            # Primero validamos payload con el serializer
+            profile = self.perfil_service.get_profile(pk, empresa)
+            serializer = self.get_serializer(profile, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            
+            # Pasamos validated data a business layer
+            updated = self.perfil_service.update_profile_by_id(pk, empresa, serializer.validated_data)
+            result = self.get_serializer(updated)
+            return Response(result.data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, pk=None):
+        """DELETE /api/v1/perfil/perfiles/<id>/ - Elimina un perfil.
+
+        [RULE 15] Requiere rol ADMIN en el tenant.
+        """
+        # [RULE 15] Guard: solo ADMIN puede eliminar perfiles
+        if not IsTenantProfileAdmin().has_permission(request, self):
+            raise PermissionDenied(
+                "Se requiere rol ADMIN en este tenant para eliminar perfiles."
             )
-    
-    @action(detail=False, methods=['get', 'patch'], url_path='me', url_name='me',
-            parser_classes=[JSONParser, MultiPartParser, FormParser])
-    def me(self, request: Request) -> Response:
-        """
-        Endpoint para obtener/actualizar el perfil del usuario actual.
-        
-        ⚠️ v2.30: API-First + Service Layer - Usa servicios para toda la lógica.
-        ⚠️ IMPORTANTE: Este endpoint NO requiere ID en la URL.
-        Siempre trabaja sobre `request.user`.
-        
-        GET /api/v1/perfil/perfiles/me/:
-            - Retorna el perfil del usuario actual
-            - Si no existe, lo crea automáticamente usando el servicio
-            - Si la tabla no existe (esquema sin migrar), retorna 503
-        
-        PATCH /api/v1/perfil/perfiles/me/:
-            - Actualiza el perfil del usuario actual usando el servicio
-            - Permite actualizar: cargo, departamento, telefono_corporativo, configuracion, avatar
-            - Soporta application/json y multipart/form-data (para avatar)
-            - Si configuracion es null, se normaliza a {} automáticamente
-            - Si se envía avatar en multipart, se actualiza junto con los demás campos
-        
-        Returns:
-            Response: Perfil del usuario actual (GET) o perfil actualizado (PATCH)
-        """
-        return self._safe_get_me_profile_response(request, method=request.method)
-    
-    @action(detail=False, methods=['patch'], url_path='me/configuracion', url_name='me-configuracion')
-    def me_configuracion(self, request: Request) -> Response:
-        """
-        Endpoint para actualizar la configuración de UI del perfil.
-        
-        ⚠️ v2.30: API-First + Service Layer - Usa servicios para toda la lógica.
-        ⚠️ IMPORTANTE: Este endpoint actualiza solo el campo `configuracion`
-        (JSONField) de forma segura, preservando los valores existentes si merge=True.
-        
-        PATCH /api/v1/perfil/perfiles/me/configuracion/:
-            - Actualiza la configuración de UI del perfil
-            - Body: {"clave": "valor"} o {"configuracion": {"clave": "valor"}}
-            - Query param: ?merge=false para reemplazar toda la configuración (default: merge=true)
-        
-        Example:
-            PATCH /api/v1/perfil/perfiles/me/configuracion/?merge=true
-            {
-                "modo_oscuro": true,
-                "densidad_tablas": "compacta"
+
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            return Response({"error": "No se encontraron datos de Empresa en el tenant actual."}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        try:
+            self.perfil_service.delete_profile(pk, empresa)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(
+        detail=True,
+        methods=['get'],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path='render-offcanvas/editar'
+    )
+    def render_offcanvas_editar(self, request, pk=None):
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only("id", "razon_social", "nit").first()
+        if not empresa:
+            return Response({"error": "No empresa"}, status=400)
+            
+        try:
+            from apps.tenant.perfil.models import RolTenant
+            profile = self.perfil_service.get_profile(pk, empresa)
+            requester_profile = getattr(request.user, 'tenant_profile', None)
+            is_admin = bool(
+                requester_profile and requester_profile.rol == RolTenant.ADMIN
+            )
+            context = {
+                'profile': profile,
+                'empresa': empresa,
+                'is_admin': is_admin,
+                'rol_choices': RolTenant.choices,
             }
-        
-        Returns:
-            Response: Perfil actualizado con la nueva configuración
-        """
-        try:
-            # Obtener la configuración del request
-            configuracion_data = request.data.get('configuracion', request.data)
-            
-            if not isinstance(configuracion_data, dict):
-                return Response(
-                    {'error': 'La configuración debe ser un objeto JSON válido.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Determinar si hacer merge (default: True)
-            merge = request.query_params.get('merge', 'true').lower() == 'true'
-            
-            # Actualizar la configuración usando el servicio
-            perfil = actualizar_configuracion_ui(request.user, configuracion_data, merge=merge)
-            
-            # Retornar el perfil actualizado
-            serializer = self.get_serializer(perfil, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        
-        except (ProgrammingError, OperationalError) as e:
-            # Error de tabla faltante (esquema sin migrar)
-            error_msg = str(e).lower()
-            if 'does not exist' in error_msg or 'relation' in error_msg or 'table' in error_msg:
-                log.warning(
-                    f"Tabla TenantProfile no existe en schema '{connection.schema_name}'. "
-                    f"Esquema sin migrar. Error: {e}"
-                )
-                return Response(
-                    {
-                        'detail': 'El esquema del tenant no ha sido migrado aún. '
-                                 'Contacta al administrador o intenta en unos segundos.',
-                        'detail_code': 'tenant_schema_unmigrated'
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-            raise
-        
-        except ValueError as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response(context, template_name='tenant/perfil/offcanvas_editar_perfil.html')
         except Exception as e:
-            log.error(f"Error actualizando configuración para usuario {request.user.id}: {e}", exc_info=True)
-            return Response(
-                {'detail': 'Error al actualizar la configuración.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    @action(detail=False, methods=['patch'], url_path='me/avatar', url_name='me-avatar',
-            parser_classes=[MultiPartParser, FormParser])
-    def me_avatar(self, request: Request) -> Response:
-        """
-        Endpoint para actualizar el avatar del perfil.
-        
-        ⚠️ v2.30: API-First + Service Layer - Usa servicios para toda la lógica.
-        
-        PATCH /api/v1/perfil/perfiles/me/avatar/:
-            - Actualiza el avatar del perfil del usuario actual
-            - Content-Type: multipart/form-data
-            - Body: archivo con key 'avatar'
-            - Tipos permitidos: image/jpeg, image/png, image/gif, image/webp
-            - Tamaño máximo: 5MB
-        
-        Returns:
-            Response: Perfil actualizado con el nuevo avatar
-        """
-        # Validar que se haya enviado un archivo
-        if 'avatar' not in request.FILES:
-            return Response(
-                {'error': 'No se proporcionó ningún archivo. Use el campo "avatar".'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        archivo = request.FILES['avatar']
-        
+            return Response({"error": str(e)}, status=404)
+
+    @action(
+        detail=True,
+        methods=['get'],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path='render-offcanvas/detalle'
+    )
+    def render_offcanvas_detalle(self, request, pk=None):
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only("id").first()
         try:
-            # Actualizar avatar usando el servicio
-            perfil = actualizar_avatar(request.user, archivo)
-            
-            # Retornar el perfil actualizado
-            serializer = self.get_serializer(perfil, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        
-        except (ProgrammingError, OperationalError) as e:
-            # Error de tabla faltante (esquema sin migrar)
-            error_msg = str(e).lower()
-            if 'does not exist' in error_msg or 'relation' in error_msg or 'table' in error_msg:
-                log.warning(
-                    f"Tabla TenantProfile no existe en schema '{connection.schema_name}'. "
-                    f"Esquema sin migrar. Error: {e}"
-                )
-                return Response(
-                    {
-                        'detail': 'El esquema del tenant no ha sido migrado aún. '
-                                 'Contacta al administrador o intenta en unos segundos.',
-                        'detail_code': 'tenant_schema_unmigrated'
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-            raise
-        
-        except ValueError as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            profile = self.perfil_service.get_profile(pk, empresa)
+            context = {'profile': profile}
+            return Response(context, template_name='tenant/perfil/offcanvas_detalle_perfil.html')
         except Exception as e:
-            log.error(f"Error actualizando avatar para usuario {request.user.id}: {e}", exc_info=True)
-            return Response(
-                {'detail': 'Error al actualizar el avatar.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            return Response({"error": str(e)}, status=404)
+
+    @action(detail=False, methods=['get', 'patch'], url_path='me')
+    def me(self, request):
+        """GET/PATCH /api/v1/perfil/perfiles/me/ - Perfil del usuario actual."""
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            return Response({
+                "empresa": "No se encontraron datos de Empresa en el tenant actual.",
+                "detail_code": "invalid"
+            }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        if request.method == 'GET':
+            profile = self.perfil_service.get_or_initialize_profile(request.user, empresa)
+            serializer = self.get_serializer(profile)
+            return Response(serializer.data)
+
+        if request.method == 'PATCH':
+            serializer = self.get_serializer(data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            updated_profile = self.perfil_service.update_user_profile(
+                request.user, empresa, serializer.validated_data
             )
+            result_serializer = self.get_serializer(updated_profile)
+            return Response(result_serializer.data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=['patch'],
+        url_path='assign-rol',
+        url_name='assign-rol',
+    )
+    def assign_rol(self, request, pk=None):
+        """PATCH /api/v1/perfil/perfiles/<id>/assign-rol/ - Asigna un rol al perfil.
+
+        [RULE 15] Exclusivo para rol ADMIN del tenant activo.
+        [RULE 13] DSV: el perfil debe pertenecer a la empresa del tenant actual.
+
+        Body: { "rol": "ADMIN" | "OPERADOR" | "VISOR" }
+
+        Returns: TenantProfile serializado con el nuevo rol y available_actions
+        actualizados reflejando los permisos del solicitante (el ADMIN).
+        """
+        # [RULE 15] Guard
+        if not IsTenantProfileAdmin().has_permission(request, self):
+            raise PermissionDenied(
+                "Se requiere rol ADMIN en este tenant para asignar roles."
+            )
+
+        # Validar payload via serializer dedicado
+        rol_serializer = TenantProfileRolSerializer(data=request.data)
+        rol_serializer.is_valid(raise_exception=True)
+        new_rol = rol_serializer.validated_data['rol']
+
+        # Resolver empresa del tenant activo
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            return Response(
+                {"error": "No se encontraron datos de Empresa en el tenant actual."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        try:
+            updated_profile = self.perfil_service.assign_rol(
+                profile_id=pk,
+                empresa=empresa,
+                new_rol=new_rol,
+            )
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            logger.error("[perfil:assign_rol] pk=%s error=%s", pk, str(exc))
+            if isinstance(exc, DjangoValidationError) and hasattr(exc, 'messages'):
+                detail = exc.messages[0] if exc.messages else str(exc)
+            else:
+                detail = str(exc)
+            return Response({"error": detail}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(updated_profile)
+        return Response(serializer.data, status=status.HTTP_200_OK)

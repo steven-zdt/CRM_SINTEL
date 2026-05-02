@@ -1,17 +1,18 @@
 """
 Servicios de orquestación para datos de contabilidad.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Solo lectura/composición de datos
 - NO duplica lógica de negocio de apps.tenant.contabilidad
 - Usa ORM optimizado (only, select_related, prefetch_related)
 """
-from typing import Dict, Any, List
-from django.db.models import Sum, Count
+from typing import Any
+
+from django.db.models import Sum
 from django.utils import timezone
 
 
-def get_contabilidad_snapshot(tenant, user=None) -> Dict[str, Any]:
+def get_contabilidad_snapshot(tenant, user=None) -> dict[str, Any]:
     """
     Obtiene snapshot de contabilidad del tenant.
     
@@ -24,8 +25,8 @@ def get_contabilidad_snapshot(tenant, user=None) -> Dict[str, Any]:
     """
     try:
         from apps.tenant.contabilidad.models import (
-            CuentaContable,
             AsientoContable,
+            CuentaContable,
             MovimientoContable,
         )
         

@@ -5,15 +5,16 @@ Define el Protocol/ABC para clientes de correo y provee:
 - RealIMAPClient: Implementación real usando imaplib (IMAP/IMAPS)
 - StubInboxClient: Implementación stub para pruebas y desarrollo
 
-⚠️ FASE 2: Implementación real con imaplib (IMAP/IMAPS con STARTTLS).
+WARNING: FASE 2: Implementación real con imaplib (IMAP/IMAPS con STARTTLS).
 """
 import email
 import imaplib
 import ssl
-from typing import Protocol, List, Dict, Any, Optional
 from email.header import decode_header
-from .schemas import MailboxConfigDTO, AttachmentDTO
+from typing import Any, Protocol
+
 from .exceptions import MailboxConnectionError
+from .schemas import AttachmentDTO, MailboxConfigDTO
 
 
 class InboxClient(Protocol):
@@ -35,7 +36,7 @@ class InboxClient(Protocol):
         """
         ...
     
-    def fetch_messages(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def fetch_messages(self, limit: int = 50) -> list[dict[str, Any]]:
         """
         Obtiene mensajes del buzón.
         
@@ -55,7 +56,7 @@ class InboxClient(Protocol):
         """
         ...
     
-    def get_attachments(self, message: Dict[str, Any]) -> List[AttachmentDTO]:
+    def get_attachments(self, message: dict[str, Any]) -> list[AttachmentDTO]:
         """
         Extrae adjuntos de un mensaje.
         
@@ -67,7 +68,7 @@ class InboxClient(Protocol):
         """
         ...
     
-    def finalize(self, message: Dict[str, Any], *, mark_as_seen: bool = False, move_to: Optional[str] = None) -> None:
+    def finalize(self, message: dict[str, Any], *, mark_as_seen: bool = False, move_to: str | None = None) -> None:
         """
         Finaliza el procesamiento de un mensaje (marcar como leído, mover, etc.).
         
@@ -98,7 +99,7 @@ class RealIMAPClient:
     - Autenticación, selección de carpeta, búsqueda y fetch de mensajes
     - Extracción de adjuntos
     
-    ⚠️ SEGURIDAD: Valida certificados TLS en producción (no insecure).
+    WARNING: SEGURIDAD: Valida certificados TLS en producción (no insecure).
     
     Ejemplo:
         client = RealIMAPClient()
@@ -115,8 +116,8 @@ class RealIMAPClient:
     """
     
     def __init__(self):
-        self._connection: Optional[imaplib.IMAP4_SSL | imaplib.IMAP4] = None
-        self._config: Optional[MailboxConfigDTO] = None
+        self._connection: imaplib.IMAP4_SSL | imaplib.IMAP4 | None = None
+        self._config: MailboxConfigDTO | None = None
         self._connected = False
     
     def connect(self, config: MailboxConfigDTO) -> None:
@@ -148,7 +149,7 @@ class RealIMAPClient:
         try:
             if use_ssl and not use_starttls:
                 # IMAPS (puerto 993, TLS implícito)
-                # ⚠️ SEGURIDAD: En producción, validar certificados (check_hostname=True por defecto)
+                # WARNING: SEGURIDAD: En producción, validar certificados (check_hostname=True por defecto)
                 context = ssl.create_default_context()
                 self._connection = imaplib.IMAP4_SSL(host, port, ssl_context=context)
             else:
@@ -171,11 +172,11 @@ class RealIMAPClient:
         except Exception as e:
             raise MailboxConnectionError(f"Error inesperado al conectar: {e}") from e
     
-    def fetch_messages(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def fetch_messages(self, limit: int = 50) -> list[dict[str, Any]]:
         """
         Obtiene mensajes del buzón (LEGACY: usa índices de secuencia, no UIDs).
         
-        ⚠️ DEPRECADO: Usar fetch_messages_by_uid() para procesamiento incremental.
+        WARNING: DEPRECADO: Usar fetch_messages_by_uid() para procesamiento incremental.
         
         Args:
             limit: Número máximo de mensajes a obtener
@@ -235,7 +236,7 @@ class RealIMAPClient:
                         "raw": msg_bytes,
                         "_email_message": msg  # Guardar objeto email.message para extraer adjuntos
                     })
-                except Exception as e:
+                except Exception:
                     # Continuar con otros mensajes si uno falla
                     continue
             
@@ -246,11 +247,11 @@ class RealIMAPClient:
         except Exception as e:
             raise MailboxConnectionError(f"Error inesperado al obtener mensajes: {e}") from e
     
-    def fetch_messages_by_uid(self, start_uid: Optional[int] = None, batch_size: int = 100) -> List[Dict[str, Any]]:
+    def fetch_messages_by_uid(self, start_uid: int | None = None, batch_size: int = 100) -> list[dict[str, Any]]:
         """
         Obtiene mensajes del buzón usando UIDs IMAP (para procesamiento incremental).
         
-        ⚠️ UID IMAP: Los UIDs son únicos y persistentes por buzón (no cambian al eliminar mensajes).
+        WARNING: UID IMAP: Los UIDs son únicos y persistentes por buzón (no cambian al eliminar mensajes).
         Permite procesamiento incremental eficiente sin reprocesar correos ya examinados.
         
         Args:
@@ -330,7 +331,7 @@ class RealIMAPClient:
                         "raw": msg_bytes,
                         "_email_message": msg  # Guardar objeto email.message para extraer adjuntos
                     })
-                except (ValueError, IndexError, Exception) as e:
+                except (ValueError, IndexError, Exception):
                     # Continuar con otros mensajes si uno falla
                     continue
             
@@ -341,7 +342,7 @@ class RealIMAPClient:
         except Exception as e:
             raise MailboxConnectionError(f"Error inesperado al obtener mensajes por UID: {e}") from e
     
-    def get_attachments(self, message: Dict[str, Any]) -> List[AttachmentDTO]:
+    def get_attachments(self, message: dict[str, Any]) -> list[AttachmentDTO]:
         """
         Extrae adjuntos de un mensaje.
         
@@ -394,11 +395,11 @@ class RealIMAPClient:
         
         return attachments
     
-    def finalize(self, message: Dict[str, Any], *, mark_as_seen: bool = False, move_to: Optional[str] = None) -> None:
+    def finalize(self, message: dict[str, Any], *, mark_as_seen: bool = False, move_to: str | None = None) -> None:
         """
         Finaliza el procesamiento de un mensaje (marcar como leído, mover, etc.).
         
-        ⚠️ UID: Si el mensaje tiene campo "uid", usa UID para las operaciones (más seguro y persistente).
+        WARNING: UID: Si el mensaje tiene campo "uid", usa UID para las operaciones (más seguro y persistente).
         
         Args:
             message: Dict con datos del mensaje (debe tener "id" o "uid")
@@ -452,7 +453,7 @@ class RealIMAPClient:
                     self._connection.store(identifier, "+FLAGS", "\\Deleted")
                 self._connection.expunge()
                 
-        except imaplib.IMAP4.error as e:
+        except imaplib.IMAP4.error:
             # No romper el flujo si falla la finalización
             pass
     
@@ -499,7 +500,7 @@ class StubInboxClient:
     
     def __init__(self):
         self._connected = False
-        self._config: Optional[MailboxConfigDTO] = None
+        self._config: MailboxConfigDTO | None = None
         self._message_counter = 0
     
     def connect(self, config: MailboxConfigDTO) -> None:
@@ -520,7 +521,7 @@ class StubInboxClient:
         self._config = config
         self._connected = True
     
-    def fetch_messages(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def fetch_messages(self, limit: int = 50) -> list[dict[str, Any]]:
         """
         Simula obtención de mensajes.
         
@@ -552,7 +553,7 @@ class StubInboxClient:
         
         return messages
     
-    def get_attachments(self, message: Dict[str, Any]) -> List[AttachmentDTO]:
+    def get_attachments(self, message: dict[str, Any]) -> list[AttachmentDTO]:
         """
         Simula extracción de adjuntos.
         
@@ -582,7 +583,7 @@ class StubInboxClient:
                 "content": b'<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><cbc:ID>FAC-123</cbc:ID></Invoice>'
             }]
     
-    def finalize(self, message: Dict[str, Any], *, mark_as_seen: bool = False, move_to: Optional[str] = None) -> None:
+    def finalize(self, message: dict[str, Any], *, mark_as_seen: bool = False, move_to: str | None = None) -> None:
         """
         Simula finalización de procesamiento (no-op en stub).
         

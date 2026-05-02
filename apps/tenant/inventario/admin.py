@@ -1,11 +1,12 @@
 from django.contrib import admin
+
 from .models import (
-    CategoriaItem, 
-    ActivoFijo, 
+    ActivoFijo,
+    CategoriaItem,
+    HistorialServicio,
+    MovimientoInventario,
     Producto,
     Servicio,
-    MovimientoInventario,
-    HistorialServicio
 )
 
 

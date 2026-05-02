@@ -16,4 +16,3 @@ class Command(BaseCommand):
                     self.stdout.write(f"{name} -> /{pattern}")
             except Exception:
                 self.stdout.write(f"{name} -> (pattern no legible)")
-

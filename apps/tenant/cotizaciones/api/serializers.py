@@ -1,16 +1,23 @@
 """
 Serializers Cotizaciones v2.60 - Tabulator Ready
-⚠️ v2.60: Desacoplamiento Radical y Resiliencia.
+# WARNING: v2.60: Desacoplamiento Radical y Resiliencia.
 """
-from decimal import Decimal
 import logging
-from rest_framework import serializers
-from django.utils.translation import gettext_lazy as _
+from decimal import Decimal
+
 from django.db import transaction
-from ..models import Cotizacion, CotizacionItem, Producto, Servicio
+from django.utils.translation import gettext_lazy as _
+from rest_framework import serializers
+
+from apps.tenant.clientes.models import (
+    Cliente,  # # WARNING: v2.60: Para queryset de cliente filtrado por empresa
+)
+
+from ..configuracion.models import (
+    ConfiguracionCotizacion,  # # WARNING: v2.60: Para queryset en tiempo de clase
+)
+from ..models import Cotizacion, CotizacionItem
 from ..services import CotizacionService
-from ..configuracion.models import ConfiguracionCotizacion  # ⚠️ v2.60: Para queryset en tiempo de clase
-from apps.tenant.clientes.models import Cliente  # ⚠️ v2.60: Para queryset de cliente filtrado por empresa
 
 logger = logging.getLogger(__name__)
 
@@ -18,25 +25,25 @@ class CotizacionItemSerializer(serializers.ModelSerializer):
     """
     Serializer para Items de Cotización v2.60.
     
-    ⚠️ Alineado con modelo CotizacionItem:
+    # WARNING: Alineado con modelo CotizacionItem:
     - Campos snapshot (descripcion, marca, referencia, unidad)
     - Campos de cálculo (cantidad, costo_unitario, porcentaje_utilidad)
     - Campos calculados (precio_unitario_venta, subtotal_linea) - read_only
     - Campo orden para mantener secuencia
-    - ⚠️ v2.60: porcentaje_iva a nivel de ítem (campo extra, no en modelo)
+    - # WARNING: v2.60: porcentaje_iva a nivel de ítem (campo extra, no en modelo)
     """
-    # ⚠️ v2.60: porcentaje_iva a nivel de ítem (campo extra para aceptar desde frontend)
+    # # WARNING: v2.60: porcentaje_iva a nivel de ítem (campo extra para aceptar desde frontend)
     # write_only=True porque no existe en el modelo, solo se usa en escritura (POST/PUT)
     porcentaje_iva = serializers.DecimalField(
         max_digits=5,
         decimal_places=2,
         required=False,
         allow_null=True,
-        write_only=True,  # ⚠️ v2.60: Solo para escritura, no se serializa en GET
+        write_only=True,  # # WARNING: v2.60: Solo para escritura, no se serializa en GET
         help_text=_("Porcentaje de IVA para este ítem específico. Si no se proporciona, se usará el valor por defecto.")
     )
     
-    # ⚠️ CORRECCIÓN: Definir el queryset y permitir que sea opcional en el POST
+    # # WARNING: CORRECCIÓN: Definir el queryset y permitir que sea opcional en el POST
     # El ID de la cotización se asignará automáticamente en el método create() del CotizacionSerializer
     cotizacion = serializers.PrimaryKeyRelatedField(
         queryset=Cotizacion.objects.all(),
@@ -44,7 +51,7 @@ class CotizacionItemSerializer(serializers.ModelSerializer):
         allow_null=True
     )
     
-    # ⚠️ CORRECCIÓN: Permitir que el campo esté en blanco y sea nulo
+    # # WARNING: CORRECCIÓN: Permitir que el campo esté en blanco y sea nulo
     # Aunque no es recomendable para el Snapshot Pattern, esto da flexibilidad al backend
     descripcion = serializers.CharField(
         required=False, 
@@ -61,68 +68,91 @@ class CotizacionItemSerializer(serializers.ModelSerializer):
             'descripcion', 'marca', 'referencia', 'unidad',  # Snapshot
             'cantidad', 'costo_unitario', 'porcentaje_utilidad',  # Inputs
             'precio_unitario_venta', 'subtotal_linea',  # Calculados
-            'porcentaje_iva',  # ⚠️ v2.60: IVA a nivel de ítem
+            'porcentaje_iva',  # # WARNING: v2.60: IVA a nivel de ítem
             'orden'  # Secuencia
         ]
         read_only_fields = ['precio_unitario_venta', 'subtotal_linea']
-        # ⚠️ v2.60: porcentaje_iva es write_only (no existe en modelo, solo para escritura)
+        # # WARNING: v2.60: porcentaje_iva es write_only (no existe en modelo, solo para escritura)
     
     def to_representation(self, instance):
         """
-        ⚠️ v2.60: Sobrescribir para asegurar que porcentaje_iva no se intente leer del modelo
+        # WARNING: v2.60: Sobrescribir para asegurar que porcentaje_iva no se intente leer del modelo
         """
         representation = super().to_representation(instance)
         # porcentaje_iva es write_only, no debe aparecer en la representación
         representation.pop('porcentaje_iva', None)
         return representation
 
+
+class CotizacionListSerializer(serializers.ModelSerializer):
+    """
+    Serializer optimizado para listado Tabulator.
+
+    Campos planos sin nested objects. Alineado con LIST_FIELDS de selectors.py.
+    Requiere select_related('cliente') en el queryset.
+    """
+    cliente_nombre = serializers.ReadOnlyField(source='cliente.nombre_comercial')
+    cliente_razon_social = serializers.ReadOnlyField(source='cliente.razon_social')
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+
+    class Meta:
+        model = Cotizacion
+        fields = [
+            'id', 'uuid', 'numero_cotizacion', 'estado', 'estado_display',
+            'fecha_emision', 'fecha_vencimiento', 'total_con_impuestos',
+            'cliente', 'cliente_nombre', 'cliente_razon_social',
+            'empresa', 'created_at',
+        ]
+        read_only_fields = fields
+
+
 class CotizacionSerializer(serializers.ModelSerializer):
     """
     Serializer de Cabecera v2.60.
     
-    ⚠️ Alineado con modelo Cotizacion:
+    # WARNING: Alineado con modelo Cotizacion:
     - Campos básicos (uuid, numero_cotizacion, empresa)
     - Relaciones opcionales (cliente, configuracion) - Resiliencia
     - Campos de estado (tipo_cotizacion, estado, fechas)
     - DNA Financiero (porcentajes AIU, IVA, total_con_impuestos)
     - Items anidados (ordenados por campo 'orden')
     """
-    items = CotizacionItemSerializer(many=True, required=False, read_only=False)  # ⚠️ v2.60: Aceptar items anidados en el payload
-    cliente_display = serializers.SerializerMethodField(read_only=True)  # ⚠️ v2.60: Solo lectura
-    cliente_nombre = serializers.ReadOnlyField(source='cliente.nombre_comercial')  # ⚠️ Sincronización: Campo legible para el frontend
-    configuracion_nombre = serializers.SerializerMethodField(read_only=True)  # ⚠️ v2.60: Cambiado a SerializerMethodField para manejar None
+    items = CotizacionItemSerializer(many=True, required=False, read_only=False)  # # WARNING: v2.60: Aceptar items anidados en el payload
+    cliente_display = serializers.SerializerMethodField(read_only=True)  # # WARNING: v2.60: Solo lectura
+    cliente_nombre = serializers.ReadOnlyField(source='cliente.nombre_comercial')  # # WARNING: Sincronización: Campo legible para el frontend
+    configuracion_nombre = serializers.SerializerMethodField(read_only=True)  # # WARNING: v2.60: Cambiado a SerializerMethodField para manejar None
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
-    subtotal = serializers.SerializerMethodField(read_only=True)  # ⚠️ Sincronización: Subtotal calculado desde items
+    subtotal = serializers.SerializerMethodField(read_only=True)  # # WARNING: Sincronización: Subtotal calculado desde items
     
-    # ⚠️ v2.60: ALINEACIÓN CON FRONTEND (Editor Directo):
+    # # WARNING: v2.60: ALINEACIÓN CON FRONTEND (Editor Directo):
     # - HTML: <select id="editor-select-cliente" name="cliente">
     # - JS: payload.cliente = parseInt(selectCliente.value, 10) → Serializer espera int
-    # ⚠️ v2.60: cliente debe recibir el ID como entero
+    # # WARNING: v2.60: cliente debe recibir el ID como entero
     # Se define explícitamente como PrimaryKeyRelatedField para aceptar IDs
-    # ⚠️ FASE 1: Limpieza del Campo Cliente - Usar queryset estándar para conversión ID → Objeto
+    # # WARNING: FASE 1: Limpieza del Campo Cliente - Usar queryset estándar para conversión ID → Objeto
     # El queryset se filtra por empresa en __init__() para seguridad (SSoT)
     cliente = serializers.PrimaryKeyRelatedField(
-        queryset=Cliente.objects.all(),  # ⚠️ FASE 1: Queryset estándar para conversión ID → Objeto
-        required=True,  # ⚠️ v2.60: Cliente es obligatorio
-        allow_null=False,  # ⚠️ v2.60: Cliente no puede ser null
+        queryset=Cliente.objects.all(),  # # WARNING: FASE 1: Queryset estándar para conversión ID → Objeto
+        required=True,  # # WARNING: v2.60: Cliente es obligatorio
+        allow_null=False,  # # WARNING: v2.60: Cliente no puede ser null
         help_text=_("ID del cliente de la base de datos. Campo obligatorio.")
     )
     
-    # ⚠️ v2.60: ALINEACIÓN CON FRONTEND (Editor Directo):
+    # # WARNING: v2.60: ALINEACIÓN CON FRONTEND (Editor Directo):
     # - HTML: <select id="editor-select-perfil" name="configuracion">
     # - JS: payload.configuracion = parseInt(selectPerfil.value, 10) → Serializer espera int
-    # ⚠️ v2.60: configuracion debe recibir el ID como entero
+    # # WARNING: v2.60: configuracion debe recibir el ID como entero
     # Se define explícitamente como PrimaryKeyRelatedField para aceptar IDs
-    # ⚠️ FUERZA BRUTA ARQUITECTÓNICA: Usar queryset estándar para conversión ID → Objeto
+    # # WARNING: FUERZA BRUTA ARQUITECTÓNICA: Usar queryset estándar para conversión ID → Objeto
     # El queryset se filtra por empresa en __init__() para seguridad (SSoT)
     configuracion = serializers.PrimaryKeyRelatedField(
-        queryset=ConfiguracionCotizacion.objects.all(),  # ⚠️ Queryset estándar para conversión ID → Objeto
+        queryset=ConfiguracionCotizacion.objects.all(),  # # WARNING: Queryset estándar para conversión ID → Objeto
         required=True,
         allow_null=False,
         help_text=_("ID del perfil de configuración. El número de cotización se generará automáticamente desde este perfil.")
     )
     
-    # ⚠️ v2.60: numero_cotizacion es STRICTAMENTE de solo lectura - se genera ÚNICAMENTE en el backend al guardar
+    # # WARNING: v2.60: numero_cotizacion es STRICTAMENTE de solo lectura - se genera ÚNICAMENTE en el backend al guardar
     # El frontend NO debe enviar este campo. Se genera automáticamente en el momento exacto de guardar usando bloqueos de fila.
     numero_cotizacion = serializers.CharField(
         read_only=True,
@@ -130,7 +160,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
         help_text=_("Número de cotización generado automáticamente desde el Perfil de Configuración. No debe ser enviado desde el frontend.")
     )
     
-    # ⚠️ v2.60: codigo_unico es STRICTAMENTE de solo lectura - se genera automáticamente en el backend al guardar
+    # # WARNING: v2.60: codigo_unico es STRICTAMENTE de solo lectura - se genera automáticamente en el backend al guardar
     # El frontend NO debe enviar este campo. Se genera automáticamente en el momento exacto de guardar usando bloqueos de fila.
     codigo_unico = serializers.CharField(
         read_only=True,
@@ -138,7 +168,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
         help_text=_("Código único generado automáticamente desde el perfil de configuración (ej: 'STS. 0422-2026'). No debe ser enviado desde el frontend.")
     )
     
-    # ⚠️ v2.60: fecha_emision puede ser proporcionada por el usuario o usar auto_now_add como fallback
+    # # WARNING: v2.60: fecha_emision puede ser proporcionada por el usuario o usar auto_now_add como fallback
     # Si el usuario no la proporciona, el modelo usará auto_now_add=True
     fecha_emision = serializers.DateField(
         required=False,
@@ -146,7 +176,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
         help_text=_("Fecha de emisión de la cotización. Si no se proporciona, se usará la fecha actual.")
     )
     
-    # ⚠️ v2.60: fecha_vencimiento es STRICTAMENTE de solo lectura - se calcula automáticamente desde dias_validez del perfil
+    # # WARNING: v2.60: fecha_vencimiento es STRICTAMENTE de solo lectura - se calcula automáticamente desde dias_validez del perfil
     # El frontend NO debe enviar este campo. Se calcula automáticamente en el backend.
     fecha_vencimiento = serializers.DateField(
         read_only=True,
@@ -163,33 +193,33 @@ class CotizacionSerializer(serializers.ModelSerializer):
             # Configuración
             'configuracion', 'configuracion_nombre',
             # Estado y fechas
-            # ⚠️ ALINEACIÓN CON FRONTEND:
+            # # WARNING: ALINEACIÓN CON FRONTEND:
             # - tipo_cotizacion: CharField (acepta: MIXTO, PRODUCTOS, SERVICIOS, MATERIALES)
-            #   ⚠️ v2.60: Ya no se envía desde el frontend, se asigna automáticamente desde el perfil
+            #   # WARNING: v2.60: Ya no se envía desde el frontend, se asigna automáticamente desde el perfil
             #   El campo es opcional en creación, el servicio lo asigna desde tipo_cotizacion_default del perfil
             # - fecha_vencimiento: DateField (espera string YYYY-MM-DD)
             #   HTML: <input type="date" id="fecha_vencimiento" name="fecha_vencimiento">
             #   JS: payload.fecha_vencimiento = fechaVencimientoLimpia (string YYYY-MM-DD)
             'tipo_cotizacion', 'estado', 'estado_display',
             'fecha_emision', 'fecha_vencimiento',
-            # DNA Financiero (⚠️ v2.60: Campos opcionales - Lógica financiera ahora a nivel de ítem)
+            # DNA Financiero (# WARNING: v2.60: Campos opcionales - Lógica financiera ahora a nivel de ítem)
             'porcentaje_aiu_admin', 'porcentaje_aiu_imprevistos', 'porcentaje_aiu_utilidad',
             'iva_porcentaje', 'subtotal', 'total_con_impuestos',
-            # ⚠️ v2.60: porcentaje_aiu (write_only) - Único parámetro financiero global que conservamos
+            # # WARNING: v2.60: porcentaje_aiu (write_only) - Único parámetro financiero global que conservamos
             'porcentaje_aiu',
             # Items
             'items'
         ]
         read_only_fields = ['uuid', 'empresa', 'total_con_impuestos', 'estado_display', 'cliente_display', 'cliente_nombre', 'configuracion_nombre', 'codigo_unico', 'numero_cotizacion', 'fecha_vencimiento', 'subtotal']
-        # ⚠️ v2.60: fecha_emision removida de read_only_fields para permitir escritura desde el frontend
+        # # WARNING: v2.60: fecha_emision removida de read_only_fields para permitir escritura desde el frontend
         # Si no se proporciona, el modelo usará auto_now_add=True como fallback
-        # ⚠️ v2.60: numero_cotizacion es STRICTAMENTE read_only - se genera automáticamente al guardar usando bloqueos de fila
-        # ⚠️ v2.60: codigo_unico es STRICTAMENTE read_only - se genera automáticamente al guardar usando bloqueos de fila
-        # ⚠️ v2.60: fecha_vencimiento es STRICTAMENTE read_only - se calcula automáticamente desde dias_validez del perfil
-        # ⚠️ v2.60: tipo_cotizacion es opcional en creación - se asigna automáticamente desde el perfil en el servicio
+        # # WARNING: v2.60: numero_cotizacion es STRICTAMENTE read_only - se genera automáticamente al guardar usando bloqueos de fila
+        # # WARNING: v2.60: codigo_unico es STRICTAMENTE read_only - se genera automáticamente al guardar usando bloqueos de fila
+        # # WARNING: v2.60: fecha_vencimiento es STRICTAMENTE read_only - se calcula automáticamente desde dias_validez del perfil
+        # # WARNING: v2.60: tipo_cotizacion es opcional en creación - se asigna automáticamente desde el perfil en el servicio
     
-    # ⚠️ v2.60: User-Driven - Campos financieros enviados desde el frontend
-    # ⚠️ PASO 1: Habilitar escritura - Estos campos NO están en read_only_fields y son explícitamente DecimalField
+    # # WARNING: v2.60: User-Driven - Campos financieros enviados desde el frontend
+    # # WARNING: PASO 1: Habilitar escritura - Estos campos NO están en read_only_fields y son explícitamente DecimalField
     # Permiten que el frontend envíe valores manuales y también aparecen en la respuesta
     iva_porcentaje = serializers.DecimalField(
         max_digits=5,
@@ -229,7 +259,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
         default='MIXTO',
         help_text=_("Tipo de cotización (MIXTO, PRODUCTOS, SERVICIOS, MATERIALES). Enviado desde el frontend (User-Driven).")
     )
-    # ⚠️ v2.60: Campo extra para aceptar porcentaje_aiu del frontend (se mapea a los tres campos del modelo)
+    # # WARNING: v2.60: Campo extra para aceptar porcentaje_aiu del frontend (se mapea a los tres campos del modelo)
     porcentaje_aiu = serializers.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -241,11 +271,11 @@ class CotizacionSerializer(serializers.ModelSerializer):
 
     def get_cliente_display(self, obj):
         """
-        ⚠️ v2.60: Muestra el cliente de la base de datos.
-        ⚠️ v2.60: Solo se llama durante la serialización (lectura), nunca durante validación.
+        # WARNING: v2.60: Muestra el cliente de la base de datos.
+        # WARNING: v2.60: Solo se llama durante la serialización (lectura), nunca durante validación.
         Maneja casos edge donde obj puede ser un dict (durante respuesta de creación).
         """
-        # ⚠️ Seguridad: Si obj es un diccionario (edge case durante creación)
+        # # WARNING: Seguridad: Si obj es un diccionario (edge case durante creación)
         if isinstance(obj, dict):
             cliente = obj.get('cliente')
             if cliente:
@@ -266,7 +296,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
     
     def get_subtotal(self, obj):
         """
-        ⚠️ Sincronización: Calcula el subtotal sumando los subtotal_linea de todos los items.
+        # WARNING: Sincronización: Calcula el subtotal sumando los subtotal_linea de todos los items.
         El subtotal es la suma de los subtotales de línea antes de aplicar IVA y AIU.
         """
         from decimal import Decimal
@@ -296,7 +326,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
     
     def get_configuracion_nombre(self, obj):
         """
-        ⚠️ v2.60: Muestra el nombre de la configuración de forma segura.
+        # WARNING: v2.60: Muestra el nombre de la configuración de forma segura.
         Maneja el caso cuando configuracion es None.
         """
         if isinstance(obj, dict):
@@ -316,7 +346,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
 
     def to_internal_value(self, data):
         """
-        ⚠️ FUERZA BRUTA ARQUITECTÓNICA: Limpiar y normalizar el valor del cliente ANTES de validación.
+        # WARNING: FUERZA BRUTA ARQUITECTÓNICA: Limpiar y normalizar el valor del cliente ANTES de validación.
         Esto previene errores cuando el frontend envía texto en lugar del ID numérico.
         
         Casos manejados:
@@ -365,7 +395,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
     
     def __init__(self, *args, **kwargs):
         """
-        ⚠️ v2.60: Establecer queryset dinámicamente para configuracion y cliente (SSoT).
+        # WARNING: v2.60: Establecer queryset dinámicamente para configuracion y cliente (SSoT).
         Los querysets se filtran por empresa del tenant para garantizar aislamiento de datos.
         """
         super().__init__(*args, **kwargs)
@@ -373,18 +403,21 @@ class CotizacionSerializer(serializers.ModelSerializer):
         from apps.tenant.empresa.models import Empresa
         # ConfiguracionCotizacion ya está importado en la parte superior del archivo
         
-        # ⚠️ Zero Trust: Obtener empresa del request si está disponible
+        # # WARNING: Zero Trust: Obtener empresa del request si está disponible
         request = self.context.get('request')
-        if request and hasattr(request.user, 'empresa'):
-            empresa = request.user.empresa
-        else:
-            # Fallback: obtener empresa del tenant (singleton)
-            empresa = Empresa.objects.first()
+        empresa = self.context.get('empresa')
+        if not empresa and request:
+            empresa = getattr(request, 'empresa', None)
+        if not empresa and request:
+            tenant = getattr(request, 'tenant', None)
+            empresa = getattr(tenant, 'empresa', None)
+        if not empresa:
+            empresa = Empresa.objects.only('id').first()
         
         if empresa:
-            # ⚠️ SSoT: Filtrar configuracion por empresa del tenant
+            # # WARNING: SSoT: Filtrar configuracion por empresa del tenant
             self.fields['configuracion'].queryset = ConfiguracionCotizacion.objects.filter(empresa=empresa)
-            # ⚠️ SSoT: Filtrar cliente por empresa del tenant
+            # # WARNING: SSoT: Filtrar cliente por empresa del tenant
             self.fields['cliente'].queryset = Cliente.objects.filter(empresa=empresa)
         else:
             self.fields['configuracion'].queryset = ConfiguracionCotizacion.objects.none()
@@ -392,11 +425,11 @@ class CotizacionSerializer(serializers.ModelSerializer):
     
     def validate_cliente(self, value):
         """
-        ⚠️ FUERZA BRUTA ARQUITECTÓNICA: Validación resiliente del cliente con múltiples fallbacks.
+        # WARNING: FUERZA BRUTA ARQUITECTÓNICA: Validación resiliente del cliente con múltiples fallbacks.
         Este método se ejecuta después de que PrimaryKeyRelatedField valida que el ID existe
         y convierte el ID a objeto Cliente.
         
-        ⚠️ Zero Trust: Validar que el cliente pertenezca a la empresa del usuario/tenant.
+        # WARNING: Zero Trust: Validar que el cliente pertenezca a la empresa del usuario/tenant.
         """
         from apps.tenant.clientes.models import Cliente
         
@@ -405,14 +438,17 @@ class CotizacionSerializer(serializers.ModelSerializer):
             # Dejar que DRF maneje el error de tipo si no es objeto
             return value
         
-        # ⚠️ FUERZA BRUTA: Obtener empresa con fallback múltiple
+        # # WARNING: FUERZA BRUTA: Obtener empresa con fallback múltiple
         request = self.context.get('request')
         empresa = self.context.get('empresa') or getattr(request, 'empresa', None)
+        if not empresa and request:
+            tenant = getattr(request, 'tenant', None)
+            empresa = getattr(tenant, 'empresa', None)
         
         # Fallback final: Obtener empresa del tenant (singleton)
         if not empresa:
             from apps.tenant.empresa.models import Empresa
-            empresa = Empresa.objects.first()
+            empresa = Empresa.objects.only('id').first()
         
         # Validación final: Si no existe empresa, error explícito
         if not empresa:
@@ -420,7 +456,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
                 _("No se pudo determinar la empresa del tenant actual.")
             )
         
-        # ⚠️ Zero Trust: Validar SSoT - El cliente debe pertenecer al tenant actual
+        # # WARNING: Zero Trust: Validar SSoT - El cliente debe pertenecer al tenant actual
         if value.empresa_id != empresa.id:
             raise serializers.ValidationError(
                 _("El cliente no pertenece a esta empresa (Seguridad Zero Trust).")
@@ -431,10 +467,10 @@ class CotizacionSerializer(serializers.ModelSerializer):
     def validate(self, data):
         """
         Zero Trust: Valida que exista al menos una identificación del cliente.
-        ⚠️ v2.60: Valida unicidad de numero_cotizacion por empresa y perfil.
-        ⚠️ v2.60: Mapea porcentaje_aiu del frontend a los campos del modelo si se proporciona.
+        # WARNING: v2.60: Valida unicidad de numero_cotizacion por empresa y perfil.
+        # WARNING: v2.60: Mapea porcentaje_aiu del frontend a los campos del modelo si se proporciona.
         """
-        # ⚠️ v2.60: Mapear porcentaje_aiu del frontend a porcentaje_aiu_admin si se proporciona
+        # # WARNING: v2.60: Mapear porcentaje_aiu del frontend a porcentaje_aiu_admin si se proporciona
         porcentaje_aiu = data.pop('porcentaje_aiu', None)
         if porcentaje_aiu is not None:
             # Si el frontend envía porcentaje_aiu, mapearlo a porcentaje_aiu_admin
@@ -464,7 +500,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
                     })
             return data
             
-        # ⚠️ FUERZA BRUTA ARQUITECTÓNICA: Confiar 100% en PrimaryKeyRelatedField para configuracion
+        # # WARNING: FUERZA BRUTA ARQUITECTÓNICA: Confiar 100% en PrimaryKeyRelatedField para configuracion
         # El campo 'configuracion' ya está definido como PrimaryKeyRelatedField en la cabecera de la clase.
         # PrimaryKeyRelatedField se encarga automáticamente de:
         # 1. Convertir el ID (int o string) a objeto ConfiguracionCotizacion
@@ -474,7 +510,7 @@ class CotizacionSerializer(serializers.ModelSerializer):
         # La validación adicional de empresa se hace en validate_configuracion() si existe.
         # NO intentar validar o convertir el perfil manualmente aquí.
         
-        # ⚠️ FUERZA BRUTA ARQUITECTÓNICA: Confiar 100% en PrimaryKeyRelatedField
+        # # WARNING: FUERZA BRUTA ARQUITECTÓNICA: Confiar 100% en PrimaryKeyRelatedField
         # El campo 'cliente' ya está definido como PrimaryKeyRelatedField en la cabecera de la clase.
         # PrimaryKeyRelatedField se encarga automáticamente de:
         # 1. Convertir el ID (int o string) a objeto Cliente
@@ -484,17 +520,17 @@ class CotizacionSerializer(serializers.ModelSerializer):
         # La validación adicional de empresa se hace en validate_cliente() que se ejecuta DESPUÉS.
         # NO intentar validar o convertir el cliente manualmente aquí.
         
-        # ⚠️ v2.60: numero_cotizacion NO debe venir del frontend - se genera automáticamente al guardar
+        # # WARNING: v2.60: numero_cotizacion NO debe venir del frontend - se genera automáticamente al guardar
         # Si viene en el payload, eliminarlo (el backend lo generará automáticamente)
         if 'numero_cotizacion' in data:
             data.pop('numero_cotizacion')
         
-        # ⚠️ v2.60: codigo_unico NO debe venir del frontend - se genera automáticamente al guardar
+        # # WARNING: v2.60: codigo_unico NO debe venir del frontend - se genera automáticamente al guardar
         # Si viene en el payload, eliminarlo (el backend lo generará automáticamente)
         if 'codigo_unico' in data:
             data.pop('codigo_unico')
         
-        # ⚠️ v2.60: fecha_vencimiento NO debe venir del frontend - se calcula automáticamente desde dias_validez del perfil
+        # # WARNING: v2.60: fecha_vencimiento NO debe venir del frontend - se calcula automáticamente desde dias_validez del perfil
         # Si viene en el payload, eliminarlo (el backend lo calculará automáticamente)
         if 'fecha_vencimiento' in data:
             data.pop('fecha_vencimiento')
@@ -504,29 +540,36 @@ class CotizacionSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         """
-        ⚠️ REFACTORIZACIÓN v2.60: Creación transaccional atómica con Soberanía del Usuario.
+        # WARNING: REFACTORIZACIÓN v2.60: Creación transaccional atómica con Soberanía del Usuario.
         
-        ⚠️ OBJETIVO 1: Transaccionalidad Atómica
+        # WARNING: OBJETIVO 1: Transaccionalidad Atómica
         - Todo el proceso (cotización, items, cálculo de totales) se ejecuta en una sola transacción
         - Si cualquier paso falla, se revierte todo (incluyendo la numeración secuencial)
         - Esto previene desperdiciar folios en caso de error
         
-        ⚠️ OBJETIVO 2: Soberanía del Usuario (User-Driven)
+        # WARNING: OBJETIVO 2: Soberanía del Usuario (User-Driven)
         - Los datos manuales del payload (IVA, AIU, Fecha Emisión) tienen prioridad absoluta
         - Los valores por defecto de la plantilla solo se usan si el usuario no proporciona datos
         - Garantiza que los datos digitados por el usuario NO sean ignorados ni sobreescritos
         
-        ⚠️ SSoT v2.60: La empresa se extrae del tenant, nunca del payload.
+        # WARNING: SSoT v2.60: La empresa se extrae del tenant, nunca del payload.
         El campo 'empresa' está en read_only_fields para garantizar seguridad.
         
-        ⚠️ v2.60: Los items se procesan junto con la cotización en una sola transacción.
+        # WARNING: v2.60: Los items se procesan junto con la cotización en una sola transacción.
         Los items se crean directamente usando CotizacionItem.objects.create() para mayor eficiencia.
         """
-        # ⚠️ A. Obtener Empresa (SSoT) y contexto
+        # # WARNING: A. Obtener Empresa (SSoT) y contexto
         from apps.tenant.empresa.models import Empresa
         
         request = self.context.get('request')
-        empresa = self.context.get('empresa') or getattr(request, 'empresa', Empresa.objects.first())
+        empresa = self.context.get('empresa')
+        if not empresa and request:
+            empresa = getattr(request, 'empresa', None)
+        if not empresa and request:
+            tenant = getattr(request, 'tenant', None)
+            empresa = getattr(tenant, 'empresa', None)
+        if not empresa:
+            empresa = Empresa.objects.only('id').first()
         
         # Validación final: Si no existe empresa, error explícito
         if not empresa:
@@ -534,159 +577,46 @@ class CotizacionSerializer(serializers.ModelSerializer):
                 'detail': _('No se encontró la empresa del tenant. Por favor, configure la empresa primero.')
             })
         
-        # ⚠️ SSoT: Eliminar 'empresa' del validated_data si fue enviado por error
-        validated_data.pop('empresa', None)
-        validated_data.pop('empresa_id', None)
-        
-        # ⚠️ v2.60: Limpiar campos que NO deben venir del frontend (se generan automáticamente)
-        validated_data.pop('numero_cotizacion', None)
-        validated_data.pop('codigo_unico', None)
-        validated_data.pop('fecha_vencimiento', None)  # ⚠️ Se calcula automáticamente desde dias_validez del perfil
-        
-        # ⚠️ v2.60: Validar que configuracion (perfil) esté presente para generar numeración
-        configuracion_id = validated_data.get('configuracion')
-        if not configuracion_id:
+        payload = dict(validated_data)
+        payload.pop('empresa', None)
+        payload.pop('empresa_id', None)
+        payload.pop('numero_cotizacion', None)
+        payload.pop('codigo_unico', None)
+        payload.pop('fecha_vencimiento', None)
+
+        if not payload.get('configuracion'):
             raise serializers.ValidationError({
                 'configuracion': _('Debe seleccionar un perfil de configuración para generar la numeración.')
             })
-        
-        # ⚠️ FASE 1: Extraer ítems antes de crear la cabecera
-        items_data = validated_data.pop('items', [])
-        
-        # ⚠️ C. Crear Cabecera vía Service Layer (Priorizando validated_data)
-        # ⚠️ CRÍTICO: validated_data contiene los campos financieros del usuario:
-        # - iva_porcentaje, porcentaje_aiu_admin, porcentaje_aiu_imprevistos, porcentaje_aiu_utilidad
-        # - tipo_cotizacion, fecha_emision
-        # El Service Layer prioriza estos valores sobre los defaults de la plantilla
-        cotizacion = CotizacionService.crear_preforma(
-            empresa=empresa,  # ⚠️ CRÍTICO: Empresa garantizada y validada
-            datos=validated_data  # ⚠️ CRÍTICO: Contiene todos los datos del usuario (User-Driven)
+
+        return CotizacionService.crear_preforma(
+            empresa=empresa,
+            datos=payload,
         )
-        
-        # ⚠️ FASE 1: CORRECCIÓN CRÍTICA - Persistencia Real de Items
-        # ⚠️ CRÍTICO: Mapear explícitamente los campos del frontend (cantidad, costo_unitario, porcentaje_utilidad)
-        # Usar .get() con fallback a 0 para evitar NoneType errors
-        for item_data in items_data:
-            # ⚠️ Extraer valores con fallback a 0 para evitar NoneType errors
-            cantidad = item_data.get('cantidad', 0)
-            costo = item_data.get('costo_unitario', 0)
-            utilidad = item_data.get('porcentaje_utilidad', 0)
-            
-            # ⚠️ Convertir a Decimal para cálculos precisos
-            cantidad = Decimal(str(cantidad)) if cantidad else Decimal('0')
-            costo = Decimal(str(costo)) if costo else Decimal('0')
-            utilidad = Decimal(str(utilidad)) if utilidad else Decimal('0')
-            
-            # ⚠️ SSoT: Calcular precios de venta y subtotales en el backend
-            calculos = CotizacionService.calcular_linea(cantidad, costo, utilidad)
-            
-            # ⚠️ Crear el ítem con los datos REALES del usuario (Snapshot Pattern)
-            CotizacionItem.objects.create(
-                cotizacion=cotizacion,
-                tipo_item=item_data.get('tipo_item', 'PRODUCTO'),
-                descripcion=item_data.get('descripcion', 'Sin descripción'),
-                marca=item_data.get('marca', ''),
-                referencia=item_data.get('referencia', ''),
-                unidad=item_data.get('unidad', 'UND'),
-                cantidad=cantidad,
-                costo_unitario=costo,
-                porcentaje_utilidad=utilidad,
-                precio_unitario_venta=calculos['precio_unitario'],
-                subtotal_linea=calculos['subtotal'],
-                orden=item_data.get('orden', 0)
-            )
-            logger.info(f"✅ Item creado: {item_data.get('descripcion', 'Sin descripción')[:50]} - Cantidad: {cantidad}, Costo: {costo}, Utilidad: {utilidad}%, Precio Venta: {calculos['precio_unitario']}")
-        
-        # ⚠️ E. Recálculo Final de Totales (Consistencia de Base de Datos)
-        # Esto asegura que el total_con_impuestos en la tabla Cotizacion sea exacto
-        # ⚠️ CRÍTICO: Si este cálculo falla, toda la transacción se revierte (Rollback)
-        CotizacionService.calcular_totales(cotizacion.id)
-        
-        return cotizacion
 
     @transaction.atomic
     def update(self, instance, validated_data):
         """
-        ⚠️ FASE 3: Actualización transaccional atómica con sincronización de ítems.
+        # WARNING: FASE 3: Actualización transaccional atómica con sincronización de ítems.
         
-        ⚠️ OBJETIVO 1: Transaccionalidad Atómica
+        # WARNING: OBJETIVO 1: Transaccionalidad Atómica
         - Todo el proceso (actualización de cabecera, sincronización de items, cálculo de totales) se ejecuta en una sola transacción
         - Si cualquier paso falla, se revierte todo
         
-        ⚠️ OBJETIVO 2: Sincronización de Ítems
+        # WARNING: OBJETIVO 2: Sincronización de Ítems
         - Estrategia de reemplazo total: Borrar ítems antiguos y crear nuevos
         - Esto garantiza que no haya duplicados ni ítems huérfanos
         - Los ítems se recalculan usando el mismo patrón que en create()
         
-        ⚠️ OBJETIVO 3: Soberanía del Usuario (User-Driven)
+        # WARNING: OBJETIVO 3: Soberanía del Usuario (User-Driven)
         - Los datos manuales del payload (IVA, AIU, Fecha Emisión) tienen prioridad absoluta
         - Los valores existentes se actualizan con los nuevos valores del payload
         """
-        # ⚠️ FASE 3: Limpiar campos que NO deben venir del frontend (se generan automáticamente)
-        validated_data.pop('numero_cotizacion', None)
-        validated_data.pop('codigo_unico', None)
-        validated_data.pop('fecha_vencimiento', None)  # ⚠️ Se calcula automáticamente desde dias_validez del perfil
-        validated_data.pop('empresa', None)  # ⚠️ Empresa no se puede cambiar
-        validated_data.pop('empresa_id', None)
-        
-        # ⚠️ FASE 3: Extraer ítems antes de actualizar la cabecera
-        items_data = validated_data.pop('items', None)
-        
-        # ⚠️ FASE 3: Actualizar campos de la cabecera (campos financieros y fechas)
-        # Solo actualizar los campos que vienen en validated_data
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        logger.info(f"✅ Cabecera de cotización {instance.uuid} actualizada")
-        
-        # ⚠️ FASE 3: Sincronizar ítems (Estrategia: Reemplazo total)
-        # Si items_data es None, no se actualizan los ítems (mantener existentes)
-        # Si items_data es una lista (vacía o con elementos), se reemplazan todos los ítems
-        if items_data is not None:
-            # ⚠️ FASE 3: Borrar ítems antiguos (reemplazo total)
-            items_antiguos_count = instance.items.count()
-            instance.items.all().delete()
-            logger.info(f"🗑️ {items_antiguos_count} ítems antiguos eliminados de cotización {instance.uuid}")
-            
-            # ⚠️ FASE 3: Crear nuevos ítems con los datos del payload
-            for item_data in items_data:
-                # ⚠️ Extraer valores con fallback a 0 para evitar NoneType errors
-                cantidad = item_data.get('cantidad', 0)
-                costo = item_data.get('costo_unitario', 0)
-                utilidad = item_data.get('porcentaje_utilidad', 0)
-                
-                # ⚠️ Convertir a Decimal para cálculos precisos
-                cantidad = Decimal(str(cantidad)) if cantidad else Decimal('0')
-                costo = Decimal(str(costo)) if costo else Decimal('0')
-                utilidad = Decimal(str(utilidad)) if utilidad else Decimal('0')
-                
-                # ⚠️ SSoT: Calcular precios de venta y subtotales en el backend
-                calculos = CotizacionService.calcular_linea(cantidad, costo, utilidad)
-                
-                # ⚠️ Crear el ítem con los datos REALES del usuario (Snapshot Pattern)
-                CotizacionItem.objects.create(
-                    cotizacion=instance,  # ⚠️ Asociar con la instancia existente
-                    tipo_item=item_data.get('tipo_item', 'PRODUCTO'),
-                    descripcion=item_data.get('descripcion', 'Sin descripción'),
-                    marca=item_data.get('marca', ''),
-                    referencia=item_data.get('referencia', ''),
-                    unidad=item_data.get('unidad', 'UND'),
-                    cantidad=cantidad,
-                    costo_unitario=costo,
-                    porcentaje_utilidad=utilidad,
-                    precio_unitario_venta=calculos['precio_unitario'],
-                    subtotal_linea=calculos['subtotal'],
-                    orden=item_data.get('orden', 0)
-                )
-                logger.info(f"✅ Item actualizado: {item_data.get('descripcion', 'Sin descripción')[:50]} - Cantidad: {cantidad}, Costo: {costo}, Utilidad: {utilidad}%, Precio Venta: {calculos['precio_unitario']}")
-            
-            logger.info(f"✅ {len(items_data)} ítems nuevos creados para cotización {instance.uuid}")
-        else:
-            logger.info(f"ℹ️ No se actualizaron ítems para cotización {instance.uuid} (items_data es None)")
-        
-        # ⚠️ FASE 3: Recálculo Final de Totales (Consistencia de Base de Datos)
-        # Esto asegura que el total_con_impuestos en la tabla Cotizacion sea exacto
-        # ⚠️ CRÍTICO: Si este cálculo falla, toda la transacción se revierte (Rollback)
-        CotizacionService.calcular_totales(instance.id)
-        
-        return instance
+        payload = dict(validated_data)
+        payload.pop('numero_cotizacion', None)
+        payload.pop('codigo_unico', None)
+        payload.pop('fecha_vencimiento', None)
+        payload.pop('empresa', None)
+        payload.pop('empresa_id', None)
+
+        return CotizacionService.actualizar_cotizacion(instance, payload)

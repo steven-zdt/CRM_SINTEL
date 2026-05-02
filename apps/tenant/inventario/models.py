@@ -1,12 +1,15 @@
 from django.db import models
+from django.db.models.functions import Lower
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+
+from apps.tenant.core.models import SintelTenantBaseModel  # auto-inserted by autocorrect
 
 # Referencia a Empresa (SSoT singleton por tenant)
 from apps.tenant.empresa.models import Empresa
 
 
-class TimeStampedModel(models.Model):
+class TimeStampedModel(SintelTenantBaseModel):
     """Modelo base abstracto para auditoría de tiempos."""
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -49,6 +52,13 @@ class CategoriaItem(TimeStampedModel):
         verbose_name = "Categoría"
         verbose_name_plural = "Categorías"
         indexes = [models.Index(fields=["empresa", "nombre"])]
+        constraints = [
+            models.UniqueConstraint(
+                Lower('nombre'),
+                'empresa',
+                name='unique_categoria_nombre_per_empresa'
+            )
+        ]
 
     def __str__(self):
         return self.nombre
@@ -277,4 +287,3 @@ class HistorialServicio(TimeStampedModel):
 
     def __str__(self):
         return f"{self.servicio.nombre} -> {self.cliente_referencia}"
-

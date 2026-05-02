@@ -1,0 +1,31 @@
+<form id="form-cotizacion" data-endpoint="/api/v1/cotizaciones/" data-method="POST">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title">Nueva Cotización</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div class="mb-3">
+      <label for="cliente" class="form-label">Cliente</label>
+      <select id="cliente" name="cliente" class="form-select" required>
+        <option value="">Seleccione un cliente</option>
+        {% for cliente in clientes %}
+        <option value="{{ cliente.id }}">{{ cliente.razon_social }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label for="configuracion" class="form-label">Configuración</label>
+      <select id="configuracion" name="configuracion" class="form-select" required>
+        <option value="">Seleccione una configuración</option>
+        {% for configuracion in configuraciones %}
+        <option value="{{ configuracion.id }}">{{ configuracion.nombre_configuracion }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label for="fecha_emision" class="form-label">Fecha de emisión</label>
+      <input type="date" id="fecha_emision" name="fecha_emision" class="form-control">
+    </div>
+    <button type="submit" class="btn btn-success">Guardar Cotización</button>
+  </div>
+</form>

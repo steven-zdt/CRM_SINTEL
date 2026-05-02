@@ -1,13 +1,13 @@
 """
 Tests tenant-aware para importar_ubl (Service Layer).
 
-⚠️ TENANT TESTS: Requieren base de datos y tenant (TenantTestCase).
+# WARNING: TENANT TESTS: Requieren base de datos y tenant (TenantTestCase).
 """
 from django_tenants.test.cases import TenantTestCase
-from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.services import importar_ubl
-from apps.tenant.facturas.models import Factura, NaturalezaFactura
 
+from apps.tenant.empresa.models import Empresa
+from apps.tenant.facturas.models import Factura, NaturalezaFactura
+from apps.tenant.facturas.services import importar_ubl
 
 XML_VENTA = b"""<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"

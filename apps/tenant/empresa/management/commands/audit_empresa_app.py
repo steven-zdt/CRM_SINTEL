@@ -13,10 +13,9 @@ Uso:
     python manage.py all_tenants_command audit_empresa_app
     python manage.py tenant_command audit_empresa_app --schema=tenant1
 """
-from django.core.management.base import BaseCommand
-from django_tenants.utils import schema_context, get_tenant_model
-from django.db import connection
 from django.apps import apps
+from django.core.management.base import BaseCommand
+from django_tenants.utils import get_tenant_model, schema_context
 
 
 class Command(BaseCommand):
@@ -58,13 +57,13 @@ class Command(BaseCommand):
                 # 1. Verificar modelo Empresa
                 try:
                     Empresa = apps.get_model('empresa', 'Empresa')
-                    self.stdout.write(self.style.SUCCESS("✓ Modelo Empresa encontrado"))
+                    self.stdout.write(self.style.SUCCESS("[OK] Modelo Empresa encontrado"))
                     
                     # Verificar campos críticos
                     campos_requeridos = ['razon_social', 'nit', 'dv', 'direccion', 'telefono']
                     for campo in campos_requeridos:
                         if hasattr(Empresa, campo):
-                            self.stdout.write(f"  ✓ Campo '{campo}' existe")
+                            self.stdout.write(f"  [OK] Campo '{campo}' existe")
                         else:
                             errors.append(f"Campo '{campo}' no existe en modelo Empresa")
                     
@@ -74,13 +73,16 @@ class Command(BaseCommand):
                 # 2. Verificar servicios
                 try:
                     # Verificar services.py (archivo raíz)
-                    from apps.tenant.empresa.services import get_empresa_emisor_data, EmpresaNotConfiguredError
-                    self.stdout.write(self.style.SUCCESS("✓ services.py: get_empresa_emisor_data disponible"))
+                    from apps.tenant.empresa.services import (
+                        EmpresaNotConfiguredError,
+                        get_empresa_emisor_data,
+                    )
+                    self.stdout.write(self.style.SUCCESS("[OK] services.py: get_empresa_emisor_data disponible"))
                     
                     # Probar get_empresa_emisor_data
                     try:
                         empresa_data = get_empresa_emisor_data()
-                        self.stdout.write(f"  ✓ get_empresa_emisor_data() retorna datos: NIT={empresa_data.get('nit')}")
+                        self.stdout.write(f"  [OK] get_empresa_emisor_data() retorna datos: NIT={empresa_data.get('nit')}")
                     except EmpresaNotConfiguredError as e:
                         warnings.append(f"get_empresa_emisor_data() lanza EmpresaNotConfiguredError: {e}")
                     except Exception as e:
@@ -96,12 +98,12 @@ class Command(BaseCommand):
                         get_or_create_empresa,
                         update_empresa,
                     )
-                    self.stdout.write(self.style.SUCCESS("✓ impl/: Funciones disponibles"))
+                    self.stdout.write(self.style.SUCCESS("[OK] impl/: Funciones disponibles"))
                     
                     # Probar get_empresa
                     empresa_dto = get_empresa()
                     if empresa_dto:
-                        self.stdout.write(f"  ✓ get_empresa() retorna datos: NIT={empresa_dto.get('nit')}")
+                        self.stdout.write(f"  [OK] get_empresa() retorna datos: NIT={empresa_dto.get('nit')}")
                     else:
                         warnings.append("get_empresa() retorna None (no hay empresa configurada)")
                     
@@ -110,17 +112,17 @@ class Command(BaseCommand):
                 
                 # 3. Verificar APIs
                 try:
-                    from apps.tenant.empresa.api.viewsets import EmpresaViewSet
                     from apps.tenant.empresa.api.serializers import EmpresaSerializer
                     from apps.tenant.empresa.api.urls import router
+                    from apps.tenant.empresa.api.viewsets import EmpresaViewSet
                     
-                    self.stdout.write(self.style.SUCCESS("✓ APIs: ViewSet, Serializer y Router disponibles"))
+                    self.stdout.write(self.style.SUCCESS("[OK] APIs: ViewSet, Serializer y Router disponibles"))
                     
                     # Verificar que el router tenga la ruta registrada
                     urlpatterns = router.urls
                     rutas_empresa = [url for url in urlpatterns if 'empresas' in str(url.pattern)]
                     if rutas_empresa:
-                        self.stdout.write(f"  ✓ Router registrado: {len(rutas_empresa)} rutas")
+                        self.stdout.write(f"  [OK] Router registrado: {len(rutas_empresa)} rutas")
                     else:
                         warnings.append("Router no tiene rutas de empresas registradas")
                     
@@ -136,7 +138,7 @@ class Command(BaseCommand):
                         warnings.append("No hay empresas en la base de datos")
                     elif count == 1:
                         empresa = Empresa.objects.first()
-                        self.stdout.write(self.style.SUCCESS(f"✓ Persistencia: 1 empresa encontrada"))
+                        self.stdout.write(self.style.SUCCESS("[OK] Persistencia: 1 empresa encontrada"))
                         self.stdout.write(f"  - ID: {empresa.id}")
                         self.stdout.write(f"  - Razón Social: {empresa.razon_social}")
                         self.stdout.write(f"  - NIT: {empresa.nit}")
@@ -164,7 +166,7 @@ class Command(BaseCommand):
                             """)
                             constraint_exists = cursor.fetchone()[0] > 0
                             if constraint_exists:
-                                self.stdout.write("  ✓ Constraint de singleton existe en BD")
+                                self.stdout.write("  [OK] Constraint de singleton existe en BD")
                             else:
                                 warnings.append("Constraint de singleton no encontrada en BD")
                     except Exception as e:
@@ -180,7 +182,7 @@ class Command(BaseCommand):
                     # READ
                     empresa = Empresa.objects.first()
                     if empresa:
-                        self.stdout.write("✓ CRUD READ: OK")
+                        self.stdout.write("[OK] CRUD READ: OK")
                     else:
                         warnings.append("CRUD READ: No hay empresa para leer")
                     
@@ -188,7 +190,7 @@ class Command(BaseCommand):
                     if empresa:
                         original_nit = empresa.nit
                         # No hacemos cambios, solo verificamos que el modelo es mutable
-                        self.stdout.write("✓ CRUD UPDATE: Modelo es mutable")
+                        self.stdout.write("[OK] CRUD UPDATE: Modelo es mutable")
                     
                 except Exception as e:
                     errors.append(f"Error verificando CRUD: {e}")
@@ -200,7 +202,7 @@ class Command(BaseCommand):
                     
                     # Verificar que los datos son consistentes
                     if empresa_data.get('nit') and empresa_data.get('razon_social'):
-                        self.stdout.write("✓ SSoT: get_empresa_emisor_data() retorna datos válidos")
+                        self.stdout.write("[OK] SSoT: get_empresa_emisor_data() retorna datos válidos")
                         self.stdout.write(f"  - NIT: {empresa_data.get('nit')}")
                         self.stdout.write(f"  - Razón Social: {empresa_data.get('razon_social')}")
                     else:
@@ -211,16 +213,16 @@ class Command(BaseCommand):
                 
                 # Resumen por tenant
                 if errors:
-                    self.stdout.write(self.style.ERROR(f"\n❌ Errores encontrados: {len(errors)}"))
+                    self.stdout.write(self.style.ERROR(f"\n[ERROR] Errores encontrados: {len(errors)}"))
                     for error in errors:
                         self.stdout.write(self.style.ERROR(f"  - {error}"))
                     total_errors += len(errors)
                 else:
-                    self.stdout.write(self.style.SUCCESS(f"\n✅ Sin errores"))
+                    self.stdout.write(self.style.SUCCESS("\n[OK] Sin errores"))
                     total_ok += 1
                 
                 if warnings:
-                    self.stdout.write(self.style.WARNING(f"\n⚠️  Advertencias: {len(warnings)}"))
+                    self.stdout.write(self.style.WARNING(f"\n# WARNING:  Advertencias: {len(warnings)}"))
                     if verbose:
                         for warning in warnings:
                             self.stdout.write(self.style.WARNING(f"  - {warning}"))
@@ -230,10 +232,10 @@ class Command(BaseCommand):
         self.stdout.write("RESUMEN FINAL")
         self.stdout.write(f"{'='*60}")
         self.stdout.write(f"Total tenants auditados: {len(schemas)}")
-        self.stdout.write(self.style.SUCCESS(f"✅ Tenants OK: {total_ok}"))
-        self.stdout.write(self.style.ERROR(f"❌ Tenants con errores: {total_errors}"))
+        self.stdout.write(self.style.SUCCESS(f"[OK] Tenants OK: {total_ok}"))
+        self.stdout.write(self.style.ERROR(f"[ERROR] Tenants con errores: {total_errors}"))
         
         if total_errors == 0:
-            self.stdout.write(self.style.SUCCESS("\n✅ La app empresa está funcionando correctamente"))
+            self.stdout.write(self.style.SUCCESS("\n[OK] La app empresa está funcionando correctamente"))
         else:
-            self.stdout.write(self.style.ERROR("\n❌ Se encontraron errores. Revisa los detalles arriba."))
+            self.stdout.write(self.style.ERROR("\n[ERROR] Se encontraron errores. Revisa los detalles arriba."))

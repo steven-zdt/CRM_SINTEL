@@ -1,14 +1,15 @@
 """
 Validador para catálogos de productos/inventario (v2.40).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Validaciones específicas para catálogos de productos
 - Reglas de negocio del dominio de inventario/cotizaciones
 - Hereda de BaseValidator
 - NO valida campos de facturas (emisor, receptor, CUFE, etc.)
 """
-from typing import Dict, Any, Tuple, List, Optional
 from decimal import Decimal, InvalidOperation
+from typing import Any
+
 from .base import BaseValidator
 
 
@@ -33,7 +34,7 @@ class InventarioValidator(BaseValidator):
         """Nombre de la app que usa este validador."""
         return "cotizaciones"
     
-    def validate(self, dto: Dict[str, Any], document_type: str) -> Tuple[bool, Optional[str], List[str]]:
+    def validate(self, dto: dict[str, Any], document_type: str) -> tuple[bool, str | None, list[str]]:
         """
         Valida un DTO de catálogo de productos.
         
@@ -109,11 +110,11 @@ class InventarioValidator(BaseValidator):
         
         return True, None, []
     
-    def validate_common_fields(self, dto: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    def validate_common_fields(self, dto: dict[str, Any]) -> tuple[bool, list[str]]:
         """
         Valida campos comunes para catálogos de productos.
         
-        ⚠️ v2.40: NO valida campos de facturas (emisor, receptor, CUFE, etc.)
+        WARNING: v2.40: NO valida campos de facturas (emisor, receptor, CUFE, etc.)
         Solo valida estructura básica del catálogo.
         
         Args:

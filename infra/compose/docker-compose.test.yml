@@ -1,0 +1,27 @@
+version: '3.8'
+
+# Override para tests: ejecuta pytest en lugar de Gunicorn
+services:
+  app:
+    command: sh -c "python manage.py migrate --noinput && python manage.py migrate_schemas --shared --fake-initial && pytest -q --maxfail=1 --disable-warnings --tb=short"
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - DEBUG=False
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+    ports: []  # No exponer puertos en tests
+    healthcheck:
+      disable: true
+
+  celery:
+    command: echo "Celery worker disabled in test mode"
+    profiles:
+      - test-disabled
+
+  beat:
+    command: echo "Celery beat disabled in test mode"
+    profiles:
+      - test-disabled
+
+  traefik:
+    profiles:
+      - test-disabled

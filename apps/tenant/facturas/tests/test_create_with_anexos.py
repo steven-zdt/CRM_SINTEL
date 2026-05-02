@@ -1,11 +1,13 @@
 """
 Tests de integración para validar creación de Factura con anexos sin TypeError.
 """
-from django_tenants.test.cases import TenantTestCase
-from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.services import crear_factura
-from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
 from decimal import Decimal
+
+from django_tenants.test.cases import TenantTestCase
+
+from apps.tenant.empresa.models import Empresa
+from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
+from apps.tenant.facturas.services import crear_factura
 
 
 class CrearFacturaAnexosTests(TenantTestCase):
@@ -39,7 +41,7 @@ class CrearFacturaAnexosTests(TenantTestCase):
             "application_response_xml": "<ApplicationResponse>...</ApplicationResponse>"
         }
         
-        # ⚠️ CRÍTICO: Esto NO debe lanzar TypeError
+        # # WARNING: CRÍTICO: Esto NO debe lanzar TypeError
         factura = crear_factura(factura_data, items_data=[])
         
         # Validar que la factura se creó

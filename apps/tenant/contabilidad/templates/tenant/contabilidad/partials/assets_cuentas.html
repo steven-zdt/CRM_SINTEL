@@ -1,0 +1,8 @@
+{% load static %}
+{# ⚠️ assets_cuentas.html - Carga de scripts Feature-Sliced para CuentaContable v2.61 #}
+{# ⚠️ IMPORTANTE: assets_core.html YA se carga en workspace.html #}
+
+{# BLOQUE 2: Archivos del módulo Contabilidad Cuentas #}
+<script src="{% static 'contabilidad/js/cuenta/cuenta.api.js' %}"></script>
+<script src="{% static 'contabilidad/js/cuenta/features/cuenta_list.js' %}"></script>
+<script src="{% static 'contabilidad/js/cuenta/features/cuenta_editor.js' %}"></script>

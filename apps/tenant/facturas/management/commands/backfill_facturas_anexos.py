@@ -1,10 +1,10 @@
 """
 Comando de backfill: crea FacturaAnexos desde columnas antiguas.
 
-⚠️ FASE 5: Backfill tenant-aware de anexos.
+# WARNING: FASE 5: Backfill tenant-aware de anexos.
 """
 from django.core.management.base import BaseCommand
-from django_tenants.utils import schema_context, get_tenant_model
+from django_tenants.utils import get_tenant_model, schema_context
 
 
 class Command(BaseCommand):
@@ -88,5 +88,5 @@ class Command(BaseCommand):
         
         if dry_run:
             self.stdout.write(self.style.WARNING(
-                "\n⚠️  DRY-RUN: No se realizaron cambios. Ejecuta sin --dry-run para aplicar."
+                "\n# WARNING:  DRY-RUN: No se realizaron cambios. Ejecuta sin --dry-run para aplicar."
             ))

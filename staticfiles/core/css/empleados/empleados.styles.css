@@ -1,0 +1,83 @@
+/* ⚠️ v2.40: Estilos para Módulo Empleados */
+
+/* 1. Panel de Analítica (Cards de Nómina) */
+#panel-totales-empleados .card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    border-radius: 12px;
+}
+
+#panel-totales-empleados .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+}
+
+#panel-totales-empleados h2 {
+    letter-spacing: -1px;
+    margin-bottom: 0.2rem;
+}
+
+/* 2. Badges de Estado Laboral Colombiano */
+.badge {
+    padding: 0.5em 0.8em;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    border-radius: 6px;
+}
+
+.badge.bg-success {
+    background-color: #d1e7dd !important;
+    color: #0f5132 !important;
+    border: 1px solid #badbcc;
+}
+
+.badge.bg-secondary {
+    background-color: #e2e3e5 !important;
+    color: #41464b !important;
+    border: 1px solid #d3d3d4;
+}
+
+.badge.bg-warning {
+    background-color: #fff3cd !important;
+    color: #664d03 !important;
+    border: 1px solid #ffecb5;
+}
+
+/* 3. Tabla de Empleados (DataTables) */
+#table-empleados thead th {
+    font-size: 0.75rem;
+    padding: 12px 15px;
+    border-bottom: 2px solid #dee2e6;
+}
+
+#table-empleados tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+#table-empleados tbody td {
+    padding: 10px 15px;
+    vertical-align: middle;
+}
+
+/* 4. Estilos de Formulario en Modales */
+.form-label {
+    margin-bottom: 0.3rem;
+    color: #495057;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+/* 5. Feedback y Loading */
+#feedback-empleados-list {
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15em;
+}

@@ -1,13 +1,14 @@
 """
 Tests de humo para validar importación de XMLs pesados sin error 500.
 """
-from django_tenants.test.cases import TenantTestCase
-from django.urls import reverse
-from django.core.files.uploadedfile import SimpleUploadedFile
-from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
 import textwrap
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
+from django_tenants.test.cases import TenantTestCase
+
+from apps.tenant.empresa.models import Empresa
+from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
 
 # XML pesado simulado (con bloques grandes de firma y AttachedDocument)
 HEAVY_XML = textwrap.dedent("""<?xml version="1.0" encoding="UTF-8"?>

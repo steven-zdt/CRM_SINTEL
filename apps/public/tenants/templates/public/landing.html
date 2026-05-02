@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container-fluid">
+        <div class="row min-vh-100">
+            <!-- Hero Section -->
+            <div class="col-12 d-flex align-items-center justify-content-center">
+                <div class="text-center">
+                    <div class="mb-4">
+                        <i class="bi bi-building-gear text-primary" style="font-size: 4rem;"></i>
+                    </div>
+                    <h1 class="display-4 fw-bold text-dark mb-3">SINTEL</h1>
+                    <p class="lead text-muted mb-4">Sistema Integral de Gestión Empresarial</p>
+                    <p class="text-muted mb-5">
+                        Plataforma completa para la gestión de gastos, proveedores, inventario y contabilidad.<br>
+                        Diseñada para empresas que buscan eficiencia y control total de sus operaciones.
+                    </p>
+                    
+                    <div class="d-flex gap-3 justify-content-center">
+                        {% if show_login_button %}
+                            <a href="/admin/login/" class="btn btn-primary btn-lg px-4">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>Iniciar Sesión
+                            </a>
+                        {% endif %}
+                        
+                        {% if show_workspace_button %}
+                            <a href="/console/" class="btn btn-success btn-lg px-4">
+                                <i class="bi bi-speedometer2 me-2"></i>Ir al Workspace
+                            </a>
+                        {% endif %}
+                        
+                        <a href="/console/" class="btn btn-outline-secondary btn-lg px-4">
+                            <i class="bi bi-info-circle me-2"></i>Más Información
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <footer class="text-center py-3 border-top bg-white">
+            <small class="text-muted">
+                SINTEL v2.61.4 - Sistema Integral de Gestión Empresarial
+            </small>
+        </footer>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

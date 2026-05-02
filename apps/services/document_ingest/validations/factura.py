@@ -1,14 +1,15 @@
 """
 Validador para facturas (FASE 4.2).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Validaciones específicas para facturas
 - Reglas de negocio del dominio de facturas
 - Hereda de BaseValidator
 """
-from typing import Dict, Any, Tuple, List, Optional
-from decimal import Decimal, InvalidOperation
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from typing import Any
+
 from .base import BaseValidator
 
 
@@ -33,7 +34,7 @@ class FacturaValidator(BaseValidator):
         """Nombre de la app que usa este validador."""
         return "facturas"
     
-    def validate(self, dto: Dict[str, Any], document_type: str) -> Tuple[bool, Optional[str], List[str]]:
+    def validate(self, dto: dict[str, Any], document_type: str) -> tuple[bool, str | None, list[str]]:
         """
         Valida un DTO de factura.
         
@@ -87,7 +88,7 @@ class FacturaValidator(BaseValidator):
             impuestos = Decimal(str(totales.get("impuestos", "0.00")))
             total = Decimal(str(totales.get("total", "0.00")))
             
-            # ⚠️ CORRECCIÓN: En UBL 2.1, el total (PayableAmount) puede incluir descuentos/cargos
+            # WARNING: CORRECCIÓN: En UBL 2.1, el total (PayableAmount) puede incluir descuentos/cargos
             # Por lo tanto, validamos que subtotal + impuestos ≤ total (con tolerancia)
             # O que subtotal + impuestos ≈ total si no hay descuentos/cargos
             tax_inclusive = subtotal + impuestos

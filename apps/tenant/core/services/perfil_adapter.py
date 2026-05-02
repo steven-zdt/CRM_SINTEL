@@ -1,7 +1,7 @@
 """
 Core Service Adapter para Perfil.
 
-⚠️ v2.30: Core API como orquestador único de la UI privada.
+# WARNING: v2.30: Core API como orquestador único de la UI privada.
 - Este adapter consume el Service Layer del dominio Perfil (apps/tenant/perfil/services)
 - Compone el DTO final incluyendo campos de solo lectura del User global
 - NO reimplementa lógica del dominio; solo orquesta y compone respuestas
@@ -22,18 +22,19 @@ Uso:
     # Actualizar configuración
     dto = core_me_update_config(user, {'tema': 'oscuro'}, merge=True)
 """
-from typing import Dict, Any, Optional
+from typing import Any
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import UploadedFile
 
 User = get_user_model()
 
 
-def core_me_read(user: User) -> Dict[str, Any]:
+def core_me_read(user: User) -> dict[str, Any]:
     """
     Lee el perfil del usuario y retorna un DTO completo (incluyendo campos del User global).
     
-    ⚠️ v2.30: Core API - Compone el DTO final para consumo de la UI.
+    # WARNING: v2.30: Core API - Compone el DTO final para consumo de la UI.
     Incluye campos de solo lectura del User global (user_id, user_email, etc.).
     
     Args:
@@ -64,13 +65,13 @@ def core_me_read(user: User) -> Dict[str, Any]:
 
 def core_me_update(
     user: User,
-    data: Dict[str, Any],
-    files: Optional[Dict[str, UploadedFile]] = None
-) -> Dict[str, Any]:
+    data: dict[str, Any],
+    files: dict[str, UploadedFile] | None = None
+) -> dict[str, Any]:
     """
     Actualiza el perfil del usuario y retorna un DTO completo.
     
-    ⚠️ v2.30: Core API - Orquesta la actualización usando el Service Layer del dominio.
+    # WARNING: v2.30: Core API - Orquesta la actualización usando el Service Layer del dominio.
     Soporta actualización de campos básicos y avatar (multipart).
     
     Args:
@@ -104,11 +105,11 @@ def core_me_update(
     return dto
 
 
-def core_me_update_config(user: User, config: Dict[str, Any], merge: bool = True) -> Dict[str, Any]:
+def core_me_update_config(user: User, config: dict[str, Any], merge: bool = True) -> dict[str, Any]:
     """
     Actualiza la configuración de UI del perfil y retorna un DTO completo.
     
-    ⚠️ v2.30: Core API - Orquesta la actualización de configuración usando el Service Layer.
+    # WARNING: v2.30: Core API - Orquesta la actualización de configuración usando el Service Layer.
     
     Args:
         user: Usuario global (AUTH_USER_MODEL)

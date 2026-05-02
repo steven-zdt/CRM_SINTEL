@@ -1,21 +1,27 @@
 """
 Parser para documentos de texto plano (TXT) (FASE 2.3).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Heurísticas para extraer datos estructurados
 - Retorna DTO JSON unificado según apps/services/document_parser/dto.py
 """
-from typing import Dict, Any, Optional
 import re
-from apps.services.document_parser.normalizers import normalize_txt, sanitize_text, normalize_nit, normalize_currency, normalize_numeric_to_decimal_string
+from typing import Any
+
+from apps.services.document_parser.normalizers import (
+    normalize_nit,
+    normalize_numeric_to_decimal_string,
+    normalize_txt,
+    sanitize_text,
+)
 
 
-def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str, Any]:
+def parse_to_dto(file_bytes: bytes, filename: str | None = None) -> dict[str, Any]:
     """
     Parsea un documento TXT a DTO JSON unificado.
     
-    ⚠️ FASE 2.3: Heurísticas → DTO.
-    ⚠️ REVERSIÓN: Recibe contenido NORMALIZADO (string UTF-8) del normalizer.
+    WARNING: FASE 2.3: Heurísticas → DTO.
+    WARNING: REVERSIÓN: Recibe contenido NORMALIZADO (string UTF-8) del normalizer.
     
     Args:
         file_bytes: Contenido del archivo TXT normalizado (bytes o str)
@@ -27,7 +33,7 @@ def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str,
     Raises:
         ValueError: Si el TXT no es válido o no se puede parsear
     """
-    # ⚠️ REVERSIÓN: El normalizer ya entregó TXT como string UTF-8 normalizado
+    # WARNING: REVERSIÓN: El normalizer ya entregó TXT como string UTF-8 normalizado
     # Si viene como string, usarlo directamente; si viene como bytes, decodificar
     try:
         if isinstance(file_bytes, str):
@@ -124,7 +130,7 @@ def _is_credit_note(text: str) -> bool:
     return any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in patterns)
 
 
-def _extract_numero(text: str) -> Optional[str]:
+def _extract_numero(text: str) -> str | None:
     """Extrae número de factura/nota crédito."""
     patterns = [
         r'factura\s*(?:n[úu]m[ée]ro|no\.?|#)\s*:?\s*([A-Z0-9\-]+)',
@@ -138,7 +144,7 @@ def _extract_numero(text: str) -> Optional[str]:
     return None
 
 
-def _extract_cufe(text: str) -> Optional[str]:
+def _extract_cufe(text: str) -> str | None:
     """Extrae CUFE/CUDE."""
     patterns = [
         r'cufe\s*:?\s*([A-Z0-9\-]+)',
@@ -152,7 +158,7 @@ def _extract_cufe(text: str) -> Optional[str]:
     return None
 
 
-def _extract_fecha_emision(text: str) -> Optional[str]:
+def _extract_fecha_emision(text: str) -> str | None:
     """Extrae fecha de emisión."""
     patterns = [
         r'fecha\s*(?:de\s*)?emisi[óo]n\s*:?\s*(\d{4}[-/]\d{2}[-/]\d{2})',
@@ -166,7 +172,7 @@ def _extract_fecha_emision(text: str) -> Optional[str]:
     return None
 
 
-def _extract_emisor_nit(text: str) -> Optional[str]:
+def _extract_emisor_nit(text: str) -> str | None:
     """Extrae NIT del emisor."""
     patterns = [
         r'nit\s*(?:emisor|proveedor)?\s*:?\s*([0-9\-]+)',
@@ -179,7 +185,7 @@ def _extract_emisor_nit(text: str) -> Optional[str]:
     return None
 
 
-def _extract_emisor_razon_social(text: str) -> Optional[str]:
+def _extract_emisor_razon_social(text: str) -> str | None:
     """Extrae razón social del emisor."""
     patterns = [
         r'raz[óo]n\s*social\s*(?:emisor)?\s*:?\s*([^\n]+)',
@@ -192,7 +198,7 @@ def _extract_emisor_razon_social(text: str) -> Optional[str]:
     return None
 
 
-def _extract_receptor_nit(text: str) -> Optional[str]:
+def _extract_receptor_nit(text: str) -> str | None:
     """Extrae NIT del receptor."""
     patterns = [
         r'nit\s*(?:receptor|cliente)?\s*:?\s*([0-9\-]+)',
@@ -205,7 +211,7 @@ def _extract_receptor_nit(text: str) -> Optional[str]:
     return None
 
 
-def _extract_receptor_razon_social(text: str) -> Optional[str]:
+def _extract_receptor_razon_social(text: str) -> str | None:
     """Extrae razón social del receptor."""
     patterns = [
         r'raz[óo]n\s*social\s*(?:receptor)?\s*:?\s*([^\n]+)',
@@ -218,7 +224,7 @@ def _extract_receptor_razon_social(text: str) -> Optional[str]:
     return None
 
 
-def _extract_totales(text: str) -> Dict[str, Any]:
+def _extract_totales(text: str) -> dict[str, Any]:
     """Extrae totales monetarios."""
     patterns = {
         "subtotal": [
@@ -248,7 +254,7 @@ def _extract_totales(text: str) -> Dict[str, Any]:
     return totales
 
 
-def _extract_referencia(text: str) -> Optional[str]:
+def _extract_referencia(text: str) -> str | None:
     """Extrae referencia a factura (para Notas Crédito)."""
     patterns = [
         r'factura\s*referenciada\s*:?\s*([A-Z0-9\-]+)',

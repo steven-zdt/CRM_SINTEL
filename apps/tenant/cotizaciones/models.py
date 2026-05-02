@@ -1,19 +1,25 @@
 """
 Modelos de Cotizaciones v2.60 - DESACOPLAMIENTO RADICAL
-⚠️ v2.60: Sistema Resiliente. No depende de la disponibilidad de otras apps.
+# WARNING: v2.60: Sistema Resiliente. No depende de la disponibilidad de otras apps.
 Si un Cliente o Producto es eliminado o falla, la Cotización persiste.
 """
+import uuid
+from decimal import Decimal
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from decimal import Decimal
-import uuid
+
+from apps.tenant.core.models import SintelTenantBaseModel  # [v2.61.4] Herencia SSoT
 from apps.tenant.empresa.models import Empresa
 
-# ⚠️ Importación diferida para evitar referencias circulares
+
+def _cotizacion_anexo_upload_path(instance, filename):
+    return f"cotizaciones/anexos/{filename}"
+
+# # WARNING: Importación diferida para evitar referencias circulares
 # ConfiguracionCotizacion se importa cuando sea necesario
 
-class Producto(models.Model):
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+class Producto(SintelTenantBaseModel):
     codigo = models.CharField(max_length=50, blank=True)
     nombre = models.CharField(max_length=255)
     marca = models.CharField(max_length=100, blank=True)
@@ -24,15 +30,15 @@ class Producto(models.Model):
 
     class Meta: db_table = 'tenant_cotizaciones_producto'
 
-class Servicio(models.Model):
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+class Servicio(SintelTenantBaseModel):
+    # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
     nombre = models.CharField(max_length=255)
     precio_venta = models.DecimalField(max_digits=15, decimal_places=2)
     activo = models.BooleanField(default=True)
 
     class Meta: db_table = 'tenant_cotizaciones_servicio'
 
-class Cotizacion(models.Model):
+class Cotizacion(SintelTenantBaseModel):
     class Estado(models.TextChoices):
         BORRADOR = 'BORRADOR', _('Borrador')
         ENVIADA = 'ENVIADA', _('Enviada')
@@ -40,9 +46,9 @@ class Cotizacion(models.Model):
         CANCELADA = 'CANCELADA', _('Cancelada')
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    numero_cotizacion = models.CharField(max_length=50)  # ⚠️ v2.60: Removido unique=True, se valida con constraint
+    numero_cotizacion = models.CharField(max_length=50)  # # WARNING: v2.60: Removido unique=True, se valida con constraint
     
-    # ⚠️ v2.60: Código único generado automáticamente (ej. "STS. 0422-2026")
+    # # WARNING: v2.60: Código único generado automáticamente (ej. "STS. 0422-2026")
     # Este campo almacena el código completo generado desde el perfil
     codigo_unico = models.CharField(
         max_length=100,
@@ -86,20 +92,20 @@ class Cotizacion(models.Model):
     class Meta:
         db_table = 'tenant_cotizaciones_documento'
         constraints = [
-            # ⚠️ v2.60: Unicidad de numero_cotizacion por empresa y perfil
+            # # WARNING: v2.60: Unicidad de numero_cotizacion por empresa y perfil
             models.UniqueConstraint(
                 fields=['empresa', 'configuracion', 'numero_cotizacion'],
                 name='unique_numero_cotizacion_por_perfil'
             )
         ]
 
-class CotizacionItem(models.Model):
+class CotizacionItem(SintelTenantBaseModel):
     class TipoItem(models.TextChoices):
         PRODUCTO = 'PRODUCTO', _('Equipo')
         MATERIAL = 'MATERIAL', _('Material')
         SERVICIO = 'SERVICIO', _('Servicio')
 
-    # ⚠️ v2.60: related_name='items' permite crear items desde el serializador anidado de Cotizacion
+    # # WARNING: v2.60: related_name='items' permite crear items desde el serializador anidado de Cotizacion
     # El campo 'cotizacion' es obligatorio en el modelo pero opcional durante la validación del serializer
     # El ID se asigna automáticamente en CotizacionSerializer.create() después de crear la cotización
     cotizacion = models.ForeignKey(Cotizacion, related_name='items', on_delete=models.CASCADE)
@@ -110,7 +116,7 @@ class CotizacionItem(models.Model):
     servicio = models.ForeignKey(Servicio, on_delete=models.SET_NULL, null=True, blank=True)
     
     # DATOS REALES (Snapshot): Lo que realmente se imprime y calcula
-    # ⚠️ CORRECCIÓN: Permitir campos vacíos y nulos para flexibilidad
+    # # WARNING: CORRECCIÓN: Permitir campos vacíos y nulos para flexibilidad
     # Aunque no es ideal para el Snapshot Pattern, esto previene errores de validación
     descripcion = models.TextField(
         blank=True,  # Permite formularios con descripción vacía
@@ -130,7 +136,7 @@ class CotizacionItem(models.Model):
     orden = models.PositiveIntegerField(default=0)
 
     def save(self, *args, **kwargs):
-        # Lógica de cálculo desacoplada (se puede mover a Service Layer luego)
+        """Calcula precios y subtotales automáticamente."""
         factor_utilidad = Decimal('1.00') + (self.porcentaje_utilidad / Decimal('100.00'))
         self.precio_unitario_venta = self.costo_unitario * factor_utilidad
         self.subtotal_linea = self.cantidad * self.precio_unitario_venta

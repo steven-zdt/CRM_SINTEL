@@ -1,0 +1,80 @@
+# ⚠️ OPTIMIZACIÓN: Ancla YAML para reutilizar configuración común de la aplicación
+# Docker Compose v2+ (sin atributo version - obsoleto desde v2.0)
+# Esto evita duplicación y permite construir una única imagen reutilizable
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  volumes:
+    - .:/app  # Sincronización de código local para desarrollo
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  # Base de datos PostgreSQL
+  db:
+    container_name: crm_sintel-db-1
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-sintel}
+      POSTGRES_USER: ${DATABASE_USER:-sintel}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-sintel}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sintel} -d ${POSTGRES_DB:-sintel}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # Redis para Celery y caché
+  redis:
+    container_name: crm_sintel-redis-1
+    image: redis:7.2-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  # Servicio web Django
+  web:
+    <<: *app-base
+    container_name: crm_sintel-web-1
+    ports:
+      - "80:8000"    # Puerto 80 del host -> Puerto 8000 del contenedor
+      - "8000:8000"  # Puerto 8000 del host -> Puerto 8000 del contenedor (compatibilidad)
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - SERVICE_ROLE=web
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    restart: unless-stopped
+
+  # Worker Celery
+  celery:
+    <<: *app-base
+    container_name: crm_sintel-celery-1
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - SERVICE_ROLE=celery
+      - C_FORCE_ROOT=1
+    command: ["celery", "-A", "config", "worker", "-l", "info"]
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: crm_sintel_postgres_data
+    driver: local

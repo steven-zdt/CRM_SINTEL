@@ -4,17 +4,18 @@ Pipeline principal de ingesta de facturas desde correo.
 Orquesta el flujo completo: conexión → mensajes → adjuntos → descompresión →
 detección UBL → retorno de XMLs listos para importar.
 
-⚠️ FASE 1: Solo estructura y contratos, sin persistencia ni llamadas a ORM/DRF.
-⚠️ SSoT: La persistencia real se hace en apps.tenant.facturas.services (Fase 2+).
-⚠️ UID IMAP: Soporta procesamiento por UIDs para histórico completo + incremental.
+WARNING: FASE 1: Solo estructura y contratos, sin persistencia ni llamadas a ORM/DRF.
+WARNING: SSoT: La persistencia real se hace en apps.tenant.facturas.services (Fase 2+).
+WARNING: UID IMAP: Soporta procesamiento por UIDs para histórico completo + incremental.
 """
-from typing import List, Optional, Tuple, TYPE_CHECKING, Callable
-from .schemas import MailboxConfigDTO, InvoiceXMLDTO
-from .inbox_client import StubInboxClient, RealIMAPClient
-from .extractors import extract_attachments
-from .archives import is_supported_archive, expand_archive
-from .detectors import guess_file_kind, extract_xml_from_attacheddocument, is_ubl_invoice
-from .exceptions import MailboxConnectionError, InvalidXMLDocument
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Optional
+
+from .archives import expand_archive, is_supported_archive
+from .detectors import extract_xml_from_attacheddocument, guess_file_kind, is_ubl_invoice
+from .exceptions import MailboxConnectionError
+from .inbox_client import RealIMAPClient
+from .schemas import InvoiceXMLDTO, MailboxConfigDTO
 
 if TYPE_CHECKING:
     from .inbox_client import InboxClient
@@ -24,9 +25,9 @@ def collect_invoice_xml_from_mailbox(
     config: MailboxConfigDTO,
     *,
     limit_messages: int = 50,
-    naturaleza: Optional[str] = None,
+    naturaleza: str | None = None,
     inbox_client: Optional["InboxClient"] = None
-) -> List[InvoiceXMLDTO]:
+) -> list[InvoiceXMLDTO]:
     """
     Pipeline principal: de correos → XMLs listos para importar.
     
@@ -38,12 +39,12 @@ def collect_invoice_xml_from_mailbox(
     5) Detecta XML UBL (o AttachedDocument) y extrae Invoice(s)
     6) Retorna lista de InvoiceXMLDTO (sin persistir)
     
-    ⚠️ FASE 1: No persiste ni llama ORM. No llama vistas DRF.
-    ⚠️ SSoT: La persistencia real se hace en apps.tenant.facturas.services
+    WARNING: FASE 1: No persiste ni llama ORM. No llama vistas DRF.
+    WARNING: SSoT: La persistencia real se hace en apps.tenant.facturas.services
     (se invocará en Fase 2+ desde Core API o tareas Celery).
     
-    ⚠️ IDEMPOTENCIA: En Fase 2+ se implementará hash SHA256 para evitar duplicados.
-    ⚠️ NATURALEZA: Si no se especifica, se determina automáticamente desde el XML UBL.
+    WARNING: IDEMPOTENCIA: En Fase 2+ se implementará hash SHA256 para evitar duplicados.
+    WARNING: NATURALEZA: Si no se especifica, se determina automáticamente desde el XML UBL.
     
     Args:
         config: Configuración de conexión al buzón
@@ -90,7 +91,7 @@ def collect_invoice_xml_from_mailbox(
         # 2) Obtener mensajes
         messages = client.fetch_messages(limit=limit_messages)
         
-        invoice_xmls: List[InvoiceXMLDTO] = []
+        invoice_xmls: list[InvoiceXMLDTO] = []
         
         # 3) Procesar cada mensaje
         for message in messages:
@@ -148,7 +149,7 @@ def collect_invoice_xml_from_mailbox(
                                     naturaleza,
                                     invoice_xmls
                                 )
-                        except Exception as e:
+                        except Exception:
                             # Log error pero continuar con otros archivos
                             continue
                     
@@ -178,7 +179,7 @@ def collect_invoice_xml_from_mailbox(
                         move_to=config.get("move_processed_to")
                     )
             
-            except Exception as e:
+            except Exception:
                 # Log error pero continuar con otros mensajes
                 continue
         
@@ -192,16 +193,16 @@ def collect_invoice_xml_from_mailbox(
 def collect_invoice_xml_from_mailbox_by_uid(
     config: MailboxConfigDTO,
     *,
-    start_uid: Optional[int] = None,
+    start_uid: int | None = None,
     batch_size: int = 100,
-    naturaleza: Optional[str] = None,
+    naturaleza: str | None = None,
     inbox_client: Optional["InboxClient"] = None,
-    should_abort: Optional[Callable[[], bool]] = None
-) -> Tuple[List[InvoiceXMLDTO], Optional[int]]:
+    should_abort: Callable[[], bool] | None = None
+) -> tuple[list[InvoiceXMLDTO], int | None]:
     """
     Pipeline principal con procesamiento por UIDs IMAP (histórico + incremental).
     
-    ⚠️ UID IMAP: Los UIDs son únicos y persistentes por buzón (no cambian al eliminar mensajes).
+    WARNING: UID IMAP: Los UIDs son únicos y persistentes por buzón (no cambian al eliminar mensajes).
     Permite procesamiento incremental eficiente sin reprocesar correos ya examinados.
     
     Flujo:
@@ -212,11 +213,11 @@ def collect_invoice_xml_from_mailbox_by_uid(
     5) Detecta XML UBL (o AttachedDocument) y extrae Invoice(s)
     6) Retorna lista de InvoiceXMLDTO y el último UID procesado
     
-    ⚠️ MODOS:
+    WARNING: MODOS:
     - Histórico completo: start_uid=None → procesa desde UID 1
     - Incremental: start_uid=N → procesa solo UIDs > N
     
-    ⚠️ CANCELACIÓN COOPERATIVA: Si should_abort() retorna True, detiene el procesamiento.
+    WARNING: CANCELACIÓN COOPERATIVA: Si should_abort() retorna True, detiene el procesamiento.
     
     Args:
         config: Configuración de conexión al buzón
@@ -259,7 +260,7 @@ def collect_invoice_xml_from_mailbox_by_uid(
             else:
                 last_uid = start_uid  # No hay mensajes nuevos
         
-        invoice_xmls: List[InvoiceXMLDTO] = []
+        invoice_xmls: list[InvoiceXMLDTO] = []
         
         # 3) Procesar cada mensaje
         for message in messages:
@@ -377,15 +378,15 @@ def _process_file_for_invoice(
     msg_subject: str,
     msg_from: str,
     msg_date: str,
-    naturaleza: Optional[str],
-    invoice_xmls: List[InvoiceXMLDTO]
+    naturaleza: str | None,
+    invoice_xmls: list[InvoiceXMLDTO]
 ) -> None:
     """
     Procesa un archivo (XML o extraído) para detectar Invoice UBL.
     
     Helper interno del pipeline.
     
-    ⚠️ NATURALEZA: Si no se especifica, se determina automáticamente desde el XML UBL.
+    WARNING: NATURALEZA: Si no se especifica, se determina automáticamente desde el XML UBL.
     
     Args:
         file: ExtractedFileDTO con el archivo a procesar

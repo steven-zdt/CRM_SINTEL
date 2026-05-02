@@ -2,18 +2,21 @@
 """
 Modelos de facturación por tenant.
 
-⚠️ TENANT_APPS: cada tenant tiene sus propias facturas/ítems (aislamiento por esquema).
+# WARNING: TENANT_APPS: cada tenant tiene sus propias facturas/ítems (aislamiento por esquema).
 SSoT histórico: snapshots de emisor/receptor al momento de emisión.
 """
 
-from django.db import models
-from django.core.validators import MinValueValidator, RegexValidator
-from django.utils.translation import gettext_lazy as _
-from django.utils import timezone
-from django.conf import settings
 from decimal import Decimal
 
-class Factura(models.Model):
+from django.core.validators import MinValueValidator
+from django.db import models
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+
+from apps.tenant.core.models import SintelTenantBaseModel  # [v2.61.4] Herencia SSoT
+
+
+class Factura(SintelTenantBaseModel):
     class TipoFactura(models.TextChoices):
         FE = 'FE', _('Factura Electrónica')
         NC = 'NC', _('Nota Crédito')
@@ -37,14 +40,7 @@ class Factura(models.Model):
         SERVICIO = 'SERVICIO', _('Servicios')
         MIXTO    = 'MIXTO',    _('Mixto')
 
-    # ⚠️ v2.40: FK a Empresa (requerido para ENFORCED MODE y auditoría)
-    empresa = models.ForeignKey(
-        'empresa.Empresa',
-        on_delete=models.PROTECT,
-        related_name='facturas',
-        verbose_name=_('Empresa'),
-        help_text=_('Empresa del tenant (SSoT)')
-    )
+    # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
 
     # Información básica
     numero = models.CharField(
@@ -60,7 +56,7 @@ class Factura(models.Model):
                               default=Estado.BORRADOR, verbose_name=_('Estado'))
 
     # Naturaleza frente al tenant y categoría de la operación
-    # ⚠️ v2.60: Se calcula automáticamente comparando NIT del emisor con NIT de la empresa del tenant (SSoT)
+    # # WARNING: v2.60: Se calcula automáticamente comparando NIT del emisor con NIT de la empresa del tenant (SSoT)
     naturaleza = models.CharField(
         max_length=10, choices=Naturaleza.choices, null=True, blank=True,
         verbose_name=_('Naturaleza (venta/compra)'),
@@ -112,15 +108,15 @@ class Factura(models.Model):
     payment_due_date = models.DateField(blank=True, null=True, verbose_name=_('Fecha límite de pago'))
 
     # DIAN / QR / CUFE y autorización
-    # ⚠️ v2.60: Índice único para garantizar idempotencia en guardar_factura_desde_dto()
+    # # WARNING: v2.60: Índice único para garantizar idempotencia en guardar_factura_desde_dto()
     # Django permite múltiples NULLs en campos únicos, así que esto garantiza unicidad cuando hay valor
-    # ⚠️ v2.61.2: Pre-validación de idempotencia: fast_get_cufe() extrae CUFE con regex antes del parsing completo
+    # # WARNING: v2.61.2: Pre-validación de idempotencia: fast_get_cufe() extrae CUFE con regex antes del parsing completo
     # Esto permite verificar duplicados en los primeros milisegundos sin cargar todo el XML en memoria
     cufe = models.CharField(
         max_length=128, 
         blank=True, 
         null=True, 
-        unique=True,  # ⚠️ CRÍTICO: Garantiza idempotencia por CUFE (clave legal de la DIAN)
+        unique=True,  # # WARNING: CRÍTICO: Garantiza idempotencia por CUFE (clave legal de la DIAN)
         db_index=True,  # Índice adicional para búsquedas rápidas (usado por fast_get_cufe para pre-validación)
         verbose_name=_('CUFE'), 
         help_text=_('Código Único de Facturación Electrónica (clave legal de la DIAN para idempotencia). Usado para pre-validación rápida en batch processing.')
@@ -141,14 +137,12 @@ class Factura(models.Model):
     dian_validation_hora = models.TimeField(blank=True, null=True, verbose_name=_('Hora Validación'))
     dian_response_xml = models.TextField(blank=True, null=True, verbose_name=_('ApplicationResponse XML'))
 
-    # XML (⚠️ DEPRECADO: usar FacturaAnexos.ubl_xml en su lugar)
+    # XML (# WARNING: DEPRECADO: usar FacturaAnexos.ubl_xml en su lugar)
     # Mantenido por compatibilidad durante migración
     xml_content = models.TextField(blank=True, null=True, verbose_name=_('XML UBL completo (Deprecado)'))
     xml_file_path = models.CharField(max_length=500, blank=True, null=True, verbose_name=_('Ruta XML'))
 
-    # Metadatos
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Creado'))
-    updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Actualizado'))
+    # [v2.61.4] created_at y updated_at heredados de SintelTenantBaseModel
 
     class Meta:
         verbose_name = _('Factura')
@@ -156,13 +150,13 @@ class Factura(models.Model):
         ordering = ['-fecha_emision', '-consecutivo']
         indexes = [
             models.Index(fields=['numero']),
+            models.Index(fields=['fecha_emision'], condition=models.Q(estado='ACEPTADA'), name='idx_fact_aceptadas_fecha'),
             models.Index(fields=['fecha_emision']),
             models.Index(fields=['estado']),
-            models.Index(fields=['naturaleza']),  # ⚠️ v2.60: Índice para filtrar por VENTA/COMPRA
-            # ⚠️ v2.60: cufe tiene unique=True y db_index=True, no necesita índice adicional aquí
-            models.Index(fields=['empresa']),  # ⚠️ v2.40: Índice para FK a Empresa
+            models.Index(fields=['naturaleza']),  # # WARNING: v2.60: Índice para filtrar por VENTA/COMPRA
+            # # WARNING: v2.60: cufe tiene unique=True y db_index=True, no necesita índice adicional aquí
         ]
-        # ⚠️ v2.60: Constraint único por cufe garantiza idempotencia (definido en el campo con unique=True)
+        # # WARNING: v2.60: Constraint único por cufe garantiza idempotencia (definido en el campo con unique=True)
         # Django permite múltiples NULLs en campos únicos, así que esto funciona correctamente
 
     @property
@@ -175,22 +169,20 @@ class Factura(models.Model):
         return f"{self.numero}{cufe_str}"
 
     def save(self, *args, **kwargs):
+        # SSoT singleton fallback for legacy creation paths/tests.
+        if not self.empresa_id:
+            empresa = Empresa.objects.only('id').first()
+            if empresa:
+                self.empresa = empresa
         if self.total is None or self.total == Decimal('0.00'):
             self.total = (self.subtotal or Decimal('0.00')) + (self.impuestos or Decimal('0.00'))
         super().save(*args, **kwargs)
 
 
-class ItemFactura(models.Model):
+class ItemFactura(SintelTenantBaseModel):
     factura = models.ForeignKey(Factura, on_delete=models.CASCADE, related_name='items', verbose_name=_('Factura'))
     
-    # ⚠️ v2.40: FK a Empresa (requerido para ENFORCED MODE y auditoría)
-    empresa = models.ForeignKey(
-        'empresa.Empresa',
-        on_delete=models.PROTECT,
-        related_name='items_factura',
-        verbose_name=_('Empresa'),
-        help_text=_('Empresa del tenant (SSoT)')
-    )
+    # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
     
     # UBL: ID de línea y codificación estándar si existe
     linea_id = models.CharField(max_length=10, blank=True, null=True, verbose_name=_('ID línea UBL'))
@@ -228,7 +220,7 @@ class ItemFactura(models.Model):
         return f"{self.factura.numero} - {self.descripcion[:50]}"
 
     def save(self, *args, **kwargs):
-        # ⚠️ v2.40: Auto-asignar empresa desde factura si no está asignada
+        # # WARNING: v2.40: Auto-asignar empresa desde factura si no está asignada
         if not self.empresa_id and self.factura_id:
             self.empresa = self.factura.empresa
         
@@ -242,12 +234,12 @@ class ItemFactura(models.Model):
 
 
 # --- DEPRECADO: Configuración de ingesta por correo (por tenant) ---
-# ⚠️ DEPRECADO (Fase 5): Este modelo ha sido migrado a apps.tenant.empresa.models.MailInboxConfig
+# # WARNING: DEPRECADO (Fase 5): Este modelo ha sido migrado a apps.tenant.empresa.models.MailInboxConfig
 # Se mantiene temporalmente para migración de datos. No usar en código nuevo.
 # TODO: Crear migración de datos y eliminar este modelo.
-class MailIngestionConfig(models.Model):
+class MailIngestionConfig(SintelTenantBaseModel):
     """
-    ⚠️ DEPRECADO: Este modelo ha sido migrado a apps.tenant.empresa.models.MailInboxConfig (SSoT).
+    # WARNING: DEPRECADO: Este modelo ha sido migrado a apps.tenant.empresa.models.MailInboxConfig (SSoT).
     
     No usar en código nuevo. Usar apps.tenant.empresa.services.mailbox_provider.get_mailbox_config().
     """
@@ -290,12 +282,12 @@ class MailIngestionConfig(models.Model):
 
 
 # --- Tracking de ejecuciones de ingesta por correo (por tenant) ---
-class MailIngestionRun(models.Model):
+class MailIngestionRun(SintelTenantBaseModel):
     """
     Registro de ejecución de ingesta de facturas desde correo.
     
-    ⚠️ TENANT_APPS: Cada tenant tiene sus propios registros (aislamiento por esquema).
-    ⚠️ CERO SIGNALS: La tarea Celery actualiza este modelo directamente (sin signals).
+    # WARNING: TENANT_APPS: Cada tenant tiene sus propios registros (aislamiento por esquema).
+    # WARNING: CERO SIGNALS: La tarea Celery actualiza este modelo directamente (sin signals).
     """
     STATUS_CHOICES = [
         ("PENDING", "PENDING"),
@@ -361,15 +353,15 @@ class MailIngestionRun(models.Model):
 
 
 # --- Estado del buzón para procesamiento incremental (por tenant) ---
-class MailInboxState(models.Model):
+class MailInboxState(SintelTenantBaseModel):
     """
     Estado del procesamiento IMAP de un buzón de correo.
     
     Rastrea el último UID procesado para permitir procesamiento incremental eficiente.
     
-    ⚠️ TENANT_APPS: Cada tenant tiene sus propios estados (aislamiento por esquema).
-    ⚠️ SSoT: Relacionado con MailInboxConfig de empresa.
-    ⚠️ UID IMAP: Los UIDs son únicos y persistentes por buzón (no cambian al eliminar mensajes).
+    # WARNING: TENANT_APPS: Cada tenant tiene sus propios estados (aislamiento por esquema).
+    # WARNING: SSoT: Relacionado con MailInboxConfig de empresa.
+    # WARNING: UID IMAP: Los UIDs son únicos y persistentes por buzón (no cambian al eliminar mensajes).
     
     Reglas:
     - Si last_seen_uid es NULL → primera ejecución (procesar histórico completo desde UID 1).
@@ -417,13 +409,13 @@ class MailInboxState(models.Model):
         return f"MailInboxState(config={self.mailbox_config_id}, last_uid={uid_str})"
 
 
-class FacturaAnexos(models.Model):
+class FacturaAnexos(SintelTenantBaseModel):
     """
     Anexos de factura (XMLs grandes separados de la fila principal).
     
-    ⚠️ OPTIMIZACIÓN: Evita cargar blobs en listados.
-    ⚠️ ONE-TO-ONE: Una factura tiene un único registro de anexos.
-    ⚠️ TENANT_APPS: Aislado por esquema (django-tenants).
+    # WARNING: OPTIMIZACIÓN: Evita cargar blobs en listados.
+    # WARNING: ONE-TO-ONE: Una factura tiene un único registro de anexos.
+    # WARNING: TENANT_APPS: Aislado por esquema (django-tenants).
     """
     factura = models.OneToOneField(
         Factura,
@@ -469,32 +461,31 @@ class FacturaAnexos(models.Model):
     def __str__(self):
         return f"FacturaAnexos(factura={self.factura.numero})"
 
+    def save(self, *args, **kwargs):
+        # Keep tenant ownership explicit for base-model guardrails.
+        if not self.empresa_id and self.factura_id and self.factura.empresa_id:
+            self.empresa = self.factura.empresa
+        super().save(*args, **kwargs)
 
-class NotaCredito(models.Model):
+
+class NotaCredito(SintelTenantBaseModel):
     """
     Nota Crédito UBL 2.1 (una por factura). Idempotencia por CUDE.
     
-    ⚠️ ONE-TO-ONE: Una factura tiene una única nota crédito.
-    ⚠️ PROTECT: Evita borrar nota crédito al borrar factura accidentalmente.
-    ⚠️ TENANT_APPS: Aislado por esquema (django-tenants).
-    ⚠️ INMUTABILIDAD: Las notas crédito son documentos históricos (solo creación/eliminación).
+    # WARNING: ONE-TO-ONE: Una factura tiene una única nota crédito.
+    # WARNING: PROTECT: Evita borrar nota crédito al borrar factura accidentalmente.
+    # WARNING: TENANT_APPS: Aislado por esquema (django-tenants).
+    # WARNING: INMUTABILIDAD: Las notas crédito son documentos históricos (solo creación/eliminación).
     """
     factura = models.OneToOneField(
         Factura,
         related_name="nota_credito",
-        on_delete=models.PROTECT,  # ⚠️ Evita cascada accidental
+        on_delete=models.PROTECT,  # # WARNING: Evita cascada accidental
         help_text=_("Factura a la que aplica esta Nota Crédito (1:1)."),
         verbose_name=_('Factura')
     )
     
-    # ⚠️ v2.40: FK a Empresa (requerido para ENFORCED MODE y auditoría)
-    empresa = models.ForeignKey(
-        'empresa.Empresa',
-        on_delete=models.PROTECT,
-        related_name='notas_credito',
-        verbose_name=_('Empresa'),
-        help_text=_('Empresa del tenant (SSoT)')
-    )
+    # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
     numero = models.CharField(
         max_length=50,
         unique=True,
@@ -588,10 +579,9 @@ class NotaCredito(models.Model):
             models.Index(fields=['numero']),
             models.Index(fields=['fecha_emision']),
             models.Index(fields=['factura']),
-            models.Index(fields=['empresa']),  # ⚠️ v2.40: Índice para FK a Empresa
         ]
         constraints = [
-            # ⚠️ COHERENCIA: Si se declara ref CUFE/número, deberían coincidir con la factura
+            # # WARNING: COHERENCIA: Si se declara ref CUFE/número, deberían coincidir con la factura
             # (validación en service layer; aquí se omite constraint complejo por portabilidad)
         ]
 
@@ -600,10 +590,14 @@ class NotaCredito(models.Model):
 
     def save(self, *args, **kwargs):
         """Calcula total automáticamente si no está definido."""
-        # ⚠️ v2.40: Auto-asignar empresa desde factura si no está asignada
+        # # WARNING: v2.40: Auto-asignar empresa desde factura si no está asignada
         if not self.empresa_id and self.factura_id:
             self.empresa = self.factura.empresa
         
         if self.total is None or self.total == Decimal('0.00'):
             self.total = (self.subtotal or Decimal('0.00')) + (self.impuestos or Decimal('0.00'))
         super().save(*args, **kwargs)
+
+
+# Backward-compat alias for legacy imports in tests and old modules.
+NaturalezaFactura = Factura.Naturaleza

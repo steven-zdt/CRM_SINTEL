@@ -1,6 +1,6 @@
 """Core API v1 - Proyectos serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Composición vía herencia de serializers existentes de la app proyectos.
 """

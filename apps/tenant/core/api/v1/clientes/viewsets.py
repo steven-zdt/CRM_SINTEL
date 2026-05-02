@@ -1,13 +1,11 @@
 """Core API v1 - Clientes facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - La app Core solo orquesta y expone los mismos ViewSets (acciones incluidas).
 - Las acciones @action se arrastran por herencia (NO redefinir).
-- ⚠️ v2.61: Alineado con patrón de cotizaciones y contabilidad.
+- # WARNING: v2.61: Alineado con patrón de cotizaciones y contabilidad.
 """
-
-from rest_framework.authentication import SessionAuthentication
 
 from apps.tenant.clientes.api.viewsets import ClienteViewSet, ContactoClienteViewSet
 
@@ -37,8 +35,6 @@ class ClienteCoreViewSet(ClienteViewSet):
     - GET /api/v1/clientes/render-offcanvas/detalle/?id={id} - Renderizar offcanvas detalle
     - GET /api/v1/clientes/offcanvas/?id={id} - Renderizar offcanvas legacy (compatibilidad)
     """
-    authentication_classes = [SessionAuthentication]
-    
     def get_serializer_class(self):
         """
         Selecciona el serializer según la acción.
@@ -69,5 +65,4 @@ class ContactoClienteCoreViewSet(ContactoClienteViewSet):
     - DELETE /api/v1/core/v1/clientes/contactos/{id}/ - Eliminar
     - GET /api/v1/core/v1/clientes/contactos/gestor-offcanvas/ - Renderizar HTML (HTMX)
     """
-    authentication_classes = [SessionAuthentication]
     serializer_class = ws_serializers.ContactoClienteWorkspaceSerializer

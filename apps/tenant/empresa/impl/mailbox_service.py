@@ -1,18 +1,19 @@
 """
 Service Layer interno para MailInboxConfig (dominio Empresa).
 
-⚠️ v2.30: Service Layer Pattern - Lógica de negocio del dominio Empresa.
+# WARNING: v2.30: Service Layer Pattern - Lógica de negocio del dominio Empresa.
 - Sin signals: Toda la lógica es explícita
 - Sin HTTP: Funciones puras que operan sobre modelos
 - Multi-tenant: Transparente (django-tenants maneja el aislamiento por esquema)
 - Validaciones: Rangos (port, max_attachment_mb), formatos (host/mailbox), password write_only
 """
-from typing import Dict, Any, List, Optional
-from django.db import transaction
+from typing import Any
+
 from django.core.paginator import Paginator
+from django.db import transaction
 
 
-def list_mailbox_configs(page: int = 1, page_size: int = 20) -> Dict[str, Any]:
+def list_mailbox_configs(page: int = 1, page_size: int = 20) -> dict[str, Any]:
     """
     Lista configuraciones de buzones de correo (paginado).
     
@@ -73,11 +74,11 @@ def list_mailbox_configs(page: int = 1, page_size: int = 20) -> Dict[str, Any]:
 
 
 @transaction.atomic
-def create_mailbox_config(data: Dict[str, Any]) -> Dict[str, Any]:
+def create_mailbox_config(data: dict[str, Any]) -> dict[str, Any]:
     """
     Crea una configuración de buzón de correo.
     
-    ⚠️ VALIDACIONES: Rangos (port, max_attachment_mb), formatos (host/mailbox), protocol.
+    # WARNING: VALIDACIONES: Rangos (port, max_attachment_mb), formatos (host/mailbox), protocol.
     
     Args:
         data: Diccionario con datos de la configuración
@@ -157,12 +158,12 @@ def create_mailbox_config(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @transaction.atomic
-def update_mailbox_config(config_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+def update_mailbox_config(config_id: int, data: dict[str, Any]) -> dict[str, Any]:
     """
     Actualiza una configuración de buzón de correo.
     
-    ⚠️ VALIDACIONES: Rangos (port, max_attachment_mb), formatos (host/mailbox), protocol.
-    ⚠️ SEGURIDAD: password es write_only (no se expone en respuesta).
+    # WARNING: VALIDACIONES: Rangos (port, max_attachment_mb), formatos (host/mailbox), protocol.
+    # WARNING: SEGURIDAD: password es write_only (no se expone en respuesta).
     
     Args:
         config_id: ID de la configuración

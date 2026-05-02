@@ -1,0 +1,23 @@
+{% extends "tenant/base.html" %}
+{% load static %}
+{% block title %}SINTEL | Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="card shadow-lg border-primary">
+        <div class="card-header bg-primary text-white text-center">
+          <h2 class="mb-0">Bienvenido, {{ empresa_nombre }}</h2>
+        </div>
+        <div class="card-body text-center">
+          <p class="lead">Accede a tu espacio de trabajo para gestionar tu empresa.</p>
+          <a href="{% url 'tenant_core:workspace' %}" class="btn btn-lg btn-success px-5 py-3 mt-3">
+            <i class="bi bi-grid-3x3-gap me-2"></i> Ir al Workspace
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

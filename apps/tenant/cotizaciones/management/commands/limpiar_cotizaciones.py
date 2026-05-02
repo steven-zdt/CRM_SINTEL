@@ -1,7 +1,7 @@
 """
 Comando de gestión para limpiar todos los datos de la app cotizaciones.
 
-⚠️ ADVERTENCIA: Este comando elimina TODOS los datos de las tablas de cotizaciones.
+# WARNING: ADVERTENCIA: Este comando elimina TODOS los datos de las tablas de cotizaciones.
 Incluye:
 - CotizacionItem (ítems de cotizaciones)
 - Cotizacion (cotizaciones)
@@ -34,19 +34,13 @@ Uso (Docker - Scripts helper):
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Count
 
-from apps.tenant.cotizaciones.models import (
-    CotizacionItem,
-    Cotizacion,
-    Producto,
-    Servicio
-)
 from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
+from apps.tenant.cotizaciones.models import Cotizacion, CotizacionItem, Producto, Servicio
 
 
 class Command(BaseCommand):
-    help = "Elimina todos los datos de las tablas de cotizaciones (⚠️ DESTRUCTIVO)"
+    help = "Elimina todos los datos de las tablas de cotizaciones (# WARNING: DESTRUCTIVO)"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -66,7 +60,7 @@ class Command(BaseCommand):
 
         if not confirm and not dry_run:
             raise CommandError(
-                "⚠️ ADVERTENCIA: Este comando eliminará TODOS los datos de cotizaciones.\n"
+                "# WARNING: ADVERTENCIA: Este comando eliminará TODOS los datos de cotizaciones.\n"
                 "Use --confirm para confirmar o --dry-run para ver qué se eliminaría.\n\n"
                 "Uso en Docker:\n"
                 "  # Comando directo:\n"
@@ -91,7 +85,7 @@ class Command(BaseCommand):
         }
 
         self.stdout.write(self.style.WARNING("\n" + "="*60))
-        self.stdout.write(self.style.WARNING("⚠️  LIMPIEZA DE BASE DE DATOS - APP COTIZACIONES"))
+        self.stdout.write(self.style.WARNING("# WARNING:  LIMPIEZA DE BASE DE DATOS - APP COTIZACIONES"))
         self.stdout.write(self.style.WARNING("="*60 + "\n"))
         
         if schema_name != 'unknown':
@@ -105,14 +99,14 @@ class Command(BaseCommand):
         self.stdout.write(f"\n  TOTAL: {total} registros a eliminar\n")
 
         if dry_run:
-            self.stdout.write(self.style.SUCCESS("✓ Modo DRY-RUN: No se eliminó nada."))
+            self.stdout.write(self.style.SUCCESS("[OK] Modo DRY-RUN: No se eliminó nada."))
             return
 
         if not confirm:
             raise CommandError("Use --confirm para confirmar la eliminación.")
 
         # Confirmación final
-        self.stdout.write(self.style.ERROR("⚠️  ADVERTENCIA FINAL:"))
+        self.stdout.write(self.style.ERROR("# WARNING:  ADVERTENCIA FINAL:"))
         self.stdout.write(self.style.ERROR("   Se eliminarán TODOS los datos de:"))
         self.stdout.write(self.style.ERROR("   - CotizacionItem"))
         self.stdout.write(self.style.ERROR("   - Cotizacion"))
@@ -129,35 +123,35 @@ class Command(BaseCommand):
                 # 1. Eliminar ítems de cotizaciones primero (dependen de Cotizacion)
                 deleted_items = CotizacionItem.objects.all().delete()
                 self.stdout.write(
-                    self.style.SUCCESS(f"✓ Eliminados {deleted_items[0]} CotizacionItem")
+                    self.style.SUCCESS(f"[OK] Eliminados {deleted_items[0]} CotizacionItem")
                 )
 
                 # 2. Eliminar cotizaciones
                 deleted_cotizaciones = Cotizacion.objects.all().delete()
                 self.stdout.write(
-                    self.style.SUCCESS(f"✓ Eliminadas {deleted_cotizaciones[0]} Cotizacion")
+                    self.style.SUCCESS(f"[OK] Eliminadas {deleted_cotizaciones[0]} Cotizacion")
                 )
 
                 # 3. Eliminar productos del catálogo
                 deleted_productos = Producto.objects.all().delete()
                 self.stdout.write(
-                    self.style.SUCCESS(f"✓ Eliminados {deleted_productos[0]} Producto")
+                    self.style.SUCCESS(f"[OK] Eliminados {deleted_productos[0]} Producto")
                 )
 
                 # 4. Eliminar servicios del catálogo
                 deleted_servicios = Servicio.objects.all().delete()
                 self.stdout.write(
-                    self.style.SUCCESS(f"✓ Eliminados {deleted_servicios[0]} Servicio")
+                    self.style.SUCCESS(f"[OK] Eliminados {deleted_servicios[0]} Servicio")
                 )
 
                 # 5. Eliminar configuraciones
                 deleted_configs = ConfiguracionCotizacion.objects.all().delete()
                 self.stdout.write(
-                    self.style.SUCCESS(f"✓ Eliminadas {deleted_configs[0]} ConfiguracionCotizacion")
+                    self.style.SUCCESS(f"[OK] Eliminadas {deleted_configs[0]} ConfiguracionCotizacion")
                 )
 
                 self.stdout.write(self.style.SUCCESS("\n" + "="*60))
-                self.stdout.write(self.style.SUCCESS("✓ LIMPIEZA COMPLETADA EXITOSAMENTE"))
+                self.stdout.write(self.style.SUCCESS("[OK] LIMPIEZA COMPLETADA EXITOSAMENTE"))
                 self.stdout.write(self.style.SUCCESS("="*60 + "\n"))
 
         except Exception as e:

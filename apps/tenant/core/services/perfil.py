@@ -1,15 +1,15 @@
 """
 Servicios de orquestación para datos de perfil.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Solo lectura/composición de datos
 - NO duplica lógica de negocio de apps.tenant.perfil
 - Usa ORM optimizado (only, select_related, prefetch_related)
 """
-from typing import Dict, Any, Optional
+from typing import Any
 
 
-def get_perfil_snapshot(user) -> Dict[str, Any]:
+def get_perfil_snapshot(user) -> dict[str, Any]:
     """
     Obtiene snapshot del perfil del usuario en el tenant actual.
     
@@ -22,7 +22,7 @@ def get_perfil_snapshot(user) -> Dict[str, Any]:
     try:
         from apps.tenant.perfil.models import TenantProfile
         
-        # ⚠️ IMPORTANTE: El campo es 'user', no 'usuario'
+        # # WARNING: IMPORTANTE: El campo es 'user', no 'usuario'
         perfil = TenantProfile.objects.filter(user=user).only(
             'id',
             'cargo',

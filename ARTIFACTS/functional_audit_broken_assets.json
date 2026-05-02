@@ -1,0 +1,28 @@
+{
+  "broken_assets": [],
+  "missing_init_functions": [],
+  "router_issues": [],
+  "workspace_issues": [
+    {
+      "issue": "missing_workspace_router_outlet",
+      "severity": "CRITICAL",
+      "description": "workspace.html NO tiene <div id='workspace-router-outlet'></div> - El router no puede montar vistas modulares",
+      "location": "apps/tenant/core/templates/tenant/core/workspace.html",
+      "fix_required": true
+    },
+    {
+      "issue": "inline_js_massive",
+      "severity": "HIGH",
+      "description": "workspace.html tiene JS inline masivo (línea 767+) que debe eliminarse",
+      "location": "apps/tenant/core/templates/tenant/core/workspace.html:767+",
+      "fix_required": true
+    },
+    {
+      "issue": "legacy_sections",
+      "severity": "HIGH",
+      "description": "workspace.html tiene secciones legacy <section id='view-*'> que deben eliminarse",
+      "location": "apps/tenant/core/templates/tenant/core/workspace.html:58+",
+      "fix_required": true
+    }
+  ]
+}

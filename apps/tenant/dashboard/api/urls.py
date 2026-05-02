@@ -1,9 +1,10 @@
 """
 URLs de API REST para el dashboard de tenants.
 
-⚠️ v2.30: API-First - Todos los endpoints retornan JSON.
+WARNING: v2.30: API-First - Todos los endpoints retornan JSON.
 """
 from django.urls import path
+
 from . import views
 
 app_name = 'tenant_dashboard_api'

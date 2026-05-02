@@ -2,17 +2,18 @@
 Servicios de dominio para Gastos (v2.40).
 Única fuente de verdad para lógica de negocio de Documento Soporte.
 """
-import re
 import logging
-from typing import Dict, Any, Tuple, Optional
+import re
 from decimal import Decimal
-from django.db import transaction
-from django.db.models import Sum, Count, Q, DecimalField, Max
-from django.db.models.functions import Coalesce
+from typing import Any
+
 from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.db.models import Count, DecimalField, Max, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.tenant.gastos.models import Gasto, DocumentoSoporte, ResolucionDIAN
+from apps.tenant.gastos.models import DocumentoSoporte, Gasto, ResolucionDIAN
 
 logger = logging.getLogger(__name__)
 
@@ -20,16 +21,18 @@ logger = logging.getLogger(__name__)
 LIST_FIELDS = ("id", "periodo", "centro_costo", "categoria_contable")
 DETAIL_FIELDS = (*LIST_FIELDS, "descripcion", "observaciones", "created_at")
 
-def normalize_document_number(value: Optional[str]) -> Optional[str]:
+def normalize_document_number(value: str | None) -> str | None:
     """Limpia y normaliza identificadores legales."""
-    if not value: return None
+    if not value:
+        return None
+
     return re.sub(r'\s+', '', str(value)).strip()
 
-def obtener_resolucion_vigente(empresa: Any) -> Optional[ResolucionDIAN]:
+def obtener_resolucion_vigente(empresa: Any) -> ResolucionDIAN | None:
     """
     Obtiene la resolución DIAN vigente para una empresa.
     
-    ⚠️ v2.40: SSoT - Solo una resolución vigente por empresa.
+    WARNING: v2.40: SSoT - Solo una resolución vigente por empresa.
     """
     return ResolucionDIAN.objects.filter(
         empresa=empresa,
@@ -41,13 +44,13 @@ def obtener_siguiente_numero_soporte(empresa: Any) -> int:
     """
     Calcula y valida el siguiente consecutivo inmutable.
     
-    ⚠️ v2.60: GESTIÓN ATÓMICA DE CONSECUTIVOS - Evita colisiones en concurrencia.
+    WARNING: v2.60: GESTIÓN ATÓMICA DE CONSECUTIVOS - Evita colisiones en concurrencia.
     - Busca automáticamente la resolución vigente usando ResolucionDIAN.objects.filter().
     - No recibe resolución como parámetro para simplificar la API.
-    - ⚠️ CRÍTICO: El consecutivo NO puede repetirse (garantizado por UniqueConstraint en modelo).
-    - ⚠️ CRÍTICO: Incluye documentos anulados en el cálculo para evitar duplicados.
-    - ⚠️ ALINEADO: Usa esta_dentro_de_fecha() del modelo en lugar de esta_vigente().
-    - ⚠️ v2.60: Usa select_for_update() para evitar race conditions en alta concurrencia.
+    - WARNING: CRÍTICO: El consecutivo NO puede repetirse (garantizado por UniqueConstraint en modelo).
+    - WARNING: CRÍTICO: Incluye documentos anulados en el cálculo para evitar duplicados.
+    - WARNING: ALINEADO: Usa esta_dentro_de_fecha() del modelo en lugar de esta_vigente().
+    - WARNING: v2.60: Usa select_for_update() para evitar race conditions en alta concurrencia.
     """
     # Buscar automáticamente la resolución vigente con lock para evitar cambios concurrentes
     resolucion = ResolucionDIAN.objects.select_for_update().filter(
@@ -61,9 +64,9 @@ def obtener_siguiente_numero_soporte(empresa: Any) -> int:
     if not resolucion.vigente or not resolucion.esta_dentro_de_fecha():
         raise ValidationError(f"Resolución {resolucion.numero_resolucion} no válida o expirada.")
 
-    # ⚠️ CRÍTICO: Incluir TODOS los documentos (incluso anulados) para garantizar consecutividad
+    # WARNING: CRÍTICO: Incluir TODOS los documentos (incluso anulados) para garantizar consecutividad
     # El consecutivo es único por resolución, incluso si el documento está anulado
-    # ⚠️ v2.60: select_for_update() previene race conditions al obtener el máximo consecutivo
+    # WARNING: v2.60: select_for_update() previene race conditions al obtener el máximo consecutivo
     ultimo = DocumentoSoporte.objects.select_for_update().filter(
         empresa=empresa, 
         resolucion_dian=resolucion
@@ -74,9 +77,9 @@ def obtener_siguiente_numero_soporte(empresa: Any) -> int:
     if nuevo_numero > resolucion.rango_hasta:
         raise ValidationError(f"Rango de resolución {resolucion.numero_resolucion} agotado.")
     
-    # ⚠️ VALIDACIÓN ADICIONAL: Verificar que no exista ya este consecutivo (doble verificación)
+    # WARNING: VALIDACIÓN ADICIONAL: Verificar que no exista ya este consecutivo (doble verificación)
     # Aunque el modelo tiene UniqueConstraint, esta validación previene errores antes de intentar guardar
-    # ⚠️ v2.60: select_for_update() asegura que no haya cambios concurrentes durante la verificación
+    # WARNING: v2.60: select_for_update() asegura que no haya cambios concurrentes durante la verificación
     existe = DocumentoSoporte.objects.select_for_update().filter(
         empresa=empresa,
         resolucion_dian=resolucion,
@@ -97,31 +100,31 @@ def qs_list(search=None):
     """
     QuerySet optimizado para Tabulator (v2.40).
     
-    ⚠️ ALINEADO: Incluye campos necesarios del modelo Gasto y DocumentoSoporte.
-    ⚠️ SSoT: Incluye empresa para filtrado y validación.
-    ⚠️ v2.40: Soporta búsqueda con parámetro ?search=
+    WARNING: ALINEADO: Incluye campos necesarios del modelo Gasto y DocumentoSoporte.
+    WARNING: SSoT: Incluye empresa para filtrado y validación.
+    WARNING: v2.40: Soporta búsqueda con parámetro ?search=
     
-    ⚠️ CRÍTICO: INCLUYE TODOS LOS DOCUMENTOS (anulados y no anulados).
+    WARNING: CRÍTICO: INCLUYE TODOS LOS DOCUMENTOS (anulados y no anulados).
     - Los documentos anulados DEBEN aparecer en la lista para mantener la secuencia de consecutivos.
     - El consecutivo prevalece en la lista, incluso si el documento está anulado.
     - Solo el summary (get_gastos_summary) excluye documentos anulados del cálculo financiero.
     """
     qs = Gasto.objects.select_related(
         "documento_soporte",
-        "empresa"  # ⚠️ SSoT: Incluir empresa para filtrado y validación
+        "empresa"  # WARNING: SSoT: Incluir empresa para filtrado y validación
     ).only(
         *LIST_FIELDS,
-        "empresa",  # ⚠️ SSoT: Campo requerido por el modelo
+        "empresa",  # WARNING: SSoT: Campo requerido por el modelo
         "documento_soporte__consecutivo",
         "documento_soporte__prefijo",
         "documento_soporte__vendedor_nombre",
         "documento_soporte__fecha",
         "documento_soporte__total",
-        "documento_soporte__activo",  # ⚠️ v2.40: Campo activo
+        "documento_soporte__activo",  # WARNING: v2.40: Campo activo
         "documento_soporte__anulado"
     )
     
-    # ⚠️ v2.40: Aplicar filtro de búsqueda si se proporciona
+    # WARNING: v2.40: Aplicar filtro de búsqueda si se proporciona
     if search:
         qs = qs.filter(
             Q(descripcion__icontains=search) |
@@ -138,11 +141,11 @@ def qs_detail():
     ).all()
 
 @transaction.atomic
-def desactivar_gasto_service(gasto_id: int) -> Dict[str, Any]:
+def desactivar_gasto_service(gasto_id: int) -> dict[str, Any]:
     """
     Desactiva un gasto (soft-disable).
     
-    ⚠️ v2.40: Paso previo obligatorio antes de anular.
+    WARNING: v2.40: Paso previo obligatorio antes de anular.
     El documento debe estar desactivado para poder anularlo.
     """
     try:
@@ -165,16 +168,16 @@ def desactivar_gasto_service(gasto_id: int) -> Dict[str, Any]:
             "activo": False,
             "mensaje": "Documento desactivado correctamente. Ahora puede anularlo si lo desea."
         }
-    except Gasto.DoesNotExist:
-        raise ValidationError("Gasto no encontrado.")
+    except Gasto.DoesNotExist as exc:
+        raise ValidationError("Gasto no encontrado.") from exc
 
 
 @transaction.atomic
-def anular_gasto_service(gasto_id: int) -> Dict[str, Any]:
+def anular_gasto_service(gasto_id: int) -> dict[str, Any]:
     """
     Marca un gasto como anulado (Inmutable).
     
-    ⚠️ v2.40: REGLA CRÍTICA - Solo se puede anular si está desactivado (activo=False).
+    WARNING: v2.40: REGLA CRÍTICA - Solo se puede anular si está desactivado (activo=False).
     El documento debe desactivarse primero antes de poder anularlo.
     Usa update() directamente para evitar validaciones del modelo.
     """
@@ -182,7 +185,7 @@ def anular_gasto_service(gasto_id: int) -> Dict[str, Any]:
         gasto = Gasto.objects.select_related('documento_soporte').get(pk=gasto_id)
         ds = gasto.documento_soporte
         
-        # ⚠️ CRÍTICO: Verificar que esté desactivado antes de anular
+        # WARNING: CRÍTICO: Verificar que esté desactivado antes de anular
         if ds.activo:
             raise ValidationError(
                 "No se puede anular un documento activo. Debe desactivarlo primero antes de anular."
@@ -191,7 +194,7 @@ def anular_gasto_service(gasto_id: int) -> Dict[str, Any]:
         if ds.anulado:
             raise ValidationError("El documento ya se encuentra anulado.")
         
-        # ⚠️ v2.40: Anulación directa usando update() para evitar validaciones
+        # WARNING: v2.40: Anulación directa usando update() para evitar validaciones
         # Esto evita que se ejecute clean() y las validaciones de total
         fecha_anulacion_actual = timezone.now()
         DocumentoSoporte.objects.filter(pk=ds.pk).update(
@@ -208,16 +211,16 @@ def anular_gasto_service(gasto_id: int) -> Dict[str, Any]:
             "anulado": True,
             "fecha_anulacion": ds.fecha_anulacion.isoformat()
         }
-    except Gasto.DoesNotExist:
-        raise ValidationError("Gasto no encontrado.")
+    except Gasto.DoesNotExist as exc:
+        raise ValidationError("Gasto no encontrado.") from exc
 
-def get_gastos_summary(empresa_id: Optional[int] = None) -> Dict[str, Any]:
+def get_gastos_summary(empresa_id: int | None = None) -> dict[str, Any]:
     """
     Calcula totales financieros netos (v2.40).
     Excluye automáticamente registros anulados y desactivados.
     Solo suma documentos activos y no anulados.
     """
-    # ⚠️ v2.40: Solo incluir documentos activos y no anulados
+    # WARNING: v2.40: Solo incluir documentos activos y no anulados
     filtros = Q(documento_soporte__anulado=False, documento_soporte__activo=True)
     if empresa_id:
         filtros &= Q(empresa_id=empresa_id)
@@ -232,14 +235,14 @@ def get_gastos_summary(empresa_id: Optional[int] = None) -> Dict[str, Any]:
 
     return {
         "subtotal_neto": res["sub"],
-        "retefuente_neto": res["rf"],  # ⚠️ v2.40: Retefuente independiente
-        "reteica_neto": res["ri"],  # ⚠️ v2.40: ReteICA independiente
+        "retefuente_neto": res["rf"],  # WARNING: v2.40: Retefuente independiente
+        "reteica_neto": res["ri"],  # WARNING: v2.40: ReteICA independiente
         "retenciones_neto": res["rf"] + res["ri"],  # Total de retenciones (compatibilidad)
         "total_neto": res["tot"],
         "cantidad": res["cant"]
     }
 
-def materializar_gasto_desde_dto(dto: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+def materializar_gasto_desde_dto(dto: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """Integración con Document Ingest Pipeline (Placeholder v2.40)."""
     return {"message": "Implementar materialización según modelos de tenant_gastos"}, 501
 
@@ -252,7 +255,7 @@ def qs_resolucion_list(empresa_id: int):
     """
     QuerySet optimizado para listado de resoluciones (Tabulator v2.40).
     
-    ⚠️ SSoT: Filtrado por empresa para aislamiento multi-tenant.
+    WARNING: SSoT: Filtrado por empresa para aislamiento multi-tenant.
     """
     return ResolucionDIAN.objects.filter(empresa_id=empresa_id).order_by('-vigente', '-fecha_resolucion')
 
@@ -261,20 +264,20 @@ def qs_resolucion_detail(empresa_id: int, resolucion_id: int):
     """
     QuerySet optimizado para detalle de resolución.
     
-    ⚠️ SSoT: Filtrado por empresa para aislamiento multi-tenant.
+    WARNING: SSoT: Filtrado por empresa para aislamiento multi-tenant.
     """
     return ResolucionDIAN.objects.filter(empresa_id=empresa_id, id=resolucion_id).first()
 
 
 @transaction.atomic
-def crear_resolucion(empresa: Any, data: Dict[str, Any]) -> ResolucionDIAN:
+def crear_resolucion(empresa: Any, data: dict[str, Any]) -> ResolucionDIAN:
     """
     Crea una nueva resolución DIAN.
     
-    ⚠️ REGLA CRÍTICA: Solo UNA resolución puede estar vigente por empresa.
+    WARNING: REGLA CRÍTICA: Solo UNA resolución puede estar vigente por empresa.
     Si se marca como vigente, desactiva automáticamente las anteriores.
     
-    ⚠️ INMUTABILIDAD: Las resoluciones son documentos legales y no deben editarse.
+    WARNING: INMUTABILIDAD: Las resoluciones son documentos legales y no deben editarse.
     Solo se pueden crear nuevas o desactivar/eliminar (si no tienen uso).
     
     Args:
@@ -346,7 +349,7 @@ def desactivar_resolucion(empresa: Any, resolucion_id: int) -> ResolucionDIAN:
     """
     Desactiva una resolución DIAN (marca vigente=False).
     
-    ⚠️ INMUTABILIDAD: El DocumentoSoporte conserva su número y prefijo originales
+    WARNING: INMUTABILIDAD: El DocumentoSoporte conserva su número y prefijo originales
     (snapshot inalterable). La desactivación no afecta documentos ya generados.
     
     Args:
@@ -370,16 +373,16 @@ def desactivar_resolucion(empresa: Any, resolucion_id: int) -> ResolucionDIAN:
     return resolucion
 
 
-def calcular_retenciones(subtotal: Decimal, retefuente_porcentaje: str, reteica_porcentaje: str) -> Dict[str, Decimal]:
+def calcular_retenciones(subtotal: Decimal, retefuente_porcentaje: str, reteica_porcentaje: str) -> dict[str, Decimal]:
     """
     Calcula las retenciones (Retefuente y ReteICA) basándose en el subtotal y los porcentajes.
     
-    ⚠️ v2.40: Lógica de cálculo para Documento Soporte según normativa colombiana.
+    WARNING: v2.40: Lógica de cálculo para Documento Soporte según normativa colombiana.
     - Retefuente: subtotal * porcentaje_retefuente
     - ReteICA: subtotal * porcentaje_reteica
     - Total Neto: subtotal - retefuente - reteica
     
-    ⚠️ v2.60: VALIDACIÓN DE FÓRMULA - Asegura que Total = Subtotal - Retefuente - ReteICA
+    WARNING: v2.60: VALIDACIÓN DE FÓRMULA - Asegura que Total = Subtotal - Retefuente - ReteICA
     
     Args:
         subtotal: Subtotal del documento (base gravable)
@@ -432,7 +435,7 @@ def calcular_retenciones(subtotal: Decimal, retefuente_porcentaje: str, reteica_
             f"Verifique que las retenciones no excedan el subtotal."
         )
     
-    # ⚠️ v2.60: VALIDACIÓN EXPLÍCITA DE FÓRMULA - Total = Subtotal - Retefuente - ReteICA
+    # WARNING: v2.60: VALIDACIÓN EXPLÍCITA DE FÓRMULA - Total = Subtotal - Retefuente - ReteICA
     # Tolerancia de 0.01 para manejar errores de redondeo en cálculos grandes
     total_calculado = subtotal - retefuente - reteica
     diferencia = abs(total - total_calculado)
@@ -451,11 +454,11 @@ def calcular_retenciones(subtotal: Decimal, retefuente_porcentaje: str, reteica_
     }
 
 
-def puede_eliminar_resolucion(empresa: Any, resolucion_id: int) -> Tuple[bool, str]:
+def puede_eliminar_resolucion(empresa: Any, resolucion_id: int) -> tuple[bool, str]:
     """
     Verifica si una resolución puede ser eliminada.
     
-    ⚠️ REGLA: No se puede eliminar si tiene Documentos de Soporte asociados.
+    WARNING: REGLA: No se puede eliminar si tiene Documentos de Soporte asociados.
     Los documentos deben conservar su referencia a la resolución (evidencia legal).
     
     Args:
@@ -469,11 +472,177 @@ def puede_eliminar_resolucion(empresa: Any, resolucion_id: int) -> Tuple[bool, s
     
     if not resolucion:
         return False, "Resolución no encontrada o no pertenece a esta empresa."
+
+    if resolucion.vigente:
+        return False, "No se puede eliminar una resolución vigente. Desactívela primero."
     
     # Contar documentos de soporte asociados
+
     conteo_documentos = DocumentoSoporte.objects.filter(resolucion_dian=resolucion).count()
     
     if conteo_documentos > 0:
         return False, f"No se puede eliminar esta resolución porque tiene {conteo_documentos} documento(s) de soporte asociado(s). Los documentos deben conservar su referencia a la resolución como evidencia legal."
     
+    
     return True, "La resolución puede ser eliminada."
+
+
+class GastoServiceMixin:
+    """
+    Mixin de inyección de dependencias para aislar la lógica de negocio de Gastos.
+    Aplica patrones DDD y Transaccionalidad Optimizada (Zero Waste Lock).
+    """
+
+    def crear_gasto_service(self, data: dict[str, Any], empresa: Any) -> tuple[bool, Any, int]:
+        """
+        Extracción de todo el endpoint de creación de Gasto, garantizando atomicidad rápida.
+        Retorna:
+            - success (bool)
+            - payout_or_error (dict / Gasto)
+            - status_code (int)
+        """
+        from django.db import IntegrityError, transaction
+
+        from apps.tenant.gastos.models import DocumentoSoporte, Gasto, ResolucionDIAN
+        
+        # 1. Obtener y Validar Resolución
+        resolucion_id = data.get('resolucion_dian')
+        resolucion_inst = None
+        
+        if resolucion_id:
+            try:
+                resolucion_inst = ResolucionDIAN.objects.filter(empresa=empresa, id=resolucion_id).first()
+                if not resolucion_inst:
+                    return False, {"error": "resolucion_no_encontrada", "message": f"La resolución {resolucion_id} no existe.", "missing_fields": ["resolucion_dian"]}, 422
+                if not resolucion_inst.esta_dentro_de_fecha():
+                    return False, {"error": "resolucion_expirada", "message": "Resolución fuera de fecha.", "missing_fields": ["resolucion_dian"]}, 422
+            except (ValueError, TypeError):
+                return False, {"error": "resolucion_invalida", "message": "ID de resolución inválido.", "missing_fields": ["resolucion_dian"]}, 422
+        else:
+            resolucion_inst = obtener_resolucion_vigente(empresa)
+            if not resolucion_inst:
+                return False, {"error": "resolucion_no_configurada", "message": "No hay resolución DIAN activa. Configure una primero.", "missing_fields": ["resolucion_dian"]}, 422
+
+        # 2. Reales Cálculos de Subtotal, Total y Validaciones Estrictas (FUERA DEL LOCK)
+        subtotal = Decimal(str(data.get('subtotal', 0) or 0))
+        retefuente_porcentaje = data.get('retefuente_porcentaje', '0.00')
+        reteica_porcentaje = data.get('reteica_porcentaje', '0.00')
+        
+        campos_faltantes = []
+        if not subtotal or subtotal <= 0: campos_faltantes.append('subtotal')
+        if not retefuente_porcentaje: campos_faltantes.append('retefuente_porcentaje')
+        if not reteica_porcentaje: campos_faltantes.append('reteica_porcentaje')
+        if not data.get('fecha'): campos_faltantes.append('fecha')
+        if not data.get('vendedor_nit'): campos_faltantes.append('vendedor_nit')
+        if not data.get('vendedor_nombre'): campos_faltantes.append('vendedor_nombre')
+        if not data.get('categoria_contable'): campos_faltantes.append('categoria_contable')
+        if not data.get('periodo'): campos_faltantes.append('periodo')
+        
+        if campos_faltantes:
+            return False, {"error": "missing_required_fields", "message": f"Faltan campos obligatorios: {', '.join(campos_faltantes)}", "missing_fields": campos_faltantes}, 422
+            
+        try:
+            retenciones = calcular_retenciones(subtotal, retefuente_porcentaje, reteica_porcentaje)
+        except ValidationError as e:
+            return False, {"error": "validacion_error", "message": str(e), "missing_fields": ["subtotal", "retefuente_porcentaje"]}, 422
+            
+        total_calculado = subtotal - retenciones['retefuente'] - retenciones['reteica']
+        diferencia = abs(retenciones['total'] - total_calculado)
+        
+        if diferencia > Decimal('0.01'):
+            return False, {
+                "error": "formula_validation_error", 
+                "message": f"Fórmula Total = Subtotal - RF - RICA no se cumple. Calculado: {total_calculado}", 
+                "missing_fields": ["subtotal"]
+            }, 422
+
+        # 3. TRANSACCIÓN ATÓMICA OPTIMIZADA (Locking únicamente sobre la Base de Datos)
+        try:
+            with transaction.atomic():
+                if resolucion_id:
+                    resolucion_lock = ResolucionDIAN.objects.select_for_update().filter(empresa=empresa, id=resolucion_inst.id).first()
+                    if not resolucion_lock:
+                        return False, {"error": "resolucion_no_encontrada", "message": "Resolución desapareció durante lock.", "missing_fields": ["resolucion_dian"]}, 422
+                    
+                    ultimo = DocumentoSoporte.objects.select_for_update().filter(empresa=empresa, resolucion_dian=resolucion_lock).aggregate(max_val=Max('consecutivo'))['max_val']
+                    nuevo_numero = (ultimo + 1) if ultimo else resolucion_lock.rango_desde
+                    
+                    if nuevo_numero > resolucion_lock.rango_hasta:
+                        return False, {"error": "rango_agotado", "message": "Rango de la resolución agotado.", "missing_fields": ["resolucion_dian"]}, 409
+                    
+                    existe = DocumentoSoporte.objects.select_for_update().filter(empresa=empresa, resolucion_dian=resolucion_lock, consecutivo=nuevo_numero).exists()
+                    if existe:
+                        return False, {"error": "consecutivo_duplicado", "message": f"Consecutivo {nuevo_numero} duplicado.", "missing_fields": ["resolucion_dian"]}, 409
+                    
+                    consecutivo = nuevo_numero
+                    resolucion_final = resolucion_lock
+                else:
+                    consecutivo = obtener_siguiente_numero_soporte(empresa)
+                    resolucion_final = resolucion_inst
+                
+                documento_soporte = DocumentoSoporte.objects.create(
+                    empresa=empresa,
+                    resolucion_dian=resolucion_final,
+                    prefijo=resolucion_final.prefijo,
+                    consecutivo=consecutivo,
+                    fecha=data.get('fecha'),
+                    vendedor_nit=data.get('vendedor_nit'),
+                    vendedor_nombre=data.get('vendedor_nombre'),
+                    vendedor_direccion=data.get('vendedor_direccion', ''),
+                    vendedor_telefono=data.get('vendedor_telefono', ''),
+                    numero_factura_proveedor=data.get('numero_factura_proveedor', ''),
+                    subtotal=subtotal,
+                    retefuente_porcentaje=retefuente_porcentaje,
+                    retefuente=retenciones['retefuente'],
+                    reteica_porcentaje=reteica_porcentaje,
+                    reteica=retenciones['reteica'],
+                    total=retenciones['total'],
+                    adjunto=data.get('adjunto')
+                )
+                
+                # v2.61.7: leer codigo_contable del payload (puede venir de cuenta_contable_codigo o directamente)
+                codigo_contable = (
+                    str(data.get('codigo_contable') or data.get('cuenta_contable_codigo') or '').strip() or None
+                )
+                if codigo_contable:
+                    from apps.tenant.gastos.choices.niif_gastos_choices import (
+                        GASTOS_NIIF_CODIGOS_VALIDOS,
+                    )
+                    if codigo_contable not in GASTOS_NIIF_CODIGOS_VALIDOS:
+                        return False, {
+                            "error": "codigo_contable_invalido",
+                            "message": f"Codigo contable '{codigo_contable}' no pertenece al catalogo NIIF permitido.",
+                            "missing_fields": ["codigo_contable"],
+                        }, 422
+
+                gasto = Gasto.objects.create(
+                    empresa=empresa,
+                    documento_soporte=documento_soporte,
+                    periodo=data.get('periodo'),
+                    centro_costo=data.get('centro_costo', ''),
+                    categoria_contable=data.get('categoria_contable'),
+                    codigo_contable=codigo_contable,
+                    descripcion=data.get('descripcion', ''),
+                    observaciones=data.get('observaciones', '')
+                )
+                
+        except IntegrityError as e:
+            logger.warning(f"Error de integridad GastoService: {e}")
+            msg = "Ya existe un Documento Soporte activo con este vendedor y número de factura." if 'unique_ds_vendedor_factura' in str(e) else "Error de integridad (consecutivo)."
+            return False, {"error": "duplicate_error", "message": msg, "missing_fields": ["consecutivo", "vendedor_nit"]}, 409
+            
+        except ValidationError as e:
+            return False, {"error": "validacion_error", "message": str(e), "missing_fields": ["resolucion_dian"]}, 422
+            
+        # 4. Asientos Contables Asíncronos (Fuera del lock de BD)
+        if documento_soporte.activo and not documento_soporte.anulado:
+            try:
+                from apps.tenant.contabilidad.services.asientos_service import (
+                    materializar_asiento_desde_gasto,
+                )
+                materializar_asiento_desde_gasto(gasto)
+                logger.info(f"[GastoService] Asiento contable automaterializado {documento_soporte.numero_documento}")
+            except Exception as e:
+                logger.warning(f"[GastoService] Falló asiento contable, se aisló error: {str(e)}")
+                
+        return True, gasto, 201

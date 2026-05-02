@@ -1,7 +1,7 @@
 """
 Modelos de empleados, contratos y nóminas (por tenant).
 
-⚠️ v2.40: Arquitectura Tabulator Factory - Modelos Anemic (solo datos).
+WARNING: v2.40: Arquitectura Tabulator Factory - Modelos Anemic (solo datos).
 
 Principios:
 - Cero Signals: Toda la lógica está en la capa de servicios (services.py)
@@ -11,37 +11,41 @@ Principios:
 - LIST_FIELDS: Campos mínimos para Tabulator definidos en services.py
 - SSoT: Empresa es la única FK externa (Single Source of Truth)
 
-⚠️ FLUJO SECUENCIAL (Máquina de Estados):
+WARNING: FLUJO SECUENCIAL (Máquina de Estados):
 1. Empleado (creación inicial)
 2. Contrato (requiere Empleado, habilita botón "Registrar Nómina")
 3. Devengo/Nómina (requiere Contrato ACTIVO, habilita botón "Historial")
 """
-from django.db import models, transaction
-from django.db.models import Q
-from django.core.validators import MinValueValidator
-from django.core.exceptions import ValidationError
-from django.utils.translation import gettext_lazy as _
-from apps.tenant.empresa.models import Empresa
 from decimal import Decimal
-from .choices import EPS_CHOICES, AFP_CHOICES, ARL_CHOICES, RIESGO_ARL_CHOICES
+
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
+from django.db import models
+from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
+
+from apps.tenant.core.models import SintelTenantBaseModel
+from apps.tenant.empresa.models import Empresa
+
+from .choices import AFP_CHOICES, ARL_CHOICES, EPS_CHOICES, RIESGO_ARL_CHOICES
 
 
-class Empleado(models.Model):
+class Empleado(SintelTenantBaseModel):
     """
     Modelo de empleado (v2.95: Flujo Secuencial).
     
-    ⚠️ ANEMIC MODEL: Solo define estructura de datos.
+    WARNING: ANEMIC MODEL: Solo define estructura de datos.
     - Lógica de negocio en services.py (qs_empleados_list, etc.)
     - Anotaciones para UI reactiva en services.py (tiene_contrato_activo, tiene_nominas_registradas)
     - LIST_FIELDS definido en services.py para optimización de queries
     
-    ⚠️ SSoT: Solo FK a Empresa (Single Source of Truth).
-    ⚠️ TENANT ISOLATION: django-tenants maneja aislamiento por esquema automáticamente.
+    WARNING: SSoT: Solo FK a Empresa (Single Source of Truth).
+    WARNING: TENANT ISOLATION: django-tenants maneja aislamiento por esquema automáticamente.
     """
     TIPO_DOC = [('CC', 'Cédula de Ciudadanía'), ('CE', 'Cédula de Extranjería'), ('PA', 'Pasaporte'), ('PPT', 'PPT')]
     ESTADOS = [('ACTIVO', 'Activo'), ('RETIRADO', 'Retirado')]
 
-    # ⚠️ SSoT: FK a Empresa (única FK externa)
+    # WARNING: SSoT: FK a Empresa (única FK externa)
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='empleados')
     
     # Identificación y Datos Personales
@@ -86,14 +90,14 @@ class Empleado(models.Model):
     def __str__(self):
         return f"{self.nombre_completo} ({self.numero_documento})"
 
-class Contrato(models.Model):
+class Contrato(SintelTenantBaseModel):
     """
     Contrato de trabajo (v2.60: Máquina de Estados Estricta + SSoT).
     
-    ⚠️ FLUJO SECUENCIAL: Requiere Empleado, habilita creación de Nómina.
-    ⚠️ MÁQUINA DE ESTADOS: Solo UN contrato ACTIVO por empleado (garantizado en constraint).
-    ⚠️ VALIDACIÓN: Lógica de integridad en save() y clean() (no es lógica de negocio).
-    ⚠️ SSoT: FK directa a Empresa (requerido v2.60).
+    WARNING: FLUJO SECUENCIAL: Requiere Empleado, habilita creación de Nómina.
+    WARNING: MÁQUINA DE ESTADOS: Solo UN contrato ACTIVO por empleado (garantizado en constraint).
+    WARNING: VALIDACIÓN: Lógica de integridad en clean() (no es lógica de negocio).
+    WARNING: SSoT: FK directa a Empresa (requerido v2.60).
     
     Estados:
     - ACTIVO: Contrato vigente, permite crear nóminas
@@ -104,11 +108,11 @@ class Contrato(models.Model):
         ('FIJO', 'Término Fijo'),
         ('INDEF', 'Indefinido'),
         ('OBRA', 'Obra o Labor'),
-        ('PRESTACION', 'Prestación de Servicios')  # ⚠️ Nuevo: Independiente
+        ('PRESTACION', 'Prestación de Servicios')  # WARNING: Nuevo: Independiente
     ]
     ESTADOS = [('ACTIVO', 'Activo'), ('INACTIVO', 'Inactivo'), ('HISTORICO', 'Histórico')]
     
-    # ⚠️ SSoT: FK directa a Empresa (requerido v2.60)
+    # WARNING: SSoT: FK directa a Empresa (requerido v2.60)
     empresa = models.ForeignKey(
         Empresa, 
         on_delete=models.PROTECT, 
@@ -116,7 +120,7 @@ class Contrato(models.Model):
         help_text='SSoT Empresa'
     )
     
-    # ⚠️ FK a Empleado (sin limit_choices_to para permitir contratos históricos)
+    # WARNING: FK a Empleado (sin limit_choices_to para permitir contratos históricos)
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='contratos')
     
     # Tipo y fechas
@@ -124,7 +128,7 @@ class Contrato(models.Model):
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField(null=True, blank=True)
     
-    # Valores económicos (⚠️ v2.95: Todos los valores en COP - Pesos Colombianos)
+    # Valores económicos (WARNING: v2.95: Todos los valores en COP - Pesos Colombianos)
     salario_mensual = models.DecimalField(
         max_digits=12, 
         decimal_places=2, 
@@ -153,14 +157,14 @@ class Contrato(models.Model):
         help_text="Copia digital del contrato firmado (PDF)"
     )
     
-    # ⚠️ MÁQUINA DE ESTADOS: estado es la fuente de verdad
+    # WARNING: MÁQUINA DE ESTADOS: estado es la fuente de verdad
     estado = models.CharField(
         max_length=12, 
         choices=ESTADOS, 
         default='ACTIVO', 
         help_text="Estado del contrato: ACTIVO, INACTIVO o HISTORICO"
     )
-    # ⚠️ LEGACY: Campo activo se sincroniza con estado en save()
+    # WARNING: LEGACY: Campo activo se sincroniza con estado en save()
     activo = models.BooleanField(
         default=True, 
         help_text="Campo legacy - usar estado='ACTIVO' en su lugar"
@@ -170,12 +174,12 @@ class Contrato(models.Model):
         verbose_name = _('Contrato')
         verbose_name_plural = _('Contratos')
         indexes = [
-            models.Index(fields=['empresa', 'estado']),  # ⚠️ v2.60: Índice SSoT
+            models.Index(fields=['empresa', 'estado']),  # WARNING: v2.60: Índice SSoT
             models.Index(fields=['empleado', 'estado']),
             models.Index(fields=['empleado', 'activo']),
         ]
         constraints = [
-            # ⚠️ v2.60: Garantizar solo un contrato ACTIVO por empleado a nivel de DB
+            # WARNING: v2.60: Garantizar solo un contrato ACTIVO por empleado a nivel de DB
             models.UniqueConstraint(
                 fields=['empleado'],
                 condition=Q(estado='ACTIVO'),
@@ -183,27 +187,6 @@ class Contrato(models.Model):
             )
         ]
 
-    @transaction.atomic
-    def save(self, *args, **kwargs):
-        # ⚠️ v2.60: SSoT - Sincronizar empresa desde empleado si no está establecida
-        if not self.empresa_id and self.empleado_id:
-            if hasattr(self.empleado, 'empresa_id'):
-                self.empresa_id = self.empleado.empresa_id
-        
-        # ⚠️ v2.40: Sincronizar activo con estado para compatibilidad
-        self.activo = (self.estado == 'ACTIVO')
-        
-        # ⚠️ v2.40: Máquina de Estados Estricta - Solo UN contrato ACTIVO por empleado
-        # ⚠️ NOTA: El constraint UniqueConstraint garantiza esto a nivel de DB, pero mantenemos
-        # la lógica aquí para desactivar contratos previos antes de que el constraint falle
-        if self.estado == 'ACTIVO':
-            # Desactivar contratos previos del mismo empleado para mantener unicidad
-            Contrato.objects.filter(
-                empleado=self.empleado, 
-                estado='ACTIVO'
-            ).exclude(pk=self.pk).update(estado='INACTIVO', activo=False)
-        super().save(*args, **kwargs)
-    
     def clean(self):
         """Validación adicional para máquina de estados."""
         # Si el estado es NULL (datos existentes), establecer como INACTIVO
@@ -214,22 +197,22 @@ class Contrato(models.Model):
     def __str__(self):
         return f"Contrato {self.tipo} - {self.empleado.nombre_completo}"
 
-class Devengo(models.Model):
+class Devengo(SintelTenantBaseModel):
     """
     Nómina/Pago de nómina (v2.60: Inmutable, vinculado a Contrato ACTIVO + SSoT).
     
-    ⚠️ FLUJO SECUENCIAL: Requiere Contrato ACTIVO, habilita botón "Historial".
-    ⚠️ INMUTABLE: Una vez creada, solo se puede anular (no editar).
-    ⚠️ SSoT: neto_pagar se calcula en save() como fuente de verdad.
-    ⚠️ SSoT: FK directa a Empresa (requerido v2.60).
-    ⚠️ PROPORCIONAL: Valores calculados según días_laborados (1-30).
+    WARNING: FLUJO SECUENCIAL: Requiere Contrato ACTIVO, habilita botón "Historial".
+    WARNING: INMUTABLE: Una vez creada, solo se puede anular (no editar).
+    WARNING: SSoT: neto_pagar se calcula en service layer como fuente de verdad.
+    WARNING: SSoT: FK directa a Empresa (requerido v2.60).
+    WARNING: PROPORCIONAL: Valores calculados según días_laborados (1-30).
     
     Cálculo:
     - Devengos = salario_base + auxilio_transporte + otros_devengos
     - Deducciones = salud_empleado + pension_empleado + prestamos + descuentos_operativos
-    - neto_pagar = Devengos - Deducciones (calculado en save())
+    - neto_pagar = Devengos - Deducciones (calculado en service layer)
     """
-    # ⚠️ SSoT: FK directa a Empresa (requerido v2.60)
+    # WARNING: SSoT: FK directa a Empresa (requerido v2.60)
     empresa = models.ForeignKey(
         Empresa, 
         on_delete=models.PROTECT, 
@@ -245,8 +228,8 @@ class Devengo(models.Model):
     periodo_mes = models.CharField(max_length=7, help_text="Formato: YYYY-MM")
     fecha_pago = models.DateField()
     
-    # ⚠️ Días laborados para cálculo proporcional (0.5-30 días)
-    # ⚠️ v2.95: Permite decimales para soportar medio día (0.5) y cálculo por horas
+    # WARNING: Días laborados para cálculo proporcional (0.5-30 días)
+    # WARNING: v2.95: Permite decimales para soportar medio día (0.5) y cálculo por horas
     dias_laborados = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -255,7 +238,7 @@ class Devengo(models.Model):
         help_text="Días laborados en el periodo (0.5-30, permite decimales para medio día)"
     )
     
-    # ⚠️ DEVENGOS (valores proporcionales calculados en COP)
+    # WARNING: DEVENGOS (valores proporcionales calculados en COP)
     salario_base = models.DecimalField(
         max_digits=12, 
         decimal_places=2, 
@@ -274,7 +257,7 @@ class Devengo(models.Model):
         help_text="Otros devengos adicionales del periodo en COP (valor fijo, no proporcional)"
     )
     
-    # ⚠️ DEDUCCIONES (porcentajes legales + descuentos en COP)
+    # WARNING: DEDUCCIONES (porcentajes legales + descuentos en COP)
     salud_empleado = models.DecimalField(max_digits=12, decimal_places=2, help_text="4% Ley - Deducción en COP")
     pension_empleado = models.DecimalField(max_digits=12, decimal_places=2, help_text="4% Ley - Deducción en COP")
     # otro descuento que se pueda agregar
@@ -289,7 +272,7 @@ class Devengo(models.Model):
     # Información adicional
     observaciones = models.TextField(blank=True, help_text="Observaciones sobre la nómina")
     
-    # ⚠️ SSoT: neto_pagar se calcula automáticamente en save() (en COP)
+    # WARNING: SSoT: neto_pagar se calcula en service layer (en COP)
     neto_pagar = models.DecimalField(max_digits=12, decimal_places=2, editable=False, help_text="Neto a pagar en COP")
     anulado = models.BooleanField(default=False, help_text="Nómina anulada (no se puede editar)")
     
@@ -297,14 +280,14 @@ class Devengo(models.Model):
         verbose_name = _('Nómina')
         verbose_name_plural = _('Nóminas')
         indexes = [
-            models.Index(fields=['empresa', 'fecha_pago']),  # ⚠️ v2.60: Índice SSoT
+            models.Index(fields=['empresa', 'fecha_pago']),  # WARNING: v2.60: Índice SSoT
             models.Index(fields=['empleado', 'fecha_pago']),
             models.Index(fields=['empleado', 'anulado']),
             models.Index(fields=['contrato']),
             models.Index(fields=['periodo_mes']),
         ]
         constraints = [
-            # ⚠️ v2.60: Nómina Multitanda - Permitir múltiples registros por mes
+            # WARNING: v2.60: Nómina Multitanda - Permitir múltiples registros por mes
             # Unicidad basada en empleado + periodo_mes + fecha_pago (permite semanas/quincenas)
             models.UniqueConstraint(
                 fields=['empleado', 'periodo_mes', 'fecha_pago'],
@@ -317,54 +300,12 @@ class Devengo(models.Model):
         # Validar que el contrato pertenezca al empleado y esté activo
         if self.contrato.empleado != self.empleado:
             raise ValidationError("El contrato seleccionado no pertenece al empleado.")
-        # ⚠️ v2.40: Máquina de Estados - Bloquear nómina si contrato no está ACTIVO
+        # WARNING: v2.40: Máquina de Estados - Bloquear nómina si contrato no está ACTIVO
         if self.contrato.estado != 'ACTIVO' and not self.pk:
             raise ValidationError("No se puede generar nómina: El contrato no está activo.")
         # Compatibilidad: también validar campo activo legacy
         if not self.contrato.activo and not self.pk:
             raise ValidationError("No se puede generar nómina para un contrato inactivo.")
-
-    def save(self, *args, **kwargs):
-        # ⚠️ v2.60: SSoT - Sincronizar empresa desde empleado si no está establecida
-        if not self.empresa_id and self.empleado_id:
-            if hasattr(self.empleado, 'empresa_id'):
-                self.empresa_id = self.empleado.empresa_id
-        
-        self.full_clean()
-        
-        # ⚠️ v2.40: Validar días laborados (1-30)
-        if self.dias_laborados < 1:
-            self.dias_laborados = 1
-        elif self.dias_laborados > 30:
-            self.dias_laborados = 30
-        
-        # ⚠️ v2.40: El frontend envía valores calculados desde el endpoint de previsualización
-        # El service layer se usa solo en el endpoint de previsualización, no en el modelo
-        # El modelo solo valida y recalcula neto_pagar como SSoT
-        
-        # ⚠️ v2.61: Siempre recalcular neto_pagar con los valores actuales (SSoT)
-        # ⚠️ CRÍTICO: Asegurar que todos los valores sean Decimal y manejar None correctamente
-        from decimal import Decimal
-        # Convertir todos los valores a Decimal, usando 0 si son None
-        salario_base = Decimal(str(self.salario_base)) if self.salario_base is not None else Decimal('0')
-        auxilio_transporte = Decimal(str(self.auxilio_transporte)) if self.auxilio_transporte is not None else Decimal('0')
-        otros_devengos = Decimal(str(self.otros_devengos)) if self.otros_devengos is not None else Decimal('0')
-        salud_empleado = Decimal(str(self.salud_empleado)) if self.salud_empleado is not None else Decimal('0')
-        pension_empleado = Decimal(str(self.pension_empleado)) if self.pension_empleado is not None else Decimal('0')
-        prestamos = Decimal(str(self.prestamos)) if self.prestamos is not None else Decimal('0')
-        descuentos_operativos = Decimal(str(self.descuentos_operativos)) if self.descuentos_operativos is not None else Decimal('0')
-        
-        # ⚠️ v2.61: Cálculo correcto de Neto a Pagar
-        # Devengos = Salario Base + Auxilio de Transporte + Otros Devengos
-        devengos = salario_base + auxilio_transporte + otros_devengos
-        
-        # Deducciones = Salud + Pensión + Préstamos + Descuentos Operativos
-        deducciones = salud_empleado + pension_empleado + prestamos + descuentos_operativos
-        
-        # Neto a Pagar = Devengos - Deducciones
-        self.neto_pagar = devengos - deducciones
-        
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Nómina {self.periodo_mes} | {self.empleado.nombre_completo}"

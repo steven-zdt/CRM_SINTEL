@@ -3,4 +3,7 @@
 Shim de compatibilidad: re-exporta endpoints Core existentes relacionados con dashboard.
 """
 
-from apps.tenant.core.api.viewsets import CoreDashboardViewSet, DashboardSectionsViewSet  # noqa: F401
+from apps.tenant.core.api.viewsets import (  # noqa: F401
+    CoreDashboardViewSet,
+    DashboardSectionsViewSet,
+)

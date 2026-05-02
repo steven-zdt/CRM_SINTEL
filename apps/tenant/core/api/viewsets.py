@@ -1,19 +1,19 @@
 """
 ViewSets para Core API v2.61.2.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Endpoints de composición/orquestación para presentación
 - NO reemplazan CRUD de las apps individuales
 - Mantienen tenant-awareness y branding dinámico
 
-⚠️ CRUD MODULARIZADO POR FUNCIÓN:
+# WARNING: CRUD MODULARIZADO POR FUNCIÓN:
 Cada ViewSet documenta claramente las funciones CRUD disponibles:
 - READ (GET): list, retrieve
 - CREATE (POST): create, @action personalizadas
 - UPDATE (PUT/PATCH): update, partial_update
 - DELETE (DELETE): destroy
 
-⚠️ ESTRUCTURA MODULARIZADA:
+# WARNING: ESTRUCTURA MODULARIZADA:
 ┌─────────────────────────────────────────────────────────────────┐
 │ CoreLinksViewSet                                                │
 │ ─────────────────────────────────────────────────────────────── │
@@ -41,22 +41,68 @@ Cada ViewSet documenta claramente las funciones CRUD disponibles:
 └─────────────────────────────────────────────────────────────────┘
 """
 import logging
-from django.contrib.auth import authenticate, login, logout, get_user_model
+
+from django.conf import settings
+from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.db import connection
-from rest_framework import status, permissions
-from rest_framework.response import Response
-from rest_framework.viewsets import ViewSet
-from rest_framework.decorators import action
+from rest_framework import permissions, status
 from rest_framework.authentication import SessionAuthentication
-from apps.tenant.dashboard.api.permissions import IsUserOrHigher
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
+
+# --- TenantInfoView: Landing público del tenant ---
+from rest_framework.views import APIView
+from rest_framework.viewsets import ViewSet
+
+from apps.public.tenants.models import TenantMembership
+from apps.tenant.core.services.contabilidad import get_contabilidad_snapshot
 from apps.tenant.core.services.empresa import get_empresas_snapshot
 from apps.tenant.core.services.facturas import get_facturas_snapshot
-from apps.tenant.core.services.contabilidad import get_contabilidad_snapshot
 from apps.tenant.core.services.perfil import get_perfil_snapshot
-from apps.tenant.core.services.landing import get_landing_snapshot
-from apps.public.tenants.models import TenantMembership
-# ⚠️ v2.61: Comentado - serializers_sections no existe
-# from apps.tenant.core.api.serializers_sections import DashboardSectionsSerializer
+from apps.tenant.dashboard.api.permissions import IsUserOrHigher
+
+from apps.tenant.core.services.activation_service import (
+    AlreadyActivatedError,
+    InvalidTokenError,
+    TenantMismatchError,
+    UserNotFoundError,
+    process_activation,
+    verify_activation_token,
+)
+
+
+class TenantInfoView(APIView):
+    """
+    Endpoint público para exponer información básica del tenant (branding, estado, nombre).
+    GET /api/v1/core/landing/info/
+    """
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        tenant = getattr(request, 'tenant', None)
+        if not tenant:
+            return Response({"detail": "No se pudo determinar el tenant actual."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Branding dinámico (si existe)
+        try:
+            from apps.tenant.core.branding import get_tenant_branding
+            branding = get_tenant_branding(request)
+        except Exception:
+            branding = {}
+
+        data = {
+            "tenant": {
+                "id": tenant.id,
+                "nombre": getattr(tenant, 'nombre', 'Tenant'),
+                "schema_name": getattr(tenant, 'schema_name', None),
+                "is_active": getattr(tenant, 'is_active', True),
+            },
+            "branding": branding,
+            "status": "ok"
+        }
+        return Response(data, status=status.HTTP_200_OK)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -66,10 +112,10 @@ class CoreLinksViewSet(ViewSet):
     """
     Link Registry para Core API v2.61.2.
     
-    ⚠️ CRUD MODULARIZADO:
+    # WARNING: CRUD MODULARIZADO:
     - READ: list() - GET /api/v1/core/links/
     
-    ⚠️ FUNCIONES DISPONIBLES:
+    # WARNING: FUNCIONES DISPONIBLES:
     - list(): Retorna registro centralizado de todas las rutas API y UI de TENANT_APPS
     
     Proporciona un registro centralizado de todas las rutas API y UI de TENANT_APPS.
@@ -83,26 +129,25 @@ class CoreLinksViewSet(ViewSet):
         "ui": "/dashboard/empresa/"
       },
             "facturas": {
-                "api": "/api/v1/core/v1/facturas/facturas/",  # ⚠️ v2.61.2: Facade
-                "ui": "/workspace/#facturas",  # ⚠️ v2.61.2: Workspace tab
+                "api": "/api/v1/core/v1/facturas/facturas/",  # # WARNING: v2.61.2: Facade
+                "ui": "/workspace/#facturas",  # # WARNING: v2.61.2: Workspace tab
             },
             "facturas-items": {
-                "api": "/api/v1/core/v1/facturas/items-factura/",  # ⚠️ v2.61.2: Facade
+                "api": "/api/v1/core/v1/facturas/items-factura/",  # # WARNING: v2.61.2: Facade
                 "ui": "/workspace/#facturas",
             },
             "facturas-notas-credito": {
-                "api": "/api/v1/core/v1/facturas/notas-credito/",  # ⚠️ v2.61.2: Facade
+                "api": "/api/v1/core/v1/facturas/notas-credito/",  # # WARNING: v2.61.2: Facade
                 "ui": "/workspace/#facturas",
             },
       ...
     }
     
-    ⚠️ POLÍTICA:
+    # WARNING: POLÍTICA:
     - URLs siempre relativas (sin dominio)
     - No hardcodes de rutas en el frontend
     - Centralizado en Core API para fácil mantenimiento
     """
-    authentication_classes = [SessionAuthentication]
     permission_classes = [IsUserOrHigher]
     
     def list(self, request):
@@ -120,7 +165,7 @@ class CoreLinksViewSet(ViewSet):
             )
         
         try:
-            # ⚠️ POLÍTICA: URLs siempre relativas (sin dominio)
+            # # WARNING: POLÍTICA: URLs siempre relativas (sin dominio)
             # El frontend construye URLs absolutas usando window.location.origin si es necesario
             links = {
                 "empresa": {
@@ -128,15 +173,15 @@ class CoreLinksViewSet(ViewSet):
                     "ui": "/dashboard/empresa/",  # Placeholder para UI futura
                 },
                 "facturas": {
-                    "api": "/api/v1/core/v1/facturas/facturas/",  # ⚠️ v2.61.1: Facade
-                    "ui": "/workspace/#facturas",  # ⚠️ v2.61.1: Workspace tab
+                    "api": "/api/v1/core/v1/facturas/facturas/",  # # WARNING: v2.61.1: Facade
+                    "ui": "/workspace/#facturas",  # # WARNING: v2.61.1: Workspace tab
                 },
                 "facturas-items": {
-                    "api": "/api/v1/core/v1/facturas/items-factura/",  # ⚠️ v2.61.1: Facade
+                    "api": "/api/v1/core/v1/facturas/items-factura/",  # # WARNING: v2.61.1: Facade
                     "ui": "/workspace/#facturas",
                 },
                 "facturas-notas-credito": {
-                    "api": "/api/v1/core/v1/facturas/notas-credito/",  # ⚠️ v2.61.1: Facade
+                    "api": "/api/v1/core/v1/facturas/notas-credito/",  # # WARNING: v2.61.1: Facade
                     "ui": "/workspace/#facturas",
                 },
                 "contabilidad": {
@@ -152,7 +197,7 @@ class CoreLinksViewSet(ViewSet):
                     "ui": "/dashboard/contabilidad/asientos/",  # Placeholder para UI futura
                 },
                 "periodos-contables": {
-                    "api": "/api/v1/core/v1/contabilidad/periodos-contables/",  # Facade ⚠️ v2.61
+                    "api": "/api/v1/core/v1/contabilidad/periodos-contables/",  # Facade # WARNING: v2.61
                     "ui": "/dashboard/contabilidad/periodos/",  # Placeholder para UI futura
                 },
                 "catalogo-niif": {
@@ -160,15 +205,15 @@ class CoreLinksViewSet(ViewSet):
                     "ui": "/dashboard/contabilidad/catalogo-niif/",  # Placeholder para UI futura
                 },
                 "cotizaciones": {
-                    "api": "/api/v1/core/v1/cotizaciones/cotizaciones/",  # Endpoint principal de cotizaciones (facade) ⚠️ v2.61
+                    "api": "/api/v1/core/v1/cotizaciones/cotizaciones/",  # Endpoint principal de cotizaciones (facade) # WARNING: v2.61
                     "ui": "/workspace/#cotizaciones",  # UI en workspace
                 },
                 "cotizaciones-items": {
-                    "api": "/api/v1/core/v1/cotizaciones/items/",  # Facade ⚠️ v2.61
+                    "api": "/api/v1/core/v1/cotizaciones/items/",  # Facade # WARNING: v2.61
                     "ui": "/workspace/#cotizaciones",  # UI en workspace
                 },
                 "cotizaciones-configuracion": {
-                    "api": "/api/v1/core/v1/cotizaciones/configuracion/",  # Facade ⚠️ v2.61
+                    "api": "/api/v1/core/v1/cotizaciones/configuracion/",  # Facade # WARNING: v2.61
                     "ui": "/workspace/#cotizaciones",  # UI en workspace
                 },
                 "perfil": {
@@ -180,23 +225,23 @@ class CoreLinksViewSet(ViewSet):
                     "ui": "/workspace/#landing",
                 },
                 "inventario-categorias": {
-                    "api": "/api/v1/core/v1/inventario/categorias/",  # ⚠️ v2.61.3: Facade
+                    "api": "/api/v1/core/v1/inventario/categorias/",  # # WARNING: v2.61.3: Facade
                     "ui": "/workspace/#inventario",
                 },
                 "inventario-productos": {
-                    "api": "/api/v1/core/v1/inventario/productos/",  # ⚠️ v2.61.3: Facade
+                    "api": "/api/v1/core/v1/inventario/productos/",  # # WARNING: v2.61.3: Facade
                     "ui": "/workspace/#inventario",
                 },
                 "inventario-servicios": {
-                    "api": "/api/v1/core/v1/inventario/servicios/",  # ⚠️ v2.61.3: Facade
+                    "api": "/api/v1/core/v1/inventario/servicios/",  # # WARNING: v2.61.3: Facade
                     "ui": "/workspace/#inventario",
                 },
                 "inventario-activos": {
-                    "api": "/api/v1/core/v1/inventario/activos/",  # ⚠️ v2.61.3: Facade
+                    "api": "/api/v1/core/v1/inventario/activos/",  # # WARNING: v2.61.3: Facade
                     "ui": "/workspace/#inventario",
                 },
                 "inventario-movimientos": {
-                    "api": "/api/v1/core/v1/inventario/movimientos/",  # ⚠️ v2.61.3: Facade
+                    "api": "/api/v1/core/v1/inventario/movimientos/",  # # WARNING: v2.61.3: Facade
                     "ui": "/workspace/#inventario",
                 },
                 "dashboard": {
@@ -228,10 +273,10 @@ class DashboardSectionsViewSet(ViewSet):
     """
     ViewSet para secciones del dashboard (Core API v2.61.2).
     
-    ⚠️ CRUD MODULARIZADO:
+    # WARNING: CRUD MODULARIZADO:
     - READ: list() - GET /api/v1/core/dashboard/sections/
     
-    ⚠️ FUNCIONES DISPONIBLES:
+    # WARNING: FUNCIONES DISPONIBLES:
     - list(): Retorna todas las secciones del dashboard en orden (empresas → facturas → contabilidad → perfil)
     
     GET /api/v1/core/dashboard/sections/
@@ -239,12 +284,11 @@ class DashboardSectionsViewSet(ViewSet):
     Retorna las secciones en orden requerido:
     - empresas → facturas → contabilidad → perfil
     
-    ⚠️ POLÍTICA:
+    # WARNING: POLÍTICA:
     - Orquestación de datos de múltiples TENANT_APPS
     - NO duplica lógica de negocio (usa servicios de cada app)
     - Mantiene tenant-awareness (django-tenants maneja el aislamiento)
     """
-    authentication_classes = [SessionAuthentication]
     permission_classes = [IsUserOrHigher]
     
     def list(self, request):
@@ -265,7 +309,7 @@ class DashboardSectionsViewSet(ViewSet):
             )
         
         try:
-            # ⚠️ ORDEN REQUERIDO: empresas → facturas → contabilidad → perfil
+            # # WARNING: ORDEN REQUERIDO: empresas → facturas → contabilidad → perfil
             # Obtener datos de cada servicio
             empresas_data = get_empresas_snapshot(tenant)
             facturas_data = get_facturas_snapshot(tenant, user)
@@ -280,10 +324,10 @@ class DashboardSectionsViewSet(ViewSet):
                     # Construir URL absoluta usando el request
                     empresas_data[0]['logo'] = request.build_absolute_uri(logo_url)
             
-            # ⚠️ POLÍTICA API-First: Incluir información de usuario, tenant y KPIs
+            # # WARNING: POLÍTICA API-First: Incluir información de usuario, tenant y KPIs
             # para que el shell estático consuma EXCLUSIVAMENTE Core API
-            from apps.tenant.dashboard.services import get_user_role_in_tenant
             from apps.tenant.core.branding import get_tenant_branding
+            from apps.tenant.dashboard.services import get_user_role_in_tenant
             
             user_role = get_user_role_in_tenant(user, tenant)
             branding = get_tenant_branding(request)
@@ -326,7 +370,7 @@ class DashboardSectionsViewSet(ViewSet):
                 },
             }
             
-            # ⚠️ v2.61: Retornar datos directamente sin serializer (serializers_sections no existe)
+            # # WARNING: v2.61: Retornar datos directamente sin serializer (serializers_sections no existe)
             return Response(data, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -347,15 +391,15 @@ class CoreAuthViewSet(ViewSet):
     """
     ViewSet centralizado para autenticación en Core API v2.61.2.
     
-    ⚠️ CRUD MODULARIZADO:
+    # WARNING: CRUD MODULARIZADO:
     - CREATE: login() - POST /api/v1/core/auth/login/
     - CREATE: logout() - POST /api/v1/core/auth/logout/
     
-    ⚠️ FUNCIONES DISPONIBLES:
+    # WARNING: FUNCIONES DISPONIBLES:
     - login(): Autentica un usuario en el tenant actual (valida TenantMembership)
     - logout(): Cierra la sesión del usuario actual
     
-    ⚠️ POLÍTICA:
+    # WARNING: POLÍTICA:
     - Centraliza todos los endpoints de auth para tenants privados
     - Valida TenantMembership antes de permitir login
     - Usa SessionAuthentication para mantener compatibilidad con frontend
@@ -364,9 +408,10 @@ class CoreAuthViewSet(ViewSet):
     Endpoints:
     - POST /api/v1/core/auth/login/ - Autenticar usuario
     - POST /api/v1/core/auth/logout/ - Cerrar sesión
+    - GET /api/v1/core/auth/from-session/ - Obtener JWT desde sesión
     """
-    authentication_classes = []  # AllowAny - no requiere autenticación previa
-    permission_classes = [permissions.AllowAny]
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [permissions.AllowAny] # login/logout son públicos, from-session verifica auth internamente
     
     @action(detail=False, methods=['post'], url_path='login', url_name='login')
     def login(self, request):
@@ -481,8 +526,30 @@ class CoreAuthViewSet(ViewSet):
             # Realizar login de sesión
             login(request, user)
             
-            # Construir redirect_url (puede venir de settings o ser fijo)
-            redirect_url = "/dashboard/"  # TODO: Configurable desde settings
+            # Garantizar TenantProfile existe (SSoT v2.61.8)
+            # Los permisos basados en TenantProfile.rol requieren que el perfil
+            # exista al momento de evaluar has_permission.
+            try:
+                from apps.tenant.empresa.models import Empresa
+                from apps.tenant.perfil.services.business_service import PerfilBusinessService
+                empresa = Empresa.objects.only('id').first()
+                if empresa:
+                    PerfilBusinessService().get_or_initialize_profile(user, empresa)
+            except Exception as exc:
+                logger.warning(
+                    "CoreAuthViewSet.login: auto-create TenantProfile fallo: "
+                    "user=%s, tenant=%s, error=%s",
+                    user.email, tenant.schema_name, str(exc),
+                )
+            
+            # Construir redirect_url (API-First)
+            # [DEBUG] En desarrollo, incluimos el puerto si es necesario
+            app_port = getattr(settings, "APP_PORT", "8000")
+            if settings.DEBUG and app_port and str(app_port) not in ("80", "443"):
+                host = request.get_host().split(":")[0]
+                redirect_url = f"http://{host}:{app_port}/dashboard/"
+            else:
+                redirect_url = "/dashboard/"
             
             logger.info(
                 "CoreAuthViewSet.login: Login exitoso: user=%s, tenant=%s",
@@ -548,5 +615,284 @@ class CoreAuthViewSet(ViewSet):
             )
             return Response(
                 {"detail": "Error interno al procesar el logout."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], url_path='from-session', url_name='from-session')
+    def from_session(self, request):
+        """
+        GET /api/v1/core/auth/from-session/
+        
+        Genera token JWT desde la sesión activa del usuario.
+        Útil para auto-login en el workspace.
+        """
+        if not request.user.is_authenticated:
+            return Response(
+                {"detail": "No autenticado"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        try:
+            refresh = RefreshToken.for_user(request.user)
+            return Response({
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(
+                "CoreAuthViewSet.from_session: Error generando token para usuario=%s, error=%s",
+                request.user.email, str(e),
+                exc_info=True
+            )
+            return Response(
+                {"detail": f"Error al generar token: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['post'], url_path='consume-ott', url_name='consume-ott')
+    def consume_ott(self, request):
+        """
+        POST /api/v1/core/auth/consume-ott/
+        
+        Consume el One-Time Token (OTT) generado durante el onboarding, invoca la
+        función que lo valida desde Redis, y loguea automáticamente al administrador
+        en el tenant privado recién creado.
+        """
+        ott = request.data.get('ott', '').strip()
+        if not ott:
+            return Response({"detail": "Token OTT requerido."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        tenant = getattr(request, 'tenant', None)
+        if not tenant:
+            return Response({"detail": "No se pudo determinar el tenant."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from apps.public.tenants.services.onboarding import consume_onboarding_ott
+            payload = consume_onboarding_ott(ott)
+            
+            if not payload:
+                return Response({"detail": "Token inválido o expirado."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verificar que el token pertenece a este tenant
+            if payload.get("schema_name") != tenant.schema_name:
+                return Response({"detail": "El token no pertenece a este tenant."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            user_id = payload.get("user_id")
+            
+            # Obtener usuario asegurando el esquema correcto
+            current_schema = connection.schema_name
+            try:
+                connection.set_schema_to_public()
+                user = User.objects.get(id=user_id, is_active=True)
+            except User.DoesNotExist:
+                user = None
+            finally:
+                connection.set_schema(current_schema)
+                
+            if not user:
+                return Response({"detail": "Usuario inválido o inactivo."}, status=status.HTTP_401_UNAUTHORIZED)
+                
+            # Loguear automáticamente mediante sesión (Django requiere user.backend cuando user se obtiene via get)
+            user.backend = 'django.contrib.auth.backends.ModelBackend'
+            login(request, user)
+            
+            logger.info("CoreAuthViewSet.consume_ott: Autenticación exitosa vía OTT: user=%s, tenant=%s", user.email, tenant.schema_name)
+            
+            # El test original también espera respuesta exitosa vacía o con tokens.
+            # Como usamos session auth (HTTP cookies) a nivel vista, esto es suficiente.
+            return Response({"success": True}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(
+                "CoreAuthViewSet.consume_ott: Error inesperado: error=%s",
+                str(e),
+                exc_info=True
+            )
+            return Response(
+                {"detail": "Error interno al procesar el consumo del token."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+    @action(detail=False, methods=['post'], url_path='password-reset/request', url_name='password-reset-request')
+    def password_reset_request(self, request):
+        """POST /api/v1/core/auth/password-reset/request/"""
+        email_or_username = request.data.get('email_or_username', '').strip()
+        if not email_or_username:
+            return Response(
+                {"detail": "Email o username requerido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        tenant = getattr(request, 'tenant', None)
+        if not tenant:
+            return Response(
+                {"detail": "No se pudo determinar el tenant."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            from apps.tenant.core.services.auth_service import (
+                password_reset_request as service_password_reset_request,
+            )
+            result = service_password_reset_request(email_or_username, tenant)
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error en password_reset_request: {str(e)}", exc_info=True)
+            return Response(
+                {"detail": "Si el email existe y tiene acceso a este tenant, recibirás un correo."},
+                status=status.HTTP_200_OK
+            )
+
+    @action(detail=False, methods=['post'], url_path='password-reset/validate', url_name='password-reset-validate')
+    def password_reset_validate(self, request):
+        """POST /api/v1/core/auth/password-reset/validate/"""
+        uid = request.data.get('uid', '').strip()
+        token = request.data.get('token', '').strip()
+        
+        if not uid or not token:
+            return Response(
+                {"detail": "UID y token requeridos."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        tenant = getattr(request, 'tenant', None)
+        if not tenant:
+            return Response(
+                {"detail": "No se pudo determinar el tenant."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            from apps.tenant.core.services.auth_service import (
+                password_reset_validate as service_password_reset_validate,
+            )
+            result = service_password_reset_validate(uid, token, tenant)
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.warning(f"Token inválido: {str(e)}")
+            return Response(
+                {"detail": "Token inválido o expirado."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['post'], url_path='password-reset/confirm', url_name='password-reset-confirm')
+    def password_reset_confirm(self, request):
+        """POST /api/v1/core/auth/password-reset/confirm/"""
+        uid = request.data.get('uid', '').strip()
+        token = request.data.get('token', '').strip()
+        new_password = request.data.get('new_password', '')
+        
+        if not uid or not token or not new_password:
+            return Response(
+                {"detail": "UID, token y nueva contraseña son requeridos."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        tenant = getattr(request, 'tenant', None)
+        if not tenant:
+            return Response(
+                {"detail": "No se pudo determinar el tenant."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            from apps.tenant.core.services.auth_service import (
+                password_reset_confirm as service_password_reset_confirm,
+            )
+            result = service_password_reset_confirm(uid, token, new_password, tenant)
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error en password_reset_confirm: {str(e)}", exc_info=True)
+            return Response(
+                {"detail": "Error al restablecer contraseña. Intenta nuevamente."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['get', 'post'], url_path='activate', url_name='activate')
+    def activate(self, request):
+        """
+        Endpoint de activación de owner (Core API v2.61).
+        
+        # WARNING: POLÍTICA v2.61:
+        - Centralizado en Core para control total de identidad.
+        - GET: Valida token y retorna info de usuario/tenant.
+        - POST: Procesa activación (establece contraseña).
+        """
+        token = request.query_params.get('token')
+        
+        if not token:
+            return Response(
+                {"detail": "Token de activacion no proporcionado."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # GET: Verificar token y retornar informacion
+        if request.method == 'GET':
+            try:
+                # ⚠️ POLÍTICA: Usar servicio de dominio migrado a Core
+                result = verify_activation_token(request, token)
+                return Response({
+                    "user": result['user'],
+                    "tenant": result['tenant'],
+                    "token_valid": result['token_valid'],
+                }, status=status.HTTP_200_OK)
+            except InvalidTokenError as e:
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            except UserNotFoundError as e:
+                return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+            except TenantMismatchError as e:
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            except AlreadyActivatedError as e:
+                return Response(
+                    {
+                        "detail": str(e),
+                        "redirect_url": "/static/tenant/core/auth/login.html",
+                        "login_api_url": "/api/v1/core/auth/login/",
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
+            except Exception as e:
+                logger.error("CoreAuthViewSet.activate (GET): error inesperado: %s", str(e), exc_info=True)
+                return Response(
+                    {"detail": "Error interno al validar el token de activacion."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        # POST: Procesar activacion
+        password1 = request.data.get('password1')
+        password2 = request.data.get('password2')
+        
+        if not password1 or not password2:
+            return Response(
+                {"detail": "Ambas contrasenas son requeridas."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # ⚠️ POLÍTICA: Usar servicio de dominio migrado a Core
+            result = process_activation(request, token, password1, password2)
+            return Response(result, status=status.HTTP_200_OK)
+        except InvalidTokenError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except UserNotFoundError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except TenantMismatchError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except AlreadyActivatedError as e:
+            return Response(
+                {
+                    "detail": str(e),
+                    "redirect_url": "/static/tenant/core/auth/login.html",
+                    "login_api_url": "/api/v1/core/auth/login/",
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error("CoreAuthViewSet.activate (POST): error inesperado: %s", str(e), exc_info=True)
+            return Response(
+                {"detail": "Error interno al procesar la activacion."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

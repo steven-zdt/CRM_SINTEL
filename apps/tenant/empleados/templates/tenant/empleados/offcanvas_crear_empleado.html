@@ -1,0 +1,105 @@
+{# offcanvas_crear_empleado.html - Formulario de creación de Empleado v2.61 #}
+{% load static %}
+
+<div class="offcanvas offcanvas-end show" tabindex="-1" id="empleadoOffcanvas" aria-labelledby="empleadoOffcanvasLabel">
+    <div class="offcanvas-header border-bottom bg-light">
+        <h5 class="offcanvas-title" id="empleadoOffcanvasLabel">
+            <i class="bi bi-person-plus me-2"></i>Nuevo Empleado
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div id="form-empleado-feedback" class="alert d-none mb-3" role="alert"></div>
+
+        <form id="empleado-form" hx-post="/api/v1/empleados/empleados/" 
+              hx-swap="none"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[empleados.crear]', {errorContainerSelector: '#form-empleado-feedback'})">
+            {% csrf_token %}
+            
+            <!-- Tipo de Documento -->
+            <div class="mb-3">
+                <label for="tipo_documento" class="form-label">Tipo de Documento</label>
+                <select class="form-select" id="tipo_documento" name="tipo_documento" required>
+                    <option value="CC">Cédula de Ciudadanía</option>
+                    <option value="CE">Cédula de Extranjería</option>
+                    <option value="PA">Pasaporte</option>
+                    <option value="PPT">PPT</option>
+                </select>
+            </div>
+            
+            <!-- Número de Documento -->
+            <div class="mb-3">
+                <label for="numero_documento" class="form-label">Número de Documento</label>
+                <input type="text" class="form-control" id="numero_documento" name="numero_documento" required>
+            </div>
+            
+            <!-- Nombres -->
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="primer_nombre" class="form-label">Primer Nombre</label>
+                    <input type="text" class="form-control" id="primer_nombre" name="primer_nombre" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="segundo_nombre" class="form-label">Segundo Nombre</label>
+                    <input type="text" class="form-control" id="segundo_nombre" name="segundo_nombre">
+                </div>
+            </div>
+            
+            <!-- Apellidos -->
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="primer_apellido" class="form-label">Primer Apellido</label>
+                    <input type="text" class="form-control" id="primer_apellido" name="primer_apellido" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="segundo_apellido" class="form-label">Segundo Apellido</label>
+                    <input type="text" class="form-control" id="segundo_apellido" name="segundo_apellido">
+                </div>
+            </div>
+            
+            <!-- Email -->
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            
+            <!-- Teléfono -->
+            <div class="mb-3">
+                <label for="telefono" class="form-label">Teléfono</label>
+                <input type="text" class="form-control" id="telefono" name="telefono">
+            </div>
+            
+            <!-- Seguridad Social -->
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="eps" class="form-label">EPS</label>
+                    <input type="text" class="form-control" id="eps" name="eps" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="afp" class="form-label">Fondo de Pensión</label>
+                    <input type="text" class="form-control" id="afp" name="afp" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="arl" class="form-label">ARL</label>
+                    <input type="text" class="form-control" id="arl" name="arl" required>
+                </div>
+            </div>
+            
+            <!-- Fecha de Ingreso -->
+            <div class="mb-3">
+                <label for="fecha_ingreso" class="form-label">Fecha de Ingreso</label>
+                <input type="date" class="form-control" id="fecha_ingreso" name="fecha_ingreso" required>
+            </div>
+            
+            <div class="offcanvas-footer border-top bg-light p-3 mt-4 mx-n3 mb-n3">
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-person-plus me-1"></i>Guardar Empleado
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

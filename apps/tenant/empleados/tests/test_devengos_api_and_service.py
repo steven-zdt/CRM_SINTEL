@@ -4,10 +4,12 @@ Pruebas de humo para API y servicios de devengos (DRF + multitenancy).
 Verifica que los endpoints respondan correctamente y que el aislamiento
 por esquema funcione correctamente.
 """
-import pytest
 from decimal import Decimal
+
+import pytest
 from django_tenants.utils import schema_context
-from apps.tenant.empleados.models import Empleado, Devengo
+
+from apps.tenant.empleados.models import Devengo, Empleado
 from apps.tenant.empleados.services.devengo_service import upsert_devengo
 
 

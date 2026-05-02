@@ -1,32 +1,33 @@
 """
 Router de documentos (enrutamiento de parsers) (FASE 3.1).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Enruta documentos a parsers apropiados según tipo detectado
 - Extensible: Nuevos tipos se agregan sin modificar routing
 - Agnóstico del dominio: no conoce modelos Django
 - Retorna DTO JSON unificado
-- ⚠️ v2.40: Prioriza parsers específicos por app antes de parsers genéricos
+- WARNING: v2.40: Prioriza parsers específicos por app antes de parsers genéricos
 """
-from typing import Optional, Dict, Any, Union
 import logging
-from apps.services.document_parser.detector import detect_document_type
+from typing import Any
+
 from apps.services.document_ingest.app_router import route_by_app
+from apps.services.document_parser.detector import detect_document_type
 
 logger = logging.getLogger("apps.services.document_ingest.router")
 
 
 def route(
-    file_bytes: Union[bytes, str],
-    filename: Optional[str] = None,
-    mime_type: Optional[str] = None,
-    media_type: Optional[str] = None,
-    kind_hint: Optional[str] = None
-) -> Dict[str, Any]:
+    file_bytes: bytes | str,
+    filename: str | None = None,
+    mime_type: str | None = None,
+    media_type: str | None = None,
+    kind_hint: str | None = None
+) -> dict[str, Any]:
     """
     Dirige un documento al parser apropiado según el tipo detectado (FASE 3.1).
     
-    ⚠️ REVERSIÓN: Recibe contenido NORMALIZADO del normalizer (bytes o str según tipo).
+    WARNING: REVERSIÓN: Recibe contenido NORMALIZADO del normalizer (bytes o str según tipo).
     
     Args:
         file_bytes: Contenido del documento normalizado (bytes para XML/PDF/Excel, str para CSV/TXT)
@@ -44,7 +45,7 @@ def route(
     Raises:
         ValueError: Si no se puede detectar el tipo o parsear el documento
     """
-    # ⚠️ REVERSIÓN: Si media_type ya viene del normalizer, usarlo directamente
+    # WARNING: REVERSIÓN: Si media_type ya viene del normalizer, usarlo directamente
     # Si no, detectar (fallback para compatibilidad)
     if not media_type:
         detection_result = detect_document_type(file_bytes, filename, mime_type)
@@ -56,9 +57,9 @@ def route(
     if not media_type:
         raise ValueError("No se pudo detectar el tipo de documento")
     
-    # ⚠️ v2.40: Intentar primero routing por app (parsers específicos)
+    # WARNING: v2.40: Intentar primero routing por app (parsers específicos)
     # Si existe un parser específico de app, usarlo en lugar del genérico
-    # ⚠️ CRÍTICO: Para inventario/cotizaciones, SIEMPRE intentar parser específico primero
+    # WARNING: CRÍTICO: Para inventario/cotizaciones, SIEMPRE intentar parser específico primero
     if isinstance(file_bytes, bytes):
         # Detectar app desde kind_hint para forzar uso de parser específico
         from apps.services.document_ingest.app_router import detect_app_from_kind_hint
@@ -87,7 +88,7 @@ def route(
                 "dto": app_dto,
             }
         elif detected_app and detected_app == "cotizaciones":
-            # ⚠️ CRÍTICO: Si se detectó cotizaciones pero no hay parser, es un error
+            # WARNING: CRÍTICO: Si se detectó cotizaciones pero no hay parser, es un error
             # No usar parser genérico porque validará como factura
             logger.error(
                 "router_cotizaciones_parser_not_found",
@@ -100,7 +101,7 @@ def route(
             )
             raise ValueError(f"Parser específico de cotizaciones no encontrado para media_type: {media_type}. No se usará parser genérico para evitar validaciones de facturas.")
     
-    # ⚠️ REVERSIÓN: Enrutar según media_type y llamar al parser genérico correspondiente
+    # WARNING: REVERSIÓN: Enrutar según media_type y llamar al parser genérico correspondiente
     # Los parsers reciben contenido NORMALIZADO (bytes o str según tipo)
     if media_type == "xml":
         from apps.services.document_parser.xml_parser import parse_to_dto

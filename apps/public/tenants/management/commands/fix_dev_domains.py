@@ -1,7 +1,7 @@
 """
 Comando de management para corregir dominios en desarrollo.
 
-⚠️ CRÍTICO: Este comando asegura que todos los tenants tengan dominios con puerto
+WARNING: CRÍTICO: Este comando asegura que todos los tenants tengan dominios con puerto
 en modo DEBUG=True, lo cual es necesario para que django-tenants resuelva correctamente
 el tenant cuando se accede con puerto explícito (ej: http://cliente.localhost:8000/).
 
@@ -16,27 +16,28 @@ Solución:
 - Solo se ejecuta si DEBUG=True
 - Los dominios con puerto se crean como is_primary=False (alias)
 """
-from django.core.management.base import BaseCommand
+
 from django.conf import settings
-from django.db import connection
-from django_tenants.utils import schema_context, get_public_schema_name
+from django.core.management.base import BaseCommand
+from django_tenants.utils import get_public_schema_name, schema_context
+
 from apps.public.tenants.models import Client, Domain
 
 
 class Command(BaseCommand):
-    help = 'Crea dominios con puerto para todos los tenants en modo desarrollo (DEBUG=True)'
+    help = "Crea dominios con puerto para todos los tenants en modo desarrollo (DEBUG=True)"
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--force',
-            action='store_true',
-            help='Forzar recreación de dominios con puerto incluso si ya existen',
+            "--force",
+            action="store_true",
+            help="Forzar recreación de dominios con puerto incluso si ya existen",
         )
         parser.add_argument(
-            '--port',
+            "--port",
             type=str,
             default=None,
-            help='Puerto específico a usar (default: APP_PORT de settings o 8000)',
+            help="Puerto específico a usar (default: APP_PORT de settings o 8000)",
         )
 
     def handle(self, *args, **options):
@@ -44,43 +45,43 @@ class Command(BaseCommand):
         if not settings.DEBUG:
             self.stdout.write(
                 self.style.WARNING(
-                    '⚠️  Este comando solo se ejecuta en modo DEBUG=True. '
-                    'En producción, los dominios no deben incluir puerto.'
+                    "WARNING:  Este comando solo se ejecuta en modo DEBUG=True. "
+                    "En producción, los dominios no deben incluir puerto."
                 )
             )
             return
 
         # Obtener puerto
-        port = options.get('port') or getattr(settings, 'APP_PORT', '8000')
-        
+        port = options.get("port") or getattr(settings, "APP_PORT", "8000")
+
         # Validar que el puerto no sea 80 o 443 (puertos estándar HTTP/HTTPS)
-        if port in ('80', '443'):
+        if port in ("80", "443"):
             self.stdout.write(
                 self.style.WARNING(
-                    f'⚠️  Puerto {port} es un puerto estándar (HTTP/HTTPS). '
-                    f'No se crearán dominios con puerto explícito.'
+                    f"WARNING:  Puerto {port} es un puerto estándar (HTTP/HTTPS). "
+                    f"No se crearán dominios con puerto explícito."
                 )
             )
             return
 
-        force = options.get('force', False)
-        
+        force = options.get("force", False)
+
         self.stdout.write(
             self.style.SUCCESS(
-                f'🚀 Iniciando corrección de dominios en desarrollo (puerto: {port})...'
+                f"🚀 Iniciando corrección de dominios en desarrollo (puerto: {port})..."
             )
         )
 
         # Cambiar al esquema public para consultar Client y Domain
         public_schema = get_public_schema_name()
-        
+
         with schema_context(public_schema):
             # Obtener todos los tenants (excepto public)
-            tenants = Client.objects.exclude(schema_name='public')
-            
+            tenants = Client.objects.exclude(schema_name="public")
+
             if not tenants.exists():
                 self.stdout.write(
-                    self.style.WARNING('⚠️  No se encontraron tenants para procesar.')
+                    self.style.WARNING("WARNING:  No se encontraron tenants para procesar.")
                 )
                 return
 
@@ -92,16 +93,13 @@ class Command(BaseCommand):
             for tenant in tenants:
                 try:
                     # Obtener el dominio principal (sin puerto)
-                    primary_domain = Domain.objects.filter(
-                        tenant=tenant,
-                        is_primary=True
-                    ).first()
+                    primary_domain = Domain.objects.filter(tenant=tenant, is_primary=True).first()
 
                     if not primary_domain:
                         self.stdout.write(
                             self.style.WARNING(
-                                f'⚠️  Tenant "{tenant.schema_name}" no tiene dominio principal. '
-                                f'Saltando...'
+                                f'WARNING:  Tenant "{tenant.schema_name}" no tiene dominio principal. '
+                                f"Saltando..."
                             )
                         )
                         skipped_count += 1
@@ -112,14 +110,13 @@ class Command(BaseCommand):
 
                     # Verificar si ya existe el dominio con puerto
                     existing_domain = Domain.objects.filter(
-                        tenant=tenant,
-                        domain=domain_with_port
+                        tenant=tenant, domain=domain_with_port
                     ).first()
 
                     if existing_domain and not force:
                         self.stdout.write(
                             f'  ✓ Tenant "{tenant.schema_name}": Dominio "{domain_with_port}" ya existe. '
-                            f'Usa --force para recrearlo.'
+                            f"Usa --force para recrearlo."
                         )
                         skipped_count += 1
                         continue
@@ -135,12 +132,12 @@ class Command(BaseCommand):
                     Domain.objects.create(
                         domain=domain_with_port,
                         tenant=tenant,
-                        is_primary=False  # El dominio principal sigue siendo el sin puerto
+                        is_primary=False,  # El dominio principal sigue siendo el sin puerto
                     )
 
                     self.stdout.write(
                         self.style.SUCCESS(
-                            f'  ✅ Tenant "{tenant.schema_name}": Dominio "{domain_with_port}" creado.'
+                            f'  OK: Tenant "{tenant.schema_name}": Dominio "{domain_with_port}" creado.'
                         )
                     )
                     created_count += 1
@@ -148,37 +145,25 @@ class Command(BaseCommand):
                 except Exception as e:
                     self.stdout.write(
                         self.style.ERROR(
-                            f'  ❌ Error procesando tenant "{tenant.schema_name}": {e}'
+                            f'  ERROR: Error procesando tenant "{tenant.schema_name}": {e}'
                         )
                     )
                     error_count += 1
 
             # Resumen
-            self.stdout.write('')
-            self.stdout.write(
-                self.style.SUCCESS('=' * 70)
-            )
-            self.stdout.write(
-                self.style.SUCCESS('📊 RESUMEN DE CORRECCIÓN DE DOMINIOS')
-            )
-            self.stdout.write(
-                self.style.SUCCESS('=' * 70)
-            )
-            self.stdout.write(f'  Total de tenants procesados: {total_tenants}')
-            self.stdout.write(
-                self.style.SUCCESS(f'  ✅ Dominios creados: {created_count}')
-            )
-            self.stdout.write(
-                self.style.WARNING(f'  ⏭️  Dominios omitidos: {skipped_count}')
-            )
+            self.stdout.write("")
+            self.stdout.write(self.style.SUCCESS("=" * 70))
+            self.stdout.write(self.style.SUCCESS("📊 RESUMEN DE CORRECCIÓN DE DOMINIOS"))
+            self.stdout.write(self.style.SUCCESS("=" * 70))
+            self.stdout.write(f"  Total de tenants procesados: {total_tenants}")
+            self.stdout.write(self.style.SUCCESS(f"  OK: Dominios creados: {created_count}"))
+            self.stdout.write(self.style.WARNING(f"  ⏭️  Dominios omitidos: {skipped_count}"))
             if error_count > 0:
-                self.stdout.write(
-                    self.style.ERROR(f'  ❌ Errores: {error_count}')
-                )
-            self.stdout.write('')
+                self.stdout.write(self.style.ERROR(f"  ERROR: Errores: {error_count}"))
+            self.stdout.write("")
             self.stdout.write(
                 self.style.SUCCESS(
-                    '✅ Corrección de dominios completada. '
-                    'Los tenants ahora deberían resolverse correctamente con puerto.'
+                    "OK: Corrección de dominios completada. "
+                    "Los tenants ahora deberían resolverse correctamente con puerto."
                 )
             )

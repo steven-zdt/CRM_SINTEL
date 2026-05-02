@@ -1,7 +1,7 @@
 """
 URL configuration for sintel_project project.
 
-⚠️ IMPORTANTE: django-tenants maneja automáticamente el aislamiento por esquema.
+WARNING: IMPORTANTE: django-tenants maneja automáticamente el aislamiento por esquema.
 El TenantMainMiddleware establece el esquema antes de procesar cualquier request.
 
 Arquitectura API-First:
@@ -13,19 +13,19 @@ Arquitectura API-First:
 """
 from django.contrib import admin
 from django.contrib.auth import logout as auth_logout
-from django.urls import path, include, reverse
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
+from django.urls import include, path, reverse
 from drf_spectacular.views import (
     SpectacularAPIView,
-    SpectacularSwaggerView,
     SpectacularRedocView,
+    SpectacularSwaggerView,
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
-    TokenVerifyView,
 )
+
 from apps.public.core.api.views import LoggedTokenVerifyView
 from config.well_known import chrome_devtools
 
@@ -96,6 +96,10 @@ urlpatterns = [
     # .well-known routes (deben ir antes de otras rutas)
     path('.well-known/appspecific/com.chrome.devtools.json', chrome_devtools, name='chrome-devtools'),
     
+    # Silenciar errores 404 comunes
+    path('robots.txt', lambda r: HttpResponse('User-agent: *\nDisallow:', content_type='text/plain')),
+    path('sitemap.xml', lambda r: HttpResponse('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>', content_type='application/xml')),
+    
     # Login: redirigir al admin login
     path('login/', lambda request: redirect('admin:login'), name='login'),
     path('logout/', lambda request: redirect('admin:logout'), name='logout'),
@@ -114,6 +118,12 @@ urlpatterns = [
     
     # APIs REST públicas (solo en esquema public)
     path('api/public/v1/', include('config.public_api_urls')),
+    # Landing page y tenants (esquema público)
+    path('', include('apps.public.tenants.urls')),
+    
+    # Core público (rutas básicas como workspace/, favicon.ico)
+    path('', include('apps.public.core.urls')),
+    
     # Consola de administración pública (solo en esquema public, requiere staff)
     path('console/', include('apps.public.console.urls')),
     path('console/impuestos/', include('apps.public.impuestos.dashboard.urls_dashboard')),

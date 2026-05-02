@@ -1,14 +1,15 @@
 """
 Serializers para Proyectos v3.3 - Alineado con Modelo, Tabulator y Zero Trust (v2.40)
 
-⚠️ v3.3: Stand-Alone Module (SSoT Strict)
+# WARNING: v3.3: Stand-Alone Module (SSoT Strict)
 - Serializers alineados con el modelo actual (v3.3)
 - Campos optimizados para Tabulator Factory v2.40 (List vs Detail)
 - Soporte para snapshots de clientes y responsables
-- 🛡️ Zero Trust: Implementación de NormalizationMixin obligatoria para inputs
+- [SHIELD] Zero Trust: Implementación de NormalizationMixin obligatoria para inputs
 """
 from rest_framework import serializers
-from apps.tenant.proyectos.models import Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido
+
+from apps.tenant.proyectos.models import AsignacionPersonal, ItemPedido, PedidoProyecto, Proyecto
 
 
 class NormalizationMixin:
@@ -27,7 +28,7 @@ class ProyectoListSerializer(serializers.ModelSerializer):
     Serializer optimizado para listado Tabulator v3.3.
     Mínima exposición de datos (Need-to-Know) y sin campos anidados pesados.
     
-    ⚠️ Campos alineados con proyectos.page.js:
+    # WARNING: Campos alineados con proyectos.page.js:
     - id, codigo, nombre, tipo_servicio_display, estado_display
     - fecha_inicio, fecha_fin_prevista (alias de fecha_fin_estimada)
     """
@@ -81,7 +82,7 @@ class ProyectoListSerializer(serializers.ModelSerializer):
 class AsignacionPersonalSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     Serializer para asignaciones de personal al proyecto.
-    🛡️ Zero Trust: Aplica normalización de datos en el input.
+    [SHIELD] Zero Trust: Aplica normalización de datos en el input.
     """
     rol_display = serializers.CharField(source='get_rol_display', read_only=True)
 
@@ -96,7 +97,7 @@ class AsignacionPersonalSerializer(NormalizationMixin, serializers.ModelSerializ
         read_only_fields = ['id', 'costo_total_asignacion']
 
     def validate(self, attrs):
-        """⚠️ Zero Trust: Normalización estricta antes de persistir."""
+        """# WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
 
@@ -104,7 +105,7 @@ class AsignacionPersonalSerializer(NormalizationMixin, serializers.ModelSerializ
 class ItemPedidoSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     Serializer para items de pedido.
-    🛡️ Zero Trust: Aplica normalización de strings numéricos.
+    [SHIELD] Zero Trust: Aplica normalización de strings numéricos.
     """
     subtotal = serializers.SerializerMethodField()
 
@@ -121,7 +122,7 @@ class ItemPedidoSerializer(NormalizationMixin, serializers.ModelSerializer):
         return obj.cantidad * obj.precio_unitario
 
     def validate(self, attrs):
-        """⚠️ Zero Trust: Normalización estricta antes de persistir."""
+        """# WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
 
@@ -129,7 +130,7 @@ class ItemPedidoSerializer(NormalizationMixin, serializers.ModelSerializer):
 class PedidoProyectoSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     Serializer para pedidos de recursos del proyecto.
-    🛡️ Zero Trust: Aplica normalización estricta de inputs.
+    [SHIELD] Zero Trust: Aplica normalización estricta de inputs.
     """
     items = ItemPedidoSerializer(many=True, read_only=True)
     tipo_recurso_display = serializers.CharField(source='get_tipo_recurso_display', read_only=True)
@@ -150,7 +151,7 @@ class PedidoProyectoSerializer(NormalizationMixin, serializers.ModelSerializer):
 
     def validate(self, attrs):
         """
-        ⚠️ Zero Trust: Normalización estricta y validación de reglas de negocio.
+        # WARNING: Zero Trust: Normalización estricta y validación de reglas de negocio.
         """
         attrs = self.normalize_data(attrs)
         
@@ -168,8 +169,8 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     Serializer completo para detalle de proyecto v3.3 y operaciones Write.
     
-    ⚠️ Incluye todas las relaciones y campos calculados. Excluye datos pesados en listados.
-    🛡️ Zero Trust: Aplica normalización de datos.
+    # WARNING: Incluye todas las relaciones y campos calculados. Excluye datos pesados en listados.
+    [SHIELD] Zero Trust: Aplica normalización de datos.
     """
     # Display fields
     tipo_servicio_display = serializers.CharField(source='get_tipo_servicio_display', read_only=True)
@@ -214,7 +215,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
-        """⚠️ Zero Trust: Limpieza y normalización de todos los datos ingresados."""
+        """# WARNING: Zero Trust: Limpieza y normalización de todos los datos ingresados."""
         attrs = self.normalize_data(attrs)
         return attrs
 
@@ -235,7 +236,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             "utilidad_estimada": float(obj.utilidad_estimada),
             "margen_rentabilidad": float(obj.margen_rentabilidad),
             "variacion_costo": float(valor_contrato - costo_total) if valor_contrato > 0 else 0,
-            "indice_rentabilidad": float((obj.utilidad_estimada / valor_contrato * 100)) if valor_contrato > 0 else 0,
+            "indice_rentabilidad": float(obj.utilidad_estimada / valor_contrato * 100) if valor_contrato > 0 else 0,
         }
 
     def get_cliente_info(self, obj):

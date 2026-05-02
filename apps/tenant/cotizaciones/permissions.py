@@ -1,7 +1,7 @@
 """
 Permisos personalizados para el módulo de cotizaciones.
 
-⚠️ MÓDULO AUTÓNOMO: Este módulo no depende de otras apps excepto SSoT (Empresa).
+# WARNING: MÓDULO AUTÓNOMO: Este módulo no depende de otras apps excepto SSoT (Empresa).
 """
 from rest_framework import permissions
 
@@ -10,7 +10,7 @@ class IsCotizacionesMember(permissions.BasePermission):
     """
     Permiso que verifica que el usuario esté autenticado y que exista una empresa (SSoT).
     
-    ⚠️ MÓDULO AUTÓNOMO: Solo verifica autenticación y existencia de empresa.
+    # WARNING: MÓDULO AUTÓNOMO: Solo verifica autenticación y existencia de empresa.
     No depende de TenantMembership ni otras apps externas.
     
     Uso:
@@ -54,10 +54,10 @@ class IsCotizacionesAdminOrReadOnly(permissions.BasePermission):
     """
     Permiso que permite lectura y escritura a usuarios autenticados del tenant (empresa).
     
-    ⚠️ v2.40: REGLA DE EFICIENCIA - Permite escritura a cualquier usuario autenticado
+    # WARNING: v2.40: REGLA DE EFICIENCIA - Permite escritura a cualquier usuario autenticado
     que pertenezca al tenant (empresa), no solo ADMIN/STAFF.
     
-    ⚠️ MÓDULO AUTÓNOMO: Solo verifica autenticación y pertenencia al tenant (SSoT).
+    # WARNING: MÓDULO AUTÓNOMO: Solo verifica autenticación y pertenencia al tenant (SSoT).
     No depende de otras apps externas.
     
     Uso:
@@ -83,7 +83,7 @@ class IsCotizacionesAdminOrReadOnly(permissions.BasePermission):
         if request.method in SAFE_METHODS:
             return True
         
-        # ⚠️ v2.40: Para mutaciones, permitir a cualquier usuario autenticado del tenant
+        # # WARNING: v2.40: Para mutaciones, permitir a cualquier usuario autenticado del tenant
         # La validación de pertenencia al tenant se hace implícitamente porque
         # todas las operaciones filtran por empresa_id (SSoT)
         return True
@@ -93,7 +93,7 @@ class IsCotizacionesConfigAllowed(permissions.BasePermission):
     """
     Permiso que permite lectura y escritura a usuarios autenticados para configuración.
     
-    ⚠️ MÓDULO AUTÓNOMO: Permite a cualquier usuario autenticado leer y actualizar configuración.
+    # WARNING: MÓDULO AUTÓNOMO: Permite a cualquier usuario autenticado leer y actualizar configuración.
     No depende de otras apps externas.
     
     Uso:

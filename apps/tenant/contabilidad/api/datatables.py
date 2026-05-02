@@ -1,50 +1,34 @@
 """
-⚠️ DEPRECATED v2.40: Este archivo está deprecado.
+WARNING: DEPRECATED v2.40: Este archivo está deprecado.
 
 Use CuentaContableViewSet.datatables() y AsientoContableViewSet.datatables() actions en su lugar.
 Este archivo será removido en v2.41.
 
 Endpoints DataTables server-side para Contabilidad.
 
-⚠️ v2.37: Usa LIST_FIELDS y qs_list() del service.
+WARNING: v2.37: Usa LIST_FIELDS y qs_list() del service.
 Usa DataTableSpec/DataTableServer según Arquitectura v2.37.
 """
 
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
-from apps.shared.datatable import DataTableSpec, DataTableServer
-from apps.tenant.contabilidad.api.serializers import (
-    CuentaContableListSerializer,
-    AsientoContableListSerializer,
-)
-# Importar directamente desde services.py para evitar circularidad
-import importlib.util
-from pathlib import Path
-import sys
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
-services_py_path = Path(__file__).parent.parent / 'services.py'
-if services_py_path.exists():
-    module_name = 'apps.tenant.contabilidad.services_module'
-    if module_name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(module_name, services_py_path)
-        services_module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = services_module
-        spec.loader.exec_module(services_module)
-    else:
-        services_module = sys.modules[module_name]
-    
-    CUENTA_LIST_FIELDS = services_module.CUENTA_LIST_FIELDS
-    qs_cuenta_list = services_module.qs_cuenta_list
-    ASIENTO_LIST_FIELDS = services_module.ASIENTO_LIST_FIELDS
-    qs_asiento_list = services_module.qs_asiento_list
-else:
-    raise ImportError(f"No se pudo cargar services.py desde {services_py_path}")
+from apps.shared.datatable import DataTableServer, DataTableSpec
+from apps.tenant.contabilidad.api.serializers import (
+    AsientoContableListSerializer,
+    CuentaContableListSerializer,
+)
+from apps.tenant.contabilidad.services.services import (
+    qs_asiento_list,
+    qs_cuenta_list,
+)
 
 
 @api_view(['POST'])
-@authentication_classes([SessionAuthentication])
+@authentication_classes([JWTAuthentication, SessionAuthentication])
 @permission_classes([IsAuthenticated])
 def cuentas_contables_dt(request: Request):
     """
@@ -52,7 +36,7 @@ def cuentas_contables_dt(request: Request):
     POST /api/v1/dt/cuentas-contables/
     Retorna JSON DataTables: { draw, recordsTotal, recordsFiltered, data }
     
-    ⚠️ v2.37: Usa CUENTA_LIST_FIELDS y qs_cuenta_list() del service.
+    WARNING: v2.37: Usa CUENTA_LIST_FIELDS y qs_cuenta_list() del service.
     """
     base_qs = qs_cuenta_list()
     
@@ -76,7 +60,7 @@ def cuentas_contables_dt(request: Request):
 
 
 @api_view(['POST'])
-@authentication_classes([SessionAuthentication])
+@authentication_classes([JWTAuthentication, SessionAuthentication])
 @permission_classes([IsAuthenticated])
 def asientos_contables_dt(request: Request):
     """
@@ -84,7 +68,7 @@ def asientos_contables_dt(request: Request):
     POST /api/v1/dt/asientos-contables/
     Retorna JSON DataTables: { draw, recordsTotal, recordsFiltered, data }
     
-    ⚠️ v2.37: Usa ASIENTO_LIST_FIELDS y qs_asiento_list() del service.
+    WARNING: v2.37: Usa ASIENTO_LIST_FIELDS y qs_asiento_list() del service.
     """
     base_qs = qs_asiento_list()
     

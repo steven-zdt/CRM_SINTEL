@@ -1,9 +1,10 @@
 """
 Tests unitarios para materializar_factura_desde_result (Fase 2).
 
-⚠️ TENANT-AWARE: Usa TenantTestCase para garantizar aislamiento por esquema.
+# WARNING: TENANT-AWARE: Usa TenantTestCase para garantizar aislamiento por esquema.
 """
 from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos
 from apps.tenant.facturas.services import materializar_factura_desde_result
@@ -53,7 +54,10 @@ class MaterializarFromDTOTests(TenantTestCase):
         # Crear empresa SSoT para el tenant
         Empresa.objects.create(
             razon_social="SINTEL TECNOLOGY S A S",
-            nit="901123299"
+            nit="901123299",
+            dv="1",
+            direccion="Calle 123",
+            telefono="3001234567",
         )
     
     def test_compra_vs_ssot(self):

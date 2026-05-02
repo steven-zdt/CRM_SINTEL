@@ -1,9 +1,0 @@
-{% load static %}
-{# 1) Core helpers SIEMPRE antes #}
-{% include 'tenant/core/partials/assets_core.html' %}
-
-{# 2) Scripts del módulo contabilidad (sin legacy *.dt.js/*.table.js) #}
-{# ⚠️ v2.61: asientos.page.js (DataTables) ELIMINADO - Usar asientos_main.js (Tabulator) #}
-<script src="{% static 'core/js/contabilidad/cuentas.page.js' %}"></script>
-<script src="{% static 'core/js/contabilidad/asientos_main.js' %}"></script>
-<script src="{% static 'core/js/contabilidad/asientos_form.js' %}"></script>

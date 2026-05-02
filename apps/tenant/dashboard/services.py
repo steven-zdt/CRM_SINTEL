@@ -1,76 +1,26 @@
 """
 Servicios para el dashboard de tenants.
 
-Lógica de negocio para determinar roles y obtener datos del dashboard.
+Logica de negocio para determinar roles y obtener datos del dashboard.
 """
-from django.db import connection
-from django_tenants.utils import get_public_schema_name
 from django.conf import settings
-from apps.public.tenants.models import Domain
+
+from apps.tenant.core.services.membership import (
+    get_primary_domain,
+    get_user_role,
+)
 
 
 def get_user_role_in_tenant(user, tenant):
     """
     Obtiene el rol del usuario en el tenant actual.
-    
-    Si el usuario tiene múltiples membresías en el mismo tenant (no debería pasar por unique_together),
-    retorna el rol más alto según prioridad: ADMIN > STAFF > USER.
-    
-    Args:
-        user: Usuario autenticado
-        tenant: Instancia del tenant (Client)
-    
+
+    Delega a Core Membership Bridge (REGLA 2).
+
     Returns:
-        str: Rol del usuario ('ADMIN', 'STAFF', 'USER') o None si no tiene membresía
+        str: Rol del usuario ('ADMIN', 'STAFF', 'USER') o None si no tiene membresia
     """
-    if not user or not user.is_authenticated:
-        return None
-    
-    if not tenant:
-        return None
-    
-    # Asegurar que estamos en el esquema public para consultar TenantMembership
-    current_schema = getattr(connection, 'schema_name', None)
-    public_schema = get_public_schema_name()
-    
-    try:
-        # Cambiar temporalmente al esquema public si es necesario
-        if current_schema != public_schema:
-            connection.set_schema_to_public()
-        
-        # Importar aquí para evitar problemas de importación circular
-        from apps.public.tenants.models import TenantMembership
-        
-        # Buscar membresías activas del usuario en el tenant
-        memberships = TenantMembership.objects.filter(
-            client=tenant,
-            user=user,
-            is_active=True
-        )
-        
-        if not memberships.exists():
-            return None
-        
-        # Prioridad de roles: ADMIN > STAFF > USER
-        role_priority = {'ADMIN': 3, 'STAFF': 2, 'USER': 1}
-        
-        # Obtener el rol más alto
-        highest_role = None
-        highest_priority = 0
-        
-        for membership in memberships:
-            role = membership.rol
-            priority = role_priority.get(role, 0)
-            if priority > highest_priority:
-                highest_priority = priority
-                highest_role = role
-        
-        return highest_role
-    
-    finally:
-        # Restaurar el esquema original si fue cambiado
-        if current_schema and current_schema != public_schema:
-            connection.set_schema(current_schema)
+    return get_user_role(user, tenant)
 
 
 def get_dashboard_redirect_url(user, tenant, absolute=False):
@@ -93,7 +43,7 @@ def get_dashboard_redirect_url(user, tenant, absolute=False):
     role = get_user_role_in_tenant(user, tenant)
     
     if not role:
-        # ⚠️ Fallback seguro: retornar ruta por defecto en lugar de None
+        # WARNING: Fallback seguro: retornar ruta por defecto en lugar de None
         # Esto evita errores en el frontend cuando no se puede determinar el rol
         # (aunque no debería pasar después de validar membresía)
         relative_url = '/dashboard/'
@@ -101,27 +51,14 @@ def get_dashboard_redirect_url(user, tenant, absolute=False):
         if not absolute:
             return relative_url
         
-        # Intentar construir URL absoluta con fallback
-        current_schema = getattr(connection, 'schema_name', None)
-        public_schema = get_public_schema_name()
-        
-        try:
-            if current_schema != public_schema:
-                connection.set_schema_to_public()
-            
-            domain = Domain.objects.filter(tenant=tenant, is_primary=True).first()
-            
-            if domain:
-                protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
-                return f"{protocol}://{domain.domain}{relative_url}"
-            else:
-                # Último fallback: ruta relativa
-                return relative_url
-        finally:
-            if current_schema and current_schema != public_schema:
-                connection.set_schema(current_schema)
+        domain = get_primary_domain(tenant)
+        if domain:
+            protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
+            return f"{protocol}://{domain}{relative_url}"
+        else:
+            return relative_url
     
-    # ⚠️ v2.30: Opción B - Rutas "bonitas" que apuntan a shells estáticos
+    # WARNING: v2.30: Opcion B - Rutas "bonitas" que apuntan a shells estaticos
     # Cada ruta redirige a un shell estático que consume la API
     # Mapeo de roles a rutas (estas rutas deben existir como shells estáticos o redirects)
     role_routes = {
@@ -135,30 +72,16 @@ def get_dashboard_redirect_url(user, tenant, absolute=False):
     if not absolute:
         return relative_url
     
-    # Construir URL absoluta
-    # Obtener dominio primario del tenant (en esquema public)
-    current_schema = getattr(connection, 'schema_name', None)
-    public_schema = get_public_schema_name()
-    
-    try:
-        if current_schema != public_schema:
-            connection.set_schema_to_public()
-        
-        domain = Domain.objects.filter(tenant=tenant, is_primary=True).first()
-        
-        if not domain:
-            # ⚠️ Fallback seguro: retornar ruta relativa si no hay dominio primario
-            # Nunca retornar None para evitar errores en el frontend
-            return relative_url
-        
-        protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
-        absolute_url = f"{protocol}://{domain.domain}{relative_url}"
-        
-        return absolute_url
-    
-    finally:
-        if current_schema and current_schema != public_schema:
-            connection.set_schema(current_schema)
+    # Construir URL absoluta via Core Membership Bridge (REGLA 2)
+    domain = get_primary_domain(tenant)
+
+    if not domain:
+        return relative_url
+
+    protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
+    absolute_url = f"{protocol}://{domain}{relative_url}"
+
+    return absolute_url
 
 
 def get_dashboard_context(user, tenant):

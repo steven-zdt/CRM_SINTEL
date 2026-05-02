@@ -1,17 +1,19 @@
 """
 Serializers para la app empresa.
 
-⚠️ v2.40: Alineado con Tabulator Factory v2.40 y lazy loading.
+# WARNING: v2.40: Alineado con Tabulator Factory v2.40 y lazy loading.
 
-⚠️ CONTRATO CANÓNICO (DTO): Este serializer define el contrato estable de datos empresariales.
+# WARNING: CONTRATO CANÓNICO (DTO): Este serializer define el contrato estable de datos empresariales.
 Todas las TENANT_APPS deben consumir este contrato vía API o servicio provider.
 
-⚠️ AUTONOMÍA: Esta app es completamente autónoma y no depende de apps/public/impuestos.
+# WARNING: AUTONOMÍA: Esta app es completamente autónoma y no depende de apps/public/impuestos.
 Los choices se definen localmente en apps/tenant/empresa/choices/
 
 Referencia: https://www.django-rest-framework.org/api-guide/serializers/
 """
 from rest_framework import serializers
+
+from apps.tenant.core.api.mixins import NormalizationMixin
 from apps.tenant.empresa.models import Empresa, MailInboxConfig
 
 
@@ -19,10 +21,10 @@ class EmpresaListSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para listado Tabulator v2.40.
     
-    ⚠️ v2.40: Exposición mínima - Solo campos visibles en la tabla.
-    ⚠️ Campos: id, razon_social, nit, dv, direccion, telefono, email_contacto
-    ⚠️ NO incluye: logo (binario), website, regimen_tributario, moneda, timestamps
-    ⚠️ Alineado con Tabulator Factory (lazy loading, paginación remota)
+    # WARNING: v2.40: Exposición mínima - Solo campos visibles en la tabla.
+    # WARNING: Campos: id, razon_social, nit, dv, direccion, telefono, email_contacto
+    # WARNING: NO incluye: logo (binario), website, regimen_tributario, moneda, timestamps
+    # WARNING: Alineado con Tabulator Factory (lazy loading, paginación remota)
     """
     class Meta:
         model = Empresa
@@ -32,8 +34,13 @@ class EmpresaListSerializer(serializers.ModelSerializer):
             'nit',
             'dv',
             'direccion',
+            'ciudad',
+            'departamento',
             'telefono',
-            'email_contacto',
+            'email',
+            'activa',
+            'regimen_tributario',
+            'moneda',
         )
         read_only_fields = fields
 
@@ -42,9 +49,9 @@ class EmpresaHeaderSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para encabezado del Editor de Cotizaciones v2.60.
     
-    ⚠️ v2.60: Exposición mínima para encabezado - Solo campos esenciales.
-    ⚠️ Campos: id, razon_social, nit, logo (URL absoluta)
-    ⚠️ Propósito: Exponer datos básicos de la empresa emisora para el encabezado del Editor de Cotizaciones.
+    # WARNING: v2.60: Exposición mínima para encabezado - Solo campos esenciales.
+    # WARNING: Campos: id, razon_social, nit, logo (URL absoluta)
+    # WARNING: Propósito: Exponer datos básicos de la empresa emisora para el encabezado del Editor de Cotizaciones.
     """
     logo = serializers.SerializerMethodField()
     
@@ -72,7 +79,7 @@ class EmpresaDetailSerializer(serializers.ModelSerializer):
     """
     Serializer para detalle (campos extendidos).
     
-    ⚠️ Incluye logo, website y otros campos opcionales.
+    # WARNING: Incluye logo, website y otros campos opcionales.
     """
     logo = serializers.SerializerMethodField()
     
@@ -84,8 +91,11 @@ class EmpresaDetailSerializer(serializers.ModelSerializer):
             'nit',
             'dv',
             'direccion',
+            'ciudad',
+            'departamento',
             'telefono',
-            'email_contacto',
+            'email',
+            'activa',
             'regimen_tributario',
             'logo',
             'website',
@@ -105,12 +115,14 @@ class EmpresaDetailSerializer(serializers.ModelSerializer):
         return None
 
 
-class EmpresaUpsertSerializer(serializers.ModelSerializer):
+class EmpresaUpsertSerializer(NormalizationMixin, serializers.ModelSerializer):
+    # Only normalize technical fields (nit). Keep `razon_social` case-preserving.
+    normalization_fields = ['nit']
     """
     Serializer para create/update (input validation).
     
-    ⚠️ Valida singleton: si ya existe una empresa y se intenta crear, retorna 409.
-    ⚠️ IMPORTANTE: singleton_key NO debe estar en fields (es editable=False y se establece automáticamente).
+    # WARNING: Valida singleton: si ya existe una empresa y se intenta crear, retorna 409.
+    # WARNING: IMPORTANTE: singleton_key NO debe estar en fields (es editable=False y se establece automáticamente).
     """
     class Meta:
         model = Empresa
@@ -119,21 +131,27 @@ class EmpresaUpsertSerializer(serializers.ModelSerializer):
             'nit',
             'dv',
             'direccion',
+            'ciudad',
+            'departamento',
             'telefono',
-            'email_contacto',
+            'email',
+            'activa',
             'regimen_tributario',
             'logo',
             'website',
             'moneda',
         )
         read_only_fields = ('dv',)
-        # ⚠️ singleton_key NO debe estar en fields (editable=False, se establece automáticamente con default=1)
+        # # WARNING: singleton_key NO debe estar en fields (editable=False, se establece automáticamente con default=1)
         extra_kwargs = {
             'razon_social': {'required': True},
             'nit': {'required': True},
             'direccion': {'required': False, 'allow_blank': True},
+            'ciudad': {'required': False, 'allow_blank': True},
+            'departamento': {'required': False, 'allow_blank': True},
             'telefono': {'required': False, 'allow_blank': True},
-            'email_contacto': {'required': False, 'allow_blank': True},
+            'email': {'required': False, 'allow_blank': True},
+            'activa': {'required': False},
             'regimen_tributario': {'required': False, 'allow_blank': True, 'default': 'NO_RESPONDE'},
             'logo': {'required': False, 'allow_null': True},
             'website': {'required': False, 'allow_blank': True},
@@ -170,7 +188,8 @@ class EmpresaUpsertSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         """Validación a nivel de objeto: singleton."""
         if self.instance is None:
-            if Empresa.objects.exists():
+            # Solo considerar la existencia de la instancia SSoT (singleton_key=1)
+            if Empresa.objects.filter(singleton_key=1).exists():
                 raise serializers.ValidationError({
                     'non_field_errors': ['Ya existe una Empresa en este tenant. Use PATCH o PUT para actualizar.']
                 })
@@ -187,9 +206,9 @@ class MailInboxConfigListSerializer(serializers.ModelSerializer):
     """
     Serializer para LIST (campos operativos mínimos, Tabulator v2.40).
     
-    ⚠️ NORMA DE EXPOSICIÓN: Solo campos necesarios para mostrar estado.
-    ⚠️ SEGURIDAD: NUNCA expone password, username completo, ni secretos.
-    ⚠️ v2.40: Alineado con Tabulator Factory (paginación remota).
+    # WARNING: NORMA DE EXPOSICIÓN: Solo campos necesarios para mostrar estado.
+    # WARNING: SEGURIDAD: NUNCA expone password, username completo, ni secretos.
+    # WARNING: v2.40: Alineado con Tabulator Factory (paginación remota).
     """
     status = serializers.SerializerMethodField()
     last_sync_display = serializers.SerializerMethodField()
@@ -232,7 +251,7 @@ class MailInboxConfigDetailSerializer(serializers.ModelSerializer):
     """
     Serializer para DETAIL (campos extendidos, sin secretos).
     
-    ⚠️ SEGURIDAD:
+    # WARNING: SEGURIDAD:
     - password es write_only (nunca se devuelve)
     - username se expone parcialmente (solo dominio si aplica)
     - Cifrado automático de passwords al guardar
@@ -369,21 +388,32 @@ class MailInboxConfigDetailSerializer(serializers.ModelSerializer):
         return attrs
     
     def create(self, validated_data):
-        """Crea configuración cifrando passwords."""
+        """Crea configuracion cifrando passwords y asignando empresa desde request.user.tenant_profile.empresa (SSoT, anti-IDOR)."""
+        request = self.context.get('request')
+        empresa = None
+        if request and hasattr(request.user, 'tenant_profile') and request.user.tenant_profile:
+            empresa = request.user.tenant_profile.empresa
+        if not empresa:
+            # Fallback: Singleton de Empresa en el tenant actual (django-tenants schema isolation)
+            from apps.tenant.empresa.models import Empresa
+            empresa = Empresa.objects.only('id').first()
+        if not empresa:
+            raise serializers.ValidationError({
+                'empresa': 'No se pudo determinar la empresa del usuario autenticado.'
+            })
+        validated_data['empresa'] = empresa
         if 'imap_password' in validated_data and validated_data['imap_password']:
             try:
                 from apps.services.security.crypto import encrypt_password
                 validated_data['imap_password'] = encrypt_password(validated_data['imap_password'])
             except Exception as e:
                 log.error(f"Error cifrando imap_password: {e}")
-        
         if 'smtp_password' in validated_data and validated_data.get('smtp_password'):
             try:
                 from apps.services.security.crypto import encrypt_password
                 validated_data['smtp_password'] = encrypt_password(validated_data['smtp_password'])
             except Exception as e:
                 log.error(f"Error cifrando smtp_password: {e}")
-        
         return super().create(validated_data)
     
     def update(self, instance, validated_data):
@@ -416,7 +446,7 @@ class MailInboxConfigTestConnectionSerializer(serializers.Serializer):
     """
     Serializer dedicado para test-connection (no persiste datos).
     
-    ⚠️ v2.40: Alineado con arquitectura API-First.
+    # WARNING: v2.40: Alineado con arquitectura API-First.
     """
     host = serializers.CharField(
         required=True,

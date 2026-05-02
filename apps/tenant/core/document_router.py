@@ -1,7 +1,7 @@
 """
 Router de Dominio para Materialización de Documentos (FASE 7 + FASE 4).
 
-⚠️ PRINCIPIOS:
+# WARNING: PRINCIPIOS:
 - Router centralizado: Selecciona función de materialización según dto["type"]
 - Multi-tenant: Opera en el contexto del tenant actual (schema_context)
 - Idempotencia: Delegada a cada servicio de dominio
@@ -14,25 +14,27 @@ Flujo:
 3. Ejecuta en contexto del tenant actual
 4. Retorna objeto materializado o payload mínimo
 
-⚠️ FASE 4: Agregado diccionario DOMAIN_MATERIALIZERS y función materializar() simplificada
+# WARNING: FASE 4: Agregado diccionario DOMAIN_MATERIALIZERS y función materializar() simplificada
 para integración directa con pipeline universal de facturas.
 """
 import logging
-from typing import Dict, Any, Tuple, Optional, Callable
+from collections.abc import Callable
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.db import connection
 
 logger = logging.getLogger("apps.tenant.core.document_router")
 
 
-# ⚠️ FASE 4: Diccionario de materializadores para facturas (simplificado)
-DOMAIN_MATERIALIZERS: Dict[str, Callable[[Dict[str, Any]], Tuple[Dict[str, Any], int]]] = {}
+# # WARNING: FASE 4: Diccionario de materializadores para facturas (simplificado)
+DOMAIN_MATERIALIZERS: dict[str, Callable[[dict[str, Any]], tuple[dict[str, Any], int]]] = {}
 
 # Registro de materializadores por tipo de documento (FASE 7 - completo)
-MATERIALIZERS: Dict[str, Callable[[Dict[str, Any]], Tuple[Dict[str, Any], int]]] = {}
+MATERIALIZERS: dict[str, Callable[[dict[str, Any]], tuple[dict[str, Any], int]]] = {}
 
 
-def register_materializer(document_type: str, materializer_func: Callable[[Dict[str, Any]], Tuple[Dict[str, Any], int]]) -> None:
+def register_materializer(document_type: str, materializer_func: Callable[[dict[str, Any]], tuple[dict[str, Any], int]]) -> None:
     """
     Registra una función de materialización para un tipo de documento.
     
@@ -50,7 +52,7 @@ def register_materializer(document_type: str, materializer_func: Callable[[Dict[
     )
 
 
-def get_materializer(document_type: str) -> Optional[Callable[[Dict[str, Any]], Tuple[Dict[str, Any], int]]]:
+def get_materializer(document_type: str) -> Callable[[dict[str, Any]], tuple[dict[str, Any], int]] | None:
     """
     Obtiene la función de materialización para un tipo de documento.
     
@@ -63,7 +65,7 @@ def get_materializer(document_type: str) -> Optional[Callable[[Dict[str, Any]], 
     return MATERIALIZERS.get(document_type)
 
 
-def materialize_document(dto: Dict[str, Any], request_id: Optional[str] = None) -> Tuple[Dict[str, Any], int]:
+def materialize_document(dto: dict[str, Any], request_id: str | None = None) -> tuple[dict[str, Any], int]:
     """
     Materializa un documento desde DTO JSON canónico (FASE 7).
     
@@ -190,7 +192,7 @@ def materialize_document(dto: Dict[str, Any], request_id: Optional[str] = None) 
             "message": error_message,
         }, status_code
         
-    except Exception as e:
+    except Exception:
         logger.exception(
             "document_router_materialization_error",
             extra={
@@ -205,12 +207,12 @@ def materialize_document(dto: Dict[str, Any], request_id: Optional[str] = None) 
         }, 500
 
 
-# ⚠️ FASE 4: Función simplificada para integración directa con pipeline universal
-def materializar(dto: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+# # WARNING: FASE 4: Función simplificada para integración directa con pipeline universal
+def materializar(dto: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """
     Materializa un documento desde DTO (FASE 4 - versión simplificada).
     
-    ⚠️ FASE 4: Función simplificada específica para facturas.
+    # WARNING: FASE 4: Función simplificada específica para facturas.
     Usa DOMAIN_MATERIALIZERS para routing directo.
     
     Args:
@@ -270,7 +272,7 @@ def _ensure_materializers_registered():
         # Factura
         from apps.tenant.facturas.services import guardar_factura_desde_dto
         
-        def materializar_factura_wrapper(dto: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+        def materializar_factura_wrapper(dto: dict[str, Any]) -> tuple[dict[str, Any], int]:
             """Wrapper para adaptar guardar_factura_desde_dto al contrato del router."""
             result, status_code = guardar_factura_desde_dto(dto, xml_text=None)
             return result, status_code
@@ -283,7 +285,7 @@ def _ensure_materializers_registered():
         # Nota Crédito
         from apps.tenant.facturas.services import guardar_nota_credito_desde_dto
         
-        def materializar_nc_wrapper(dto: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
+        def materializar_nc_wrapper(dto: dict[str, Any]) -> tuple[dict[str, Any], int]:
             """Wrapper para adaptar guardar_nota_credito_desde_dto al contrato del router."""
             try:
                 nota_credito = guardar_nota_credito_desde_dto(dto, xml_text=None)
@@ -314,7 +316,7 @@ def _ensure_materializers_registered():
     
     try:
         # Inventario
-        from apps.tenant.inventario.services import materializar_inventario_desde_dto
+        from apps.tenant.inventario.services.services import materializar_inventario_desde_dto
         register_materializer("inventario", materializar_inventario_desde_dto)
     except ImportError:
         logger.warning("document_router: No se pudo importar materializador de inventario")

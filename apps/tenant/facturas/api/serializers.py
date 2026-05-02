@@ -1,12 +1,13 @@
 """
 Serializers para la app facturas.
 
-⚠️ v2.30: API-First (DRF JSON-only) - Contratos canónicos para consumo desde workspace.
-⚠️ v2.40: Alineado con XML reales en apps/tenant/facturas/xml/ - Solo campos extraídos del XML
+# WARNING: v2.30: API-First (DRF JSON-only) - Contratos canónicos para consumo desde workspace.
+# WARNING: v2.40: Alineado con XML reales en apps/tenant/facturas/xml/ - Solo campos extraídos del XML
 """
 from rest_framework import serializers
+
 from apps.tenant.facturas.models import Factura, ItemFactura, MailIngestionRun, NotaCredito
-from apps.tenant.facturas.services import LIST_FIELDS, DETAIL_FIELDS
+from apps.tenant.facturas.services import DETAIL_FIELDS
 
 
 class ItemFacturaSerializer(serializers.ModelSerializer):
@@ -25,9 +26,9 @@ class FacturaListDTSerializer(serializers.ModelSerializer):
     """
     Serializer mínimo para Tabulator v2.40 de Facturas.
     
-    ⚠️ OPTIMIZACIÓN: Solo campos necesarios para la tabla Tabulator.
-    ✅ Alineado con columnas definidas en facturas.page.js (Tabulator v2.40)
-    ✅ Sin campos pesados (XML, anexos)
+    # WARNING: OPTIMIZACIÓN: Solo campos necesarios para la tabla Tabulator.
+    [OK] Alineado con columnas definidas en facturas.page.js (Tabulator v2.40)
+    [OK] Sin campos pesados (XML, anexos)
     """
     emisor = serializers.CharField(source="emisor_razon_social", read_only=True)
     receptor = serializers.CharField(source="receptor_razon_social", read_only=True)
@@ -42,26 +43,26 @@ class FacturaListSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para listado de facturas (Tabulator v2.60).
     
-    ⚠️ CAPA DE API: Serialización (Serializers)
-    ⚠️ v2.60: Campos aplanados para Tabulator Factory
+    # WARNING: CAPA DE API: Serialización (Serializers)
+    # WARNING: v2.60: Campos aplanados para Tabulator Factory
     - cliente_nombre: Campo aplanado desde receptor_razon_social (snapshot)
     - total_formateado: Campo calculado formateado para visualización
     - Solo campos necesarios para la tabla (optimización)
     
-    ⚠️ CAMPO NATURALEZA: Disponible para el frontend en el listado optimizado
+    # WARNING: CAMPO NATURALEZA: Disponible para el frontend en el listado optimizado
     - El campo `naturaleza` está incluido en los campos serializados (VENTA/COMPRA)
     - Es un campo calculado automáticamente en el Service Layer antes de persistir
     - Está marcado como `read_only` porque se determina automáticamente
     
-    ⚠️ OPTIMIZACIÓN ZERO WASTE:
+    # WARNING: OPTIMIZACIÓN ZERO WASTE:
     - El servicio qs_list() ya incluye el campo naturaleza dentro de LIST_FIELDS
     - Esto evita consultas innecesarias a la base de datos
     - Solo se cargan los campos definidos en LIST_FIELDS usando only()
     """
-    # ⚠️ CRÍTICO: Formatear fecha para mejor visualización
+    # # WARNING: CRÍTICO: Formatear fecha para mejor visualización
     fecha_emision = serializers.DateTimeField(format="%Y-%m-%d %H:%M", read_only=True)
     
-    # ⚠️ v2.60: Campos aplanados para Tabulator
+    # # WARNING: v2.60: Campos aplanados para Tabulator
     cliente_nombre = serializers.CharField(source="receptor_razon_social", read_only=True)
     total_formateado = serializers.SerializerMethodField()
     
@@ -71,20 +72,20 @@ class FacturaListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Factura
-        # ⚠️ v2.60: Campos optimizados para Tabulator con campos aplanados
+        # # WARNING: v2.60: Campos optimizados para Tabulator con campos aplanados
         fields = (
-            "id",  # ⚠️ PRIMERO: Requerido para Tabulator
+            "id",  # # WARNING: PRIMERO: Requerido para Tabulator
             "numero",  # <cbc:ID> del XML
-            "naturaleza",  # ⚠️ VENTA/COMPRA (calculado automáticamente en Service Layer)
+            "naturaleza",  # # WARNING: VENTA/COMPRA (calculado automáticamente en Service Layer)
             "fecha_emision",  # <cbc:IssueDate> + <cbc:IssueTime>
-            "fecha_vencimiento",  # ⚠️ v2.60: Fecha de vencimiento para estado de pago
-            "cliente_nombre",  # ⚠️ v2.60: Campo aplanado (alias de receptor_razon_social)
+            "fecha_vencimiento",  # # WARNING: v2.60: Fecha de vencimiento para estado de pago
+            "cliente_nombre",  # # WARNING: v2.60: Campo aplanado (alias de receptor_razon_social)
             "receptor_razon_social",  # Snapshot histórico (mantenido por compatibilidad)
             "moneda",  # <cbc:DocumentCurrencyCode>
             "subtotal",  # <cac:LegalMonetaryTotal><cbc:LineExtensionAmount>
             "impuestos",  # <cac:TaxTotal><cbc:TaxAmount>
             "total",  # <cac:LegalMonetaryTotal><cbc:PayableAmount>
-            "total_formateado",  # ⚠️ v2.60: Campo calculado formateado
+            "total_formateado",  # # WARNING: v2.60: Campo calculado formateado
             "estado",  # Estado DIAN (CUFE/CUDE)
             "nota_credito_id",  # ID de NotaCrédito si existe
             "nota_credito_numero",  # Número de NotaCrédito si existe
@@ -122,11 +123,11 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
     """
     Serializer de detalle para factura (uno a uno).
     
-    ⚠️ v2.37: Alineado con DETAIL_FIELDS del service.
-    ✅ Solo cuando el usuario abre detalle
-    ✅ Acceso controlado y singular
-    ✅ Incluye metadatos de anexos (no el contenido XML)
-    ✅ NO incluye items (usar endpoint /items/ si es necesario)
+    # WARNING: v2.37: Alineado con DETAIL_FIELDS del service.
+    [OK] Solo cuando el usuario abre detalle
+    [OK] Acceso controlado y singular
+    [OK] Incluye metadatos de anexos (no el contenido XML)
+    [OK] NO incluye items (usar endpoint /items/ si es necesario)
     """
     has_ubl_xml = serializers.SerializerMethodField()
     has_application_response_xml = serializers.SerializerMethodField()
@@ -196,7 +197,7 @@ class FacturaWriteSerializer(serializers.ModelSerializer):
     """
     Serializer de escritura: NO permite campos computados/externos.
     
-    ⚠️ IMPORTANTE: Los campos emisor_* se poblan automáticamente desde Empresa (SSoT)
+    # WARNING: IMPORTANTE: Los campos emisor_* se poblan automáticamente desde Empresa (SSoT)
     mediante el servicio crear_factura() / actualizar_factura().
     """
     class Meta:
@@ -214,7 +215,7 @@ class FacturaReadDTOSerializer(serializers.Serializer):
     """
     Serializer para DTO de preview (sin persistir).
     
-    ⚠️ MINIMAL: Solo campos esenciales para mostrar en preview.
+    # WARNING: MINIMAL: Solo campos esenciales para mostrar en preview.
     """
     numero = serializers.CharField(allow_blank=True, required=False)
     prefijo = serializers.CharField(allow_blank=True, required=False)
@@ -244,13 +245,13 @@ class UploadUBLFileSerializer(serializers.Serializer):
 
 
 # --- Serializers para ingesta por correo (Fase 4/5) ---
-# ⚠️ SSoT: Las configuraciones se gestionan en /api/v1/empresa/mailbox/configs/
+# # WARNING: SSoT: Las configuraciones se gestionan en /api/v1/empresa/mailbox/configs/
 class MailIngestionRunCreateSerializer(serializers.Serializer):
     """
     Serializer para crear una ejecución de ingesta por correo.
     
-    ⚠️ SSoT: config_id hace referencia a MailInboxConfig de empresa.
-    ⚠️ NATURALEZA: No se especifica; se determina automáticamente desde el XML UBL.
+    # WARNING: SSoT: config_id hace referencia a MailInboxConfig de empresa.
+    # WARNING: NATURALEZA: No se especifica; se determina automáticamente desde el XML UBL.
     """
     config_id = serializers.IntegerField(
         required=True,
@@ -269,7 +270,7 @@ class MailIngestionRunListSerializer(serializers.ModelSerializer):
     """
     Serializer para listado de ejecuciones de ingesta.
     
-    ⚠️ MINIMAL: Solo campos esenciales para tabla de ejecuciones.
+    # WARNING: MINIMAL: Solo campos esenciales para tabla de ejecuciones.
     """
     class Meta:
         model = MailIngestionRun
@@ -290,8 +291,8 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
     """
     Serializer mínimo para listado de notas crédito.
     
-    ⚠️ OPTIMIZACIÓN: Sin xml_content (artefacto pesado).
-    ✅ Solo campos esenciales para tabla.
+    # WARNING: OPTIMIZACIÓN: Sin xml_content (artefacto pesado).
+    [OK] Solo campos esenciales para tabla.
     """
     factura_numero = serializers.CharField(source="factura.numero", read_only=True)
     factura_cufe = serializers.CharField(source="factura.cufe", read_only=True)
@@ -321,8 +322,8 @@ class NotaCreditoDetailSerializer(serializers.ModelSerializer):
     """
     Serializer de detalle para nota crédito.
     
-    ⚠️ OPTIMIZACIÓN: NO incluye xml_content (artefacto pesado).
-    ✅ El XML se expone en endpoint dedicado /xml/
+    # WARNING: OPTIMIZACIÓN: NO incluye xml_content (artefacto pesado).
+    [OK] El XML se expone en endpoint dedicado /xml/
     """
     factura_numero = serializers.CharField(source="factura.numero", read_only=True)
     factura_cufe = serializers.CharField(source="factura.cufe", read_only=True)

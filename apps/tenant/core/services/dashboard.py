@@ -1,25 +1,24 @@
 """
 Servicios de orquestación para datos de dashboard.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Solo lectura/composición de datos
 - NO duplica lógica de negocio de apps.tenant.dashboard
 - Usa servicios de otras apps para componer datos
 """
-from typing import Dict, Any, Optional
-from django.db import connection
+from typing import Any
 
+from apps.tenant.core.services.contabilidad import get_contabilidad_snapshot
 from apps.tenant.core.services.empresa import get_empresas_snapshot
 from apps.tenant.core.services.facturas import get_facturas_snapshot
-from apps.tenant.core.services.contabilidad import get_contabilidad_snapshot
 from apps.tenant.core.services.perfil import get_perfil_snapshot
 
 
-def get_dashboard_resumen(tenant, user=None) -> Dict[str, Any]:
+def get_dashboard_resumen(tenant, user=None) -> dict[str, Any]:
     """
     Obtiene resumen de datos del dashboard del tenant.
     
-    ⚠️ POLÍTICA: Composición de datos de múltiples apps.
+    # WARNING: POLÍTICA: Composición de datos de múltiples apps.
     
     Args:
         tenant: Instancia del tenant (Client)
@@ -64,11 +63,11 @@ def get_dashboard_resumen(tenant, user=None) -> Dict[str, Any]:
         }
 
 
-def get_dashboard_snapshot(tenant, user=None) -> Dict[str, Any]:
+def get_dashboard_snapshot(tenant, user=None) -> dict[str, Any]:
     """
     Obtiene snapshot de datos del dashboard para el DashboardSectionsViewSet.
     
-    ⚠️ POLÍTICA: Versión simplificada para uso en Core API.
+    # WARNING: POLÍTICA: Versión simplificada para uso en Core API.
     
     Args:
         tenant: Instancia del tenant (Client)

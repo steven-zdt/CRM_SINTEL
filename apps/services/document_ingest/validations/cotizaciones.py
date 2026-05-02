@@ -1,15 +1,16 @@
 """
 Validador para catálogos de productos de Cotizaciones (v2.40).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Validaciones específicas para catálogos de productos en el módulo de cotizaciones
 - Reglas de negocio del dominio de cotizaciones/inventario
 - Hereda de BaseValidator
 - NO valida campos de facturas (emisor, receptor, CUFE, etc.)
 - Alineado con la arquitectura de cotizaciones
 """
-from typing import Dict, Any, Tuple, List, Optional
 from decimal import Decimal, InvalidOperation
+from typing import Any
+
 from .base import BaseValidator
 
 
@@ -17,7 +18,7 @@ class CotizacionesValidator(BaseValidator):
     """
     Validador para catálogos de productos en Cotizaciones.
     
-    ⚠️ v2.40: Validador específico para el módulo de cotizaciones.
+    WARNING: v2.40: Validador específico para el módulo de cotizaciones.
     Aplica validaciones específicas para catálogos:
     - Items con código y nombre
     - Precios válidos
@@ -35,7 +36,7 @@ class CotizacionesValidator(BaseValidator):
         """Nombre de la app que usa este validador."""
         return "cotizaciones"
     
-    def validate(self, dto: Dict[str, Any], document_type: str) -> Tuple[bool, Optional[str], List[str]]:
+    def validate(self, dto: dict[str, Any], document_type: str) -> tuple[bool, str | None, list[str]]:
         """
         Valida un DTO de catálogo de productos para cotizaciones.
         
@@ -109,11 +110,11 @@ class CotizacionesValidator(BaseValidator):
         
         return True, None, []
     
-    def validate_common_fields(self, dto: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    def validate_common_fields(self, dto: dict[str, Any]) -> tuple[bool, list[str]]:
         """
         Valida campos comunes para catálogos de productos en cotizaciones.
         
-        ⚠️ v2.40: NO valida campos de facturas (emisor, receptor, CUFE, etc.)
+        WARNING: v2.40: NO valida campos de facturas (emisor, receptor, CUFE, etc.)
         Solo valida estructura básica del catálogo.
         
         Args:

@@ -1,7 +1,7 @@
 """
 Tests de humo para Fase 3: Workspace Facturas UI (Upload asíncrono + Polling + Materialización).
 
-⚠️ VALIDACIONES ESTRICTAS:
+# WARNING: VALIDACIONES ESTRICTAS:
 - Rutas relativas (nunca http(s)://host)
 - Sin duplicación de assets
 - Columna Naturaleza presente
@@ -9,9 +9,8 @@ Tests de humo para Fase 3: Workspace Facturas UI (Upload asíncrono + Polling + 
 """
 import re
 from pathlib import Path
-from django.test import SimpleTestCase
-from django.urls import reverse
 
+from django.test import SimpleTestCase
 
 TEMPLATE_PATH = Path("apps/tenant/core/templates/tenant/core/workspace.html")
 FACTURAS_JS_PATH = Path("apps/tenant/landing/static/tenant/landing/workspace/facturas.page.js")

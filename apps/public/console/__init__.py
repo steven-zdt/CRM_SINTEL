@@ -6,5 +6,5 @@ Esta aplicación proporciona una interfaz web para gestionar:
 - Usuarios Globales
 - Catálogo Legal de Impuestos DIAN
 
-⚠️ IMPORTANTE: Solo accesible desde el esquema 'public' y solo para usuarios staff.
+WARNING: IMPORTANTE: Solo accesible desde el esquema 'public' y solo para usuarios staff.
 """

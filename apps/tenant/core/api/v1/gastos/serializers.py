@@ -1,6 +1,6 @@
 """Core API v1 - Gastos serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Heredar serializers existentes de la app gastos.
 - Exponer URLs de adjuntos (evidencia) para el Workspace.

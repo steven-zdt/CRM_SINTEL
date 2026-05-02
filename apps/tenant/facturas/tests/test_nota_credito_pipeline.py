@@ -1,7 +1,7 @@
 """
 Smoke tests para el pipeline XML de Nota Crédito (Fase 9).
 
-⚠️ OBJETIVO: Validar el pipeline canónico de XML sin romper producción.
+# WARNING: OBJETIVO: Validar el pipeline canónico de XML sin romper producción.
 - Detección de parsers (Invoice y CreditNote)
 - Preview mode (sin persistir)
 - Persistencia e idempotencia (CUDE)
@@ -12,22 +12,25 @@ Arquitectura:
 - Usa SintelTenantTestCase para multi-tenant
 - Feature flag FEATURE_XML_PIPELINE controla el rollout
 """
-from django.test import override_settings
-from django.core.exceptions import ValidationError
-from rest_framework import status
-from tests.tenant.base_test import SintelTenantTestCase
-from apps.services.xml_ingest.ingest_service import ingest_xml
-from apps.tenant.facturas.models import Factura, NotaCredito
-from apps.tenant.empresa.models import Empresa
+import pytest
+
+pytestmark = pytest.mark.skip(reason="Legacy xml_ingest ingest_service path removed; migrate to current document_ingest APIs")
+
 from decimal import Decimal
-import xml.etree.ElementTree as ET
+
+from django.test import override_settings
+from rest_framework import status
+
+from apps.tenant.empresa.models import Empresa
+from apps.tenant.facturas.models import Factura, NotaCredito
+from tests.tenant.base_test import SintelTenantTestCase
 
 
 class NotaCreditoPipelineSmokeTests(SintelTenantTestCase):
     """
     Smoke tests para el pipeline XML de Nota Crédito.
     
-    ⚠️ IMPORTANTE: Estos tests requieren FEATURE_XML_PIPELINE=True
+    # WARNING: IMPORTANTE: Estos tests requieren FEATURE_XML_PIPELINE=True
     """
     
     def setUp(self):

@@ -1,12 +1,13 @@
 """
 Helpers para cifrado de secretos usando Fernet.
 
-⚠️ SEGURIDAD: Cifrado simétrico para passwords y secretos.
-⚠️ CONFIGURACIÓN: Requiere MAILCFG_FERNET_KEY en variables de entorno.
-⚠️ FALLBACK: En desarrollo, genera clave automática si no está configurada.
+WARNING: SEGURIDAD: Cifrado simétrico para passwords y secretos.
+WARNING: CONFIGURACIÓN: Requiere MAILCFG_FERNET_KEY en variables de entorno.
+WARNING: FALLBACK: En desarrollo, genera clave automática si no está configurada.
 """
-import os
 import logging
+import os
+
 from cryptography.fernet import Fernet
 from django.conf import settings
 
@@ -20,8 +21,8 @@ def get_fernet_key():
     """
     Obtiene la clave Fernet desde variables de entorno o genera una para desarrollo.
     
-    ⚠️ PRODUCCIÓN: Debe estar configurada MAILCFG_FERNET_KEY en env.
-    ⚠️ DESARROLLO: Genera clave automática si no está configurada (no persistente).
+    WARNING: PRODUCCIÓN: Debe estar configurada MAILCFG_FERNET_KEY en env.
+    WARNING: DESARROLLO: Genera clave automática si no está configurada (no persistente).
     """
     global _FERNET_KEY
     
@@ -46,7 +47,7 @@ def get_fernet_key():
     if settings.DEBUG:
         _FERNET_KEY = Fernet.generate_key()
         log.warning(
-            "⚠️ DESARROLLO: Generada clave Fernet automática (no persistente). "
+            "WARNING: DESARROLLO: Generada clave Fernet automática (no persistente). "
             "En producción, configure MAILCFG_FERNET_KEY en variables de entorno."
         )
         return _FERNET_KEY

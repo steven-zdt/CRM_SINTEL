@@ -1,16 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 Choices para el campo 'centro_costo' del modelo Gasto.
 
-⚠️ v2.40: Centros de costo para clasificación contable de gastos.
+WARNING: v2.40: Centros de costo para clasificación contable de gastos.
 Basado en categorías contables estándar para Documentos Soporte.
 """
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
-CENTRO_COSTO_CHOICES: List[Tuple[str, str]] = [
+CENTRO_COSTO_CHOICES: list[tuple[str, str]] = [
     ("ADMINISTRATIVOS", "Administrativos"),
     ("MATERIA_PRIMA", "Materia Prima"),
     ("MANUTENCION", "Mantenimiento"),
@@ -35,7 +32,7 @@ CENTRO_COSTO_CHOICES: List[Tuple[str, str]] = [
 ]
 
 
-def get_centro_costo_choices() -> List[Tuple[str, str]]:
+def get_centro_costo_choices() -> list[tuple[str, str]]:
     """
     Provee los choices de centro de costo en runtime.
     

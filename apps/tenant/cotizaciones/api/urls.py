@@ -1,22 +1,22 @@
 """
 URLs de API para cotizaciones v2.60.
 
-⚠️ API-First: Router DRF para endpoints REST.
+# WARNING: API-First: Router DRF para endpoints REST.
 Las vistas UI están en apps/tenant/cotizaciones/ui_views.py
 """
-from django.urls import path, include
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import CotizacionViewSet, CotizacionItemViewSet
 from ..configuracion.viewsets import ConfiguracionCotizacionViewSet
 from ..ui_views import (
-    CotizacionEditorTemplateView,
-    CotizacionEditorDraftView,
     ConfiguracionCrearOffcanvasView,
     ConfiguracionEditarOffcanvasView,
     ConfiguracionListOffcanvasView,
     ConfiguracionVerOffcanvasView,
+    CotizacionEditorDraftView,
+    CotizacionEditorTemplateView,
 )
+from .viewsets import CotizacionItemViewSet, CotizacionViewSet
 
 # Router DRF (APIs REST)
 router = DefaultRouter()

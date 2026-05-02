@@ -1,39 +1,36 @@
-from decimal import Decimal
-from rest_framework import viewsets, permissions, mixins, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.request import Request
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
-from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.exceptions import APIException
 from django.conf import settings
-from django.db.models import Q
-from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError
+from rest_framework import mixins, permissions, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
+from rest_framework.request import Request
+from rest_framework.response import Response
 
-# Nuevos Modelos
-from apps.tenant.inventario.models import (
-    CategoriaItem, ActivoFijo, Producto, Servicio, 
-    MovimientoInventario, HistorialServicio
-)
-from apps.tenant.empresa.models import Empresa
-from apps.tenant.api.permissions import IsTenantAdminOrReadOnly
-from apps.tenant.empresa.permissions import IsTenantAdmin
+from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
+
+# SINTEL v3.5: Refactorizacion Service Layer (Tri-Part)
+# PROHIBIDO IMPORTAR MODELOS directamente en ViewSets.
+# Toda consulta de base de datos DEBE pasar por el Service Layer.
+from apps.tenant.inventario import services as inv_services
 
 # Nuevos Serializers
 from .serializers import (
-    # ⚠️ v2.60: Serializers List/Detail explícitos
-    CategoriaItemListSerializer, CategoriaItemDetailSerializer,
-    ProductoListSerializer, ProductoDetailSerializer,
-    ServicioListSerializer, ServicioDetailSerializer,
-    ActivoFijoListSerializer, ActivoFijoDetailSerializer,
-    MovimientoInventarioListSerializer, MovimientoInventarioDetailSerializer,
-    HistorialServicioDetailSerializer,
+    ActivoFijoDetailSerializer,
+    ActivoFijoListSerializer,
+    CategoriaItemDetailSerializer,
+    # v2.60: Serializers List/Detail explicitas
+    CategoriaItemListSerializer,
+    HistorialServicioSerializer,
+    MovimientoInventarioListSerializer,
+    # v2.60: Aliases para compatibilidad
+    MovimientoInventarioSerializer,
+    ProductoDetailSerializer,
+    ProductoListSerializer,
+    ServicioDetailSerializer,
+    ServicioListSerializer,
     StockResponseSerializer,
-    # ⚠️ v2.60: Aliases para compatibilidad
-    CategoriaItemSerializer, ProductoSerializer, ServicioSerializer,
-    ActivoFijoSerializer, MovimientoInventarioSerializer, HistorialServicioSerializer
 )
 
 # En dev: usar UnsafeSessionAuthentication si existe (CSRF relajado).
@@ -46,10 +43,10 @@ except Exception:
 
 class StandardResultsSetPagination(PageNumberPagination):
     """
-    ⚠️ v2.40: Paginación estándar para Tabulator.
+    v2.40: Paginacion estandar para Tabulator.
     Tabulator espera: {count, next, previous, results: [...]}
     """
-    page_size = 10  # Default: 10 (estándar SaaS)
+    page_size = 10  # Default: 10 (estandar SaaS)
     page_size_query_param = 'page_size'
     max_page_size = 100
 
@@ -61,17 +58,15 @@ class BaseViewSet(viewsets.GenericViewSet,
                    mixins.UpdateModelMixin,
                    mixins.DestroyModelMixin):
     """
-    ⚠️ v2.60: ViewSet base para inventario usando GenericViewSet con mixins específicos.
+    v2.60: ViewSet base para inventario usando GenericViewSet con mixins especificos.
     
-    SINTEL v2.60: Sincronización Arquitectónica
-    - GenericViewSet: Base flexible con mixins específicos (List, Retrieve, Create, Update, Destroy)
-    - ENFORCED MODE: Validación de permisos para mutaciones
-    - Asignación de Empresa (SSoT): Automática en perform_create()
+    SINTEL v2.60: Sincronizacion Arquitectonica
+    - GenericViewSet: Base flexible con mixins especificos (List, Retrieve, Create, Update, Destroy)
+    - ENFORCED MODE: Validacion de permisos para mutaciones
+    - Asignacion de Empresa (SSoT): Automatica en perform_create()
     - Formato DRF {count, results}: Garantizado en list() para Tabulator Factory
     """
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [permissions.IsAuthenticated, IsTenantAdminOrReadOnly]
-    # Se agrega MultiPartParser para permitir subida de imágenes
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     renderer_classes = [JSONRenderer]
     pagination_class = StandardResultsSetPagination
@@ -83,7 +78,7 @@ class BaseViewSet(viewsets.GenericViewSet,
     
     def _check_enforced_mode(self, request):
         """
-        ⚠️ v2.60: Verifica si el usuario tiene permisos para mutaciones (ENFORCED MODE).
+        v2.60: Verifica si el usuario tiene permisos para mutaciones (ENFORCED MODE).
         """
         from rest_framework.permissions import SAFE_METHODS
         
@@ -101,31 +96,25 @@ class BaseViewSet(viewsets.GenericViewSet,
 
     def perform_create(self, serializer):
         """
-        ⚠️ v2.60: Asigna automáticamente la Empresa (SSoT) al crear un registro.
-        Asume que existe una única empresa por esquema tenant.
-        
-        ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
+        v2.60: Asigna automaticamente la Empresa (SSoT) al crear un registro.
+        Usa get_empresa_singleton() de services para asegurar Zero Trust.
         """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            # Fallback de seguridad, aunque en tenant siempre debería haber una
-            raise ValueError("No se encontró configuración de Empresa para este tenant.")
+        empresa = inv_services.get_empresa_singleton()
         serializer.save(empresa=empresa)
     
     def list(self, request, *args, **kwargs):
         """
-        ⚠️ v2.60: Listado paginado con formato DRF {count, results} para Tabulator Factory.
-        Garantiza que siempre retorne el formato estándar DRF compatible con Tabulator Factory.
+        v2.60: Listado paginado con formato DRF {count, results} para Tabulator Factory.
+        Garantiza que siempre retorne el formato estandar DRF compatible con Tabulator Factory.
         """
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            # ⚠️ v2.60: get_paginated_response() retorna formato DRF estándar: {count, next, previous, results}
             return self.get_paginated_response(serializer.data)
         
-        # Si no hay paginación, retornar formato compatible
+        # Si no hay paginacion, retornar formato compatible
         serializer = self.get_serializer(queryset, many=True)
         return Response({
             'count': len(serializer.data),
@@ -151,307 +140,86 @@ class BaseViewSet(viewsets.GenericViewSet,
         return super().destroy(request, *args, **kwargs)
 
 
-class CategoriaItemViewSet(BaseViewSet):
+class CategoriaItemViewSet(BaseViewSet, inv_services.CategoriaItemServiceMixin):
     """
-    ⚠️ v2.60: ViewSet para CATEGORÍAS de Inventario.
-    
-    SINTEL v2.60: Sincronización Arquitectónica
-    - GenericViewSet con mixins específicos (List, Retrieve, Create, Update, Destroy)
-    - Filtra automáticamente por empresa (SSoT - Zero Trust)
-    - Usa qs_categoria_list() y qs_categoria_detail() del service layer
-    - Serializers List/Detail explícitos
-    - Formato DRF {count, results} garantizado en list()
+    v2.61: ViewSet para CATEGORIAS de Inventario con Inyeccion de Servicio.
     """
     
     def get_serializer_class(self):
-        """
-        ⚠️ v2.60: Selecciona el serializer según la acción.
-        - list: CategoriaItemListSerializer (campos mínimos para tabla)
-        - retrieve/create/update: CategoriaItemDetailSerializer (campos completos para formulario)
-        """
         if self.action == 'list':
             return CategoriaItemListSerializer
         return CategoriaItemDetailSerializer
     
     def get_queryset(self):
-        """
-        ⚠️ v2.60: QuerySet optimizado usando qs_categoria_list() del service layer.
-        Filtra por empresa (SSoT - Zero Trust) y aplica búsqueda si se proporciona.
-        
-        ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-        """
-        from apps.tenant.inventario.services import qs_categoria_list
-        
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            return CategoriaItem.objects.none()
-        
+        empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        # ⚠️ v2.60: Usar qs_categoria_list() del service layer (ya incluye empresa_id y search)
-        qs = qs_categoria_list(empresa_id=empresa.id, search=search)
-        
-        return qs.order_by('nombre')
+        return inv_services.qs_categoria_list(empresa_id=empresa.id, search=search).order_by('nombre')
     
     def get_object(self):
-        """
-        ⚠️ v2.60: Obtiene objeto usando qs_categoria_detail() del service layer.
-        Garantiza que el objeto pertenezca al tenant (Zero Trust).
-        """
-        from apps.tenant.inventario.services import qs_categoria_detail
-        
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise CategoriaItem.DoesNotExist("No se encontró configuración de Empresa para este tenant.")
-        
-        return qs_categoria_detail(empresa_id=empresa.id, categoria_id=self.kwargs['pk'])
+        empresa = inv_services.get_empresa_singleton()
+        return inv_services.qs_categoria_detail(empresa_id=empresa.id, categoria_id=self.kwargs['pk'])
     
     def get_empresa(self):
-        """
-        ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
-        """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise APIException("No se encontró configuración de Empresa para este tenant.")
-        return empresa
-    
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
-    def gestor_offcanvas(self, request):
-        """
-        ⚠️ v2.60: Devuelve el HTML del formulario de categoría para HTMX Offcanvas.
-        
-        Endpoint: GET /api/v1/inventario/categorias/gestor-offcanvas/
-        
-        Query params:
-        - id: ID de la categoría (opcional - si no se proporciona, es modo creación)
-        
-        Returns:
-            Template HTML renderizado con contexto de la categoría
-        """
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
-        empresa = self.get_empresa()
-        
-        categoria = None
-        id_instancia = request.query_params.get('id')
-        
-        if id_instancia:
-            # ⚠️ Zero Trust: Validar que la categoría pertenezca al tenant
-            categoria = get_object_or_404(
-                self.get_queryset(),
-                id=id_instancia
-            )
-        
-        template_name = 'tenant/core/partials/inventario/categorias/categorias_offcanvas.html'
-        
-        context = {
-            'categoria': categoria,
-            'empresa': empresa,
-        }
-        
-        return Response(context, template_name=template_name)
-    
-    @action(detail=False, methods=["get", "post"], url_path="dt")
-    def datatables(self, request):
-        """
-        ⚠️ v2.40: DataTables CLIENT-SIDE para Categorías.
-        Retorna TODAS las categorías sin paginación para filtrado instantáneo en frontend.
-        Usa CategoriaItemListSerializer optimizado (solo campos necesarios para tabla).
-        
-        ⚠️ FORMATO: Retorna {"data": [...]} para compatibilidad con DataTables client-side.
-        """
-        from apps.tenant.inventario.services import qs_categoria_list
-        
-        # Usar QuerySet optimizado del service layer
-        qs = qs_categoria_list()
-        
-        # ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-        empresa = Empresa.objects.only('id').first()
-        if empresa:
-            qs = qs.filter(empresa=empresa)
-        
-        # Ordenar por nombre por defecto
-        qs = qs.order_by('nombre')
-        
-        # ⚠️ CRÍTICO: Usar serializer de lista optimizado
-        serializer = CategoriaItemListSerializer(qs, many=True)
-        
-        # Retornar formato simple para client-side DataTables
-        return Response({"data": serializer.data})
-    
+        return inv_services.get_empresa_singleton()
+
     def destroy(self, request, *args, **kwargs):
         """
-        ⚠️ ELIMINACIÓN DE CATEGORÍAS:
-        - ⚠️ v2.61.3: Se permite eliminar categorías activas o inactivas.
-        - Al eliminar una categoría, los productos, servicios y activos asociados quedan sin categoría (null).
-          Esto es equivalente a "eliminar el kardex de categorías" - los ítems quedan sin categoría asignada.
-        
-        ⚠️ STANDALONE MODULE: Este módulo es completamente independiente.
-        - No depende de otros módulos del inventario
-        - Los ítems (productos, servicios, activos) pueden tener o no categoría asignada (null=True)
-        - Al eliminar una categoría, los ítems asociados simplemente quedan sin categoría
-        
-        Returns:
-            204 No Content si se elimina exitosamente
+        Garantiza que la logica de borrado (set null) viva en el Service Layer.
         """
         ok, reason = self._check_enforced_mode(request)
         if not ok:
             return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         
         instance = self.get_object()
-        
-        # ⚠️ v2.61.3: ESTABLECER CATEGORÍA A NULL: Antes de eliminar, establecer la categoría de los ítems asociados a null
-        # Esto permite eliminar la categoría sin bloquear por PROTECT
-        try:
-            conteo_productos = Producto.objects.filter(categoria=instance).update(categoria=None)
-            conteo_servicios = Servicio.objects.filter(categoria=instance).update(categoria=None)
-            conteo_activos = ActivoFijo.objects.filter(categoria=instance).update(categoria=None)
-            
-            # Log informativo (opcional, para auditoría)
-            if conteo_productos > 0 or conteo_servicios > 0 or conteo_activos > 0:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.info(
-                    f"Eliminando categoría {instance.id} ({instance.nombre}). "
-                    f"Ítems afectados: {conteo_productos} productos, {conteo_servicios} servicios, {conteo_activos} activos. "
-                    f"Sus categorías fueron establecidas a null."
-                )
-        except Exception as e:
-            # Si hay un error al actualizar (ej: columna no permite NULL), registrar y retornar error
-            import logging
-            from django.db import DatabaseError, IntegrityError
-            
-            logger = logging.getLogger(__name__)
-            error_msg = str(e)
-            
-            # Detectar si es un error de restricción NOT NULL
-            if 'null' in error_msg.lower() or 'not null' in error_msg.lower() or isinstance(e, (DatabaseError, IntegrityError)):
-                mensaje_usuario = (
-                    "Error: La base de datos no permite valores NULL en la columna 'categoria'. "
-                    "Esto indica que la migración no se ha aplicado. "
-                    "Por favor, ejecute: python manage.py makemigrations tenant_inventario && python manage.py migrate"
-                )
-            else:
-                mensaje_usuario = f"Error al actualizar ítems asociados: {error_msg}"
-            
-            logger.error(
-                f"Error al establecer categoría a null antes de eliminar categoría {instance.id}: {e}",
-                exc_info=True
-            )
-            return Response(
-                {
-                    "error": "update_failed",
-                    "message": mensaje_usuario
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-        try:
-            return super().destroy(request, *args, **kwargs)
-        except Exception as e:
-            # Capturar errores durante la eliminación
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(
-                f"Error al eliminar categoría {instance.id}: {e}",
-                exc_info=True
-            )
-            return Response(
-                {
-                    "error": "delete_failed",
-                    "message": f"Error al eliminar la categoría: {str(e)}"
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        self.service_categoria_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     
     @action(detail=True, methods=['get'], url_path='resumen')
     def resumen(self, request, pk=None):
         """
-        ⚠️ v2.40: Retorna un resumen con el conteo de productos/servicios/activos asociados a esta categoría.
-        
-        Returns:
-            {
-                "id": int,
-                "nombre": str,
-                "activo": bool,
-                "conteo_productos": int,
-                "conteo_servicios": int,
-                "conteo_activos": int,
-                "total_items": int
-            }
+        v2.40: Retorna un resumen con el conteo de productos/servicios/activos asociados a esta categoria.
         """
         instance = self.get_object()
-        
-        # ⚠️ PERFORMANCE BIBLE: Usar .count() directamente (más eficiente que len())
-        conteo_productos = Producto.objects.filter(categoria=instance).count()
-        conteo_servicios = Servicio.objects.filter(categoria=instance).count()
-        conteo_activos = ActivoFijo.objects.filter(categoria=instance).count()
-        
-        return Response({
-            "id": instance.id,
-            "nombre": instance.nombre,
-            "activo": instance.activo,
-            "conteo_productos": conteo_productos,
-            "conteo_servicios": conteo_servicios,
-            "conteo_activos": conteo_activos,
-            "total_items": conteo_productos + conteo_servicios + conteo_activos
-        })
+        resumen = self.service_categoria_get_resumen(instance)
+        return Response(resumen)
+
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
+    def gestor_offcanvas(self, request):
+        """
+        v2.60: Devuelve el HTML del formulario de categoria para HTMX Offcanvas via Servicio.
+        """
+        empresa = self.get_empresa()
+        id_instancia = request.query_params.get('id')
+        context = self.service_categoria_get_offcanvas_context(empresa, id_instancia)
+        return Response(context, template_name='inventario/offcanvas_categoria.html')
 
 
-class ProductoViewSet(BaseViewSet):
+class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
     """
-    ⚠️ v2.60: ViewSet para PRODUCTOS (Bienes tangibles con Stock).
-    
-    SINTEL v2.60: Sincronización Arquitectónica
-    - GenericViewSet con mixins específicos (List, Retrieve, Create, Update, Destroy)
-    - Filtra automáticamente por empresa (SSoT - Zero Trust)
-    - Usa qs_producto_list() y qs_producto_detail() del service layer
-    - Serializers List/Detail explícitos
-    - Formato DRF {count, results} garantizado en list()
+    WARNING: v2.61: ViewSet para PRODUCTOS con Inyección de Servicio.
     """
-    queryset = Producto.objects.none()  # ⚠️ v2.60: Solo para DRF, se sobrescribe en get_queryset()
     
     def get_serializer_class(self):
-        """
-        ⚠️ v2.60: Selecciona el serializer según la acción.
-        - list: ProductoListSerializer (campos mínimos para tabla)
-        - retrieve/create/update: ProductoDetailSerializer (campos completos para formulario)
-        """
         if self.action == 'list':
             return ProductoListSerializer
         return ProductoDetailSerializer
     
     def get_queryset(self):
-        """
-        ⚠️ v2.60: QuerySet optimizado usando qs_producto_list() del service layer.
-        Filtra por empresa (SSoT - Zero Trust) y aplica búsqueda si se proporciona.
-        
-        ⚠️ PERFORMANCE BIBLE: Siempre filtrar por empresa (SSoT) - PROHIBIDO .all()
-        """
-        from apps.tenant.inventario.services import qs_producto_list
-        
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            return Producto.objects.none()
+        try:
+            empresa = inv_services.get_empresa_singleton()
+        except ValidationError:
+            return inv_services.qs_producto_list(empresa_id=0)
         
         search = self.request.query_params.get('search', None)
-        # ⚠️ v2.60: Usar qs_producto_list() del service layer
-        return qs_producto_list(empresa_id=empresa.id, search=search).order_by('nombre')
+        return inv_services.qs_producto_list(empresa_id=empresa.id, search=search).order_by('nombre')
     
     def get_object(self):
-        """
-        ⚠️ v2.60: Obtiene objeto usando qs_producto_detail() del service layer.
-        Garantiza que el objeto pertenezca al tenant (Zero Trust).
-        """
-        from apps.tenant.inventario.services import qs_producto_detail
-        
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise Producto.DoesNotExist("No se encontró configuración de Empresa para este tenant.")
-        
-        return qs_producto_detail(empresa_id=empresa.id, producto_id=self.kwargs['pk'])
+        empresa = inv_services.get_empresa_singleton()
+        return inv_services.qs_producto_detail(empresa_id=empresa.id, producto_id=self.kwargs['pk'])
     
     def create(self, request: Request, *args, **kwargs) -> Response:
         """
-        ⚠️ v2.61.3: Sobrescribe create() para manejar IntegrityError (código duplicado)
+        WARNING: v2.61.3: Sobrescribe create() para manejar IntegrityError (código duplicado)
         """
         ok, reason = self._check_enforced_mode(request)
         if not ok:
@@ -460,8 +228,9 @@ class ProductoViewSet(BaseViewSet):
         try:
             return super().create(request, *args, **kwargs)
         except Exception as e:
-            from django.db import IntegrityError
             import re
+
+            from django.db import IntegrityError
             
             # Capturar IntegrityError por código duplicado
             if isinstance(e, IntegrityError):
@@ -495,27 +264,22 @@ class ProductoViewSet(BaseViewSet):
     @action(detail=False, methods=["get", "post"], url_path="dt")
     def datatables(self, request):
         """
-        ⚠️ DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
+        WARNING: DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
         Ya no se usa - Tabulator Factory consume GET /api/v1/inventario/productos/ directamente.
         Se mantiene por compatibilidad temporal, pero será eliminado en v2.50.
         
-        ⚠️ v2.40: DataTables SERVER-SIDE para Productos.
+        WARNING: v2.40: DataTables SERVER-SIDE para Productos.
         Retorna datos paginados en formato estándar DataTables server-side.
         Usa DataTableServer helper para procesamiento seguro.
         """
-        from apps.shared.datatable import DataTableSpec, DataTableServer
-        from apps.tenant.inventario.services import qs_producto_list
+        from apps.shared.datatable import DataTableServer, DataTableSpec
         from apps.tenant.inventario.api.serializers import ProductoListSerializer
+        from apps.tenant.inventario import services as inv_services
         
-        # QuerySet base optimizado
-        qs_base = qs_producto_list()
+        empresa = inv_services.get_empresa_singleton()
+        qs_base = inv_services.qs_producto_list(empresa_id=empresa.id)
         
-        # ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-        empresa = Empresa.objects.only('id').first()
-        if empresa:
-            qs_base = qs_base.filter(empresa=empresa)
-        
-        # ⚠️ CRÍTICO: fields_map debe coincidir EXACTAMENTE con el orden de columnas en inventario.page.js
+        # WARNING: CRÍTICO: fields_map debe coincidir EXACTAMENTE con el orden de columnas en inventario.page.js
         # Columnas: 0=codigo, 1=nombre, 2=categoria_nombre, 3=stock_actual, 4=precio_venta, 5=activo, 6=Acciones (no ordenable)
         spec = DataTableSpec(
             fields_map={
@@ -541,19 +305,12 @@ class ProductoViewSet(BaseViewSet):
         """
         Retorna solo el stock actual de un producto.
         
-        ⚠️ PERFORMANCE BIBLE: Solo campos necesarios (id, nombre, stock_actual)
+        WARNING: PERFORMANCE BIBLE: Solo campos necesarios (id, nombre, stock_actual)
         """
-        # ⚠️ CRÍTICO: Solo obtener campos necesarios - evitar get_object() que trae todos los campos
+        # WARNING: CRÍTICO: Solo obtener campos necesarios - evitar get_object() que trae todos los campos
         pk = self.kwargs.get('pk')
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            from rest_framework.exceptions import NotFound
-            raise NotFound('Empresa no encontrada')
-        
-        producto = Producto.objects.filter(empresa=empresa, pk=pk).only('id', 'nombre', 'stock_actual').first()
-        if not producto:
-            from rest_framework.exceptions import NotFound
-            raise NotFound('Producto no encontrado')
+        empresa = inv_services.get_empresa_singleton()
+        producto = self.service_producto_get_stock(empresa, pk)
         
         serializer = StockResponseSerializer({
             "id": producto.id,
@@ -565,35 +322,18 @@ class ProductoViewSet(BaseViewSet):
     @action(detail=True, methods=["get"], url_path="kardex")
     def kardex(self, request, pk=None):
         """
-        ⚠️ v2.40: Endpoint para obtener el historial de movimientos (Kardex) de un producto específico.
+        WARNING: v2.40: Endpoint para obtener el historial de movimientos (Kardex) de un producto específico.
         Retorna todos los movimientos de inventario asociados al producto ordenados por fecha descendente.
         
-        ⚠️ PERFORMANCE BIBLE:
+        WARNING: PERFORMANCE BIBLE:
         - Usa select_related('producto') para evitar N+1
         - Solo campos necesarios para serializer (MOVIMIENTO_LIST_FIELDS)
         - Producto solo campos necesarios (id, codigo, nombre, stock_actual)
         """
-        from apps.tenant.inventario.models import MovimientoInventario
         from apps.tenant.inventario.api.serializers import MovimientoInventarioListSerializer
-        from apps.tenant.inventario.services import MOVIMIENTO_LIST_FIELDS
-        
-        # ⚠️ CRÍTICO: Solo obtener campos necesarios del producto
         pk = self.kwargs.get('pk')
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            from rest_framework.exceptions import NotFound
-            raise NotFound('Empresa no encontrada')
-        
-        producto = Producto.objects.filter(empresa=empresa, pk=pk).only('id', 'codigo', 'nombre', 'stock_actual').first()
-        if not producto:
-            from rest_framework.exceptions import NotFound
-            raise NotFound('Producto no encontrado')
-        
-        # ⚠️ PERFORMANCE BIBLE: select_related + only() para evitar N+1 y SELECT *
-        movimientos = MovimientoInventario.objects.filter(producto=producto)\
-            .select_related('producto')\
-            .only(*MOVIMIENTO_LIST_FIELDS)\
-            .order_by('-created_at')
+        empresa = inv_services.get_empresa_singleton()
+        producto, movimientos = self.service_producto_get_kardex(empresa, pk)
         
         # Usar serializer optimizado para listas
         serializer = MovimientoInventarioListSerializer(movimientos, many=True)
@@ -610,14 +350,14 @@ class ProductoViewSet(BaseViewSet):
     
     def destroy(self, request, *args, **kwargs):
         """
-        ⚠️ REGLA DE SEGURIDAD DE ELIMINACIÓN (Inactivar antes de Borrar):
+        WARNING: REGLA DE SEGURIDAD DE ELIMINACIÓN (Inactivar antes de Borrar):
         - No se puede eliminar un producto activo.
         - El producto debe estar inactivo (activo=False) antes de poder eliminarlo.
         - Al eliminar un producto, se eliminan automáticamente:
           * Todos sus movimientos de inventario (Kardex) - CASCADE
           * El stock se elimina junto con el producto (es parte del registro)
         
-        ⚠️ STANDALONE MODULE: Este módulo es independiente y no depende de otros módulos.
+        WARNING: STANDALONE MODULE: Este módulo es independiente y no depende de otros módulos.
         
         Returns:
             400 Bad Request si el producto está activo
@@ -639,581 +379,193 @@ class ProductoViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # ⚠️ ELIMINAR MOVIMIENTOS Y STOCK: Contar movimientos antes de eliminar para logging
-        conteo_movimientos = MovimientoInventario.objects.filter(producto=instance).count()
+        # Mantener el ViewSet libre de queries directas a modelos; la eliminacion real
+        # y el cascade del kardex permanecen delegados al ORM/model layer.
         stock_actual = instance.stock_actual or 0
         
-        # Log informativo (opcional, para auditoría)
+        # Log informativo (opcional, para auditoria)
         import logging
         logger = logging.getLogger(__name__)
         logger.info(
             f"Eliminando producto {instance.id} ({instance.codigo} - {instance.nombre}). "
             f"Stock actual: {stock_actual}. "
-            f"Se eliminarán {conteo_movimientos} movimiento(s) de kardex automáticamente (CASCADE)."
+            "Los movimientos de kardex asociados se eliminaran automaticamente (CASCADE)."
         )
         
-        # ⚠️ CASCADE: Django eliminará automáticamente los movimientos al eliminar el producto
+        # CASCADE: Django eliminara automaticamente los movimientos al eliminar el producto
         # debido a on_delete=models.CASCADE en el modelo MovimientoInventario
         # El stock se elimina junto con el producto ya que es parte del registro
         return super().destroy(request, *args, **kwargs)
     
     def get_empresa(self):
         """
-        ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
+        v2.60: Zero Trust - Obtiene la empresa del tenant actual.
         """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise APIException("No se encontró configuración de Empresa para este tenant.")
-        return empresa
+        return inv_services.get_empresa_singleton()
     
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):
         """
-        ⚠️ v2.60: Devuelve el HTML del formulario de producto o ajuste de inventario para HTMX Offcanvas.
-        
-        Endpoint: GET /api/v1/inventario/productos/gestor-offcanvas/
-        
-        Query params:
-        - id: ID del producto (opcional - si no se proporciona, es modo creación)
-        - tipo: Tipo de formulario ('producto' o 'ajuste'). Default: 'producto'
-        
-        Returns:
-            Template HTML renderizado con contexto del producto y catálogos necesarios
+        v2.60: Devuelve el HTML del formulario de producto o ajuste de inventario para HTMX Offcanvas via Servicio.
         """
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
         empresa = self.get_empresa()
-        
-        producto = None
         id_instancia = request.query_params.get('id')
-        tipo_formulario = request.query_params.get('tipo', 'producto')  # 'producto' o 'ajuste'
-        
-        if id_instancia:
-            # ⚠️ Zero Trust: Validar que el producto pertenezca al tenant
-            producto = get_object_or_404(
-                self.get_queryset(),
-                id=id_instancia
-            )
-        
-        # ⚠️ Catálogos: Cargar lista de categorías para el select
-        categorias = []
-        try:
-            from apps.tenant.inventario.models import CategoriaItem
-            categorias = CategoriaItem.objects.filter(
-                empresa_id=empresa.id,
-                activo=True
-            ).only('id', 'nombre', 'aplicacion').order_by('nombre')[:100]
-        except Exception:
-            # Si hay error, continuar sin catálogo
-            pass
-        
-        # ⚠️ Tipos de movimiento para el formulario de ajuste
-        tipos_movimiento = []
-        if tipo_formulario == 'ajuste':
-            from apps.tenant.inventario.models import MovimientoInventario
-            tipos_movimiento = MovimientoInventario.TipoMovimiento.choices
-        
-        # Usar el template unificado
-        template_name = 'tenant/core/partials/inventario/offcanvas_form.html'
-        
-        context = {
-            'producto': producto,
-            'categorias': categorias,
-            'tipo_formulario': tipo_formulario,
-            'empresa': empresa,
-            'tipos_movimiento': tipos_movimiento,
-        }
-        
-        return Response(context, template_name=template_name)
+        tipo_formulario = request.query_params.get('tipo', 'producto')
+        context = self.service_producto_get_offcanvas_context(empresa, id_instancia, tipo_formulario)
+        return Response(context, template_name='inventario/offcanvas_producto.html')
 
 
-class ServicioViewSet(BaseViewSet):
+class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
     """
-    ⚠️ v2.60: ViewSet para SERVICIOS (Bienes intangibles sin Stock).
-    
-    SINTEL v2.60: Sincronización Arquitectónica
-    - GenericViewSet con mixins específicos (List, Retrieve, Create, Update, Destroy)
-    - Filtra automáticamente por empresa (SSoT - Zero Trust)
-    - Usa qs_servicio_list() y qs_servicio_detail() del service layer
-    - Serializers List/Detail explícitos
-    - Formato DRF {count, results} garantizado en list()
+    v2.61: ViewSet para SERVICIOS con Inyeccion de Servicio.
     """
-    queryset = Servicio.objects.none()  # ⚠️ v2.60: Solo para DRF, se sobrescribe en get_queryset()
     
     def get_serializer_class(self):
-        """
-        ⚠️ v2.60: Selecciona el serializer según la acción.
-        - list: ServicioListSerializer (campos mínimos para tabla)
-        - retrieve/create/update: ServicioDetailSerializer (campos completos para formulario)
-        """
         if self.action == 'list':
             return ServicioListSerializer
         return ServicioDetailSerializer
     
     def get_queryset(self):
-        """
-        ⚠️ v2.60: QuerySet optimizado usando qs_servicio_list() del service layer.
-        Filtra por empresa (SSoT - Zero Trust) y aplica búsqueda si se proporciona.
-        
-        ⚠️ PERFORMANCE BIBLE: Siempre filtrar por empresa (SSoT) - PROHIBIDO .all()
-        """
-        from apps.tenant.inventario.services import qs_servicio_list
-        
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            return Servicio.objects.none()
-        
+        empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        # ⚠️ v2.60: Usar qs_servicio_list() del service layer
-        return qs_servicio_list(empresa_id=empresa.id, search=search).order_by('nombre')
+        return inv_services.qs_servicio_list(empresa_id=empresa.id, search=search).order_by('nombre')
     
     def get_object(self):
-        """
-        ⚠️ v2.60: Obtiene objeto usando qs_servicio_detail() del service layer.
-        Garantiza que el objeto pertenezca al tenant (Zero Trust).
-        """
-        from apps.tenant.inventario.services import qs_servicio_detail
-        
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise Servicio.DoesNotExist("No se encontró configuración de Empresa para este tenant.")
-        
-        return qs_servicio_detail(empresa_id=empresa.id, servicio_id=self.kwargs['pk'])
-    
-    def get_empresa(self):
-        """
-        ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
-        """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise APIException("No se encontró configuración de Empresa para este tenant.")
-        return empresa
-    
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
-    def gestor_offcanvas(self, request):
-        """
-        ⚠️ v2.60: Devuelve el HTML del formulario de servicio para HTMX Offcanvas.
-        
-        Endpoint: GET /api/v1/inventario/servicios/gestor-offcanvas/
-        
-        Query params:
-        - id: ID del servicio (opcional - si no se proporciona, es modo creación)
-        
-        Returns:
-            Template HTML renderizado con contexto del servicio y catálogos necesarios
-        """
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
-        empresa = self.get_empresa()
-        
-        servicio = None
-        id_instancia = request.query_params.get('id')
-        
-        if id_instancia:
-            # ⚠️ Zero Trust: Validar que el servicio pertenezca al tenant
-            servicio = get_object_or_404(
-                self.get_queryset(),
-                id=id_instancia
-            )
-        
-        # ⚠️ Catálogos: Cargar lista de categorías para el select
-        categorias = []
-        try:
-            from apps.tenant.inventario.models import CategoriaItem
-            categorias = CategoriaItem.objects.filter(
-                empresa_id=empresa.id,
-                activo=True,
-                aplicacion__in=[CategoriaItem.Aplicacion.SERVICIO, CategoriaItem.Aplicacion.TODO]
-            ).only('id', 'nombre', 'aplicacion').order_by('nombre')[:100]
-        except Exception:
-            # Si hay error, continuar sin catálogo
-            pass
-        
-        template_name = 'tenant/core/partials/inventario/servicios_offcanvas.html'
-        
-        context = {
-            'servicio': servicio,
-            'categorias': categorias,
-            'empresa': empresa,
-        }
-        
-        return Response(context, template_name=template_name)
-    
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='historial-offcanvas')
-    def historial_offcanvas(self, request):
-        """
-        ⚠️ v2.60: Devuelve el HTML del formulario de historial de servicio para HTMX Offcanvas.
-        
-        Endpoint: GET /api/v1/inventario/servicios/historial-offcanvas/
-        
-        Returns:
-            Template HTML renderizado con contexto para el formulario de historial
-        """
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
-        empresa = self.get_empresa()
-        
-        template_name = 'tenant/core/partials/inventario/historial_servicio_offcanvas.html'
-        
-        context = {
-            'empresa': empresa,
-        }
-        
-        return Response(context, template_name=template_name)
-
-    @action(detail=False, methods=["get", "post"], url_path="dt")
-    def datatables(self, request):
-        """
-        ⚠️ DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
-        Ya no se usa - Tabulator Factory consume GET /api/v1/inventario/servicios/ directamente.
-        Se mantiene por compatibilidad temporal, pero será eliminado en v2.50.
-        
-        ⚠️ v2.40: DataTables SERVER-SIDE para Servicios.
-        Retorna datos paginados en formato estándar DataTables server-side.
-        Usa DataTableServer helper para procesamiento seguro.
-        """
-        from apps.shared.datatable import DataTableSpec, DataTableServer
-        from apps.tenant.inventario.services import qs_servicio_list
-        from apps.tenant.inventario.api.serializers import ServicioListSerializer
-        
-        # QuerySet base optimizado
-        qs_base = qs_servicio_list()
-        
-        # ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-        empresa = Empresa.objects.only('id').first()
-        if empresa:
-            qs_base = qs_base.filter(empresa=empresa)
-        
-        # ⚠️ CRÍTICO: fields_map debe coincidir EXACTAMENTE con el orden de columnas en inventario.page.js
-        # Columnas: 0=codigo, 1=nombre, 2=categoria_nombre, 3=precio_venta, 4=activo, 5=Acciones (no ordenable)
-        spec = DataTableSpec(
-            fields_map={
-                0: 'codigo',
-                1: 'nombre',
-                2: 'categoria__nombre',  # Serializer expone como categoria_nombre, pero en DB es categoria__nombre
-                3: 'precio_venta',
-                4: 'activo'
-            },
-            search_fields=['codigo', 'nombre', 'categoria__nombre'],
-            base_qs=qs_base,
-            serializer=ServicioListSerializer,
-            extra_filter=lambda req, qs: qs  # Sin filtros adicionales
-        )
-        
-        # Procesar request DataTables
-        dt_server = DataTableServer(spec)
-        return dt_server.handle(request)
+        empresa = inv_services.get_empresa_singleton()
+        return inv_services.qs_servicio_detail(empresa_id=empresa.id, servicio_id=self.kwargs['pk'])
     
     def destroy(self, request, *args, **kwargs):
         """
-        ⚠️ REGLA DE SEGURIDAD DE ELIMINACIÓN (Inactivar antes de Borrar):
-        - No se puede eliminar un servicio activo.
-        - El servicio debe estar inactivo (activo=False) antes de poder eliminarlo.
-        - Al eliminar un servicio, se eliminan automáticamente:
-          * Todos sus historiales de ventas - CASCADE
-        
-        ⚠️ STANDALONE MODULE: Este módulo es independiente y no depende de otros módulos.
-        
-        Returns:
-            400 Bad Request si el servicio está activo
-            204 No Content si se elimina exitosamente
+        Delega la validacion de seguridad (inactivar antes de borrar) al Service Layer.
         """
         ok, reason = self._check_enforced_mode(request)
         if not ok:
             return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         
         instance = self.get_object()
+        try:
+            self.service_servicio_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def get_empresa(self):
+        return inv_services.get_empresa_singleton()
+    
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
+    def gestor_offcanvas(self, request):
+        """
+        v2.60: Devuelve el HTML del formulario de servicio para HTMX Offcanvas via Servicio.
+        """
+        empresa = self.get_empresa()
+        id_instancia = request.query_params.get('id')
+        context = self.service_servicio_get_offcanvas_context(empresa, id_instancia)
+        return Response(context, template_name='inventario/offcanvas_servicio.html')
+    
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='historial-offcanvas')
+    def historial_offcanvas(self, request):
+        """
+        v2.60: Devuelve el HTML del formulario de historial de servicio para HTMX Offcanvas via Servicio.
+        """
+        empresa = self.get_empresa()
+        context = self.service_servicio_get_historial_context(empresa)
+        return Response(context, template_name='inventario/offcanvas_historial_servicio.html')
+
+    @action(detail=False, methods=["get", "post"], url_path="dt")
+    def datatables(self, request):
+        """
+        DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
+        """
+        from apps.shared.datatable import DataTableServer, DataTableSpec
+        from apps.tenant.inventario.api.serializers import ServicioListSerializer
+        from apps.tenant.inventario import services as inv_services
         
-        # Validar que el servicio no esté activo
-        if instance.activo:
-            return Response(
-                {
-                    "error": "active_record",
-                    "message": "No se puede eliminar un ítem activo. Cámbielo a 'Inactivo' en el formulario de edición antes de intentar borrarlo."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        empresa = inv_services.get_empresa_singleton()
+        qs_base = inv_services.qs_servicio_list(empresa_id=empresa.id)
         
-        # ⚠️ ELIMINAR HISTORIALES: Contar historiales antes de eliminar para logging
-        conteo_historiales = HistorialServicio.objects.filter(servicio=instance).count()
+        spec = DataTableSpec(
+            fields_map={
+                0: 'codigo',
+                1: 'nombre',
+                2: 'categoria__nombre',
+                3: 'precio_venta',
+                4: 'activo'
+            },
+            search_fields=['codigo', 'nombre', 'categoria__nombre'],
+            base_qs=qs_base,
+            serializer=ServicioListSerializer,
+            extra_filter=lambda req, qs: qs
+        )
         
-        # Log informativo (opcional, para auditoría)
-        if conteo_historiales > 0:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(
-                f"Eliminando servicio {instance.id} ({instance.codigo} - {instance.nombre}). "
-                f"Se eliminarán {conteo_historiales} historial(es) de ventas automáticamente (CASCADE)."
-            )
-        
-        # ⚠️ CASCADE: Django eliminará automáticamente los historiales al eliminar el servicio
-        # debido a on_delete=models.CASCADE en el modelo HistorialServicio
-        return super().destroy(request, *args, **kwargs)
+        dt_server = DataTableServer(spec)
+        return dt_server.handle(request)
 
 
-class ActivoFijoViewSet(BaseViewSet):
+class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
     """
-    ViewSet para ACTIVOS FIJOS.
-    
-    ⚠️ v2.40: Migrado a Tabulator Factory - usa StandardResultsSetPagination.
-    
-    ⚠️ PERFORMANCE BIBLE:
-    - PROHIBIDO .all(): get_queryset() filtra por empresa (SSoT)
-    - queryset base solo para DRF, se sobrescribe en get_queryset()
+    v2.61: ViewSet para ACTIVOS FIJOS con Inyeccion de Servicio.
     """
-    # ⚠️ NOTA: Este queryset es solo para DRF, se sobrescribe en get_queryset()
-    queryset = ActivoFijo.objects.none()
-    serializer_class = ActivoFijoSerializer
-    pagination_class = StandardResultsSetPagination
     
     def get_serializer_class(self):
-        """
-        ⚠️ v2.60: Selecciona el serializer según la acción.
-        - list: ActivoFijoListSerializer (campos mínimos para tabla)
-        - retrieve/create/update: ActivoFijoDetailSerializer (campos completos para formulario)
-        """
         if self.action == 'list':
             return ActivoFijoListSerializer
         return ActivoFijoDetailSerializer
     
     def get_queryset(self):
-        """
-        ⚠️ v2.60: QuerySet optimizado usando qs_activo_list() del service layer.
-        Filtra por empresa (SSoT - Zero Trust) y aplica búsqueda si se proporciona.
-        
-        ⚠️ PERFORMANCE BIBLE: Siempre filtrar por empresa (SSoT) - PROHIBIDO .all()
-        """
-        from apps.tenant.inventario.services import qs_activo_list
-        
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            return ActivoFijo.objects.none()
-        
+        empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        # ⚠️ v2.60: Usar qs_activo_list() del service layer
-        return qs_activo_list(empresa_id=empresa.id, search=search).order_by('nombre')
+        return inv_services.qs_activo_list(empresa_id=empresa.id, search=search).order_by('nombre')
     
     def get_object(self):
-        """
-        ⚠️ v2.60: Obtiene objeto usando qs_activo_detail() del service layer.
-        Garantiza que el objeto pertenezca al tenant (Zero Trust).
-        """
-        from apps.tenant.inventario.services import qs_activo_detail
-        
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ActivoFijo.DoesNotExist("No se encontró configuración de Empresa para este tenant.")
-        
-        return qs_activo_detail(empresa_id=empresa.id, activo_id=self.kwargs['pk'])
-    
-    def get_empresa(self):
-        """
-        ⚠️ v2.60: Zero Trust - Obtiene la empresa del tenant actual.
-        """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise APIException("No se encontró configuración de Empresa para este tenant.")
-        return empresa
-    
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
-    def gestor_offcanvas(self, request):
-        """
-        ⚠️ v2.60: Devuelve el HTML del formulario de activo fijo para HTMX Offcanvas.
-        
-        Endpoint: GET /api/v1/inventario/activos/gestor-offcanvas/
-        
-        Query params:
-        - id: ID del activo (opcional - si no se proporciona, es modo creación)
-        
-        Returns:
-            Template HTML renderizado con contexto del activo y catálogos necesarios
-        """
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
-        empresa = self.get_empresa()
-        
-        activo = None
-        id_instancia = request.query_params.get('id')
-        
-        if id_instancia:
-            # ⚠️ Zero Trust: Validar que el activo pertenezca al tenant
-            activo = get_object_or_404(
-                self.get_queryset(),
-                id=id_instancia
-            )
-        
-        # ⚠️ Catálogos: Cargar lista de categorías para el select
-        categorias = []
-        try:
-            from apps.tenant.inventario.models import CategoriaItem
-            categorias = CategoriaItem.objects.filter(
-                empresa_id=empresa.id,
-                activo=True,
-                aplicacion__in=[CategoriaItem.Aplicacion.ACTIVO, CategoriaItem.Aplicacion.TODO]
-            ).only('id', 'nombre', 'aplicacion').order_by('nombre')[:100]
-        except Exception:
-            # Si hay error, continuar sin catálogo
-            pass
-        
-        template_name = 'tenant/core/partials/inventario/activos_offcanvas.html'
-        
-        context = {
-            'activo': activo,
-            'categorias': categorias,
-            'empresa': empresa,
-        }
-        
-        return Response(context, template_name=template_name)
-    
-    def list(self, request, *args, **kwargs):
-        """
-        GET /api/v1/inventario/activos/
-        Lista paginada de activos fijos (Tabulator).
-        """
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=["get", "post"], url_path="dt")
-    def datatables(self, request):
-        """
-        ⚠️ DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
-        Ya no se usa - Tabulator Factory consume GET /api/v1/inventario/activos/ directamente.
-        Se mantiene por compatibilidad temporal, pero será eliminado en v2.50.
-        
-        ⚠️ v2.40: DataTables SERVER-SIDE para Activos Fijos.
-        Retorna datos paginados en formato estándar DataTables server-side.
-        Usa DataTableServer helper para procesamiento seguro.
-        """
-        from apps.shared.datatable import DataTableSpec, DataTableServer
-        from apps.tenant.inventario.services import qs_activo_list
-        from apps.tenant.inventario.api.serializers import ActivoFijoListSerializer
-        
-        # QuerySet base optimizado
-        qs_base = qs_activo_list()
-        
-        # ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-        empresa = Empresa.objects.only('id').first()
-        if empresa:
-            qs_base = qs_base.filter(empresa=empresa)
-        
-        # ⚠️ CRÍTICO: fields_map debe coincidir EXACTAMENTE con el orden de columnas en inventario.page.js
-        # Columnas: 0=codigo, 1=nombre, 2=categoria_nombre, 3=ubicacion, 4=responsable, 5=estado, 6=Acciones (no ordenable)
-        spec = DataTableSpec(
-            fields_map={
-                0: 'codigo',
-                1: 'nombre',
-                2: 'categoria__nombre',  # Serializer expone como categoria_nombre, pero en DB es categoria__nombre
-                3: 'ubicacion',
-                4: 'responsable',
-                5: 'estado'
-            },
-            search_fields=['codigo', 'nombre', 'categoria__nombre', 'ubicacion', 'responsable'],
-            base_qs=qs_base,
-            serializer=ActivoFijoListSerializer,
-            extra_filter=lambda req, qs: qs  # Sin filtros adicionales
-        )
-        
-        # Procesar request DataTables
-        dt_server = DataTableServer(spec)
-        return dt_server.handle(request)
+        empresa = inv_services.get_empresa_singleton()
+        return inv_services.qs_activo_detail(empresa_id=empresa.id, activo_id=self.kwargs['pk'])
     
     def destroy(self, request, *args, **kwargs):
         """
-        ⚠️ REGLA DE SEGURIDAD DE ELIMINACIÓN (Inactivar antes de Borrar):
-        - No se puede eliminar un activo fijo con estado 'ACTIVO'.
-        - El activo debe cambiar su estado (MANTENIMIENTO, BAJA, VENDIDO) antes de poder eliminarlo.
-        
-        Returns:
-            400 Bad Request si el activo está en estado 'ACTIVO'
-            204 No Content si se elimina exitosamente
+        Delega la eliminacion al Service Layer.
         """
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        
         instance = self.get_object()
-        
-        # Validar que el activo no esté en estado ACTIVO
-        if instance.estado == ActivoFijo.Estado.ACTIVO:
-            return Response(
-                {
-                    "error": "active_record",
-                    "message": "No se puede eliminar un ítem activo. Cámbielo a 'Inactivo' en el formulario de edición antes de intentar borrarlo."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        return super().destroy(request, *args, **kwargs)
+        self.service_activo_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     
     @action(detail=False, methods=['get'], url_path="list-all")
     def list_all(self, request):
         """
-        ⚠️ v2.40: Endpoint optimizado para Client-Side DataTables.
-        Retorna TODOS los activos en un array JSON simple (sin paginación DRF).
-        Usa QuerySet optimizado del service layer.
-        
-        ⚠️ FORMATO: Retorna array JSON directo (no objeto con "data").
-        DataTables con ajax.dataSrc: '' espera un array directo.
-        
-        Nota: ActivoFijo no tiene campo 'activo', usa 'estado' (ACTIVO, MANTENIMIENTO, BAJA, VENDIDO).
-        Este endpoint retorna todos los activos sin filtrar por estado.
+        v2.40: Endpoint optimizado para Client-Side DataTables via Servicio.
         """
-        from apps.tenant.inventario.services import qs_activo_list
-        
-        # ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            return Response([], status=status.HTTP_200_OK)
-        
-        # ⚠️ CRÍTICO: Usar QuerySet optimizado del service layer
-        qs = qs_activo_list().filter(empresa=empresa).order_by('nombre')
-        
-        # ⚠️ CRÍTICO: Usar serializer de lista optimizado
-        serializer = ActivoFijoListSerializer(qs, many=True)
-        
-        # ⚠️ CRÍTICO: Retornar array JSON simple (no objeto con "data")
-        # DataTables con ajax.dataSrc: '' espera un array directo
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        empresa = inv_services.get_empresa_singleton()
+        serializer_data = self.service_activo_list_all(empresa)
+        return Response(serializer_data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
+    def gestor_offcanvas(self, request):
+        """
+        v2.60: Devuelve el HTML del formulario de activo fijo para HTMX Offcanvas via Servicio.
+        """
+        empresa = inv_services.get_empresa_singleton()
+        id_instancia = request.query_params.get('id')
+        context = self.service_activo_get_offcanvas_context(empresa, id_instancia)
+        return Response(context, template_name='inventario/offcanvas_activo.html')
 
 
-class MovimientoInventarioViewSet(
-    mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
-):
+class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMixin):
     """
-    ViewSet para KARDEX. Solo lectura y creación.
-    No permite editar/borrar movimientos para garantizar integridad.
-    
-    ⚠️ v2.40: Migrado a Tabulator Factory - usa StandardResultsSetPagination.
-    
-    ⚠️ PERFORMANCE BIBLE:
-    - PROHIBIDO .all(): get_queryset() filtra por empresa (SSoT) a través de producto
-    - queryset base solo para DRF, se sobrescribe en get_queryset()
+    v2.61: ViewSet para KARDEX con Inyeccion de Servicio.
     """
-    # ⚠️ NOTA: Este queryset es solo para DRF, se sobrescribe en get_queryset()
-    queryset = MovimientoInventario.objects.none()
-    serializer_class = MovimientoInventarioSerializer
-    pagination_class = StandardResultsSetPagination
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [permissions.IsAuthenticated, IsTenantAdminOrReadOnly]
-    parser_classes = [JSONParser, FormParser]
-    renderer_classes = [JSONRenderer]
     
     def get_serializer_class(self):
-        """Selecciona el serializer según la acción."""
         if self.action == 'list':
             return MovimientoInventarioListSerializer
         return MovimientoInventarioSerializer
     
     def get_queryset(self):
-        """
-        ⚠️ PERFORMANCE BIBLE: Siempre filtrar por empresa (SSoT) - PROHIBIDO .all()
-        Filtra a través de producto__empresa para mantener integridad.
-        """
-        from apps.tenant.inventario.services import qs_movimiento_list
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            return MovimientoInventario.objects.none()
+        empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        return qs_movimiento_list(empresa.id, search=search).order_by('-created_at')
+        return inv_services.qs_movimiento_list(empresa.id, search=search).order_by('-created_at')
     
     def list(self, request, *args, **kwargs):
         """
@@ -1230,37 +582,34 @@ class MovimientoInventarioViewSet(
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
+    @action(detail=False, methods=["get"], renderer_classes=[TemplateHTMLRenderer], url_path="gestor-offcanvas")
+    def gestor_offcanvas(self, request):
+        """
+        GET /api/v1/inventario/movimientos/gestor-offcanvas/
+        Devuelve el HTML del formulario de movimiento para HTMX Offcanvas.
+        """
+        empresa = inv_services.get_empresa_singleton()
+        context = self.service_movimiento_get_offcanvas_context(empresa)
+        return Response(context, template_name='inventario/offcanvas_movimiento.html')
+    
     @action(detail=False, methods=["get", "post"], url_path="dt")
     def datatables(self, request):
         """
-        ⚠️ DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
-        Ya no se usa - Tabulator Factory consume GET /api/v1/inventario/movimientos/ directamente.
-        Se mantiene por compatibilidad temporal, pero será eliminado en v2.50.
-        
-        ⚠️ v2.40: DataTables SERVER-SIDE para Kardex (Movimientos de Inventario).
-        Retorna datos paginados en formato estándar DataTables server-side.
-        Usa DataTableServer helper para procesamiento seguro.
+        DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
         """
-        from apps.shared.datatable import DataTableSpec, DataTableServer
-        from apps.tenant.inventario.services import qs_movimiento_list
+        from apps.shared.datatable import DataTableServer, DataTableSpec
         from apps.tenant.inventario.api.serializers import MovimientoInventarioListSerializer
+        from apps.tenant.inventario import services as inv_services
         
-        # QuerySet base optimizado
-        qs_base = qs_movimiento_list()
+        empresa = inv_services.get_empresa_singleton()
+        qs_base = inv_services.qs_movimiento_list(empresa_id=empresa.id)
         
-        # ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-        empresa = Empresa.objects.only('id').first()
-        if empresa:
-            qs_base = qs_base.filter(producto__empresa=empresa)
-        
-        # ⚠️ CRÍTICO: fields_map debe coincidir EXACTAMENTE con el orden de columnas en inventario.page.js
-        # Columnas: 0=created_at, 1=producto_codigo, 2=producto_nombre, 3=tipo_display, 4=cantidad, 5=origen_referencia, 6=observaciones
         spec = DataTableSpec(
             fields_map={
                 0: 'created_at',
-                1: 'producto__codigo',  # Serializer expone como producto_codigo, pero en DB es producto__codigo
-                2: 'producto__nombre',  # Serializer expone como producto_nombre, pero en DB es producto__nombre
-                3: 'tipo',  # Serializer expone como tipo_display, pero ordenamos por tipo
+                1: 'producto__codigo',
+                2: 'producto__nombre',
+                3: 'tipo',
                 4: 'cantidad',
                 5: 'origen_referencia',
                 6: 'observaciones'
@@ -1268,65 +617,41 @@ class MovimientoInventarioViewSet(
             search_fields=['producto__codigo', 'producto__nombre', 'origen_referencia', 'observaciones'],
             base_qs=qs_base,
             serializer=MovimientoInventarioListSerializer,
-            extra_filter=lambda req, qs: qs  # Sin filtros adicionales
+            extra_filter=lambda req, qs: qs
         )
         
-        # Procesar request DataTables
         dt_server = DataTableServer(spec)
         return dt_server.handle(request)
 
     def perform_create(self, serializer):
         """
-        ⚠️ v2.40: Crea movimiento y recalcula stock automáticamente usando Service Layer.
+        v2.40: Crea movimiento y recalcula stock automaticamente usando Service Layer.
         """
-        from apps.tenant.empresa.models import Empresa
-        from apps.tenant.inventario.services import recalcular_stock_producto
-        
-        # ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ValueError("No se encontró configuración de Empresa para este tenant.")
-        
-        # Guardar movimiento
-        movimiento = serializer.save(empresa=empresa)
-        
-        # ⚠️ CRÍTICO: Recalcular stock después de crear movimiento
-        recalcular_stock_producto(movimiento.producto.id)
-        
-        return movimiento
+        empresa = inv_services.get_empresa_singleton()
+        self.service_movimiento_perform_create(serializer, empresa)
 
 
 class HistorialServicioViewSet(
-    mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+    mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet,
+    inv_services.HistorialServiceMixin
 ):
     """
-    ViewSet para Historial de Servicios.
-    
-    ⚠️ PERFORMANCE BIBLE:
-    - PROHIBIDO .all(): get_queryset() filtra por empresa (SSoT)
-    - queryset base solo para DRF, se sobrescribe en get_queryset()
+    ViewSet para Historial de Servicios via Service Layer.
     """
-    # ⚠️ NOTA: Este queryset es solo para DRF, se sobrescribe en get_queryset()
-    queryset = HistorialServicio.objects.none()
     serializer_class = HistorialServicioSerializer
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [permissions.IsAuthenticated, IsTenantAdminOrReadOnly]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     parser_classes = [JSONParser, FormParser]
     
     def get_queryset(self):
         """
-        ⚠️ PERFORMANCE BIBLE: Siempre filtrar por empresa (SSoT) - PROHIBIDO .all()
+        v2.61: Usa QuerySet optimizado del Service Layer.
         """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            return HistorialServicio.objects.none()
-        return HistorialServicio.objects.select_related('servicio').filter(empresa=empresa).order_by('-created_at')
+        empresa = inv_services.get_empresa_singleton()
+        return self.service_historial_get_queryset(empresa)
 
     def perform_create(self, serializer):
         """
-        ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
+        v2.60: Asigna empresa singleton via Servicio.
         """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ValueError("No se encontró configuración de Empresa para este tenant.")
+        empresa = inv_services.get_empresa_singleton()
         serializer.save(empresa=empresa)

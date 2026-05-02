@@ -1,0 +1,161 @@
+{# offcanvas_crear_devengo.html - Offcanvas del módulo Nóminas v2.61 #}
+{# ⚠️ v2.61: HTMX + Offcanvas con Zero Trust #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-devengo" aria-labelledby="offcanvas-devengo-label" style="width: 95%; max-width: 1000px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-devengo-label">
+      <i class="bi bi-cash-coin me-2"></i>
+      <span>Registrar Nómina</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="form-devengo-feedback" class="alert d-none mb-3" role="alert"></div>
+    
+    <form id="form-devengo" method="POST" onsubmit="return false;"
+          hx-post="/api/v1/empleados/devengos/"
+          hx-target="#grid-empleados" 
+          hx-swap="none"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+          hx-on::htmx:before-request="const btn = document.getElementById('btn-guardar-devengo'); if(btn && !btn.disabled){ btn.disabled = true; btn.innerHTML = '<span class=\"spinner-border spinner-border-sm me-1\" role=\"status\" aria-hidden=\"true\"></span>Guardando...'; }"
+          hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+      {% csrf_token %}
+      <input type="hidden" id="devengo-id" name="id" value="">
+      <input type="hidden" id="devengo-empleado-id" name="empleado" value="{{ empleado.id }}">
+      <input type="hidden" id="devengo-contrato-id" name="contrato" value="{{ contrato.id }}">
+      
+      {# Información del Empleado (Solo lectura) #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-person me-2"></i>Información del Empleado
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label text-muted small">Nombre Completo</label>
+            <input type="text" class="form-control bg-light" value="{{ empleado.nombre_completo }}" readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-muted small">Documento</label>
+            <input type="text" class="form-control bg-light" value="{{ empleado.numero_documento }}" readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-muted small">Cargo</label>
+            <input type="text" class="form-control bg-light" value="{{ contrato.cargo }}" readonly>
+          </div>
+        </div>
+      </div>
+      
+      {# Periodo y Fecha #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar-range me-2"></i>Periodo y Fecha
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="devengo-periodo_mes" class="form-label text-danger fw-bold">Periodo (YYYY-MM) *</label>
+            <input type="text" class="form-control" 
+                   id="devengo-periodo_mes" name="periodo_mes" 
+                   value="{{ 'now'|date:'Y-m' }}" 
+                   pattern="\d{4}-\d{2}" placeholder="2024-01" required
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados-wrapper"
+                   hx-include="#form-devengo"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-trigger="change, keyup changed delay:500ms">
+          </div>
+          <div class="col-md-6">
+            <label for="devengo-fecha_pago" class="form-label text-danger fw-bold">Fecha de Pago *</label>
+            <input type="date" class="form-control" id="devengo-fecha_pago" name="fecha_pago" required
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados-wrapper"
+                   hx-include="#form-devengo"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-trigger="change">
+          </div>
+        </div>
+      </div>
+      
+      {# Días Laborados #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar-check me-2"></i>Días Laborados
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="devengo-dias_laborados" class="form-label text-danger fw-bold">Días Laborados *</label>
+            <input type="number" class="form-control" id="devengo-dias_laborados" name="dias_laborados" 
+                   value="30" step="0.1" min="0.1" max="30" required
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados-wrapper"
+                   hx-include="#form-devengo"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-trigger="change, keyup changed delay:500ms">
+          </div>
+        </div>
+      </div>
+
+      {# Contenedor Dinámico para Cálculos #}
+      <div id="devengo-campos-calculados-wrapper">
+          <div class="alert alert-info">
+              <i class="bi bi-info-circle me-2"></i>Ingrese los días y periodo para previsualizar el cálculo.
+          </div>
+      </div>
+
+      {# Devengos Adicionales #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-plus-circle me-2"></i>Devengos y Deducciones Adicionales (COP)
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label for="devengo-otros_devengos" class="form-label">Otros Devengos</label>
+            <input type="number" class="form-control" id="devengo-otros_devengos" name="otros_devengos" 
+                   value="0" step="0.01" min="0"
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados-wrapper"
+                   hx-include="#form-devengo"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-trigger="keyup changed delay:500ms">
+          </div>
+          <div class="col-md-4">
+            <label for="devengo-prestamos" class="form-label">Préstamos</label>
+            <input type="number" class="form-control" id="devengo-prestamos" name="prestamos" 
+                   value="0" step="0.01" min="0"
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados-wrapper"
+                   hx-include="#form-devengo"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-trigger="keyup changed delay:500ms">
+          </div>
+          <div class="col-md-4">
+            <label for="devengo-descuentos_operativos" class="form-label">Dctos Operativos</label>
+            <input type="number" class="form-control" id="devengo-descuentos_operativos" name="descuentos_operativos" 
+                   value="0" step="0.01" min="0"
+                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
+                   hx-target="#devengo-campos-calculados-wrapper"
+                   hx-include="#form-devengo"
+                   hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                   hx-trigger="keyup changed delay:500ms">
+          </div>
+        </div>
+      </div>
+      
+      {# Observaciones #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-chat-left-text me-2"></i>Observaciones
+        </h6>
+        <textarea class="form-control" id="devengo-observaciones" name="observaciones" rows="2"></textarea>
+      </div>
+
+    </form>
+  </div>
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="submit" class="btn btn-primary" id="btn-guardar-devengo" form="form-devengo">
+        <i class="bi bi-check-lg me-1"></i>Guardar Nómina
+      </button>
+    </div>
+  </div>
+</div>

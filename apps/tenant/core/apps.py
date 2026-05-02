@@ -15,7 +15,7 @@ class TenantCoreConfig(AppConfig):
     """
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.tenant.core'
-    label = 'tenant_core'  # ⚠️ CRÍTICO: Label único para evitar conflicto con apps.public.core
+    label = 'tenant_core'  # # WARNING: CRÍTICO: Label único para evitar conflicto con apps.public.core
     verbose_name = 'Tenant Core'
     
     def ready(self):

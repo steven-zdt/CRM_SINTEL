@@ -8,10 +8,12 @@ Referencias:
 - DataTables server-side: https://datatables.net/manual/server-side
 - Seguridad whitelist: https://webdevservices.in/secure-datatables-implementation/
 """
-from typing import Iterable, Mapping, Sequence, Callable, Optional, Dict, Any
-from django.db.models import QuerySet, Q, OrderBy
-from rest_framework.response import Response
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from typing import Any
+
+from django.db.models import Q, QuerySet
 from rest_framework import status
+from rest_framework.response import Response
 
 
 class DataTableSpec:
@@ -42,7 +44,7 @@ class DataTableSpec:
         search_fields: Sequence[str],
         base_qs: QuerySet,
         serializer,
-        extra_filter: Optional[Callable] = None,
+        extra_filter: Callable | None = None,
     ):
         self.fields_map = dict(fields_map)
         self.search_fields = list(search_fields)
@@ -138,7 +140,7 @@ class DataTableServer:
         
         return qs
     
-    def _parse_request(self, request) -> Dict[str, Any]:
+    def _parse_request(self, request) -> dict[str, Any]:
         """
         Parsea parámetros DataTables desde request.data (POST).
         

@@ -1,0 +1,181 @@
+{# offcanvas_detalle_proveedor.html - Template dedicado para detalle de proveedor según FSD #}
+{# [INFO] AGENTS.md: Arquitectura Feature-Sliced Design - Template dedicado para detalle (read-only) #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label" style="width: 90%; max-width: 800px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-proveedor-label">
+      <i class="bi bi-building me-2"></i>Detalle Proveedor
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# Identificación Legal #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-card-text me-2"></i>Identificación Legal
+      </h6>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Tipo Persona</label>
+          <p class="form-control-plaintext">{{ proveedor.get_tipo_persona_display }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Tipo Documento</label>
+          <p class="form-control-plaintext">{{ proveedor.get_tipo_documento_display }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Número Documento</label>
+          <p class="form-control-plaintext">{{ proveedor.numero_documento }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Dígito de Verificación</label>
+          <p class="form-control-plaintext">{{ proveedor.digito_verificacion|default:"N/A" }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">NIT Completo</label>
+          <p class="form-control-plaintext">{{ proveedor.nit }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Razón Social</label>
+          <p class="form-control-plaintext">{{ proveedor.razon_social }}</p>
+        </div>
+        <div class="col-md-12">
+          <label class="form-label fw-bold">Nombre Comercial</label>
+          <p class="form-control-plaintext">{{ proveedor.nombre_comercial|default:"N/A" }}</p>
+        </div>
+      </div>
+    </div>
+
+    {# Información Tributaria #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-receipt me-2"></i>Información Tributaria
+      </h6>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Régimen Tributario</label>
+          <p class="form-control-plaintext">{{ proveedor.get_regimen_tributario_display }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Código CIIU</label>
+          <p class="form-control-plaintext">{{ proveedor.actividad_economica_ciiu|default:"N/A" }}</p>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Responsable de IVA</label>
+          <p class="form-control-plaintext">
+            {% if proveedor.responsable_iva %}
+              <span class="badge bg-success">Sí</span>
+            {% else %}
+              <span class="badge bg-secondary">No</span>
+            {% endif %}
+          </p>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Gran Contribuyente</label>
+          <p class="form-control-plaintext">
+            {% if proveedor.gran_contribuyente %}
+              <span class="badge bg-success">Sí</span>
+            {% else %}
+              <span class="badge bg-secondary">No</span>
+            {% endif %}
+          </p>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Autoretenedor</label>
+          <p class="form-control-plaintext">
+            {% if proveedor.autoretenedor %}
+              <span class="badge bg-success">Sí</span>
+            {% else %}
+              <span class="badge bg-secondary">No</span>
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {# Contacto y Ubicación #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
+      </h6>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Email</label>
+          <p class="form-control-plaintext">{{ proveedor.email_contacto|default:"N/A" }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Teléfono</label>
+          <p class="form-control-plaintext">{{ proveedor.telefono_contacto|default:"N/A" }}</p>
+        </div>
+        <div class="col-md-12">
+          <label class="form-label fw-bold">Dirección</label>
+          <p class="form-control-plaintext">{{ proveedor.direccion|default:"N/A" }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Ciudad</label>
+          <p class="form-control-plaintext">{{ proveedor.ciudad|default:"N/A" }}</p>
+        </div>
+      </div>
+    </div>
+
+    {# Información Comercial y Bancaria #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-bank me-2"></i>Información Comercial y Bancaria
+      </h6>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Plazo de Pago</label>
+          <p class="form-control-plaintext">{{ proveedor.plazo_pago_dias|default:30 }} días</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Banco</label>
+          <p class="form-control-plaintext">{{ proveedor.banco|default:"N/A" }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Tipo de Cuenta</label>
+          <p class="form-control-plaintext">{{ proveedor.get_tipo_cuenta_display|default:"N/A" }}</p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Número de Cuenta</label>
+          <p class="form-control-plaintext">{{ proveedor.numero_cuenta|default:"N/A" }}</p>
+        </div>
+      </div>
+    </div>
+
+    {# Estado y Metadatos #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-toggle-on me-2"></i>Estado y Metadatos
+      </h6>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Estado</label>
+          <p class="form-control-plaintext">
+            {% if proveedor.activo %}
+              <span class="badge bg-success">Activo</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactivo</span>
+            {% endif %}
+          </p>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Fecha de Creación</label>
+          <p class="form-control-plaintext">{{ proveedor.created_at|date:"d/m/Y H:i" }}</p>
+        </div>
+        <div class="col-md-12">
+          <label class="form-label fw-bold">Observaciones</label>
+          <p class="form-control-plaintext">{{ proveedor.observaciones|default:"Sin observaciones" }}</p>
+        </div>
+      </div>
+    </div>
+
+    {# Botones de Acción #}
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cerrar</button>
+      <button type="button" class="btn btn-primary" onclick="w.Sintel.Proveedores.Form.openOffcanvas('{{ proveedor.id }}')">
+        <i class="bi bi-pencil me-1"></i>Editar
+      </button>
+    </div>
+  </div>
+</div>

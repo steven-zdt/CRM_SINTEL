@@ -1,7 +1,7 @@
 """
 Core Service Adapter para Contabilidad.
 
-⚠️ v2.30: Core API como orquestador único de la UI privada.
+# WARNING: v2.30: Core API como orquestador único de la UI privada.
 - Este adapter consume el Service Layer del dominio Contabilidad (apps/tenant/contabilidad/services)
 - Compone el DTO final estandarizando respuestas
 - NO reimplementa lógica del dominio; solo orquesta y compone respuestas
@@ -23,23 +23,22 @@ Uso:
         core_movimientos_delete,
     )
 """
-from typing import Dict, Any, Optional
-
+from typing import Any
 
 # ============================================================================
 # CUENTAS CONTABLES
 # ============================================================================
 
 def core_cuentas_list(
-    filters: Optional[Dict[str, Any]] = None,
-    ordering: Optional[str] = None,
+    filters: dict[str, Any] | None = None,
+    ordering: str | None = None,
     page: int = 1,
     page_size: int = 20
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Lista cuentas contables (paginado).
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         filters: Diccionario con filtros
@@ -55,11 +54,11 @@ def core_cuentas_list(
     return list_cuentas(filters=filters, ordering=ordering, page=page, page_size=page_size)
 
 
-def core_cuentas_create(data: Dict[str, Any]) -> Dict[str, Any]:
+def core_cuentas_create(data: dict[str, Any]) -> dict[str, Any]:
     """
     Crea una cuenta contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         data: Diccionario con datos de la cuenta
@@ -75,11 +74,11 @@ def core_cuentas_create(data: Dict[str, Any]) -> Dict[str, Any]:
     return create_cuenta(data)
 
 
-def core_cuentas_update(cuenta_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+def core_cuentas_update(cuenta_id: int, data: dict[str, Any]) -> dict[str, Any]:
     """
     Actualiza una cuenta contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         cuenta_id: ID de la cuenta
@@ -100,7 +99,7 @@ def core_cuentas_delete(cuenta_id: int) -> None:
     """
     Elimina una cuenta contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         cuenta_id: ID de la cuenta
@@ -118,15 +117,15 @@ def core_cuentas_delete(cuenta_id: int) -> None:
 # ============================================================================
 
 def core_asientos_list(
-    filters: Optional[Dict[str, Any]] = None,
-    ordering: Optional[str] = None,
+    filters: dict[str, Any] | None = None,
+    ordering: str | None = None,
     page: int = 1,
     page_size: int = 20
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Lista asientos contables (paginado).
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         filters: Diccionario con filtros
@@ -142,11 +141,11 @@ def core_asientos_list(
     return list_asientos(filters=filters, ordering=ordering, page=page, page_size=page_size)
 
 
-def core_asientos_create(data: Dict[str, Any]) -> Dict[str, Any]:
+def core_asientos_create(data: dict[str, Any]) -> dict[str, Any]:
     """
     Crea un asiento contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         data: Diccionario con datos del asiento
@@ -162,11 +161,11 @@ def core_asientos_create(data: Dict[str, Any]) -> Dict[str, Any]:
     return create_asiento(data)
 
 
-def core_asientos_update(asiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+def core_asientos_update(asiento_id: int, data: dict[str, Any]) -> dict[str, Any]:
     """
     Actualiza un asiento contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         asiento_id: ID del asiento
@@ -187,7 +186,7 @@ def core_asientos_delete(asiento_id: int) -> None:
     """
     Elimina un asiento contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         asiento_id: ID del asiento
@@ -200,12 +199,12 @@ def core_asientos_delete(asiento_id: int) -> None:
     delete_asiento(asiento_id)
 
 
-def core_asientos_aprobar(asiento_id: int) -> Dict[str, Any]:
+def core_asientos_aprobar(asiento_id: int) -> dict[str, Any]:
     """
     Aprueba un asiento contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
-    ⚠️ VALIDACIÓN: Un asiento solo puede ser aprobado si total_debe == total_haber.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: VALIDACIÓN: Un asiento solo puede ser aprobado si total_debe == total_haber.
     
     Args:
         asiento_id: ID del asiento
@@ -226,15 +225,15 @@ def core_asientos_aprobar(asiento_id: int) -> Dict[str, Any]:
 # ============================================================================
 
 def core_movimientos_list(
-    filters: Optional[Dict[str, Any]] = None,
-    ordering: Optional[str] = None,
+    filters: dict[str, Any] | None = None,
+    ordering: str | None = None,
     page: int = 1,
     page_size: int = 20
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Lista movimientos contables (paginado).
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         filters: Diccionario con filtros
@@ -250,11 +249,11 @@ def core_movimientos_list(
     return list_movimientos(filters=filters, ordering=ordering, page=page, page_size=page_size)
 
 
-def core_movimientos_create(data: Dict[str, Any]) -> Dict[str, Any]:
+def core_movimientos_create(data: dict[str, Any]) -> dict[str, Any]:
     """
     Crea un movimiento contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         data: Diccionario con datos del movimiento
@@ -270,11 +269,11 @@ def core_movimientos_create(data: Dict[str, Any]) -> Dict[str, Any]:
     return create_movimiento(data)
 
 
-def core_movimientos_update(movimiento_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+def core_movimientos_update(movimiento_id: int, data: dict[str, Any]) -> dict[str, Any]:
     """
     Actualiza un movimiento contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         movimiento_id: ID del movimiento
@@ -295,7 +294,7 @@ def core_movimientos_delete(movimiento_id: int) -> None:
     """
     Elimina un movimiento contable.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         movimiento_id: ID del movimiento

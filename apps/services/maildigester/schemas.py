@@ -4,16 +4,16 @@ DTOs (Data Transfer Objects) para el servicio maildigester.
 Define los contratos de datos para entrada y salida de las funciones del servicio.
 Usa TypedDict para validación de tipos en tiempo de desarrollo.
 
-⚠️ FASE 1: Solo contratos, sin lógica de negocio.
+WARNING: FASE 1: Solo contratos, sin lógica de negocio.
 """
-from typing import TypedDict, Optional, Literal, List, Dict, Any
+from typing import Any, Literal, TypedDict
 
 
 class MailboxConfigDTO(TypedDict, total=False):
     """
     Configuración de conexión a buzón de correo.
     
-    ⚠️ GMAIL: Si provider == "gmail", host/port/ssl se fuerzan a presets de Gmail.
+    WARNING: GMAIL: Si provider == "gmail", host/port/ssl se fuerzan a presets de Gmail.
     
     Ejemplo:
         config = {
@@ -39,7 +39,7 @@ class MailboxConfigDTO(TypedDict, total=False):
             }
         }
     """
-    provider: Optional[Literal["gmail", "custom"]]  # Proveedor predefinido
+    provider: Literal["gmail", "custom"] | None  # Proveedor predefinido
     host: str
     port: int
     protocol: Literal["imap", "pop3"]
@@ -49,9 +49,9 @@ class MailboxConfigDTO(TypedDict, total=False):
     password: str
     mailbox: str  # INBOX, Facturacion, etc.
     max_attachment_mb: int  # p. ej., 50 (alineado con límite de ingesta)
-    move_processed_to: Optional[str]  # carpeta destino tras procesar
+    move_processed_to: str | None  # carpeta destino tras procesar
     mark_as_seen: bool
-    smtp: Optional[Dict[str, Any]]  # Configuración SMTP opcional (para futuros usos)
+    smtp: dict[str, Any] | None  # Configuración SMTP opcional (para futuros usos)
 
 
 class AttachmentDTO(TypedDict):
@@ -111,7 +111,7 @@ class InvoiceXMLDTO(TypedDict, total=False):
         }
     """
     source_email_id: str  # id del mensaje/correo
-    source_filename: Optional[str]
+    source_filename: str | None
     xml_text: str  # XML UBL normalizado a texto
     naturaleza: Literal["VENTA", "COMPRA"]
-    metadata: Dict[str, Any]  # libre: proveedor, asunto, etc.
+    metadata: dict[str, Any]  # libre: proveedor, asunto, etc.

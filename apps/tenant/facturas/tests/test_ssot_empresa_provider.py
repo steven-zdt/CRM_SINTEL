@@ -2,8 +2,9 @@
 Tests para validar el SSoT de Empresa (provider canónico).
 """
 from django_tenants.test.cases import TenantTestCase
-from apps.tenant.empresa.services import get_empresa_emisor_data, EmpresaNotConfiguredError
+
 from apps.tenant.empresa.models import Empresa
+from apps.tenant.empresa.services import EmpresaNotConfiguredError, get_empresa_emisor_data
 
 
 class SSoTEmpresaProviderTests(TenantTestCase):
@@ -20,7 +21,8 @@ class SSoTEmpresaProviderTests(TenantTestCase):
             razon_social="SINTEL",
             nit="",  # Sin NIT
             dv="",
-            direccion="Calle 123"
+            direccion="Calle 123",
+            telefono="3001234567",
         )
         
         with self.assertRaises(EmpresaNotConfiguredError):
@@ -54,7 +56,8 @@ class SSoTEmpresaProviderTests(TenantTestCase):
             razon_social="SINTEL",
             nit="901123299",
             dv="1",
-            direccion="Calle 123"
+            direccion="Calle 123",
+            telefono="3001234567",
         )
         
         data = get_empresa_emisor_data()

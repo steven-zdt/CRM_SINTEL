@@ -3,12 +3,14 @@ URLs para la API de consola.
 
 Todas las rutas están bajo /api/admin/v1/console/ y requieren IsAdminUser.
 """
+
 from django.urls import path
+
 from .views import (
-    TenantsDataTableView,
-    TenantDomainsDataTableView,
-    UsersDataTableView,
     ConsoleHealthView,
+    TenantDomainsDataTableView,
+    TenantsDataTableView,
+    UsersDataTableView,
 )
 
 app_name = "console_api"

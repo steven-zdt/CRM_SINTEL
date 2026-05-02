@@ -1,6 +1,6 @@
 """Core API v1 - Inventario serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Heredar serializers existentes de la app inventario.
 - Exponer URLs absolutas de imágenes para el Workspace.

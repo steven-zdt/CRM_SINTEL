@@ -4,7 +4,7 @@ Excepciones específicas del dominio maildigester.
 Todas las excepciones del servicio de ingesta de correo deben heredar de estas
 clases base para facilitar el manejo de errores y logging.
 
-⚠️ FASE 1: Solo definiciones, sin lógica de negocio.
+WARNING: FASE 1: Solo definiciones, sin lógica de negocio.
 """
 
 
@@ -57,7 +57,7 @@ class PathTraversalError(MailDigesterError):
     """
     Intento de path traversal detectado en nombre de archivo.
     
-    ⚠️ SEGURIDAD: Se rechaza cualquier ruta que contenga '..' o rutas absolutas.
+    WARNING: SEGURIDAD: Se rechaza cualquier ruta que contenga '..' o rutas absolutas.
     
     Ejemplo:
         raise PathTraversalError("Nombre de archivo rechazado: '../../etc/passwd'")

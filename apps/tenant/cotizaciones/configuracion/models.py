@@ -1,17 +1,20 @@
 """
 Configuración de Perfiles v2.60 - SIMPLIFICADO (User-Driven)
-⚠️ v2.60: Refactorizado para modo User-Driven. Solo provee:
+# WARNING: v2.60: Refactorizado para modo User-Driven. Solo provee:
 1. Lógica de generación de códigos (Prefijo, Sufijo, Semilla)
 2. Días de validez de la cotización (1 a 30 días)
 """
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils.translation import gettext_lazy as _
+
+from apps.tenant.core.models import SintelTenantBaseModel  # auto-inserted by autocorrect
 from apps.tenant.empresa.models import Empresa
 
-class ConfiguracionCotizacion(models.Model):
+
+class ConfiguracionCotizacion(SintelTenantBaseModel):
     """
-    ⚠️ v2.60: Modelo simplificado para modo User-Driven.
+    # WARNING: v2.60: Modelo simplificado para modo User-Driven.
     
     Campos eliminados (obsoletos en User-Driven):
     - tipo_plantilla, tipo_cotizacion_default
@@ -38,7 +41,7 @@ class ConfiguracionCotizacion(models.Model):
         help_text=_('Indica si este perfil está activo y disponible para uso')
     )
 
-    # ⚠️ v2.60: Días de Validez de la Cotización
+    # # WARNING: v2.60: Días de Validez de la Cotización
     dias_validez = models.IntegerField(
         default=15,
         validators=[MinValueValidator(1), MaxValueValidator(30)],
@@ -46,7 +49,7 @@ class ConfiguracionCotizacion(models.Model):
         help_text=_('Días de validez de la cotización (1 a 30 días). Se usa para calcular automáticamente la fecha de vencimiento.')
     )
 
-    # ⚠️ v2.60: Gestión de Folios Dinámicos por Perfil
+    # # WARNING: v2.60: Gestión de Folios Dinámicos por Perfil
     prefijo_secuencia = models.CharField(
         max_length=20,
         blank=True,

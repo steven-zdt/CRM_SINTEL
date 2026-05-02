@@ -117,15 +117,31 @@
             },
             
             // Petición AJAX con fetch y manejo de errores
-            ajaxRequest: function(url, config, params) {
+            ajaxRequest: async function(url, config, params) {
                 console.log('[TabulatorFactory.ajaxRequest] Iniciando petición:', { url, params });
-                
+
+                // Construir headers iniciales (CSRF + Content-Type)
+                const headers = {
+                    "X-CSRFToken": getCookie('csrftoken') || '',
+                    "Content-Type": "application/json"
+                };
+
+                // Intentar inyectar Authorization si el helper jwtAuth está disponible
+                try {
+                    if (typeof window.jwtAuth === 'object' && typeof window.jwtAuth.getValidAccessToken === 'function') {
+                        const access = await window.jwtAuth.getValidAccessToken();
+                        if (access) {
+                            headers['Authorization'] = `Bearer ${access}`;
+                        }
+                    }
+                } catch (err) {
+                    console.debug('[TabulatorFactory] No se pudo obtener JWT desde jwtAuth:', err && err.message ? err.message : err);
+                }
+
                 return fetch(url, {
                     method: "GET",
-                    headers: {
-                        "X-CSRFToken": getCookie('csrftoken') || '',
-                        "Content-Type": "application/json"
-                    }
+                    credentials: 'same-origin',
+                    headers: headers
                 }).then(response => {
                     console.log('[TabulatorFactory.ajaxRequest] Respuesta recibida:', {
                         status: response.status,
@@ -378,14 +394,38 @@
         
         // Crear y retornar instancia
         const tableInstance = new Tabulator(container, finalConfig);
-        
+
         // ⚠️ DEBUG: Verificar que la tabla se creó correctamente
         console.log('[TabulatorFactory] ✅ Tabla Tabulator creada:', {
             selector: selector,
             apiUrl: apiUrl,
             instance: tableInstance ? 'OK' : 'NULL'
         });
-        
+
+        // ⚠️ v3.5: Debounce en input de búsqueda (300ms) para reducir requests
+        if (options.searchInputSelector) {
+            const searchInput = d.querySelector(options.searchInputSelector);
+            if (searchInput) {
+                let debounceTimer = null;
+
+                searchInput.addEventListener('input', function() {
+                    // Cancelar timeout anterior si existe
+                    if (debounceTimer) {
+                        clearTimeout(debounceTimer);
+                    }
+
+                    // Configurar nuevo timeout (300ms)
+                    debounceTimer = setTimeout(() => {
+                        console.log('[TabulatorFactory] 🔍 Búsqueda con debounce:', searchInput.value);
+                        // Ir a la página 1 cuando el usuario termina de escribir
+                        tableInstance.setPage(1);
+                    }, 300);
+                });
+
+                console.log('[TabulatorFactory] ✅ Debounce configurado para', options.searchInputSelector);
+            }
+        }
+
         return tableInstance;
     }
 

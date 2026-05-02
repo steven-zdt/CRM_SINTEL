@@ -1,8 +1,6 @@
 {% load static %}
-{# ⚠️ PASO 3: Helpers Core removidos (ya vienen de assets_core.html) #}
-{# BLOQUE 1: Helpers Core (DEBEN ir primero) #}
-{% include 'tenant/core/partials/assets_core.html' %}
-
-{# BLOQUE 2: Archivos del módulo Perfil #}
-<script src="{% static 'core/js/perfil/perfil.api.js' %}"></script>
-<script src="{% static 'core/js/perfil/perfil.page.js' %}"></script>
+{# Assets perfil - orden critico: api.js debe cargarse primero (Gateway SSoT) #}
+<script src="{% static 'perfil/js/perfil.api.js' %}"></script>
+<script src="{% static 'perfil/js/perfil.ui.js' %}"></script>
+<script src="{% static 'perfil/js/perfil.modals.js' %}"></script>
+<script src="{% static 'perfil/js/perfil.page.js' %}"></script>

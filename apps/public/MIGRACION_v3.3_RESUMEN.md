@@ -11,7 +11,7 @@
 
 **Validación de Rutas:**
 - ✅ JavaScript en `apps/public/core/static/core/js/` (correcto)
-- ✅ Templates en `apps/public/core/static/public/core/landing/` (correcto)
+- ✅ Templates en `apps/public/core/templates/public/core/` (corregido)
 
 **Refactorización Vanilla JS:**
 - ✅ `login.ui.js` - Convertido a IIFE completo (eliminado `import`)
@@ -83,18 +83,16 @@
 ## 🔧 Próximos Pasos
 
 ### 1. Registrar URLs API (Alta Prioridad)
-Crear `apps/public/core/api/urls.py`:
+Las URLs públicas ahora se gestionan en `config/public_api_urls.py`, lo que asegura su disponibilidad independientemente del enrutamiento de tenant. Ya se ha añadido un fallback determinista para endpoints críticos de usuarios.
+Se deben agregar explícitamente las rutas públicas del core si es necesario:
 ```python
-from django.urls import path
-from . import public_views
-
-urlpatterns = [
-    path('validate-token/', public_views.validar_token_acceso, name='validate-token'),
-    path('documento-publico/', public_views.obtener_documento_publico, name='documento-publico'),
+# En config/public_api_urls.py
+from apps.public.core.api import public_views
+urlpatterns += [
+    path('core/validate-token/', public_views.validar_token_acceso, name='validate-token'),
+    path('core/documento-publico/', public_views.obtener_documento_publico, name='documento-publico'),
 ]
 ```
-
-Y registrar en `apps/public/core/urls.py` o en el router principal.
 
 ### 2. Completar `obtener_datos_documento_publico()` (Media Prioridad)
 Implementar acceso real a modelos del tenant:
@@ -104,7 +102,7 @@ Implementar acceso real a modelos del tenant:
 
 ### 3. Implementar Vistas Públicas (Baja Prioridad)
 Crear vistas HTML públicas para cotizaciones/proyectos:
-- Template en `apps/public/core/static/public/core/view/`
+- Template en `apps/public/core/templates/public/core/view/`
 - JavaScript que use TabulatorFactory
 - Integración con endpoints de validación de tokens
 
@@ -130,3 +128,41 @@ Crear vistas HTML públicas para cotizaciones/proyectos:
 
 **Última actualización:** 2024-12-19  
 **Versión:** 3.3
+
+---
+
+## 🟢 Actualización de estado (2026-03-27)
+
+Durante la iteración de marzo 2026 se completaron y verificaron las siguientes tareas relacionadas con la migración y estabilidad de `apps/public`:
+
+- **Onboarding y Empresa bootstrap:** Se corrigió el ValidationError por campo `empresa` nulo y se verificó el onboarding idempotente para creación de tenant con owner.
+- **Fix migraciones DateTimeField:** Corregido el TypeError en defaults de `DateTimeField` en migraciones que impedía aplicar migraciones en ciertos entornos de prueba.
+- **Eliminación y auditoría:** Implementado `DeletionAudit` y `delete_user_service` (limpieza por esquema, auditoría en `public`) y comandos de apoyo. Auditoría creada en `apps/public/accounts/models.py`.
+- **Restauración endpoints públicos:** Se agregó un fallback determinista para `PublicUserViewSet` en `config/public_api_urls.py` y una ruta explícita en `config/urls_public.py` para evitar errores de resolución en tests.
+- **Corrección de conteo en Console Tenants API:** Excluido tenant `public` y `test` del queryset público en `ClientViewSet`/`TenantsDataTableView` y añadido logging de snapshot para depuración. El test específico de paginación de tenants fue estabilizado.
+
+### Validaciones ejecutadas
+
+- Reconstrucción de imágenes Docker y levantamiento de contenedores en entorno local.
+- Ejecución de pruebas focalizadas y depuración por logs: la prueba `ConsoleAPIConsumptionTests::test_tenants_api_returns_paginated_results` ahora pasa (1 passed).
+
+### Pendientes y recomendaciones
+
+- Ejecutar la suite completa `pytest apps/public` en CI antes de mergear para detectar otras regresiones no cubiertas por los tests focalizados.
+- Revisar y eliminar logs de snapshot temporales en `apps/public/console/api/views.py` y `apps/public/tenants/api/viewsets.py` una vez la suite esté estable.
+- Preparar commit/PR con changelog que incluya los archivos modificados y referencias a los tests ejecutados.
+
+### 5. Consolidación Core API y Resiliencia (v2.61.4) ✅
+
+**Hitos Alcanzados:**
+- ✅ **EmailService Centralizado**: Migración de lógica de envío desde `tenants` a `apps/public/core/services/email_service.py`.
+- ✅ **DLQ (Dead Letter Queue)**: Implementación de `FailedTenantTask` para persistencia de fallos asíncronos en onboarding.
+- ✅ **Segmentación UI Estricta**: Implementación de `TenantRootView` para bloqueo de landing pública en subdominios privados.
+- ✅ **Modernización UX**: Rediseño de `activate.html` con Glassmorphism y funciones de seguridad mejoradas.
+
+**Resultado:** Se ha eliminado la dependencia de `landing` para flujos de autenticación, centralizando todo en el ecosistema Core API con auditoría completa.
+
+---
+
+**Última actualización:** 2026-03-28  
+**Versión:** 2.61.4

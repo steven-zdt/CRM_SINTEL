@@ -1,25 +1,21 @@
 """
 Serializers para Empleados v2.60.
 
-⚠️ SINTEL v2.60: Sincronización Arquitectónica
+WARNING: SINTEL v2.60: Sincronización Arquitectónica
 - NormalizationMixin: Todos los serializadores heredan de este Mixin para sanitizar strings y validar tipos
 - Validación Estricta: validate_<field> para asegurar que ForeignKeys pertenezcan al tenant actual
 - Separación List/Detail: ListSerializer para tablas, DetailSerializer para formularios
 - Campos Explícitos: PROHIBIDO __all__, usar campos explícitos alineados con LIST_FIELDS y DETAIL_FIELDS
 """
-from rest_framework import serializers
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
-from ..models import Empleado, Contrato, Devengo
-from ..choices import EPS_CHOICES, AFP_CHOICES, ARL_CHOICES, RIESGO_ARL_CHOICES
+from rest_framework import serializers
+
+# WARNING: v2.60: Importar campos desde services.py (SSoT)
 from apps.tenant.empresa.models import Empresa
 
-# ⚠️ v2.60: Importar campos desde services.py (SSoT)
-from apps.tenant.empleados.services import (
-    EMPLEADO_LIST_FIELDS, EMPLEADO_DETAIL_FIELDS,
-    CONTRATO_LIST_FIELDS, CONTRATO_DETAIL_FIELDS,
-    DEVENGO_LIST_FIELDS, DEVENGO_DETAIL_FIELDS,
-)
+from ..choices import AFP_CHOICES, ARL_CHOICES, EPS_CHOICES, RIESGO_ARL_CHOICES
+from ..models import Contrato, Devengo, Empleado
 
 
 # ==============================================================================
@@ -27,7 +23,7 @@ from apps.tenant.empleados.services import (
 # ==============================================================================
 class NormalizationMixin:
     """
-    ⚠️ v2.60: Mixin para normalización de datos de entrada (Zero Trust).
+    WARNING: v2.60: Mixin para normalización de datos de entrada (Zero Trust).
     Sanitiza strings y valida tipos de datos antes de persistir.
     """
     def normalize_data(self, attrs):
@@ -62,7 +58,7 @@ class NormalizationMixin:
                     if attrs[key]:
                         attrs[key] = attrs[key].title()
             
-            # ⚠️ v2.60: Normalizar campos decimales (dias_laborados permite decimales 0.1-30)
+            # WARNING: v2.60: Normalizar campos decimales (dias_laborados permite decimales 0.1-30)
             if key in ['dias_laborados'] and value is not None:
                 from decimal import Decimal, InvalidOperation
                 try:
@@ -76,7 +72,7 @@ class NormalizationMixin:
 
 class EmpleadoListSerializer(serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
+    WARNING: v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con EMPLEADO_LIST_FIELDS de services.py.
     Fase 2: Expone indicadores de estado para habilitar acciones secuenciales.
@@ -102,25 +98,25 @@ class EmpleadoListSerializer(serializers.ModelSerializer):
 
 class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer para gestión de contratos vinculados a empleados.
+    WARNING: v2.60: Serializer para gestión de contratos vinculados a empleados.
     Campos alineados con CONTRATO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     
-    ⚠️ v2.95: La creación se maneja en perform_create del ViewSet usando service layer.
+    WARNING: v2.95: La creación se maneja en perform_create del ViewSet usando service layer.
     Este serializer solo valida y serializa datos.
     """
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     empleado_nombre = serializers.CharField(source='empleado.nombre_completo', read_only=True)
     
-    # ⚠️ v2.60: Campo empleado - puede venir como ID (string) desde FormData
+    # WARNING: v2.60: Campo empleado - puede venir como ID (string) desde FormData
     empleado = serializers.PrimaryKeyRelatedField(
         queryset=Empleado.objects.all(),
         required=True,
         help_text="ID del empleado (puede venir como string desde FormData)"
     )
     
-    # ⚠️ v2.95: Campos opcionales con valores por defecto (valores en COP)
+    # WARNING: v2.95: Campos opcionales con valores por defecto (valores en COP)
     auxilio_transporte = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Auxilio de transporte en COP")
     prestamos_empresa = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Préstamos de la empresa en COP")
     fecha_fin = serializers.DateField(required=False, allow_null=True)
@@ -133,11 +129,11 @@ class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
             'fecha_inicio', 'fecha_fin', 'salario_mensual', 'auxilio_transporte', 
             'prestamos_empresa', 'cargo', 'archivo_pdf', 'estado', 'estado_display', 'activo'
         )
-        read_only_fields = ('estado_display', 'activo', 'empleado_nombre')  # ⚠️ v2.95: activo se sincroniza con estado
+        read_only_fields = ('estado_display', 'activo', 'empleado_nombre')  # WARNING: v2.95: activo se sincroniza con estado
     
     def validate(self, attrs):
         """
-        ⚠️ v2.60: Zero Trust - Normalización estricta y validación antes de persistir.
+        WARNING: v2.60: Zero Trust - Normalización estricta y validación antes de persistir.
         """
         attrs = self.normalize_data(attrs)
         
@@ -153,7 +149,7 @@ class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
         return attrs
     
     def validate_empleado(self, value):
-        """⚠️ v2.60: Validación estricta - Asegurar que el empleado pertenezca al tenant actual."""
+        """WARNING: v2.60: Validación estricta - Asegurar que el empleado pertenezca al tenant actual."""
         if value is None:
             return value
         
@@ -167,12 +163,12 @@ class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
         
         return value
     
-    # ⚠️ v2.95: NO implementar create() aquí - se maneja en perform_create del ViewSet
+    # WARNING: v2.95: NO implementar create() aquí - se maneja en perform_create del ViewSet
     # El ViewSet usa gestionar_contrato_service para crear el contrato
     
     def update(self, instance, validated_data):
         """
-        ⚠️ v2.40: Solo permitir edición si el contrato está ACTIVO.
+        WARNING: v2.40: Solo permitir edición si el contrato está ACTIVO.
         """
         nuevo_estado = validated_data.get('estado', instance.estado)
         
@@ -191,25 +187,25 @@ class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
 
 class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer de Nómina vinculado a Contrato.
+    WARNING: v2.60: Serializer de Nómina vinculado a Contrato.
     Campos alineados con DEVENGO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     
-    ⚠️ Zero Trust: Los valores calculados (salario_base, auxilio_transporte, salud_empleado, 
+    WARNING: Zero Trust: Los valores calculados (salario_base, auxilio_transporte, salud_empleado, 
     pension_empleado, neto_pagar) son READ_ONLY. El backend los calcula en perform_create usando
     la capa de servicio (calcular_liquidacion_nomina). El frontend NUNCA debe enviar estos valores.
     
     v2.40: Los valores proporcionales se calculan desde la lógica de servicio.
-    ⚠️ v2.95: Todos los valores monetarios están en COP (Pesos Colombianos).
+    WARNING: v2.95: Todos los valores monetarios están en COP (Pesos Colombianos).
     """
-    # ⚠️ v2.60: Campos requeridos
+    # WARNING: v2.60: Campos requeridos
     periodo_mes = serializers.CharField(required=True, help_text="Periodo en formato YYYY-MM (ej: 2024-01)")
     fecha_pago = serializers.DateField(required=True)
     dias_laborados = serializers.DecimalField(max_digits=5, decimal_places=2, required=True, help_text="Días laborados (0.5-30, permite decimales)")
     empleado = serializers.PrimaryKeyRelatedField(queryset=Empleado.objects.all(), required=True, help_text="ID del empleado")
     contrato = serializers.PrimaryKeyRelatedField(queryset=Contrato.objects.all(), required=True, help_text="ID del contrato activo")
     
-    # ⚠️ v2.60: Campos calculados - READ_ONLY (Zero Trust: el backend los calcula, nunca confiar en el frontend)
+    # WARNING: v2.60: Campos calculados - READ_ONLY (Zero Trust: el backend los calcula, nunca confiar en el frontend)
     salario_base = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Salario base proporcional en COP (calculado automáticamente)")
     auxilio_transporte = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Auxilio de transporte proporcional en COP (calculado automáticamente)")
     salud_empleado = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Deducción de salud (4%) en COP (calculado automáticamente)")
@@ -217,14 +213,14 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
     neto_pagar = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Neto a pagar en COP (calculado automáticamente)")
     empleado_nombre = serializers.CharField(source='empleado.nombre_completo', read_only=True)
     
-    # ⚠️ v2.95: Campos opcionales con valores por defecto
+    # WARNING: v2.95: Campos opcionales con valores por defecto
     prestamos = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Préstamos descontados en COP")
     descuentos_operativos = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Descuentos operativos en COP")
     otros_devengos = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Otros devengos en COP")
     observaciones = serializers.CharField(required=False, allow_blank=True)
     
     def __init__(self, *args, **kwargs):
-        """⚠️ v2.60: Inicializar querysets dinámicamente para validación Zero Trust."""
+        """WARNING: v2.60: Inicializar querysets dinámicamente para validación Zero Trust."""
         super().__init__(*args, **kwargs)
         # Obtener empresa del contexto o request
         empresa = Empresa.objects.only('id').first()
@@ -248,7 +244,7 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
     
     def validate(self, attrs):
         """
-        ⚠️ v2.60: Zero Trust - Normalización estricta antes de persistir.
+        WARNING: v2.60: Zero Trust - Normalización estricta antes de persistir.
         """
         attrs = self.normalize_data(attrs)
         
@@ -273,7 +269,7 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
         return attrs
     
     def validate_empleado(self, value):
-        """⚠️ v2.60: Validación estricta - Asegurar que el empleado pertenezca al tenant actual."""
+        """WARNING: v2.60: Validación estricta - Asegurar que el empleado pertenezca al tenant actual."""
         if value is None:
             return value
         
@@ -287,7 +283,7 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
         return value
     
     def validate_contrato(self, value):
-        """⚠️ v2.60: Validación estricta - Asegurar que el contrato pertenezca al tenant actual y al empleado."""
+        """WARNING: v2.60: Validación estricta - Asegurar que el contrato pertenezca al tenant actual y al empleado."""
         if value is None:
             return value
         
@@ -315,11 +311,11 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
 
 class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer completo para DETALLE/EDICIÓN de Empleados.
+    WARNING: v2.60: Serializer completo para DETALLE/EDICIÓN de Empleados.
     Campos alineados con EMPLEADO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     
-    ⚠️ v2.95: Incluye campos de seguridad social (EPS, AFP, ARL).
+    WARNING: v2.95: Incluye campos de seguridad social (EPS, AFP, ARL).
     """
     contratos = ContratoNestedSerializer(many=True, read_only=True)
     nombre_completo = serializers.ReadOnlyField()
@@ -330,7 +326,7 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     telefono = serializers.CharField(required=False, allow_blank=True, allow_null=False)
     fecha_retiro = serializers.DateField(required=False, allow_null=True)
     
-    # ⚠️ v2.95: Campos de seguridad social
+    # WARNING: v2.95: Campos de seguridad social
     eps = serializers.ChoiceField(choices=EPS_CHOICES, required=True)
     afp = serializers.ChoiceField(choices=AFP_CHOICES, required=True)
     arl = serializers.ChoiceField(choices=ARL_CHOICES, required=True)
@@ -340,7 +336,7 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         default='I'
     )
     
-    # ⚠️ v2.60: Empresa es read_only pero se asigna en perform_create
+    # WARNING: v2.60: Empresa es read_only pero se asigna en perform_create
     empresa = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
@@ -349,7 +345,7 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'id', 'empresa', 'tipo_documento', 'numero_documento',
             'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
             'email', 'telefono', 
-            'eps', 'afp', 'arl', 'nivel_riesgo_arl',  # ⚠️ v2.95: Seguridad Social
+            'eps', 'afp', 'arl', 'nivel_riesgo_arl',  # WARNING: v2.95: Seguridad Social
             'estado', 'fecha_ingreso', 'fecha_retiro',
             'nombre_completo', 'contratos'
         )
@@ -357,7 +353,7 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     
     def validate(self, attrs):
         """
-        ⚠️ v2.60: Zero Trust - Normalización estricta antes de persistir.
+        WARNING: v2.60: Zero Trust - Normalización estricta antes de persistir.
         """
         # Remover empresa si viene en los datos (debe ser asignada por perform_create)
         attrs.pop('empresa', None)
@@ -365,7 +361,7 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         return attrs
     
     def validate_email(self, value):
-        """⚠️ v2.60: Validación estricta de formato de email."""
+        """WARNING: v2.60: Validación estricta de formato de email."""
         if value:
             try:
                 EmailValidator()(value.strip())

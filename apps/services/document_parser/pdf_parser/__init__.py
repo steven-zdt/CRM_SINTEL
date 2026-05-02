@@ -1,7 +1,7 @@
 """
 Parser para documentos PDF (FASE 2.3).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Extracción de texto usando pdfminer
 - Regex + tablas DIAN para extraer datos estructurados
 - Retorna DTO JSON unificado

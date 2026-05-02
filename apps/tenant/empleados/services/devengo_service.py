@@ -4,6 +4,7 @@ Servicios de negocio para devengos (desprendibles de pago).
 Service Layer: lógica de negocio sin presentación.
 """
 from django.db import transaction
+
 from ..models import Devengo
 
 

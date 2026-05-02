@@ -1,0 +1,47 @@
+{# offcanvas_categoria.html - Offcanvas Categorías v3.5 - Nucleus #}
+{% load static %}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-categorias" aria-labelledby="offcanvas-categorias-label" style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-categorias-label">
+      <i class="bi bi-tags me-2"></i>
+      <span id="offcanvas-categorias-titulo">{% if categoria %}Editar Categoría{% else %}Nueva Categoría{% endif %}</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="form-categoria-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <form id="form-categoria" method="POST" onsubmit="return false;">
+      <input type="hidden" id="categoria-id" name="id" value="{% if categoria %}{{ categoria.id }}{% endif %}">
+      <div class="row g-3">
+        <div class="col-12">
+          <label for="categoria-nombre" class="form-label text-danger fw-bold">Nombre *</label>
+          <input type="text" class="form-control" id="categoria-nombre" name="nombre" value="{% if categoria %}{{ categoria.nombre }}{% endif %}" required>
+        </div>
+        <div class="col-12">
+          <label for="categoria-aplicacion" class="form-label text-danger fw-bold">Aplicación *</label>
+          <select class="form-select" id="categoria-aplicacion" name="aplicacion" required>
+            <option value="">Seleccionar...</option>
+            <option value="TODO" {% if categoria and categoria.aplicacion == 'TODO' %}selected{% endif %}>Todos</option>
+            <option value="PRODUCTO" {% if categoria and categoria.aplicacion == 'PRODUCTO' %}selected{% endif %}>Solo Productos</option>
+            <option value="SERVICIO" {% if categoria and categoria.aplicacion == 'SERVICIO' %}selected{% endif %}>Solo Servicios</option>
+            <option value="ACTIVO" {% if categoria and categoria.aplicacion == 'ACTIVO' %}selected{% endif %}>Activos Fijos</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label for="categoria-descripcion" class="form-label">Descripción</label>
+          <textarea class="form-control" id="categoria-descripcion" name="descripcion" rows="3">{% if categoria %}{{ categoria.descripcion }}{% endif %}</textarea>
+        </div>
+        <div class="col-12">
+          <div class="form-check form-switch mt-2">
+            <input class="form-check-input" type="checkbox" id="categoria-activo" name="activo" {% if not categoria or categoria.activo %}checked{% endif %}>
+            <label class="form-check-label" for="categoria-activo">Categoría Activa</label>
+          </div>
+        </div>
+      </div>
+      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-categoria">{% if categoria %}Actualizar{% else %}Crear{% endif %} Categoría</button>
+      </div>
+    </form>
+  </div>
+</div>

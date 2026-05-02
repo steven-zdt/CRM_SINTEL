@@ -4,13 +4,15 @@ Servicio de procesamiento de correos electrónicos (MailDigester).
 Este servicio procesa correos electrónicos para extraer facturas XML adjuntas
 y procesarlas usando el servicio de XML Parser.
 
-⚠️ IMPORTANTE: Usa schema_context para procesar correos en el contexto del tenant correcto.
+WARNING: IMPORTANTE: Usa schema_context para procesar correos en el contexto del tenant correcto.
 """
 import email
 import imaplib
-from typing import List, Dict, Optional, Any
 from email.header import decode_header
+from typing import Any
+
 from django_tenants.utils import schema_context
+
 # TODO: Migrar a pipeline universal - usar ingest_document en lugar de procesar_factura_xml
 # from apps.services.document_ingest.ingest_service import ingest_document
 
@@ -38,7 +40,7 @@ def decodificar_header(header_value: str) -> str:
     return decoded_string
 
 
-def extraer_adjuntos_xml(mensaje: email.message.Message) -> List[Dict[str, Any]]:
+def extraer_adjuntos_xml(mensaje: email.message.Message) -> list[dict[str, Any]]:
     """
     Extrae archivos XML adjuntos de un mensaje de email.
     
@@ -68,11 +70,11 @@ def procesar_correo(
     schema_name: str,
     mensaje: email.message.Message,
     procesar_xml: bool = True
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Procesa un correo electrónico en el contexto de un tenant específico.
     
-    ⚠️ IMPORTANTE: Usa schema_context para procesar en el esquema del tenant correcto.
+    WARNING: IMPORTANTE: Usa schema_context para procesar en el esquema del tenant correcto.
     
     Args:
         schema_name: Nombre del esquema del tenant
@@ -195,7 +197,7 @@ def conectar_imap(
 def obtener_correos_no_leidos(
     conexion: imaplib.IMAP4_SSL,
     carpeta: str = 'INBOX'
-) -> List[bytes]:
+) -> list[bytes]:
     """
     Obtiene los IDs de correos no leídos.
     
@@ -217,7 +219,7 @@ def obtener_correos_no_leidos(
 def obtener_mensaje_por_id(
     conexion: imaplib.IMAP4_SSL,
     mensaje_id: bytes
-) -> Optional[email.message.Message]:
+) -> email.message.Message | None:
     """
     Obtiene un mensaje de email por su ID.
     

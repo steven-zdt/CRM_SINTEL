@@ -1,0 +1,58 @@
+{# offcanvas_detalle_perfil.html - HTMX fragment for details #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-perfil-detalle" aria-labelledby="offcanvas-perfil-detalle-label" style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-perfil-detalle-label">
+      <i class="bi bi-person-badge me-2"></i>Detalle de Perfil
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-body text-center">
+        {% if profile.avatar %}
+          <img src="{{ profile.avatar.url }}" alt="Avatar" class="rounded-circle mb-3" width="80" height="80">
+        {% else %}
+          <div class="rounded-circle bg-primary text-white d-inline-flex justify-content-center align-items-center mb-3" style="width: 80px; height: 80px; font-size: 2rem;">
+            {{ profile.user.first_name|default:profile.user.username|slice:":1"|upper }}
+          </div>
+        {% endif %}
+        <h4 class="mb-1">{{ profile.user.first_name }} {{ profile.user.last_name }}</h4>
+        <p class="text-muted mb-0">@{{ profile.user.username }}</p>
+      </div>
+    </div>
+    
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 mb-3">
+        <i class="bi bi-info-circle me-2"></i>Información
+      </h6>
+      <dl class="row">
+        <dt class="col-sm-4 text-muted">Email</dt>
+        <dd class="col-sm-8">{{ profile.user.email }}</dd>
+        
+        <dt class="col-sm-4 text-muted">Cargo</dt>
+        <dd class="col-sm-8">{{ profile.cargo|default:"<span class='text-muted font-italic'>No definido</span>"|safe }}</dd>
+        
+        <dt class="col-sm-4 text-muted">Departamento</dt>
+        <dd class="col-sm-8">{{ profile.departamento|default:"<span class='text-muted font-italic'>No definido</span>"|safe }}</dd>
+        
+        <dt class="col-sm-4 text-muted">Teléfono</dt>
+        <dd class="col-sm-8">{{ profile.telefono_corporativo|default:"<span class='text-muted font-italic'>No definido</span>"|safe }}</dd>
+
+        <dt class="col-sm-4 text-muted">Rol</dt>
+        <dd class="col-sm-8">
+          {% if profile.rol == "ADMIN" %}
+            <span class="badge bg-danger">{{ profile.get_rol_display }}</span>
+          {% elif profile.rol == "OPERADOR" %}
+            <span class="badge bg-primary">{{ profile.get_rol_display }}</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ profile.get_rol_display }}</span>
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cerrar</button>
+    </div>
+  </div>
+</div>

@@ -1,13 +1,14 @@
 """
 Healthcheck API para tenant.
 
-⚠️ FASE 5: Endpoint de salud básico (DB y schema actual).
+# WARNING: FASE 5: Endpoint de salud básico (DB y schema actual).
 """
 import logging
-from rest_framework.views import APIView
-from rest_framework.response import Response
+
+from django_tenants.utils import get_tenant, schema_context
 from rest_framework import status
-from django_tenants.utils import schema_context, get_tenant
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 health_log = logging.getLogger("core.health")
 
@@ -16,7 +17,7 @@ class HealthView(APIView):
     """
     Health básico del tenant: DB y schema actual.
     
-    ⚠️ FASE 5: Verifica que el tenant actual tenga acceso a su esquema.
+    # WARNING: FASE 5: Verifica que el tenant actual tenga acceso a su esquema.
     """
     authentication_classes = []  # Público (o añade permisos si lo prefieres)
     permission_classes = []

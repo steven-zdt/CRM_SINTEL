@@ -1,13 +1,12 @@
 """
 DTOs específicos para Cotizaciones (v2.40).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - DTOs específicos para el módulo de cotizaciones
 - Estructuras específicas para catálogos de productos
 """
-from typing import Dict, Any, Optional, List, Literal
-from decimal import Decimal
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+from typing import Any, Literal
 
 # Tipos de documentos específicos de cotizaciones
 CotizacionesDocumentType = Literal[
@@ -20,13 +19,13 @@ class ProductoDTO:
     """DTO para un producto en un catálogo."""
     codigo: str
     nombre: str
-    marca: Optional[str] = None
-    referencia: Optional[str] = None
+    marca: str | None = None
+    referencia: str | None = None
     unidad: str = "UND"
     precio_venta: str = "0.00"
-    descripcion: Optional[str] = None
+    descripcion: str | None = None
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {k: v for k, v in asdict(self).items() if v is not None}
 
@@ -36,14 +35,14 @@ class CatalogoDTO:
     """DTO para un catálogo de productos."""
     document_type: str = "inventario.catalogo"
     type: str = "inventario"
-    items: List[Dict[str, Any]] = None
-    mapping_metadata: Optional[Dict[str, Any]] = None
+    items: list[dict[str, Any]] = None
+    mapping_metadata: dict[str, Any] | None = None
     
     def __post_init__(self):
         if self.items is None:
             self.items = []
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         result = {
             "document_type": self.document_type,

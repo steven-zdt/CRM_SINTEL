@@ -1,14 +1,15 @@
 """
 Admin de Cotizaciones v2.60 - RESILIENTE
-⚠️ v2.60: Alineado con Desacoplamiento Radical.
+# WARNING: v2.60: Alineado con Desacoplamiento Radical.
 Permite gestión de cotizaciones incluso con fallos en otros módulos.
 """
 from django.contrib import admin
-from django.utils.translation import gettext_lazy as _
-from django.db.utils import ProgrammingError, OperationalError
 from django.db import connection
-from .models import Producto, Servicio, Cotizacion, CotizacionItem
+from django.utils.translation import gettext_lazy as _
+
 from .configuracion.models import ConfiguracionCotizacion
+from .models import Cotizacion, CotizacionItem, Producto, Servicio
+
 
 class CotizacionItemInline(admin.TabularInline):
     """Edición de ítems con Snapshot (Marca/Ref/Costo) visible."""
@@ -68,7 +69,7 @@ class CotizacionAdmin(admin.ModelAdmin):
 @admin.register(ConfiguracionCotizacion)
 class ConfiguracionCotizacionAdmin(admin.ModelAdmin):
     """
-    ⚠️ v2.60: Admin simplificado para modo User-Driven.
+    # WARNING: v2.60: Admin simplificado para modo User-Driven.
     
     Solo gestiona:
     1. Generación de códigos (Prefijo, Sufijo, Semilla)

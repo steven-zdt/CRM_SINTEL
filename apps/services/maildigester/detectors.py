@@ -4,18 +4,17 @@ Heurísticas para detectar XML UBL 2.1 y AttachedDocument.
 Filtra archivos que parecen ser facturas UBL antes de enviarlos a los servicios
 de apps.tenant.facturas para parsing completo.
 
-⚠️ FASE 1: Solo heurísticas básicas, sin parsing completo.
-⚠️ SSoT: El parsing real de UBL está en apps.tenant.facturas.ubl_parser
+WARNING: FASE 1: Solo heurísticas básicas, sin parsing completo.
+WARNING: SSoT: El parsing real de UBL está en apps.tenant.facturas.ubl_parser
 """
-from typing import List, Literal
-from .exceptions import InvalidXMLDocument
+from typing import Literal
 
 
 def guess_file_kind(filename: str, content_type: str, content: bytes) -> Literal["xml", "zip", "rar", "7z", "other"]:
     """
     Adivina el tipo de archivo basado en nombre, content-type y contenido.
     
-    ⚠️ FASE 1: Heurística básica por extensión y magic bytes.
+    WARNING: FASE 1: Heurística básica por extensión y magic bytes.
     TODO FASE 2: Detección más robusta con magic bytes completos.
     
     Args:
@@ -67,15 +66,15 @@ def guess_file_kind(filename: str, content_type: str, content: bytes) -> Literal
     return "other"
 
 
-def extract_xml_from_attacheddocument(xml_text: str) -> List[str]:
+def extract_xml_from_attacheddocument(xml_text: str) -> list[str]:
     """
     Extrae XMLs internos desde un AttachedDocument UBL.
     
     Si el XML es un AttachedDocument que contiene Invoice(s) en base64/CDATA,
     los decodifica y retorna lista de XMLs de Invoice.
     
-    ⚠️ IMPLEMENTACIÓN: Usa lxml para parsear AttachedDocument UBL.
-    ⚠️ SSoT: El parsing completo de UBL está en apps.tenant.facturas.ubl_parser
+    WARNING: IMPLEMENTACIÓN: Usa lxml para parsear AttachedDocument UBL.
+    WARNING: SSoT: El parsing completo de UBL está en apps.tenant.facturas.ubl_parser
     Esta función solo detecta y extrae XMLs desde AttachedDocument.
     
     Args:
@@ -214,8 +213,8 @@ def is_ubl_invoice(xml_text: str) -> bool:
     """
     Heurística mínima para detectar si un XML es una factura UBL 2.1 o CreditNote.
     
-    ⚠️ IMPLEMENTACIÓN: Detecta tanto Invoice como CreditNote UBL 2.1.
-    ⚠️ SSoT: La validación completa de UBL está en apps.tenant.facturas.ubl_parser
+    WARNING: IMPLEMENTACIÓN: Detecta tanto Invoice como CreditNote UBL 2.1.
+    WARNING: SSoT: La validación completa de UBL está en apps.tenant.facturas.ubl_parser
     Esta función solo filtra rápidamente antes de enviar al parser completo.
     
     Args:

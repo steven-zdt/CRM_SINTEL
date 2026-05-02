@@ -3,9 +3,9 @@ Clase base para tests de apps públicas (SHARED_APPS).
 
 Hereda de APITestCase (DRF) y proporciona helpers para tests de APIs públicas.
 """
-from rest_framework.test import APITestCase, APIClient
-from rest_framework import status
 from django.contrib.auth import get_user_model
+from rest_framework import status
+from rest_framework.test import APIClient, APITestCase
 
 User = get_user_model()
 

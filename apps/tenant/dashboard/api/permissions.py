@@ -1,9 +1,10 @@
 """
 Permisos DRF para el dashboard de tenants.
 
-⚠️ v2.30: API-First - Permisos basados en roles de TenantMembership.
+WARNING: v2.30: API-First - Permisos basados en roles de TenantMembership.
 """
 from rest_framework import permissions
+
 from apps.tenant.dashboard.services import get_user_role_in_tenant
 
 

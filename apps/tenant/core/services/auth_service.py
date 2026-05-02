@@ -1,20 +1,21 @@
 """
 Servicios de autenticación centralizados en Core (v2.30).
 
-⚠️ POLÍTICA v2.30:
+# WARNING: POLÍTICA v2.30:
 - Todos los flujos de auth (login, logout, password-reset) están centralizados en Core
 - Trabajan con User global (esquema public) pero ejecutan bajo tenant hostname
 - No renderizan HTML; lanzan excepciones tipadas
 - Retornan redirect_url absoluta para que la UI pueda redirigir
 """
 import logging
-from typing import Dict, Any
-from django.contrib.auth import authenticate, login, logout, get_user_model
-from django.db import connection
+from typing import Any
+
 from django.conf import settings
+from django.contrib.auth import authenticate, get_user_model, logout
+from django.db import connection
 from django_tenants.utils import schema_context
 
-from apps.public.tenants.models import TenantMembership, Domain
+from apps.public.tenants.models import Domain, TenantMembership
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class TenantNotFoundError(AuthError):
     pass
 
 
-def login_user(tenant, identifier: str, password: str) -> Dict[str, Any]:
+def login_user(tenant, identifier: str, password: str) -> dict[str, Any]:
     """
     Autentica y loguea un usuario en el tenant.
     
@@ -112,7 +113,7 @@ def login_user(tenant, identifier: str, password: str) -> Dict[str, Any]:
         connection.set_schema(current_schema)
 
 
-def logout_user(tenant, request) -> Dict[str, Any]:
+def logout_user(tenant, request) -> dict[str, Any]:
     """
     Cierra la sesión del usuario.
     
@@ -147,7 +148,7 @@ def build_login_redirect(tenant, user, absolute: bool = False) -> str:
     """
     Construye la URL de redirección después del login.
     
-    ⚠️ POLÍTICA v2.30: Todos los usuarios se redirigen al workspace orquestado por Core.
+    # WARNING: POLÍTICA v2.30: Todos los usuarios se redirigen al workspace orquestado por Core.
     El workspace consume Core API para mostrar datos del dashboard y otras apps.
     
     Args:
@@ -158,7 +159,7 @@ def build_login_redirect(tenant, user, absolute: bool = False) -> str:
     Returns:
         URL de redirección al workspace (relativa o absoluta según absolute)
     """
-    # ⚠️ v2.30: Redirigir siempre al workspace (Core orquesta todo)
+    # # WARNING: v2.30: Redirigir siempre al workspace (Core orquesta todo)
     # El workspace consume Core API para mostrar datos del dashboard y otras apps
     relative_url = "/workspace/"
     
@@ -172,7 +173,7 @@ def build_login_redirect(tenant, user, absolute: bool = False) -> str:
         
         if domain:
             protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
-            # ⚠️ v2.30: Incluir puerto en DEV si APP_PORT está configurado
+            # # WARNING: v2.30: Incluir puerto en DEV si APP_PORT está configurado
             app_port = getattr(settings, 'APP_PORT', None)
             if settings.DEBUG and app_port and str(app_port) not in ('80', '443'):
                 domain_with_port = f"{domain.domain}:{app_port}"
@@ -206,7 +207,7 @@ def build_logout_redirect(tenant, absolute: bool = False) -> str:
         
         if domain:
             protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
-            # ⚠️ v2.30: Incluir puerto en DEV si APP_PORT está configurado
+            # # WARNING: v2.30: Incluir puerto en DEV si APP_PORT está configurado
             app_port = getattr(settings, 'APP_PORT', None)
             if settings.DEBUG and app_port and str(app_port) not in ('80', '443'):
                 domain_with_port = f"{domain.domain}:{app_port}"
@@ -217,7 +218,7 @@ def build_logout_redirect(tenant, absolute: bool = False) -> str:
     return "/"
 
 
-def password_reset_request(email_or_username: str, tenant) -> Dict[str, Any]:
+def password_reset_request(email_or_username: str, tenant) -> dict[str, Any]:
     """
     Solicita reset de contraseña para un usuario.
     
@@ -232,10 +233,10 @@ def password_reset_request(email_or_username: str, tenant) -> Dict[str, Any]:
         TenantNotFoundError: Si no se puede determinar el tenant
         UserNotFoundError: Si el usuario no tiene activación pendiente
     """
-    from apps.tenant.landing.services.password_reset import (
-        request_reset,
-        UserNotFoundError,
+    from apps.tenant.core.services.password_reset import (
         TenantNotFoundError,
+        UserNotFoundError,
+        request_reset,
     )
     
     try:
@@ -253,7 +254,7 @@ def password_reset_request(email_or_username: str, tenant) -> Dict[str, Any]:
     except UserNotFoundError as e:
         # Para activación pendiente, retornar error específico
         logger.warning(
-            "AuthService.password_reset_request: Usuario sin activación: %s",
+            "AuthService.password_reset_request: Usuario sin activacion: %s",
             str(e)
         )
         raise
@@ -269,7 +270,7 @@ def password_reset_request(email_or_username: str, tenant) -> Dict[str, Any]:
         }
 
 
-def password_reset_validate(uid: str, token: str, tenant) -> Dict[str, Any]:
+def password_reset_validate(uid: str, token: str, tenant) -> dict[str, Any]:
     """
     Valida un token de reset de contraseña.
     
@@ -285,18 +286,18 @@ def password_reset_validate(uid: str, token: str, tenant) -> Dict[str, Any]:
         InvalidTokenError: Si el token es inválido o expirado
         TenantNotFoundError: Si no se puede determinar el tenant
     """
-    from apps.tenant.landing.services.password_reset import (
-        validate_token,
+    from apps.tenant.core.services.password_reset import (
         InvalidTokenError,
         TenantNotFoundError,
+        validate_token,
     )
     
     try:
         result = validate_token(uid, token, tenant)
         return result
-    except InvalidTokenError as e:
+    except InvalidTokenError:
         logger.warning(
-            "AuthService.password_reset_validate: Token inválido: tenant=%s",
+            "AuthService.password_reset_validate: Token invalido: tenant=%s",
             tenant.schema_name if tenant else 'none'
         )
         raise
@@ -312,10 +313,10 @@ def password_reset_validate(uid: str, token: str, tenant) -> Dict[str, Any]:
             str(e),
             exc_info=True
         )
-        raise InvalidTokenError("Token de reset inválido o expirado.")
+        raise InvalidTokenError("Token de reset invalido o expirado.")
 
 
-def password_reset_confirm(uid: str, token: str, new_password: str, tenant) -> Dict[str, Any]:
+def password_reset_confirm(uid: str, token: str, new_password: str, tenant) -> dict[str, Any]:
     """
     Confirma el reset de contraseña y establece la nueva contraseña.
     
@@ -333,10 +334,10 @@ def password_reset_confirm(uid: str, token: str, new_password: str, tenant) -> D
         TenantNotFoundError: Si no se puede determinar el tenant
         ValueError: Si la contraseña no cumple requisitos
     """
-    from apps.tenant.landing.services.password_reset import (
-        confirm_reset,
+    from apps.tenant.core.services.password_reset import (
         InvalidTokenError,
         TenantNotFoundError,
+        confirm_reset,
     )
     
     try:
@@ -347,9 +348,9 @@ def password_reset_confirm(uid: str, token: str, new_password: str, tenant) -> D
             "detail": "Tu contraseña ha sido restablecida exitosamente. Por favor, inicia sesión.",
             "redirect_url": redirect_url
         }
-    except InvalidTokenError as e:
+    except InvalidTokenError:
         logger.warning(
-            "AuthService.password_reset_confirm: Token inválido: tenant=%s",
+            "AuthService.password_reset_confirm: Token invalido: tenant=%s",
             tenant.schema_name if tenant else 'none'
         )
         raise
@@ -361,7 +362,7 @@ def password_reset_confirm(uid: str, token: str, new_password: str, tenant) -> D
         raise
     except ValueError as e:
         logger.warning(
-            "AuthService.password_reset_confirm: Error de validación: %s",
+            "AuthService.password_reset_confirm: Error de validacion: %s",
             str(e)
         )
         raise
@@ -376,24 +377,24 @@ def password_reset_confirm(uid: str, token: str, new_password: str, tenant) -> D
 
 def build_password_reset_confirm_redirect(tenant, user, absolute: bool = False) -> str:
     """
-    Construye la URL de redirección después de confirmar el reset de contraseña.
+    Construye la URL de redireccion despues de confirmar el reset de contrasena.
     
     Args:
         tenant: Instancia del tenant (Client)
-        user: Usuario que confirmó el reset
+        user: Usuario que confirmo el reset
         absolute: Si True, retorna URL absoluta (con protocolo y dominio)
         
     Returns:
-        URL de redirección (relativa o absoluta según absolute)
+        URL de redireccion (relativa o absoluta segun absolute)
     """
-    # Después de reset, redirigir a la landing para que el usuario pueda iniciar sesión
+    # Despues de reset, redirigir a la landing para que el usuario pueda iniciar sesion
     if absolute:
         with schema_context('public'):
             domain = Domain.objects.filter(tenant=tenant, is_primary=True).first()
         
         if domain:
             protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
-            # ⚠️ v2.30: Incluir puerto en DEV si APP_PORT está configurado
+            # # WARNING: v2.30: Incluir puerto en DEV si APP_PORT esta configurado
             app_port = getattr(settings, 'APP_PORT', None)
             if settings.DEBUG and app_port and str(app_port) not in ('80', '443'):
                 domain_with_port = f"{domain.domain}:{app_port}"
@@ -402,3 +403,35 @@ def build_password_reset_confirm_redirect(tenant, user, absolute: bool = False) 
             return f"{protocol}://{domain_with_port}/"
     
     return "/"
+
+
+class AuthService:
+    """
+    Servicio de autenticacion centralizado.
+    Wrapper class para funciones de auth.
+    """
+
+    @staticmethod
+    def login(tenant, identifier, password):
+        """Autentica y loguea un usuario."""
+        return login_user(tenant, identifier, password)
+
+    @staticmethod
+    def logout(tenant, request):
+        """Cierra sesion de un usuario."""
+        return logout_user(tenant, request)
+
+    @staticmethod
+    def request_password_reset(email_or_username, tenant):
+        """Solicita reset de contrasena."""
+        return password_reset_request(email_or_username, tenant)
+
+    @staticmethod
+    def validate_password_reset(uid, token, tenant):
+        """Valida token de reset de contrasena."""
+        return password_reset_validate(uid, token, tenant)
+
+    @staticmethod
+    def confirm_password_reset(uid, token, new_password, tenant):
+        """Confirma reset de contrasena."""
+        return password_reset_confirm(uid, token, new_password, tenant)

@@ -1,23 +1,22 @@
 """
 Servicios de orquestación para Core API.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No duplicar lógica de negocio de las apps "dueñas"
 - Solo orquestar/componer datos de múltiples apps
 - Mantener tenant-awareness (django-tenants maneja el aislamiento)
 """
-from typing import Dict, Any, Optional
-from django.db import connection
-from django.db.models import Sum, Count
+from typing import Any
+
+from django.db.models import Sum
 from django.utils import timezone
-from datetime import timedelta
 
 
-def get_empresa_summary(tenant) -> Dict[str, Any]:
+def get_empresa_summary(tenant) -> dict[str, Any]:
     """
     Obtiene resumen de datos de la empresa del tenant.
     
-    ⚠️ POLÍTICA SSoT: Usa el servicio provider de empresa para evitar duplicación.
+    # WARNING: POLÍTICA SSoT: Usa el servicio provider de empresa para evitar duplicación.
     
     Args:
         tenant: Instancia del tenant (Client)
@@ -26,7 +25,7 @@ def get_empresa_summary(tenant) -> Dict[str, Any]:
         Dict con datos de empresa (razon_social, logo, etc.)
     """
     try:
-        # ⚠️ POLÍTICA SSoT: Usar servicio provider en lugar de consulta ORM directa
+        # # WARNING: POLÍTICA SSoT: Usar servicio provider en lugar de consulta ORM directa
         from apps.tenant.empresa.services import get_empresa_data
         
         empresa_data = get_empresa_data()
@@ -63,7 +62,7 @@ def get_empresa_summary(tenant) -> Dict[str, Any]:
     }
 
 
-def get_facturas_resumen(tenant, user=None) -> Dict[str, Any]:
+def get_facturas_resumen(tenant, user=None) -> dict[str, Any]:
     """
     Obtiene resumen de facturas del tenant.
     
@@ -135,7 +134,7 @@ def get_facturas_resumen(tenant, user=None) -> Dict[str, Any]:
         }
 
 
-def get_contabilidad_resumen(tenant, user=None) -> Dict[str, Any]:
+def get_contabilidad_resumen(tenant, user=None) -> dict[str, Any]:
     """
     Obtiene resumen de contabilidad del tenant.
     
@@ -147,12 +146,13 @@ def get_contabilidad_resumen(tenant, user=None) -> Dict[str, Any]:
         Dict con estadísticas de contabilidad
     """
     try:
-        from apps.tenant.contabilidad.models import (
-            CuentaContable,
-            AsientoContable,
-            MovimientoContable
-        )
         from django.db.models import Sum
+
+        from apps.tenant.contabilidad.models import (
+            AsientoContable,
+            CuentaContable,
+            MovimientoContable,
+        )
         
         # Estadísticas generales
         total_cuentas = CuentaContable.objects.count()
@@ -201,7 +201,7 @@ def get_contabilidad_resumen(tenant, user=None) -> Dict[str, Any]:
         }
 
 
-def get_perfil_resumen(user, tenant) -> Dict[str, Any]:
+def get_perfil_resumen(user, tenant) -> dict[str, Any]:
     """
     Obtiene resumen del perfil del usuario en el tenant.
     
@@ -215,7 +215,7 @@ def get_perfil_resumen(user, tenant) -> Dict[str, Any]:
     try:
         from apps.tenant.perfil.models import TenantProfile
         
-        # ⚠️ CORRECCIÓN: El campo es 'user', no 'usuario'
+        # # WARNING: CORRECCIÓN: El campo es 'user', no 'usuario'
         perfil = TenantProfile.objects.filter(user=user).first()
         
         if perfil:
@@ -240,7 +240,7 @@ def get_perfil_resumen(user, tenant) -> Dict[str, Any]:
     }
 
 
-def get_dashboard_completo(user, tenant) -> Dict[str, Any]:
+def get_dashboard_completo(user, tenant) -> dict[str, Any]:
     """
     Obtiene datos completos del dashboard compuestos de múltiples apps.
     
@@ -251,12 +251,13 @@ def get_dashboard_completo(user, tenant) -> Dict[str, Any]:
     Returns:
         Dict con todos los datos del dashboard
     """
+    from django.http import HttpRequest
+
     from apps.tenant.core.branding import get_tenant_branding
     from apps.tenant.dashboard.services import (
-        get_user_role_in_tenant,
         get_dashboard_redirect_url,
+        get_user_role_in_tenant,
     )
-    from django.http import HttpRequest
     
     # Crear request mock para branding
     request = HttpRequest()
@@ -292,3 +293,35 @@ def get_dashboard_completo(user, tenant) -> Dict[str, Any]:
         'branding': branding,
         'redirect_url': redirect_url or '/dashboard/',
     }
+
+
+class OrchestrationService:
+    """
+    Servicio de orquestacion de datos de multiple apps.
+    Wrapper class para funciones de orquestacion.
+    """
+
+    @staticmethod
+    def get_empresa_summary(tenant):
+        """Obtiene resumen de datos de la empresa."""
+        return get_empresa_summary(tenant)
+
+    @staticmethod
+    def get_facturas_resumen(tenant, user=None):
+        """Obtiene resumen de facturas."""
+        return get_facturas_resumen(tenant, user)
+
+    @staticmethod
+    def get_contabilidad_resumen(tenant, user=None):
+        """Obtiene resumen de contabilidad."""
+        return get_contabilidad_resumen(tenant, user)
+
+    @staticmethod
+    def get_perfil_resumen(user, tenant):
+        """Obtiene resumen del perfil del usuario."""
+        return get_perfil_resumen(user, tenant)
+
+    @staticmethod
+    def get_dashboard_completo(user, tenant):
+        """Obtiene datos completos del dashboard."""
+        return get_dashboard_completo(user, tenant)

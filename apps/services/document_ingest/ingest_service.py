@@ -1,7 +1,7 @@
 """
 Servicio de ingesta de documentos canónico (SSoT) (FASE 3.3 + FASE 5).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Única vía de ingesta/parseo de documentos en el sistema
 - Agnóstico del dominio: no conoce modelos Django
 - Preview mode: permite parsear sin persistir
@@ -16,7 +16,7 @@ Flujo del pipeline universal (REFACTOR - Solo Parsing):
 3. run_validations(dto) → Valida DTO con validadores específicos por app
 4. Retorna DTO sin persistir (SIEMPRE)
 
-⚠️ REFACTOR: document_ingest SOLO actúa como parser auxiliar.
+WARNING: REFACTOR: document_ingest SOLO actúa como parser auxiliar.
 - NO persiste modelos
 - NO crea registros en DB
 - NO llama a servicios CRUD de apps
@@ -30,18 +30,20 @@ Responsabilidades:
 - Ejecutar validaciones (run_validations)
 - Devolver DTO (sin persistir)
 """
-import logging
 import hashlib
-from typing import Dict, Any, Optional, Tuple
-from django.db import transaction
+import logging
+from typing import Any
+
 from django.conf import settings
 from django.db import connection
+
+from apps.services.document_ingest.app_router import detect_app_from_kind_hint
 from apps.services.document_ingest.router import route
-from apps.services.document_parser.normalizers import normalize_content, sanitize_text
-from apps.services.document_ingest.validators import validate_document_dto
 from apps.services.document_ingest.validations.router import run_validations
-from apps.services.document_ingest.app_router import detect_app_from_kind_hint, register_app_parser
-# ⚠️ REFACTOR: Eliminado import de materialize_document - document_ingest SOLO parsea, NO persiste
+from apps.services.document_ingest.validators import validate_document_dto
+from apps.services.document_parser.normalizers import normalize_content
+
+# WARNING: REFACTOR: Eliminado import de materialize_document - document_ingest SOLO parsea, NO persiste
 # from apps.tenant.core.document_router import materialize_document, materializar as domain_materialize
 
 # Logger estructurado
@@ -50,14 +52,14 @@ logger = logging.getLogger("apps.services.document_ingest")
 
 def ingest_document(
     content: bytes,
-    filename: Optional[str] = None,
-    mime_type: Optional[str] = None,
-    kind_hint: Optional[str] = None,
+    filename: str | None = None,
+    mime_type: str | None = None,
+    kind_hint: str | None = None,
     preview: bool = True,
     async_mode: bool = False
-) -> Tuple[Dict[str, Any], int]:
+) -> tuple[dict[str, Any], int]:
     """
-    ⚠️ REFACTOR: Ingesta un documento SOLO para parseo (NO persiste).
+    WARNING: REFACTOR: Ingesta un documento SOLO para parseo (NO persiste).
     
     Flujo del pipeline universal (REFACTOR - Solo Parsing):
     1. route(file_bytes) → Parsea documento a DTO
@@ -65,7 +67,7 @@ def ingest_document(
     3. run_validations(dto) → Valida DTO con validadores específicos por app
     4. Retorna DTO sin persistir (SIEMPRE)
     
-    ⚠️ IMPORTANTE: Este servicio NO persiste modelos. Las apps deben consumir el DTO
+    WARNING: IMPORTANTE: Este servicio NO persiste modelos. Las apps deben consumir el DTO
     y persistir bajo su propia lógica mediante sus propios endpoints.
     
     Responsabilidades:
@@ -124,7 +126,7 @@ def ingest_document(
         }
     )
     
-    # 3. ⚠️ REVERSIÓN: Normalización SIEMPRE aplicada a TODOS los tipos (XML, CSV, XLS/XLSX, TXT, PDF)
+    # 3. WARNING: REVERSIÓN: Normalización SIEMPRE aplicada a TODOS los tipos (XML, CSV, XLS/XLSX, TXT, PDF)
     # Enforcer: Obligar normalización antes de rutear/parsear
     # NO hay bypass, NO hay short-circuit, NO hay raw passthrough
     try:
@@ -181,7 +183,7 @@ def ingest_document(
             "error": "unsupported_media_type" if "no reconocido" in str(e) or "no soportado" in str(e) else "normalization_error",
             "message": str(e),
         }, 415 if "no reconocido" in str(e) or "no soportado" in str(e) else 400
-    except Exception as e:
+    except Exception:
         logger.exception(
             "document_ingest_normalization_exception",
             extra={
@@ -200,8 +202,8 @@ def ingest_document(
         }, 400
     
     # 4. Llamar a router (FASE 5: route)
-    # ⚠️ REVERSIÓN: Pasar contenido normalizado y media_type al router
-    # ⚠️ v2.40: El router prioriza parsers específicos por app antes de parsers genéricos
+    # WARNING: REVERSIÓN: Pasar contenido normalizado y media_type al router
+    # WARNING: v2.40: El router prioriza parsers específicos por app antes de parsers genéricos
     # El router debe consumir EXCLUSIVAMENTE el contenido normalizado
     try:
         # Detectar app consumidora para logging
@@ -232,7 +234,7 @@ def ingest_document(
             }
         )
     except ValueError as e:
-        # ⚠️ v2.61.5: Captura y mejora de presentación de errores para inyección en UI
+        # WARNING: v2.61.5: Captura y mejora de presentación de errores para inyección en UI
         error_detail = {
             "error_code": "unknown_document_type",
             "message": f"Tipo de documento no reconocido o no soportado: {str(e)}",
@@ -255,7 +257,7 @@ def ingest_document(
             "metadata": metadata,
             "error": error_detail["error_code"],
             "message": error_detail["message"],
-            "ui_feedback": error_detail, # ⚠️ Inyectable por error_injector
+            "ui_feedback": error_detail, # WARNING: Inyectable por error_injector
         }, 400
     except Exception as e:
         error_message = str(e)
@@ -291,7 +293,7 @@ def ingest_document(
         dto_dict["type"] = type_base
     
     # 6. Ejecutar validaciones (FASE 5: run_validations)
-    # ⚠️ v2.40: El router prioriza validadores específicos por app (cotizaciones sobre inventario genérico)
+    # WARNING: v2.40: El router prioriza validadores específicos por app (cotizaciones sobre inventario genérico)
     logger.info(
         "document_ingest_validation_start",
         extra={
@@ -305,11 +307,11 @@ def ingest_document(
     )
     is_valid, error_code, missing_fields = run_validations(dto_dict)
     
-    # ⚠️ v2.40: Fallback a validación tradicional solo si NO es catálogo de inventario/cotizaciones
+    # WARNING: v2.40: Fallback a validación tradicional solo si NO es catálogo de inventario/cotizaciones
     # Los catálogos de productos NO deben usar validaciones de facturas
     doc_type_base = dto_dict.get("type") or (document_type.split('.')[0] if '.' in document_type else document_type)
     
-    # ⚠️ CRÍTICO: NUNCA usar fallback genérico para inventario/cotizaciones
+    # WARNING: CRÍTICO: NUNCA usar fallback genérico para inventario/cotizaciones
     # El fallback genérico valida campos de facturas (emisor, receptor, CUFE, etc.)
     if not is_valid and error_code == "validator_not_found":
         if doc_type_base in ["inventario", "cotizaciones"]:
@@ -352,7 +354,7 @@ def ingest_document(
             is_valid, error_code, missing_fields = validate_document_dto(dto_dict, document_type)
     
     if not is_valid:
-        # ⚠️ CRÍTICO: Si el error es validator_not_found_inventario_cotizaciones, ya se retornó arriba
+        # WARNING: CRÍTICO: Si el error es validator_not_found_inventario_cotizaciones, ya se retornó arriba
         if error_code == "validator_not_found_inventario_cotizaciones":
             # El error ya fue retornado arriba, no hacer nada más
             pass
@@ -404,7 +406,7 @@ def ingest_document(
             "metadata": metadata,
         }, 200
     
-    # 8. ⚠️ REFACTOR: document_ingest SOLO parsea y devuelve DTO, NO persiste
+    # 8. WARNING: REFACTOR: document_ingest SOLO parsea y devuelve DTO, NO persiste
     # La persistencia debe ser manejada por las apps individuales mediante sus propios endpoints
     # El parámetro `preview` ahora es ignorado - siempre devolvemos DTO sin persistir
     logger.info(
@@ -426,7 +428,7 @@ def ingest_document(
     }, 200
 
 
-def _detect_format_from_filename(filename: Optional[str]) -> Optional[str]:
+def _detect_format_from_filename(filename: str | None) -> str | None:
     """
     Detecta el formato del archivo desde su nombre.
     

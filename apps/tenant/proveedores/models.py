@@ -1,7 +1,10 @@
 from django.db import models
+
+from apps.tenant.core.models import SintelTenantBaseModel  # auto-inserted by autocorrect
 from apps.tenant.empresa.models import Empresa  # SSoT
 
-class Proveedor(models.Model):
+
+class Proveedor(SintelTenantBaseModel):
     """
     Gestión de Proveedores y Acreedores (Normativa Colombia).
     SSoT: apps.tenant.empresa
@@ -11,7 +14,7 @@ class Proveedor(models.Model):
     REGIMEN = [("SIMPLE", "Régimen Simple"), ("ORDINARIO", "Régimen Ordinario"), ("NO_RESP", "No responsable de IVA")]
     
     # SSoT
-    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='proveedores', help_text='SSoT Empresa')
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='proveedores', db_index=True, help_text='SSoT Empresa')
 
     # Identificación Legal
     tipo_persona = models.CharField(max_length=10, choices=TIPO_PERSONA, default="JURIDICA")
@@ -42,6 +45,18 @@ class Proveedor(models.Model):
     
     # Estado
     activo = models.BooleanField(default=True)
+    
+    # Mapeo Contable NIIF (v2.61.8)
+    # WARNING: v2.61.8: Solo se permiten codigos de subcuenta (nivel 6) para Pasivos (Clase 2).
+    # Este campo permite mapear el proveedor a una cuenta por pagar especifica.
+    codigo_contable = models.CharField(
+        max_length=10, 
+        blank=True, 
+        null=True, 
+        help_text="Codigo NIIF de subcuenta (Clase 2)",
+        db_index=True
+    )
+    
     observaciones = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

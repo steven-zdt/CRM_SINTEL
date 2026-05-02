@@ -6,6 +6,7 @@ por esquema funcione correctamente.
 """
 import pytest
 from django_tenants.utils import schema_context
+
 from apps.tenant.empleados.models import Empleado
 
 

@@ -1,15 +1,15 @@
 """
 Tests for upload-ubl API contract.
 
-⚠️ API TESTS: Verify that POST /api/v1/facturas/upload-ubl/ works correctly,
+# WARNING: API TESTS: Verify that POST /api/v1/facturas/upload-ubl/ works correctly,
 list endpoint does NOT include heavy XML fields, and /{id}/xml/ returns XML.
 """
-from django_tenants.test.cases import TenantTestCase
-from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
+from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos
-
 
 UBL_MIN = b"""<?xml version="1.0"?><Invoice xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"><cbc:ID>FV-001</cbc:ID><cbc:IssueDate>2026-01-30</cbc:IssueDate><cac:AccountingSupplierParty><cac:Party><cac:PartyTaxScheme><cbc:CompanyID>901123299</cbc:CompanyID><cbc:RegistrationName>SINTEL</cbc:RegistrationName></cac:PartyTaxScheme></cac:Party></cac:AccountingSupplierParty><cac:AccountingCustomerParty><cac:Party><cac:PartyTaxScheme><cbc:CompanyID>900298074</cbc:CompanyID><cbc:RegistrationName>GVS</cbc:RegistrationName></cac:PartyTaxScheme></cac:Party></cac:AccountingCustomerParty><cac:LegalMonetaryTotal><cbc:TaxExclusiveAmount>1000.00</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount>1190.00</cbc:TaxInclusiveAmount><cbc:PayableAmount>1190.00</cbc:PayableAmount></cac:LegalMonetaryTotal></Invoice>"""
 
@@ -19,7 +19,13 @@ class UploadUBLContractTests(TenantTestCase):
     
     def setUp(self):
         super().setUp()
-        Empresa.objects.create(razon_social="SINTEL", nit="901123299")
+        Empresa.objects.create(
+            razon_social="SINTEL",
+            nit="901123299",
+            dv="1",
+            direccion="Calle 123",
+            telefono="3001234567",
+        )
     
     def test_post_upload_ubl_creates_factura(self):
         """Verify that POST /api/v1/facturas/upload-ubl/ creates a factura."""

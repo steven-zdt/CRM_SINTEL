@@ -1,7 +1,7 @@
 """
 Servicio de creación y actualización de usuarios (Service Layer).
 
-⚠️ IMPORTANTE:
+WARNING: IMPORTANTE:
 - Usa set_password() para hashing seguro de contraseñas
 - Transaccional: @transaction.atomic
 - Sin signals: toda la lógica está aquí
@@ -10,9 +10,10 @@ Servicio de creación y actualización de usuarios (Service Layer).
 Referencias:
 - Django set_password: https://docs.djangoproject.com/en/6.0/topics/auth/customizing/
 """
-from django.db import transaction, IntegrityError
-from django.db.models import Field
+
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.db.models import Field
 
 User = get_user_model()
 
@@ -52,12 +53,12 @@ def create_user_service(
 ) -> User:
     """
     Crea un nuevo usuario global (esquema public).
-    
-    ⚠️ SEGURIDAD:
+
+    WARNING: SEGURIDAD:
     - Normaliza email a minúsculas
     - Usa set_password() para hashing seguro (nunca texto plano)
     - Genera username único si el modelo lo tiene (compatibilidad con AbstractUser)
-    
+
     Args:
         email: Email del usuario (único, requerido)
         password: Contraseña en texto plano (se hashea con set_password)
@@ -66,10 +67,10 @@ def create_user_service(
         is_staff: Si es staff/admin (default: False)
         is_active: Si está activo (default: True)
         telefono: Teléfono (opcional)
-    
+
     Returns:
         User: Usuario creado
-    
+
     Raises:
         ValueError: Si el email o password están vacíos
         IntegrityError: Si el email o username ya existen
@@ -78,7 +79,7 @@ def create_user_service(
     email = (email or "").strip().lower()
     if not email or not password:
         raise ValueError("Email y password son obligatorios.")
-    
+
     # Preparar kwargs para crear usuario
     user_kwargs = {
         "email": email,
@@ -87,24 +88,24 @@ def create_user_service(
         "is_staff": is_staff,
         "is_active": is_active,
     }
-    
+
     if telefono:
         user_kwargs["telefono"] = telefono
-    
+
     # Si existe el campo username, generarlo de forma única para evitar IntegrityError
     if _user_has_field("username"):
         user_kwargs["username"] = _generate_unique_username(email)
-    
+
     # Crear usuario
     user = User(**user_kwargs)
     user.set_password(password)  # hashing recomendado por Django
-    
+
     try:
         user.save()
     except IntegrityError as e:
         # Email duplicado u otra unicidad: elevar error claro
         raise IntegrityError("No se pudo crear el usuario: email o username ya existente.") from e
-    
+
     return user
 
 
@@ -121,12 +122,12 @@ def update_user_service(
 ) -> User:
     """
     Actualiza un usuario existente.
-    
-    ⚠️ SEGURIDAD:
+
+    WARNING: SEGURIDAD:
     - Si se proporciona password, usa set_password() para hashing seguro
     - Solo actualiza los campos proporcionados (partial update)
     - No expone el password en la respuesta
-    
+
     Args:
         user: Instancia de User a actualizar
         first_name: Nuevo nombre (opcional)
@@ -135,7 +136,7 @@ def update_user_service(
         is_staff: Nuevo estado de staff (opcional)
         is_active: Nuevo estado activo (opcional)
         telefono: Nuevo teléfono (opcional)
-    
+
     Returns:
         User: Usuario actualizado
     """
@@ -150,12 +151,21 @@ def update_user_service(
         user.is_active = is_active
     if telefono is not None:
         user.telefono = telefono
-    
+
     # Actualizar contraseña si se proporciona (hashing seguro)
     if password:
         user.set_password(password)
-        user.save(update_fields=["first_name", "last_name", "is_staff", "is_active", "telefono", "password"])
+        user.save(
+            update_fields=[
+                "first_name",
+                "last_name",
+                "is_staff",
+                "is_active",
+                "telefono",
+                "password",
+            ]
+        )
     else:
         user.save(update_fields=["first_name", "last_name", "is_staff", "is_active", "telefono"])
-    
+
     return user

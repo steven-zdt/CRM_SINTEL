@@ -1,12 +1,11 @@
 """
 Provider SSoT para configuraciones de buzones de correo.
 
-⚠️ SSoT: Este es el único lugar desde donde maildigester toma credenciales.
-⚠️ CERO SIGNALS: Toda la lógica es explícita.
+# WARNING: SSoT: Este es el único lugar desde donde maildigester toma credenciales.
+# WARNING: CERO SIGNALS: Toda la lógica es explícita.
 """
-from typing import Dict
-from apps.tenant.empresa.models import MailInboxConfig
 from apps.services.maildigester.schemas import MailboxConfigDTO
+from apps.tenant.empresa.models import MailInboxConfig
 
 
 def get_mailbox_config(config_id: int) -> MailboxConfigDTO:
@@ -16,8 +15,8 @@ def get_mailbox_config(config_id: int) -> MailboxConfigDTO:
     Valida is_active y normaliza campos según el contrato MailboxConfigDTO.
     Si provider == "gmail", aplica presets de Gmail (imap.gmail.com:993 SSL).
     
-    ⚠️ SSoT: Este es el único lugar desde donde maildigester obtiene credenciales.
-    ⚠️ GMAIL: Si provider == "gmail", fuerza presets seguros de Gmail.
+    # WARNING: SSoT: Este es el único lugar desde donde maildigester obtiene credenciales.
+    # WARNING: GMAIL: Si provider == "gmail", fuerza presets seguros de Gmail.
     
     Args:
         config_id: ID de MailInboxConfig (debe estar activa)

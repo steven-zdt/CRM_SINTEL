@@ -1,0 +1,97 @@
+{# offcanvas_movimiento.html - Registro de Movimiento de Inventario v3.5 #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-movimientos" aria-labelledby="offcanvas-movimientos-label" style="width: 500px;">
+    <div class="offcanvas-header bg-success text-white">
+        <h5 class="offcanvas-title" id="offcanvas-movimientos-label">
+            <i class="bi bi-arrow-left-right me-2"></i>Registrar Movimiento (Kardex)
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    
+    <div class="offcanvas-body">
+        <div id="feedback-movimiento" class="alert d-none mb-3" role="alert"></div>
+        
+        <form id="form-movimiento" class="row g-3">
+            <input type="hidden" name="empresa" value="{{ empresa.id }}">
+            
+            <div class="col-12">
+                <label for="movimiento-producto" class="form-label fw-bold">Producto <span class="text-danger">*</span></label>
+                <select class="form-select select2-offcanvas" id="movimiento-producto" name="producto" required>
+                    <option value="">Seleccione un producto...</option>
+                    {% for prod in productos %}
+                        <option value="{{ prod.id }}">[{{ prod.codigo }}] {{ prod.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-12">
+                <label for="movimiento-tipo" class="form-label fw-bold">Tipo de Movimiento <span class="text-danger">*</span></label>
+                <select class="form-select" id="movimiento-tipo" name="tipo" required>
+                    <option value="">Seleccione tipo...</option>
+                    {% for code, label in tipos %}
+                        <option value="{{ code }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-6">
+                <label for="movimiento-cantidad" class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="movimiento-cantidad" name="cantidad" step="0.001" min="0.001" placeholder="0.000" required>
+            </div>
+            
+            <div class="col-md-6">
+                <label for="movimiento-costo" class="form-label fw-bold">Costo Unitario ($)</label>
+                <input type="number" class="form-control" id="movimiento-costo" name="costo_unitario" step="0.01" min="0" placeholder="0.00">
+            </div>
+            
+            <div class="col-12">
+                <label for="movimiento-origen" class="form-label fw-bold">Referencia / Origen</label>
+                <input type="text" class="form-control" id="movimiento-origen" name="origen_referencia" placeholder="Ej: Factura #123, Ajuste de inventario...">
+                <div class="form-text">Documento o referencia que origina este movimiento.</div>
+            </div>
+            
+            <div class="col-12">
+                <label for="movimiento-observaciones" class="form-label fw-bold">Observaciones</label>
+                <textarea class="form-control" id="movimiento-observaciones" name="observaciones" rows="3" placeholder="Detalles adicionales del movimiento..."></textarea>
+            </div>
+            
+            <div class="col-12 mt-4 pt-3 border-top">
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-success btn-lg" id="btn-guardar-movimiento">
+                        <i class="bi bi-save me-2"></i>Registrar Movimiento
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="offcanvas">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    /**
+     * Inicialización específica del Offcanvas de Movimientos
+     * ⚠️ Se ejecuta cuando HTMX inyecta este HTML
+     */
+    (function() {
+        console.log('[offcanvas.movimiento] Inicializando...');
+        
+        // ⚠️ v3.5: Sincronización defensiva para Select2 (DOM Shield compatibility)
+        const form = document.getElementById('form-movimiento');
+        if (form) {
+            form.addEventListener('submit', function() {
+                if (window.jQuery && typeof window.jQuery.fn.select2 !== 'undefined') {
+                    const $select = window.jQuery('#movimiento-producto');
+                    if ($select.data('select2')) {
+                        // Forzar que el valor de Select2 se refleje en el select nativo antes del submit
+                        $select.trigger('change');
+                    }
+                }
+            });
+        }
+
+        if (window.MovimientosEditor && typeof window.MovimientosEditor.init === 'function') {
+            window.MovimientosEditor.init();
+        }
+    })();
+</script>

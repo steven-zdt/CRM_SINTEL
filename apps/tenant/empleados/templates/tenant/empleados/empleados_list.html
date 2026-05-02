@@ -1,0 +1,196 @@
+{# empleados_list.html - Empleados Module v3.5 (Feature-Sliced) #}
+{# Zero JS in HTML - All logic in empleado_list.js #}
+
+<div class="card shadow-sm" data-module="empleados">
+  <div class="card-header bg-white">
+    <ul class="nav nav-tabs card-header-tabs" id="empleados-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab-empleados" data-bs-toggle="tab" data-bs-target="#tab-pane-empleados" 
+                type="button" role="tab" aria-controls="tab-pane-empleados" aria-selected="true">
+          <i class="bi bi-people me-2"></i>Empleados
+          <span data-module="empleados" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-contratos" data-bs-toggle="tab" data-bs-target="#tab-pane-contratos" 
+                type="button" role="tab" aria-controls="tab-pane-contratos" aria-selected="false">
+          <i class="bi bi-file-text me-2"></i>Contratos
+          <span data-module="contratos" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-nominas" data-bs-toggle="tab" data-bs-target="#tab-pane-nominas" 
+                type="button" role="tab" aria-controls="tab-pane-nominas" aria-selected="false">
+          <i class="bi bi-cash-coin me-2"></i>Nominas
+          <span data-module="nominas" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card-body">
+    <div class="tab-content" id="empleados-tab-content">
+      
+      {# TAB 1: EMPLEADOS #}
+      <div class="tab-pane fade show active" id="tab-pane-empleados" role="tabpanel" 
+           aria-labelledby="tab-empleados" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="empleados">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-empleado" 
+                   class="form-control" 
+                   placeholder="Buscar empleado..."
+                   data-module="empleados"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="empleados" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/ui/empleados/gestor-offcanvas/?tipo=empleado" 
+                  hx-target="#offcanvas-container-empleados" 
+                  hx-swap="innerHTML"
+                  data-module="empleados"
+                  data-create-button>
+            <i class="bi bi-plus-lg me-1"></i>Nuevo Empleado
+          </button>
+        </div>
+        
+        {# Resumen de Empleados #}
+        <div id="empleados-summary" class="row mb-3"></div>
+        
+        {# Spinner #}
+        <div data-spinner="empleados" class="text-center py-5" style="display: none;">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando tabla de empleados...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-empleados" data-grid="empleados" style="display: none;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="empleados" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay empleados registrados
+          </p>
+        </div>
+      </div>
+
+      {# TAB 2: CONTRATOS #}
+      <div class="tab-pane fade" id="tab-pane-contratos" role="tabpanel" 
+           aria-labelledby="tab-contratos" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="contratos">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-contrato" 
+                   class="form-control" 
+                   placeholder="Buscar contrato..."
+                   data-module="contratos"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="contratos" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+        </div>
+        
+        {# Spinner #}
+        <div data-spinner="contratos" class="text-center py-5" style="display: none;">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando tabla de contratos...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-contratos" data-grid="contratos" style="display: none;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="contratos" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay contratos registrados
+          </p>
+        </div>
+      </div>
+
+      {# TAB 3: NOMINAS #}
+      <div class="tab-pane fade" id="tab-pane-nominas" role="tabpanel" 
+           aria-labelledby="tab-nominas" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="nominas">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-nomina" 
+                   class="form-control" 
+                   placeholder="Buscar nomina..."
+                   data-module="nominas"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="nominas" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+        </div>
+        
+        {# Spinner #}
+        <div data-spinner="nominas" class="text-center py-5" style="display: none;">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando tabla de nominas...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-nominas" data-grid="nominas" style="display: none;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="nominas" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay nominas registradas
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Offcanvas Containers #}
+<div id="offcanvas-container-empleados"></div>
+<div id="offcanvas-container-contratos"></div>
+<div id="offcanvas-container-nominas"></div>
+
+{# Modal de Confirmacion Eliminar #}
+<div class="modal fade" id="confirmarEliminarModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirmar Eliminacion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Esta seguro de que desea eliminar este registro?</p>
+        <p class="text-danger"><strong>Esta accion no se puede deshacer.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include 'tenant/empleados/assets_empleados.html' %}

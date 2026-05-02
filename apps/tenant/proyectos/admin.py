@@ -3,7 +3,8 @@ Admin para Proyectos v3.1 - Stand-Alone Data Schema (SSoT Strict)
 Alineado con modelo desacoplado (sin ForeignKeys a apps externas)
 """
 from django.contrib import admin
-from .models import Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido
+
+from .models import AsignacionPersonal, ItemPedido, PedidoProyecto, Proyecto
 
 
 @admin.register(Proyecto)

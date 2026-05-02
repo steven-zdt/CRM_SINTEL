@@ -1,6 +1,6 @@
 """Core API helpers (funcionales) para normalizar request payloads y respuestas.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Sin lógica de negocio aquí.
 - Solo utilidades puras/reutilizables para evitar duplicación (JSON vs multipart, paginación, errores).
 """
@@ -8,14 +8,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from django.http import QueryDict
 from rest_framework import status
 from rest_framework.response import Response
 
 
-def coerce_request_data(request) -> Dict[str, Any]:
+def coerce_request_data(request) -> dict[str, Any]:
     """Normaliza request.data a dict plano.
 
     - JSONParser -> dict
@@ -28,7 +28,7 @@ def coerce_request_data(request) -> Dict[str, Any]:
 
     data = request.data
     if isinstance(data, QueryDict):
-        out: Dict[str, Any] = data.dict()
+        out: dict[str, Any] = data.dict()
     else:
         out = dict(data)
 
@@ -44,7 +44,7 @@ def parse_int(value: Any, default: int) -> int:
         return default
 
 
-def get_pagination_params(request, *, default_page: int = 1, default_page_size: int = 20) -> Tuple[int, int]:
+def get_pagination_params(request, *, default_page: int = 1, default_page_size: int = 20) -> tuple[int, int]:
     """Extrae page y page_size en forma segura."""
     page = parse_int(getattr(request, "query_params", {}).get("page"), default_page)
     page_size = parse_int(getattr(request, "query_params", {}).get("page_size"), default_page_size)

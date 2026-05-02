@@ -1,5 +1,4 @@
 # apps/public/impuestos/choices/responsabilidad_rut.py
-# -*- coding: utf-8 -*-
 """
 Choices para el campo 'codigo' del modelo ResponsabilidadRUT.
 Basado en el listado de responsabilidades RUT (DIAN). Ver:
@@ -11,9 +10,7 @@ Si la DIAN emite cambios, actualizar este archivo (SSoT local de choices).
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
-RESPONSABILIDAD_RUT_CHOICES: List[Tuple[str, str]] = [
+RESPONSABILIDAD_RUT_CHOICES: list[tuple[str, str]] = [
     ("01", "Aporte especial para la administración de justicia"),
     ("02", "Gravamen a los movimientos financieros"),
     ("03", "Impuesto al patrimonio"),
@@ -59,7 +56,8 @@ RESPONSABILIDAD_RUT_CHOICES: List[Tuple[str, str]] = [
     ("56", "Impuesto al carbono"),
 ]
 
-def get_responsabilidad_rut_choices() -> List[Tuple[str, str]]:
+
+def get_responsabilidad_rut_choices() -> list[tuple[str, str]]:
     """
     Provee los choices en runtime por si se prefiere inyectarlos
     dinámicamente en serializers/forms (recomendado).

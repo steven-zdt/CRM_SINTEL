@@ -1,18 +1,18 @@
 """
 Servicios de orquestación para datos de facturas.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Solo lectura/composición de datos
 - NO duplica lógica de negocio de apps.tenant.facturas
 - Usa ORM optimizado (only, select_related, prefetch_related)
 """
-from typing import Dict, Any, List
+from typing import Any
+
 from django.db.models import Count, Sum
 from django.utils import timezone
-from datetime import timedelta
 
 
-def get_facturas_snapshot(tenant, user=None) -> Dict[str, Any]:
+def get_facturas_snapshot(tenant, user=None) -> dict[str, Any]:
     """
     Obtiene snapshot de facturas del tenant.
     

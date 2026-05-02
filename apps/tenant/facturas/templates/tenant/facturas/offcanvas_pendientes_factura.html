@@ -1,0 +1,31 @@
+{% load static %}
+{# offcanvas_pendientes.html - Facturas Pendientes de Correo v2.60 #}
+{# ⚠️ v2.60: Offcanvas para selección manual de facturas desde correo #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-facturas-pendientes" aria-labelledby="offcanvas-facturas-pendientes-label" style="width: 800px;">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-facturas-pendientes-label">
+      <i class="bi bi-envelope-arrow-down me-2"></i>
+      Facturas Pendientes (<span id="count-xml-detected">0</span>)
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {% include 'tenant/core/partials/error_handler.html' %}
+    <div id="sync-container">
+      <div class="text-center py-4">
+        <div class="spinner-border text-primary mb-2"></div>
+        <p class="text-muted small">Cargando facturas...</p>
+      </div>
+    </div>
+  </div>
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-circle me-1"></i>Cancelar
+      </button>
+      <button type="button" class="btn btn-primary" id="btn-procesar-seleccionadas">
+        <i class="bi bi-check-circle me-2"></i>Procesar Seleccionadas
+      </button>
+    </div>
+  </div>
+</div>

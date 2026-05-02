@@ -1,15 +1,15 @@
 """Core API v1 - Empleados serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Composición vía herencia de serializers existentes de la app empleados.
 """
 
 from apps.tenant.empleados.api.serializers import (
-    EmpleadoListSerializer,
-    EmpleadoDetailSerializer,
     ContratoNestedSerializer,
     DevengoSerializer,
+    EmpleadoDetailSerializer,
+    EmpleadoListSerializer,
 )
 
 

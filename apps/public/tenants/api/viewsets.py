@@ -1,91 +1,110 @@
 """
 ViewSets para la app tenants.
 
-⚠️ IMPORTANTE: Solo administradores pueden gestionar tenants.
+WARNING: IMPORTANTE: Solo administradores pueden gestionar tenants.
 - Autenticación: SessionAuthentication para permitir cookies de sesión desde la UI
 
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
-from rest_framework import viewsets, permissions, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.authentication import SessionAuthentication
+
 from django.core.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
-from apps.public.tenants.models import Client, Domain
-from apps.public.tenants.api.serializers import ClientSerializer, DomainSerializer, OnboardTenantWithOwnerSerializer
-from apps.public.tenants.api.filters import ClientFilter
+from rest_framework import permissions, status, viewsets
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.response import Response
+
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.public.tenants.api.filters import ClientFilter
+from apps.public.tenants.api.serializers import ClientSerializer, DomainSerializer
+from apps.public.tenants.models import Client, Domain
 
 
 class ClientViewSet(viewsets.ModelViewSet):
     """
     ViewSet CRUD completo para Client (solo administradores).
-    
-    ⚠️ IMPORTANTE: 
+
+    WARNING: IMPORTANTE:
     - CRUD completo para uso administrativo exclusivo (requiere IsAdminUser)
     - La creación de tenants puede hacerse mediante el servicio de onboarding o por API
     - Todas las operaciones requieren permisos de administrador
     - Autenticación: SessionAuthentication (cookies de sesión desde UI)
     """
+
     authentication_classes = [SessionAuthentication]
     # Queryset optimizado: solo campos necesarios, sin prefetch pesado de membresías
-    # ⚠️ OPTIMIZACIÓN: No hacer prefetch de membresías para evitar 500 y reducir carga
+    # WARNING: OPTIMIZACIÓN: No hacer prefetch de membresías para evitar 500 y reducir carga
     # Para API pública/admin: usar only() para reducir carga
-    queryset = Client.objects.only(
-        "id", "schema_name", "nombre", "created_on", "is_active", 
-        "on_trial", "paid_until"
-    ).prefetch_related('domains').order_by("-created_on")
+    # Excluir el tenant público y el tenant de prueba ('test') que se crea durante
+    # la ejecución de tests para evitar que aparezca en APIs públicas.
+    queryset = (
+        Client.objects.exclude(schema_name__in=["public", "test"]).only(
+            "id", "schema_name", "nombre", "created_on", "is_active", "on_trial", "paid_until"
+        )
+        .prefetch_related("domains")
+        .order_by("-created_on")
+    )
     serializer_class = ClientSerializer
     permission_classes = [permissions.IsAdminUser]  # Solo admins
-    
+
     def get_queryset(self):
         """
         Queryset optimizado según la acción.
-        
-        ⚠️ OPTIMIZACIÓN: No hacer prefetch de membresías para evitar 500 y reducir carga.
+
+        WARNING: OPTIMIZACIÓN: No hacer prefetch de membresías para evitar 500 y reducir carga.
         Si se necesitan membresías en admin, usar un serializer separado.
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            # Snapshot current clients for debug in tests (schema_name and nombre)
+            snapshot = list(Client.objects.values("id", "schema_name", "nombre"))
+            logger.info("ClientViewSet.get_queryset snapshot count=%s clients=%s", len(snapshot), snapshot)
+        except Exception:
+            logger.exception("ClientViewSet.get_queryset: failed to snapshot clients")
+
         return super().get_queryset()
+
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ClientFilter  # Usar FilterSet personalizado para booleanos
-    search_fields = ['nombre', 'schema_name']
-    ordering_fields = ['nombre', 'created_on', 'paid_until']
-    ordering = ['-created_on']
-    
-    @action(detail=False, methods=['post'], url_path='onboard', url_name='onboard')
+    search_fields = ["nombre", "schema_name"]
+    ordering_fields = ["nombre", "created_on", "paid_until"]
+    ordering = ["-created_on"]
+
+    @action(detail=False, methods=["post"], url_path="onboard", url_name="onboard")
     def onboard(self, request):
         """
         Endpoint para onboarding completo de un tenant con propietario.
-        
-        ⚠️ CONTRATO ESTABLE: Retorna dict {"client_id", "domain", "membership_id", "login_url"} con 201
+
+        WARNING: CONTRATO ESTABLE: Retorna dict {"client_id", "domain", "membership_id", "login_url"} con 201
         Aunque el seed de perfil falle, siempre retorna login_url si User, Client, Domain y Membership se crearon.
-        
+
         Crea un tenant completo con:
         - Usuario global (public) - idempotente por email, set_unusable_password() (v2.29: sin password en onboarding)
         - Client (tenant) - auto_create_schema=True crea esquema + migra TENANT_APPS automáticamente
         - Domain (dominio principal) - sin puerto ni www (normalizado)
         - TenantMembership (usuario propietario) - en public, rol=ADMIN, is_primary_admin=True
         - (Opcional) Seed de perfil si la tabla existe - dentro de schema_context, solo si tabla existe
-        
-        ⚠️ PERMISOS: Requiere IsAdminUser (solo staff puede crear tenants)
-        
+
+        WARNING: PERMISOS: Requiere IsAdminUser (solo staff puede crear tenants)
+
         Payload esperado:
         {
             "nombre": "Empresa X",  # Requerido
             "schema_name": "empresa_x",  # Requerido
             "dominio_fqdn": "empresa-x.localhost",  # Opcional (se autogenera como <schema>.<TENANT_DOMAIN_BASE>)
             "owner_email": "owner@empresa-x.com",  # Requerido (si no se proporciona admin_user_id)
-            # ⚠️ v2.29: owner_password ELIMINADO - NO se acepta password en onboarding
+            # WARNING: v2.29: owner_password ELIMINADO - NO se acepta password en onboarding
             "admin_user_id": 1,  # Opcional (alternativa a owner_email)
             "owner_is_staff": true,  # Opcional, default: true
             "owner_is_active": true,  # Opcional, default: true
             "paid_until": "2024-12-31",  # Opcional
             "on_trial": true  # Opcional, default: true
         }
-        
+
         Returns:
             Response 201 Created con dict: {
                 "client_id": int,
@@ -93,18 +112,51 @@ class ClientViewSet(viewsets.ModelViewSet):
                 "membership_id": int,
                 "login_url": str
             }
-        
+
         Raises:
             Response 400 Bad Request: Si hay errores de validación (ValidationError, ValueError)
             Response 403 Forbidden: Si el usuario no es staff (IsAdminUser)
             Response 500 Internal Server Error: Si hay errores inesperados
         """
-        from apps.services.onboarding.empresa_service import crear_tenant_con_owner
-        from apps.public.tenants.api.serializers import OnboardTenantWithOwnerSerializer
-        
+        # Compat: algunos clientes/tests usan el endpoint legacy '/tenants/create/'
+        # con keys 'nombre', 'dominio' y 'email_admin' que esperan que se invoque
+        # a `apps.services.onboarding.empresa_service.crear_empresa`.
+        # Soporte ambos flujos: el API moderno (OnboardTenantWithOwnerSerializer)
+        # y el legacy (dominio/email_admin) para mantener compatibilidad.
         import logging
+
+        from apps.public.tenants.api.serializers import OnboardTenantWithOwnerSerializer
+        from apps.services.onboarding.empresa_service import (
+            crear_empresa,
+            crear_tenant_con_owner,
+        )
+
         logger = logging.getLogger(__name__)
-        
+
+        # Legacy payload support (console UI and older tests)
+        if isinstance(request.data, dict) and (
+            "email_admin" in request.data or "dominio" in request.data
+        ):
+            # Map legacy keys to crear_empresa signature. The service accepts
+            # arbitrary kwargs, so passing 'dominio' for compatibility is fine
+            nombre = request.data.get("nombre")
+            dominio = request.data.get("dominio")
+            email_admin = request.data.get("email_admin")
+            on_trial = request.data.get("on_trial", True)
+
+            if not nombre or not email_admin:
+                return Response({"error": "Faltan campos requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                payload = crear_empresa(nombre=nombre, email_admin=email_admin, dominio=dominio, on_trial=on_trial)
+                logger.info("OK: Onboarding (legacy) exitoso: nombre=%s, dominio=%s", nombre, dominio)
+                return Response(payload, status=status.HTTP_201_CREATED)
+            except ValidationError as e:
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                logger.exception("Onboarding (legacy) error: %s", e)
+                return Response({"error": "Error al crear el tenant"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         serializer = OnboardTenantWithOwnerSerializer(data=request.data)
         if not serializer.is_valid():
             # Errores de validación del serializer (campos requeridos, formatos, etc.)
@@ -115,23 +167,23 @@ class ClientViewSet(viewsets.ModelViewSet):
                     "Onboarding 400 - Campo '%s': %s | Payload recibido: nombre=%s, schema_name=%s, dominio_fqdn=%s, owner_email=%s",
                     field,
                     field_errors,
-                    request.data.get('nombre', 'N/A'),
-                    request.data.get('schema_name', 'N/A'),
-                    request.data.get('dominio_fqdn', 'N/A'),
-                    request.data.get('owner_email', 'N/A'),
+                    request.data.get("nombre", "N/A"),
+                    request.data.get("schema_name", "N/A"),
+                    request.data.get("dominio_fqdn", "N/A"),
+                    request.data.get("owner_email", "N/A"),
                 )
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             # Crear tenant usando el servicio (retorna dict estable)
-            # ⚠️ CONTRATO ESTABLE: Siempre retorna dict con client_id, domain, membership_id, login_url
+            # WARNING: CONTRATO ESTABLE: Siempre retorna dict con client_id, domain, membership_id, login_url
             # Aunque el seed de perfil falle, el onboarding debe retornar 201 con login_url
             payload = crear_tenant_con_owner(**serializer.validated_data)
             logger.info(
-                "✅ Onboarding exitoso: client_id=%s, domain=%s, membership_id=%s",
-                payload.get('client_id'),
-                payload.get('domain'),
-                payload.get('membership_id'),
+                "OK: Onboarding exitoso: client_id=%s, domain=%s, membership_id=%s",
+                payload.get("client_id"),
+                payload.get("domain"),
+                payload.get("membership_id"),
             )
             return Response(payload, status=status.HTTP_201_CREATED)
         except ValidationError as e:
@@ -140,56 +192,50 @@ class ClientViewSet(viewsets.ModelViewSet):
             logger.warning(
                 "Onboarding 400 - ValidationError: %s | Payload: nombre=%s, schema_name=%s, dominio_fqdn=%s",
                 error_detail,
-                serializer.validated_data.get('nombre', 'N/A'),
-                serializer.validated_data.get('schema_name', 'N/A'),
-                serializer.validated_data.get('dominio_fqdn', 'N/A'),
+                serializer.validated_data.get("nombre", "N/A"),
+                serializer.validated_data.get("schema_name", "N/A"),
+                serializer.validated_data.get("dominio_fqdn", "N/A"),
             )
-            return Response(
-                {'detail': error_detail},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": error_detail}, status=status.HTTP_400_BAD_REQUEST)
         except ValueError as e:
             # Errores de valor (campos requeridos faltantes, etc.)
             error_detail = str(e)
             logger.warning(
                 "Onboarding 400 - ValueError: %s | Payload: nombre=%s, schema_name=%s, owner_email=%s",
                 error_detail,
-                serializer.validated_data.get('nombre', 'N/A'),
-                serializer.validated_data.get('schema_name', 'N/A'),
-                serializer.validated_data.get('owner_email', 'N/A'),
+                serializer.validated_data.get("nombre", "N/A"),
+                serializer.validated_data.get("schema_name", "N/A"),
+                serializer.validated_data.get("owner_email", "N/A"),
             )
-            return Response(
-                {'detail': error_detail},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": error_detail}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             # Errores inesperados
             logger.error(
                 "Onboarding 500 - Error inesperado: %s | Payload: %s",
                 str(e),
                 serializer.validated_data,
-                exc_info=True
+                exc_info=True,
             )
             return Response(
-                {'detail': 'Error al crear el tenant. Por favor, contacte al administrador.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"detail": "Error al crear el tenant. Por favor, contacte al administrador."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-    
-    @action(detail=True, methods=['post'], url_path='toggle-active', url_name='toggle-active')
+
+    @action(detail=True, methods=["post"], url_path="toggle-active", url_name="toggle-active")
     def toggle_active(self, request, pk=None):
         """
         Activa o desactiva un tenant (toggle de is_active).
-        
-        ⚠️ CONTRATO: POST /api/public/v1/tenants/{id}/toggle-active/
+
+        WARNING: CONTRATO: POST /api/public/v1/tenants/{id}/toggle-active/
         - Sin prefetch redundantes
         - Cambia is_active y retorna {"id", "is_active", "message"}
-        
+
         Cambia el estado de is_active del tenant:
         - Si is_active=True → is_active=False (suspende)
         - Si is_active=False → is_active=True (activa)
-        
-        ⚠️ PERMISOS: Requiere IsAdminUser (solo staff puede cambiar estado de tenants)
-        
+
+        WARNING: PERMISOS: Requiere IsAdminUser (solo staff puede cambiar estado de tenants)
+
         Returns:
             Response 200 OK con: {
                 "id": int,
@@ -200,68 +246,181 @@ class ClientViewSet(viewsets.ModelViewSet):
         try:
             client = self.get_object()
             client.is_active = not client.is_active
-            client.save(update_fields=['is_active'])
-            
+            client.save(update_fields=["is_active"])
+
             serializer = self.get_serializer(client)
-            action = 'activado' if client.is_active else 'desactivado'
-            
-            return Response({
-                'id': client.id,
-                'is_active': client.is_active,
-                'message': f'Tenant "{client.nombre}" {action} exitosamente'
-            }, status=status.HTTP_200_OK)
-            
+            action = "activado" if client.is_active else "desactivado"
+
+            return Response(
+                {
+                    "id": client.id,
+                    "is_active": client.is_active,
+                    "message": f'Tenant "{client.nombre}" {action} exitosamente',
+                },
+                status=status.HTTP_200_OK,
+            )
+
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Error al cambiar estado del tenant: {str(e)}", exc_info=True)
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"], url_path="resend-invitation", url_name="resend-invitation")
+    def resend_invitation(self, request, pk=None):
+        """
+        Regenera y reenvía el email de invitación al admin primario del tenant.
+
+        POST /api/public/v1/tenants/{id}/resend-invitation/
+
+        Util cuando:
+        - El token de activación expiró (TTL 24h) o fue corrompido en tránsito
+        - El email original no fue recibido (backend console en desarrollo)
+        - Usuario con set_unusable_password() aún no ha activado su cuenta
+
+        WARNING: PERMISOS: Requiere IsAdminUser.
+        WARNING: Se bloquea si el usuario ya tiene contraseña usable (ya activado).
+
+        Returns 200: {"activation_url", "user_email", "email_sent", "detail"}
+        Returns 400: admin primario no encontrado o sin dominio primario
+        Returns 409: usuario ya activó su cuenta
+        """
+        import logging
+
+        from apps.public.tenants.models import TenantMembership
+
+        logger = logging.getLogger(__name__)
+
+        client = self.get_object()
+
+        # Obtener admin primario del tenant
+        membership = (
+            TenantMembership.objects.filter(
+                client=client,
+                is_primary_admin=True,
+                is_active=True,
             )
-    
+            .select_related("user")
+            .only("user__id", "user__email", "user__password")
+            .first()
+        )
+
+        if not membership:
+            return Response(
+                {"detail": "No se encontro el admin primario del tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = membership.user
+
+        # Bloquear reenvío si el usuario ya tiene contraseña usable (ya activado)
+        if user.has_usable_password():
+            return Response(
+                {"detail": "El usuario ya activo su cuenta. No se requiere reenvio de invitacion."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Obtener dominio primario del tenant
+        domain = (
+            Domain.objects.filter(tenant=client, is_primary=True)
+            .only("domain")
+            .first()
+        )
+
+        if not domain:
+            return Response(
+                {"detail": "El tenant no tiene un dominio primario configurado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from apps.public.tenants.services.invitations import (
+                build_activation_url,
+                generate_invitation_token,
+                send_invitation_email,
+            )
+
+            token = generate_invitation_token(user_id=user.id, tenant_id=client.id)
+            activation_url = build_activation_url(domain.domain, token)
+            sent = send_invitation_email(user, client, activation_url)
+
+            if sent:
+                logger.info(
+                    "[RESEND-INVITATION] Enviada: user=%s, tenant=%s",
+                    user.email, client.schema_name,
+                )
+            else:
+                logger.warning(
+                    "[RESEND-INVITATION] Email no enviado: user=%s, tenant=%s | url=%s",
+                    user.email, client.schema_name, activation_url,
+                )
+
+            return Response(
+                {
+                    "detail": "Invitacion reenviada.",
+                    "activation_url": activation_url,
+                    "user_email": user.email,
+                    "email_sent": sent,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(
+                "[RESEND-INVITATION] Error: tenant=%s | %s",
+                client.schema_name, str(e), exc_info=True,
+            )
+            return Response(
+                {"detail": f"Error al reenviar invitacion: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
     def destroy(self, request, *args, **kwargs):
         """
         Hard Delete de tenant (eliminación permanente).
-        
-        ⚠️ OPERACIÓN IRREVERSIBLE:
+
+        WARNING: OPERACIÓN IRREVERSIBLE:
         - Elimina el esquema PostgreSQL del tenant (drop schema)
         - Elimina Client, Domain(s) y TenantMembership(s) del esquema public
-        
-        ⚠️ PRECONDICIONES OBLIGATORIAS:
+
+        WARNING: PRECONDICIONES OBLIGATORIAS:
         1. schema != 'public' (el tenant público NO puede eliminarse)
         2. is_active == False (el tenant debe estar suspendido antes de eliminarlo)
-        
-        ⚠️ MECANISMO:
+
+        WARNING: MECANISMO:
         - Activar auto_drop_schema=True temporalmente
         - client.delete() para drop del esquema (mecanismo soportado por django-tenants)
         - Limpiar relaciones en public (Domains/Memberships) si no hay CASCADE
-        
-        ⚠️ PERMISOS: Requiere IsAdminUser (solo staff puede eliminar tenants)
-        
-        ⚠️ AUDITORÍA: Logs de seguridad registrados en logger 'security.tenants'
-        
+
+        WARNING: PERMISOS: Requiere IsAdminUser (solo staff puede eliminar tenants)
+
+        WARNING: AUDITORÍA: Logs de seguridad registrados en logger 'security.tenants'
+
         Returns:
             Response 204 No Content si se elimina exitosamente
             Response 400 Bad Request si el tenant está activo
             Response 403 Forbidden si se intenta eliminar el tenant público
-        
+
         Referencias:
         - django-tenants: https://django-tenants.readthedocs.io/en/latest/use.html
         - auto_drop_schema: https://django-tenants.readthedocs.io/en/latest/use.html#deleting-tenants
         """
         from apps.public.tenants.services.deletion_service import hard_delete_tenant
-        
+
         try:
             client = self.get_object()
-            
+
             # BLOQUEO ABSOLUTO DEL TENANT PÚBLICO (defensa en profundidad - capa API)
             from django_tenants.utils import get_public_schema_name
+
             public_schema = get_public_schema_name()
             if client.schema_name == public_schema:
                 import logging
-                logger = logging.getLogger('security.tenants')
+
+                logger = logging.getLogger("security.tenants")
                 import datetime
+
                 logger.critical(
                     f"🚨 API: INTENTO DE ELIMINAR TENANT PÚBLICO RECHAZADO | "
                     f"schema={public_schema} | "
@@ -271,76 +430,75 @@ class ClientViewSet(viewsets.ModelViewSet):
                 )
                 return Response(
                     {
-                        'error': 'El esquema público no puede eliminarse bajo ningún motivo.',
-                        'detail': 'El tenant público es el núcleo del sistema y es indeletable.'
+                        "error": "El esquema público no puede eliminarse bajo ningún motivo.",
+                        "detail": "El tenant público es el núcleo del sistema y es indeletable.",
                     },
-                    status=status.HTTP_403_FORBIDDEN
+                    status=status.HTTP_403_FORBIDDEN,
                 )
-            
+
             # Precondición: is_active == False
             if client.is_active:
                 return Response(
                     {
-                        'error': 'El tenant debe estar suspendido (is_active=False) antes de eliminarlo definitivamente.',
-                        'detail': 'Primero desactiva el tenant usando el botón "Desactivar" o el endpoint /toggle-active/.'
+                        "error": "El tenant debe estar suspendido (is_active=False) antes de eliminarlo definitivamente.",
+                        "detail": 'Primero desactiva el tenant usando el botón "Desactivar" o el endpoint /toggle-active/.',
                     },
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            
+
             # Obtener ID del usuario que ejecuta la acción (para auditoría)
             actor_user_id = request.user.id if request.user.is_authenticated else None
-            
-            # Ejecutar hard delete
-            hard_delete_tenant(client_id=client.id, actor_user_id=actor_user_id)
-            
-            return Response(
-                {'message': f'Tenant "{client.nombre}" eliminado permanentemente'},
-                status=status.HTTP_204_NO_CONTENT
+
+            # Ejecutar hard delete y eliminar usuarios huérfanos asociados al tenant
+            # (usuarios cuyo único TenantMembership era este tenant y que no son staff/superuser)
+            hard_delete_tenant(
+                client_id=client.id, actor_user_id=actor_user_id, delete_orphan_users=True
             )
-            
+
+            return Response(
+                {"message": f'Tenant "{client.nombre}" eliminado permanentemente'},
+                status=status.HTTP_204_NO_CONTENT,
+            )
+
         except ValidationError as e:
             # Error de validación (incluye bloqueo de tenant público)
             error_msg = str(e)
-            if 'público' in error_msg.lower() or 'public' in error_msg.lower():
-                return Response(
-                    {'error': error_msg},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            return Response(
-                {'error': error_msg},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            if "público" in error_msg.lower() or "public" in error_msg.lower():
+                return Response({"error": error_msg}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Error en hard delete tenant: {str(e)}", exc_info=True)
             return Response(
-                {'error': f'Error al eliminar el tenant: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": f"Error al eliminar el tenant: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 class DomainViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet ReadOnly para Domain (solo administradores).
-    
-    ⚠️ IMPORTANTE: 
+
+    WARNING: IMPORTANTE:
     - Solo lectura para uso administrativo
     - La creación de dominios debe hacerse mediante el servicio de onboarding
     """
+
     queryset = Domain.objects.all()
     serializer_class = DomainSerializer
     permission_classes = [permissions.IsAdminUser]  # Solo admins
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['is_primary', 'tenant']
-    search_fields = ['domain']
-    ordering_fields = ['domain', 'is_primary']
-    ordering = ['domain']
+    filterset_fields = ["is_primary", "tenant"]
+    search_fields = ["domain"]
+    ordering_fields = ["domain", "is_primary"]
+    ordering = ["domain"]
 
 
 # Lista de ViewSets para registro automático en el router
 VIEWSETS = [
-    (r'tenants', ClientViewSet, 'tenant'),
-    (r'domains', DomainViewSet, 'domain'),
+    (r"tenants", ClientViewSet, "tenant"),
+    (r"domains", DomainViewSet, "domain"),
 ]

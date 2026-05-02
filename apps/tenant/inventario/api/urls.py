@@ -1,12 +1,13 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
+
 from .viewsets import (
+    ActivoFijoViewSet,
     CategoriaItemViewSet,
+    HistorialServicioViewSet,
+    MovimientoInventarioViewSet,
     ProductoViewSet,
     ServicioViewSet,
-    ActivoFijoViewSet,
-    MovimientoInventarioViewSet,
-    HistorialServicioViewSet
 )
 
 # Configuración del Router
@@ -51,10 +52,10 @@ urlpatterns = [
 #
 # ENDPOINTS DEPRECATED (Legacy DataTables Server-Side):
 # -----------------------------------------------------
-# POST /api/v1/inventario/productos/dt/     - ⚠️ DEPRECATED v2.40 (usar GET /productos/)
-# POST /api/v1/inventario/servicios/dt/      - ⚠️ DEPRECATED v2.40 (usar GET /servicios/)
-# POST /api/v1/inventario/activos/dt/        - ⚠️ DEPRECATED v2.40 (usar GET /activos/)
-# POST /api/v1/inventario/movimientos/dt/    - ⚠️ DEPRECATED v2.40 (usar GET /movimientos/)
+# POST /api/v1/inventario/productos/dt/     - WARNING: DEPRECATED v2.40 (usar GET /productos/)
+# POST /api/v1/inventario/servicios/dt/      - WARNING: DEPRECATED v2.40 (usar GET /servicios/)
+# POST /api/v1/inventario/activos/dt/        - WARNING: DEPRECATED v2.40 (usar GET /activos/)
+# POST /api/v1/inventario/movimientos/dt/    - WARNING: DEPRECATED v2.40 (usar GET /movimientos/)
 #
 # Estos endpoints se mantienen por compatibilidad temporal pero serán eliminados en v2.50.
 # El frontend Tabulator Factory consume directamente los endpoints GET estándar.

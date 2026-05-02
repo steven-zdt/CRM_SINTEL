@@ -4,6 +4,7 @@ Admin para clientes (aislado por tenant).
 django-tenants maneja automáticamente el aislamiento por esquema.
 """
 from django.contrib import admin
+
 from .models import Cliente
 
 

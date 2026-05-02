@@ -1,0 +1,132 @@
+{% load static %}
+{% load tenant_branding %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% tenant_branding_name %} - Sistema de Gestión{% endblock %}</title>
+    <!-- Favicon v2.30: Archivo estático para evitar 404 -->
+    <link rel="icon" type="image/x-icon" href="{% static 'tenant/core/favicon.ico' %}">
+    <link rel="icon" type="image/svg+xml" href="{% static 'tenant/core/favicon.svg' %}">
+    
+    <!-- ⚠️ v2.40: Tailwind CDN removido (usar CSS locales exclusivamente) -->
+    
+    <!-- Bootstrap 5 CSS (requerido para modales) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous" onerror="this.onerror=null; this.href='https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css';">
+    
+    <!-- Bootstrap Icons (requerido para iconos bi-*) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- ⚠️ v3.3: DataTables CSS ELIMINADO - Migrado completamente a Tabulator -->
+    
+    <!-- Tabulator CSS -->
+    <!-- ⚠️ v2.60: Fallback a CDN alternativo si unpkg falla -->
+    <link href="https://unpkg.com/tabulator-tables@6.2.5/dist/css/tabulator_bootstrap5.min.css" rel="stylesheet" onerror="this.onerror=null; this.href='https://cdn.jsdelivr.net/npm/tabulator-tables@6.2.5/dist/css/tabulator_bootstrap5.min.css';">
+    
+    <!-- CSRF Token para JavaScript -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    
+    {% block extra_head %}{% endblock %}
+    
+    <!-- Include de assets comunes (opcional) -->
+    {% include 'tenant/core/partials/assets_common.html' %}
+    
+    <!-- Hook opcional para assets por-página -->
+    {% block page_assets_head %}{% endblock page_assets_head %}
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa; /* Bootstrap bg-light equivalent */
+        }
+        main {
+            min-height: calc(100vh - 200px); /* Altura mínima ajustada */
+        }
+    </style>
+</head>
+<body class="{% block body_class %}bg-light{% endblock %}">
+    {% block header %}
+        {% if not hide_header %}
+            {% include 'tenant/partials/_header.html' %}
+        {% endif %}
+    {% endblock %}
+    
+    {% block messages %}
+        {% if messages %}
+            {% include 'tenant/partials/_messages.html' %}
+        {% endif %}
+    {% endblock %}
+    
+    <main class="{% block main_class %}{% endblock %}">
+        {% block content %}{% endblock %}
+    </main>
+    
+    {% block footer %}
+        {% if not hide_footer %}
+            {% include 'tenant/partials/_footer.html' %}
+        {% endif %}
+    {% endblock %}
+    
+    <!-- ⚠️ v3.3: jQuery y DataTables JS ELIMINADOS - Migrado completamente a Tabulator -->
+    <!-- jQuery ya no es necesario - Tabulator usa Vanilla JS -->
+    
+    <!-- Bootstrap 5 Bundle JS (requerido para modales y componentes interactivos) -->
+    <!-- ⚠️ NOTA: integrity removido temporalmente debido a problemas de validación SRI con CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous" onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js';"></script>
+    
+    <!-- Tabulator JS -->
+    <!-- ⚠️ v2.60: Tabulator debe cargarse ANTES de tabulator.factory.js -->
+    <!-- ⚠️ RESILIENCIA: Fallback automático a jsDelivr si unpkg falla -->
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.5/dist/js/tabulator.min.js" onerror="this.onerror=null; console.warn('[Tabulator] Fallback: Intentando cargar desde jsDelivr...'); this.src='https://cdn.jsdelivr.net/npm/tabulator-tables@6.2.5/dist/js/tabulator.min.js';"></script>
+    <script>
+      // ⚠️ v2.60: Verificar que Tabulator se cargó correctamente con retry
+      (function() {
+        function checkTabulator(retries = 0) {
+          if (typeof Tabulator !== 'undefined') {
+            console.log('[Tabulator] ✅ Tabulator cargado correctamente');
+            return;
+          }
+          
+          if (retries < 3) {
+            // Intentar cargar desde CDN alternativo
+            console.warn(`[Tabulator] ⚠️ Tabulator no disponible. Reintento ${retries + 1}/3...`);
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/tabulator-tables@6.2.5/dist/js/tabulator.min.js';
+            script.onload = function() {
+              console.log('[Tabulator] ✅ Tabulator cargado desde jsDelivr (fallback)');
+            };
+            script.onerror = function() {
+              if (retries < 2) {
+                setTimeout(() => checkTabulator(retries + 1), 1000);
+              } else {
+                console.error('[Tabulator] ❌ CRÍTICO: No se pudo cargar Tabulator desde ningún CDN. El sistema no funcionará correctamente.');
+                console.error('[Tabulator] 💡 SOLUCIÓN: Implementa recursos locales en apps/tenant/core/static/core/vendor/');
+              }
+            };
+            document.head.appendChild(script);
+          } else {
+            console.error('[Tabulator] ❌ CRÍTICO: Tabulator no disponible después de múltiples intentos.');
+          }
+        }
+        
+        // Verificar después de que el DOM esté listo
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', () => setTimeout(checkTabulator, 100));
+        } else {
+          setTimeout(checkTabulator, 100);
+        }
+      })();
+    </script>
+    <!-- JWT helper: proporciona window.jwtAuth para inyección Authorization -->
+    <script src="{% static 'js/jwt-auth.js' %}"></script>
+    
+    <!-- Hook de scripts por-página -->
+    {% block page_assets_body %}{% endblock page_assets_body %}
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -6,7 +6,8 @@ Uso:
     python manage.py tenant_command audit_empresa_nit --schema=tenant1
 """
 from django.core.management.base import BaseCommand
-from django_tenants.utils import schema_context, get_tenant_model
+from django_tenants.utils import get_tenant_model, schema_context
+
 from apps.tenant.empresa.models import Empresa
 
 
@@ -55,15 +56,15 @@ class Command(BaseCommand):
         # Resumen
         self.stdout.write("\n" + "="*60)
         self.stdout.write(f"Total tenants: {len(schemas)}")
-        self.stdout.write(f"  ✅ OK: {total_ok}")
-        self.stdout.write(f"  ❌ Sin Empresa: {total_sin_empresa}")
-        self.stdout.write(f"  ⚠️  Sin NIT: {total_sin_nit}")
+        self.stdout.write(f"  [OK] OK: {total_ok}")
+        self.stdout.write(f"  [ERROR] Sin Empresa: {total_sin_empresa}")
+        self.stdout.write(f"  # WARNING:  Sin NIT: {total_sin_nit}")
         
         if total_sin_empresa > 0 or total_sin_nit > 0:
             self.stdout.write(
-                self.style.WARNING("\n⚠️  Hay tenants sin Empresa o sin NIT. Configure antes de importar facturas.")
+                self.style.WARNING("\n# WARNING:  Hay tenants sin Empresa o sin NIT. Configure antes de importar facturas.")
             )
         else:
             self.stdout.write(
-                self.style.SUCCESS("\n✅ Todos los tenants tienen Empresa con NIT configurado.")
+                self.style.SUCCESS("\n[OK] Todos los tenants tienen Empresa con NIT configurado.")
             )

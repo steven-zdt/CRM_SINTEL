@@ -4,6 +4,7 @@ Servicios de negocio para empleados.
 Service Layer: lógica de negocio sin presentación.
 """
 from django.db import transaction
+
 from ..models import Empleado
 
 

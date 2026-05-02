@@ -1,15 +1,16 @@
 """
 Comando de corrección: Corrige naturaleza para todas las facturas recalculando contra Empresa.nit.
 
-⚠️ ADVERTENCIA: Este comando modifica datos en producción. Ejecutar con precaución.
+# WARNING: ADVERTENCIA: Este comando modifica datos en producción. Ejecutar con precaución.
 
 Uso:
     python manage.py all_tenants_command fix_naturaleza_inconsistent
     python manage.py tenant_command fix_naturaleza_inconsistent --schema=tenant1
 """
 from django.core.management.base import BaseCommand
-from django_tenants.utils import schema_context, get_tenant_model
 from django.db import transaction
+from django_tenants.utils import get_tenant_model, schema_context
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 from apps.tenant.facturas.services import _determinar_naturaleza
@@ -36,7 +37,7 @@ class Command(BaseCommand):
         
         if dry_run:
             self.stdout.write(
-                self.style.WARNING("⚠️  MODO DRY-RUN: No se realizarán cambios")
+                self.style.WARNING("# WARNING:  MODO DRY-RUN: No se realizarán cambios")
             )
         
         if schema_name:
@@ -96,15 +97,16 @@ class Command(BaseCommand):
         if total_fixed > 0:
             if dry_run:
                 self.stdout.write(
-                    self.style.WARNING(f"\n⚠️  Total de facturas a corregir: {total_fixed}")
-                    self.stdout.write(
-                        self.style.WARNING("Ejecuta sin --dry-run para aplicar cambios")
-                    )
+                    self.style.WARNING(f"\n# WARNING:  Total de facturas a corregir: {total_fixed}")
+                )
+                self.stdout.write(
+                    self.style.WARNING("Ejecuta sin --dry-run para aplicar cambios")
+                )
             else:
                 self.stdout.write(
-                    self.style.SUCCESS(f"\n✅ Total de facturas corregidas: {total_fixed}")
+                    self.style.SUCCESS(f"\n[OK] Total de facturas corregidas: {total_fixed}")
                 )
         else:
             self.stdout.write(
-                self.style.SUCCESS(f"\n✅ Todas las facturas están correctas (0 correcciones)")
+                self.style.SUCCESS("\n[OK] Todas las facturas están correctas (0 correcciones)")
             )

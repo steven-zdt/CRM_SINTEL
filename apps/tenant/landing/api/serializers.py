@@ -4,8 +4,6 @@ from django.conf import settings
 from django_tenants.utils import get_public_schema_name
 from rest_framework import serializers
 
-from apps.public.tenants.models import TenantMembership
-
 
 User = get_user_model()
 
@@ -30,16 +28,8 @@ class TenantPublicInfoSerializer(serializers.Serializer):
         """
         Devuelve el dominio principal registrado para este tenant (en esquema public).
         """
-        from django_tenants.utils import schema_context
-        from apps.public.tenants.models import Domain
-
-        current_schema = connection.schema_name
-        try:
-            with schema_context(get_public_schema_name()):
-                domain = Domain.objects.filter(tenant=obj, is_primary=True).first()
-                return domain.domain if domain else None
-        except Exception:
-            return None
+        from apps.tenant.core.services.membership import get_primary_domain
+        return get_primary_domain(obj)
     
     def get_branding(self, obj):
         """
@@ -131,18 +121,9 @@ class TenantLoginSerializer(serializers.Serializer):
                 'non_field_errors': ['No se pudo determinar el tenant actual.']
             })
 
-        # Verificar membresía (en esquema public)
-        current_schema = connection.schema_name
-        try:
-            connection.set_schema_to_public()
-            membership = TenantMembership.objects.filter(
-                client=tenant,
-                user=user,
-                is_active=True,
-            ).first()
-        finally:
-            connection.set_schema(current_schema)
-
+        # Verificar membresia via Core Membership Bridge (REGLA 2)
+        from apps.tenant.core.services.membership import check_membership
+        membership = check_membership(user, tenant)
         if not membership:
             # Log de intento de acceso sin membresía
             import logging
@@ -292,8 +273,8 @@ class OwnerActivationSerializer(serializers.Serializer):
             raise serializers.ValidationError("Request o token no proporcionado en el contexto.")
         
         # 3. Validar token
-        from apps.public.tenants.services.invitations import verify_invitation_token
-        payload = verify_invitation_token(token)
+        from apps.tenant.core.services.membership import verify_invitation
+        payload = verify_invitation(token)
         
         if not payload:
             raise serializers.ValidationError("Token de activación inválido o expirado.")
@@ -309,20 +290,10 @@ class OwnerActivationSerializer(serializers.Serializer):
         if not tenant or tenant.id != payload['tenant_id']:
             raise serializers.ValidationError("El token no corresponde al tenant actual.")
         
-        # 6. Validar membresía activa
-        from django.db import connection
-        from apps.public.tenants.models import TenantMembership
-        
-        current_schema = connection.schema_name
-        try:
-            connection.set_schema_to_public()
-            membership = TenantMembership.objects.filter(
-                client=tenant,
-                user=user,
-                is_active=True,
-            ).first()
-        finally:
-            connection.set_schema(current_schema)
+        # 6. Validar membresia activa via Core Membership Bridge (REGLA 2)
+        from apps.tenant.core.services.membership import check_membership
+
+        membership = check_membership(user, tenant)
         
         if not membership:
             raise serializers.ValidationError("No tienes acceso a este tenant.")

@@ -1,10 +1,11 @@
 """
 Templatetags para branding del tenant.
 
-⚠️ POLÍTICA: Todo branding viene de la base de datos.
+# WARNING: POLÍTICA: Todo branding viene de la base de datos.
 No se permiten hardcodes de marca en templates.
 """
 from django import template
+
 from apps.tenant.core.branding import get_tenant_branding
 
 register = template.Library()
@@ -19,7 +20,7 @@ def tenant_branding_header(context):
         {% load tenant_branding %}
         {% tenant_branding_header %}
     
-    ⚠️ POLÍTICA: El branding viene de la BD (Empresa o tenant).
+    # WARNING: POLÍTICA: El branding viene de la BD (Empresa o tenant).
     No se permiten hardcodes de marca.
     
     Args:

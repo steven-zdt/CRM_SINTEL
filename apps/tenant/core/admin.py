@@ -4,12 +4,12 @@ Admin Site aislado para Tenants Privados.
 Este módulo crea un Admin Site personalizado que SOLO muestra modelos
 pertenecientes a TENANT_APPS, eliminando cualquier rastro de la administración pública.
 
-⚠️ IMPORTANTE: Este admin site es completamente independiente del admin global.
+# WARNING: IMPORTANTE: Este admin site es completamente independiente del admin global.
 Los modelos del esquema público (Client, Domain, etc.) NO aparecerán aquí.
 """
-from django.contrib import admin
 from django.apps import apps
 from django.conf import settings
+from django.contrib import admin
 
 
 class TenantAdminSite(admin.AdminSite):
@@ -27,19 +27,19 @@ class TenantAdminSite(admin.AdminSite):
         """
         Validación extra: Solo usuarios activos y staff pueden acceder.
         
-        ⚠️ IMPORTANTE: Esta validación es adicional a la verificación de membresía
+        # WARNING: IMPORTANTE: Esta validación es adicional a la verificación de membresía
         que se hace en el middleware o en las vistas del dashboard.
         """
         return request.user.is_active and request.user.is_staff
     
     def index(self, request, extra_context=None):
         """
-        ⚠️ v3.3: Sobrescribir index para manejar ProgrammingError cuando se intenta
+        # WARNING: v3.3: Sobrescribir index para manejar ProgrammingError cuando se intenta
         contar objetos de modelos de tenant en el esquema público.
         """
-        from django.db.utils import ProgrammingError, OperationalError
-        from django_tenants.utils import get_public_schema_name
         from django.db import connection
+        from django.db.utils import OperationalError, ProgrammingError
+        from django_tenants.utils import get_public_schema_name
         
         try:
             return super().index(request, extra_context)
@@ -117,7 +117,7 @@ def register_tenant_apps():
     Copia los modelos registrados en el admin global (admin.site)
     hacia tenant_admin_site, PERO SOLO si pertenecen a una app de TENANT_APPS.
     
-    ⚠️ IMPORTANTE: Esta función se ejecuta al importar este módulo.
+    # WARNING: IMPORTANTE: Esta función se ejecuta al importar este módulo.
     Filtra automáticamente los modelos del esquema público (Client, Domain, etc.)
     y solo registra modelos de apps de tenant (Empresa, Factura, AsientoContable, etc.).
     """
@@ -186,7 +186,7 @@ def ensure_tenant_apps_registered():
 
 
 # Ejecutar el filtrado al importar este módulo
-# ⚠️ IMPORTANTE: Esto se ejecuta cuando Django carga este módulo.
+# # WARNING: IMPORTANTE: Esto se ejecuta cuando Django carga este módulo.
 # Si algunos modelos aún no están registrados en admin.site, se registrarán
 # cuando se importen sus respectivos admin.py.
 # 
@@ -197,7 +197,7 @@ ensure_tenant_apps_registered()
 
 def _is_tenant_model(model):
     """
-    ⚠️ v3.3: Helper para verificar si un modelo pertenece a TENANT_APPS.
+    # WARNING: v3.3: Helper para verificar si un modelo pertenece a TENANT_APPS.
     
     Esta función es crítica para el monkey patch: solo filtra modelos de tenant,
     NO silencia errores legítimos en tablas que sí deberían estar en el esquema público.
@@ -207,20 +207,20 @@ def _is_tenant_model(model):
     return app_label in tenant_app_labels
 
 
-# ⚠️ v3.3: Monkey patch para el AdminSite global
+# # WARNING: v3.3: Monkey patch para el AdminSite global
 # Esto previene ProgrammingError cuando se intenta contar objetos de modelos de tenant
 # en el esquema público, PERO solo filtra modelos de TENANT_APPS para no silenciar errores legítimos
 def _safe_index(self, request, extra_context=None):
     """
-    ⚠️ v3.3: Versión segura de index() que captura ProgrammingError
+    # WARNING: v3.3: Versión segura de index() que captura ProgrammingError
     cuando se intenta contar objetos de modelos de tenant en el esquema público.
     
     SEGURIDAD: Solo filtra modelos de TENANT_APPS. No silencia errores legítimos
     en tablas que sí deberían estar en el esquema público (como Client/Tenant).
     """
-    from django.db.utils import ProgrammingError, OperationalError
-    from django_tenants.utils import get_public_schema_name
     from django.db import connection
+    from django.db.utils import OperationalError, ProgrammingError
+    from django_tenants.utils import get_public_schema_name
     
     try:
         # Intentar ejecutar el método original
@@ -238,7 +238,7 @@ def _safe_index(self, request, extra_context=None):
                 context = self.each_context(request)
                 context.update(extra_context or {})
                 
-                # ⚠️ CRÍTICO: Filtrar SOLO modelos de TENANT_APPS
+                # # WARNING: CRÍTICO: Filtrar SOLO modelos de TENANT_APPS
                 # Esto previene silenciar errores legítimos en tablas públicas (Client, Domain, etc.)
                 app_list = []
                 tenant_app_labels = {app.split('.')[-1] for app in settings.TENANT_APPS}
@@ -252,7 +252,7 @@ def _safe_index(self, request, extra_context=None):
                             if model in self._registry:
                                 model_admin = self._registry[model]
                                 
-                                # ⚠️ VALIDACIÓN ADICIONAL: Verificar que NO es un modelo de tenant
+                                # # WARNING: VALIDACIÓN ADICIONAL: Verificar que NO es un modelo de tenant
                                 # Esto es una doble verificación de seguridad
                                 if _is_tenant_model(model):
                                     # Si es un modelo de tenant, omitirlo (no debería estar aquí)
@@ -263,7 +263,7 @@ def _safe_index(self, request, extra_context=None):
                                         # Intentar obtener el conteo de forma segura
                                         count = model_admin.get_queryset(request).count()
                                     except (ProgrammingError, OperationalError) as inner_e:
-                                        # ⚠️ Si falla, verificar si es un modelo de tenant
+                                        # # WARNING: Si falla, verificar si es un modelo de tenant
                                         # Si NO es de tenant, re-lanzar el error (no silenciar errores legítimos)
                                         if _is_tenant_model(model):
                                             # Es un modelo de tenant, omitirlo
@@ -304,7 +304,7 @@ def _safe_index(self, request, extra_context=None):
         # Si no es el esquema público, re-lanzar el error (no silenciar errores legítimos)
         raise
 
-# ⚠️ v3.3: Aplicar el monkey patch solo si no se ha aplicado ya
+# # WARNING: v3.3: Aplicar el monkey patch solo si no se ha aplicado ya
 if not hasattr(admin.site, '_safe_index_applied'):
     admin.site.index = _safe_index.__get__(admin.site, admin.AdminSite)
     admin.site._safe_index_applied = True

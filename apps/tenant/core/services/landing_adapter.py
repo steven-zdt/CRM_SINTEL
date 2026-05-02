@@ -1,29 +1,30 @@
 """
 Adaptador Core para servicios de Landing (v2.30).
 
-⚠️ POLÍTICA v2.30:
+# WARNING: POLÍTICA v2.30:
 - Core orquesta servicios de Landing para exponer UI única
 - Consume apps/tenant/landing/services/* directamente
 - Mantiene separación de responsabilidades: Landing = dominio, Core = orquestación/UI
 """
 import logging
-from typing import Dict, Any
+from typing import Any
+
 from django.http import HttpRequest
 
-from apps.tenant.landing.services.landing_info_service import get_public_info
 from apps.tenant.landing.services.activation_service import (
-    verify_activation_token,
-    process_activation,
-    InvalidTokenError,
-    UserNotFoundError,
-    TenantMismatchError,
     AlreadyActivatedError,
+    InvalidTokenError,
+    TenantMismatchError,
+    UserNotFoundError,
+    process_activation,
+    verify_activation_token,
 )
+from apps.tenant.landing.services.landing_info_service import get_public_info
 
 logger = logging.getLogger(__name__)
 
 
-def get_public_info_from_landing(request: HttpRequest) -> Dict[str, Any]:
+def get_public_info_from_landing(request: HttpRequest) -> dict[str, Any]:
     """
     Obtiene información pública del tenant desde Landing service.
     
@@ -53,7 +54,7 @@ def get_public_info_from_landing(request: HttpRequest) -> Dict[str, Any]:
         raise ValueError("Error interno al obtener información del tenant.")
 
 
-def verify_activation_via_landing(request: HttpRequest, token: str) -> Dict[str, Any]:
+def verify_activation_via_landing(request: HttpRequest, token: str) -> dict[str, Any]:
     """
     Verifica token de activación desde Landing service.
     
@@ -87,7 +88,7 @@ def verify_activation_via_landing(request: HttpRequest, token: str) -> Dict[str,
         raise InvalidTokenError("Error interno al validar el token de activación.")
 
 
-def process_activation_via_landing(request: HttpRequest, token: str, password1: str, password2: str) -> Dict[str, Any]:
+def process_activation_via_landing(request: HttpRequest, token: str, password1: str, password2: str) -> dict[str, Any]:
     """
     Procesa activación desde Landing service.
     

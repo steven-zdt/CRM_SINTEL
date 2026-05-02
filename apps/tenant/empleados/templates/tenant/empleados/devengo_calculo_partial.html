@@ -1,0 +1,55 @@
+{# devengo_calculo_partial.html - Partial HTMX para actualización en tiempo real v2.61 #}
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <label class="form-label text-muted small">Salario Base (Proporcional)</label>
+    <div class="input-group">
+      <span class="input-group-text">$</span>
+      <input type="text" class="form-control bg-light" value="{{ calculo.salario_base|floatformat:2 }}" readonly>
+      <input type="hidden" name="salario_base" value="{{ calculo.salario_base }}">
+    </div>
+  </div>
+  <div class="col-md-6">
+    <label class="form-label text-muted small">Auxilio Transporte (Proporcional)</label>
+    <div class="input-group">
+      <span class="input-group-text">$</span>
+      <input type="text" class="form-control bg-light" value="{{ calculo.auxilio_transporte|floatformat:2 }}" readonly>
+      <input type="hidden" name="auxilio_transporte" value="{{ calculo.auxilio_transporte }}">
+    </div>
+  </div>
+  
+  <div class="col-md-6">
+    <label class="form-label text-muted small">Salud (4%)</label>
+    <div class="input-group">
+      <span class="input-group-text">$</span>
+      <input type="text" class="form-control bg-light" value="{{ calculo.salud_empleado|floatformat:2 }}" readonly>
+      <input type="hidden" name="salud_empleado" value="{{ calculo.salud_empleado }}">
+    </div>
+  </div>
+  <div class="col-md-6">
+    <label class="form-label text-muted small">Pensión (4%)</label>
+    <div class="input-group">
+      <span class="input-group-text">$</span>
+      <input type="text" class="form-control bg-light" value="{{ calculo.pension_empleado|floatformat:2 }}" readonly>
+      <input type="hidden" name="pension_empleado" value="{{ calculo.pension_empleado }}">
+    </div>
+  </div>
+  
+  <div class="col-md-12">
+    <label class="form-label fw-bold text-primary">Neto a Pagar</label>
+    <div class="input-group input-group-lg">
+      <span class="input-group-text bg-primary text-white border-primary">$</span>
+      <input type="text" class="form-control border-primary fw-bold text-primary bg-light" 
+             id="devengo-neto_pagar-display" 
+             value="{{ calculo.neto_pagar|floatformat:2 }}" readonly>
+      <input type="hidden" name="neto_pagar" value="{{ calculo.neto_pagar }}">
+    </div>
+  </div>
+</div>
+
+{% if calculo.neto_pagar < 0 %}
+<div class="alert alert-danger">
+  <i class="bi bi-exclamation-triangle-fill me-2"></i>
+  <strong>¡Atención!</strong> El neto a pagar es negativo. Revise los descuentos y préstamos.
+</div>
+{% endif %}

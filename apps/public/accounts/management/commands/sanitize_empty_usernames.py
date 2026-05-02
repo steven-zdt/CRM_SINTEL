@@ -7,9 +7,10 @@ generando un username único a partir del email para evitar violaciones de unici
 Uso:
     python manage.py sanitize_empty_usernames
 """
+
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.contrib.auth import get_user_model
 from django.utils.text import slugify
 
 User = get_user_model()
@@ -35,52 +36,54 @@ def _generate_unique_username(base: str) -> str:
 
 
 class Command(BaseCommand):
-    help = 'Sanear usuarios con username=\'\' (cadena vacía) generando username único desde email'
+    help = "Sanear usuarios con username='' (cadena vacía) generando username único desde email"
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--dry-run',
-            action='store_true',
-            help='Mostrar qué usuarios se corregirían sin hacer cambios',
+            "--dry-run",
+            action="store_true",
+            help="Mostrar qué usuarios se corregirían sin hacer cambios",
         )
 
     def handle(self, *args, **options):
-        dry_run = options['dry_run']
-        
+        dry_run = options["dry_run"]
+
         # Buscar usuarios con username='' o None
-        users_to_fix = User.objects.filter(username__in=['', None]) | User.objects.filter(username='')
-        
-        count = users_to_fix.count()
-        
-        if count == 0:
-            self.stdout.write(self.style.SUCCESS('✅ No hay usuarios con username vacío. Todo está correcto.'))
-            return
-        
-        self.stdout.write(
-            self.style.WARNING(
-                f'⚠️  Encontrados {count} usuario(s) con username vacío.'
-            )
+        users_to_fix = User.objects.filter(username__in=["", None]) | User.objects.filter(
+            username=""
         )
-        
+
+        count = users_to_fix.count()
+
+        if count == 0:
+            self.stdout.write(
+                self.style.SUCCESS("OK: No hay usuarios con username vacío. Todo está correcto.")
+            )
+            return
+
+        self.stdout.write(
+            self.style.WARNING(f"WARNING:  Encontrados {count} usuario(s) con username vacío.")
+        )
+
         if dry_run:
-            self.stdout.write(self.style.WARNING('🔍 DRY-RUN: No se realizarán cambios.'))
-        
+            self.stdout.write(self.style.WARNING("🔍 DRY-RUN: No se realizarán cambios."))
+
         fixed_count = 0
         errors = []
-        
+
         with transaction.atomic():
             for user in users_to_fix:
                 email = user.email or ""
                 local = email.split("@")[0] if email else "user"
-                
+
                 if not local or local.strip() == "":
                     local = "user"
-                
+
                 new_username = _generate_unique_username(local)
-                
+
                 if dry_run:
                     self.stdout.write(
-                        f'  - Usuario ID {user.id} ({email}): username=\'{user.username}\' → \'{new_username}\''
+                        f"  - Usuario ID {user.id} ({email}): username='{user.username}' → '{new_username}'"
                     )
                 else:
                     try:
@@ -89,33 +92,31 @@ class Command(BaseCommand):
                         fixed_count += 1
                         self.stdout.write(
                             self.style.SUCCESS(
-                                f'  ✅ Usuario ID {user.id} ({email}): username corregido a \'{new_username}\''
+                                f"  OK: Usuario ID {user.id} ({email}): username corregido a '{new_username}'"
                             )
                         )
                     except Exception as e:
-                        error_msg = f'  ❌ Error corrigiendo usuario ID {user.id} ({email}): {str(e)}'
+                        error_msg = (
+                            f"  ERROR: Error corrigiendo usuario ID {user.id} ({email}): {str(e)}"
+                        )
                         errors.append(error_msg)
                         self.stdout.write(self.style.ERROR(error_msg))
-        
+
         if not dry_run:
             if fixed_count > 0:
                 self.stdout.write(
-                    self.style.SUCCESS(
-                        f'\n✅ {fixed_count} usuario(s) corregido(s) exitosamente.'
-                    )
+                    self.style.SUCCESS(f"\nOK: {fixed_count} usuario(s) corregido(s) exitosamente.")
                 )
-            
+
             if errors:
                 self.stdout.write(
-                    self.style.ERROR(
-                        f'\n❌ {len(errors)} error(es) al corregir usuarios:'
-                    )
+                    self.style.ERROR(f"\nERROR: {len(errors)} error(es) al corregir usuarios:")
                 )
                 for error in errors:
-                    self.stdout.write(self.style.ERROR(f'  {error}'))
+                    self.stdout.write(self.style.ERROR(f"  {error}"))
         else:
             self.stdout.write(
                 self.style.WARNING(
-                    f'\n🔍 DRY-RUN: Se corregirían {count} usuario(s). Ejecuta sin --dry-run para aplicar cambios.'
+                    f"\n🔍 DRY-RUN: Se corregirían {count} usuario(s). Ejecuta sin --dry-run para aplicar cambios."
                 )
             )

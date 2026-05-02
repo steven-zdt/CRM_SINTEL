@@ -1,0 +1,154 @@
+{# gastos_list.html - Gastos Module v3.5 (Feature-Sliced) #}
+{# Zero JS in HTML - All logic in gasto_list.js #}
+
+<div class="card shadow-sm" data-module="gastos">
+  <div class="card-header bg-white">
+    <ul class="nav nav-tabs card-header-tabs" id="gastos-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab-gastos" data-bs-toggle="tab" data-bs-target="#tab-pane-gastos" 
+                type="button" role="tab" aria-controls="tab-pane-gastos" aria-selected="true">
+          <i class="bi bi-receipt me-2"></i>Gastos
+          <span data-module="gastos" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-resoluciones" data-bs-toggle="tab" data-bs-target="#tab-pane-resoluciones" 
+                type="button" role="tab" aria-controls="tab-pane-resoluciones" aria-selected="false">
+          <i class="bi bi-file-text me-2"></i>Resoluciones DIAN
+          <span data-module="resoluciones" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card-body">
+    <div class="tab-content" id="gastos-tab-content">
+      
+      {# TAB 1: GASTOS #}
+      <div class="tab-pane fade show active" id="tab-pane-gastos" role="tabpanel" 
+           aria-labelledby="tab-gastos" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="gastos">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-gasto" 
+                   class="form-control" 
+                   placeholder="Buscar gasto..."
+                   data-module="gastos"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="gastos" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/ui/gastos/gestor-offcanvas/?tipo=gasto" 
+                  hx-target="#offcanvas-container-gastos" 
+                  hx-swap="innerHTML"
+                  data-module="gastos"
+                  data-create-button>
+            <i class="bi bi-plus-lg me-1"></i>Nuevo Gasto
+          </button>
+        </div>
+        
+        {# Resumen de Gastos #}
+        <div id="gastos-summary" class="mb-3"></div>
+        
+        {# Spinner #}
+        <div data-spinner="gastos" class="text-center py-5" style="display: none;">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando tabla de gastos...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-gastos" data-grid="gastos" style="display: none;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="gastos" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay gastos registrados
+          </p>
+        </div>
+      </div>
+
+      {# TAB 2: RESOLUCIONES DIAN #}
+      <div class="tab-pane fade" id="tab-pane-resoluciones" role="tabpanel" 
+           aria-labelledby="tab-resoluciones" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="resoluciones">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-resolucion" 
+                   class="form-control" 
+                   placeholder="Buscar resolucion..."
+                   data-module="resoluciones"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="resoluciones" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/ui/gastos/gestor-offcanvas/?tipo=resolucion" 
+                  hx-target="#offcanvas-container-gastos" 
+                  hx-swap="innerHTML"
+                  data-module="resoluciones"
+                  data-create-button>
+            <i class="bi bi-plus-lg me-1"></i>Nueva Resolucion
+          </button>
+        </div>
+        
+        {# Spinner #}
+        <div data-spinner="resoluciones" class="text-center py-5" style="display: none;">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando tabla de resoluciones...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-resoluciones" data-grid="resoluciones" style="display: none;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="resoluciones" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay resoluciones registradas
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Offcanvas Container #}
+<div id="offcanvas-container-gastos"></div>
+
+{# Modal de Confirmacion Eliminar #}
+<div class="modal fade" id="confirmarEliminarModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirmar Eliminacion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Esta seguro de que desea eliminar este registro?</p>
+        <p class="text-danger"><strong>Esta accion no se puede deshacer.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include 'tenant/gastos/assets_gastos.html' %}

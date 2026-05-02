@@ -7,12 +7,12 @@ Este servicio maneja la comunicación con los servicios web de la DIAN para:
 - Envío de documentos electrónicos
 - Consulta de información tributaria
 
-⚠️ IMPORTANTE: Usa schema_context para operaciones específicas de tenant.
+WARNING: IMPORTANTE: Usa schema_context para operaciones específicas de tenant.
 """
+from typing import Any
+
 import requests
-from typing import Dict, Any, Optional
 from django.conf import settings
-from django_tenants.utils import schema_context
 
 
 class DIANService:
@@ -22,8 +22,8 @@ class DIANService:
     
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         ambiente: str = 'pruebas'  # 'pruebas' o 'produccion'
     ):
         """
@@ -52,12 +52,12 @@ class DIANService:
     def validar_factura_electronica(
         self,
         xml_content: bytes,
-        schema_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+        schema_name: str | None = None
+    ) -> dict[str, Any]:
         """
         Valida una factura electrónica con la DIAN.
         
-        ⚠️ IMPORTANTE: Si se proporciona schema_name, usa schema_context.
+        WARNING: IMPORTANTE: Si se proporciona schema_name, usa schema_context.
         
         Args:
             xml_content: Contenido XML de la factura
@@ -101,8 +101,8 @@ class DIANService:
     def consultar_estado_documento(
         self,
         cufe: str,
-        schema_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+        schema_name: str | None = None
+    ) -> dict[str, Any]:
         """
         Consulta el estado de un documento electrónico en la DIAN.
         
@@ -145,8 +145,8 @@ class DIANService:
     def enviar_factura_electronica(
         self,
         xml_content: bytes,
-        schema_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+        schema_name: str | None = None
+    ) -> dict[str, Any]:
         """
         Envía una factura electrónica a la DIAN.
         
@@ -189,7 +189,7 @@ class DIANService:
         return resultado
 
 
-def obtener_servicio_dian(schema_name: Optional[str] = None) -> DIANService:
+def obtener_servicio_dian(schema_name: str | None = None) -> DIANService:
     """
     Obtiene una instancia del servicio DIAN.
     

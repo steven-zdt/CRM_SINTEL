@@ -1,0 +1,33 @@
+{% load static %}
+{# assets_proyectos.html - Assets del módulo Proyectos v2.60 #}
+{# ⚠️ v2.60: Migrado a Feature-Sliced Architecture + HTMX + Offcanvas #}
+{# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
+{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http.js, ui-manager.js, etc.) - ya cargado en workspace.html #}
+{# 2. proyectos.api.js (define window.proyectosAPI) - REQUERIDO #}
+{# 3. proyectos_list.js (Feature: Listado y Tabulator) - REQUERIDO #}
+{# 4. proyectos_editor.js (Feature: Editor y Offcanvas) - REQUERIDO #}
+
+{# BLOQUE 1: API Wrapper (REQUERIDO) #}
+<script src="{% static 'proyectos/js/proyectos.api.js' %}"></script>
+
+{# BLOQUE 2: Features Feature-Sliced (REQUERIDO) #}
+<script src="{% static 'proyectos/js/features/proyectos_list.js' %}"></script>
+<script src="{% static 'proyectos/js/features/proyectos_editor.js' %}"></script>
+
+{# ⚠️ HTMX: Reinicializar listeners cuando se carga el Offcanvas vía HTMX #}
+<script>
+    if (typeof htmx !== 'undefined') {
+        document.addEventListener('htmx:afterSwap', function(event) {
+            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
+            // Los eventos htmx:afterSwap ya garantizan que el DOM está actualizado
+            if (event.detail.target.id === 'offcanvas-container-proyectos') {
+                requestAnimationFrame(() => {
+                    const offcanvasEl = document.getElementById('offcanvas-container-proyectos');
+                    if (offcanvasEl && window.ProyectosEditorModule && typeof window.ProyectosEditorModule.init === 'function') {
+                        window.ProyectosEditorModule.init();
+                    }
+                });
+            }
+        });
+    }
+</script>

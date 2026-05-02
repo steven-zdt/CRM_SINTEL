@@ -1,16 +1,16 @@
 """
 Tests para flujo async completo: upload → status → materialize (Fase 2).
 
-⚠️ TENANT-AWARE: Usa TenantTestCase para garantizar aislamiento por esquema.
-⚠️ CELERY: Requiere CELERY_TASK_ALWAYS_EAGER=True en tests para ejecución síncrona.
+# WARNING: TENANT-AWARE: Usa TenantTestCase para garantizar aislamiento por esquema.
+# WARNING: CELERY: Requiere CELERY_TASK_ALWAYS_EAGER=True en tests para ejecución síncrona.
 """
-import base64
-from django_tenants.test.cases import TenantTestCase
-from django.urls import reverse
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
+from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos
-from django.core.files.uploadedfile import SimpleUploadedFile
 
 # XML mínimo válido para tests
 UBL_MIN = b"""<?xml version="1.0"?>
@@ -56,7 +56,13 @@ class UploadAsyncFlowTests(TenantTestCase):
     
     def setUp(self):
         super().setUp()
-        Empresa.objects.create(razon_social="SINTEL", nit="901123299")
+        Empresa.objects.create(
+            razon_social="SINTEL",
+            nit="901123299",
+            dv="1",
+            direccion="Calle 123",
+            telefono="3001234567",
+        )
         
         # En tests, forzar tareas en modo eager si está disponible
         # (permite ejecución síncrona sin necesidad de worker Celery)

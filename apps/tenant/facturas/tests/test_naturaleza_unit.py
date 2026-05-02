@@ -1,11 +1,12 @@
 """
 Tests unitarios para normalización de NIT y determinación de naturaleza.
 
-⚠️ UNIT TESTS: No requieren base de datos ni tenant.
+# WARNING: UNIT TESTS: No requieren base de datos ni tenant.
 """
 from django.test import SimpleTestCase
-from apps.tenant.facturas.services import _norm_nit, _determinar_naturaleza
+
 from apps.tenant.facturas.models import Factura
+from apps.tenant.facturas.services import _determinar_naturaleza, _norm_nit
 
 
 class TestNormNit(SimpleTestCase):

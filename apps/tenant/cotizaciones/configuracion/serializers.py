@@ -1,11 +1,12 @@
 """
 Serializers para Configuración de Cotizaciones v2.60 - SIMPLIFICADO (User-Driven).
 
-⚠️ v2.60: Serializers simplificados para modo User-Driven.
+# WARNING: v2.60: Serializers simplificados para modo User-Driven.
 Solo exponen: generación de códigos y días de validez.
 """
-from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
+from rest_framework import serializers
+
 from .models import ConfiguracionCotizacion
 
 
@@ -13,7 +14,7 @@ class ConfiguracionCotizacionListSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para listado Tabulator v2.60.
     
-    ⚠️ v2.60: Mínima exposición para alto rendimiento en grillas remotas.
+    # WARNING: v2.60: Mínima exposición para alto rendimiento en grillas remotas.
     Solo campos esenciales: nombre, días de validez, estado, empresa.
     """
     empresa_nombre = serializers.CharField(source='empresa.razon_social', read_only=True)
@@ -39,7 +40,7 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
     """
     Serializer completo para detalle de perfil de configuración v2.60 - SIMPLIFICADO.
     
-    ⚠️ v2.60: CRUD completo de perfiles de configuración.
+    # WARNING: v2.60: CRUD completo de perfiles de configuración.
     Solo incluye: generación de códigos y días de validez.
     """
     empresa_nombre = serializers.CharField(source='empresa.razon_social', read_only=True)
@@ -52,7 +53,7 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
             'nombre_configuracion',
             'dias_validez',
             'es_activo', 'estado_display',
-            # ⚠️ v2.60: Gestión de Folios Dinámicos
+            # # WARNING: v2.60: Gestión de Folios Dinámicos
             'prefijo_secuencia',
             'sufijo_secuencia',
             'semilla_inicial',
@@ -66,7 +67,7 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
     
     def validate_nombre_configuracion(self, value):
         """
-        ⚠️ v2.60: Zero Trust - Sanitización de nombre de configuración.
+        # WARNING: v2.60: Zero Trust - Sanitización de nombre de configuración.
         - Eliminar espacios al inicio y final
         - Eliminar espacios múltiples
         - Validar longitud mínima y máxima
@@ -87,7 +88,7 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
     
     def validate_dias_validez(self, value):
         """
-        ⚠️ v2.60: Zero Trust - Validación de días de validez.
+        # WARNING: v2.60: Zero Trust - Validación de días de validez.
         Debe estar entre 1 y 30 días.
         """
         if value is not None:
@@ -97,16 +98,16 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """
-        ⚠️ SSoT v2.60: Validaciones del perfil de configuración simplificado.
+        # WARNING: SSoT v2.60: Validaciones del perfil de configuración simplificado.
         - Validar unicidad de nombre_configuracion por empresa
         - Validar que dias_validez esté entre 1 y 30 (ya validado en validate_dias_validez, pero por seguridad)
         - La empresa se obtiene del tenant actual (singleton), nunca del payload
         """
-        # ⚠️ SSoT: Eliminar 'empresa' del data si fue enviado por error
+        # # WARNING: SSoT: Eliminar 'empresa' del data si fue enviado por error
         data.pop('empresa', None)
         data.pop('empresa_id', None)
         
-        # ⚠️ SSoT v2.60: Obtener empresa del tenant actual (singleton)
+        # # WARNING: SSoT v2.60: Obtener empresa del tenant actual (singleton)
         # La empresa se obtiene del tenant, no del usuario
         from apps.tenant.empresa.models import Empresa
         
@@ -115,8 +116,14 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
             # Si es actualización, usar la empresa del instance
             empresa = self.instance.empresa
         else:
-            # Si es creación, obtener empresa del tenant (singleton)
-            empresa = Empresa.objects.first()
+            request = self.context.get('request')
+            if request:
+                empresa = getattr(request, 'empresa', None)
+                if not empresa:
+                    tenant = getattr(request, 'tenant', None)
+                    empresa = getattr(tenant, 'empresa', None)
+            if not empresa:
+                empresa = Empresa.objects.only('id').first()
             if not empresa:
                 raise serializers.ValidationError({
                     'detail': _('No se encontró la empresa del tenant. Por favor, configure la empresa primero.')

@@ -1,14 +1,13 @@
 """
 Autenticación personalizada para APIs de tenants.
 
-⚠️ DESARROLLO: CSRF relajado solo en DEBUG=True
+WARNING: DESARROLLO: CSRF relajado solo en DEBUG=True
 - En desarrollo, permite PATCH sin validar CSRF para facilitar testing del workspace
 - En producción, mantiene CSRF estricto (comportamiento seguro)
 
-⚠️ SEGURIDAD: Este módulo NO relaja autenticación ni permisos, solo CSRF en desarrollo.
+WARNING: SEGURIDAD: Este módulo NO relaja autenticación ni permisos, solo CSRF en desarrollo.
 """
 
-from django.conf import settings
 from rest_framework.authentication import SessionAuthentication
 
 
@@ -16,12 +15,12 @@ class UnsafeSessionAuthentication(SessionAuthentication):
     """
     Autenticación de sesión que NO valida CSRF en desarrollo.
     
-    ⚠️ SOLO PARA DESARROLLO (DEBUG=True):
+    WARNING: SOLO PARA DESARROLLO (DEBUG=True):
     - Permite PATCH/POST sin token CSRF válido
     - Facilita testing del workspace en desarrollo local
     - NO afecta producción (solo se usa cuando DEBUG=True)
     
-    ⚠️ IMPORTANTE:
+    WARNING: IMPORTANTE:
     - La autenticación de sesión sigue funcionando (usuario debe estar logueado)
     - Los permisos siguen aplicándose (IsAuthenticated, IsTenantMember, etc.)
     - Solo se omite la validación de CSRF token
@@ -41,7 +40,7 @@ class UnsafeSessionAuthentication(SessionAuthentication):
         """
         Omite la validación de CSRF en desarrollo.
         
-        ⚠️ CRÍTICO: Este método solo se ejecuta cuando DEBUG=True.
+        WARNING: CRÍTICO: Este método solo se ejecuta cuando DEBUG=True.
         En producción, esta clase NO debe usarse.
         """
         # En desarrollo, no validar CSRF

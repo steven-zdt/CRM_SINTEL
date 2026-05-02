@@ -1,19 +1,20 @@
 """
 Router de apps para document_ingest (v2.40).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Detecta qué app está consumiendo el servicio
 - Enruta a parsers específicos por app
 - Mantiene lógica separada por app
 - Extensible: nuevas apps pueden registrar sus parsers sin modificar el core
 """
-from typing import Dict, Any, Optional, Callable
 import logging
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger("apps.services.document_ingest.app_router")
 
 # Registry de parsers por app y tipo de documento
-_APP_PARSERS: Dict[str, Dict[str, Callable]] = {}
+_APP_PARSERS: dict[str, dict[str, Callable]] = {}
 
 
 def register_app_parser(app_name: str, media_type: str, parser_func: Callable) -> None:
@@ -44,7 +45,7 @@ def register_app_parser(app_name: str, media_type: str, parser_func: Callable) -
     )
 
 
-def get_app_parser(app_name: str, media_type: str) -> Optional[Callable]:
+def get_app_parser(app_name: str, media_type: str) -> Callable | None:
     """
     Obtiene el parser específico de una app para un tipo de medio.
     
@@ -58,7 +59,7 @@ def get_app_parser(app_name: str, media_type: str) -> Optional[Callable]:
     return _APP_PARSERS.get(app_name, {}).get(media_type)
 
 
-def detect_app_from_kind_hint(kind_hint: Optional[str]) -> Optional[str]:
+def detect_app_from_kind_hint(kind_hint: str | None) -> str | None:
     """
     Detecta la app consumidora desde el kind_hint.
     
@@ -68,7 +69,7 @@ def detect_app_from_kind_hint(kind_hint: Optional[str]) -> Optional[str]:
     - "gasto", "expense" → "gastos"
     - etc.
     
-    ⚠️ v2.40: Prioriza detección de cotizaciones para catálogos de productos.
+    WARNING: v2.40: Prioriza detección de cotizaciones para catálogos de productos.
     
     Args:
         kind_hint: Hint del tipo de documento
@@ -81,7 +82,7 @@ def detect_app_from_kind_hint(kind_hint: Optional[str]) -> Optional[str]:
     
     kind_lower = kind_hint.lower().strip()
     
-    # ⚠️ v2.40: Mapeo de hints a apps (prioridad: cotizaciones para catálogos)
+    # WARNING: v2.40: Mapeo de hints a apps (prioridad: cotizaciones para catálogos)
     app_mapping = {
         "inventario": "cotizaciones",
         "catalogo": "cotizaciones",
@@ -108,10 +109,10 @@ def detect_app_from_kind_hint(kind_hint: Optional[str]) -> Optional[str]:
 def route_by_app(
     file_bytes: bytes,
     media_type: str,
-    filename: Optional[str] = None,
-    kind_hint: Optional[str] = None,
-    app_name: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
+    filename: str | None = None,
+    kind_hint: str | None = None,
+    app_name: str | None = None
+) -> dict[str, Any] | None:
     """
     Enruta el parseo a un parser específico de app si existe.
     

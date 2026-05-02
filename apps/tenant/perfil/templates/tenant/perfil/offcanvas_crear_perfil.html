@@ -1,0 +1,143 @@
+{# offcanvas_crear_perfil.html - Template dedicado para creacion de perfil segun FSD #}
+{# [INFO] AGENTS.md: Arquitectura Feature-Sliced Design - Template dedicado para creacion #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-perfil-crear" aria-labelledby="offcanvas-perfil-crear-label" style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-perfil-crear-label">
+      <i class="bi bi-person-plus me-2"></i>Nuevo Usuario + Perfil
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="form-perfil-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="form-perfil-crear" method="POST" onsubmit="return false;">
+
+      {# Relacion con Empresa #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-building me-2"></i>Empresa Asociada
+        </h6>
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="perfil-empresa-select" class="form-label fw-bold text-danger">Empresa *</label>
+            {# Selector visible - DOM Shield: no tiene name para evitar envio doble #}
+            <select class="form-select" id="perfil-empresa-select" required>
+              <option value="">-- Selecciona una empresa --</option>
+              {% for empresa in empresas %}
+                <option value="{{ empresa.id }}"
+                  data-nit="{{ empresa.nit }}"
+                  data-nombre="{{ empresa.razon_social }}">
+                  {{ empresa.razon_social }} &mdash; NIT {{ empresa.nit }}
+                </option>
+              {% empty %}
+                <option value="" disabled>No hay empresas registradas en este tenant</option>
+              {% endfor %}
+            </select>
+            {# DOM Shield: hidden input que recibe el FK real (empresa_id) #}
+            <input type="hidden" id="perfil-empresa-id" name="empresa_id" value="">
+            <div class="form-text">La empresa a la que pertenecera el perfil del usuario.</div>
+          </div>
+        </div>
+      </div>
+
+      {# Datos del Usuario #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-person me-2"></i>Datos del Usuario
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="perfil-first-name" class="form-label fw-bold text-danger">Nombre *</label>
+            <input type="text" class="form-control" id="perfil-first-name" name="first_name"
+                   placeholder="Ej: Juan" required>
+          </div>
+          <div class="col-md-6">
+            <label for="perfil-last-name" class="form-label fw-bold">Apellido</label>
+            <input type="text" class="form-control" id="perfil-last-name" name="last_name"
+                   placeholder="Ej: Perez">
+          </div>
+          <div class="col-md-6">
+            <label for="perfil-email" class="form-label fw-bold text-danger">Email *</label>
+            <input type="email" class="form-control" id="perfil-email" name="email"
+                   placeholder="usuario@empresa.com" required>
+            <div class="form-text">Si el email no existe, se creara un usuario nuevo.</div>
+          </div>
+          <div class="col-md-6">
+            <label for="perfil-username" class="form-label fw-bold">Username</label>
+            <input type="text" class="form-control" id="perfil-username" name="username"
+                   placeholder="Se genera automaticamente">
+            <div class="form-text">Opcional. Si se deja vacio, se genera desde el email.</div>
+          </div>
+        </div>
+      </div>
+
+      {# Datos del Perfil Corporativo #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-briefcase me-2"></i>Datos Corporativos
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="perfil-cargo" class="form-label">Cargo</label>
+            <input type="text" class="form-control" id="perfil-cargo" name="cargo"
+                   placeholder="Ej: Gerente Comercial">
+          </div>
+          <div class="col-md-6">
+            <label for="perfil-departamento" class="form-label">Departamento</label>
+            <input type="text" class="form-control" id="perfil-departamento" name="departamento"
+                   placeholder="Ej: Ventas">
+          </div>
+          <div class="col-md-6">
+            <label for="perfil-telefono" class="form-label">Telefono Corporativo</label>
+            <input type="text" class="form-control" id="perfil-telefono" name="telefono_corporativo"
+                   placeholder="Ej: +57 300 1234567">
+          </div>
+        </div>
+      </div>
+
+      {# Rol del Perfil #}
+      {% if rol_choices %}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-shield-lock me-2"></i>Rol en el Sistema
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="perfil-rol" class="form-label">Rol</label>
+            <select class="form-select" id="perfil-rol" name="rol">
+              {% for value, label in rol_choices %}
+                <option value="{{ value }}" {% if value == "OPERADOR" %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Nivel de acceso del usuario en este tenant.</div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {# Botones de Accion #}
+      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-perfil-crear">
+          <i class="bi bi-check-lg me-1"></i>Crear Perfil
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# DOM Shield Script: sincroniza select visible -> hidden field empresa_id #}
+<script>
+(function() {
+  var sel = document.getElementById('perfil-empresa-select');
+  var hid = document.getElementById('perfil-empresa-id');
+  if (sel && hid) {
+    // Sincronizar al cargar si hay una opcion preseleccionada
+    hid.value = sel.value || '';
+    sel.addEventListener('change', function() {
+      hid.value = this.value;
+    });
+  }
+})();
+</script>

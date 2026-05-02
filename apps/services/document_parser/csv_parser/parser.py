@@ -1,21 +1,28 @@
 """
 Parser para documentos CSV (FASE 2.3).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Convierte CSV a DataFrame normalizado
 - DataFrame → DTO JSON unificado
 - Retorna DTO según apps/services/document_parser/dto.py
 """
-from typing import Dict, Any, Optional
-from apps.services.document_parser.normalizers import normalize_csv_to_dataframe, sanitize_text, normalize_nit, normalize_currency, normalize_numeric_to_decimal_string
+from typing import Any
+
+from apps.services.document_parser.normalizers import (
+    normalize_csv_to_dataframe,
+    normalize_currency,
+    normalize_nit,
+    normalize_numeric_to_decimal_string,
+    sanitize_text,
+)
 
 
-def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str, Any]:
+def parse_to_dto(file_bytes: bytes, filename: str | None = None) -> dict[str, Any]:
     """
     Parsea un documento CSV a DTO JSON unificado.
     
-    ⚠️ FASE 2.3: DataFrame → DTO.
-    ⚠️ REVERSIÓN: Recibe contenido NORMALIZADO (string UTF-8) del normalizer.
+    WARNING: FASE 2.3: DataFrame → DTO.
+    WARNING: REVERSIÓN: Recibe contenido NORMALIZADO (string UTF-8) del normalizer.
     
     Args:
         file_bytes: Contenido del archivo CSV normalizado (bytes o str)
@@ -28,7 +35,7 @@ def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str,
         ValueError: Si el CSV no es válido o no se puede parsear
         ImportError: Si pandas no está instalado
     """
-    # ⚠️ REVERSIÓN: El normalizer ya entregó CSV como string UTF-8 normalizado
+    # WARNING: REVERSIÓN: El normalizer ya entregó CSV como string UTF-8 normalizado
     # Convertir a bytes si viene como string (para compatibilidad con normalize_csv_to_dataframe)
     if isinstance(file_bytes, str):
         csv_bytes = file_bytes.encode('utf-8')
@@ -131,7 +138,7 @@ def _is_credit_note(df) -> bool:
     return any(pattern in text for pattern in patterns)
 
 
-def _extract_from_dataframe(df, possible_columns: list) -> Optional[Any]:
+def _extract_from_dataframe(df, possible_columns: list) -> Any | None:
     """Extrae valor del DataFrame buscando en columnas posibles."""
     for col in possible_columns:
         if col in df.columns:

@@ -1,7 +1,7 @@
 """
 URLs de API para la app facturas v2.61.2.
 
-⚠️ API-First: Router DRF para endpoints REST.
+# WARNING: API-First: Router DRF para endpoints REST.
 Las vistas UI están en apps/tenant/facturas/ui_views.py (si existen).
 
 Arquitectura:
@@ -11,35 +11,37 @@ Arquitectura:
 - Usa routers de DRF para generar endpoints automáticamente
 - Referencia: https://www.django-rest-framework.org/api-guide/routers/
 
-⚠️ IMPORTANTE: El include en config/api_urls.py es `path('facturas/', include(...))`, 
+# WARNING: IMPORTANTE: El include en config/api_urls.py es `path('facturas/', include(...))`, 
 por lo que el router debe registrar con ruta vacía "" para generar /api/v1/facturas/
 
-⚠️ v2.61.2: OPTIMIZACIONES:
+# WARNING: v2.61.2: OPTIMIZACIONES:
 - Pre-validación de idempotencia (CUFE/CUDE) antes del parsing completo
 - Batch processing: soporte para files[] (múltiples archivos)
 - Silent Success: actualización automática de FacturaAnexos si XML es más completo
 """
 from django.urls import path
 from rest_framework.routers import DefaultRouter
-from apps.tenant.facturas.api.viewsets import FacturaViewSet, ItemFacturaViewSet, NotaCreditoViewSet
+
 from apps.tenant.facturas.api.views_mail_ingestion import (
+    MailIngestionPreviewAPIView,
     MailIngestionRunCreateAPIView,
     MailIngestionRunsListAPIView,
-    MailIngestionPreviewAPIView,
 )
-# ⚠️ DEPRECATED v2.40: datatables.py eliminado - usar GET /api/v1/facturas/ con StandardResultsSetPagination
+from apps.tenant.facturas.api.viewsets import FacturaViewSet, ItemFacturaViewSet, NotaCreditoViewSet
+
+# # WARNING: DEPRECATED v2.40: datatables.py eliminado - usar GET /api/v1/facturas/ con StandardResultsSetPagination
 
 # Router para esta app
 router = DefaultRouter(trailing_slash=True)
 
 # Registrar ViewSets
-# ⚠️ CRÍTICO: Orden de registro importa - rutas específicas ANTES de ruta vacía ""
+# # WARNING: CRÍTICO: Orden de registro importa - rutas específicas ANTES de ruta vacía ""
 # Si r'' está primero, captura todas las rutas (greedy matching) y notas-credito nunca se alcanza
-# ⚠️ IMPORTANTE: Registrar con ruta vacía "" porque el include en config/api_urls.py es path('facturas/', ...)
+# # WARNING: IMPORTANTE: Registrar con ruta vacía "" porque el include en config/api_urls.py es path('facturas/', ...)
 # Esto genera rutas como: /api/v1/facturas/ (list), /api/v1/facturas/{id}/ (detail)
-router.register(r'notas-credito', NotaCreditoViewSet, basename='nota-credito')  # ⚠️ ANTES de r''
-router.register(r'items-factura', ItemFacturaViewSet, basename='item-factura')  # ⚠️ ANTES de r''
-router.register(r'', FacturaViewSet, basename='factura')  # ⚠️ AL FINAL para evitar greedy matching
+router.register(r'notas-credito', NotaCreditoViewSet, basename='nota-credito')  # # WARNING: ANTES de r''
+router.register(r'items-factura', ItemFacturaViewSet, basename='item-factura')  # # WARNING: ANTES de r''
+router.register(r'', FacturaViewSet, basename='factura')  # # WARNING: AL FINAL para evitar greedy matching
 
 # URLs generadas por el router
 # Endpoints disponibles:
@@ -49,8 +51,8 @@ router.register(r'', FacturaViewSet, basename='factura')  # ⚠️ AL FINAL para
 # - POST /api/v1/facturas/importar-ubl/ (importar UBL desde texto)
 # - GET /api/v1/facturas/summary/ (resumen de facturación neta)
 # - POST /api/v1/facturas/upload-ubl/ (upload UBL file - single o batch)
-#   ⚠️ v2.61.2: Soporta batch processing con files[] (múltiples archivos)
-#   ⚠️ v2.61.2: Pre-validación de idempotencia (CUFE/CUDE) antes del parsing completo
+#   # WARNING: v2.61.2: Soporta batch processing con files[] (múltiples archivos)
+#   # WARNING: v2.61.2: Pre-validación de idempotencia (CUFE/CUDE) antes del parsing completo
 # - POST /api/v1/facturas/upload-document/ (upload documento universal - XML/PDF/XLS/CSV/TXT)
 # - GET /api/v1/facturas/ingest/{task_id}/status/ (estado de ingesta asíncrona)
 # - POST /api/v1/facturas/create-from-dto/ (crear factura desde DTO canónico)
@@ -65,7 +67,7 @@ router.register(r'', FacturaViewSet, basename='factura')  # ⚠️ AL FINAL para
 urlpatterns = router.urls
 
 # URLs adicionales para ingesta por correo (Fase 4/5)
-# ⚠️ SSoT: Las configuraciones se gestionan en /api/v1/core/v1/empresa/mail-inbox/
+# # WARNING: SSoT: Las configuraciones se gestionan en /api/v1/core/v1/empresa/mail-inbox/
 # Estas rutas se montan bajo /api/v1/facturas/ porque el include es path('facturas/', ...)
 # Endpoints disponibles:
 # - POST /api/v1/facturas/ingesta-correo/run/ (ejecutar ingesta de correo)
@@ -75,13 +77,13 @@ urlpatterns += [
     path("ingesta-correo/run/", MailIngestionRunCreateAPIView.as_view(), name="facturas_mail_run"),
     path("ingesta-correo/runs/", MailIngestionRunsListAPIView.as_view(), name="facturas_mail_runs"),
     path("ingesta-correo/preview/", MailIngestionPreviewAPIView.as_view(), name="facturas_mail_preview"),
-    # ⚠️ DEPRECATED v2.40: Endpoints DataTables eliminados.
+    # # WARNING: DEPRECATED v2.40: Endpoints DataTables eliminados.
     # Usar GET /api/v1/facturas/ con StandardResultsSetPagination (Tabulator Factory).
-    # path("dt/facturas/", facturas_dt, name="facturas_dt"),  # ⚠️ DEPRECATED
-    # ⚠️ NOTA: render-offcanvas-pendientes fue eliminado - el offcanvas se carga directamente desde facturas_ui.js
+    # path("dt/facturas/", facturas_dt, name="facturas_dt"),  # # WARNING: DEPRECATED
+    # # WARNING: NOTA: render-offcanvas-pendientes fue eliminado - el offcanvas se carga directamente desde facturas_ui.js
 ]
 
-# ⚠️ v2.61.2: DOCUMENTACIÓN DE ENDPOINTS OPTIMIZADOS
+# # WARNING: v2.61.2: DOCUMENTACIÓN DE ENDPOINTS OPTIMIZADOS
 # 
 # BATCH PROCESSING (upload-ubl):
 # POST /api/v1/facturas/upload-ubl/

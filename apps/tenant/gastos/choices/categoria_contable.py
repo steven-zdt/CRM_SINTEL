@@ -1,17 +1,14 @@
-# -*- coding: utf-8 -*-
 """
 Choices para el campo 'categoria_contable' del modelo Gasto.
 
-⚠️ v2.40: Categorías contables para clasificación de gastos.
+WARNING: v2.40: Categorías contables para clasificación de gastos.
 Basado en categorías contables estándar para Documentos Soporte.
 Excluye gastos de personal (salarios, aportes, etc.).
 """
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
-CATEGORIA_CONTABLE_CHOICES: List[Tuple[str, str]] = [
+CATEGORIA_CONTABLE_CHOICES: list[tuple[str, str]] = [
     ("ARRENDAMIENTOS", "Arrendamientos"),
     ("SERVICIOS_PUBLICOS", "Servicios Públicos"),
     ("PAPELERIA_UTILES", "Papelería y Útiles"),
@@ -46,7 +43,7 @@ CATEGORIA_CONTABLE_CHOICES: List[Tuple[str, str]] = [
 ]
 
 
-def get_categoria_contable_choices() -> List[Tuple[str, str]]:
+def get_categoria_contable_choices() -> list[tuple[str, str]]:
     """
     Provee los choices de categoría contable en runtime.
     

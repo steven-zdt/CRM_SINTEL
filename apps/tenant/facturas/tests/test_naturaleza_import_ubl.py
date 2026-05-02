@@ -1,11 +1,12 @@
 """
 Pruebas de humo para detección automática de naturaleza (VENTA/COMPRA) en importación UBL.
 
-⚠️ MULTI-TENANT: Usa TenantTestCase de django-tenants para tests tenant-aware.
+# WARNING: MULTI-TENANT: Usa TenantTestCase de django-tenants para tests tenant-aware.
 """
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 

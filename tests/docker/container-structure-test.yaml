@@ -1,0 +1,47 @@
+schemaVersion: '2.0.0'
+
+metadataTest:
+  exposedPorts: ["8000"]
+  entrypoint: ["/entrypoint.sh"]
+  cmd: []
+  workdir: "/app"
+  user: "root"
+
+fileExistenceTests:
+  - name: 'manage.py exists'
+    path: '/app/manage.py'
+    shouldExist: true
+    permissions: '-rw-r--r--'
+  
+  - name: 'config/settings.py exists'
+    path: '/app/config/settings.py'
+    shouldExist: true
+  
+  - name: 'apps/config/api/ exists'
+    path: '/app/apps/config/api'
+    shouldExist: true
+  
+  - name: 'entrypoint.sh exists'
+    path: '/entrypoint.sh'
+    shouldExist: true
+    permissions: '-rwxr-xr-x'
+  
+  - name: 'requirements.txt exists'
+    path: '/app/requirements.txt'
+    shouldExist: true
+
+commandTests:
+  - name: 'Python version is 3.12'
+    command: 'python'
+    args: ['-V']
+    expectedOutput: ['Python 3.12']
+  
+  - name: 'Django check command works'
+    command: 'python'
+    args: ['manage.py', 'check', '--deploy']
+    exitCode: 0
+  
+  - name: 'check_migrations command exists'
+    command: 'python'
+    args: ['manage.py', 'check_migrations', '--help']
+    exitCode: 0

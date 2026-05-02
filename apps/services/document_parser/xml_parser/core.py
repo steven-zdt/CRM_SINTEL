@@ -1,10 +1,9 @@
 """
 Funciones helper para parsing XML con lxml.
 
-⚠️ v2.36: Migrado desde apps/services/xml_parser/core.py
+WARNING: v2.36: Migrado desde apps/services/xml_parser/core.py
 Funciones utilitarias para trabajar con etree._Element de lxml.
 """
-from typing import Optional, List, Any
 from lxml import etree
 
 
@@ -46,7 +45,7 @@ def local_name(tag: str) -> str:
     return tag
 
 
-def xpath(element: etree._Element, xpath_expr: str) -> List[etree._Element]:
+def xpath(element: etree._Element, xpath_expr: str) -> list[etree._Element]:
     """
     Ejecuta XPath y retorna lista de elementos.
     
@@ -65,7 +64,7 @@ def xpath(element: etree._Element, xpath_expr: str) -> List[etree._Element]:
         return []
 
 
-def first(element: etree._Element, xpath_expr: str) -> Optional[etree._Element]:
+def first(element: etree._Element, xpath_expr: str) -> etree._Element | None:
     """
     Ejecuta XPath y retorna el primer elemento encontrado.
     
@@ -80,7 +79,7 @@ def first(element: etree._Element, xpath_expr: str) -> Optional[etree._Element]:
     return results[0] if results else None
 
 
-def text(element: Optional[etree._Element]) -> str:
+def text(element: etree._Element | None) -> str:
     """
     Extrae el texto de un elemento.
     
@@ -95,7 +94,7 @@ def text(element: Optional[etree._Element]) -> str:
     return (element.text or "").strip()
 
 
-def attr(element: Optional[etree._Element], attr_name: str) -> Optional[str]:
+def attr(element: etree._Element | None, attr_name: str) -> str | None:
     """
     Extrae el valor de un atributo.
     
@@ -115,7 +114,7 @@ def ensure_invoice_root_and_artifacts(root: etree._Element) -> dict:
     """
     Extrae Invoice/CreditNote desde AttachedDocument si es necesario.
     
-    ⚠️ v2.36: Migrado desde apps/services/xml_parser/core.py
+    WARNING: v2.36: Migrado desde apps/services/xml_parser/core.py
     
     Args:
         root: Element raíz (puede ser AttachedDocument o Invoice/CreditNote)

@@ -1,26 +1,27 @@
 """
 Servicio para probar conexión a buzones de correo sin persistir datos.
 
-⚠️ v2.37: Alineado con arquitectura Service Layer y SSoT.
+WARNING: v2.37: Alineado con arquitectura Service Layer y SSoT.
 - Desacoplado de modelos y vistas
 - No persiste datos
 - Usa RealIMAPClient para pruebas reales
 - Manejo de errores explícito
 """
 import logging
-from typing import Dict, Any, Tuple
-from .inbox_client import RealIMAPClient
+from typing import Any
+
 from .exceptions import MailboxConnectionError
+from .inbox_client import RealIMAPClient
 
 log = logging.getLogger("mailinbox.api")
 
 
-def maildigester_test_connection(config: Dict[str, Any]) -> Tuple[bool, str]:
+def maildigester_test_connection(config: dict[str, Any]) -> tuple[bool, str]:
     """
     Prueba conexión a buzón de correo sin persistir datos.
     
-    ⚠️ SEGURIDAD: No persiste credenciales, solo prueba conexión.
-    ⚠️ DESACOPLADO: No depende de modelos ni vistas.
+    WARNING: SEGURIDAD: No persiste credenciales, solo prueba conexión.
+    WARNING: DESACOPLADO: No depende de modelos ni vistas.
     
     Args:
         config: Dict con configuración de conexión:
@@ -60,7 +61,7 @@ def maildigester_test_connection(config: Dict[str, Any]) -> Tuple[bool, str]:
     port = config['port']
     protocol = config['protocol']
     username = config['username']
-    password = config['password']  # ⚠️ No loguear password
+    password = config['password']  # WARNING: No loguear password
     use_ssl = config['use_ssl']
     use_starttls = config.get('use_starttls', False)
     

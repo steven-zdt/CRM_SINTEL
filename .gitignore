@@ -1,5 +1,5 @@
 # 1. Ignorar absolutamente todo en la raíz
-/*
+
 
 # 2. Excepciones: Carpetas y archivos que SÍ se van a subir
 !/documentacion/arquitectura_general.md

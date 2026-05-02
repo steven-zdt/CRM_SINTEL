@@ -1,37 +1,36 @@
 """
 Servicio de generación de PDF para cotizaciones v2.60.
 
-⚠️ ARQUITECTURA MODULAR: Lógica de negocio desacoplada del generador.
+# WARNING: ARQUITECTURA MODULAR: Lógica de negocio desacoplada del generador.
 - Usa CotizacionPDFGenerator (módulo independiente) para generar PDFs
-- ⚠️ QA: Agrupa ítems por tipo_item (PRODUCTO, MATERIAL, SERVICIO) para secciones claras
+- # WARNING: QA: Agrupa ítems por tipo_item (PRODUCTO, MATERIAL, SERVICIO) para secciones claras
 - Oculta secciones vacías
 - Resumen económico secuencial con lógica AIU
-- ⚠️ QA: User-Driven - Valores financieros tomados directamente del objeto cotizacion
+- # WARNING: QA: User-Driven - Valores financieros tomados directamente del objeto cotizacion
 
-⚠️ PRINCIPIO DE INVERSIÓN DE DEPENDENCIAS:
+# WARNING: PRINCIPIO DE INVERSIÓN DE DEPENDENCIAS:
 - Este módulo NO conoce xhtml2pdf directamente
 - Depende de la abstracción CotizacionPDFGenerator
 - Si se cambia de librería PDF, solo se modifica pdf_generator.py
 """
 import logging
-import re
 from decimal import Decimal
-from typing import Dict, List, Tuple, Optional
-from django.http import HttpRequest
-from django.db.models import Prefetch
 
-from apps.tenant.empresa.models import Empresa
+from django.db.models import Prefetch
+from django.http import HttpRequest
+
 from apps.tenant.cotizaciones.models import Cotizacion, CotizacionItem
 from apps.tenant.cotizaciones.utils.pdf_generator import CotizacionPDFGenerator
+from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
 
 
-def obtener_cotizacion_para_pdf(empresa_id: int, cotizacion_id: int) -> Optional[Cotizacion]:
+def obtener_cotizacion_para_pdf(empresa_id: int, cotizacion_id: int) -> Cotizacion | None:
     """
     Obtiene una cotización con todos sus items optimizados para generación de PDF.
     
-    ⚠️ CRÍTICO: Incluye explícitamente seccion_modulo en los campos recuperados.
+    # WARNING: CRÍTICO: Incluye explícitamente seccion_modulo en los campos recuperados.
     """
     try:
         cotizacion = Cotizacion.objects.filter(
@@ -48,23 +47,23 @@ def obtener_cotizacion_para_pdf(empresa_id: int, cotizacion_id: int) -> Optional
             )
         ).get(pk=cotizacion_id)
         
-        logger.info(f"[PDF Service] ✅ Cotización {cotizacion_id} obtenida (items: {len(getattr(cotizacion, 'items_list', []))})")
+        logger.info(f"[PDF Service] [OK] Cotización {cotizacion_id} obtenida (items: {len(getattr(cotizacion, 'items_list', []))})")
         
         return cotizacion
     except Cotizacion.DoesNotExist:
-        logger.warning(f"[PDF Service] ⚠️ Cotización {cotizacion_id} no encontrada")
+        logger.warning(f"[PDF Service] # WARNING: Cotización {cotizacion_id} no encontrada")
         return None
     except Exception as e:
-        logger.error(f"[PDF Service] ❌ Error obteniendo cotización {cotizacion_id}: {str(e)}")
+        logger.error(f"[PDF Service] [ERROR] Error obteniendo cotización {cotizacion_id}: {str(e)}")
         return None
 
 
 def preparar_contexto_pdf(
     cotizacion: Cotizacion,
     empresa: Empresa,
-    request: Optional[HttpRequest] = None,
-    perfil_id: Optional[int] = None
-) -> Dict:
+    request: HttpRequest | None = None,
+    perfil_id: int | None = None
+) -> dict:
     """
     Prepara el contexto completo para el template del PDF.
     
@@ -92,7 +91,7 @@ def preparar_contexto_pdf(
             logger.warning(f"[PDF Service] No se pudo obtener perfil de configuración: {str(e)}")
             perfil_configuracion = None
     
-    # ⚠️ QA: Agrupar items por tipo_item (PRODUCTO, MATERIAL, SERVICIO) para secciones claras
+    # # WARNING: QA: Agrupar items por tipo_item (PRODUCTO, MATERIAL, SERVICIO) para secciones claras
     # Esto asegura que el PDF tenga secciones claras basadas en el tipo de item
     productos_items = [item for item in all_items if item.tipo_item == CotizacionItem.TipoItem.PRODUCTO]
     materiales_items = [item for item in all_items if item.tipo_item == CotizacionItem.TipoItem.MATERIAL]
@@ -108,7 +107,7 @@ def preparar_contexto_pdf(
     for item in all_items:
         subtotal_items += Decimal(str(item.subtotal_linea or 0))
     
-    # ⚠️ QA: User-Driven - Tomar valores directamente del objeto cotizacion
+    # # WARNING: QA: User-Driven - Tomar valores directamente del objeto cotizacion
     # Los campos financieros vienen directamente del usuario, no de la plantilla
     iva_porcentaje = Decimal(str(cotizacion.iva_porcentaje or 19))
     porcentaje_aiu_admin = Decimal(str(cotizacion.porcentaje_aiu_admin or 0))
@@ -149,7 +148,7 @@ def preparar_contexto_pdf(
         valor_utilidad = Decimal('0.00')
         total_neto = subtotal_items + iva_valor
     
-    # ⚠️ QA: Contexto completo con todos los campos financieros (User-Driven)
+    # # WARNING: QA: Contexto completo con todos los campos financieros (User-Driven)
     context = {
         'cotizacion': cotizacion,
         'empresa': empresa,
@@ -159,14 +158,14 @@ def preparar_contexto_pdf(
         'seccion_3': seccion_3_items,  # SERVICIO
         'subtotal_items': subtotal_items,
         'aplicar_aiu': aplicar_aiu,
-        # ⚠️ QA: Campos de AIU tomados directamente del objeto cotizacion (User-Driven)
+        # # WARNING: QA: Campos de AIU tomados directamente del objeto cotizacion (User-Driven)
         'aiu_admin_porcentaje': aiu_admin_porcentaje,
         'aiu_imprevistos_porcentaje': aiu_imprevistos_porcentaje,
         'aiu_utilidad_porcentaje': aiu_utilidad_porcentaje,
         'valor_administracion': valor_administracion,
         'valor_imprevistos': valor_imprevistos,
         'valor_utilidad': valor_utilidad,
-        # ⚠️ QA: iva_porcentaje tomado directamente del objeto cotizacion (User-Driven)
+        # # WARNING: QA: iva_porcentaje tomado directamente del objeto cotizacion (User-Driven)
         'iva_porcentaje': iva_porcentaje,
         'iva_valor': iva_valor,
         'total_neto': total_neto,
@@ -176,11 +175,11 @@ def preparar_contexto_pdf(
     return context
 
 
-def render_to_pdf(context: Dict, request: Optional[HttpRequest] = None) -> bytes:
+def render_to_pdf(context: dict, request: HttpRequest | None = None) -> bytes:
     """
     Genera el PDF a partir del contexto preparado usando CotizacionPDFGenerator.
     
-    ⚠️ ARQUITECTURA: Delega la generación del PDF al módulo generador desacoplado.
+    # WARNING: ARQUITECTURA: Delega la generación del PDF al módulo generador desacoplado.
     Este método solo valida el contexto y delega al generador.
     NO contiene lógica de renderizado de PDF (eso está en pdf_generator.py).
     
@@ -205,7 +204,7 @@ def render_to_pdf(context: Dict, request: Optional[HttpRequest] = None) -> bytes
         if 'empresa' not in context:
             raise ValueError("Contexto no contiene 'empresa'")
         
-        # ⚠️ ARQUITECTURA: Delegar al módulo generador desacoplado
+        # # WARNING: ARQUITECTURA: Delegar al módulo generador desacoplado
         # El generador es el único que conoce xhtml2pdf
         # NO hay lógica de renderizado aquí - todo está en pdf_generator.py
         pdf_bytes = CotizacionPDFGenerator.render_to_pdf(
@@ -229,7 +228,7 @@ def render_to_pdf(context: Dict, request: Optional[HttpRequest] = None) -> bytes
 
 
 # Alias para compatibilidad con código existente
-def generar_pdf_bytes(context: Dict, request: Optional[HttpRequest] = None) -> bytes:
+def generar_pdf_bytes(context: dict, request: HttpRequest | None = None) -> bytes:
     """
     Alias para render_to_pdf (compatibilidad con código existente).
     """

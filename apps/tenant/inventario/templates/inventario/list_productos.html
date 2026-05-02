@@ -1,0 +1,30 @@
+{# list_productos.html - Módulo Productos v3.5 - Nucleus #}
+<div class="ui-module h-100 d-flex flex-column">
+    <div id="feedback-productos-list" class="alert d-none mb-2" role="alert"></div>
+    
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-box-seam me-2"></i>Productos</h5>
+            <span class="badge bg-light text-dark border">Inventario Físico</span>
+        </div>
+        <div class="btn-group shadow-sm">
+            <button type="button" class="btn btn-primary" id="btn-nuevo-producto"
+                    hx-get="/api/v1/inventario/productos/gestor-offcanvas/" 
+                    hx-target="#offcanvas-container-inventario" 
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-inventario'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                <i class="bi bi-plus-lg me-1"></i> Nuevo Producto
+            </button>
+            <button type="button" class="btn btn-outline-secondary" 
+                    onclick="if(window.Sintel?.Inventario?.Productos?.List?.recargar){ window.Sintel.Inventario.Productos.List.recargar(); } else if(window.SintelInventarioTables?.main){ window.SintelInventarioTables.main.replaceData(); }">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="mb-3">
+        <input type="text" id="search-producto" class="form-control" placeholder="Buscar por código, nombre o categoría...">
+    </div>
+    
+    <div id="grid-productos" class="flex-grow-1"></div>
+</div>

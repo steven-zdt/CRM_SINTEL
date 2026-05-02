@@ -1,9 +1,15 @@
-# Auditoría de Flujo - Módulo Inventario v2.61.4
+# Auditoria de Flujo - Modulo Inventario v2.61.8
 
-**Fecha de Auditoría:** 2026-03-12  
-**Versión del Módulo:** v2.61.4  
+> [!IMPORTANT]
+> **REGLAS DE MODIFICACIÓN (ESTRICTAS):**
+> 1. Para realizar cualquier modificación en esta aplicación (`apps/tenant/inventario`), se debe solicitar primero **autorización y aprobación explícita del usuario**.
+> 2. Es **OBLIGATORIO** leer íntegramente este archivo (`AUDITORIA_INVENTARIO.md`) antes de proponer o implementar cambios.
+> 3. No se deben romper los patrones de **Aislamiento Gradual** y **API-First** documentados aquí.
+
+**Fecha de Auditoria:** 2026-03-30  
+**Version del Modulo:** v2.61.8  
 **App:** `apps/tenant/inventario`  
-**Última actualización:** 2026-03-12
+**Ultima actualizacion:** 2026-03-30 (Estabilización de Kardex y Validación UI)
 
 ---
 
@@ -68,7 +74,8 @@ apps/tenant/inventario/
 │   ├── viewsets.py        # ViewSets DRF (6 ViewSets)
 │   ├── serializers.py     # Serializers DRF (12 serializers)
 │   └── urls.py            # Router DRF
-├── services.py            # Lógica de negocio (Service Layer)
+├── services/              # Paquete Service Layer (v2.61.5)
+│   └── services.py        # Logica de negocio completa
 └── migrations/            # Migraciones Django
 
 apps/tenant/core/
@@ -76,11 +83,11 @@ apps/tenant/core/
 │   ├── viewsets.py            # Core API Facade ViewSets (5 ViewSets)
 │   └── serializers.py         # Workspace Serializers (10 serializers)
 ├── static/core/js/inventario/
-│   ├── features/              # ⚠️ v2.61.3: Feature-Sliced Architecture
-│   │   ├── categorias_list.js      # Feature: READ categorías
-│   │   ├── categorias_editor.js    # Feature: CREATE/UPDATE categorías
+│   ├── features/              # Feature-Sliced Architecture (v2.61.3)
+│   │   ├── categorias_list.js      # Feature: READ categorias
+│   │   ├── categorias_editor.js    # Feature: CREATE/UPDATE categorias
 │   │   ├── productos_list.js       # Feature: READ productos
-│   │   ├── productos_editor.js    # Feature: CREATE/UPDATE productos
+│   │   ├── productos_editor.js     # Feature: CREATE/UPDATE productos
 │   │   ├── servicios_list.js       # Feature: READ servicios
 │   │   ├── servicios_editor.js     # Feature: CREATE/UPDATE servicios
 │   │   ├── activos_list.js         # Feature: READ activos
@@ -90,14 +97,18 @@ apps/tenant/core/
 │   │   ├── inventario_list.js      # Legacy: Listado principal
 │   │   └── inventario_editor.js    # Legacy: Editor principal
 │   ├── inventario.api.js      # Wrapper API (Capa de Datos)
-│   ├── categorias.page.js     # ⚠️ DEPRECATED v2.61.3
-│   ├── productos.page.js      # ⚠️ DEPRECATED v2.61.3
-│   ├── servicios.page.js      # ⚠️ DEPRECATED v2.61.3
-│   ├── activos.page.js        # ⚠️ DEPRECATED v2.61.3
-│   └── movimientos.page.js    # ⚠️ DEPRECATED v2.61.3
+│   ├── categorias.page.js     # DEPRECATED v2.61.3
+│   ├── productos.page.js      # DEPRECATED v2.61.3
+│   ├── servicios.page.js      # DEPRECATED v2.61.3
+│   ├── activos.page.js        # DEPRECATED v2.61.3
+│   └── movimientos.page.js    # DEPRECATED v2.61.3
 └── templates/tenant/core/partials/inventario/
-    ├── list.html              # Vista principal (Tabs)
-    ├── offcanvas_form.html    # Formulario Offcanvas (HTMX)
+    ├── list.html                              # Vista principal (Tabs)
+    ├── offcanvas_form.html                    # Formulario Productos/Ajuste (HTMX)
+    ├── categorias/categorias_offcanvas.html   # Formulario Categorias (HTMX)
+    ├── servicios_offcanvas.html               # Formulario Servicios (HTMX)
+    ├── activos_offcanvas.html                 # Formulario Activos (HTMX)
+    ├── historial_servicio_offcanvas.html      # Historial Servicios (HTMX)
     ├── list_productos.html    # Tab Productos
     ├── list_servicios.html    # Tab Servicios
     ├── list_activos.html      # Tab Activos
@@ -492,7 +503,8 @@ links = {
 - `POST /categorias/` - Crear (solo ADMIN)
 - `PATCH /categorias/{id}/` - Actualizar (solo ADMIN)
 - `DELETE /categorias/{id}/` - Eliminar (solo ADMIN, debe estar inactiva)
-- `GET /categorias/{id}/resumen/` - Resumen con conteo de ítems asociados
+- `GET /categorias/{id}/resumen/` - Resumen con conteo de items asociados
+- `GET /categorias/gestor-offcanvas/` - HTML formulario Offcanvas (HTMX) v2.61.6
 - `GET /categorias/dt/` - DataTables client-side (DEPRECATED v2.40)
 
 **Filtrado**:
@@ -534,6 +546,8 @@ links = {
 - `POST /servicios/` - Crear (solo ADMIN)
 - `PATCH /servicios/{id}/` - Actualizar (solo ADMIN)
 - `DELETE /servicios/{id}/` - Eliminar (solo ADMIN, debe estar inactivo)
+- `GET /servicios/gestor-offcanvas/` - HTML formulario Offcanvas (HTMX) v2.61.6
+- `GET /servicios/historial-offcanvas/` - HTML formulario Historial (HTMX)
 - `POST /servicios/dt/` - DataTables server-side (DEPRECATED v2.40)
 
 **Filtrado**:
@@ -549,7 +563,8 @@ links = {
 - `POST /activos/` - Crear (solo ADMIN)
 - `PATCH /activos/{id}/` - Actualizar (solo ADMIN)
 - `DELETE /activos/{id}/` - Eliminar (solo ADMIN, no puede estar en estado 'ACTIVO')
-- `GET /activos/list-all/` - Lista completa sin paginación (client-side DataTables)
+- `GET /activos/list-all/` - Lista completa sin paginacion (client-side DataTables)
+- `GET /activos/gestor-offcanvas/` - HTML formulario Offcanvas (HTMX) v2.61.6
 - `POST /activos/dt/` - DataTables server-side (DEPRECATED v2.40)
 
 **Filtrado**:
@@ -661,14 +676,21 @@ router.register(r'historial-servicios', HistorialServicioViewSet, basename='inv-
 
 ### 5.1. QuerySets Optimizados
 
-**Archivo**: `apps/tenant/inventario/services.py`
+**Archivo**: `apps/tenant/inventario/services/services.py`
 
-**Funciones**:
-- `qs_categoria_list()` - QuerySet optimizado para categorías
-- `qs_producto_list(empresa_id, search=None)` - QuerySet optimizado para productos
-- `qs_servicio_list(empresa_id, search=None)` - QuerySet optimizado para servicios
-- `qs_activo_list(empresa_id, search=None)` - QuerySet optimizado para activos
-- `qs_movimiento_list(empresa_id, search=None)` - QuerySet optimizado para movimientos
+**Funciones y Mixins**:
+- `get_empresa_singleton()` - Obtiene empresa del tenant activo
+- `qs_categoria_list(empresa_id, search)` - QuerySet optimizado para categorias
+- `qs_producto_list(empresa_id, search)` - QuerySet optimizado para productos
+- `qs_servicio_list(empresa_id, search)` - QuerySet optimizado para servicios
+- `qs_activo_list(empresa_id, search)` - QuerySet optimizado para activos
+- `qs_movimiento_list(empresa_id, search)` - QuerySet optimizado para movimientos
+- `CategoriaItemServiceMixin` - Mixin inyectado en `CategoriaItemViewSet`
+- `ProductoServiceMixin` - Mixin inyectado en `ProductoViewSet`
+- `ServicioServiceMixin` - Mixin inyectado en `ServicioViewSet`
+- `ActivoFijoServiceMixin` - Mixin inyectado en `ActivoFijoViewSet`
+- `MovimientoServiceMixin` - Mixin inyectado en `MovimientoInventarioViewSet`
+- `HistorialServiceMixin` - Mixin inyectado en `HistorialServicioViewSet`
 
 **Optimizaciones**:
 - Uso de `select_related()` para evitar N+1 queries
@@ -1737,37 +1759,34 @@ PostgreSQL Database
 
 ## 12. Conclusión
 
-El módulo **Inventario v2.61.4** es un sistema completo y robusto para la gestión de inventario con:
+El modulo **Inventario v2.61.6** es un sistema completo y robusto para la gestion de inventario con:
 
-✅ **Arquitectura sólida**: API-First, Service Layer, Multi-tenancy, Core API Facade  
-✅ **Feature-Sliced Architecture**: Frontend completamente modularizado (10 módulos features)  
-✅ **Core API Facade Completo**: 5 ViewSets facade con serializers especializados  
-✅ **Performance optimizado**: QuerySets optimizados, campos estrictamente necesarios  
-✅ **Integridad de datos**: Kardex inmutable, stock desnormalizado mantenido automáticamente  
-✅ **Zero Trust**: Validación estricta de pertenencia al tenant  
-✅ **Frontend moderno**: Tabulator Factory, HTMX, Bootstrap Offcanvas  
-✅ **Endpoints unificados**: Todos los módulos usan Core API Facade (`/api/v1/core/v1/inventario/`)  
-✅ **Robustez mejorada**: Prevención de doble envío, manejo de errores amigable, recarga automática  
-✅ **UX optimizada**: Mensajes de error claros, valores numéricos formateados, inicialización automática  
-✅ **Extensibilidad**: Preparado para integraciones con Ventas, Compras, etc.
+- **Arquitectura solida**: API-First, Service Layer puro, Multi-tenancy, Core API Facade
+- **Service Layer refactorizado**: Paquete `services/services.py` con Service Mixins inyectados en ViewSets
+- **Feature-Sliced Architecture**: Frontend completamente modularizado (10 modulos features)
+- **Core API Facade Completo**: 5 ViewSets facade con serializers especializados
+- **gestor-offcanvas estandarizado**: Todos los modulos (Categorias, Productos, Servicios, Activos) exponen el endpoint y delegan correctamente al Service Layer
+- **Performance optimizado**: QuerySets con `.only()` y `select_related()`
+- **Zero Trust**: Validacion estricta de pertenencia al tenant en cada operacion
+- **Anti-doble submit**: Guards `_listEventsInit` y `_editorInitialized` en frontend
 
-**Logros v2.61.3**:
-1. ✅ Migración completa a Feature-Sliced Architecture (10 módulos features)
-2. ✅ Core API Facade completo (5 ViewSets: Categorías, Productos, Servicios, Activos, Movimientos)
-3. ✅ Serializers Workspace con URLs absolutas de imágenes (`_ImagenUrlMixin`)
-4. ✅ Alineación completa de endpoints JavaScript con Core API Facade
-5. ✅ Links centralizados en `CoreLinksViewSet` para todos los módulos
+**Logros v2.61.6**:
+1. Estandarizacion de `gestor-offcanvas` en todos los ViewSets de inventario
+2. Correccion de discrepancia de firmas (request vs empresa) en Service Layer calls
+3. Correccion de doble registro por race condition HTMX/Bootstrap en Categorias
+4. Implementacion de guards `_listEventsInit` y `_editorInitialized`
+
+**Logros v2.61.5**:
+1. Refactorizacion de `services.py` a paquete `services/services.py`
+2. Service Mixins inyectados en ViewSets via herencia
+3. Suite completa: 22/22 tests passing
+4. Importacion estandarizada: `from apps.tenant.inventario.services.services import ...`
 
 **Logros v2.61.4**:
-1. ✅ Prevención de doble envío implementada (flag `_guardandoProducto`)
-2. ✅ Manejo de errores mejorado (IntegrityError con mensajes amigables)
-3. ✅ Filtrado de tracebacks de Python en UI
-4. ✅ Recarga automática de tabla después de crear/actualizar producto
-5. ✅ Inicialización automática de tabla al hacer clic en menú "Productos"
-6. ✅ Mapeo correcto de campos (producto_id → producto, tipo_movimiento → tipo)
-7. ✅ Columna "Precio Venta" agregada al listado
-8. ✅ Formatters mejorados para manejar valores nulos
-9. ✅ Fallback robusto en `inventario.api.js` para Core API Facade
+1. Prevencion de doble envio implementada
+2. Manejo de errores mejorado (IntegrityError con mensajes amigables)
+3. Filtrado de tracebacks de Python en UI
+4. Recarga automatica de tabla despues de crear/actualizar
 
 **Próximos pasos recomendados**:
 1. Integración con módulo de Ventas (registrar salidas automáticamente)
@@ -1778,96 +1797,25 @@ El módulo **Inventario v2.61.4** es un sistema completo y robusto para la gesti
 
 ---
 
-## 13. Notas de Versión
+## 13. Notas de Version
+### v2.61.8 (2026-03-30) - Estabilización de Kardex y Validación UI
 
-### v2.61.4 (2026-03-12) - Correcciones de Robustez y UX
+**Registro de Movimientos (Kardex):**
+- ✅ **Validación Granular**: Implementación de mensajes de error específicos por campo en `movimientos_editor.js` (Producto, Tipo, Cantidad).
+- ✅ **Sincronización Select2**: Añadido listener defensivo en `offcanvas_movimiento.html` para forzar la sincronización del buscador de productos antes del envío.
+- ✅ **Fix de Serialización**: Corregido error `TypeError: Object of type Producto is not JSON serializable` en `MovimientoInventarioViewSet` mediante el uso de `TemplateHTMLRenderer` en el endpoint `gestor-offcanvas`.
+- ✅ **Accesibilidad**: Corregido desajuste de IDs en labels de "Referencia / Origen".
 
-**Prevención de Doble Envío:**
-- ✅ Flag `_guardandoProducto` implementado en `productos_editor.js`
-- ✅ Activación temprana del flag antes de validar payload
-- ✅ Deshabilitación de botón y formulario durante guardado (`pointerEvents: 'none'`)
-- ✅ Clonado de botón para eliminar listeners duplicados
-- ✅ Verificación adicional del flag dentro de listeners
-
-**Manejo de Errores Mejorado:**
-- ✅ Manejo de `IntegrityError` en `ProductoViewSet.create()` con mensajes amigables
-- ✅ Extracción automática de código duplicado del mensaje de error
-- ✅ Filtrado de tracebacks de Python en `ui-manager.js`
-- ✅ Detección y formateo mejorado de errores de código duplicado
-- ✅ Prioridad de mensajes: `error` + `message` > `error` > `detail`
-
-**Recarga e Inicialización de Tabla:**
-- ✅ Función `recargar()` expuesta en `inventario_list.js`
-- ✅ Módulo `ProductosList` expuesto para compatibilidad con `productos_editor.js`
-- ✅ Inicialización automática de tabla al hacer clic en menú "Productos"
-- ✅ Recarga inmediata después de crear/actualizar producto (delay 300ms)
-- ✅ Múltiples métodos de fallback para asegurar recarga
-- ✅ Listener `shown.bs.tab` mejorado para detectar tab de productos
-
-**Mapeo de Campos Corregido:**
-- ✅ `producto_id` → `producto` (FK) en `inventario_editor.js`
-- ✅ `tipo_movimiento` → `tipo` (string) en `inventario_editor.js`
-- ✅ Validación actualizada para usar campos mapeados
-- ✅ Eliminación de campos incorrectos después del mapeo
-
-**Mejoras de UI:**
-- ✅ Columna "Precio Venta" agregada al listado de productos
-- ✅ Formatters mejorados para manejar valores `null`/`undefined`
-- ✅ Retorno de valores por defecto (`'$ 0,00'`, `'0,00'`) para campos vacíos
-- ✅ Fallback mejorado en `inventario.api.js` para usar Core API Facade directamente
-
-**Bug Fixes:**
-- ✅ Error 400 "PRODUCTO: Este campo es requerido" corregido (mapeo de campos)
-- ✅ Error 400 "TIPO: Este campo es requerido" corregido (mapeo de campos)
-- ✅ Error 500 con traceback completo corregido (filtrado de tracebacks)
-- ✅ Error de código duplicado ahora muestra mensaje amigable
-- ✅ Error 404 al cargar rutas corregido (fallback a Core API Facade)
-
-### v2.61.3 (2026-03-12) - Migración Completa a Feature-Sliced Architecture
-
-**Core API Facade - Completado:**
-- ✅ `ServicioCoreViewSet` agregado a Core API
-- ✅ `ActivoFijoCoreViewSet` agregado a Core API
-- ✅ Serializers Workspace para Servicios y Activos (con `_ImagenUrlMixin`)
-- ✅ URLs registradas en `router_v1` para todos los módulos
-- ✅ Links agregados en `CoreLinksViewSet` para todos los módulos
-
-**Feature-Sliced Architecture - Completado:**
-- ✅ Migración completa de Categorías a `categorias_list.js` + `categorias_editor.js`
-- ✅ Migración completa de Productos a `productos_list.js` + `productos_editor.js`
-- ✅ Migración completa de Servicios a `servicios_list.js` + `servicios_editor.js`
-- ✅ Migración completa de Activos a `activos_list.js` + `activos_editor.js`
-- ✅ Migración completa de Movimientos a `movimientos_list.js` + `movimientos_editor.js`
-- ✅ Archivos `.page.js` marcados como DEPRECATED (mantenidos por compatibilidad)
-
-**Endpoints JavaScript - Alineados:**
-- ✅ Todos los archivos `*_list.js` usan Core API Facade para Tabulator (`API_URL`)
-- ✅ Todos los archivos `*_editor.js` usan Core API Facade para CRUD (`CORE_API_BASE`)
-- ✅ Todos los endpoints de `gestor-offcanvas` usan Core API Facade
-- ✅ Carga de catálogos (categorías, productos) usa Core API Facade
-- ✅ Archivos legacy (`inventario_list.js`, `inventario_editor.js`) actualizados
-
-**Documentación:**
-- ✅ Documentación actualizada con flujos completos desde `workspace.html`
-- ✅ Sección de Core API Facade expandida con todos los ViewSets
-- ✅ Flujos principales detallados paso a paso (17 pasos para crear producto)
-- ✅ Integración con workspace documentada
-- ✅ Estructura de archivos actualizada con Feature-Sliced Architecture
-
-### v2.60
-- ✅ Migración a HTMX + Offcanvas
-- ✅ Eliminación de modals.html (todo funciona con HTMX)
-- ✅ API-First Architecture consolidada
-- ✅ Tabulator Factory implementado
+**Files Modified:**
+- `apps/tenant/inventario/static/inventario/js/features/movimientos_editor.js`
+- `apps/tenant/inventario/templates/inventario/offcanvas_movimiento.html`
+- `apps/tenant/inventario/api/viewsets.py`
+- `apps/tenant/inventario/services/business_service.py` (Type hints y correcciones menores)
 
 ---
 
 **Fin del Documento**  
-**Última actualización**: 2026-03-12  
-**Versión del Sistema**: 2.61.4  
-**Estado**: ✅ Sincronizado con flujos completos desde workspace.html hasta models.py  
-**Estado Core API**: ✅ Completo (5 ViewSets facade, 10 serializers workspace)  
-**Estado Frontend**: ✅ Feature-Sliced Architecture completo (10 módulos features)  
-**Estado Endpoints**: ✅ Todos alineados con Core API Facade  
-**Estado Robustez**: ✅ Prevención de doble envío, manejo de errores mejorado, recarga automática  
-**Estado UX**: ✅ Mensajes de error amigables, valores numéricos formateados correctamente
+**Ultima actualizacion**: 2026-03-30  
+**Version del Sistema**: 2.61.8  
+**Estado**: Estable y Sincronizado  
+**Regla de Oro**: Solicitar aprobación al usuario antes de modificar este módulo.

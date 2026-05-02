@@ -1,46 +1,18 @@
 {% load static %}
-{# assets_facturas.html - Assets del módulo Facturas v2.61.3 #}
-{# ⚠️ v2.60: Migrado a Feature-Sliced Architecture + HTMX + Offcanvas #}
-{# ⚠️ v2.61.2: facturas_editor.js deshabilitado - Facturas son solo lectura #}
-{# ⚠️ v2.61.2: ver_detalle_factura.js cargado antes de facturas_list.js (dependencia) #}
-{# ⚠️ v2.61.3: Alineado con backend v2.61.3 - persisted:True, status_code check, !data.id fix #}
-{# #}
-{# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
-{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http.js, ui-manager.js, etc.) - ya cargado en workspace.html #}
-{# 2. facturas.api.js (define window.facturasAPI) - REQUERIDO #}
-{# 3. facturas_ui.js (Módulo centralizado de UI - define window.AppFacturas) - REQUERIDO #}
-{# 4. ver_detalle_factura.js (Feature: Solo lectura - define window.VerDetalleFactura) - REQUERIDO #}
-{# 5. facturas_list.js (Feature: Listado y Tabulator - requiere VerDetalleFactura) - REQUERIDO #}
+{# assets_facturas.html - Assets del modulo Facturas v2.61.5 #}
+{# Arquitectura modular: window.Sintel.Facturas + window.AppFacturas (alias) #}
+{#                                                                            #}
+{# ORDEN CRITICO (sin async/defer):                                          #}
+{# 1. facturas.utils.js  - Formatters puros, sin deps                        #}
+{# 2. facturas.api.js    - Core API Facade, requiere window.http             #}
+{# 3. facturas.table.js  - Tabulator + event delegation, requiere utils      #}
+{# 4. facturas.ui.js     - Offcanvas + form + detalle, requiere utils + api  #}
+{# 5. facturas.sync.js   - Sincronizacion correo, requiere utils + api + ui  #}
+{# 6. facturas.main.js   - FacturaController orquestador, monta todo        #}
 
-{# BLOQUE 1: API Wrapper (REQUERIDO) #}
-<script src="{% static 'core/js/facturas/facturas.api.js' %}"></script>
-
-{# BLOQUE 2: Módulo Centralizado de UI (REQUERIDO) #}
-{# ⚠️ CRÍTICO: facturas_ui.js expone window.AppFacturas para eventos inline (onclick) #}
-<script src="{% static 'core/js/facturas/facturas_ui.js' %}"></script>
-
-{# BLOQUE 3: Features Feature-Sliced (REQUERIDO) #}
-<script src="{% static 'core/js/facturas/features/facturas_list.js' %}"></script>
-<script src="{% static 'core/js/facturas/features/ver_detalle_factura.js' %}"></script>
-{# ⚠️ v2.61.2: facturas_editor.js deshabilitado - Las facturas son solo lectura #}
-{# <script src="{% static 'core/js/facturas/features/facturas_editor.js' %}"></script> #}
-
-{# ⚠️ v2.61.2: HTMX: Reinicializar listeners cuando se carga el Offcanvas vía HTMX #}
-{# ⚠️ NOTA: facturas_editor.js está deshabilitado - Las facturas son solo lectura #}
-<script>
-    if (typeof htmx !== 'undefined') {
-        document.addEventListener('htmx:afterSwap', function(event) {
-            if (event.detail.target.id === 'offcanvas-container-facturas') {
-                // ⚠️ v2.61.2: Solo inicializar verDetalleFactura si el offcanvas es de solo lectura
-                setTimeout(function() {
-                    const offcanvasEl = document.getElementById('offcanvas-ver-factura') || document.getElementById('offcanvas-factura');
-                    if (offcanvasEl && offcanvasEl.id === 'offcanvas-ver-factura') {
-                        // Modo solo lectura - no inicializar editor
-                        console.log('[facturas] Offcanvas de solo lectura cargado');
-                    }
-                    // ⚠️ v2.61.2: Editor deshabilitado - no inicializar FacturasEditorModule
-                }, 50);
-            }
-        });
-    }
-</script>
+<script src="{% static 'facturas/js/factura_utils.js' %}"></script>
+<script src="{% static 'facturas/js/factura_api.js' %}"></script>
+<script src="{% static 'facturas/js/factura_table.js' %}"></script>
+<script src="{% static 'facturas/js/factura_ui.js' %}"></script>
+<script src="{% static 'facturas/js/factura_sync.js' %}"></script>
+<script src="{% static 'facturas/js/factura_main.js' %}"></script>

@@ -1,22 +1,22 @@
 """
 Service Layer interno del dominio Empresa.
 
-⚠️ v2.30: Service Layer Pattern - Lógica de negocio del dominio Empresa.
+# WARNING: v2.30: Service Layer Pattern - Lógica de negocio del dominio Empresa.
 - Sin signals: Toda la lógica es explícita
 - Sin HTTP: Funciones puras que operan sobre modelos
 - Multi-tenant: Transparente (django-tenants maneja el aislamiento por esquema)
 - Validaciones: Tipos, longitudes, formatos (NIT, email, URL), singleton
 """
-from typing import Dict, Any, Optional
+from typing import Any
+
 from django.db import transaction
-from django.core.exceptions import ValidationError
 
 
-def get_empresa() -> Optional[Dict[str, Any]]:
+def get_empresa() -> dict[str, Any] | None:
     """
     Obtiene la empresa del tenant actual (singleton).
     
-    ⚠️ SINGLETON: Solo existe una empresa por tenant.
+    # WARNING: SINGLETON: Solo existe una empresa por tenant.
     
     Returns:
         dict: DTO con datos de la empresa o None si no existe
@@ -50,12 +50,12 @@ def get_empresa() -> Optional[Dict[str, Any]]:
 
 
 @transaction.atomic
-def get_or_create_empresa(defaults: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_or_create_empresa(defaults: dict[str, Any] | None = None) -> dict[str, Any]:
     """
     Obtiene o crea/actualiza la empresa del tenant actual (singleton).
     
-    ⚠️ SINGLETON: Solo existe una empresa por tenant.
-    ⚠️ v2.60: Si la empresa existe, actualiza los campos proporcionados en `defaults`.
+    # WARNING: SINGLETON: Solo existe una empresa por tenant.
+    # WARNING: v2.60: Si la empresa existe, actualiza los campos proporcionados en `defaults`.
     
     Args:
         defaults: Valores por defecto para crear la empresa si no existe, o campos a actualizar si ya existe
@@ -65,11 +65,11 @@ def get_or_create_empresa(defaults: Optional[Dict[str, Any]] = None) -> Dict[str
     """
     from apps.tenant.empresa.models import Empresa
     
-    # ⚠️ v2.60: Intentar obtener la empresa existente primero
+    # # WARNING: v2.60: Intentar obtener la empresa existente primero
     empresa = Empresa.objects.first()
     
     if empresa:
-        # ⚠️ v2.60: Si existe, actualizar los campos proporcionados en defaults
+        # # WARNING: v2.60: Si existe, actualizar los campos proporcionados en defaults
         if defaults:
             # Validar y actualizar solo campos permitidos
             campos_permitidos = [
@@ -80,7 +80,7 @@ def get_or_create_empresa(defaults: Optional[Dict[str, Any]] = None) -> Dict[str
             update_fields = []
             for campo, valor in defaults.items():
                 if campo in campos_permitidos:
-                    # ⚠️ Validaciones básicas (similares a update_empresa)
+                    # # WARNING: Validaciones básicas (similares a update_empresa)
                     if campo == 'razon_social' and valor and not isinstance(valor, str):
                         raise ValueError("El campo 'razon_social' debe ser una cadena de texto.")
                     if campo == 'nit' and valor and not isinstance(valor, str):
@@ -99,7 +99,7 @@ def get_or_create_empresa(defaults: Optional[Dict[str, Any]] = None) -> Dict[str
         # Retornar DTO actualizado
         return get_empresa()
     
-    # ⚠️ v2.60: Si no existe, crear con defaults
+    # # WARNING: v2.60: Si no existe, crear con defaults
     if defaults is None:
         defaults = {
             'razon_social': 'Empresa',
@@ -110,12 +110,12 @@ def get_or_create_empresa(defaults: Optional[Dict[str, Any]] = None) -> Dict[str
             'moneda': 'COP',
         }
     
-    # ⚠️ v2.60: Crear nueva empresa
+    # # WARNING: v2.60: Crear nueva empresa
     # Si el NIT ya existe (caso edge), intentar obtener y actualizar en lugar de crear
     try:
         empresa = Empresa.objects.create(**defaults)
     except Exception as e:
-        # ⚠️ PROTECCIÓN: Si falla por NIT duplicado u otra constraint, intentar obtener y actualizar
+        # # WARNING: PROTECCIÓN: Si falla por NIT duplicado u otra constraint, intentar obtener y actualizar
         # Esto puede pasar en condiciones de carrera o si hay datos inconsistentes
         if 'nit' in str(e).lower() or 'unique' in str(e).lower():
             # Intentar obtener por NIT si está en defaults
@@ -136,12 +136,12 @@ def get_or_create_empresa(defaults: Optional[Dict[str, Any]] = None) -> Dict[str
 
 
 @transaction.atomic
-def update_empresa(data: Dict[str, Any]) -> Dict[str, Any]:
+def update_empresa(data: dict[str, Any]) -> dict[str, Any]:
     """
     Actualiza la empresa del tenant actual (singleton).
     
-    ⚠️ v2.30: Service Layer Pattern - Lógica de negocio centralizada.
-    ⚠️ VALIDACIONES: Tipos, longitudes, formatos (NIT, email, URL), singleton.
+    # WARNING: v2.30: Service Layer Pattern - Lógica de negocio centralizada.
+    # WARNING: VALIDACIONES: Tipos, longitudes, formatos (NIT, email, URL), singleton.
     
     Args:
         data: Diccionario con campos a actualizar

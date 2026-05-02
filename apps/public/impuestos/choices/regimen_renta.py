@@ -1,5 +1,4 @@
 # apps/public/impuestos/choices/regimen_renta.py
-# -*- coding: utf-8 -*-
 """
 Choices para el campo 'codigo' del modelo RegimenRenta.
 Basado en la normativa DIAN:
@@ -10,15 +9,14 @@ Basado en la normativa DIAN:
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
-REGIMEN_RENTA_CHOICES: List[Tuple[str, str]] = [
+REGIMEN_RENTA_CHOICES: list[tuple[str, str]] = [
     ("ORDINARIO", "Régimen Ordinario"),
     ("ESPECIAL", "Régimen Tributario Especial (RTE)"),
     ("SIMPLE", "Régimen Simple de Tributación (SIMPLE)"),
 ]
 
-def get_regimen_renta_choices() -> List[Tuple[str, str]]:
+
+def get_regimen_renta_choices() -> list[tuple[str, str]]:
     """
     Provee los choices en runtime por si se prefiere inyectarlos
     dinámicamente en serializers/forms (recomendado).

@@ -4,7 +4,7 @@ Servicio de gestión de perfiles de colaboradores.
 Este servicio centraliza la lógica de negocio para la gestión de perfiles
 de colaboradores dentro de tenants, siguiendo el principio de Service Layer Pattern.
 
-⚠️ v2.30: API-First + SSoT - Toda la lógica de negocio está aquí.
+WARNING: v2.30: API-First + SSoT - Toda la lógica de negocio está aquí.
 - Cero Signals: Toda la lógica es explícita
 - Service Layer Pattern: Lógica de negocio separada de modelos y vistas
 - Tenant Isolation: Operaciones dentro del contexto del tenant
@@ -30,22 +30,23 @@ Uso:
     # Actualizar avatar
     perfil = actualizar_avatar(user, archivo)
 """
-from typing import Dict, Any, Optional
+from typing import Any
+
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.core.files.uploadedfile import UploadedFile
+from django.db import transaction
 
 User = get_user_model()
 
 
-def obtener_o_crear_perfil(user: User, defaults: Optional[Dict[str, Any]] = None) -> 'TenantProfile':
+def obtener_o_crear_perfil(user: User, defaults: dict[str, Any] | None = None) -> 'TenantProfile':
     """
     Obtiene o crea el perfil del usuario en el tenant actual.
     
-    ⚠️ IMPORTANTE: Este método reemplaza el uso de señales post_save.
+    WARNING: IMPORTANTE: Este método reemplaza el uso de señales post_save.
     La lógica es explícita y se ejecuta solo cuando se necesita.
     
-    ⚠️ TENANT ISOLATION: Este método debe ejecutarse dentro del contexto
+    WARNING: TENANT ISOLATION: Este método debe ejecutarse dentro del contexto
     del tenant correcto. django-tenants maneja automáticamente el aislamiento
     por esquema, así que el perfil se crea en el esquema del tenant actual.
     
@@ -91,12 +92,12 @@ def obtener_o_crear_perfil(user: User, defaults: Optional[Dict[str, Any]] = None
 
 
 @transaction.atomic
-def actualizar_perfil(user: User, data: Dict[str, Any]) -> 'TenantProfile':
+def actualizar_perfil(user: User, data: dict[str, Any]) -> 'TenantProfile':
     """
     Actualiza el perfil del usuario con los datos proporcionados.
     
-    ⚠️ v2.30: Service Layer Pattern - Lógica de negocio centralizada.
-    ⚠️ IMPORTANTE: Normaliza configuracion=None a {} antes de guardar.
+    WARNING: v2.30: Service Layer Pattern - Lógica de negocio centralizada.
+    WARNING: IMPORTANTE: Normaliza configuracion=None a {} antes de guardar.
     
     Args:
         user: Usuario global (AUTH_USER_MODEL)
@@ -115,7 +116,6 @@ def actualizar_perfil(user: User, data: Dict[str, Any]) -> 'TenantProfile':
             'configuracion': {'modo_oscuro': True}  # o None (se normaliza a {})
         })
     """
-    from apps.tenant.perfil.models import TenantProfile
     
     # Obtener o crear el perfil
     perfil = obtener_o_crear_perfil(user)
@@ -127,7 +127,7 @@ def actualizar_perfil(user: User, data: Dict[str, Any]) -> 'TenantProfile':
     for campo in campos_permitidos:
         if campo in data:
             valor = data[campo]
-            # ⚠️ v2.30: Normalizar configuracion=None a {} (nunca propagar None al modelo)
+            # WARNING: v2.30: Normalizar configuracion=None a {} (nunca propagar None al modelo)
             if campo == 'configuracion' and valor is None:
                 valor = {}
             setattr(perfil, campo, valor)
@@ -143,14 +143,14 @@ def actualizar_perfil(user: User, data: Dict[str, Any]) -> 'TenantProfile':
 @transaction.atomic
 def actualizar_configuracion_ui(
     user: User,
-    configuracion_dict: Dict[str, Any],
+    configuracion_dict: dict[str, Any],
     merge: bool = True
 ) -> 'TenantProfile':
     """
     Actualiza la configuración de UI del perfil de forma segura.
     
-    ⚠️ v2.30: Service Layer Pattern - Lógica de negocio centralizada.
-    ⚠️ IMPORTANTE: Este método actualiza el campo JSONField `configuracion`
+    WARNING: v2.30: Service Layer Pattern - Lógica de negocio centralizada.
+    WARNING: IMPORTANTE: Este método actualiza el campo JSONField `configuracion`
     de forma segura, preservando los valores existentes si `merge=True`.
     
     Args:
@@ -174,12 +174,11 @@ def actualizar_configuracion_ui(
             merge=False
         )
     """
-    from apps.tenant.perfil.models import TenantProfile
     
     # Obtener o crear el perfil
     perfil = obtener_o_crear_perfil(user)
     
-    # ⚠️ v2.30: Normalizar None a {} (nunca propagar None)
+    # WARNING: v2.30: Normalizar None a {} (nunca propagar None)
     if configuracion_dict is None:
         configuracion_dict = {}
     
@@ -206,8 +205,8 @@ def actualizar_avatar(user: User, archivo: UploadedFile) -> 'TenantProfile':
     """
     Actualiza el avatar del perfil del usuario.
     
-    ⚠️ v2.30: Service Layer Pattern - Lógica de negocio centralizada.
-    ⚠️ SEGURIDAD: Valida tipo de archivo y tamaño.
+    WARNING: v2.30: Service Layer Pattern - Lógica de negocio centralizada.
+    WARNING: SEGURIDAD: Valida tipo de archivo y tamaño.
     
     Args:
         user: Usuario global (AUTH_USER_MODEL)
@@ -224,8 +223,6 @@ def actualizar_avatar(user: User, archivo: UploadedFile) -> 'TenantProfile':
         
         perfil = actualizar_avatar(user, request.FILES['avatar'])
     """
-    from apps.tenant.perfil.models import TenantProfile
-    from django.core.exceptions import ValidationError
     
     # Validar tipo de archivo (solo imágenes)
     content_types_permitidos = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']

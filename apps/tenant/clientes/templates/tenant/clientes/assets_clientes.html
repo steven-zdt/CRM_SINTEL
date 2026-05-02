@@ -1,0 +1,13 @@
+{% load static %}
+
+
+{# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
+<script src="{% static 'clientes/js/clientes.api.js' %}"></script>
+
+{# BLOQUE 2: Features - Módulos Refactorizados #}
+<script src="{% static 'clientes/js/clientes.utils.js' %}"></script>
+<script src="{% static 'clientes/js/clientes.list.js' %}"></script>
+<script src="{% static 'clientes/js/clientes.editor.js' %}"></script>
+<script src="{% static 'clientes/js/clientes.detalle.js' %}"></script>
+<script src="{% static 'clientes/js/clientes.contactos.js' %}"></script>
+

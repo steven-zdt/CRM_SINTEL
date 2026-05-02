@@ -1,24 +1,24 @@
 """Core API v1 - Facturas serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Composición vía herencia de serializers existentes de la app facturas.
-- ⚠️ v2.61.1: Alineado con patrón de cotizaciones
+- # WARNING: v2.61.1: Alineado con patrón de cotizaciones
 """
 
 from apps.tenant.facturas.api.serializers import (
-    FacturaListSerializer,
     FacturaDetailSerializer,
+    FacturaListSerializer,
     FacturaWriteSerializer,
     ItemFacturaSerializer,
-    NotaCreditoListSerializer,
     NotaCreditoDetailSerializer,
+    NotaCreditoListSerializer,
 )
 
 
 class FacturaWorkspaceListSerializer(FacturaListSerializer):
     """
-    ⚠️ v2.61.1: Serializer facade para listado de facturas en Core API.
+    # WARNING: v2.61.1: Serializer facade para listado de facturas en Core API.
     """
     class Meta(FacturaListSerializer.Meta):
         pass
@@ -26,7 +26,7 @@ class FacturaWorkspaceListSerializer(FacturaListSerializer):
 
 class FacturaWorkspaceDetailSerializer(FacturaDetailSerializer):
     """
-    ⚠️ v2.61.1: Serializer facade para detalle de factura en Core API.
+    # WARNING: v2.61.1: Serializer facade para detalle de factura en Core API.
     """
     class Meta(FacturaDetailSerializer.Meta):
         pass
@@ -34,7 +34,7 @@ class FacturaWorkspaceDetailSerializer(FacturaDetailSerializer):
 
 class FacturaWorkspaceSerializer(FacturaWriteSerializer):
     """
-    ⚠️ v2.61.1: Serializer facade para escritura de factura en Core API.
+    # WARNING: v2.61.1: Serializer facade para escritura de factura en Core API.
     """
     class Meta(FacturaWriteSerializer.Meta):
         pass
@@ -42,7 +42,7 @@ class FacturaWorkspaceSerializer(FacturaWriteSerializer):
 
 class ItemFacturaWorkspaceSerializer(ItemFacturaSerializer):
     """
-    ⚠️ v2.61.1: Serializer facade para items de factura en Core API.
+    # WARNING: v2.61.1: Serializer facade para items de factura en Core API.
     """
     class Meta(ItemFacturaSerializer.Meta):
         pass
@@ -50,7 +50,7 @@ class ItemFacturaWorkspaceSerializer(ItemFacturaSerializer):
 
 class NotaCreditoWorkspaceListSerializer(NotaCreditoListSerializer):
     """
-    ⚠️ v2.61.1: Serializer facade para listado de notas crédito en Core API.
+    # WARNING: v2.61.1: Serializer facade para listado de notas crédito en Core API.
     """
     class Meta(NotaCreditoListSerializer.Meta):
         pass
@@ -58,7 +58,7 @@ class NotaCreditoWorkspaceListSerializer(NotaCreditoListSerializer):
 
 class NotaCreditoWorkspaceDetailSerializer(NotaCreditoDetailSerializer):
     """
-    ⚠️ v2.61.1: Serializer facade para detalle de nota crédito en Core API.
+    # WARNING: v2.61.1: Serializer facade para detalle de nota crédito en Core API.
     """
     class Meta(NotaCreditoDetailSerializer.Meta):
         pass

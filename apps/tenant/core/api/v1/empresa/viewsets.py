@@ -1,13 +1,12 @@
 """Core API v1 - Empresa facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - La app Core solo orquesta y expone los mismos ViewSets (acciones incluidas).
 - Las acciones @action se arrastran por herencia (NO redefinir).
 """
 
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 
 from apps.tenant.empresa.api.viewsets import EmpresaViewSet, MailInboxConfigViewSet
 
@@ -15,8 +14,7 @@ from . import serializers as ws_serializers
 
 
 class EmpresaCoreViewSet(EmpresaViewSet):
-    authentication_classes = [SessionAuthentication]
-    # ⚠️ CRÍTICO: Asegurar parser_classes en facade
+    # # WARNING: CRÍTICO: Asegurar parser_classes en facade
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     def get_serializer_class(self):
@@ -31,8 +29,6 @@ class EmpresaCoreViewSet(EmpresaViewSet):
 
 
 class MailInboxConfigCoreViewSet(MailInboxConfigViewSet):
-    authentication_classes = [SessionAuthentication]
-
     def get_serializer_class(self):
         if self.action == 'list':
             return ws_serializers.MailInboxConfigWorkspaceListSerializer

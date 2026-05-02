@@ -1,7 +1,7 @@
 """
 Consola API-First (SSOT - Single Source of Truth)
 
-⚠️ ESTE PAQUETE ES LA ÚNICA FUENTE DE VERDAD PARA CRUD DE LA CONSOLA PÚBLICA.
+WARNING: ESTE PAQUETE ES LA ÚNICA FUENTE DE VERDAD PARA CRUD DE LA CONSOLA PÚBLICA.
 
 Este módulo es la única fuente de verdad (SSOT) para todas las operaciones CRUD
 de la consola de administración pública (esquema 'public').

@@ -3,23 +3,24 @@ Smoke tests de templates para la app impuestos.
 
 Verifica que los endpoints API no renderizan templates HTML.
 """
+
 from apps.config.tests.base_public import PublicAPITestCase
 
 
 class ImpuestosTemplateTests(PublicAPITestCase):
     """Tests de templates para endpoints de impuestos."""
-    
+
     def test_api_endpoints_no_render_templates(self):
         """Test: Los endpoints /api/v1/impuestos/ no renderizan templates."""
         endpoints = [
-            '/api/v1/impuestos/tipos/',
-            '/api/v1/impuestos/tarifas-iva/',
-            '/api/v1/impuestos/conceptos-retencion/',
-            '/api/v1/impuestos/codigos-tributarios/',
-            '/api/v1/impuestos/actividades-economicas/',
+            "/api/v1/impuestos/tipos/",
+            "/api/v1/impuestos/tarifas-iva/",
+            "/api/v1/impuestos/conceptos-retencion/",
+            "/api/v1/impuestos/codigos-tributarios/",
+            "/api/v1/impuestos/actividades-economicas/",
         ]
-        
+
         for endpoint in endpoints:
-            response = self.json('get', endpoint)
-            self.assertEqual(response['content-type'], 'application/json')
-            self.assertNotIn('text/html', response['content-type'])
+            response = self.json("get", endpoint)
+            self.assertEqual(response["content-type"], "application/json")
+            self.assertNotIn("text/html", response["content-type"])

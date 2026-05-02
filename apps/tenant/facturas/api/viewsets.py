@@ -1,7 +1,7 @@
 """
 ViewSets para la app facturas.
 
-⚠️ v2.30: API-First (DRF JSON-only) - Solo endpoints REST.
+# WARNING: v2.30: API-First (DRF JSON-only) - Solo endpoints REST.
 - django-tenants maneja automáticamente el aislamiento por esquema
 - NO es necesario filtrar manualmente por tenant_id
 - Service Layer: Toda la lógica de negocio está en services.py
@@ -9,28 +9,26 @@ ViewSets para la app facturas.
 
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
-from rest_framework import viewsets, status, mixins
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.request import Request
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
-from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
-from django.shortcuts import get_object_or_404
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
-from django.db.models import Q, ProtectedError
-from django.db import IntegrityError, DataError
-from django.db import connection
-from lxml import etree
-from decimal import Decimal
-import logging
 import base64
-from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito
-from apps.tenant.empresa.models import Empresa
-from apps.tenant.api.permissions import IsTenantAdminOrReadOnly
+import logging
+from decimal import Decimal
+
+from django.db import IntegrityError, connection
+from django.db.models import ProtectedError, Q
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
+from rest_framework.request import Request
+from rest_framework.response import Response
+
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+from apps.tenant.empresa.models import Empresa
+from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito
 
 # Logger normalizado para facturas (upload, import, etc.)
 log_up = logging.getLogger("facturas")
@@ -47,7 +45,7 @@ def safe_extra(d: dict) -> dict:
     """
     Devuelve un nuevo dict sin colisión con LogRecord; renombra claves reservadas añadiendo sufijo '_x'.
     
-    ⚠️ FORÉNSICA: Evita KeyError "Attempt to overwrite ..." cuando una clave en 'extra'
+    # WARNING: FORÉNSICA: Evita KeyError "Attempt to overwrite ..." cuando una clave en 'extra'
     colisiona con atributos estándar de LogRecord.
     """
     if not d:
@@ -57,32 +55,21 @@ def safe_extra(d: dict) -> dict:
         out[k + "_x" if k in _RESERVED else k] = v
     return out
 
-from .serializers import (
-    FacturaListSerializer,
-    FacturaDetailSerializer,
-    FacturaReadDTOSerializer,
-    FacturaWriteSerializer,
-    ItemFacturaSerializer,
-    ImportUBLSerializer,
-    UploadUBLFileSerializer,
-    NotaCreditoListSerializer,
-    NotaCreditoDetailSerializer,
-)
-from apps.tenant.facturas import services
-from apps.tenant.facturas.services import (
-    importar_ubl_async,
-    importar_ubl_sync,
-    materializar_factura_desde_result,
-    obtener_anexo_xml,
-    importar_documento,  # ⚠️ v2.36 FASE 2: Función para pipeline universal
-    qs_list,  # ⚠️ v2.37: QuerySet optimizado para listado
-    qs_detail,  # ⚠️ v2.37: QuerySet optimizado para detalle
-    get_facturacion_summary,  # ⚠️ v2.40: Resumen de facturación neta
-)
-from apps.tenant.facturas.ubl_parser import fast_get_cufe  # ⚠️ v2.61.2: Pre-validación de idempotencia (Vía Rápida)
-# ⚠️ DEPRECATED v2.40: DataTableSpec y DataTableServer eliminados - usar StandardResultsSetPagination
-from django.http import HttpResponse
 from django.conf import settings
+
+# # WARNING: DEPRECATED v2.40: DataTableSpec y DataTableServer eliminados - usar StandardResultsSetPagination
+from django.http import HttpResponse
+
+from apps.tenant.facturas.services import FacturaSelectors, FacturaServiceMixin
+from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
+from .serializers import (
+    FacturaDetailSerializer,
+    FacturaListSerializer,
+    ImportUBLSerializer,
+    ItemFacturaSerializer,
+    NotaCreditoDetailSerializer,
+    NotaCreditoListSerializer,
+)
 
 
 def mini_error(message: str, code: str, status_code: int) -> Response:
@@ -94,16 +81,16 @@ def mini_error(message: str, code: str, status_code: int) -> Response:
     return Response({"error": code, "message": message}, status=status_code)
 
 
-class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
+class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
     """
     FACTURAS MODULE — CONTROL CONTABLE
     
-    ⚠️ REGLAS DE NEGOCIO v2.95:
+    # WARNING: REGLAS DE NEGOCIO v2.95:
     Las facturas son documentos históricos importados desde sistemas externos.
-    - ✅ ELIMINACIÓN: Se habilita la eliminación directa sin restricciones.
-    - ✅ La factura puede eliminarse incluso si tiene notas de crédito asociadas.
-    - ✅ No hay validaciones que bloqueen la eliminación por vínculos contables o documentos relacionados.
-    - ⚠️ EDICIÓN: NUNCA se pueden editar, actualizar o modificar (inmutabilidad solo para edición).
+    - [OK] ELIMINACIÓN: Se habilita la eliminación directa sin restricciones.
+    - [OK] La factura puede eliminarse incluso si tiene notas de crédito asociadas.
+    - [OK] No hay validaciones que bloqueen la eliminación por vínculos contables o documentos relacionados.
+    - # WARNING: EDICIÓN: NUNCA se pueden editar, actualizar o modificar (inmutabilidad solo para edición).
     - Las correcciones fiscales se realizan mediante Notas Crédito/Débito.
     
     Endpoints permitidos:
@@ -118,24 +105,23 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     - PUT /facturas/{id}/ → 405 Method Not Allowed (inmutabilidad para edición)
     - PATCH /facturas/{id}/ → 405 Method Not Allowed (inmutabilidad para edición)
     
-    ⚠️ OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
-    ✅ Escalable (millones de facturas)
-    ✅ Perfecto para supervisión contable
+    # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
+    [OK] Escalable (millones de facturas)
+    [OK] Perfecto para supervisión contable
     """
     """
-    ⚠️ v2.40: ViewSet para Facturas con Tabulator Factory.
+    # WARNING: v2.40: ViewSet para Facturas con Tabulator Factory.
     Usa StandardResultsSetPagination para paginación remota.
     """
-    authentication_classes = [SessionAuthentication]  # ✅ Compatible con workspace (cookies de sesión)
-    permission_classes = [IsAuthenticated, IsTenantAdminOrReadOnly]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     pagination_class = StandardResultsSetPagination
-    parser_classes = [JSONParser, FormParser, MultiPartParser]  # ⚠️ v2.40: JSON (principal) + FormParser (legacy) + MultiPartParser (upload)
-    renderer_classes = [JSONRenderer]  # ⚠️ v2.40: Solo JSON (no BrowsableAPIRenderer)
+    parser_classes = [JSONParser, FormParser, MultiPartParser]  # # WARNING: v2.40: JSON (principal) + FormParser (legacy) + MultiPartParser (upload)
+    renderer_classes = [JSONRenderer]  # # WARNING: v2.40: Solo JSON (no BrowsableAPIRenderer)
     
-    # ⚠️ INMUTABILIDAD: GET, DELETE y POST (solo para upload-ubl) permitidos
+    # # WARNING: INMUTABILIDAD: GET, DELETE y POST (solo para upload-ubl) permitidos
     http_method_names = ['get', 'head', 'options', 'post', 'delete']
     
-    # ⚠️ NO usar queryset = Factura.objects.all()
+    # # WARNING: NO usar queryset = Factura.objects.all()
     # Se define en get_queryset() con only() para optimización
     
     # Filtros y búsqueda
@@ -152,56 +138,59 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """
         QuerySet optimizado usando qs_list() y qs_detail() del service.
-        
-        ⚠️ v2.40: Alineado con Service Layer Pattern y Tabulator Factory.
+
+        # WARNING: v2.40: Alineado con Service Layer Pattern y Tabulator Factory.
         - LIST: usa qs_list() (LIST_FIELDS) con soporte ?search=
         - RETRIEVE: usa qs_detail() (DETAIL_FIELDS)
-        - DESTROY: todos los campos (necesarios para validaciones)
-        
+        - DESTROY: .only() minimo (Zero-Trust DML)
+
+        # WARNING: v2.61.5: Anti-IDOR — empresa_id aplicado en TODAS las acciones
+        como defensa en profundidad (django-tenants aisla por schema, pero el filtro
+        explicito garantiza que un usuario no acceda a facturas de otra empresa
+        dentro del mismo schema).
+
         Filtros soportados:
-        - naturaleza: VENTA|COMPRA (soportado por filterset_fields)
-        - nit: busca en emisor_nit o receptor_nit (filtro personalizado)
-        - estado: filtro exacto (soportado por filterset_fields)
-        - fecha_emision__date__gte / fecha_emision__date__lte: rango de fechas
-        - search: búsqueda general (soportado por Tabulator)
+        - naturaleza: VENTA|COMPRA
+        - nit: busca en emisor_nit o receptor_nit
+        - estado: filtro exacto
+        - search: busqueda general (Tabulator)
         """
-        # Obtener parámetro de búsqueda
+        # Garantiza que el perfil exista y obtén empresa_id de forma segura
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+        perfil = get_or_create_profile(self.request.user)
+        empresa_id = perfil.empresa_id
         search = self.request.query_params.get('search', None)
-        
-        # Seleccionar queryset según acción
+
         if self.action == "list":
-            qs = qs_list(search=search)
+            qs = self.get_qs_list(search=search).filter(empresa_id=empresa_id)
         elif self.action == "retrieve":
-            qs = qs_detail()
+            qs = self.get_qs_detail().filter(empresa_id=empresa_id)
         elif self.action == "destroy":
-            # Para delete necesitamos todos los campos
-            qs = Factura.objects.all()
+            qs = Factura.objects.filter(empresa_id=empresa_id).only('id', 'estado', 'empresa_id')
         else:
-            # Default: usar list queryset
-            qs = qs_list(search=search)
-        
-        # Filtros explícitos (nunca .all())
+            qs = self.get_qs_list(search=search).filter(empresa_id=empresa_id)
+
         request = self.request
-        
+
         if nat := request.GET.get("naturaleza"):
             if nat in ("VENTA", "COMPRA"):
                 qs = qs.filter(naturaleza=nat)
-        
+
         if nit := request.GET.get("nit"):
             qs = qs.filter(Q(emisor_nit__icontains=nit) | Q(receptor_nit__icontains=nit))
-        
+
         if estado := request.GET.get("estado"):
             qs = qs.filter(estado=estado)
-        
+
         return qs.order_by("-fecha_emision", "-id")
     
     def get_serializer_class(self):
         """
         Selecciona el serializer según la acción.
         
-        ⚠️ v2.61.2: Acciones @action que no usan serializer retornan None.
+        # WARNING: v2.61.2: Acciones @action que no usan serializer retornan None.
         """
-        # ⚠️ v2.61.2: Acciones que no usan serializer (trabajan directamente con request.data)
+        # # WARNING: v2.61.2: Acciones que no usan serializer (trabajan directamente con request.data)
         if self.action in ['create-from-dto', 'materialize', 'importar-ubl', 'upload-ubl', 'upload-document', 
                            'summary', 'xml', 'app-response', 'update-inbox-state', 'gestor-offcanvas']:
             return None
@@ -212,7 +201,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_serializer(self, *args, **kwargs):
         """
-        ⚠️ v2.61.2: Si get_serializer_class retorna None, no crear serializer.
+        # WARNING: v2.61.2: Si get_serializer_class retorna None, no crear serializer.
         Esto evita errores cuando las acciones @action no usan serializer.
         """
         serializer_class = self.get_serializer_class()
@@ -224,7 +213,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Bloqueado: Las facturas son inmutables.
         
-        ⚠️ IMPORTANTE: Las facturas NO pueden ser editadas.
+        # WARNING: IMPORTANTE: Las facturas NO pueden ser editadas.
         Las correcciones se realizan mediante Notas Crédito/Débito.
         
         Returns:
@@ -242,7 +231,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Bloqueado: Las facturas son inmutables.
         
-        ⚠️ IMPORTANTE: Las facturas NO pueden ser editadas.
+        # WARNING: IMPORTANTE: Las facturas NO pueden ser editadas.
         Las correcciones se realizan mediante Notas Crédito/Débito.
         
         Returns:
@@ -260,7 +249,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Bloqueado: Las facturas solo se crean mediante importación UBL.
         
-        ⚠️ IMPORTANTE: Las facturas son documentos históricos importados.
+        # WARNING: IMPORTANTE: Las facturas son documentos históricos importados.
         No se pueden crear manualmente. Use /upload-ubl/ o /importar-ubl/.
         
         Returns:
@@ -278,21 +267,21 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Eliminación directa de facturas (sin restricciones de inmutabilidad).
         
-        ⚠️ NUEVA POLÍTICA v2.95:
+        # WARNING: NUEVA POLÍTICA v2.95:
         - Se habilita la eliminación directa de facturas sin restricciones.
         - La factura puede eliminarse incluso si tiene notas de crédito asociadas.
         - No hay validaciones que bloqueen la eliminación por vínculos contables o documentos relacionados.
         - La inmutabilidad solo aplica para EDICIÓN (update/partial_update), no para eliminación.
         
-        ⚠️ OBJETIVO: Simplificar el manejo del ciclo de facturación permitiendo la depuración 
+        # WARNING: OBJETIVO: Simplificar el manejo del ciclo de facturación permitiendo la depuración 
         y gestión operativa sin restricciones innecesarias.
         
-        ⚠️ MAPEO DE ERRORES:
+        # WARNING: MAPEO DE ERRORES:
         - 404 si no existe (DRF maneja automáticamente)
         - 409 si hay dependencias protegidas a nivel de base de datos (ProtectedError/IntegrityError)
         - 204 si borra ok
         
-        ⚠️ v2.95: Service Layer Pattern - Usa services.eliminar_factura()
+        # WARNING: v2.95: Service Layer Pattern - Usa services.eliminar_factura()
         
         Returns:
             204 No Content si se elimina exitosamente
@@ -304,12 +293,12 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             instance = self.get_object()  # Si no existe -> DRF lanza 404 automáticamente
             
-            # ⚠️ v2.95: Eliminación directa sin validaciones de negocio
+            # # WARNING: v2.95: Eliminación directa sin validaciones de negocio
             # Se eliminan todas las restricciones de CUFE, estado, notas de crédito, etc.
             # La eliminación se permite siempre, excepto por restricciones de integridad de BD
             
-            # Eliminar usando servicio
-            services.eliminar_factura(instance)
+            # Eliminar usando servicio (a través del mixin de herencia)
+            self.service_eliminar(instance)
             
             log_del.info("delete_ok", extra=safe_extra({
                 "id": instance.id,
@@ -318,7 +307,9 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                 "estado": instance.estado,
             }))
             
-            return Response(status=status.HTTP_204_NO_CONTENT)
+            resp = Response(status=status.HTTP_204_NO_CONTENT)
+            resp["HX-Trigger"] = "listaFacturasChanged"
+            return resp
             
         except ProtectedError as ex:
             # Solo errores de integridad a nivel de BD (muy raro, solo si hay FK con PROTECT)
@@ -338,7 +329,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                 {"error": "integrity_error", "message": "No se puede eliminar por restricciones de integridad de base de datos."},
                 status=status.HTTP_409_CONFLICT
             )
-        except Exception as ex:
+        except Exception:
             # Loggea el ex pero no expongas detalles sensibles
             log_del.exception("delete_failed")
             return Response(
@@ -349,7 +340,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["post"], url_path="importar-ubl")
     def importar_ubl(self, request: Request) -> Response:
         """
-        ⚠️ DEPRECATED: Este endpoint está deprecado.
+        # WARNING: DEPRECATED: Este endpoint está deprecado.
         Use POST /api/v1/core/documentos/upload/ en su lugar.
         Este endpoint será removido en v2.40.
         
@@ -399,7 +390,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Endpoint para obtener resumen de facturación neta.
         
-        ⚠️ v2.40: Excluye facturas con Nota de Crédito asociada.
+        # WARNING: v2.40: Excluye facturas con Nota de Crédito asociada.
         Retorna desglose por naturaleza (VENTA/COMPRA) con subtotal, impuestos y total neto.
         
         Returns:
@@ -424,17 +415,11 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             if hasattr(request.user, 'empresa_id'):
                 empresa_id = request.user.empresa_id
             
-            summary = get_facturacion_summary(empresa_id=empresa_id)
-            
-            # Convertir Decimal a string para JSON
-            def decimal_to_str(d):
-                if isinstance(d, dict):
-                    return {k: str(v) if isinstance(v, Decimal) else v for k, v in d.items()}
-                return d
+            summary = self.get_summary(empresa_id=empresa_id)
             
             summary_serialized = {
-                "ventas": decimal_to_str(summary["ventas"]),
-                "compras": decimal_to_str(summary["compras"])
+                "ventas": {k: str(v) if isinstance(v, Decimal) else v for k, v in summary["ventas"].items()},
+                "compras": {k: str(v) if isinstance(v, Decimal) else v for k, v in summary["compras"].items()}
             }
             
             return Response(summary_serialized, status=status.HTTP_200_OK)
@@ -448,11 +433,11 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["post"], url_path="upload-ubl", parser_classes=[MultiPartParser, FormParser])
     def upload_ubl(self, request: Request) -> Response:
         """
-        ⚠️ DEPRECATED: Este endpoint está deprecado.
+        # WARNING: DEPRECATED: Este endpoint está deprecado.
         Use POST /api/v1/core/documentos/upload/ en su lugar.
         Este endpoint será removido en v2.40.
         
-        ⚠️ v2.61.2: OPTIMIZADO - Pre-validación de idempotencia y batch processing.
+        # WARNING: v2.61.2: OPTIMIZADO - Pre-validación de idempotencia y batch processing.
         
         Sube uno o múltiples archivos XML UBL 2.1 y los importa (async o sync).
         Delega al endpoint universal de documentos.
@@ -467,7 +452,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         - async=false: Parsea y materializa en la misma request (201/200)
         - preview=true: Solo retorna DTO sin persistir
         
-        ⚠️ v2.61.2: DELEGACIÓN A CELERY - Si hay más de 10 archivos, el procesamiento se delega
+        # WARNING: v2.61.2: DELEGACIÓN A CELERY - Si hay más de 10 archivos, el procesamiento se delega
         automáticamente a Celery para no bloquear la conexión del usuario, independientemente del
         parámetro async. Use GET /api/v1/facturas/ingest/{task_id}/status/ para consultar el estado.
         
@@ -481,13 +466,13 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             - 415 Unsupported Media Type si el tipo no es soportado
             - 422 Unprocessable Entity si hay error de validación
             
-        ⚠️ CONSULTA DE ESTADO: Para batch > 10 archivos, use GET /api/v1/facturas/ingest/{task_id}/status/
+        # WARNING: CONSULTA DE ESTADO: Para batch > 10 archivos, use GET /api/v1/facturas/ingest/{task_id}/status/
         """
-        # ⚠️ NORMALIZACIÓN: Obtener contexto para logging
+        # # WARNING: NORMALIZACIÓN: Obtener contexto para logging
         schema = getattr(connection, "schema_name", "-")
         rid = request.META.get("REQUEST_ID", "-")
         
-        # ⚠️ v2.61.2: BATCH PROCESSING - Soportar files[] o files (múltiples archivos)
+        # # WARNING: v2.61.2: BATCH PROCESSING - Soportar files[] o files (múltiples archivos)
         xml_files = request.FILES.getlist('files[]') or request.FILES.getlist('files') or []
         single_file = request.FILES.get('file')
         
@@ -515,18 +500,24 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             )
             return Response({"error": "read_error", "message": "Error al leer el archivo XML."}, status=400)
         
-        # ⚠️ v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida")
+        # # WARNING: v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida")
         # Extraer CUFE con regex antes del parsing completo - ejecuta en los primeros milisegundos
         if not preview_mode and not use_async:
             cufe_rapido = fast_get_cufe(xml_bytes)
             
             if cufe_rapido:
                 # Verificar si la factura ya existe por CUFE
-                from apps.tenant.facturas.models import Factura
-                factura_existente = Factura.objects.filter(cufe=cufe_rapido).first()
+                # # WARNING: v2.61.5: IDOR fix - filtrar por empresa del tenant (Zero-Trust)
+                empresa_id = getattr(getattr(request.user, 'tenant_profile', None), 'empresa_id', None)
+                if not empresa_id:
+                    empresa_id = Empresa.objects.only('id').values_list('id', flat=True).first()
+                factura_existente = Factura.objects.filter(
+                    cufe=cufe_rapido,
+                    empresa_id=empresa_id
+                ).only('id', 'numero', 'naturaleza', 'cufe').first() if empresa_id else None
                 
                 if factura_existente:
-                    # ⚠️ v2.61.2: Retornar 200 OK inmediatamente sin parsing completo
+                    # # WARNING: v2.61.2: Retornar 200 OK inmediatamente sin parsing completo
                     # Esto evita desperdiciar CPU en archivos que ya existen en la base de datos
                     log_up.info(
                         "upload_ubl duplicate detected (fast pre-validation)",
@@ -551,9 +542,9 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         # TODO: Deprecar este endpoint - delegar al endpoint universal
         # Usar el servicio universal directamente
         try:
-            # Usar importar_documento que internamente usa el pipeline universal
-            payload, code = importar_documento(
-                file_bytes=xml_bytes,
+            # Usar el servicio a través del mixin
+            payload, code = self.service_importar_documento(
+                xml_bytes,
                 filename=single_file.name,
                 preview=preview_mode,
                 async_mode=use_async
@@ -583,7 +574,10 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                     "numero": payload.get("numero") if isinstance(payload, dict) else None,
                 }
             )
-            return Response(payload, status=code)
+            resp = Response(payload, status=code)
+            if not preview_mode and code in (200, 201):
+                resp["HX-Trigger"] = "listaFacturasChanged"
+            return resp
         except Exception as e:
             log_up.exception(
                 "upload_ubl error (universal pipeline)",
@@ -598,9 +592,9 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     
     def _upload_ubl_batch(self, request: Request, xml_files: list, rid: str, schema: str) -> Response:
         """
-        ⚠️ v2.61.2: BATCH PROCESSING - Procesa múltiples archivos XML y retorna resumen.
+        # WARNING: v2.61.2: BATCH PROCESSING - Procesa múltiples archivos XML y retorna resumen.
         
-        ⚠️ DELEGACIÓN A CELERY: Si hay más de 10 archivos, delega el procesamiento a Celery
+        # WARNING: DELEGACIÓN A CELERY: Si hay más de 10 archivos, delega el procesamiento a Celery
         usando batch_upload_facturas_task para no bloquear la conexión del usuario.
         
         Args:
@@ -614,7 +608,6 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             - Si > 10 archivos: 202 Accepted con task_id para consultar estado
         """
         from apps.tenant.facturas.models import Factura
-        import base64
         
         preview_mode = request.query_params.get('preview', 'false').lower() == 'true'
         use_async = request.query_params.get('async', 'true').lower() != 'false'
@@ -626,12 +619,12 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                 "message": "Batch processing no soporta modo preview. Use preview=false."
             }, status=400)
         
-        # ⚠️ v2.61.2: DELEGACIÓN A CELERY - Si hay más de 10 archivos, usar Celery
+        # # WARNING: v2.61.2: DELEGACIÓN A CELERY - Si hay más de 10 archivos, usar Celery
         BATCH_SIZE_THRESHOLD = 10
         if len(xml_files) > BATCH_SIZE_THRESHOLD:
             # Delegar a Celery para no bloquear la conexión del usuario
             try:
-                # ⚠️ IMPORT LAZY: Importar tarea Celery solo cuando se necesita
+                # # WARNING: IMPORT LAZY: Importar tarea Celery solo cuando se necesita
                 from apps.services.document_ingest.tasks import batch_upload_facturas_task
                 
                 # Preparar datos de archivos (codificar en base64 para serialización)
@@ -710,7 +703,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                     "message": f"Error al encolar procesamiento asíncrono: {str(e)}"
                 }, status=500)
         
-        # ⚠️ PROCESAMIENTO SÍNCRONO - Para <= 10 archivos
+        # # WARNING: PROCESAMIENTO SÍNCRONO - Para <= 10 archivos
         if use_async:
             # Para batch pequeño, no usar async (procesar directamente)
             log_up.info(
@@ -732,11 +725,18 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                 xml_bytes = xml_file.read()
                 size = len(xml_bytes or b"")
                 
-                # ⚠️ v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida") - Extraer CUFE con regex
+                # # WARNING: v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida") - Extraer CUFE con regex
                 cufe_rapido = fast_get_cufe(xml_bytes)
                 
                 if cufe_rapido:
-                    factura_existente = Factura.objects.filter(cufe=cufe_rapido).first()
+                    # # WARNING: v2.61.5: IDOR fix - filtrar por empresa del tenant (Zero-Trust)
+                    _emp_id = getattr(getattr(self.request.user, 'tenant_profile', None), 'empresa_id', None)
+                    if not _emp_id:
+                        _emp_id = Empresa.objects.only('id').values_list('id', flat=True).first()
+                    factura_existente = Factura.objects.filter(
+                        cufe=cufe_rapido,
+                        empresa_id=_emp_id
+                    ).only('id', 'numero', 'cufe').first() if _emp_id else None
                     if factura_existente:
                         # Duplicado detectado sin parsing completo
                         resultados.append({
@@ -749,9 +749,9 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                         duplicados += 1
                         continue
                 
-                # Procesar archivo normalmente
-                payload, code = importar_documento(
-                    file_bytes=xml_bytes,
+                # Procesar archivo normalmente via mixin
+                payload, code = self.service_importar_documento(
+                    xml_bytes,
                     filename=xml_file.name,
                     preview=False,
                     async_mode=False
@@ -812,20 +812,23 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             }
         )
         
-        return Response({
+        resp = Response({
             "creados": creados,
             "duplicados": duplicados,
             "errores": errores,
             "total": len(xml_files),
             "resultados": resultados
         }, status=200)
+        if creados > 0:
+            resp["HX-Trigger"] = "listaFacturasChanged"
+        return resp
     
     @action(detail=False, methods=["post"], url_path="upload-document", parser_classes=[MultiPartParser, FormParser])
     def upload_document(self, request: Request) -> Response:
         """
         Endpoint universal para subir documentos (XML, PDF, XLS/XLSX, CSV, TXT) (FASE 3).
         
-        ⚠️ v2.36 FASE 3: Endpoint universal protegido por feature flag.
+        # WARNING: v2.36 FASE 3: Endpoint universal protegido por feature flag.
         Usa el pipeline universal de documentos cuando FEATURE_UPLOAD_DOCUMENT_ENDPOINT=True.
         
         Body (multipart/form-data):
@@ -845,7 +848,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             - 415 Unsupported Media Type: Tipo no soportado
             - 422 Unprocessable Entity: Error de validación
         """
-        # ⚠️ FASE 3: Verificar feature flag
+        # # WARNING: FASE 3: Verificar feature flag
         if not getattr(settings, 'FEATURE_UPLOAD_DOCUMENT_ENDPOINT', False):
             return Response(
                 {"error": "endpoint_disabled", "message": "Este endpoint está deshabilitado."},
@@ -889,10 +892,10 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Llamar a importar_documento (FASE 2)
+        # Llamar a importar_documento via mixin
         try:
-            payload, code = importar_documento(
-                file_bytes=file_content,
+            payload, code = self.service_importar_documento(
+                file_content,
                 filename=file.name,
                 preview=preview,
                 async_mode=async_mode
@@ -915,7 +918,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             
             return Response(payload, status=code)
             
-        except Exception as e:
+        except Exception:
             log_up.exception(
                 "upload_document error",
                 extra=safe_extra({
@@ -939,8 +942,8 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Consulta el estado de una tarea de ingesta XML.
         
-        ⚠️ FASE 2: Endpoint para polling del estado de tarea Celery.
-        ⚠️ NUNCA 500: Siempre retorna 200 con JSON estructurado (apto para UI).
+        # WARNING: FASE 2: Endpoint para polling del estado de tarea Celery.
+        # WARNING: NUNCA 500: Siempre retorna 200 con JSON estructurado (apto para UI).
         
         Args:
             task_id: ID de la tarea Celery (retornado por upload_ubl?async=true)
@@ -951,7 +954,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
               - result: payload si SUCCESS
               - error_code/message/hint cuando hay problemas
         """
-        # ⚠️ NORMALIZACIÓN: Pasar request para contexto de logging
+        # # WARNING: NORMALIZACIÓN: Pasar request para contexto de logging
         from apps.services.document_ingest.tasks import get_task_status
         payload, code = get_task_status(task_id, request=request)
         return Response(payload, status=code)
@@ -959,7 +962,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["post"], url_path="create-from-dto", parser_classes=[JSONParser])
     def create_from_dto(self, request: Request) -> Response:
         """
-        ⚠️ REFACTOR: Crea una factura o nota crédito desde DTO parseado por document_ingest.
+        # WARNING: REFACTOR: Crea una factura o nota crédito desde DTO parseado por document_ingest.
         
         Este endpoint recibe un DTO del pipeline universal y lo persiste bajo la lógica
         propia de la app facturas. El pipeline universal SOLO parsea, NO persiste.
@@ -982,7 +985,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             - 409 Conflict: Duplicado o restricción violada
             - 413 Payload Too Large: XML/anexo excede tamaño permitido
             
-        ⚠️ PROPAGACIÓN DE ERRORES 422:
+        # WARNING: PROPAGACIÓN DE ERRORES 422:
         Si la validación falla (ej. falta emisor.razon_social), se retorna un JSON estructurado:
         {
             "error": "missing_required_fields",
@@ -992,12 +995,11 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         
         El módulo error_injector.js intercepta estos errores y los muestra en el Offcanvas.
         """
-        import base64
         import logging
         
         logger = logging.getLogger(__name__)
         
-        # ⚠️ v2.61.2: Logging para debugging
+        # # WARNING: v2.61.2: Logging para debugging
         schema = getattr(connection, "schema_name", "-")
         rid = request.META.get("REQUEST_ID", "-")
         log_up.debug(
@@ -1013,7 +1015,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         dto = request.data.get("dto")
         persist_anexos = bool(request.data.get("persist_anexos", True))
         
-        # ⚠️ v2.60: Extraer file_content_bytes y file_type si vienen en el request
+        # # WARNING: v2.60: Extraer file_content_bytes y file_type si vienen en el request
         file_content_bytes_b64 = request.data.get("file_content_bytes")
         file_type = request.data.get("file_type", "xml")
         
@@ -1034,16 +1036,14 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             )
             return Response({"error": "missing_dto", "message": "Falta 'dto' en el cuerpo."}, status=400)
         
-        # ⚠️ v2.60: Pasar file_bytes y file_type a materializar_factura_desde_result
-        # ⚠️ PROPAGACIÓN: Los errores 422 con missing_fields se propagan directamente desde guardar_factura_desde_dto
-        payload, code = materializar_factura_desde_result(
+        # # WARNING: v2.60: Pasar file_bytes y file_type a materializar_factura_desde_result
+        # # WARNING: PROPAGACIÓN: Los errores 422 con missing_fields se propagan directamente
+        payload, code = self.service_materializar(
             dto, 
-            persist_anexos=persist_anexos,
-            file_bytes=file_bytes,  # Pasamos los bytes del archivo
-            file_type=file_type  # Pasamos el tipo de archivo
+            empresa_id=getattr(getattr(self.request.user, 'tenant_profile', None), 'empresa_id', None) or Empresa.objects.only('id').values_list('id', flat=True).first()
         )
         
-        # ⚠️ LOGGING: Registrar errores 422 con missing_fields para debugging
+        # # WARNING: LOGGING: Registrar errores 422 con missing_fields para debugging
         if code == 422 and "missing_fields" in payload:
             logger.warning(f"[create_from_dto] Error 422 - Campos faltantes: {payload.get('missing_fields')}")
         
@@ -1053,20 +1053,23 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             "missing_fields": payload.get("missing_fields") if code == 422 else None,
         }))
         
-        # ⚠️ PROPAGACIÓN: Retornar payload tal cual (incluye missing_fields si es error 422)
+        # WARNING: PROPAGACIÓN: Retornar payload tal cual (incluye missing_fields si es error 422)
         # El módulo error_injector.js intercepta htmx:responseError y muestra los campos faltantes
-        return Response(payload, status=code)
+        resp = Response(payload, status=code)
+        if code in (200, 201):
+            resp["HX-Trigger"] = "listaFacturasChanged"
+        return resp
     
     @action(detail=False, methods=["post"], url_path="materialize")
     def materialize(self, request: Request) -> Response:
         """
-        ⚠️ DEPRECATED: Usar create_from_dto en su lugar.
+        # WARNING: DEPRECATED: Usar create_from_dto en su lugar.
         Mantenido por compatibilidad temporal.
         """
         """
         Materializa una factura desde el DTO resultante de la ingesta XML.
         
-        ⚠️ FASE 2: Endpoint para materializar después de que la tarea Celery termine.
+        # WARNING: FASE 2: Endpoint para materializar después de que la tarea Celery termine.
         
         Body (application/json):
         {
@@ -1088,7 +1091,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         if not dto:
             return Response({"error": "missing_dto", "message": "Falta 'dto' en el cuerpo."}, status=400)
         
-        payload, code = materializar_factura_desde_result(dto, persist_anexos=persist_anexos)
+        payload, code = self.service_materializar(dto, empresa_id=getattr(getattr(self.request.user, 'tenant_profile', None), 'empresa_id', None) or Empresa.objects.only('id').values_list('id', flat=True).first())
         log_up.info("materialize", extra=safe_extra({
             "status_code": code,
             "numero": payload.get("numero") if "error" not in payload else None,
@@ -1097,19 +1100,18 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     
     def retrieve(self, request, *args, **kwargs):
         """Retorna detalle de factura con metadatos de anexos (sin contenido XML)."""
+        # # WARNING: v2.61.5: Delegar queryset a get_queryset() -> qs_detail() que ya incluye
+        # select_related(nota_credito, anexos) con .only(*DETAIL_FIELDS). No sobreescribir self.queryset.
         self.serializer_class = FacturaDetailSerializer
-        # Optimizar queryset para incluir anexos
-        if self.action == 'retrieve':
-            self.queryset = Factura.objects.select_related('anexos')
         return super().retrieve(request, *args, **kwargs)
     
-    # ⚠️ FASE 4: Acciones detail para anexos XML
+    # # WARNING: FASE 4: Acciones detail para anexos XML
     @action(detail=True, methods=['get'], url_path='xml')
     def xml_ubl(self, request, pk=None):
         """
         Retorna el UBL XML completo de la factura.
         
-        ⚠️ FASE 6: Endpoint dedicado para artefactos pesados (XML).
+        # WARNING: FASE 6: Endpoint dedicado para artefactos pesados (XML).
         - Listas y detalle NO incluyen XML (solo metadatos)
         - Este endpoint retorna el XML completo con Content-Type: application/xml
         - Inline si <= 2MB, descarga forzada si mayor
@@ -1120,7 +1122,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             - 404 Not Found: Si la factura no existe
         """
         factura = self.get_object()
-        payload, code = obtener_anexo_xml(factura, "ubl")
+        payload, code = self.service_obtener_xml(factura, "ubl")
         if isinstance(payload, HttpResponse):
             return payload
         return Response(payload, status=code)
@@ -1130,7 +1132,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Retorna el ApplicationResponse DIAN XML completo.
         
-        ⚠️ FASE 6: Endpoint dedicado para artefactos pesados (ApplicationResponse XML).
+        # WARNING: FASE 6: Endpoint dedicado para artefactos pesados (ApplicationResponse XML).
         - Listas y detalle NO incluyen XML (solo metadatos)
         - Este endpoint retorna el XML completo con Content-Type: application/xml
         - Inline si <= 2MB, descarga forzada si mayor
@@ -1141,20 +1143,20 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             - 404 Not Found: Si la factura no existe
         """
         factura = self.get_object()
-        payload, code = obtener_anexo_xml(factura, "app")
+        payload, code = self.service_obtener_xml(factura, "app")
         if isinstance(payload, HttpResponse):
             return payload
         return Response(payload, status=code)
     
-    # ⚠️ DEPRECATED v2.40: Método datatables() eliminado - usar GET /api/v1/facturas/ con StandardResultsSetPagination
+    # # WARNING: DEPRECATED v2.40: Método datatables() eliminado - usar GET /api/v1/facturas/ con StandardResultsSetPagination
     
     @action(detail=False, methods=['post'], url_path='update-inbox-state')
     def update_inbox_state(self, request: Request) -> Response:
         """
         Actualiza el estado del buzón IMAP después de procesar facturas.
         
-        ⚠️ ZERO WASTE: Actualiza last_seen_uid para evitar reprocesar correos ya vistos.
-        ⚠️ Este endpoint se llama después de que el usuario procesa facturas desde el modal.
+        # WARNING: ZERO WASTE: Actualiza last_seen_uid para evitar reprocesar correos ya vistos.
+        # WARNING: Este endpoint se llama después de que el usuario procesa facturas desde el modal.
         
         POST /api/v1/facturas/update-inbox-state/
         
@@ -1224,7 +1226,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):
         """
-        ⚠️ v2.60: Devuelve el HTML del formulario de factura para HTMX Offcanvas.
+        # WARNING: v2.60: Devuelve el HTML del formulario de factura para HTMX Offcanvas.
         
         Endpoint: GET /api/v1/facturas/gestor-offcanvas/?id=<factura_id>
         
@@ -1233,8 +1235,8 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
           o permite edición si es borrador.
         - Si no recibe `id`, devuelve formulario vacío para nueva factura.
         
-        ⚠️ ZERO TRUST: Valida que la factura pertenezca al tenant del usuario.
-        ⚠️ ZERO WASTE: Solo carga campos necesarios para el visualizador.
+        # WARNING: ZERO TRUST: Valida que la factura pertenezca al tenant del usuario.
+        # WARNING: ZERO WASTE: Solo carga campos necesarios para el visualizador.
         
         Returns:
             HTML template con el formulario Offcanvas (ruta centralizada en core)
@@ -1242,23 +1244,23 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         factura_id = request.query_params.get('id')
         context = {}
         
-        # ⚠️ v2.60: Determinar qué template usar según el modo
-        # - Modo simple (subida/detalle): tenant/core/partials/facturas/offcanvas_factura.html
-        # - Modo edición completa: tenant/core/partials/facturas/offcanvas_form.html
+        # # WARNING: v2.60: Determinar qué template usar según el modo
+        # - Modo simple (subida/detalle): tenant/facturas/partials/offcanvas_factura.html
+        # - Modo edición completa: tenant/facturas/partials/offcanvas_form.html
         use_simple_template = request.query_params.get('simple', 'true').lower() == 'true'
         
         if factura_id:
             try:
-                # ⚠️ ZERO TRUST: Validar que la factura pertenece al tenant
+                # # WARNING: ZERO TRUST: Validar que la factura pertenece al tenant
                 # Obtener empresa del tenant (patrón Singleton)
                 empresa = Empresa.objects.only('id').first()
                 if not empresa:
                     context['error'] = "No se encontró la empresa (SSoT) configurada para este tenant."
-                    template_name = 'tenant/core/partials/facturas/offcanvas_factura.html' if use_simple_template else 'tenant/core/partials/facturas/offcanvas_form.html'
+                    template_name = 'tenant/facturas/offcanvas_crear_factura.html' if use_simple_template else 'tenant/facturas/offcanvas_editar_factura.html'
                     return Response(context, template_name=template_name)
                 
-                # ⚠️ ZERO WASTE: Solo cargar campos necesarios para el visualizador
-                # ⚠️ v2.61.2: Si es modo readonly, cargar también items para el template de solo lectura
+                # # WARNING: ZERO WASTE: Solo cargar campos necesarios para el visualizador
+                # # WARNING: v2.61.2: Si es modo readonly, cargar también items para el template de solo lectura
                 readonly_mode = request.query_params.get('readonly', 'false').lower() == 'true'
                 if use_simple_template:
                     if readonly_mode:
@@ -1302,20 +1304,27 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                             'anexos__ubl_xml'
                         ).first()
                 else:
-                    # Template completo: más campos para edición
+                    # Template completo: mas campos para edicion
+                    # # WARNING: v2.61.5: Zero Waste - .only() con campos necesarios para el editor
                     factura = Factura.objects.select_related('anexos').prefetch_related('items').filter(
                         empresa=empresa,
                         id=factura_id
+                    ).only(
+                        'id', 'numero', 'prefijo', 'consecutivo', 'tipo', 'estado', 'naturaleza',
+                        'fecha_emision', 'fecha_vencimiento',
+                        'emisor_nit', 'emisor_razon_social', 'emisor_direccion', 'emisor_email',
+                        'receptor_nit', 'receptor_razon_social', 'receptor_direccion', 'receptor_email',
+                        'moneda', 'subtotal', 'impuestos', 'total',
+                        'cufe', 'qr_url',
+                        'anexos__pdf_file', 'anexos__ubl_xml', 'anexos__application_response_xml',
                     ).first()
                 
                 if not factura:
                     context['error'] = "Factura no encontrada o no pertenece a este tenant."
-                    return Response(context, template_name='tenant/core/partials/facturas/offcanvas_factura.html')
-                
-                context['factura'] = factura
+                    return Response(context, template_name='tenant/facturas/offcanvas_crear_factura.html')
                 
                 # Determinar si es modo lectura o edición
-                # ⚠️ REGLA: Solo borradores pueden editarse
+                # # WARNING: REGLA: Solo borradores pueden editarse
                 context['readonly'] = factura.estado != Factura.Estado.BORRADOR
                 context['es_emitida'] = factura.estado in [
                     Factura.Estado.ENVIADA,
@@ -1324,13 +1333,13 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
                     Factura.Estado.ANULADA
                 ]
                 
-                # ⚠️ v2.61.2: Si es modo simple y readonly, usar template de solo lectura
+                # # WARNING: v2.61.2: Si es modo simple y readonly, usar template de solo lectura
                 readonly_mode = request.query_params.get('readonly', 'false').lower() == 'true'
                 if use_simple_template and (context['es_emitida'] or readonly_mode):
                     # Usar template de solo lectura si está en modo readonly o la factura está emitida
                     if readonly_mode:
-                        return Response(context, template_name='tenant/core/partials/facturas/offcanvas_ver_factura.html')
-                    return Response(context, template_name='tenant/core/partials/facturas/offcanvas_factura.html')
+                        return Response(context, template_name='tenant/facturas/offcanvas_detalle_factura.html')
+                    return Response(context, template_name='tenant/facturas/offcanvas_crear_factura.html')
             except Exception as e:
                 log_up.warning(f"Error al obtener factura para Offcanvas: {e}", exc_info=True)
                 context['error'] = "No se pudo cargar la factura."
@@ -1342,7 +1351,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
             
             # Si es modo simple, usar template simple para subida
             if use_simple_template:
-                return Response(context, template_name='tenant/core/partials/facturas/offcanvas_factura.html')
+                return Response(context, template_name='tenant/facturas/offcanvas_crear_factura.html')
         
         # Pasar choices para selects (solo necesario para template completo)
         context['tipos_factura'] = Factura.TipoFactura.choices
@@ -1351,7 +1360,7 @@ class FacturaViewSet(viewsets.ReadOnlyModelViewSet):
         context['categorias'] = Factura.Categoria.choices
         
         # Template completo para edición
-        return Response(context, template_name='tenant/core/partials/facturas/offcanvas_form.html')
+        return Response(context, template_name='tenant/facturas/offcanvas_editar_factura.html')
     
 
 class ItemFacturaViewSet(mixins.RetrieveModelMixin,
@@ -1360,13 +1369,12 @@ class ItemFacturaViewSet(mixins.RetrieveModelMixin,
     """
     Endpoints puntuales para ítems (opcional).
     
-    ⚠️ NOTA: CRUD completo de ítems se recomienda gestionarlo a través de Factura (items embed).
+    # WARNING: NOTA: CRUD completo de ítems se recomienda gestionarlo a través de Factura (items embed).
     Este ViewSet solo expone retrieve y destroy para casos específicos.
     
-    ⚠️ OPTIMIZACIÓN: NO usa .all(), usa only() cuando sea necesario.
+    # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() cuando sea necesario.
     """
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated, IsTenantAdminOrReadOnly]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     serializer_class = ItemFacturaSerializer
     
     def get_queryset(self):
@@ -1388,7 +1396,7 @@ class NotaCreditoViewSet(mixins.ListModelMixin,
     """
     NOTAS CRÉDITO — Endpoints para gestión de notas crédito.
     
-    ⚠️ REGLAS DE NEGOCIO:
+    # WARNING: REGLAS DE NEGOCIO:
     Las notas crédito son documentos históricos que corrigen facturas.
     - Solo se pueden eliminar para corregir un error de carga (rollback técnico).
     - NUNCA se pueden editar, actualizar o modificar.
@@ -1405,13 +1413,12 @@ class NotaCreditoViewSet(mixins.ListModelMixin,
     - PUT /notas-credito/{id}/ → 405 Method Not Allowed
     - PATCH /notas-credito/{id}/ → 405 Method Not Allowed
     
-    ⚠️ OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
-    ✅ Escalable (millones de notas crédito)
-    ✅ Artefactos pesados (XML) solo en endpoint /xml/
+    # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
+    [OK] Escalable (millones de notas crédito)
+    [OK] Artefactos pesados (XML) solo en endpoint /xml/
     """
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated, IsTenantAdminOrReadOnly]
-    http_method_names = ["get", "head", "options", "delete"]  # ⚠️ v2.40: POST eliminado (datatables deprecated)
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    http_method_names = ["get", "head", "options", "delete"]  # # WARNING: v2.40: POST eliminado (datatables deprecated)
     
     def get_serializer_class(self):
         """Usa ListSerializer para list, DetailSerializer para retrieve."""
@@ -1423,7 +1430,7 @@ class NotaCreditoViewSet(mixins.ListModelMixin,
         """
         QuerySet optimizado - NO usa .all().
         
-        ⚠️ OPTIMIZACIÓN: Para list, solo campos esenciales (sin xml_content).
+        # WARNING: OPTIMIZACIÓN: Para list, solo campos esenciales (sin xml_content).
         """
         if self.action == "list":
             return NotaCredito.objects.select_related("factura").only(
@@ -1442,15 +1449,15 @@ class NotaCreditoViewSet(mixins.ListModelMixin,
             "created_at", "updated_at"
         )
     
-    # ⚠️ DEPRECATED v2.40: Método datatables() eliminado - usar GET /api/v1/facturas/notas-credito/ con StandardResultsSetPagination
+    # # WARNING: DEPRECATED v2.40: Método datatables() eliminado - usar GET /api/v1/facturas/notas-credito/ con StandardResultsSetPagination
     
     @action(detail=True, methods=["get"], url_path="xml")
     def xml(self, request, pk=None):
         """
         Endpoint dedicado para XML completo (artefacto pesado).
         
-        ⚠️ ARQUITECTURA: Artefactos pesados solo en endpoints /xml/
-        ✅ No se incluye en listas/detalles (optimización)
+        # WARNING: ARQUITECTURA: Artefactos pesados solo en endpoints /xml/
+        [OK] No se incluye en listas/detalles (optimización)
         """
         nota = self.get_object()
         
@@ -1472,8 +1479,8 @@ class NotaCreditoViewSet(mixins.ListModelMixin,
         """
         DELETE /notas-credito/{id}/ → Eliminar nota crédito (rollback técnico).
         
-        ⚠️ REGLA: Solo para corregir errores de carga.
-        ⚠️ PROTECCIÓN: OneToOneField con PROTECT evita borrado accidental de factura.
+        # WARNING: REGLA: Solo para corregir errores de carga.
+        # WARNING: PROTECCIÓN: OneToOneField con PROTECT evita borrado accidental de factura.
         """
         try:
             nota = self.get_object()

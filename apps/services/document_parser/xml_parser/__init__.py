@@ -1,7 +1,7 @@
 """
 Parser para documentos XML (UBL 2.1, etc.) (FASE 2.3).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Migra pipeline UBL v2.34
 - Soporta Invoice y CreditNote UBL 2.1
 - Detecta documentos embebidos en AttachedDocument CDATA

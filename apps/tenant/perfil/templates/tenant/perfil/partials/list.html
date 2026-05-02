@@ -1,27 +1,42 @@
 {% load static %}
-{# list.html estandarizado para módulo Perfil v2.37 #}
-{# ⚠️ Singleton: No requiere DataTable, solo botones de acción #}
-<div id="ui-perfil-list" class="ui-module ui-perfil">
-  <!-- Toolbar -->
-  <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-perfil">
-    <div id="actions-perfil" class="ms-auto">
-      <button class="btn btn-sm btn-secondary" id="btn-perfil-ver" type="button">
-        <i class="bi bi-eye"></i> Ver Perfil
-      </button>
-      <button class="btn btn-sm btn-primary" id="btn-perfil-editar" type="button">
-        <i class="bi bi-pencil"></i> Editar Perfil
-      </button>
+{# list.html - Modulo Perfil - Feature-Sliced Architecture #}
+{# Alineado con patron estandar de workspace (gastos, empleados, etc.) #}
+<div id="workspace-perfil" class="ui-module ui-perfil">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="btn-group shadow-sm">
+            <button class="btn btn-primary px-3"
+                    type="button"
+                    id="btn-perfil-crear"
+                    title="Crear nuevo perfil"
+                    style="display: none;"
+                    hx-get="/api/v1/perfil/perfiles/render-offcanvas/crear/"
+                    hx-target="#offcanvas-container-perfil"
+                    hx-swap="innerHTML"
+                    hx-indicator="#spinner"
+                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-perfil-crear'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                <i class="bi bi-person-plus me-1"></i> Nuevo Perfil
+            </button>
+            <button class="btn btn-outline-secondary" id="btn-refrescar-perfil" title="Refrescar datos">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+        <div id="perfil-list-feedback" class="small fw-bold text-end"></div>
     </div>
-  </div>
-  
-  <!-- Feedback -->
-  <div id="feedback-perfil-list" class="alert d-none" role="alert"
-       aria-live="polite"></div>
-  
-  <!-- Información del perfil (se carga dinámicamente) -->
-  <div id="perfil-info-container" class="card">
-    <div class="card-body">
-      <p class="text-muted text-center">Cargando información del perfil...</p>
+
+    {# Input de busqueda para Tabulator #}
+    <div class="mb-3">
+        <input type="text" id="search-perfil" class="form-control" placeholder="Buscar por nombre, cargo o departamento...">
     </div>
-  </div>
+
+    {# Contenedor para Tabulator (no tabla HTML) #}
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div id="grid-perfil" class="flex-grow-1" style="min-height: 400px;"></div>
+        </div>
+    </div>
+
+    {# Contenedor para Offcanvas (HTMX) #}
+    <div id="offcanvas-container-perfil"></div>
+
 </div>

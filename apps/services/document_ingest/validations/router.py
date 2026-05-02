@@ -1,21 +1,21 @@
 """
 Router de validadores (FASE 4.1 + FASE 2).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Selecciona el validador apropiado según tipo de documento y app
 - Permite registrar validadores por app
 - Extensible: Nuevas apps pueden registrar sus validadores sin modificar el core
 - Router por tipo de documento: Dirige validaciones según document_type del DTO
 """
-from typing import Dict, Optional, List, Tuple, Any
+from typing import Any
+
 from .base import BaseValidator
 
-
 # Registry de validadores (por app:document_type)
-_validators: Dict[str, BaseValidator] = {}
+_validators: dict[str, BaseValidator] = {}
 
 # Router de validaciones por tipo de documento (FASE 2)
-VALIDATORS: Dict[str, BaseValidator] = {}
+VALIDATORS: dict[str, BaseValidator] = {}
 
 
 def register_validator(validator: BaseValidator) -> None:
@@ -38,14 +38,14 @@ def register_validator(validator: BaseValidator) -> None:
     key = f"{validator.app_name}:{validator.document_type}"
     _validators[key] = validator
     
-    # ⚠️ v2.40: También registrar por tipo base para búsqueda flexible
+    # WARNING: v2.40: También registrar por tipo base para búsqueda flexible
     doc_type_base = validator.document_type.split('.')[0] if '.' in validator.document_type else validator.document_type
     key_base = f"{validator.app_name}:{doc_type_base}"
     if key_base not in _validators:  # Solo si no existe ya
         _validators[key_base] = validator
     
     # Registrar en el router por tipo de documento (FASE 2)
-    # ⚠️ v2.40: Permitir override para asegurar que el validador correcto se registre
+    # WARNING: v2.40: Permitir override para asegurar que el validador correcto se registre
     # Prioridad: CotizacionesValidator sobre InventarioValidator para tipo "inventario"
     if doc_type_base == "inventario":
         # Verificar si es CotizacionesValidator (por nombre de clase, no por app_name)
@@ -95,7 +95,7 @@ def register_validator(validator: BaseValidator) -> None:
                         }
                     )
                 else:
-                    logger.warning(
+                    logger.debug(
                         "validator_registered_inventario_skipped",
                         extra={
                             "app_name": validator.app_name,
@@ -122,7 +122,7 @@ def register_validator(validator: BaseValidator) -> None:
     )
 
 
-def get_validator(app_name: str, document_type: str) -> Optional[BaseValidator]:
+def get_validator(app_name: str, document_type: str) -> BaseValidator | None:
     """
     Obtiene el validador para una app y tipo de documento específicos.
     
@@ -190,7 +190,7 @@ def get_validator(app_name: str, document_type: str) -> Optional[BaseValidator]:
     return None
 
 
-def list_validators() -> List[Dict[str, str]]:
+def list_validators() -> list[dict[str, str]]:
     """
     Lista todos los validadores registrados.
     
@@ -208,7 +208,7 @@ def list_validators() -> List[Dict[str, str]]:
     ]
 
 
-def get_validator_by_document_type(document_type: str) -> Optional[BaseValidator]:
+def get_validator_by_document_type(document_type: str) -> BaseValidator | None:
     """
     Obtiene el validador por tipo de documento (busca en todas las apps).
     
@@ -230,13 +230,13 @@ def get_validator_by_document_type(document_type: str) -> Optional[BaseValidator
     return VALIDATORS.get(doc_type_base)
 
 
-def run_validations(dto_json: Dict[str, Any]) -> Tuple[bool, Optional[str], List[str]]:
+def run_validations(dto_json: dict[str, Any]) -> tuple[bool, str | None, list[str]]:
     """
     Ejecuta validaciones según el tipo de documento del DTO (FASE 2).
     
     El router dirige validaciones dependiendo del "document_type" asignado por el parser.
     
-    ⚠️ v2.40: Prioriza validadores específicos por app (ej: cotizaciones sobre inventario genérico)
+    WARNING: v2.40: Prioriza validadores específicos por app (ej: cotizaciones sobre inventario genérico)
     
     Args:
         dto_json: DTO JSON con el campo "document_type" o "type"
@@ -263,7 +263,7 @@ def run_validations(dto_json: Dict[str, Any]) -> Tuple[bool, Optional[str], List
     doc_type = dto_json.get("type") or dto_json.get("document_type", "")
     
     if not doc_type:
-        # ⚠️ v2.40: Si no hay type/document_type pero tiene items, asumir que es inventario.catalogo
+        # WARNING: v2.40: Si no hay type/document_type pero tiene items, asumir que es inventario.catalogo
         if "items" in dto_json and isinstance(dto_json.get("items"), list) and len(dto_json.get("items", [])) > 0:
             logger.info(
                 "validation_router_inferring_inventario_from_items",
@@ -279,7 +279,7 @@ def run_validations(dto_json: Dict[str, Any]) -> Tuple[bool, Optional[str], List
     # Extraer tipo base (ej: "invoice.ubl21" -> "invoice")
     doc_type_base = doc_type.split('.')[0] if '.' in doc_type else doc_type
     
-    # ⚠️ v2.40: Para inventario, buscar primero validador específico por app
+    # WARNING: v2.40: Para inventario, buscar primero validador específico por app
     # Priorizar validador de cotizaciones sobre inventario genérico
     if doc_type_base == "inventario":
         # Buscar validador específico de cotizaciones primero
@@ -318,7 +318,7 @@ def run_validations(dto_json: Dict[str, Any]) -> Tuple[bool, Optional[str], List
     # Buscar validador en el router por tipo base
     if doc_type_base in VALIDATORS:
         validator = VALIDATORS[doc_type_base]
-        # ⚠️ v2.40: Si es inventario y el validador NO es de cotizaciones, intentar buscar el de cotizaciones primero
+        # WARNING: v2.40: Si es inventario y el validador NO es de cotizaciones, intentar buscar el de cotizaciones primero
         if doc_type_base == "inventario" and validator.app_name != "cotizaciones":
             logger.warning(
                 "validation_router_inventario_not_cotizaciones",
@@ -373,7 +373,7 @@ def run_validations(dto_json: Dict[str, Any]) -> Tuple[bool, Optional[str], List
         return validator.validate(dto_json, doc_type)
     
     # No se encontró validador para este tipo
-    # ⚠️ CRÍTICO: Si es inventario/cotizaciones, NO retornar validator_not_found
+    # WARNING: CRÍTICO: Si es inventario/cotizaciones, NO retornar validator_not_found
     # porque causaría que se use el fallback genérico que valida campos de facturas
     if doc_type_base in ["inventario", "cotizaciones"]:
         logger.error(

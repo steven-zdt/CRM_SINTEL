@@ -2,6 +2,7 @@
 Tests de humo para validar columna Naturaleza y assets en workspace.html.
 """
 import re
+
 from django.urls import reverse
 from django_tenants.test.cases import TenantTestCase
 

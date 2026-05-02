@@ -121,7 +121,13 @@
         }
       })();
     </script>
-    
+    <!-- JWT helper: proporciona window.jwtAuth para inyección Authorization -->
+    <script src="{% static 'js/jwt-auth.js' %}"></script>
+
+    <!-- Cliente HTTP unificado v3.4 (función + objeto, devuelve {ok,status,data}) -->
+    <!-- Debe cargarse DESPUÉS de jwt-auth.js y ANTES de cualquier *.api.js -->
+    <script src="{% static 'js/http.js' %}"></script>
+
     <!-- Hook de scripts por-página -->
     {% block page_assets_body %}{% endblock page_assets_body %}
     

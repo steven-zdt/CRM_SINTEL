@@ -1,14 +1,14 @@
 """Core API v1 - Clientes serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Composición vía herencia de serializers existentes de la app clientes.
-- ⚠️ v2.61: Alineado con patrón de cotizaciones y contabilidad.
+- # WARNING: v2.61: Alineado con patrón de cotizaciones y contabilidad.
 """
 
 from apps.tenant.clientes.api.serializers import (
-    ClienteListSerializer,
     ClienteDetailSerializer,
+    ClienteListSerializer,
     ContactoClienteSerializer,
 )
 

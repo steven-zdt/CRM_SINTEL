@@ -1,14 +1,14 @@
 """
 Clase base abstracta para validadores de documentos (FASE 4.1).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Cada app puede implementar su propio validador especializado
 - Valida DTO JSON unificado producido por el pipeline
 - Aplica reglas de negocio específicas del dominio
 - Retorna resultados estructurados para logging y errores
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Any
 
 
 class BaseValidator(ABC):
@@ -48,7 +48,7 @@ class BaseValidator(ABC):
         pass
     
     @abstractmethod
-    def validate(self, dto: Dict[str, Any], document_type: str) -> Tuple[bool, Optional[str], List[str]]:
+    def validate(self, dto: dict[str, Any], document_type: str) -> tuple[bool, str | None, list[str]]:
         """
         Valida un DTO de documento.
         
@@ -67,7 +67,7 @@ class BaseValidator(ABC):
         """
         pass
     
-    def validate_common_fields(self, dto: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    def validate_common_fields(self, dto: dict[str, Any]) -> tuple[bool, list[str]]:
         """
         Valida campos comunes a todos los documentos (helper).
         

@@ -7,6 +7,7 @@ Valida que:
 3. SessionAuthentication funcione correctamente
 """
 import pytest
+
 from apps.public.tenants.models import TenantMembership
 
 

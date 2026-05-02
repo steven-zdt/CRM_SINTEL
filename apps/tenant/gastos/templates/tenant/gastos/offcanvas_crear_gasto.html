@@ -1,0 +1,129 @@
+{# offcanvas_crear_gasto.html - Formulario de creación de Gasto #}
+{% load static %}
+
+<div class="offcanvas offcanvas-end show" tabindex="-1" id="gastoOffcanvas" aria-labelledby="gastoOffcanvasLabel">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="gastoOffcanvasLabel">Nuevo Gasto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form id="gasto-form" hx-post="{% url 'gastos:gasto-list' %}" 
+              hx-swap="none"
+              hx-trigger="submit">
+            {% csrf_token %}
+            
+            <!-- Proveedor -->
+            <div class="mb-3">
+                <label for="proveedor_uuid" class="form-label">Proveedor</label>
+                <select class="form-select" id="proveedor_uuid" name="proveedor_uuid" required>
+                    <option value="">Seleccione...</option>
+                    <!-- Opciones cargadas dinámicamente -->
+                </select>
+            </div>
+            
+            <!-- Tipo Documento -->
+            <div class="mb-3">
+                <label for="tipo_documento" class="form-label">Tipo Documento</label>
+                <select class="form-select" id="tipo_documento" name="tipo_documento" required>
+                    <option value="NIT">NIT</option>
+                    <option value="CC">Cédula</option>
+                    <option value="CE">Cédula Extranjería</option>
+                </select>
+            </div>
+            
+            <!-- Número Factura -->
+            <div class="mb-3">
+                <label for="numero_factura_proveedor" class="form-label">Número Factura</label>
+                <input type="text" class="form-control" id="numero_factura_proveedor" name="numero_factura_proveedor" required>
+            </div>
+            
+            <!-- Fecha -->
+            <div class="mb-3">
+                <label for="fecha" class="form-label">Fecha</label>
+                <input type="date" class="form-control" id="fecha" name="fecha" required>
+            </div>
+            
+            <!-- Periodo -->
+            <div class="mb-3">
+                <label for="periodo" class="form-label">Periodo (YYYY-MM)</label>
+                <input type="text" class="form-control" id="periodo" name="periodo" 
+                       placeholder="2026-03" pattern="\d{4}-\d{2}" required>
+            </div>
+            
+            <!-- Cuenta Contable -->
+            <div class="mb-3">
+                <label for="cuenta_contable_uuid" class="form-label">Categoría Contable</label>
+                <select class="form-select" id="cuenta_contable_uuid" name="cuenta_contable_uuid" required>
+                    <option value="">Seleccione...</option>
+                    <!-- Opciones cargadas desde contabilidad -->
+                </select>
+            </div>
+            
+            <!-- Centro de Costo -->
+            <div class="mb-3">
+                <label for="centro_costo" class="form-label">Centro de Costo</label>
+                <select class="form-select" id="centro_costo" name="centro_costo">
+                    <option value="">Ninguno</option>
+                    <option value="ADMIN">Administración</option>
+                    <option value="VENTAS">Ventas</option>
+                    <option value="PRODUCCION">Producción</option>
+                </select>
+            </div>
+            
+            <!-- Subtotal -->
+            <div class="mb-3">
+                <label for="subtotal" class="form-label">Subtotal</label>
+                <input type="number" class="form-control" id="subtotal" name="subtotal" 
+                       step="0.01" min="0.01" required>
+            </div>
+            
+            <!-- Retenciones -->
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="retefuente_porcentaje" class="form-label">ReteFuente %</label>
+                    <select class="form-select" id="retefuente_porcentaje" name="retefuente_porcentaje">
+                        <option value="0">0%</option>
+                        <option value="4">4%</option>
+                        <option value="6">6%</option>
+                        <option value="10">10%</option>
+                        <option value="11">11%</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="reteica_porcentaje" class="form-label">ReteICA %</label>
+                    <select class="form-select" id="reteica_porcentaje" name="reteica_porcentaje">
+                        <option value="0">0%</option>
+                        <option value="0.69">0.69%</option>
+                        <option value="0.966">0.966%</option>
+                        <option value="1.104">1.104%</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Total Calculado -->
+            <div class="mb-3">
+                <label for="total_neto" class="form-label">Total Neto</label>
+                <input type="number" class="form-control" id="total_neto" name="total_neto" 
+                       step="0.01" readonly>
+                <div id="calculo-preview" class="form-text"></div>
+            </div>
+            
+            <!-- Descripción -->
+            <div class="mb-3">
+                <label for="descripcion" class="form-label">Descripción</label>
+                <textarea class="form-control" id="descripcion" name="descripcion" rows="2"></textarea>
+            </div>
+            
+            <!-- Observaciones -->
+            <div class="mb-3">
+                <label for="observaciones" class="form-label">Observaciones</label>
+                <textarea class="form-control" id="observaciones" name="observaciones" rows="2"></textarea>
+            </div>
+            
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary">Guardar Gasto</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+            </div>
+        </form>
+    </div>
+</div>

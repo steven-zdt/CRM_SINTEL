@@ -1,7 +1,7 @@
 """
 Service Layer interno del dominio Perfil.
 
-⚠️ v2.30: Service Layer Pattern - Lógica de negocio del dominio Perfil.
+WARNING: v2.30: Service Layer Pattern - Lógica de negocio del dominio Perfil.
 - Sin signals: Toda la lógica es explícita
 - Sin HTTP: Funciones puras que operan sobre modelos
 - Multi-tenant: Transparente (django-tenants maneja el aislamiento por esquema)
@@ -10,21 +10,20 @@ Service Layer interno del dominio Perfil.
 Este módulo contiene la lógica de negocio pura del dominio Perfil.
 No debe tener dependencias de HTTP, vistas o serializers.
 """
-import json
-from typing import Dict, Any, Optional
+from typing import Any
+
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.core.files.uploadedfile import UploadedFile
-from django.core.exceptions import ValidationError
+from django.db import transaction
 
 User = get_user_model()
 
 
-def get_or_create_profile(user: User, defaults: Optional[Dict[str, Any]] = None) -> 'TenantProfile':
+def get_or_create_profile(user: User, defaults: dict[str, Any] | None = None) -> 'TenantProfile':
     """
     Obtiene o crea el perfil del usuario en el tenant actual.
     
-    ⚠️ TENANT ISOLATION: django-tenants maneja automáticamente el aislamiento
+    WARNING: TENANT ISOLATION: django-tenants maneja automáticamente el aislamiento
     por esquema, así que el perfil se crea/obtiene del esquema del tenant actual.
     
     Args:
@@ -46,7 +45,18 @@ def get_or_create_profile(user: User, defaults: Optional[Dict[str, Any]] = None)
     
     # Intentar obtener el perfil existente
     try:
-        perfil = TenantProfile.objects.get(user=user)
+        perfil = TenantProfile.objects.filter(user=user).only(
+            "id",
+            "user_id",
+            "empresa_id",
+            "cargo",
+            "departamento",
+            "telefono_corporativo",
+            "avatar",
+            "configuracion",
+            "created_at",
+            "updated_at",
+        ).get()
         return perfil
     except TenantProfile.DoesNotExist:
         # Crear el perfil con valores por defecto
@@ -57,11 +67,11 @@ def get_or_create_profile(user: User, defaults: Optional[Dict[str, Any]] = None)
         return perfil
 
 
-def read_profile(user: User) -> Dict[str, Any]:
+def read_profile(user: User) -> dict[str, Any]:
     """
     Lee el perfil del usuario y retorna un DTO (dict).
     
-    ⚠️ v2.30: Retorna un diccionario con todos los campos del perfil,
+    WARNING: v2.30: Retorna un diccionario con todos los campos del perfil,
     incluyendo campos calculados (no incluye campos del User global; eso lo hace el adapter).
     
     Args:
@@ -85,12 +95,12 @@ def read_profile(user: User) -> Dict[str, Any]:
 
 
 @transaction.atomic
-def update_profile(user: User, data: Dict[str, Any], files: Optional[Dict[str, UploadedFile]] = None) -> Dict[str, Any]:
+def update_profile(user: User, data: dict[str, Any], files: dict[str, UploadedFile] | None = None) -> dict[str, Any]:
     """
     Actualiza el perfil del usuario con los datos proporcionados.
     
-    ⚠️ v2.30: Service Layer Pattern - Lógica de negocio centralizada.
-    ⚠️ VALIDACIONES: Tipos, longitud de campos, MIME y tamaño de avatar.
+    WARNING: v2.30: Service Layer Pattern - Lógica de negocio centralizada.
+    WARNING: VALIDACIONES: Tipos, longitud de campos, MIME y tamaño de avatar.
     
     Args:
         user: Usuario global (AUTH_USER_MODEL)
@@ -103,10 +113,20 @@ def update_profile(user: User, data: Dict[str, Any], files: Optional[Dict[str, U
     Raises:
         ValueError: Si los datos no son válidos (tipo, longitud, MIME, tamaño)
     """
-    from apps.tenant.perfil.models import TenantProfile
     
     # Obtener o crear el perfil
     perfil = get_or_create_profile(user)
+
+    # Double Semantic Verification: reject attempts to change tenant/user via payload
+    if isinstance(data, dict):
+        if "empresa_id" in data or "empresa" in data:
+            incoming = data.get("empresa_id") or data.get("empresa")
+            if incoming is not None and int(incoming) != int(getattr(perfil, "empresa_id", 0)):
+                raise ValueError("Payload contains empresa that does not match tenant (anti-IDOR)")
+        if "user_id" in data or "user" in data:
+            incoming_user = data.get("user_id") or data.get("user")
+            if incoming_user is not None and int(incoming_user) != int(user.id):
+                raise ValueError("Payload contains user id that does not match authenticated user (anti-IDOR)")
     
     # Validar y actualizar campos básicos
     campos_permitidos = ['cargo', 'departamento', 'telefono_corporativo', 'configuracion']
@@ -170,12 +190,12 @@ def update_profile(user: User, data: Dict[str, Any], files: Optional[Dict[str, U
 
 
 @transaction.atomic
-def update_profile_config(user: User, config: Dict[str, Any], merge: bool = True) -> Dict[str, Any]:
+def update_profile_config(user: User, config: dict[str, Any], merge: bool = True) -> dict[str, Any]:
     """
     Actualiza la configuración de UI del perfil de forma segura.
     
-    ⚠️ v2.30: Service Layer Pattern - Lógica de negocio centralizada.
-    ⚠️ IMPORTANTE: Este método actualiza el campo JSONField `configuracion`
+    WARNING: v2.30: Service Layer Pattern - Lógica de negocio centralizada.
+    WARNING: IMPORTANTE: Este método actualiza el campo JSONField `configuracion`
     de forma segura, preservando los valores existentes si `merge=True`.
     
     Args:
@@ -189,7 +209,6 @@ def update_profile_config(user: User, config: Dict[str, Any], merge: bool = True
     Raises:
         ValueError: Si la configuración no es un diccionario válido
     """
-    from apps.tenant.perfil.models import TenantProfile
     
     # Validar que config sea un diccionario
     if not isinstance(config, dict):

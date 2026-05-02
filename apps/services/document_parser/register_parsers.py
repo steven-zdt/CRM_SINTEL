@@ -1,12 +1,13 @@
 """
 Registro automático de parsers por app (v2.40).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Registra automáticamente los parsers de cada app al importar
 - Cada app tiene sus parsers independientes
 - El router de document_ingest usa estos parsers registrados
 """
 import logging
+
 from apps.services.document_ingest.app_router import register_app_parser
 
 logger = logging.getLogger("apps.services.document_parser.register_parsers")
@@ -16,7 +17,7 @@ def register_all_parsers():
     """
     Registra todos los parsers de todas las apps.
     
-    ⚠️ v2.40: Se llama automáticamente al importar este módulo.
+    WARNING: v2.40: Se llama automáticamente al importar este módulo.
     """
     # Registrar parsers de Cotizaciones
     try:

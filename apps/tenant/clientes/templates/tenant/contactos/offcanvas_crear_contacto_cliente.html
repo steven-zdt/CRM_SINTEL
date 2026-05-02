@@ -1,0 +1,89 @@
+{# offcanvas_crear_contacto_cliente.html - Offcanvas para CREAR contacto de cliente v2.61 #}
+{# Feature-Sliced: Template modular solo para creación #}
+{# HTMX: Auto-inicialización del offcanvas #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-contacto-cliente" aria-labelledby="offcanvas-contacto-cliente-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-contacto-cliente-label">
+      <i class="bi bi-person-plus me-2"></i>Nuevo Contacto
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {# Contenedor de errores para Error Boundary Pattern #}
+    <div id="form-contacto-cliente-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    <form id="form-contacto-cliente" method="POST" onsubmit="return false;">
+      {# Campo oculto para cliente_id (inyectado desde UI o parámetro) #}
+      <input type="hidden" id="contacto-cliente-id" name="cliente" value="">
+      
+      {# Sección: Cliente (visible solo si no hay cliente_id preseleccionado) #}
+      <div class="mb-4" id="contacto-cliente-select-container" style="display: none;">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-building me-2"></i>Cliente
+        </h6>
+        <select class="form-select" id="contacto-cliente-select" required>
+          <option value="">Seleccione un cliente...</option>
+        </select>
+      </div>
+
+      {# Sección: Información Personal #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-person me-2"></i>Información Personal
+        </h6>
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="contacto-nombre_completo" class="form-label">Nombre Completo *</label>
+            <input type="text" class="form-control" id="contacto-nombre_completo" name="nombre_completo" 
+                   required placeholder="Nombre completo del contacto" />
+          </div>
+          <div class="col-md-6">
+            <label for="contacto-cargo" class="form-label">Cargo</label>
+            <input type="text" class="form-control" id="contacto-cargo" name="cargo" 
+                   placeholder="Cargo o posición" />
+          </div>
+          <div class="col-md-6">
+            <label for="contacto-telefono" class="form-label">Teléfono</label>
+            <input type="text" class="form-control" id="contacto-telefono" name="telefono" 
+                   placeholder="Teléfono de contacto" />
+          </div>
+          <div class="col-12">
+            <label for="contacto-email" class="form-label">Email *</label>
+            <input type="email" class="form-control" id="contacto-email" name="email" 
+                   required placeholder="Email de contacto" />
+          </div>
+        </div>
+      </div>
+
+      {# Sección: Estado #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-info-circle me-2"></i>Estado
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="contacto-activo" name="activo" checked />
+              <label class="form-check-label" for="contacto-activo">Activo</label>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="contacto-principal" name="is_principal" />
+              <label class="form-check-label" for="contacto-principal">Contacto Principal</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="btn-guardar-contacto-cliente">
+        <i class="bi bi-save me-1"></i>Guardar
+      </button>
+    </div>
+  </div>
+</div>

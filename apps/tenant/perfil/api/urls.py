@@ -6,8 +6,9 @@ Endpoints disponibles:
 - PATCH /api/v1/perfil/me/ - Actualizar perfil del usuario actual
 - PATCH /api/v1/perfil/me/configuracion/ - Actualizar configuración de UI
 """
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
+
 from apps.tenant.perfil.api.viewsets import PerfilViewSet
 
 router = DefaultRouter()

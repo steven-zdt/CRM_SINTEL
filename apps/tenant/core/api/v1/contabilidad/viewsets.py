@@ -1,28 +1,24 @@
 """Core API v1 - Contabilidad facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - La app Core solo orquesta y expone los mismos ViewSets (acciones incluidas).
 - Las acciones @action se arrastran por herencia (NO redefinir).
-- ⚠️ v2.61: Incluye CatalogoMaestroNIIFViewSet para el catálogo oficial NIIF Colombia.
+- # WARNING: v2.61: Incluye CatalogoMaestroNIIFViewSet para el catálogo oficial NIIF Colombia.
 """
 
-from rest_framework.authentication import SessionAuthentication
-
 from apps.tenant.contabilidad.api.viewsets import (
-    CuentaContableViewSet,
     AsientoContableViewSet,
-    MovimientoContableViewSet,
-    PeriodoContableViewSet,  # ⚠️ v2.61
     CatalogoMaestroNIIFViewSet,
+    CuentaContableViewSet,
+    MovimientoContableViewSet,
+    PeriodoContableViewSet,  # # WARNING: v2.61
 )
 
 from . import serializers as ws_serializers
 
 
 class CuentaContableCoreViewSet(CuentaContableViewSet):
-    authentication_classes = [SessionAuthentication]
-
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return ws_serializers.CuentaContableWorkspaceDetailSerializer
@@ -30,8 +26,6 @@ class CuentaContableCoreViewSet(CuentaContableViewSet):
 
 
 class AsientoContableCoreViewSet(AsientoContableViewSet):
-    authentication_classes = [SessionAuthentication]
-
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return ws_serializers.AsientoContableWorkspaceDetailSerializer
@@ -39,8 +33,6 @@ class AsientoContableCoreViewSet(AsientoContableViewSet):
 
 
 class MovimientoContableCoreViewSet(MovimientoContableViewSet):
-    authentication_classes = [SessionAuthentication]
-
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return ws_serializers.MovimientoContableWorkspaceDetailSerializer
@@ -51,10 +43,8 @@ class CatalogoMaestroNIIFCoreViewSet(CatalogoMaestroNIIFViewSet):
     """
     Facade para CatalogoMaestroNIIF (Catálogo oficial NIIF Colombia).
     
-    ⚠️ v2.61: Expone el catálogo maestro NIIF a través de Core API.
+    # WARNING: v2.61: Expone el catálogo maestro NIIF a través de Core API.
     """
-    authentication_classes = [SessionAuthentication]
-
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return ws_serializers.CatalogoMaestroNIIFWorkspaceDetailSerializer
@@ -65,10 +55,8 @@ class PeriodoContableCoreViewSet(PeriodoContableViewSet):
     """
     Facade para PeriodoContable (Periodos Contables).
     
-    ⚠️ v2.61: Expone los periodos contables a través de Core API.
+    # WARNING: v2.61: Expone los periodos contables a través de Core API.
     """
-    authentication_classes = [SessionAuthentication]
-
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return ws_serializers.PeriodoContableWorkspaceDetailSerializer

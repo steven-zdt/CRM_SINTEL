@@ -1,10 +1,10 @@
 """
 Services de gastos - Re-exporta símbolos de services.py para importación limpia.
 
-⚠️ v2.40: Arquitectura simplificada con importaciones estándar de Django.
+v2.40: Arquitectura simplificada con importaciones estándar de Django.
 Re-exporta todas las funciones del service layer para uso en ViewSets y Serializers.
 
-⚠️ CRÍTICO: Este archivo está en apps/tenant/gastos/services/__init__.py
+CRÍTICO: Este archivo está en apps/tenant/gastos/services/__init__.py
 El archivo services.py está en apps/tenant/gastos/services.py (nivel superior).
 
 PROBLEMA DE CIRCULARIDAD:
@@ -17,7 +17,7 @@ SOLUCIÓN:
 - Esto evita que Python intente cargar el paquete services/ primero
 - Las funciones se re-exportan explícitamente para uso en ViewSets
 """
-# ⚠️ v2.40: Importación directa desde el archivo services.py para evitar circularidad
+# v2.40: Importación directa desde el archivo services.py para evitar circularidad
 # El conflicto es: paquete services/ (con __init__.py) vs archivo services.py
 # Solución: importar directamente desde el archivo usando importlib
 import importlib.util
@@ -42,27 +42,29 @@ if services_py_path.exists():
     obtener_siguiente_numero_soporte = services_module.obtener_siguiente_numero_soporte
     normalize_document_number = services_module.normalize_document_number
     anular_gasto_service = services_module.anular_gasto_service
-    desactivar_gasto_service = getattr(services_module, 'desactivar_gasto_service', None)  # ⚠️ v2.40: Función para desactivar
+    desactivar_gasto_service = getattr(services_module, 'desactivar_gasto_service', None)  # v2.40: Función para desactivar
     materializar_gasto_desde_dto = getattr(services_module, 'materializar_gasto_desde_dto', None)
     materializar_inventario_desde_dto = getattr(services_module, 'materializar_inventario_desde_dto', None)
-    # ⚠️ v2.40: Funciones de Resoluciones DIAN
+    # v2.40: Funciones de Resoluciones DIAN
     qs_resolucion_list = getattr(services_module, 'qs_resolucion_list', None)
     qs_resolucion_detail = getattr(services_module, 'qs_resolucion_detail', None)
     crear_resolucion = getattr(services_module, 'crear_resolucion', None)
     desactivar_resolucion = getattr(services_module, 'desactivar_resolucion', None)
     puede_eliminar_resolucion = getattr(services_module, 'puede_eliminar_resolucion', None)
-    # ⚠️ v2.40: Función de cálculo de retenciones
+    # v2.40: Función de cálculo de retenciones
     calcular_retenciones = getattr(services_module, 'calcular_retenciones', None)
+    # v2.61: Service Layer Pattern - GastoServiceMixin
+    GastoServiceMixin = getattr(services_module, 'GastoServiceMixin', None)
 else:
     raise ImportError(f"No se encontró el archivo services.py en {services_py_path.parent}")
 
 # Re-exportar desde gasto_service.py si existe (compatibilidad)
-try:
-    from .gasto_service import *  # Mantener imports existentes si hay funciones adicionales
-except ImportError:
-    pass  # No crítico si no existe
+from contextlib import suppress
 
-# ⚠️ v2.40: Exportar explícitamente todas las funciones requeridas
+with suppress(ImportError):
+    from .gasto_service import *  # Mantener imports existentes si hay funciones adicionales
+
+# v2.40: Exportar explícitamente todas las funciones requeridas
 __all__ = [
     'LIST_FIELDS',
     'DETAIL_FIELDS',
@@ -80,7 +82,7 @@ if materializar_gasto_desde_dto:
     __all__.append('materializar_gasto_desde_dto')
 if materializar_inventario_desde_dto:
     __all__.append('materializar_inventario_desde_dto')
-# ⚠️ v2.40: Funciones de Resoluciones DIAN
+# v2.40: Funciones de Resoluciones DIAN
 if qs_resolucion_list:
     __all__.append('qs_resolucion_list')
 if qs_resolucion_detail:
@@ -93,3 +95,5 @@ if puede_eliminar_resolucion:
     __all__.append('puede_eliminar_resolucion')
 if calcular_retenciones:
     __all__.append('calcular_retenciones')
+if GastoServiceMixin:
+    __all__.append('GastoServiceMixin')

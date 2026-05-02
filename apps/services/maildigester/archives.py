@@ -3,12 +3,12 @@ Utilidades para descomprimir archivos (ZIP/RAR/7z).
 
 Detecta tipos de archivo comprimido y los expande en listas de archivos individuales.
 
-⚠️ FASE 1: Solo stubs y validaciones de seguridad, sin dependencias externas.
-⚠️ SEGURIDAD: Prevención de path traversal, validación de tamaños, límite de archivos.
+WARNING: FASE 1: Solo stubs y validaciones de seguridad, sin dependencias externas.
+WARNING: SEGURIDAD: Prevención de path traversal, validación de tamaños, límite de archivos.
 """
-from typing import List
-from .schemas import ExtractedFileDTO
+
 from .exceptions import ArchiveExpansionError, PathTraversalError
+from .schemas import ExtractedFileDTO
 
 
 def is_supported_archive(filename: str, content_type: str) -> bool:
@@ -41,18 +41,18 @@ def is_supported_archive(filename: str, content_type: str) -> bool:
     return False
 
 
-def expand_archive(file: ExtractedFileDTO) -> List[ExtractedFileDTO]:
+def expand_archive(file: ExtractedFileDTO) -> list[ExtractedFileDTO]:
     """
     Descomprime un archivo y retorna lista de archivos extraídos.
     
-    ⚠️ SEGURIDAD CRÍTICA:
+    WARNING: SEGURIDAD CRÍTICA:
     - Rechaza rutas con '..' (path traversal)
     - Rechaza rutas absolutas
     - Normaliza rutas relativas
     - Limita número máximo de archivos extraídos (p. ej., 100)
     - Valida tamaños individuales
     
-    ⚠️ FASE 1: STUB - Solo validaciones de seguridad básicas.
+    WARNING: FASE 1: STUB - Solo validaciones de seguridad básicas.
     TODO FASE 2: Implementar descompresión real con zipfile, rarfile, py7zr
     
     Args:
@@ -75,7 +75,7 @@ def expand_archive(file: ExtractedFileDTO) -> List[ExtractedFileDTO]:
         files = expand_archive(zip_file)
         # Retorna: [ExtractedFileDTO(filename="FAC-123.xml", ...), ...]
     """
-    # ⚠️ SEGURIDAD: Validar nombre de archivo antes de procesar
+    # WARNING: SEGURIDAD: Validar nombre de archivo antes de procesar
     filename = file.get("filename", "")
     
     # Rechazar path traversal
@@ -91,7 +91,7 @@ def expand_archive(file: ExtractedFileDTO) -> List[ExtractedFileDTO]:
     if normalized.startswith("/") or ".." in normalized:
         raise PathTraversalError(f"Ruta normalizada rechazada: '{normalized}'")
     
-    # ⚠️ SEGURIDAD: Límites de seguridad
+    # WARNING: SEGURIDAD: Límites de seguridad
     MAX_FILES = 100  # Máximo de archivos a extraer
     MAX_TOTAL_SIZE = 500 * 1024 * 1024  # 500MB total descomprimido
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB por archivo individual
@@ -99,13 +99,13 @@ def expand_archive(file: ExtractedFileDTO) -> List[ExtractedFileDTO]:
     content = file.get("content", b"")
     file_type = file.get("guessed_type", "unknown")
     
-    extracted_files: List[ExtractedFileDTO] = []
+    extracted_files: list[ExtractedFileDTO] = []
     total_size = 0
     
     try:
         if file_type == "zip":
-            import zipfile
             import io
+            import zipfile
             
             # Abrir ZIP desde bytes
             zip_buffer = io.BytesIO(content)
@@ -119,7 +119,7 @@ def expand_archive(file: ExtractedFileDTO) -> List[ExtractedFileDTO]:
                 
                 # Extraer cada archivo
                 for member_name in file_list:
-                    # ⚠️ SEGURIDAD: Validar nombre de archivo (path traversal)
+                    # WARNING: SEGURIDAD: Validar nombre de archivo (path traversal)
                     if ".." in member_name or member_name.startswith("/"):
                         continue  # Saltar archivos con path traversal
                     
@@ -156,12 +156,12 @@ def expand_archive(file: ExtractedFileDTO) -> List[ExtractedFileDTO]:
                             size_bytes=len(file_content),
                             content=file_content
                         ))
-                    except Exception as e:
+                    except Exception:
                         # Continuar con otros archivos si uno falla
                         continue
         
         elif file_type == "rar":
-            # ⚠️ RAR requiere rarfile que a su vez requiere unrar
+            # WARNING: RAR requiere rarfile que a su vez requiere unrar
             # Por ahora, lanzar error indicando que no está soportado
             raise ArchiveExpansionError(
                 "Descompresión de archivos RAR no está implementada. "
@@ -169,7 +169,7 @@ def expand_archive(file: ExtractedFileDTO) -> List[ExtractedFileDTO]:
             )
         
         elif file_type == "7z":
-            # ⚠️ 7z requiere py7zr
+            # WARNING: 7z requiere py7zr
             # Por ahora, lanzar error indicando que no está soportado
             raise ArchiveExpansionError(
                 "Descompresión de archivos 7z no está implementada. "

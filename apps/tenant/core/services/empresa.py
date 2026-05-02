@@ -1,21 +1,20 @@
 """
 Servicios de orquestación para datos de empresa.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Solo lectura/composición de datos
 - NO duplica lógica de negocio de apps.tenant.empresa
 - Usa ORM optimizado (only, select_related, prefetch_related)
 """
-from typing import Dict, Any, List, Optional
-from django.db import connection
+from typing import Any
 
 
-def get_mi_empresa(tenant) -> Optional[Dict[str, Any]]:
+def get_mi_empresa(tenant) -> dict[str, Any] | None:
     """
     Obtiene la empresa del tenant (singleton) para el dashboard.
     
-    ⚠️ PATRÓN SINGLETON: Solo existe una empresa por tenant.
-    ⚠️ POLÍTICA SSoT: Usa el servicio provider de empresa.
+    # WARNING: PATRÓN SINGLETON: Solo existe una empresa por tenant.
+    # WARNING: POLÍTICA SSoT: Usa el servicio provider de empresa.
     Retorna None si no existe (indica que falta setup).
     
     Args:
@@ -25,7 +24,7 @@ def get_mi_empresa(tenant) -> Optional[Dict[str, Any]]:
         Dict con datos de empresa o None si no existe
     """
     try:
-        # ⚠️ POLÍTICA SSoT: Usar servicio provider en lugar de consulta ORM directa
+        # # WARNING: POLÍTICA SSoT: Usar servicio provider en lugar de consulta ORM directa
         from apps.tenant.empresa.services import get_empresa_data
         
         empresa_data = get_empresa_data()
@@ -49,12 +48,12 @@ def get_mi_empresa(tenant) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_empresas_snapshot(tenant) -> List[Dict[str, Any]]:
+def get_empresas_snapshot(tenant) -> list[dict[str, Any]]:
     """
     Obtiene snapshot de empresas del tenant.
     
-    ⚠️ PATRÓN SINGLETON: Solo existe una empresa por tenant.
-    ⚠️ POLÍTICA SSoT: Usa el servicio provider de empresa.
+    # WARNING: PATRÓN SINGLETON: Solo existe una empresa por tenant.
+    # WARNING: POLÍTICA SSoT: Usa el servicio provider de empresa.
     
     Args:
         tenant: Instancia del tenant (Client)
@@ -63,7 +62,7 @@ def get_empresas_snapshot(tenant) -> List[Dict[str, Any]]:
         List[Dict] con datos de empresa(s)
     """
     try:
-        # ⚠️ POLÍTICA SSoT: Usar servicio provider en lugar de consulta ORM directa
+        # # WARNING: POLÍTICA SSoT: Usar servicio provider en lugar de consulta ORM directa
         from apps.tenant.empresa.services import get_empresa_data
         
         empresa_data = get_empresa_data()

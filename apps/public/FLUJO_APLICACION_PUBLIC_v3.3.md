@@ -1,8 +1,8 @@
-# 📋 Flujo Completo y Estructura Funcional - apps/public v3.3
+# 📋 Flujo Completo y Estructura Funcional - apps/public v2.61.4
 
-**Fecha:** 2024-12-19  
+**Fecha:** 2026-03-23  
 **Alcance:** `apps/public/` - Aplicaciones del esquema público (SHARED_APPS)  
-**Referencia:** `.cursor/rules/reglas.mdc` y `documentacion/arquitectura_general.md`
+**Referencia:** `AGENTS.md` y arquitectura multi-tenant actualizada
 
 ---
 
@@ -76,7 +76,34 @@ Gestión de usuarios globales que pueden pertenecer a múltiples tenants.
 ### 2. `apps/public/tenants/` - Gestión de Tenants
 
 #### Propósito
-Gestión de tenants (Client), dominios y membresías de usuarios a tenants.
+Gestión de tenants (Client), dominios, membresías y landing page principal.
+
+#### URLs (`urls.py`) ⭐ NUEVO
+- `path('', LandingPageView.as_view())` - Landing page principal
+- `path('select/', TenantSelectView.as_view())` - Selección de tenant
+
+#### Vistas (`views.py`) ⭐ NUEVO
+- `LandingPageView` (TemplateView) - Landing page profesional SINTEL
+  - **Template:** `public/landing.html`
+  - **Características:**
+    - Hero section con icono y título SINTEL
+    - Descripción del sistema integral
+    - Botones dinámicos según estado de autenticación
+    - Footer con versión del sistema
+    - Diseño responsive con Bootstrap 5
+- `TenantSelectView` (LoginRequiredMixin) - Selección de tenants disponibles
+  - **Template:** `public/tenant_select.html`
+  - Lista tenants donde el usuario tiene membresía activa
+  - Links directos a dominios de cada tenant
+
+#### Templates ⭐ NUEVO
+- `templates/public/landing.html` - Landing page principal
+- `templates/public/tenant_select.html` - Selección de tenant
+
+#### Management Commands ⭐ NUEVO
+- `create_public_tenant.py` - Crea tenant público obligatorio
+  - Configura `Client(schema_name='public')` y `Domain(domain='localhost')`
+  - Comando: `python manage.py create_public_tenant`
 
 #### Modelos Principales
 
@@ -256,29 +283,28 @@ Interfaz de administración para gestión de tenants, usuarios y catálogos DIAN
 ### 5. `apps/public/core/` - Core Público
 
 #### Propósito
-Funcionalidades core del esquema público (middleware, vistas, utilidades, landing page).
+Funcionalidades core del esquema público (middleware, vistas, utilidades, URLs básicas).
 
 #### Componentes
 
-**Middleware (`middleware.py`):**
-- `ForceNoPortMiddleware` - Normaliza HTTP_HOST eliminando puerto antes de resolución de tenant
-- `HTTPSRedirectMiddleware` - Redirige HTTPS a HTTP en desarrollo
-- `CSRFTrustedOriginMiddleware` - Permite dominios arbitrarios en desarrollo
-- `RequestContextMiddleware` - Añade request_id y schema_name a los logs
+**URLs (`urls.py`):** ⭐ NUEVO
+- `path('', PublicIndexView.as_view())` - Página principal
+- `path('workspace/', workspace_redirect)` - Redirección a consola
+- `path('favicon.ico', favicon_view)` - Favicon placeholder (204 No Content)
+- `path('console/tenants/', RedirectView)` - Redirección a gestión de tenants
 
 **Vistas (`views.py`):**
-- `PublicIndexView` (TemplateView) - Landing page profesional para dominio público
-  - **Template:** `public/core/index.html`
+- `PublicIndexView` (TemplateView) - Redirige a landing page de tenants
   - **Lógica de redirección:**
     - Usuario staff/superuser → `/console/` (Consola de administración)
-    - Usuario normal autenticado → `/admin/login/` (No tiene acceso a consola)
-    - Usuario anónimo → Renderiza landing page profesional
-  - **Características:**
-    - Hero section con gradiente y call-to-action
-    - Sección de características (Features) con 6 tarjetas
-    - CTA final con botón destacado
-    - Footer informativo
-    - Diseño responsive con Bootstrap 5
+    - Usuario anónimo → Renderiza vista básica
+
+**Management Commands:** ⭐ NUEVO
+- `setup_default_tenant.py` - Crea tenant público obligatorio para localhost
+  - Configura `Client(schema_name='public', domain='localhost')`
+  - Ejecuta migraciones en esquema del tenant
+  - Crea perfil de tenant para usuario admin
+  - Comando: `python manage.py setup_default_tenant`
 
 **API (`api/views.py`):**
 - `LoggedTokenVerifyView` - Verificación de token JWT con logging
@@ -320,61 +346,50 @@ Funcionalidades core del esquema público (middleware, vistas, utilidades, landi
 
 ## 🔄 Flujos Principales
 
-### Flujo 0: Acceso al Dominio Público (Landing Page) ⭐ NUEVO
+### Flujo 0: Acceso al Dominio Público (Landing Page) ⭐ ACTUALIZADO
 
-**Escenario:** Usuario accede a `http://sintel.com/` o `http://localhost:8000/`
+**Escenario:** Usuario accede a `http://localhost/`
 
 ```
-1. Request HTTP → sintel.com/ (o localhost:8000/)
+1. Request HTTP → localhost/
    
-2. ForceNoPortMiddleware:
-   - Normaliza HTTP_HOST eliminando puerto
-   - localhost:8000 → localhost
-   
-3. TenantMainMiddleware:
-   - Busca dominio en BD: Domain.objects.filter(domain='sintel.com').first()
-   - Encuentra: Domain(domain='sintel.com', tenant=Client(schema_name='public'))
+2. django-tenants TenantMainMiddleware:
+   - Busca dominio en BD: Domain.objects.filter(domain='localhost').first()
+   - Encuentra: Domain(domain='localhost', tenant=Client(schema_name='public'))
    - Activa schema: connection.set_schema_to('public')
    - Establece request.tenant = Client(schema_name='public')
    
-4. TenantSecurityAndURLConfMiddleware:
-   - Valida acceso público con _validate_public_access():
-     * CAPA 1: Verifica host en ALLOWED_PUBLIC_DOMAINS ['sintel.com', 'localhost', '127.0.0.1', '0.0.0.0']
-     * CAPA 2: Bloquea subdominios (ej: cliente.sintel.com NO puede acceder al público)
-     * CAPA 3: Valida que no sea subdominio de localhost
-   - Si acceso permitido: Establece request.urlconf = 'config.urls_public'
-   - Si acceso bloqueado: Retorna HttpResponseForbidden(403)
+3. Django resuelve URL en config/urls.py:
+   - path('', include('apps.public.tenants.urls')) → LandingPageView
    
-5. Django resuelve URL en ROOT_URLCONF:
-   - path('', PublicIndexView.as_view(), name='public_index')
+4. LandingPageView.dispatch():
+   - Si usuario autenticado y staff → redirect('/console/')
+   - Si usuario anónimo → Renderiza 'public/landing.html'
+   - Muestra landing page SINTEL con:
+     - Hero section: "SINTEL - Sistema Integral de Gestión Empresarial"
+     - Botones dinámicos: "Iniciar Sesión" o "Ir al Workspace"
+     - Footer con versión v2.61.4
    
-6. PublicIndexView.dispatch():
-   - Si usuario autenticado:
-     * Staff/Superuser → redirect('/console/') (Consola de administración)
-     * Usuario normal → redirect('/admin/login/') (No tiene acceso a consola)
-   - Si usuario anónimo:
-     * Renderiza template: 'public/core/index.html'
-     * Muestra landing page profesional con:
-       - Hero section: Título "SINTEL - Plataforma ERP/CRM Multi-Tenant"
-       - Features: 6 tarjetas explicando características
-       - CTA: Botón "Acceso Administrador Plataforma" → /admin/
-       - Footer: Información del proyecto
-   
-7. Response 200 OK con HTML de landing page
+5. Response 200 OK con HTML de landing page
 ```
 
+**URLs Adicionales Configuradas:**
+- `/workspace/` → Redirige a `/console/`
+- `/favicon.ico` → 204 No Content
+- `/robots.txt` → Respuesta estándar
+- `/sitemap.xml` → XML vacío
+
 **Archivos Involucrados:**
-- `apps/public/core/views.py` - PublicIndexView
-- `apps/public/core/templates/public/core/index.html` - Template landing page
-- `apps/public/tenants/middleware_urlconf.py` - Validación de acceso público
-- `config/urls_public.py` - Ruta raíz `path('', PublicIndexView.as_view())`
+- `apps/public/tenants/views.py` - LandingPageView, TenantSelectView
+- `apps/public/tenants/templates/public/landing.html` - Template landing page
+- `apps/public/core/urls.py` - URLs básicas (workspace/, favicon.ico)
+- `config/urls.py` - Configuración maestro de URLs
 
 **Inicialización Requerida:**
-- Ejecutar `scripts/setup_public_domain.py` para crear tenant público y dominios
+- Ejecutar `python manage.py create_public_tenant` para crear tenant público
 - Verificar que exista:
-  - Client(schema_name='public', nombre='SINTEL Public')
-  - Domain(domain='sintel.com', tenant=public, is_primary=True)
-  - Domain(domain='localhost', tenant=public, is_primary=False)
+  - Client(schema_name='public', nombre='Sitio Público SINTEL')
+  - Domain(domain='localhost', tenant=public, is_primary=True)
 
 ### Flujo 1: Creación de Tenant (Onboarding)
 
@@ -388,6 +403,34 @@ Funcionalidades core del esquema público (middleware, vistas, utilidades, landi
    c. Genera schema_name
    d. Crea Client (auto_create_schema=True)
    e. Domain creado por señal
+
+---
+
+## ✅ Implementado y funcional (actualizado 2026-03-27)
+
+Se han aplicado y verificado las siguientes correcciones y mejoras en `apps/public` durante la iteración de marzo 2026:
+
+- **Onboarding estable y idempotente:** Corrección de error de `Empresa` nulo durante bootstrap; `crear_tenant_con_owner()` ahora garantiza creación completa y retorno estable de `login_url`.
+- **Fix migraciones DateTimeField:** Corregido error en migraciones que originaba TypeError al aplicar defaults en `DateTimeField`.
+- **Eliminación robusta de usuarios/tenants:** Implementado `delete_user_service` y `DeletionAudit` en `apps/public/accounts/models.py`; auditoría y limpieza por esquema comprobadas.
+- **Restauración API pública `/api/public/v1/users/`:** Añadidos fallback determinísticos en `config/public_api_urls.py` y `config/urls_public.py`, y serializer que expone `username` en la respuesta de creación.
+- **Protecciones y logging:** Middleware y logging reforzados en `apps/public/tenants/middleware_*` para trazar resolución de tenant y bloquear rutas públicas en contextos tenant.
+- **Corrección tenants list (console):** `TenantsDataTableView` ahora excluye explícitamente `schema_name='public'` y `schema_name='test'` en listados administrativos para evitar artefactos de tests; logging temporal añadido para diagnóstico.
+
+Validación rápida realizada en entorno de CI local (Docker):
+
+- Reconstrucción de imágenes y levantamiento de contenedores: `docker compose up -d --build`
+- Ejecución de prueba focalizada que fallaba anteriormente:
+   - `pytest -q apps/public/console/tests.py::ConsoleAPIConsumptionTests::test_tenants_api_returns_paginated_results -q -s -o log_cli=true -o log_cli_level=DEBUG`
+   - Resultado: `1 passed` (el test de paginación de tenants ahora pasa).
+
+Notas de alcance:
+- Se evitaron cambios invasivos en la estructura de templates y JS (manteniendo FSD/SSoT). 
+- Se introdujeron logs temporales para depuración en `TenantsDataTableView` y `ClientViewSet` — pueden eliminarse tras estabilizar la suite completa.
+
+Próximo paso recomendado:
+- Ejecutar la suite completa `pytest apps/public` en CI para validar otras pruebas afectadas, y preparar commit/PR con cambios y notas de migración.
+
    f. Ejecuta migrate_schemas
    g. Crea TenantMembership (ADMIN, primary)
    h. (Opcional) Seed perfil
@@ -457,7 +500,7 @@ Funcionalidades core del esquema público (middleware, vistas, utilidades, landi
 
 ---
 
-## 📊 Estructura de Archivos
+## 📊 Estructura de Archivos ⭐ ACTUALIZADA
 
 ```
 apps/public/
@@ -474,9 +517,18 @@ apps/public/
 ├── tenants/
 │   ├── models.py              # Client, Domain, TenantMembership
 │   ├── services.py            # crear_tenant_con_owner, generar_schema_name
+│   ├── views.py               # ⭐ NUEVO: LandingPageView, TenantSelectView
+│   ├── urls.py                # ⭐ NUEVO: URLs landing page y selección
+│   ├── templates/             # ⭐ NUEVO: Templates públicos
+│   │   └── public/
+│   │       ├── landing.html   # Landing page principal
+│   │       └── tenant_select.html # Selección de tenant
 │   ├── api/
 │   │   ├── serializers.py     # Serializers DRF
 │   │   └── viewsets.py        # ClientViewSet, onboard action
+│   ├── management/
+│   │   └── commands/
+│   │       └── create_public_tenant.py # ⭐ NUEVO: Crear tenant público
 │   ├── middleware.py           # Tenant middleware
 │   └── migrations/
 │
@@ -500,17 +552,16 @@ apps/public/
 │   └── static/js/             # JavaScript consola
 │
 └── core/
-    ├── views.py               # PublicIndexView (TemplateView con landing page)
-    ├── middleware.py          # Core middleware (ForceNoPort, HTTPSRedirect, CSRFTrusted, RequestContext)
-    ├── templates/
-    │   └── public/
-    │       └── core/
-    │           └── index.html # Landing page profesional (Bootstrap 5)
+    ├── views.py               # PublicIndexView (redirección básica)
+    ├── urls.py                # ⭐ NUEVO: URLs básicas (workspace/, favicon.ico)
+    ├── management/
+    │   └── commands/
+    │       └── setup_default_tenant.py # ⭐ NUEVO: Setup tenant por defecto
+    ├── middleware.py          # Core middleware
     ├── api/
     │   └── views.py           # LoggedTokenVerifyView
     └── static/
-        ├── public/core/landing/ # Templates landing (legacy)
-        └── core/js/            # JavaScript landing
+        └── core/js/           # JavaScript core
 ```
 
 ---
@@ -565,91 +616,110 @@ El JavaScript de `apps/public/console/static/js/` y `apps/public/core/static/cor
 
 ---
 
-## 🔐 Validación de Tokens de Acceso Público (v3.3)
+## � Management Commands Disponibles
 
-### Servicio de Validación (`apps/public/services.py`)
+### Tenant Público
 
-**`generar_hash_acceso()`**
-- Genera hash HMAC-SHA256 seguro para acceso público
-- Incluye: tipo_documento, documento_id, tenant_schema, expiración
-- Hash determinístico pero no reversible
+**`python manage.py create_public_tenant`**
+- Crea el tenant público obligatorio para django-tenants
+- Configura `Client(schema_name='public')` y `Domain(domain='localhost')`
+- Parámetros:
+  - `--domain` (default: localhost) - Dominio para el tenant
+- Uso: `docker compose exec web python manage.py create_public_tenant`
 
-**`validar_hash_acceso()`**
-- Valida hash y verifica integridad
-- Verifica expiración
-- Comparación timing-safe (previene timing attacks)
+**`python manage.py setup_default_tenant`**
+- Configura tenant por defecto con empresa completa
+- Crea esquema de BD y ejecuta migraciones
+- Crea perfil de tenant para usuario admin
+- Parámetros:
+  - `--domain` (default: localhost) - Dominio para el tenant
+  - `--empresa-nombre` (default: SINTEL Demo) - Nombre de la empresa
+- Uso: `docker compose exec web python manage.py setup_default_tenant`
 
-**`validar_token_documento()`**
-- Método principal para validación desde API
-- Retorna dict con estado de validación
-
-**`obtener_datos_documento_publico()`**
-- Obtiene datos públicos del documento (sin información sensible)
-- Requiere acceso al schema del tenant
-
-### Endpoints API Públicos
-
-**`POST /api/public/v1/core/validate-token/`**
-- Valida token de acceso público
-- Body: `{token, tipo_documento, documento_id, tenant_schema}`
-- Returns: `{valido: bool, error?: string, expiracion?: int}`
-
-**`GET /api/public/v1/core/documento-publico/`**
-- Obtiene datos públicos de documento validado
-- Query params: `token, tipo, id, tenant`
-- Returns: `{valido: bool, documento: {...}}`
-
-### Flujo de Acceso Público
+### Flujo de Inicialización
 
 ```
-1. Usuario genera hash de acceso (desde tenant):
-   hash = generar_hash_acceso('cotizacion', 123, 'empresa_x', 30)
+1. Crear tenant público (obligatorio):
+   python manage.py create_public_tenant
    
-2. Usuario comparte URL pública:
-   /public/view/cotizacion/123/?token={hash}&tenant=empresa_x
+2. (Opcional) Configurar tenant con empresa:
+   python manage.py setup_default_tenant
    
-3. Frontend público valida token:
-   POST /api/public/v1/core/validate-token/
-   {token, tipo_documento: 'cotizacion', documento_id: 123, tenant_schema: 'empresa_x'}
-   
-4. Si válido, obtiene datos:
-   GET /api/public/v1/core/documento-publico/?token={hash}&tipo=cotizacion&id=123&tenant=empresa_x
-   
-5. Frontend muestra documento con TabulatorFactory (solo lectura)
+3. Verificar acceso:
+   http://localhost/ → Landing page SINTEL
+   http://localhost/console/ → Dashboard admin
 ```
 
 ---
 
-## ✅ Migración v3.3 Completada
+## ✅ Migración v2.61.4 Completada
 
-### Cambios Realizados
+### Cambios Realizados (2026-03-23)
 
-1. **Service Layer Pattern:**
-   - ✅ Creado `apps/public/services.py` con validación de tokens
-   - ✅ Funciones: `generar_hash_acceso()`, `validar_hash_acceso()`, `validar_token_documento()`
+1. **Tenant Público Multi-tenant:**
+   - ✅ Creado `apps/public/tenants/management/commands/create_public_tenant.py`
+   - ✅ Configurado tenant público obligatorio: `Client(schema_name='public', domain='localhost')`
+   - ✅ Resueltos errores 404 del middleware django-tenants
 
-2. **Vanilla JS (IIFE):**
-   - ✅ Refactorizado `login.ui.js` - Eliminado `import`, agregado IIFE completo
-   - ✅ Refactorizado `reset-request.ui.js` - Eliminado `import`, agregado IIFE completo
-   - ✅ Refactorizado `reset-confirm.ui.js` - Eliminado `import`, agregado IIFE completo
-   - ✅ Refactorizado `activate.ui.js` - Eliminado `import`, agregado IIFE completo
-   - ✅ `landing.ui.js` ya estaba en IIFE (sin cambios)
+2. **Landing Page y URLs:**
+   - ✅ Creado `apps/public/tenants/views.py` con `LandingPageView` y `TenantSelectView`
+   - ✅ Creado `apps/public/tenants/urls.py` para rutas principales
+   - ✅ Creado `apps/public/core/urls.py` para URLs básicas (workspace/, favicon.ico)
+   - ✅ Templates: `public/landing.html` y `public/tenant_select.html`
 
-3. **API-First:**
-   - ✅ Creado `apps/public/core/api/public_views.py` con endpoints públicos
-   - ✅ Endpoints: `validar_token_acceso()`, `obtener_documento_publico()`
+3. **Configuración URLs Maestro:**
+   - ✅ Actualizado `config/urls.py` con estructura jerárquica:
+     - `path('', include('apps.public.tenants.urls'))` - Landing page
+     - `path('', include('apps.public.core.urls'))` - URLs básicas
+     - `path('console/', include('apps.public.console.urls'))` - Consola admin
+   - ✅ Agregadas rutas para robots.txt, sitemap.xml
 
-4. **Rutas Validadas:**
-   - ✅ JavaScript en `apps/public/core/static/core/js/` (correcto)
-   - ✅ Templates en `apps/public/core/static/public/core/landing/` (correcto)
+4. **Corrección Errores 404:**
+   - ✅ `/` → Landing page SINTEL
+   - ✅ `/workspace/` → Redirige a `/console/`
+   - ✅ `/favicon.ico` → 204 No Content
+   - ✅ `/console/tenants/` → Gestión de tenants
+   - ✅ Rutas adicionales silenciadas
 
-### Pendientes
+### Estado Actual
 
-1. **URLs API:** Crear `apps/public/core/api/urls.py` y registrar endpoints
-2. **TabulatorFactory:** Implementar en vistas públicas de cotizaciones/proyectos (cuando existan)
-3. **Integración Tenant:** Completar `obtener_datos_documento_publico()` con acceso real a modelos del tenant
+**URLs Funcionales:**
+- `http://localhost/` → Landing page SINTEL
+- `http://localhost/console/` → Dashboard administración
+- `http://localhost/admin/` → Django admin
+- `http://localhost/api/v1/` → APIs por tenant
+- `http://localhost/api/public/v1/` → APIs públicas
+
+**Arquitectura Multi-tenant:**
+- ✅ Esquema `public` configurado para `localhost`
+- ✅ Middleware django-tenants funcional
+- ✅ Redirecciones inteligentes según autenticación
+- ✅ Separación clara entre rutas públicas y de tenant
 
 ---
 
-**Última actualización:** 2024-12-19  
-**Versión:** 3.3
+---
+
+## 🟢 Actualización v2.61.4 (2026-03-28)
+
+Se han consolidado cambios estructurales orientados a la seguridad y centralización en Core API:
+
+### 1. Centralización de Identidad en Core
+- **Auth Shells**: `login.html`, `activate.html` y `password-reset.html` han sido migrados definitivamente a `apps/tenant/core/static/tenant/core/auth/`.
+- **API First**: El frontend consume exclusivamente `CoreAuthViewSet` para todas las operaciones de identidad.
+
+### 2. Servicio de Email Centralizado (SSoT)
+- **EmailService**: Implementado en `apps/public/core/services/email_service.py`.
+- **Templates Unificados**: Ubicados en `apps/public/core/templates/public/core/emails/`.
+- **Alcance**: Gestiona invitaciones de owner y restablecimiento de contraseñas con logging avanzado `[EMAIL:SEND]`.
+
+### 3. Resiliencia y Auditoría (DLQ)
+- **FailedTenantTask**: Implementado en `apps/public/tenants/models.py` para capturar fallos en tareas de Celery (onboarding).
+- **Consola de Auditoría**: Integración de eventos de activación (`USER_ACTIVATE`) en el log de acciones de la consola.
+
+### 4. Segmentación Estricta de UI
+- **Hardening de Rutas**: Los dominios privados solo resuelven rutas de `core`. Se prohíbe el acceso a la landing pública desde subdominios de clientes.
+- **Dominio SSoT**: Registro obligatorio de dominios en `Domain` (ej. `home.sintel.com`) para evitar fugas de información entre esquemas.
+
+**Última actualización:** 2026-03-28  
+**Versión:** 2.61.4 - Estabilización Alpha

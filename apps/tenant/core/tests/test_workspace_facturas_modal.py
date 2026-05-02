@@ -1,14 +1,15 @@
 """
 Tests de humo para Fase 4: Modal de detalle de factura con anexos.
 
-⚠️ VALIDACIONES:
+# WARNING: VALIDACIONES:
 - Modal presente en HTML
 - Rutas relativas (sin host/protocolo)
 - Sin duplicación de assets
 """
 import re
-from django_tenants.test.cases import TenantTestCase
+
 from django.urls import reverse
+from django_tenants.test.cases import TenantTestCase
 
 
 class WorkspaceFacturasModalTests(TenantTestCase):

@@ -1,13 +1,12 @@
 """
 Serializers compuestos para Core API.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Reutilizar serializers de las apps "dueñas" cuando sea posible
 - Crear adapters mínimos solo cuando sea necesario
 - Mantener tenant-awareness y branding dinámico
 """
 from rest_framework import serializers
-from apps.tenant.core.branding import get_tenant_branding
 
 
 class EmpresaResumenSerializer(serializers.Serializer):
@@ -67,7 +66,7 @@ class DashboardCompletoSerializer(serializers.Serializer):
     """
     Serializer para dashboard completo (compuesto de múltiples apps).
     
-    ⚠️ POLÍTICA: Incluye branding dinámico desde BD.
+    # WARNING: POLÍTICA: Incluye branding dinámico desde BD.
     """
     tenant = serializers.DictField(read_only=True)
     user = serializers.DictField(read_only=True)
@@ -83,8 +82,8 @@ class MiEmpresaSerializer(serializers.Serializer):
     """
     Serializer para endpoint /api/v1/core/mi-empresa/.
     
-    ⚠️ POLÍTICA: Incluye branding dinámico desde BD.
-    ⚠️ SETUP: Retorna setup_required=True si no existe empresa (falta crear).
+    # WARNING: POLÍTICA: Incluye branding dinámico desde BD.
+    # WARNING: SETUP: Retorna setup_required=True si no existe empresa (falta crear).
     """
     empresa = EmpresaResumenSerializer(read_only=True, allow_null=True)
     branding = serializers.DictField(read_only=True)

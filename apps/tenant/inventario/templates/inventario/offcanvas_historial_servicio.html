@@ -1,0 +1,51 @@
+{# offcanvas_historial_servicio.html - Offcanvas Historial v3.5 - Nucleus #}
+{% load static %}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-historial-servicio" aria-labelledby="offcanvas-historial-servicio-label" style="width: 90%; max-width: 700px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-historial-servicio-label">
+      <i class="bi bi-clock-history me-2"></i>
+      <span>Registrar Historial</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="form-historial-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <form id="form-historial-servicio" method="POST" onsubmit="return false;">
+      <div class="row g-3">
+        <div class="col-12">
+          <label for="historial-servicio-select" class="form-label text-danger fw-bold">Servicio *</label>
+          <select class="form-select" id="historial-servicio-select" name="servicio_id" required>
+            <option value="">Seleccionar...</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label for="historial-fecha-registro" class="form-label text-danger fw-bold">Fecha *</label>
+          <input type="date" class="form-control" id="historial-fecha-registro" name="fecha_registro" value="{% now "Y-m-d" %}" required>
+        </div>
+        <div class="col-md-6">
+          <label for="historial-cantidad" class="form-label text-danger fw-bold">Cantidad *</label>
+          <input type="number" class="form-control" id="historial-cantidad" name="cantidad" step="0.01" value="1.00" required>
+        </div>
+        <div class="col-md-6">
+          <label for="historial-valor-cobrado" class="form-label text-danger fw-bold">Valor Cobrado *</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" class="form-control" id="historial-valor-cobrado" name="valor_cobrado" step="0.01" value="0.00" required>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label for="historial-referencia" class="form-label">Referencia (Factura/Contrato)</label>
+          <input type="text" class="form-control" id="historial-referencia" name="origen_referencia">
+        </div>
+        <div class="col-12">
+          <label for="historial-observaciones" class="form-label">Observaciones</label>
+          <textarea class="form-control" id="historial-observaciones" name="observaciones" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-historial">Registrar</button>
+      </div>
+    </form>
+  </div>
+</div>

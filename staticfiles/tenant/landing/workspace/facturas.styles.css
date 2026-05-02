@@ -1,0 +1,54 @@
+/* Estilos específicos para la página de Facturas en el workspace */
+/* Nota: Los estilos generales del workspace están en el template base */
+
+/* Tabla de facturas */
+#tbl-facturas {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: white;
+}
+
+#tbl-facturas th,
+#tbl-facturas td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+#tbl-facturas th {
+  color: #6b7280;
+  font-weight: 600;
+  background: #f9fafb;
+}
+
+/* Toolbar de facturas */
+#workspace-facturas .input-group {
+  min-width: 340px;
+}
+
+/* Modal de importación */
+#import-modal .modal-body {
+  padding: 1rem;
+}
+
+#import-modal .form-label {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+#import-modal .form-control {
+  margin-bottom: 0.5rem;
+}
+
+/* Feedback más compacto en modales */
+#feedback-import.alert,
+#feedback-estado.alert {
+  margin-bottom: .75rem;
+  padding: .5rem .75rem;
+}
+
+/* Modal de error */
+#import-error-modal .modal-body {
+  padding: 1rem;
+}

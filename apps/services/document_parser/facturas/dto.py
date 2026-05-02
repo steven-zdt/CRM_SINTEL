@@ -1,17 +1,15 @@
 """
 DTOs específicos para Facturas (v2.40).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - DTOs específicos para el módulo de facturas
 - Reutiliza DTOs genéricos cuando es posible
 - Agrega estructuras específicas para facturas cuando es necesario
 """
-from typing import Dict, Any, Optional, Literal
-from decimal import Decimal
-from dataclasses import dataclass, asdict
+from typing import Literal
 
 # Reutilizar DTOs genéricos
-# ⚠️ v2.40: Los parsers de facturas retornan dicts, no objetos DocumentDTO
+# WARNING: v2.40: Los parsers de facturas retornan dicts, no objetos DocumentDTO
 # Se importan los DTOs base para referencia, pero los parsers retornan dicts JSON
 from apps.services.document_parser.dto import (
     IdentificadoresDTO,

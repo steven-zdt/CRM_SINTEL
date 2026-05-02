@@ -1,20 +1,17 @@
 """
 Tests para endpoint universal de documentos (FASE 8).
 
-⚠️ PRINCIPIOS:
+# WARNING: PRINCIPIOS:
 - Tests multitenant: Verificar aislamiento por esquema
 - API-First: Verificar respuestas JSON-only
 - Preview mode: Verificar que preview=true no persiste
 - Validación: Verificar códigos HTTP apropiados
 """
-from django.test import TestCase
-from django.core.files.uploadedfile import SimpleUploadedFile
-from rest_framework.test import APIClient
-from rest_framework import status
-from django_tenants.test.cases import TenantTestCase
-from django_tenants.utils import tenant_context
-from apps.public.tenants.models import Client, Domain
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django_tenants.test.cases import TenantTestCase
+from rest_framework import status
+from rest_framework.test import APIClient
 
 User = get_user_model()
 

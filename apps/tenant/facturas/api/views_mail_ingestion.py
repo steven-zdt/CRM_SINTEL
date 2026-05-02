@@ -1,27 +1,28 @@
 """
 Views para ingesta de facturas desde correo.
 
-⚠️ FASE 4: Endpoints JSON-only para orquestar ingesta por correo.
+# WARNING: FASE 4: Endpoints JSON-only para orquestar ingesta por correo.
 - Complementa POST /api/v1/facturas/upload-ubl/ (no lo reemplaza)
 - SessionAuthentication + CSRF para UI privada
 - Permisos: IsTenantAdminOrStaff (TODO: permisos finos por TenantMembership)
 """
 import logging
-from rest_framework import status, generics
-from rest_framework.permissions import IsAuthenticated
+
+from rest_framework import generics, status
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+# # WARNING: IMPORT LAZY: enqueue_mail_ingestion se importa dentro del método (evita ciclos)
+# from apps.tenant.facturas.services_mail_ingestion import enqueue_mail_ingestion
+from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+from apps.tenant.empresa.models import MailInboxConfig
 from apps.tenant.facturas.api.serializers import (
     MailIngestionRunCreateSerializer,
     MailIngestionRunListSerializer,
 )
 from apps.tenant.facturas.models import MailIngestionRun
-from apps.tenant.empresa.models import MailInboxConfig
-# ⚠️ IMPORT LAZY: enqueue_mail_ingestion se importa dentro del método (evita ciclos)
-# from apps.tenant.facturas.services_mail_ingestion import enqueue_mail_ingestion
-from apps.tenant.api.permissions import IsTenantAdminOrReadOnly
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +33,14 @@ class MailIngestionRunCreateAPIView(APIView):
     
     Encola tarea de ingesta de correo y devuelve 202 con run_id y task_id.
     
-    ⚠️ ASÍNCRONO: La tarea se ejecuta en Celery (cola high_priority).
-    ⚠️ PERMISOS: IsTenantAdminOrReadOnly (TODO: permisos finos)
+    # WARNING: ASINCRONO: La tarea se ejecuta en Celery (cola high_priority).
+    # WARNING: PERMISOS: IsTenantAdminOrReadOnly (TODO: permisos finos)
     """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated, IsTenantAdminOrReadOnly]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     
     def post(self, request, *args, **kwargs):
-        # ⚠️ IMPORT LAZY: Evita ciclos de importación
+        # # WARNING: IMPORT LAZY: Evita ciclos de importación
         from apps.tenant.facturas.services_mail_ingestion import enqueue_mail_ingestion
         
         serializer = MailIngestionRunCreateSerializer(data=request.data)
@@ -80,11 +81,11 @@ class MailIngestionRunsListAPIView(generics.ListAPIView):
     
     Lista ejecuciones recientes de ingesta por correo (JSON-only).
     
-    ⚠️ PAGINACIÓN: Usa paginación estándar de DRF.
-    ⚠️ PERMISOS: IsTenantAdminOrReadOnly (TODO: permisos finos)
+    # WARNING: PAGINACIÓN: Usa paginación estándar de DRF.
+    # WARNING: PERMISOS: IsTenantAdminOrReadOnly (TODO: permisos finos)
     """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated, IsTenantAdminOrReadOnly]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     serializer_class = MailIngestionRunListSerializer
     
     def get_queryset(self):
@@ -98,9 +99,9 @@ class MailIngestionPreviewAPIView(APIView):
     
     Pre-visualiza facturas desde correo sin persistirlas (solo metadatos).
     
-    ⚠️ PRE-VISUALIZACIÓN: Extrae metadatos de facturas encontradas pero NO las persiste.
-    ⚠️ SINCRONIZACIÓN: El usuario debe seleccionar cuáles procesar después.
-    ⚠️ PERMISOS: IsTenantAdminOrReadOnly (TODO: permisos finos)
+    # WARNING: PRE-VISUALIZACIÓN: Extrae metadatos de facturas encontradas pero NO las persiste.
+    # WARNING: SINCRONIZACIÓN: El usuario debe seleccionar cuáles procesar después.
+    # WARNING: PERMISOS: IsTenantAdminOrReadOnly (TODO: permisos finos)
     
     Body (JSON):
     {
@@ -138,14 +139,14 @@ class MailIngestionPreviewAPIView(APIView):
     }
     """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated, IsTenantAdminOrReadOnly]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     
     def post(self, request, *args, **kwargs):
-        # ⚠️ IMPORT LAZY: Evita ciclos de importación
-        from apps.tenant.facturas.services_mail_ingestion import preview_mail_ingestion
+        # # WARNING: IMPORT LAZY: Evita ciclos de importación
         from apps.tenant.empresa.models import MailInboxConfig
+        from apps.tenant.facturas.services_mail_ingestion import preview_mail_ingestion
         
-        # ⚠️ v2.60: config_id y limit_messages son opcionales con valores por defecto
+        # # WARNING: v2.60: config_id y limit_messages son opcionales con valores por defecto
         config_id = request.data.get("config_id")
         limit_messages = request.data.get("limit_messages", 50)
         
@@ -176,7 +177,7 @@ class MailIngestionPreviewAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
         
-        # ⚠️ VALIDACIÓN DE SEGURIDAD: Verificar que la configuración pertenezca al tenant actual
+        # # WARNING: VALIDACIÓN DE SEGURIDAD: Verificar que la configuración pertenezca al tenant actual
         # El aislamiento por tenant es automático, pero validamos explícitamente para mejor mensaje de error
         try:
             config = MailInboxConfig.objects.filter(id=config_id, is_active=True).first()
@@ -207,7 +208,7 @@ class MailIngestionPreviewAPIView(APIView):
             )
             
             if not result.get("ok"):
-                # ⚠️ DIAGNÓSTICO: Retornar código de estado apropiado según el tipo de error
+                # # WARNING: DIAGNÓSTICO: Retornar código de estado apropiado según el tipo de error
                 error_type = result.get("error", "mailbox_error")
                 if error_type == "authentication_error" or error_type == "auth_failed":
                     status_code = status.HTTP_401_UNAUTHORIZED
@@ -223,7 +224,7 @@ class MailIngestionPreviewAPIView(APIView):
                     status=status_code,
                 )
             
-            # ⚠️ v2.60: Incluir config_id en la respuesta para que el frontend pueda usarlo
+            # # WARNING: v2.60: Incluir config_id en la respuesta para que el frontend pueda usarlo
             response_data = result.copy()
             response_data['config_id'] = config_id
             return Response(response_data, status=status.HTTP_200_OK)

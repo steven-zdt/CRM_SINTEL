@@ -1,0 +1,26 @@
+<div class="offcanvas-header">
+  <h5 class="offcanvas-title">Plantillas de Cotización</h5>
+  <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+</div>
+<div class="offcanvas-body">
+  {% if plantillas %}
+  <div class="list-group">
+    {% for plantilla in plantillas %}
+    <div class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start gap-3">
+        <div>
+          <h6 class="mb-1">{{ plantilla.nombre_configuracion }}</h6>
+          <div class="small text-muted">Validez: {{ plantilla.dias_validez }} dias</div>
+          <div class="small text-muted">Secuencia: {{ plantilla.prefijo_secuencia }}{{ plantilla.ultimo_numero }}{{ plantilla.sufijo_secuencia }}</div>
+        </div>
+        <span class="badge {% if plantilla.es_activo %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+          {% if plantilla.es_activo %}Activa{% else %}Inactiva{% endif %}
+        </span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="alert alert-light border">No hay plantillas configuradas para esta empresa.</div>
+  {% endif %}
+</div>

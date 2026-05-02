@@ -1,12 +1,11 @@
 """
 Tests de humo para validar DELETE /api/v1/facturas/{id}/ sin error 500.
 """
-from django_tenants.test.cases import TenantTestCase
 from django.urls import reverse
-from django.db import IntegrityError
-from django.db.models import ProtectedError
-from apps.tenant.facturas.models import Factura, NaturalezaFactura, FacturaAnexos
+from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
+from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
 
 
 class FacturaDeleteAPITests(TenantTestCase):
@@ -88,7 +87,7 @@ class FacturaDeleteAPITests(TenantTestCase):
         Valida que errores esperables (ProtectedError, IntegrityError) 
         se mapean a 409/422, no a 500.
         
-        ⚠️ NOTA: En este modelo, las relaciones son CASCADE, 
+        # WARNING: NOTA: En este modelo, las relaciones son CASCADE, 
         así que no deberíamos tener ProtectedError en condiciones normales.
         Este test valida que el mapeo funciona si ocurriera.
         """

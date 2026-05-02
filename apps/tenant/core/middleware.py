@@ -1,19 +1,20 @@
 """
 SintelExceptionMiddleware - Sistema de Manejo de Errores Centralizado v2.40
 
-⚠️ ARQUITECTURA v2.40:
+# WARNING: ARQUITECTURA v2.40:
 - Captura todas las excepciones no manejadas
 - Loguea errores incluyendo request.tenant actual
 - Para peticiones /api/, devuelve JsonResponse estandarizado
 - Para otras peticiones, delega al handler estándar de Django
 
-⚠️ REGISTRO: Debe estar DESPUÉS de TenantMainMiddleware para tener contexto del esquema
+# WARNING: REGISTRO: Debe estar DESPUÉS de TenantMainMiddleware para tener contexto del esquema
 """
 
 import logging
 import traceback
-from django.http import JsonResponse
+
 from django.conf import settings
+from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 
 logger = logging.getLogger(__name__)

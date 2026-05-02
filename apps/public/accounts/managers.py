@@ -66,5 +66,3 @@ class UserManager(DjangoUserManager):
             raise ValueError("Superuser must have is_superuser=True.")
 
         return self._create_user(email=email, password=password, **extra_fields)
-
-

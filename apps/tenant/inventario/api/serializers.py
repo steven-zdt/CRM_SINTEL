@@ -1,28 +1,26 @@
 """
 Serializers para Inventario v2.60.
 
-⚠️ SINTEL v2.60: Sincronización Arquitectónica
+WARNING: SINTEL v2.60: Sincronización Arquitectónica
 - NormalizationMixin: Todos los serializadores heredan de este Mixin para sanitizar strings y validar tipos
 - Validación Estricta: validate_<field> para asegurar que ForeignKeys pertenezcan al tenant actual
 - Separación List/Detail: ListSerializer para tablas, DetailSerializer para formularios
 - Campos Explícitos: PROHIBIDO __all__, usar campos explícitos alineados con LIST_FIELDS y DETAIL_FIELDS
 """
-from rest_framework import serializers
 from django.core.exceptions import ValidationError
-from apps.tenant.inventario.models import (
-    CategoriaItem, ActivoFijo, Producto, Servicio, 
-    MovimientoInventario, HistorialServicio
-)
-from apps.tenant.empresa.models import Empresa
+from rest_framework import serializers
 
-# ⚠️ v2.60: Importar campos desde services.py (SSoT)
-from apps.tenant.inventario.services import (
-    CATEGORIA_LIST_FIELDS, CATEGORIA_DETAIL_FIELDS,
-    PRODUCTO_LIST_FIELDS, PRODUCTO_DETAIL_FIELDS,
-    SERVICIO_LIST_FIELDS, SERVICIO_DETAIL_FIELDS,
-    ACTIVO_LIST_FIELDS, ACTIVO_DETAIL_FIELDS,
-    MOVIMIENTO_LIST_FIELDS, MOVIMIENTO_DETAIL_FIELDS,
+from apps.tenant.empresa.models import Empresa
+from apps.tenant.inventario.models import (
+    ActivoFijo,
+    CategoriaItem,
+    HistorialServicio,
+    MovimientoInventario,
+    Producto,
+    Servicio,
 )
+
+# WARNING: v2.60: Importar campos desde services.py (SSoT)
 
 
 # ==============================================================================
@@ -30,7 +28,7 @@ from apps.tenant.inventario.services import (
 # ==============================================================================
 class NormalizationMixin:
     """
-    ⚠️ v2.60: Mixin para normalización de datos de entrada (Zero Trust).
+    WARNING: v2.60: Mixin para normalización de datos de entrada (Zero Trust).
     Sanitiza strings y valida tipos de datos antes de persistir.
     """
     def normalize_data(self, attrs):
@@ -54,7 +52,7 @@ class NormalizationMixin:
 # ==============================================================================
 class CategoriaItemListSerializer(serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
+    WARNING: v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con CATEGORIA_LIST_FIELDS de services.py.
     """
@@ -66,7 +64,7 @@ class CategoriaItemListSerializer(serializers.ModelSerializer):
 
 class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer completo para DETALLE/EDICIÓN de Categorías.
+    WARNING: v2.60: Serializer completo para DETALLE/EDICIÓN de Categorías.
     Campos alineados con CATEGORIA_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
@@ -76,13 +74,39 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
         read_only_fields = ['id', 'created_at', 'updated_at', 'empresa']
     
     def validate(self, attrs):
-        """⚠️ Zero Trust: Normalización estricta antes de persistir."""
+        """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
     
-    def validate_categoria(self, value):
-        """⚠️ v2.60: Validación estricta - No aplica (CategoriaItem no tiene FK a CategoriaItem)"""
-        return value
+    def validate_nombre(self, value):
+        """
+        WARNING: v2.60: Validación estricta - Evitar nombres duplicados para la misma empresa.
+        Zero Trust: No confiar en el frontend.
+        """
+        if not value:
+            return value
+            
+        # Normalizar para comparación
+        nombre_clean = value.strip()
+        
+        # SINTEL v2.60: Obtener empresa del tenant actual (SSoT)
+        empresa = Empresa.objects.only('id').first()
+        if not empresa:
+            raise ValidationError("No se encontró configuración de Empresa para este tenant.")
+            
+        qs = CategoriaItem.objects.filter(
+            empresa_id=empresa.id,
+            nombre__iexact=nombre_clean
+        )
+        
+        # Si estamos editando, excluir la instancia actual
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+            
+        if qs.exists():
+            raise ValidationError(f"Ya existe una categoría con el nombre '{nombre_clean}'. Elija un nombre diferente.")
+            
+        return nombre_clean
 
 
 # ==============================================================================
@@ -90,7 +114,7 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
 # ==============================================================================
 class ProductoListSerializer(serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
+    WARNING: v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con PRODUCTO_LIST_FIELDS de services.py.
     Incluye campos calculados para visualización.
@@ -98,7 +122,7 @@ class ProductoListSerializer(serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     activo_display = serializers.CharField(source='get_activo_display', read_only=True)
     
-    # ⚠️ v2.60: Campos calculados (lógica en backend - Zero Trust)
+    # WARNING: v2.60: Campos calculados (lógica en backend - Zero Trust)
     stock_total = serializers.DecimalField(source='stock_actual', max_digits=14, decimal_places=3, read_only=True)
     valor_inventario = serializers.SerializerMethodField()
     alerta_stock = serializers.SerializerMethodField()
@@ -114,7 +138,7 @@ class ProductoListSerializer(serializers.ModelSerializer):
     
     def get_valor_inventario(self, obj):
         """
-        ⚠️ v2.60: Calcula el valor total del inventario: stock_actual * costo_promedio
+        WARNING: v2.60: Calcula el valor total del inventario: stock_actual * costo_promedio
         Lógica en backend (Zero Trust) - No confiar en cálculos del frontend.
         """
         from decimal import Decimal
@@ -124,7 +148,7 @@ class ProductoListSerializer(serializers.ModelSerializer):
     
     def get_alerta_stock(self, obj):
         """
-        ⚠️ v2.60: Retorna True si el stock actual es menor o igual al stock mínimo.
+        WARNING: v2.60: Retorna True si el stock actual es menor o igual al stock mínimo.
         Lógica en backend (Zero Trust).
         """
         stock_actual = obj.stock_actual or 0
@@ -134,7 +158,7 @@ class ProductoListSerializer(serializers.ModelSerializer):
 
 class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer completo para DETALLE/EDICIÓN de Productos.
+    WARNING: v2.60: Serializer completo para DETALLE/EDICIÓN de Productos.
     Campos alineados con PRODUCTO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
@@ -152,19 +176,19 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at', 'empresa', 'stock_actual', 'costo_promedio']
     
     def validate(self, attrs):
-        """⚠️ Zero Trust: Normalización estricta antes de persistir."""
+        """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
     
     def validate_categoria(self, value):
         """
-        ⚠️ v2.60: Validación estricta - Asegurar que la categoría pertenezca al tenant actual.
+        WARNING: v2.60: Validación estricta - Asegurar que la categoría pertenezca al tenant actual.
         Zero Trust: No confiar en el frontend.
         """
         if value is None:
             return value  # Permitir None (categoría opcional)
         
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
+        # WARNING: Zero Trust: Obtener empresa del tenant actual
         empresa = Empresa.objects.only('id').first()
         if not empresa:
             raise ValidationError("No se encontró configuración de Empresa para este tenant.")
@@ -191,7 +215,7 @@ class StockResponseSerializer(serializers.Serializer):
 # ==============================================================================
 class ServicioListSerializer(serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
+    WARNING: v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con SERVICIO_LIST_FIELDS de services.py.
     """
@@ -209,7 +233,7 @@ class ServicioListSerializer(serializers.ModelSerializer):
 
 class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer completo para DETALLE/EDICIÓN de Servicios.
+    WARNING: v2.60: Serializer completo para DETALLE/EDICIÓN de Servicios.
     Campos alineados con SERVICIO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
@@ -226,19 +250,19 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at', 'empresa']
     
     def validate(self, attrs):
-        """⚠️ Zero Trust: Normalización estricta antes de persistir."""
+        """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
     
     def validate_categoria(self, value):
         """
-        ⚠️ v2.60: Validación estricta - Asegurar que la categoría pertenezca al tenant actual.
+        WARNING: v2.60: Validación estricta - Asegurar que la categoría pertenezca al tenant actual.
         Zero Trust: No confiar en el frontend.
         """
         if value is None:
             return value  # Permitir None (categoría opcional)
         
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
+        # WARNING: Zero Trust: Obtener empresa del tenant actual
         empresa = Empresa.objects.only('id').first()
         if not empresa:
             raise ValidationError("No se encontró configuración de Empresa para este tenant.")
@@ -259,7 +283,7 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
 # ==============================================================================
 class ActivoFijoListSerializer(serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
+    WARNING: v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con ACTIVO_LIST_FIELDS de services.py.
     """
@@ -278,7 +302,7 @@ class ActivoFijoListSerializer(serializers.ModelSerializer):
 
 class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer completo para DETALLE/EDICIÓN de Activos Fijos.
+    WARNING: v2.60: Serializer completo para DETALLE/EDICIÓN de Activos Fijos.
     Campos alineados con ACTIVO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
@@ -297,19 +321,19 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
         read_only_fields = ['id', 'created_at', 'updated_at', 'empresa']
     
     def validate(self, attrs):
-        """⚠️ Zero Trust: Normalización estricta antes de persistir."""
+        """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
     
     def validate_categoria(self, value):
         """
-        ⚠️ v2.60: Validación estricta - Asegurar que la categoría pertenezca al tenant actual.
+        WARNING: v2.60: Validación estricta - Asegurar que la categoría pertenezca al tenant actual.
         Zero Trust: No confiar en el frontend.
         """
         if value is None:
             return value  # Permitir None (categoría opcional)
         
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
+        # WARNING: Zero Trust: Obtener empresa del tenant actual
         empresa = Empresa.objects.only('id').first()
         if not empresa:
             raise ValidationError("No se encontró configuración de Empresa para este tenant.")
@@ -330,7 +354,7 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
 # ==============================================================================
 class MovimientoInventarioListSerializer(serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
+    WARNING: v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con MOVIMIENTO_LIST_FIELDS de services.py.
     """
@@ -350,10 +374,10 @@ class MovimientoInventarioListSerializer(serializers.ModelSerializer):
 
 class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer completo para DETALLE/CREACIÓN de Movimientos.
+    WARNING: v2.60: Serializer completo para DETALLE/CREACIÓN de Movimientos.
     Campos alineados con MOVIMIENTO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
-    ⚠️ IMPORTANTE: Los movimientos NO se pueden editar/eliminar (integridad del Kardex).
+    WARNING: IMPORTANTE: Los movimientos NO se pueden editar/eliminar (integridad del Kardex).
     """
     producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
     producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
@@ -370,19 +394,19 @@ class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.Model
         read_only_fields = ['id', 'created_at', 'updated_at', 'empresa']
     
     def validate(self, attrs):
-        """⚠️ Zero Trust: Normalización estricta antes de persistir."""
+        """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
     
     def validate_producto(self, value):
         """
-        ⚠️ v2.60: Validación estricta - Asegurar que el producto pertenezca al tenant actual.
+        WARNING: v2.60: Validación estricta - Asegurar que el producto pertenezca al tenant actual.
         Zero Trust: No confiar en el frontend.
         """
         if value is None:
             raise ValidationError("El producto es requerido.")
         
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
+        # WARNING: Zero Trust: Obtener empresa del tenant actual
         empresa = Empresa.objects.only('id').first()
         if not empresa:
             raise ValidationError("No se encontró configuración de Empresa para este tenant.")
@@ -399,7 +423,7 @@ class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.Model
 # ==============================================================================
 class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    ⚠️ v2.60: Serializer completo para DETALLE/CREACIÓN de Historial de Servicios.
+    WARNING: v2.60: Serializer completo para DETALLE/CREACIÓN de Historial de Servicios.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
     servicio_nombre = serializers.CharField(source='servicio.nombre', read_only=True)
@@ -415,19 +439,19 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
         read_only_fields = ['id', 'created_at', 'updated_at', 'empresa']
     
     def validate(self, attrs):
-        """⚠️ Zero Trust: Normalización estricta antes de persistir."""
+        """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
     
     def validate_servicio(self, value):
         """
-        ⚠️ v2.60: Validación estricta - Asegurar que el servicio pertenezca al tenant actual.
+        WARNING: v2.60: Validación estricta - Asegurar que el servicio pertenezca al tenant actual.
         Zero Trust: No confiar en el frontend.
         """
         if value is None:
             raise ValidationError("El servicio es requerido.")
         
-        # ⚠️ Zero Trust: Obtener empresa del tenant actual
+        # WARNING: Zero Trust: Obtener empresa del tenant actual
         empresa = Empresa.objects.only('id').first()
         if not empresa:
             raise ValidationError("No se encontró configuración de Empresa para este tenant.")
@@ -442,7 +466,7 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
 # ==============================================================================
 # ALIASES PARA COMPATIBILIDAD (v2.60)
 # ==============================================================================
-# ⚠️ v2.60: Mantener aliases para compatibilidad con código existente
+# WARNING: v2.60: Mantener aliases para compatibilidad con código existente
 # Los ViewSets deben usar los nombres Detail/List explícitos
 CategoriaItemSerializer = CategoriaItemDetailSerializer
 ProductoSerializer = ProductoDetailSerializer

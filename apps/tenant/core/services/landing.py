@@ -1,21 +1,21 @@
 """
 Servicio para obtener datos de landing (Core API).
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No duplicar lógica de negocio de apps/tenant/landing
 - Solo orquestar/componer datos públicos de landing
 - Mantener tenant-awareness (django-tenants maneja el aislamiento)
 """
-from typing import Dict, Any, Optional
-from django.db import connection
+from typing import Any
+
 from django.conf import settings
 
 
-def get_landing_resumen(tenant) -> Dict[str, Any]:
+def get_landing_resumen(tenant) -> dict[str, Any]:
     """
     Obtiene resumen de datos públicos de landing del tenant.
     
-    ⚠️ POLÍTICA: Usa la API de landing para obtener información pública.
+    # WARNING: POLÍTICA: Usa la API de landing para obtener información pública.
     
     Args:
         tenant: Instancia del tenant (Client)
@@ -58,11 +58,11 @@ def get_landing_resumen(tenant) -> Dict[str, Any]:
     }
 
 
-def get_landing_snapshot(tenant) -> Dict[str, Any]:
+def get_landing_snapshot(tenant) -> dict[str, Any]:
     """
     Obtiene snapshot de datos de landing para el dashboard.
     
-    ⚠️ POLÍTICA: Versión simplificada para uso en DashboardSectionsViewSet.
+    # WARNING: POLÍTICA: Versión simplificada para uso en DashboardSectionsViewSet.
     
     Args:
         tenant: Instancia del tenant (Client)

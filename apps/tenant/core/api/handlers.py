@@ -1,14 +1,15 @@
 """
 Manejadores de error personalizados para tenants.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Estos handlers se activan solo en TENANT_URLCONF
 - Mantienen la identidad visual del tenant incluso en errores
 - Usan branding dinámico desde BD (no hardcodes)
-- ⚠️ v2.60: Devuelven JSON estructurado para peticiones API (Error Boundary Pattern)
+- # WARNING: v2.60: Devuelven JSON estructurado para peticiones API (Error Boundary Pattern)
 """
 from django.http import JsonResponse
 from django.shortcuts import render
+
 from apps.tenant.core.branding import get_tenant_branding
 
 
@@ -16,14 +17,14 @@ def custom_page_not_found_view(request, exception):
     """
     Manejador personalizado para errores 404 (Página no encontrada).
     
-    ⚠️ v2.60: Error Boundary Pattern - Devuelve JSON estructurado para peticiones API.
+    # WARNING: v2.60: Error Boundary Pattern - Devuelve JSON estructurado para peticiones API.
     
     Renderiza un template con el diseño del tenant, manteniendo la identidad visual.
     
-    ⚠️ IMPORTANTE: Este handler solo se activa en TENANT_URLCONF.
+    # WARNING: IMPORTANTE: Este handler solo se activa en TENANT_URLCONF.
     Para el esquema 'public', Django usa el handler por defecto.
     
-    ⚠️ POLÍTICA: Usa branding dinámico desde BD (no hardcodes).
+    # WARNING: POLÍTICA: Usa branding dinámico desde BD (no hardcodes).
     
     Args:
         request: HttpRequest
@@ -32,7 +33,7 @@ def custom_page_not_found_view(request, exception):
     Returns:
         JsonResponse si es petición API, HttpResponse con template si es HTML
     """
-    # ⚠️ v2.60: Detectar si es petición API (AJAX o Content-Type: application/json)
+    # # WARNING: v2.60: Detectar si es petición API (AJAX o Content-Type: application/json)
     is_api_request = (
         request.path.startswith('/api/') or
         request.headers.get('Accept', '').startswith('application/json') or
@@ -86,15 +87,15 @@ def custom_permission_denied_view(request, exception):
     """
     Manejador personalizado para errores 403 (Permiso denegado).
     
-    ⚠️ v2.60: Error Boundary Pattern - Devuelve JSON estructurado para peticiones API.
+    # WARNING: v2.60: Error Boundary Pattern - Devuelve JSON estructurado para peticiones API.
     
     Renderiza un template con el diseño del tenant, mostrando un mensaje
     claro de que el usuario no tiene permisos para acceder a esta área.
     
-    ⚠️ CASO DE USO PRINCIPAL: Usuario logueado que intenta entrar a un tenant
+    # WARNING: CASO DE USO PRINCIPAL: Usuario logueado que intenta entrar a un tenant
     del cual no es miembro (Cross-Tenant Access).
     
-    ⚠️ POLÍTICA: Usa branding dinámico desde BD (no hardcodes).
+    # WARNING: POLÍTICA: Usa branding dinámico desde BD (no hardcodes).
     
     Args:
         request: HttpRequest
@@ -106,7 +107,7 @@ def custom_permission_denied_view(request, exception):
     # Mensaje de error personalizado
     error_message = str(exception) if exception else "No tienes permisos para acceder a esta área."
     
-    # ⚠️ v2.60: Detectar si es petición API (AJAX o Content-Type: application/json)
+    # # WARNING: v2.60: Detectar si es petición API (AJAX o Content-Type: application/json)
     is_api_request = (
         request.path.startswith('/api/') or
         request.headers.get('Accept', '').startswith('application/json') or

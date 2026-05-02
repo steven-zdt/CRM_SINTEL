@@ -1,11 +1,12 @@
 """
 Admin para gastos (aislado por tenant).
 
-⚠️ v2.40: Sistema de Documento Soporte Inmutable según normativa DIAN.
+WARNING: v2.40: Sistema de Documento Soporte Inmutable según normativa DIAN.
 django-tenants maneja automáticamente el aislamiento por esquema.
 """
 from django.contrib import admin
-from .models import Gasto, DocumentoSoporte, ResolucionDIAN
+
+from .models import DocumentoSoporte, Gasto, ResolucionDIAN
 
 
 @admin.register(ResolucionDIAN)

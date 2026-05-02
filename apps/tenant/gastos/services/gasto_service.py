@@ -5,9 +5,12 @@ Service Layer: lógica de negocio sin presentación.
 Validaciones y reglas contables mínimas.
 """
 from __future__ import annotations
-from decimal import Decimal
+
 import re
+from decimal import Decimal
+
 from django.db import transaction
+
 from ..models import Gasto
 
 _PERIODO_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")  # YYYY-MM

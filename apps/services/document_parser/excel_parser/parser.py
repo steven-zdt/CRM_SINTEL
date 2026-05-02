@@ -1,25 +1,30 @@
 """
 Parser para documentos Excel (XLS, XLSX) (FASE 2.3).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Convierte Excel a DataFrame normalizado
 - DataFrame → DTO JSON unificado
 - Retorna DTO según apps/services/document_parser/dto.py
 - Mapeo semántico inteligente de columnas (v2.40)
 """
-from typing import Dict, Any, Optional, Tuple
+from typing import Any
+
 from apps.services.document_parser.normalizers import (
-    normalize_excel_to_dataframe, sanitize_text, normalize_nit, 
-    normalize_currency, normalize_numeric_to_decimal_string, SemanticMapper
+    SemanticMapper,
+    normalize_currency,
+    normalize_excel_to_dataframe,
+    normalize_nit,
+    normalize_numeric_to_decimal_string,
+    sanitize_text,
 )
 
 
-def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None, kind_hint: Optional[str] = None) -> Dict[str, Any]:
+def parse_to_dto(file_bytes: bytes, filename: str | None = None, kind_hint: str | None = None) -> dict[str, Any]:
     """
     Parsea un documento Excel a DTO JSON unificado.
     
-    ⚠️ FASE 2.3: DataFrame → DTO.
-    ⚠️ v2.40: Soporta catálogos de productos cuando kind_hint="inventario"
+    WARNING: FASE 2.3: DataFrame → DTO.
+    WARNING: v2.40: Soporta catálogos de productos cuando kind_hint="inventario"
     
     Args:
         file_bytes: Contenido del archivo Excel en bytes
@@ -45,7 +50,7 @@ def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None, kind_hint: O
     if df.empty:
         raise ValueError("El archivo Excel está vacío")
     
-    # ⚠️ v2.40: Detectar si es catálogo de productos (inventario)
+    # WARNING: v2.40: Detectar si es catálogo de productos (inventario)
     if kind_hint and kind_hint.lower() in ("inventario", "catalogo", "productos"):
         return _parse_catalog_to_dto(df, filename)
     
@@ -134,7 +139,7 @@ def _is_credit_note(df) -> bool:
     return any(pattern in text for pattern in patterns)
 
 
-def _extract_from_dataframe(df, possible_columns: list) -> Optional[Any]:
+def _extract_from_dataframe(df, possible_columns: list) -> Any | None:
     """Extrae valor del DataFrame buscando en columnas posibles."""
     for col in possible_columns:
         if col in df.columns:
@@ -149,7 +154,6 @@ def _normalize_fecha(fecha_str: str) -> str:
     """Normaliza fecha a formato ISO 8601."""
     # Intentar parsear diferentes formatos
     import re
-    from datetime import datetime
     
     patterns = [
         r'(\d{4})[-/](\d{2})[-/](\d{2})',
@@ -171,11 +175,11 @@ def _normalize_fecha(fecha_str: str) -> str:
     return fecha_str
 
 
-def _parse_catalog_to_dto(df, filename: Optional[str] = None) -> Dict[str, Any]:
+def _parse_catalog_to_dto(df, filename: str | None = None) -> dict[str, Any]:
     """
     Parsea un Excel de catálogo de productos a array de DTOs.
     
-    ⚠️ v2.40: Convierte cada fila del Excel en un DTO de producto.
+    WARNING: v2.40: Convierte cada fila del Excel en un DTO de producto.
     
     Args:
         df: DataFrame normalizado del Excel
@@ -203,7 +207,6 @@ def _parse_catalog_to_dto(df, filename: Optional[str] = None) -> Dict[str, Any]:
     Raises:
         ValueError: Si el DataFrame está vacío o no se pueden extraer productos
     """
-    import pandas as pd
     
     # Validar que el DataFrame no esté vacío
     if df is None or df.empty:
@@ -211,7 +214,7 @@ def _parse_catalog_to_dto(df, filename: Optional[str] = None) -> Dict[str, Any]:
     
     items = []
     
-    # ⚠️ v2.40: Usar SemanticMapper para mapeo inteligente de columnas
+    # WARNING: v2.40: Usar SemanticMapper para mapeo inteligente de columnas
     mapper = SemanticMapper(threshold=0.6)
     
     # Obtener nombres de columnas originales (antes de normalización)

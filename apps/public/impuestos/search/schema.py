@@ -4,16 +4,17 @@ Schema de índices versionados con alias para OpenSearch.
 Define el alias y los mappings con analyzers personalizados para búsqueda
 en español con sinónimos tributarios.
 """
+
 INDEX_ALIAS = "impuestos-docs"
 
 
 def index_name(version: int) -> str:
     """
     Genera el nombre de un índice versionado.
-    
+
     Args:
         version: Número de versión (ej: 1, 2, 3)
-    
+
     Returns:
         str: Nombre del índice (ej: "impuestos-docs-v1")
     """

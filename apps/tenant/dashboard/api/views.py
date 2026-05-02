@@ -1,28 +1,31 @@
 """
 Vistas DRF para el dashboard de tenants (API-First).
 
-⚠️ v2.30: Migración completa a API-first.
+WARNING: v2.30: Migración completa a API-first.
 Todas las vistas que renderizan HTML han sido eliminadas.
 """
 import logging
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.throttling import UserRateThrottle
 
+from rest_framework import status
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
+from rest_framework.views import APIView
+
+from apps.tenant.api.permissions import IsTenantMember
+from apps.tenant.dashboard.services import (
+    get_dashboard_context,
+    get_dashboard_redirect_url,
+    get_user_role_in_tenant,
+)
+
+from .permissions import IsUserOrHigher
 from .serializers import (
     DashboardPayload,
     DashboardSummarySerializer,
     KPISerializer,
     QuickActionSerializer,
-)
-from .permissions import HasTenantMembership, IsAdminOrHigher, IsStaffOrHigher, IsUserOrHigher
-from apps.tenant.dashboard.services import (
-    get_user_role_in_tenant,
-    get_dashboard_context,
-    get_dashboard_redirect_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,14 +54,14 @@ class DashboardDataAPIView(APIView):
     Autenticación: SessionAuthentication (usa cookies de sesión).
     """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTenantMember]
     throttle_classes = [DashboardThrottle]
     
     def get(self, request):
         """
         Retorna datos del dashboard con valores por defecto seguros.
         
-        ⚠️ API-First: No asume acoplamiento con DB.
+        WARNING: API-First: No asume acoplamiento con DB.
         Proporciona datos mínimos válidos incluso si no hay datos del tenant.
         """
         tenant = getattr(request, 'tenant', None)
@@ -154,7 +157,7 @@ class DashboardSummaryAPIView(APIView):
     
     GET /api/v1/dashboard/summary/
     
-    ⚠️ DEPRECADO: Usar DashboardDataAPIView en su lugar.
+    WARNING: DEPRECADO: Usar DashboardDataAPIView en su lugar.
     """
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsUserOrHigher]
@@ -222,7 +225,7 @@ class DashboardKPIsAPIView(APIView):
     
     GET /api/v1/dashboard/kpis/
     
-    ⚠️ DEPRECADO: Usar DashboardDataAPIView en su lugar.
+    WARNING: DEPRECADO: Usar DashboardDataAPIView en su lugar.
     """
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsUserOrHigher]

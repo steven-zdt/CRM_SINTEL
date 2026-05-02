@@ -1,7 +1,7 @@
 """
 Tareas Celery para ingesta asíncrona de facturas desde correo.
 
-⚠️ FASE 2: Tareas asíncronas multi-tenant friendly con Celery.
+WARNING: FASE 2: Tareas asíncronas multi-tenant friendly con Celery.
 
 Principios:
 - Multi-tenant por esquemas: Usa schema_context para aislamiento
@@ -12,21 +12,19 @@ Principios:
 - Logging estructurado: Logger dedicado 'maildigester' para trazabilidad (sin secretos)
 """
 from __future__ import annotations
+
 import logging
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, TypedDict
 
 from celery import shared_task
-from django_tenants.utils import schema_context
-from django.utils import timezone
 from django.db import transaction
-
-from apps.services.maildigester.schemas import MailboxConfigDTO, InvoiceXMLDTO
-from apps.services.maildigester import pipeline
+from django.utils import timezone
+from django_tenants.utils import schema_context
 
 # Importar el servicio dueño de la lógica de importación UBL (SSoT en facturas)
 # No duplicar parsing aquí.
-from apps.tenant.facturas import services as facturas_services
-# ⚠️ IMPORT LAZY: Importar funciones de estado desde módulo puro (evita ciclos)
+
+# WARNING: IMPORT LAZY: Importar funciones de estado desde módulo puro (evita ciclos)
 # Estas funciones se importan dentro de la función cuando se necesitan
 
 logger = logging.getLogger("maildigester")
@@ -125,7 +123,7 @@ class MailDigesterResult(TypedDict, total=False):
     imported: int
     duplicates: int
     errors: int
-    details: List[Dict[str, Any]]  # lista de eventos/resumen por archivo
+    details: list[dict[str, Any]]  # lista de eventos/resumen por archivo
 
 
 def _build_result(tenant_schema: str, naturaleza: str) -> MailDigesterResult:
@@ -167,7 +165,7 @@ def fetch_and_process_billing_mail(
     tenant_schema: str,
     config_id: int,
     limit_messages: int = 50,
-    naturaleza: Optional[str] = None
+    naturaleza: str | None = None
 ):
     """
     Procesa correo → XML UBL → Facturas (histórico completo + incremental por UIDs).
@@ -188,15 +186,15 @@ def fetch_and_process_billing_mail(
             return {"ok": False, "canceled": True}
         
         # 3) Resolver config desde BD (sin credenciales en payload)
-        from apps.tenant.empresa.services import get_mailbox_config
         from apps.services.maildigester import pipeline
+        from apps.tenant.empresa.services import get_mailbox_config
         from apps.tenant.facturas import services as facturas_services
         
         with schema_context(tenant_schema):
             mailbox_config = get_mailbox_config(config_id)
             
             # 4) Obtener estado del buzón (último UID procesado)
-            # ⚠️ IMPORT LAZY: Importar desde módulo puro (evita ciclos)
+            # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
             from apps.tenant.facturas.inbox_state import get_or_create_inbox_state
             
             inbox_state = get_or_create_inbox_state(config_id)
@@ -225,7 +223,7 @@ def fetch_and_process_billing_mail(
                 if _should_abort(tenant_schema, task_id):
                     # Actualizar estado con el último UID procesado antes de cancelar
                     if current_uid is not None:
-                        # ⚠️ IMPORT LAZY: Importar desde módulo puro (evita ciclos)
+                        # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
                         from apps.tenant.facturas.inbox_state import update_inbox_state
                         update_inbox_state(config_id, current_uid, total_messages_processed)
                     _update_run(tenant_schema, task_id, status="CANCELED", counts=counts, finished_at=timezone.now())
@@ -252,7 +250,7 @@ def fetch_and_process_billing_mail(
                     # Abort cooperativo durante el loop
                     if _should_abort(tenant_schema, task_id):
                         if current_uid is not None:
-                            # ⚠️ IMPORT LAZY: Importar desde módulo puro (evita ciclos)
+                            # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
                             from apps.tenant.facturas.inbox_state import update_inbox_state
                             update_inbox_state(config_id, current_uid, total_messages_processed)
                         _update_run(tenant_schema, task_id, status="CANCELED", counts=counts, finished_at=timezone.now())
@@ -262,9 +260,10 @@ def fetch_and_process_billing_mail(
                     batch_messages += 1
                     
                     try:
-                        # ⚠️ v2.37: Usar pipeline universal SOLO para parsear/validar (NO persiste)
-                        from apps.services.document_ingest.ingest_service import ingest_document
+                        # WARNING: v2.37: Usar pipeline universal SOLO para parsear/validar (NO persiste)
                         from django.core.exceptions import ValidationError
+
+                        from apps.services.document_ingest.ingest_service import ingest_document
                         
                         # Convertir XML texto a bytes
                         xml_bytes = item["xml_text"].encode("utf-8") if isinstance(item["xml_text"], str) else item["xml_text"]
@@ -452,7 +451,7 @@ def fetch_and_process_billing_mail(
                 
                 # Actualizar estado después de cada lote
                 if last_uid is not None and last_uid != current_uid:
-                    # ⚠️ IMPORT LAZY: Importar desde módulo puro (evita ciclos)
+                    # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
                     from apps.tenant.facturas.inbox_state import update_inbox_state
                     update_inbox_state(config_id, last_uid, batch_messages)
                     current_uid = last_uid

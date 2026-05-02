@@ -1,29 +1,42 @@
 """
 Parser para documentos XML (FASE 2.3).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Migra pipeline UBL v2.34
 - Soporta Invoice y CreditNote UBL 2.1
 - Detecta documentos embebidos en AttachedDocument CDATA
 - Retorna DTO JSON unificado según apps/services/document_parser/dto.py
 """
-from typing import Dict, Any, Optional
-from decimal import Decimal
 import re
+from decimal import Decimal
+from typing import Any
+
 from lxml import etree
-from apps.services.document_parser.dto import DocumentoDTO, IdentificadoresDTO, PartyDTO, TotalesDTO, ReferenciaDTO
-# ⚠️ REFACTOR: Eliminado normalize_encoding - solo se aplica a PDF/Excel en ingest_service.py
+
+# WARNING: REFACTOR: Eliminado normalize_encoding - solo se aplica a PDF/Excel en ingest_service.py
 # Mantenemos sanitize_text, normalize_nit, normalize_currency, normalize_numeric_to_decimal_string
 # porque son normalizaciones específicas de datos (no de encoding del archivo)
-from apps.services.document_parser.normalizers import sanitize_text, normalize_nit, normalize_currency, normalize_numeric_to_decimal_string
-from apps.services.document_parser.xml_parser.core import parse_xml_bytes, local_name, xpath, first, text, attr
+from apps.services.document_parser.normalizers import (
+    normalize_currency,
+    normalize_nit,
+    normalize_numeric_to_decimal_string,
+    sanitize_text,
+)
+from apps.services.document_parser.xml_parser.core import (
+    attr,
+    first,
+    local_name,
+    parse_xml_bytes,
+    text,
+    xpath,
+)
 
 
-def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str, Any]:
+def parse_to_dto(file_bytes: bytes, filename: str | None = None) -> dict[str, Any]:
     """
     Parsea un documento XML a DTO JSON unificado.
     
-    ⚠️ FASE 2.3: Migra pipeline UBL v2.34.
+    WARNING: FASE 2.3: Migra pipeline UBL v2.34.
     
     Args:
         file_bytes: Contenido del archivo XML en bytes
@@ -46,7 +59,7 @@ def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str,
     Raises:
         ValueError: Si el XML no es válido o no se puede parsear
     """
-    # ⚠️ REFACTOR: NO normalizar encoding para XML - lxml maneja encoding automáticamente
+    # WARNING: REFACTOR: NO normalizar encoding para XML - lxml maneja encoding automáticamente
     # La normalización solo se aplica a PDF y Excel en ingest_service.py
     # Parsear XML directamente (lxml detecta encoding desde declaración <?xml encoding="...">)
     try:
@@ -71,7 +84,7 @@ def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str,
             root_tag = "CreditNote"
         else:
             # Buscar en CDATA dentro de Attachment/ExternalReference/Description
-            # ⚠️ PATRÓN REAL: Los XMLs de ejemplo tienen el Invoice/CreditNote embebido en CDATA
+            # WARNING: PATRÓN REAL: Los XMLs de ejemplo tienen el Invoice/CreditNote embebido en CDATA
             # dentro de <cac:Attachment><cac:ExternalReference><cbc:Description><![CDATA[...]]>
             external_refs = xpath(xml_root, ".//*[local-name()='ExternalReference']")
             for ext_ref in external_refs:
@@ -128,7 +141,7 @@ def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str,
         raise ValueError(f"Tipo de documento XML no soportado: {root_tag}")
 
 
-def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
+def _parse_invoice_ubl21(invoice_root: etree._Element) -> dict[str, Any]:
     """
     Parsea Invoice UBL 2.1 a DTO.
     
@@ -155,7 +168,7 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
     fecha_emision = issue_date
     if issue_time:
         fecha_emision = f"{issue_date}T{issue_time}"
-    # ⚠️ v2.61.3: Solo agregar timezone si no hay uno ya presente en la cadena
+    # WARNING: v2.61.3: Solo agregar timezone si no hay uno ya presente en la cadena
     # El issue_time puede incluir offset como "13:21:00-05:00" → ya tiene zona horaria
     if fecha_emision and "T" in fecha_emision:
         time_part = fecha_emision.split("T", 1)[1]
@@ -177,7 +190,7 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
         tax_scheme = first(supplier_party, ".//*[local-name()='PartyTaxScheme']")
         if tax_scheme is not None:
             emisor_nit = text(first(tax_scheme, ".//*[local-name()='CompanyID']")) or ""
-            # ⚠️ FALLBACK: Algunos XMLs tienen RegistrationName directamente en PartyTaxScheme
+            # WARNING: FALLBACK: Algunos XMLs tienen RegistrationName directamente en PartyTaxScheme
             # (ej: <cac:PartyTaxScheme><cbc:RegistrationName>...</cbc:RegistrationName>)
             if not emisor_razon_social:
                 emisor_razon_social = text(first(tax_scheme, ".//*[local-name()='RegistrationName']")) or ""
@@ -224,7 +237,7 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
         tax_scheme = first(customer_party, ".//*[local-name()='PartyTaxScheme']")
         if tax_scheme is not None:
             receptor_nit = text(first(tax_scheme, ".//*[local-name()='CompanyID']")) or ""
-            # ⚠️ FALLBACK: Algunos XMLs tienen RegistrationName directamente en PartyTaxScheme
+            # WARNING: FALLBACK: Algunos XMLs tienen RegistrationName directamente en PartyTaxScheme
             # (ej: <cac:PartyTaxScheme><cbc:RegistrationName>...</cbc:RegistrationName>)
             if not receptor_razon_social:
                 receptor_razon_social = text(first(tax_scheme, ".//*[local-name()='RegistrationName']")) or ""
@@ -355,6 +368,58 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
         moneda = normalize_currency(currency_id)
     
     # Construir DTO (FASE 3: incluir type base para compatibilidad)
+    # --- Items (InvoiceLine) ---
+    items = []
+    invoice_lines = xpath(invoice_root, ".//*[local-name()='InvoiceLine']")
+    for line_elem in invoice_lines:
+        linea_id = text(first(line_elem, ".//*[local-name()='ID']")) or ""
+        descripcion = text(first(line_elem, ".//*[local-name()='Description']")) or ""
+        cantidad_str = text(first(line_elem, ".//*[local-name()='InvoicedQuantity']")) or "1"
+        qty_elem = first(line_elem, ".//*[local-name()='InvoicedQuantity']")
+        unidad_medida = attr(qty_elem, "unitCode") or "UND" if qty_elem is not None else "UND"
+
+        valor_unitario_str = text(first(line_elem, ".//*[local-name()='Price']//*[local-name()='PriceAmount']")) or "0"
+        sellers_id = first(line_elem, ".//*[local-name()='SellersItemIdentification']//*[local-name()='ID']")
+        codigo = text(sellers_id) or "" if sellers_id is not None else ""
+
+        # IVA del item
+        porcentaje_iva = Decimal("0.00")
+        tax_subtotals = xpath(line_elem, ".//*[local-name()='TaxTotal']//*[local-name()='TaxSubtotal']")
+        for ts in tax_subtotals:
+            tax_id = text(first(ts, ".//*[local-name()='TaxCategory']//*[local-name()='TaxScheme']//*[local-name()='ID']")) or ""
+            if tax_id == "01":  # IVA
+                pct_str = text(first(ts, ".//*[local-name()='Percent']")) or "0"
+                try:
+                    porcentaje_iva = Decimal(normalize_numeric_to_decimal_string(pct_str))
+                except Exception:
+                    pass
+                break
+
+        try:
+            cantidad_dec = Decimal(normalize_numeric_to_decimal_string(cantidad_str))
+        except Exception:
+            cantidad_dec = Decimal("1")
+        try:
+            valor_unitario_dec = Decimal(normalize_numeric_to_decimal_string(valor_unitario_str))
+        except Exception:
+            valor_unitario_dec = Decimal("0")
+
+        subtotal_item = cantidad_dec * valor_unitario_dec
+        iva_item = subtotal_item * porcentaje_iva / Decimal("100")
+        total_item = subtotal_item + iva_item
+
+        items.append({
+            "linea_id": sanitize_text(linea_id),
+            "codigo": sanitize_text(codigo),
+            "descripcion": sanitize_text(descripcion),
+            "cantidad": cantidad_dec,
+            "unidad_medida": sanitize_text(unidad_medida),
+            "valor_unitario": valor_unitario_dec,
+            "porcentaje_iva": porcentaje_iva,
+            "subtotal": subtotal_item,
+            "total": total_item,
+        })
+
     dto = {
         "document_type": "invoice.ubl21",
         "type": "invoice",  # Tipo base para router de validaciones
@@ -387,6 +452,7 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
             "impuestos": impuestos_str,
             "total": total_str,
         },
+        "items": items,
         # Metadatos UBL
         "ubl_version": ubl_version,
         "customization_id": customization_id,
@@ -410,7 +476,7 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> Dict[str, Any]:
     return dto
 
 
-def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> Dict[str, Any]:
+def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> dict[str, Any]:
     """
     Parsea CreditNote UBL 2.1 a DTO.
     
@@ -437,7 +503,7 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> Dict[str, Any]
     fecha_emision = issue_date
     if issue_time:
         fecha_emision = f"{issue_date}T{issue_time}"
-    # ⚠️ v2.61.3: Solo agregar timezone si no hay uno ya presente en la cadena
+    # WARNING: v2.61.3: Solo agregar timezone si no hay uno ya presente en la cadena
     # El issue_time puede incluir offset como "16:59:00-05:00" → ya tiene zona horaria
     if fecha_emision and "T" in fecha_emision:
         time_part = fecha_emision.split("T", 1)[1]
@@ -457,7 +523,7 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> Dict[str, Any]
         tax_scheme = first(supplier_party, ".//*[local-name()='PartyTaxScheme']")
         if tax_scheme is not None:
             emisor_nit = text(first(tax_scheme, ".//*[local-name()='CompanyID']")) or ""
-            # ⚠️ FALLBACK: Algunos XMLs tienen RegistrationName directamente en PartyTaxScheme
+            # WARNING: FALLBACK: Algunos XMLs tienen RegistrationName directamente en PartyTaxScheme
             # (ej: <cac:PartyTaxScheme><cbc:RegistrationName>...</cbc:RegistrationName>)
             if not emisor_razon_social:
                 emisor_razon_social = text(first(tax_scheme, ".//*[local-name()='RegistrationName']")) or ""
@@ -500,7 +566,7 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> Dict[str, Any]
         tax_scheme = first(customer_party, ".//*[local-name()='PartyTaxScheme']")
         if tax_scheme is not None:
             receptor_nit = text(first(tax_scheme, ".//*[local-name()='CompanyID']")) or ""
-            # ⚠️ FALLBACK: Algunos XMLs tienen RegistrationName directamente en PartyTaxScheme
+            # WARNING: FALLBACK: Algunos XMLs tienen RegistrationName directamente en PartyTaxScheme
             # (ej: <cac:PartyTaxScheme><cbc:RegistrationName>...</cbc:RegistrationName>)
             if not receptor_razon_social:
                 receptor_razon_social = text(first(tax_scheme, ".//*[local-name()='RegistrationName']")) or ""
@@ -585,7 +651,7 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> Dict[str, Any]
         motivo_discrepancy = text(first(discrepancy, ".//*[local-name()='Description']")) or ""
     
     # Buscar InvoiceDocumentReference dentro de BillingReference (método principal UBL 2.1)
-    # ⚠️ PATRÓN: <cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>...</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>
+    # WARNING: PATRÓN: <cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>...</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>
     # Usar xpath() directamente para mayor robustez
     try:
         billing_refs = xpath(credit_note_root, ".//*[local-name()='BillingReference']")
@@ -646,14 +712,14 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> Dict[str, Any]
     ref_factura_cufe = sanitize_text(ref_factura_cufe) if ref_factura_cufe else ""
     motivo_discrepancy = sanitize_text(motivo_discrepancy) if motivo_discrepancy else ""
     
-    # ⚠️ DEBUG: Log para diagnóstico de extracción de referencia
+    # WARNING: DEBUG: Log para diagnóstico de extracción de referencia
     import logging
     log_parser = logging.getLogger("document_parser.xml_parser")
     if ref_factura_numero or ref_factura_cufe:
         log_parser.debug(f"Referencia extraída de CreditNote: numero='{ref_factura_numero}', cufe='{ref_factura_cufe}'")
     else:
         log_parser.warning("No se pudo extraer referencia a factura desde CreditNote XML")
-        # ⚠️ DEBUG: Intentar extraer manualmente para diagnóstico
+        # WARNING: DEBUG: Intentar extraer manualmente para diagnóstico
         try:
             billing_refs_debug = xpath(credit_note_root, ".//*[local-name()='BillingReference']")
             log_parser.debug(f"BillingReference encontrados: {len(billing_refs_debug)}")

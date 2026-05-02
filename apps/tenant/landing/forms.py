@@ -9,10 +9,6 @@ violando el aislamiento multi-tenant.
 """
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
-from django.db import connection
-from django_tenants.utils import get_public_schema_name
-
-from apps.public.tenants.models import TenantMembership
 
 
 class TenantAuthenticationForm(AuthenticationForm):
@@ -148,56 +144,32 @@ class TenantAuthenticationForm(AuthenticationForm):
         if tenant.schema_name == 'public':
             return
         
-        # Guardar el esquema actual para restaurarlo después
-        current_schema = connection.schema_name
-        
+        # Verificar membresia via Core Membership Bridge (REGLA 2)
+        from apps.tenant.core.services.membership import check_membership
+
         try:
-            # Cambiar al esquema public para consultar TenantMembership
-            # TenantMembership está en SHARED_APPS, así que vive en el esquema public
-            connection.set_schema_to_public()
-            
-            # Buscar membresía del usuario en el tenant actual
-            membership = TenantMembership.objects.filter(
-                client=tenant,
-                user=user
-            ).first()
-            
-            # Restaurar el esquema original
-            connection.set_schema(current_schema)
-            
-            # Validar membresía
+            membership = check_membership(user, tenant)
+
             if not membership:
-                # Usuario no tiene membresía en este tenant
                 tenant_name = getattr(tenant, 'nombre', 'esta empresa')
                 raise forms.ValidationError(
                     f"Tu cuenta existe, pero no tienes acceso a la empresa {tenant_name}. "
                     "Contacta a tu administrador.",
                     code='no_membership'
                 )
-            
-            # Verificar que la membresía esté activa
-            # Nota: TenantMembership no tiene campo is_active por defecto,
-            # pero podemos verificar si el tenant está activo
+
             if not tenant.is_active:
                 raise forms.ValidationError(
-                    "Esta empresa está suspendida. Por favor, contacta al administrador.",
+                    "Esta empresa est\u00e1 suspendida. Por favor, contacta al administrador.",
                     code='tenant_inactive'
                 )
-            
-            # Si llegamos aquí, el usuario tiene membresía activa
-            # Permitir el login (no hacer nada, el método padre ya validó)
-            
+
         except forms.ValidationError:
-            # Re-lanzar ValidationError (no restaurar esquema, ya se hizo arriba)
             raise
         except Exception as e:
-            # En caso de error inesperado, restaurar esquema y re-lanzar
-            connection.set_schema(current_schema)
-            # Log del error para debugging
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Error al validar membresía en TenantAuthenticationForm: {e}")
-            # Por seguridad, rechazar el login si hay error
+            logger.error("Error al validar membresia en TenantAuthenticationForm: %s", e)
             raise forms.ValidationError(
                 "Error al validar acceso. Por favor, intenta nuevamente.",
                 code='validation_error'

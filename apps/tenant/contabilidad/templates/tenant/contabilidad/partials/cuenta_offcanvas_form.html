@@ -1,0 +1,305 @@
+{% load static %}
+{# cuenta_offcanvas_form.html - Formulario Offcanvas para CuentaContable v2.60 #}
+{# ⚠️ Feature-Sliced Design: Template dedicado exclusivamente para CuentaContable #}
+{# ⚠️ HTMX: Cargado dinámicamente desde /api/v1/contabilidad/cuentas-contables/render-offcanvas/crear/ o /editar/ #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}" 
+     aria-labelledby="offcanvas-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}-label" 
+     style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-primary text-white">
+    <h5 class="offcanvas-title" id="offcanvas-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}-label">
+      <i class="bi bi-{% if cuenta %}pencil-square{% else %}plus-circle{% endif %} me-2"></i>
+      {% if cuenta %}Editar{% else %}Crear{% endif %} Cuenta Contable
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  
+  <div class="offcanvas-body">
+    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
+    <div id="feedback-cuenta-{% if cuenta %}edit{% else %}create{% endif %}" class="alert alert-danger d-none mb-3" role="alert"></div>
+    
+    {# ⚠️ v2.60: Componente modular de manejo de errores HTMX #}
+    {% include 'tenant/core/partials/error_handler.html' %}
+    
+    <form id="form-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}" novalidate>
+      {% if cuenta %}<input type="hidden" id="input-id" name="id" value="{{ cuenta.id }}">{% endif %}
+      
+      <div class="row g-3">
+        <div class="col-12"><h6 class="text-primary border-bottom pb-2 small fw-bold">DATOS DE LA CUENTA</h6></div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Código *</label>
+          <input type="text" class="form-control" id="input-codigo" required 
+                 placeholder="Ej: 1105" maxlength="20" 
+                 value="{% if cuenta %}{{ cuenta.codigo|default:'' }}{% endif %}">
+          <small class="text-muted">Código único de la cuenta (máx. 20 caracteres)</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Tipo *</label>
+          <select class="form-select" id="select-tipo" required>
+            <option value="">Seleccione tipo...</option>
+            <option value="ACTIVO" {% if cuenta and cuenta.tipo == 'ACTIVO' %}selected{% endif %}>Activo</option>
+            <option value="PASIVO" {% if cuenta and cuenta.tipo == 'PASIVO' %}selected{% endif %}>Pasivo</option>
+            <option value="PATRIMONIO" {% if cuenta and cuenta.tipo == 'PATRIMONIO' %}selected{% endif %}>Patrimonio</option>
+            <option value="INGRESO" {% if cuenta and cuenta.tipo == 'INGRESO' %}selected{% endif %}>Ingreso</option>
+            <option value="GASTO" {% if cuenta and cuenta.tipo == 'GASTO' %}selected{% endif %}>Gasto</option>
+          </select>
+          <small class="text-muted">Seleccione un tipo para buscar en el catálogo NIIF</small>
+        </div>
+        
+        {# ⚠️ v2.61: Buscador dinámico del Catálogo NIIF #}
+        <div class="col-12" id="catalogo-niif-container" style="display: none;">
+          <label class="form-label small fw-bold">
+            <i class="bi bi-search me-1"></i>Buscar en Catálogo NIIF
+          </label>
+          <input type="text" class="form-control mb-2" id="input-buscar-niif" 
+                 placeholder="Buscar por código (ej: 1105) o nombre (ej: BANCOS)...">
+          <div id="catalogo-niif-resultados" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+            <div class="text-muted text-center py-3">
+              <i class="bi bi-info-circle me-2"></i>Seleccione un tipo de cuenta para buscar
+            </div>
+          </div>
+          <small class="text-muted">Haga clic en una cuenta para autocompletar los campos Código y Nombre</small>
+        </div>
+        
+        <div class="col-12">
+          <label class="form-label small fw-bold">Nombre *</label>
+          <input type="text" class="form-control" id="input-nombre" required 
+                 placeholder="Nombre de la cuenta" maxlength="200" 
+                 value="{% if cuenta %}{{ cuenta.nombre|default:'' }}{% endif %}">
+        </div>
+        
+        <div class="col-12">
+          <label class="form-label small fw-bold">Descripción</label>
+          <textarea class="form-control" id="input-descripcion" rows="2" 
+                    placeholder="Descripción opcional de la cuenta">{% if cuenta %}{{ cuenta.descripcion|default:'' }}{% endif %}</textarea>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Cuenta Padre</label>
+          <select class="form-select" id="select-cuenta-padre">
+            <option value="">Ninguna (cuenta raíz)</option>
+            {# Las opciones se cargan dinámicamente vía JavaScript #}
+          </select>
+          <small class="text-muted">Opcional: Seleccione una cuenta padre si esta es una subcuenta</small>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label small fw-bold">Estado</label>
+          <select class="form-select" id="select-activa">
+            <option value="true" {% if not cuenta or cuenta.activa %}selected{% endif %}>Activa</option>
+            <option value="false" {% if cuenta and not cuenta.activa %}selected{% endif %}>Inactiva</option>
+          </select>
+        </div>
+      </div>
+    </form>
+  </div>
+  
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="btn-guardar-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}">
+        <i class="bi bi-save me-2"></i>Guardar Cuenta
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const offcanvasId = 'offcanvas-cuenta-{% if cuenta %}editar{% else %}crear{% endif %}';
+  const offcanvasEl = document.getElementById(offcanvasId);
+  const isEdit = '{% if cuenta %}true{% else %}false{% endif %}' === 'true';
+  const cuentaId = '{% if cuenta %}{{ cuenta.id }}{% endif %}';
+  
+  if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
+    const offcanvasInstance = window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+    offcanvasInstance.show();
+    console.log('[Contabilidad] Offcanvas activado:', offcanvasId);
+    
+    // Inicializar lógica modular
+    cargarCuentasPadre();
+    initCatalogoNIIFBuscador();
+    
+    // Manejo de Guardado
+    const btnGuardar = document.getElementById(`btn-guardar-cuenta-${isEdit ? 'editar' : 'crear'}`);
+    if (btnGuardar) {
+      btnGuardar.addEventListener('click', guardarCuenta);
+    }
+    
+    function cargarCuentasPadre() {
+      const selectPadre = document.getElementById('select-cuenta-padre');
+      const currentPadreId = '{% if cuenta and cuenta.cuenta_padre_id %}{{ cuenta.cuenta_padre_id }}{% endif %}';
+      
+      fetch('/api/v1/contabilidad/cuentas-contables/?page_size=100', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin'
+      })
+      .then(response => response.json())
+      .then(data => {
+        const cuentas = data.results || data;
+        if (Array.isArray(cuentas)) {
+          cuentas.forEach(c => {
+            if (cuentaId !== String(c.id)) {
+              const option = document.createElement('option');
+              option.value = c.id;
+              option.textContent = `${c.codigo} - ${c.nombre}`;
+              if (String(c.id) === currentPadreId) option.selected = true;
+              selectPadre.appendChild(option);
+            }
+          });
+        }
+      })
+      .catch(err => console.error('[Contabilidad] Error al cargar cuentas padre:', err));
+    }
+    
+    function guardarCuenta() {
+      const feedback = document.getElementById(`feedback-cuenta-${isEdit ? 'edit' : 'create'}`);
+      
+      // ⚠️ DOM Shield: Recolección manual
+      const payload = {
+        codigo: document.getElementById('input-codigo').value.trim(),
+        nombre: document.getElementById('input-nombre').value.trim(),
+        tipo: document.getElementById('select-tipo').value,
+        descripcion: document.getElementById('input-descripcion').value.trim(),
+        cuenta_padre: document.getElementById('select-cuenta-padre').value || null,
+        activa: document.getElementById('select-activa').value === 'true'
+      };
+      
+      if (!payload.codigo || !payload.nombre || !payload.tipo) {
+        if (feedback) {
+          feedback.textContent = 'Por favor complete todos los campos obligatorios (*).';
+          feedback.classList.remove('d-none');
+        }
+        return;
+      }
+      
+      const url = isEdit ? `/api/v1/contabilidad/cuentas-contables/${cuentaId}/` : '/api/v1/contabilidad/cuentas-contables/';
+      const method = isEdit ? 'PATCH' : 'POST';
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+      
+      btnGuardar.disabled = true;
+      const originalHtml = btnGuardar.innerHTML;
+      btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Guardando...';
+      if (feedback) feedback.classList.add('d-none');
+      
+      fetch(url, {
+        method: method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(payload),
+        credentials: 'same-origin'
+      })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw { status: response.status, data: data };
+        return data;
+      })
+      .then(data => {
+        if (window.notyf) window.notyf.success(`Cuenta ${isEdit ? 'actualizada' : 'creada'} con éxito.`);
+        offcanvasInstance.hide();
+        document.body.dispatchEvent(new Event('contabilidad:refresh'));
+        if (window.Sintel?.Contabilidad?.Table) window.Sintel.Contabilidad.Table.refresh();
+      })
+      .catch(err => {
+        btnGuardar.disabled = false;
+        btnGuardar.innerHTML = originalHtml;
+        if (feedback) {
+          const errMsg = err.data?.detail || err.data?.error || JSON.stringify(err.data) || 'Error al guardar';
+          feedback.textContent = errMsg;
+          feedback.classList.remove('d-none');
+        }
+      });
+    }
+
+    function initCatalogoNIIFBuscador() {
+      const selectTipo = document.getElementById('select-tipo');
+      const catalogoContainer = document.getElementById('catalogo-niif-container');
+      const inputBuscar = document.getElementById('input-buscar-niif');
+      const resultadosDiv = document.getElementById('catalogo-niif-resultados');
+      
+      if (!selectTipo || !catalogoContainer) return;
+      
+      let currentTipo = selectTipo.value;
+      let searchTimeout = null;
+      
+      selectTipo.addEventListener('change', function() {
+        currentTipo = this.value;
+        if (currentTipo) {
+          catalogoContainer.style.display = 'block';
+          buscarEnCatalogo('');
+        } else {
+          catalogoContainer.style.display = 'none';
+        }
+      });
+      
+      if (inputBuscar) {
+        inputBuscar.addEventListener('input', function() {
+          clearTimeout(searchTimeout);
+          searchTimeout = setTimeout(() => buscarEnCatalogo(this.value), 300);
+        });
+      }
+      
+      function buscarEnCatalogo(searchTerm) {
+        if (!currentTipo) return;
+        resultadosDiv.innerHTML = '<div class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></div>';
+        
+        const params = new URLSearchParams({ tipo: currentTipo, search: searchTerm.trim(), page_size: 20 });
+        fetch(`/api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?${params.toString()}`)
+        .then(r => r.json())
+        .then(data => {
+          const cuentas = data.results || data;
+          mostrarResultados(Array.isArray(cuentas) ? cuentas : []);
+        })
+        .catch(err => {
+          resultadosDiv.innerHTML = '<div class="text-danger small">Error al buscar</div>';
+        });
+      }
+      
+      function mostrarResultados(cuentas) {
+        if (cuentas.length === 0) {
+          resultadosDiv.innerHTML = '<div class="text-muted small text-center py-2">No se encontraron resultados</div>';
+          return;
+        }
+        
+        let html = '<div class="list-group list-group-flush">';
+        cuentas.forEach(c => {
+          html += `
+            <button type="button" class="list-group-item list-group-item-action p-2 small cuenta-niif-item" 
+                    data-codigo="${c.codigo}" data-nombre="${c.nombre}">
+              <strong>${c.codigo}</strong> - ${c.nombre}
+            </button>`;
+        });
+        html += '</div>';
+        resultadosDiv.innerHTML = html;
+        
+        resultadosDiv.querySelectorAll('.cuenta-niif-item').forEach(item => {
+          item.addEventListener('click', function() {
+            const codigoInput = document.getElementById('input-codigo');
+            const nombreInput = document.getElementById('input-nombre');
+            if (codigoInput) {
+              codigoInput.value = this.dataset.codigo;
+              codigoInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (nombreInput) {
+              nombreInput.value = this.dataset.nombre;
+              nombreInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (window.notyf) window.notyf.success('Sugerencia NIIF aplicada');
+          });
+        });
+      }
+      
+      if (currentTipo) {
+        catalogoContainer.style.display = 'block';
+        buscarEnCatalogo('');
+      }
+    }
+  } else {
+    console.error('[Contabilidad] Requisitos UI no encontrados para Offcanvas');
+  }
+})();
+</script>

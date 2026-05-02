@@ -2,21 +2,23 @@
 Modelo de Proyectos v3.3 - Stand-Alone Module (SSoT Strict)
 -------------------------------------------------------------------
 ARQUITECTURA V2.40 (Zero-Coupling con otras apps de negocio):
-- ✅ ÚNICA dependencia externa: apps.tenant.empresa.models.Empresa (SSoT)
-- ❌ NO hay ForeignKeys a Clientes, Proveedores, Empleados o Inventario.
-- ✅ Uso estricto del Patrón "Snapshot" (ID referencial + CharField) para que
+- [OK] ÚNICA dependencia externa: apps.tenant.empresa.models.Empresa (SSoT)
+- [ERROR] NO hay ForeignKeys a Clientes, Proveedores, Empleados o Inventario.
+- [OK] Uso estricto del Patrón "Snapshot" (ID referencial + CharField) para que
      el módulo no se rompa si otros servicios no están disponibles.
-- ✅ Modelo Anémico: Solo estructura de datos. Toda validación de IDs 
+- [OK] Modelo Anémico: Solo estructura de datos. Toda validación de IDs 
      y cálculos financieros vivirán en services.py.
 -------------------------------------------------------------------
 """
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+
+from apps.tenant.core.models import SintelTenantBaseModel  # [v2.61.4] Herencia SSoT
 from apps.tenant.empresa.models import Empresa  # ÚNICA Dependencia Externa (SSoT)
 
 
-class Proyecto(models.Model):
+class Proyecto(SintelTenantBaseModel):
     """
     Entidad Maestra de Proyectos.
     Funciona autónomamente almacenando snapshots de los responsables y clientes.
@@ -127,13 +129,10 @@ class Proyecto(models.Model):
             models.UniqueConstraint(fields=["empresa", "codigo"], condition=models.Q(codigo__gt=''), name="uniq_proyecto_codigo_empresa")
         ]
         indexes = [
-            models.Index(fields=["empresa"]),  # ⚠️ v2.40: Índice obligatorio SSoT
+            # v3.5: Los índices base (empresa, created_at) vienen de SintelTenantBaseModel.
+            # Solo añadimos índices específicos de la lógica de negocio de Proyectos.
             models.Index(fields=["empresa", "fase_actual"]),
             models.Index(fields=["empresa", "cliente_id"]),
-            models.Index(fields=["responsable_comercial_id"]),
-            models.Index(fields=["responsable_tecnico_id"]),
-            models.Index(fields=["responsable_operativo_id"]),
-            models.Index(fields=["responsable_administrativo_id"]),
             models.Index(fields=["responsable_actual_id"]),
         ]
 
@@ -141,7 +140,7 @@ class Proyecto(models.Model):
         return f"{self.nombre} ({self.codigo})"
 
 
-class AsignacionPersonal(models.Model):
+class AsignacionPersonal(SintelTenantBaseModel):
     """
     Registro de Talento Humano asignado al proyecto.
     Desacoplado del módulo de Empleados.
@@ -176,7 +175,7 @@ class AsignacionPersonal(models.Model):
         verbose_name = _("Asignación Personal")
         verbose_name_plural = _("Equipo de Trabajo")
         indexes = [
-            models.Index(fields=["empresa"]),  # ⚠️ v2.40: Índice obligatorio SSoT
+            # v3.5: Index base en empresa provisto por SintelTenantBaseModel.
             models.Index(fields=["proyecto"]),
             models.Index(fields=["empleado_id"]),
         ]
@@ -185,7 +184,7 @@ class AsignacionPersonal(models.Model):
         return f"{self.nombre_colaborador} - {self.get_rol_display()}"
 
 
-class PedidoProyecto(models.Model):
+class PedidoProyecto(SintelTenantBaseModel):
     """
     Encabezado de Solicitud de Recursos.
     Desacoplado de Proveedores e Inventario.
@@ -239,7 +238,7 @@ class PedidoProyecto(models.Model):
         verbose_name_plural = _("Pedidos de Proyecto")
         ordering = ['-fecha_solicitud']
         indexes = [
-            models.Index(fields=["empresa"]),  # ⚠️ v2.40: Índice obligatorio SSoT
+            # v3.5: Index base en empresa provisto por SintelTenantBaseModel.
             models.Index(fields=["proyecto"]),
             models.Index(fields=["proveedor_id"]),
         ]
@@ -248,7 +247,7 @@ class PedidoProyecto(models.Model):
         return f"Pedido #{self.id} - {self.proyecto.nombre}"
 
 
-class ItemPedido(models.Model):
+class ItemPedido(SintelTenantBaseModel):
     """
     Detalle de línea de pedido. Estrictamente datos, sin relaciones a Inventario.
     """

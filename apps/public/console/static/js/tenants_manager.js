@@ -433,11 +433,76 @@
         });
 
         // Delegación de eventos para botones de acción
-        jQuery('#dt-tenants').on('click', '.btn-edit', function() {
+        jQuery('#dt-tenants').on('click', '.btn-edit', async function() {
             const tenantId = jQuery(this).data('id');
-            // TODO: Implementar edición
-            showNotification('Funcionalidad de edición en desarrollo', 'info');
+            if (!tenantId) return;
+            
+            try {
+                // Usar window.http (forma objeto) para obtener datos del tenant
+                const tenant = await window.http.get(`/api/public/v1/tenants/${tenantId}/`);
+                openEditTenantModal(tenant);
+            } catch (err) {
+                showNotification(err.message || 'No se pudo cargar el tenant', 'error');
+            }
         });
+
+        function openEditTenantModal(tenant) {
+            const form = document.getElementById('tenant-form');
+            if (!form) {
+                showNotification('Formulario de tenant no encontrado en la página', 'error');
+                return;
+            }
+
+            // Precargar campos editables
+            const setVal = (id, value) => {
+                const el = document.getElementById(id);
+                if (el) el.value = value ?? '';
+            };
+            
+            setVal('nombre', tenant.nombre);
+            setVal('paid_until', tenant.paid_until ? tenant.paid_until.split('T')[0] : '');
+            
+            const onTrial = document.getElementById('on_trial');
+            if (onTrial) onTrial.checked = !!tenant.on_trial;
+            
+            const isActive = document.getElementById('is_active');
+            if (isActive) isActive.checked = !!tenant.is_active;
+
+            // Bloquear inmutables
+            ['schema_name', 'dominio_fqdn', 'owner_email'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = id === 'schema_name' ? tenant.schema_name : (tenant[id] || '');
+                    el.readOnly = true;
+                    el.disabled = true;
+                }
+            });
+
+            form.dataset.mode = 'edit';
+            form.dataset.tenantId = tenant.id;
+
+            // Cambiar título y botón submit
+            const title = document.querySelector('#tenant-modal-title, #tenant-form-title') || document.querySelector('.modal-title');
+            if (title) title.textContent = `Editar tenant: ${tenant.nombre}`;
+            
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.textContent = 'Guardar cambios';
+
+            // Mostrar el modal/offcanvas (tenants_manager usa Tailwind, el modal suele ser un elemento con IDs específicos)
+            // Intentar disparar el trigger si existe, o buscar el contenedor del modal
+            const modalEl = document.getElementById('tenant-modal') || document.querySelector('[role="dialog"]');
+            // Nota: En la consola actual de Tailwind, el modal suele manejarse vía Alpine.js o clases hidden
+            // Intentaremos emitir un evento si es necesario, o simplemente remover 'hidden'
+            if (modalEl) {
+                modalEl.classList.remove('hidden');
+            } else {
+                // Si usa Bootstrap (algunas partes de la consola lo mezclan)
+                if (typeof bootstrap !== 'undefined') {
+                    const inst = bootstrap.Modal.getOrCreateInstance(modalEl) || bootstrap.Offcanvas.getOrCreateInstance(modalEl);
+                    if (inst) inst.show();
+                }
+            }
+        }
 
         // Usar la URL base de la API de tenants para eliminación
         const tenantsApiUrlForDelete = '/api/public/v1/tenants/';
@@ -564,23 +629,27 @@
             }
 
             // Construir dominio FQDN: usar el proporcionado o dejar vacío para autogeneración (v2.25)
-            // ⚠️ v2.25: Si no se proporciona, el backend autogenerará como {schema_name}.{TENANT_DOMAIN_BASE}
-            // El serializer espera string vacío o null, no undefined
             let dominioFqdn = dominioFqdnInput || "";
 
-            // Construir payload según el contrato del servicio (v2.29: sin owner_password)
+            const mode = form.dataset.mode || 'create';
+            const tenantId = form.dataset.tenantId;
+
+            // Construir payload según el modo (create vs edit)
             const formData = {
                 nombre: nombre,
-                schema_name: schemaName,
-                owner_email: ownerEmail,
-                // ⚠️ v2.29: owner_password ELIMINADO - NO se acepta password en onboarding
                 on_trial: onTrial
             };
 
-            // Agregar campos opcionales solo si tienen valor
-            if (dominioFqdn) {
-                formData.dominio_fqdn = dominioFqdn;
+            // En modo creación: incluir schema_name y owner_email
+            if (mode === 'create') {
+                formData.schema_name = schemaName;
+                formData.owner_email = ownerEmail;
+                if (dominioFqdn) {
+                    formData.dominio_fqdn = dominioFqdn;
+                }
             }
+
+            // Agregar paid_until si se proporciona (ambos modos)
             if (paidUntil) {
                 formData.paid_until = paidUntil;
             }
@@ -589,20 +658,30 @@
             const submitBtn = form.querySelector('button[type="submit"]');
             const originalText = submitBtn.textContent;
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Creando...';
+            submitBtn.textContent = mode === 'edit' ? 'Guardando...' : 'Creando...';
 
             try {
-                const response = await fetch(apiOnboardUrl, {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: JSON.stringify(formData),
-                    credentials: 'include'
-                });
+                let response;
+                if (mode === 'edit' && tenantId) {
+                    response = await fetch(`${apiOnboardUrl.replace('onboard/', '')}${tenantId}/`, {
+                        method: 'PATCH',
+                        headers: getHeaders(),
+                        body: JSON.stringify(formData),
+                        credentials: 'include'
+                    });
+                } else {
+                    response = await fetch(apiOnboardUrl, {
+                        method: 'POST',
+                        headers: getHeaders(),
+                        body: JSON.stringify(formData),
+                        credentials: 'include'
+                    });
+                }
 
                 const data = await response.json();
 
                 if (!response.ok) {
-                    console.error('Onboarding error response:', data);
+                    console.error('Tenant action error response:', data);
                     
                     // Manejar errores de validación del serializer (estructura DRF)
                     if (data && typeof data === 'object') {
@@ -629,26 +708,50 @@
                             }
                         } else {
                             // Mostrar error general (detail o mensaje por defecto)
-                            const errorMsg = data.detail || data.message || 'Error al crear el tenant';
+                            const errorMsg = data.detail || data.message || `Error al ${mode === 'edit' ? 'actualizar' : 'crear'} el tenant`;
                             showNotification(errorMsg, 'error');
                         }
                     } else {
                         // Error en formato no esperado
                         const error = handleAPIError({ response, data });
-                        showNotification(error.message || error.detail || 'Error al crear el tenant', 'error');
+                        showNotification(error.message || error.detail || `Error al ${mode === 'edit' ? 'actualizar' : 'crear'} el tenant`, 'error');
                     }
                 } else {
-                    // Mostrar login_url si está disponible
-                    const loginUrl = data.login_url || data.domain;
-                    const message = data.login_url 
-                        ? `Tenant creado exitosamente. Login URL: ${data.login_url}`
-                        : 'Tenant creado exitosamente';
+                    const message = mode === 'edit' 
+                        ? `Tenant "${data.nombre}" actualizado correctamente`
+                        : (data.login_url 
+                            ? `Tenant creado exitosamente. Login URL: ${data.login_url}`
+                            : 'Tenant creado exitosamente');
+                            
                     showNotification(message, 'success');
                     
-                    // Redirigir después de un breve delay
-                    setTimeout(() => {
-                        window.location.href = '/console/tenants/';
-                    }, 2000);
+                    // Si es edición, solo cerrar y recargar tabla, no redirigir
+                    if (mode === 'edit') {
+                        const modalEl = document.getElementById('tenant-modal') || document.querySelector('[role="dialog"]');
+                        if (modalEl) modalEl.classList.add('hidden');
+                        
+                        // Recargar tabla DataTables
+                        if (typeof jQuery !== 'undefined' && jQuery.fn.dataTable) {
+                            jQuery('#dt-tenants').DataTable().ajax.reload(null, false);
+                        }
+                        
+                        // Reset form
+                        form.reset();
+                        delete form.dataset.mode;
+                        delete form.dataset.tenantId;
+                        
+                        // Restaurar campos bloqueados
+                        ['schema_name', 'dominio_fqdn', 'owner_email'].forEach((id) => {
+                            const el = document.getElementById(id);
+                            if (el) { el.readOnly = false; el.disabled = false; }
+                        });
+                        if (submitBtn) submitBtn.textContent = 'Crear Empresa';
+                    } else {
+                        // Redirigir después de un breve delay si es creación
+                        setTimeout(() => {
+                            window.location.href = '/console/tenants/';
+                        }, 2000);
+                    }
                 }
             } catch (error) {
                 const errorInfo = handleAPIError(error);

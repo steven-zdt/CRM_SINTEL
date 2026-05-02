@@ -1,4 +1,4 @@
-# Auditoría de Flujo — Core (Workspace + Core API) — SINTEL
+# Auditoría de Flujo — Core (Workspace + Core API) — SINTEL v2.61
 
 ## 1) Propósito
 
@@ -7,23 +7,27 @@
 - Expone una **IU única** (workspace) para operar múltiples dominios (empresa, facturas, contabilidad, inventario, etc.).
 - La IU es **shell HTML estructural** (sin lógica de negocio y sin render server-side de datos de negocio).
 - Los datos y acciones del usuario se resuelven vía **APIs DRF** (SessionAuth + CSRF) por tenant.
-- Core agrega **orquestación**: rutas canónicas, dashboard compuesto, y endpoints de “facade” (auth/landing) y adaptadores.
+- Core es el **Dueño de Identidad y Acceso**: Gestiona Login, Logout, Activación de Cuenta y Perfil.
+- Core agrega **orquestación**: rutas canónicas, dashboard compuesto, y endpoints de “facade”
 
 ## 2) Entrada al sistema (ruteo tenant)
 
 ### 2.1 TENANT_URLCONF
 
-En tenants privados, el ruteo se controla con `config/urls_tenant.py`.
+En tenants privados, el ruteo se controla con `config/urls_tenant.py` (v2.61.4).
 
 Flujo base:
 
 1. `GET /` (dominio tenant)
-   - Redirige a shell estático según autenticación:
+   - Redirige a shell estático centralizado según autenticación:
      - autenticado → `/static/tenant/core/dashboard/index.html`
-     - anónimo → `/static/tenant/landing/index.html`
+     - anónimo → `/static/tenant/core/auth/login.html` ✅ **SEGMENTACIÓN ESTRICTA**
+   - **Prohibido**: Servir `landing/index.html` en dominios privados (evita exposición IDOR de UI pública).
 
 2. Shells estáticos de Core:
-   - `/static/tenant/core/dashboard/index.html`
+   - `/static/tenant/core/auth/login.html` (Shell único de acceso)
+   - `/static/tenant/core/auth/activate.html` (Modernizado Glassmorphism v2.61.4)
+   - `/static/tenant/core/dashboard/index.html` (Workspace principal)
    - `/static/tenant/core/empresa/index.html`
    - `/static/tenant/core/contabilidad/index.html`
    - `/static/tenant/core/facturas/index.html`
@@ -88,12 +92,14 @@ Puntos clave:
 Definidos en `apps/tenant/core/api/viewsets.py`:
 
 - `GET /api/v1/core/links/` → `CoreLinksViewSet` - Registro de rutas API y UI
-- `GET /api/v1/core/dashboard/sections/` → `DashboardSectionsViewSet` - Dashboard compuesto (empresa + facturas + contabilidad + perfil + branding).
-- `GET/PATCH /api/v1/core/empresa/` → `EmpresaCoreViewSet.mi_empresa` - Singleton/upsert de Empresa para UI.
-- `POST /api/v1/core/auth/login/` → `CoreAuthViewSet.login` ✅ **IMPLEMENTADO v2.61**
-- `POST /api/v1/core/auth/logout/` → `CoreAuthViewSet.logout` ✅ **IMPLEMENTADO v2.61**
-- Password reset (request/validate/confirm) ⚠️ **PENDIENTE**
-- Landing facade (`/api/v1/core/landing/info/`, `/api/v1/core/landing/auth/activate/`) ⚠️ **PENDIENTE**
+- `GET /api/v1/core/dashboard/sections/` → `DashboardSectionsViewSet` - Dashboard compuesto.
+- `GET/PATCH /api/v1/core/empresa/` → `EmpresaCoreViewSet.mi_empresa` - Singleton de Empresa.
+- `POST /api/v1/core/auth/login/` → `CoreAuthViewSet.login` ✅ **SSoT AUTH**
+- `POST /api/v1/core/auth/logout/` → `CoreAuthViewSet.logout` ✅ **SSoT AUTH**
+- `GET/POST /api/v1/core/auth/activate/` → `CoreAuthViewSet.activate` ✅ **SSoT AUTH** (Retorna email e info de tenant)
+- Password reset (request/validate/confirm) ✅ **SSoT AUTH** (Delegado a EmailService centralizado)
+
+- Landing facade (`/api/v1/core/landing/info/`) - Brinda metadatos para branding.
 
 Otros módulos Core API:
 
@@ -131,14 +137,11 @@ Objetivo:
 Core consume lógica de dominios por dos vías:
 
 1. **Services de Core** (composición):
-   - `apps/tenant/core/services/orchestration.py`
-   - `apps/tenant/core/services/*` (snapshots/summary)
+   - `apps/tenant/core/services/activation_service.py` (Validación de tokens de activación)
+   - `apps/tenant/core/services/auth_service.py` (Orquestación de Login/Reset)
 
-2. **Adapters** hacia apps dueñas (sin HTTP):
-   - Ejemplos vistos en código:
-     - `apps/tenant/core/services/empresa_adapter` (usado por Core Empresa + mailbox)
-     - `apps/tenant/core/services/contabilidad_adapter` (usado por Core contabilidad)
-     - `apps/tenant/core/services/landing_adapter` (landing facade)
+2. **Servicio de Email Centralizado (SSoT PÚBLICO)**:
+   - `apps/public/core/services/email_service.py` (Utilizado por Core para invitaciones y reset)
 
 Invariante:
 
@@ -166,43 +169,33 @@ Estado actual (API-first estricto):
 
 - Devuelven **solo JSON** (`JsonResponse`) siempre.
 
-## 8) Riesgos / deuda técnica observada
+## 8) Riesgos / deuda técnica mitigada (v2.61.4)
 
-- **Doble registro conceptual de rutas**: `CoreRoutesView` y `CoreLinksViewSet` se solapan (ambos son “registry” de rutas). Esto puede generar divergencia.
-- **Heterogeneidad de partials UI**: algunos módulos renderizan UI desde Core, otros desde la app específica. Si cambian selectores/IDs, la UI rompe.
-- **Monolito en `core/api/views.py`**: concentra múltiples dominios (auth, landing, empresa, perfil, maildigester). Funciona pero dificulta mantenibilidad.
+- ✅ **Fuga de UI Pública**: Resuelto mediante segmentación estricta en `TenantRootView`.
+- ✅ **Dispersión de Emails**: Resuelto mediante `EmailService` centralizado en core público.
+- ✅ **Fragilidad en Activación**: Resuelto mediante `FailedTenantTask` (DLQ) y auditoría `USER_ACTIVATE`.
 
-## 9) Recomendaciones (próximos pasos)
+---
 
-### 9.1 Unificar registro de rutas
-
-- Elegir una fuente única:
-  - o `GET /api/v1/core/routes/`
-  - o `GET /api/v1/core/links/`
-
-### 9.2 Separar Core API por submódulos (sin romper urls)
-
-- Mantener `urls.py` igual, pero mover implementación a:
-  - `views_auth.py`, `views_empresa_core.py`, `views_perfil_core.py`, etc.
-
-### 9.3 Normalización estricta de payloads complejos
-
-- Para campos JSON dentro de multipart (ej. `mail_inbox_config`), estandarizar:
-  - enviar JSON real (application/json)
-  - o serializar string y parsear controladamente (regla fija)
+**Última actualización:** 2026-03-28  
+**Versión:** 2.61.4 - Estabilización de Identidad y Acceso
 
 ---
 
 ## Apéndice A — Mapa rápido de archivos Core relevantes
 
-- UI
-  - `apps/tenant/core/views_ui.py`
-  - `apps/tenant/core/urls_ui.py`
+- UI (Shells estáticos)
+  - `apps/tenant/core/static/tenant/core/auth/` (login, activate, reset)
   - `apps/tenant/core/templates/tenant/core/workspace.html`
+
+- Services
+  - `apps/tenant/core/services/auth_service.py`
+  - `apps/tenant/core/services/activation_service.py`
+  - `apps/tenant/core/services/password_reset.py`
 
 - Core API
   - `apps/tenant/core/api/urls.py`
-  - `apps/tenant/core/api/views.py`
+  - `apps/tenant/core/api/viewsets.py`
   - `apps/tenant/core/api/views_empresa.py`
   - `apps/tenant/core/api/views_contabilidad.py`
   - `apps/tenant/core/api/viewsets_documentos.py`

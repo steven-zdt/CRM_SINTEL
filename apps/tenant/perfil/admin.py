@@ -2,6 +2,7 @@
 Admin para la app de perfil.
 """
 from django.contrib import admin
+
 from apps.tenant.perfil.models import TenantProfile
 
 
@@ -10,7 +11,7 @@ class TenantProfileAdmin(admin.ModelAdmin):
     """
     Admin para TenantProfile.
     
-    ⚠️ IMPORTANTE: django-tenants maneja automáticamente el aislamiento por esquema.
+    WARNING: IMPORTANTE: django-tenants maneja automáticamente el aislamiento por esquema.
     No es necesario filtrar manualmente por tenant_id.
     """
     list_display = ['user', 'cargo', 'departamento', 'telefono_corporativo', 'created_at']

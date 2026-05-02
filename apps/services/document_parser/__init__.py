@@ -1,12 +1,12 @@
 """
 Document Parser Service Layer (Low-level parsing/normalization).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Única fuente de verdad para parsing de documentos (XML, PDF, XLS/XLSX, CSV, TXT)
 - Agnóstico del dominio: no conoce modelos Django
 - Reutilizable: puede ser usado por cualquier app que necesite parsear documentos
 - Extensible: permite agregar nuevos tipos sin tocar la orquestación principal
-- ⚠️ v2.40: Separado por app (facturas, cotizaciones) con parsers independientes
+- WARNING: v2.40: Separado por app (facturas, cotizaciones) con parsers independientes
 
 Estructura (v2.40):
 - dto.py: DTO unificado JSON (genérico)
@@ -22,7 +22,7 @@ Estructura (v2.40):
 - register_parsers.py: Registro automático de parsers por app
 """
 
-# ⚠️ v2.40: Registrar automáticamente los parsers de cada app
+# WARNING: v2.40: Registrar automáticamente los parsers de cada app
 try:
     from . import register_parsers  # noqa: F401
 except ImportError:

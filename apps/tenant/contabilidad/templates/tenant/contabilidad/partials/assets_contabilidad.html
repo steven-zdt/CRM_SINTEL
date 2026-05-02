@@ -1,0 +1,11 @@
+{% load static %}
+{# assets_contabilidad.html - Cargador general del módulo Contabilidad v2.61 #}
+{# ⚠️ IMPORTANTE: assets_core.html YA se carga en workspace.html #}
+
+{# 1) APIs de Datos #}
+<script src="{% static 'contabilidad/js/cuenta/cuenta.api.js' %}"></script>
+<script src="{% static 'contabilidad/js/asiento/asiento.api.js' %}"></script>
+
+{# 2) Módulos de Interfaz (Listados) #}
+<script src="{% static 'contabilidad/js/cuenta/features/cuenta_list.js' %}"></script>
+<script src="{% static 'contabilidad/js/asiento/features/asiento_list.js' %}"></script>

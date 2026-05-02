@@ -1,14 +1,15 @@
 """
 Admin para empleados (aislado por tenant).
 
-⚠️ v2.95: Alineado con arquitectura Tabulator Factory y flujo secuencial.
-⚠️ v2.40: Modelos Anemic - Lógica de negocio en services.py
+WARNING: v2.95: Alineado con arquitectura Tabulator Factory y flujo secuencial.
+WARNING: v2.40: Modelos Anemic - Lógica de negocio en services.py
 
 django-tenants maneja automáticamente el aislamiento por esquema.
 """
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
-from .models import Empleado, Contrato, Devengo
+
+from .models import Contrato, Devengo, Empleado
 
 
 @admin.register(Empleado)
@@ -16,8 +17,8 @@ class EmpleadoAdmin(admin.ModelAdmin):
     """
     Admin para el modelo Empleado.
     
-    ⚠️ v2.95: Incluye campos de seguridad social (EPS, AFP, ARL).
-    ⚠️ FLUJO SECUENCIAL: Empleado → Contrato → Nómina
+    WARNING: v2.95: Incluye campos de seguridad social (EPS, AFP, ARL).
+    WARNING: FLUJO SECUENCIAL: Empleado → Contrato → Nómina
     """
     list_display = (
         "numero_documento", 
@@ -85,8 +86,8 @@ class ContratoAdmin(admin.ModelAdmin):
     """
     Admin para el modelo Contrato.
     
-    ⚠️ v2.40: Máquina de Estados Estricta - Solo UN contrato ACTIVO por empleado.
-    ⚠️ FLUJO SECUENCIAL: Requiere Empleado, habilita creación de Nómina.
+    WARNING: v2.40: Máquina de Estados Estricta - Solo UN contrato ACTIVO por empleado.
+    WARNING: FLUJO SECUENCIAL: Requiere Empleado, habilita creación de Nómina.
     """
     list_display = (
         "empleado", 
@@ -133,7 +134,7 @@ class ContratoAdmin(admin.ModelAdmin):
         }),
         ('Estado', {
             'fields': ('estado', 'activo'),
-            'description': '⚠️ estado es la fuente de verdad. activo se sincroniza automáticamente.'
+            'description': 'WARNING: estado es la fuente de verdad. activo se sincroniza automáticamente.'
         }),
     )
     
@@ -150,9 +151,9 @@ class DevengoAdmin(admin.ModelAdmin):
     """
     Admin para el modelo Devengo (Nómina).
     
-    ⚠️ v2.40: Inmutable - Una vez creada, solo se puede anular (no editar).
-    ⚠️ FLUJO SECUENCIAL: Requiere Contrato ACTIVO, habilita botón "Historial".
-    ⚠️ SSoT: neto_pagar se calcula automáticamente en save().
+    WARNING: v2.40: Inmutable - Una vez creada, solo se puede anular (no editar).
+    WARNING: FLUJO SECUENCIAL: Requiere Contrato ACTIVO, habilita botón "Historial".
+    WARNING: SSoT: neto_pagar se calcula automáticamente en save().
     """
     list_display = (
         "empleado", 
@@ -209,13 +210,13 @@ class DevengoAdmin(admin.ModelAdmin):
         }),
         ('Resultado', {
             'fields': ('neto_pagar', 'anulado', 'observaciones'),
-            'description': '⚠️ neto_pagar se calcula automáticamente (SSoT)'
+            'description': 'WARNING: neto_pagar se calcula automáticamente (SSoT)'
         }),
     )
     
     def get_readonly_fields(self, request, obj=None):
         """
-        ⚠️ v2.40: Nómina es INMUTABLE - Solo se puede anular, no editar.
+        WARNING: v2.40: Nómina es INMUTABLE - Solo se puede anular, no editar.
         Si ya existe (obj.pk), hacer todos los campos readonly excepto anulado y observaciones.
         """
         readonly = list(self.readonly_fields)
@@ -230,6 +231,6 @@ class DevengoAdmin(admin.ModelAdmin):
     
     def has_delete_permission(self, request, obj=None):
         """
-        ⚠️ v2.40: No permitir eliminar nóminas, solo anularlas.
+        WARNING: v2.40: No permitir eliminar nóminas, solo anularlas.
         """
         return False  # Usar anulado=True en lugar de eliminar

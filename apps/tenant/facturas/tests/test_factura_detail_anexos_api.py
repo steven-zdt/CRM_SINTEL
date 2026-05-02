@@ -1,15 +1,16 @@
 """
 Tests tenant-aware para Fase 4: Detalle de Factura + Anexos bajo demanda.
 
-⚠️ VALIDACIONES:
+# WARNING: VALIDACIONES:
 - Detalle retorna metadatos de anexos (no contenido)
 - Acciones detail para XML retornan HttpResponse con Content-Type correcto
 - Tamaños y tipos de contenido correctos
 - 200/204/404 esperados según existencia de anexos
 """
-from django_tenants.test.cases import TenantTestCase
 from django.urls import reverse
 from django.utils import timezone
+from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos
 
@@ -19,7 +20,13 @@ class FacturaDetailAnexosAPITests(TenantTestCase):
     
     def setUp(self):
         super().setUp()
-        Empresa.objects.create(razon_social="SINTEL", nit="901123299")
+        Empresa.objects.create(
+            razon_social="SINTEL",
+            nit="901123299",
+            dv="1",
+            direccion="Calle 123",
+            telefono="3001234567",
+        )
         self.f = Factura.objects.create(
             numero="DET-001",
             prefijo="DET",

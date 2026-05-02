@@ -3,10 +3,12 @@ Smoke test: Verifica que el enrutado de devengos funciona después del include e
 
 Test no invasivo que verifica que el endpoint responde correctamente.
 """
+from decimal import Decimal
+
 import pytest
 from django_tenants.utils import schema_context
-from apps.tenant.empleados.models import Empleado, Devengo
-from decimal import Decimal
+
+from apps.tenant.empleados.models import Devengo, Empleado
 
 
 @pytest.mark.django_db

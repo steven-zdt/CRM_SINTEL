@@ -1,7 +1,7 @@
 """
 Core Service Adapter para Empresa.
 
-⚠️ v2.30: Core API como orquestador único de la UI privada.
+# WARNING: v2.30: Core API como orquestador único de la UI privada.
 - Este adapter consume el Service Layer del dominio Empresa (apps/tenant/empresa/services)
 - Compone el DTO final incluyendo branding
 - NO reimplementa lógica del dominio; solo orquesta y compone respuestas
@@ -16,15 +16,16 @@ Uso:
         core_mailbox_delete,
     )
 """
-from typing import Dict, Any, Optional
+from typing import Any
+
 from django.core.files.uploadedfile import UploadedFile
 
 
-def core_empresa_get() -> Optional[Dict[str, Any]]:
+def core_empresa_get() -> dict[str, Any] | None:
     """
     Lee la empresa del tenant y retorna un DTO completo (incluyendo branding).
     
-    ⚠️ v2.30: Core API - Compone el DTO final para consumo de la UI.
+    # WARNING: v2.30: Core API - Compone el DTO final para consumo de la UI.
     Incluye branding dinámico.
     
     Returns:
@@ -59,11 +60,11 @@ def core_empresa_get() -> Optional[Dict[str, Any]]:
     return dto
 
 
-def core_empresa_update(data: Dict[str, Any], files: Optional[Dict[str, UploadedFile]] = None) -> Dict[str, Any]:
+def core_empresa_update(data: dict[str, Any], files: dict[str, UploadedFile] | None = None) -> dict[str, Any]:
     """
     Actualiza la empresa del tenant y retorna un DTO completo.
     
-    ⚠️ v2.30: Core API - Orquesta la actualización usando el Service Layer del dominio.
+    # WARNING: v2.30: Core API - Orquesta la actualización usando el Service Layer del dominio.
     Soporta actualización de campos básicos y logo (multipart).
     
     Args:
@@ -107,11 +108,11 @@ def core_empresa_update(data: Dict[str, Any], files: Optional[Dict[str, Uploaded
     return dto
 
 
-def core_mailbox_list(page: int = 1, page_size: int = 20) -> Dict[str, Any]:
+def core_mailbox_list(page: int = 1, page_size: int = 20) -> dict[str, Any]:
     """
     Lista configuraciones de buzones de correo (paginado).
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         page: Número de página (1-indexed)
@@ -125,11 +126,11 @@ def core_mailbox_list(page: int = 1, page_size: int = 20) -> Dict[str, Any]:
     return list_mailbox_configs(page=page, page_size=page_size)
 
 
-def core_mailbox_create(data: Dict[str, Any]) -> Dict[str, Any]:
+def core_mailbox_create(data: dict[str, Any]) -> dict[str, Any]:
     """
     Crea una configuración de buzón de correo.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         data: Diccionario con datos de la configuración
@@ -145,11 +146,11 @@ def core_mailbox_create(data: Dict[str, Any]) -> Dict[str, Any]:
     return create_mailbox_config(data)
 
 
-def core_mailbox_update(config_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+def core_mailbox_update(config_id: int, data: dict[str, Any]) -> dict[str, Any]:
     """
     Actualiza una configuración de buzón de correo.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         config_id: ID de la configuración
@@ -170,7 +171,7 @@ def core_mailbox_delete(config_id: int) -> None:
     """
     Elimina una configuración de buzón de correo.
     
-    ⚠️ v2.30: Core API - Delega 1:1 al Service Layer del dominio.
+    # WARNING: v2.30: Core API - Delega 1:1 al Service Layer del dominio.
     
     Args:
         config_id: ID de la configuración

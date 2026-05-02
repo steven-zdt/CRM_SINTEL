@@ -6,39 +6,39 @@ Comando de management para auditar todos los tenants y verificar que:
 4. El esquema PostgreSQL existe
 5. El acceso web funciona (simulación HTTP)
 """
+
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.test import Client as TestClient
-from django.db import connection
-from django_tenants.utils import schema_exists, get_public_schema_name
-from django.conf import settings
+from django_tenants.utils import get_public_schema_name, schema_exists
 
 from apps.public.tenants.models import Client, Domain
 
 
 class Command(BaseCommand):
-    help = 'Audita todos los tenants y verifica que tienen dominio activo y acceso web funcionando.'
+    help = "Audita todos los tenants y verifica que tienen dominio activo y acceso web funcionando."
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--schema',
+            "--schema",
             type=str,
-            help='Auditar solo un tenant específico por schema_name',
+            help="Auditar solo un tenant específico por schema_name",
         )
         parser.add_argument(
-            '--fix',
-            action='store_true',
-            help='Intentar corregir problemas encontrados automáticamente',
+            "--fix",
+            action="store_true",
+            help="Intentar corregir problemas encontrados automáticamente",
         )
         parser.add_argument(
-            '--test-web',
-            action='store_true',
-            help='Probar acceso web real (simula petición HTTP)',
+            "--test-web",
+            action="store_true",
+            help="Probar acceso web real (simula petición HTTP)",
         )
 
     def handle(self, *args, **options):
-        schema_filter = options.get('schema')
-        fix_issues = options.get('fix', False)
-        test_web = options.get('test_web', False)
+        schema_filter = options.get("schema")
+        fix_issues = options.get("fix", False)
+        test_web = options.get("test_web", False)
 
         self.stdout.write("=" * 80)
         self.stdout.write("🔍 AUDITORÍA DE DOMINIOS Y ACCESO WEB DE TENANTS")
@@ -50,12 +50,10 @@ class Command(BaseCommand):
             try:
                 tenants = [Client.objects.get(schema_name=schema_filter)]
             except Client.DoesNotExist:
-                self.stdout.write(
-                    self.style.ERROR(f"❌ Tenant '{schema_filter}' no encontrado.")
-                )
+                self.stdout.write(self.style.ERROR(f"❌ Tenant '{schema_filter}' no encontrado."))
                 return
         else:
-            tenants = Client.objects.all().order_by('schema_name')
+            tenants = Client.objects.all().order_by("schema_name")
 
         if not tenants:
             self.stdout.write(self.style.WARNING("⚠️  No se encontraron tenants para auditar."))
@@ -98,7 +96,9 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR(issue))
                 # No se puede corregir automáticamente (requiere migraciones)
             else:
-                self.stdout.write(self.style.SUCCESS(f"✅ Esquema PostgreSQL '{tenant.schema_name}' existe"))
+                self.stdout.write(
+                    self.style.SUCCESS(f"✅ Esquema PostgreSQL '{tenant.schema_name}' existe")
+                )
 
             # 3. Verificar dominios
             domains = Domain.objects.filter(tenant=tenant)
@@ -108,25 +108,21 @@ class Command(BaseCommand):
                 issue = "❌ NO tiene dominios asociados"
                 tenant_issues.append(issue)
                 self.stdout.write(self.style.ERROR(issue))
-                
+
                 if fix_issues:
                     # Intentar crear dominio principal
                     domain_name = f"{tenant.schema_name}.{settings.TENANT_DOMAIN_BASE}"
                     try:
-                        Domain.objects.create(
-                            domain=domain_name,
-                            tenant=tenant,
-                            is_primary=True
-                        )
+                        Domain.objects.create(domain=domain_name, tenant=tenant, is_primary=True)
                         tenant_fixed = True
                         self.stdout.write(
                             self.style.SUCCESS(f"   ✅ Corregido: Dominio '{domain_name}' creado")
                         )
-                        primary_domain = Domain.objects.filter(tenant=tenant, is_primary=True).first()
+                        primary_domain = Domain.objects.filter(
+                            tenant=tenant, is_primary=True
+                        ).first()
                     except Exception as e:
-                        self.stdout.write(
-                            self.style.ERROR(f"   ❌ Error al crear dominio: {e}")
-                        )
+                        self.stdout.write(self.style.ERROR(f"   ❌ Error al crear dominio: {e}"))
             else:
                 self.stdout.write(self.style.SUCCESS(f"✅ Tiene {domains.count()} dominio(s)"))
 
@@ -135,7 +131,7 @@ class Command(BaseCommand):
                 issue = "❌ NO tiene dominio principal (is_primary=True)"
                 tenant_issues.append(issue)
                 self.stdout.write(self.style.ERROR(issue))
-                
+
                 if fix_issues:
                     # Marcar el primer dominio como principal
                     first_domain = domains.first()
@@ -146,7 +142,9 @@ class Command(BaseCommand):
                         first_domain.save()
                         tenant_fixed = True
                         self.stdout.write(
-                            self.style.SUCCESS(f"   ✅ Corregido: '{first_domain.domain}' marcado como principal")
+                            self.style.SUCCESS(
+                                f"   ✅ Corregido: '{first_domain.domain}' marcado como principal"
+                            )
                         )
                         primary_domain = first_domain
             else:
@@ -171,11 +169,11 @@ class Command(BaseCommand):
                 try:
                     # Simular petición HTTP al dominio del tenant
                     test_client = TestClient()
-                    response = test_client.get('/', HTTP_HOST=primary_domain.domain, follow=False)
-                    
+                    response = test_client.get("/", HTTP_HOST=primary_domain.domain, follow=False)
+
                     # Verificar que la respuesta no sea 404 (tenant no encontrado)
                     if response.status_code == 404:
-                        issue = f"❌ Acceso web falla: HTTP 404 (tenant no encontrado por django-tenants)"
+                        issue = "❌ Acceso web falla: HTTP 404 (tenant no encontrado por django-tenants)"
                         tenant_issues.append(issue)
                         self.stdout.write(self.style.ERROR(issue))
                     elif response.status_code in [200, 302, 301]:
@@ -211,19 +209,15 @@ class Command(BaseCommand):
         self.stdout.write("📊 RESUMEN DE AUDITORÍA")
         self.stdout.write("=" * 80)
         self.stdout.write(f"Total de tenants auditados: {total_tenants}")
-        self.stdout.write(
-            self.style.SUCCESS(f"✅ Tenants OK: {tenants_ok}")
-        )
-        self.stdout.write(
-            self.style.ERROR(f"❌ Tenants con problemas: {tenants_with_issues}")
-        )
+        self.stdout.write(self.style.SUCCESS(f"✅ Tenants OK: {tenants_ok}"))
+        self.stdout.write(self.style.ERROR(f"❌ Tenants con problemas: {tenants_with_issues}"))
 
         if issues_found:
             self.stdout.write("")
             self.stdout.write("🔍 PROBLEMAS ENCONTRADOS:")
             for schema, issue in issues_found:
                 self.stdout.write(f"   [{schema}] {issue}")
-            
+
             if not fix_issues:
                 self.stdout.write("")
                 self.stdout.write(

@@ -1,16 +1,17 @@
 """
 Gestión del estado del buzón IMAP para procesamiento incremental.
 
-⚠️ MÓDULO PURO: Solo modelos Django, sin dependencias de Celery, core, o maildigester.
-⚠️ SEGURO PARA URLS: Puede importarse desde cualquier lugar sin crear ciclos.
+# WARNING: MÓDULO PURO: Solo modelos Django, sin dependencias de Celery, core, o maildigester.
+# WARNING: SEGURO PARA URLS: Puede importarse desde cualquier lugar sin crear ciclos.
 
 Este módulo gestiona el estado del procesamiento IMAP usando UIDs para evitar
 reprocesar correos ya examinados.
 """
 from __future__ import annotations
-from typing import Optional
+
 from django.db import transaction
 from django.utils import timezone
+
 from apps.tenant.facturas.models import MailInboxState
 
 
@@ -18,7 +19,7 @@ def get_or_create_inbox_state(config_id: int) -> MailInboxState:
     """
     Obtiene o crea el estado del buzón para una configuración.
     
-    ⚠️ SSoT: Un estado por configuración (unique_together).
+    # WARNING: SSoT: Un estado por configuración (unique_together).
     
     Args:
         config_id: ID de MailInboxConfig
@@ -47,11 +48,11 @@ def get_or_create_inbox_state(config_id: int) -> MailInboxState:
     return state
 
 
-def update_inbox_state(config_id: int, last_uid: Optional[int], messages_processed: int) -> None:
+def update_inbox_state(config_id: int, last_uid: int | None, messages_processed: int) -> None:
     """
     Actualiza el estado del buzón después de procesar un lote.
     
-    ⚠️ ATOMICIDAD: Usa transaction.atomic() para evitar condiciones de carrera.
+    # WARNING: ATOMICIDAD: Usa transaction.atomic() para evitar condiciones de carrera.
     
     Args:
         config_id: ID de MailInboxConfig
@@ -80,7 +81,7 @@ def update_inbox_state(config_id: int, last_uid: Optional[int], messages_process
                 state.save(update_fields=["last_seen_uid", "total_processed", "last_run_at", "updated_at"])
 
 
-def get_inbox_state(config_id: int) -> Optional[MailInboxState]:
+def get_inbox_state(config_id: int) -> MailInboxState | None:
     """
     Obtiene el estado del buzón para una configuración.
     

@@ -1,7 +1,7 @@
 """
 Servicios de dominio para Empleados v2.60.
 
-⚠️ SINTEL v2.60: Sincronización Arquitectónica
+WARNING: SINTEL v2.60: Sincronización Arquitectónica
 - Aislamiento SSoT: Todos los modelos tienen empresa = ForeignKey(Empresa, on_delete=PROTECT) e índice obligatorio
 - Campos Explícitos: LIST_FIELDS y DETAIL_FIELDS como tuplas (PROHIBIDO __all__)
 - QuerySets Optimizados: qs_list() y qs_detail() usando .only(*FIELDS) y select_related()
@@ -14,24 +14,26 @@ PRINCIPIOS:
 - Zero Trust: Validación estricta de pertenencia al tenant.
 """
 
-from django.db.models import Sum, Count, Q, Exists, OuterRef, BooleanField
-from django.utils import timezone
+import logging
 from decimal import Decimal
+
 from django.apps import apps
 from django.db import transaction
+from django.db.models import Count, Exists, OuterRef, Q, Sum
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-import logging
-from .models import Empleado, Devengo, Contrato
+
+from .models import Contrato, Devengo, Empleado
 
 logger = logging.getLogger(__name__)
 
 # ==============================================================================
 # 1. QUERYSETS OPTIMIZADOS (Service Layer Pattern) - v2.60
-# ⚠️ SINTEL v2.60: Campos explícitos como tuplas (PROHIBIDO __all__)
+# WARNING: SINTEL v2.60: Campos explícitos como tuplas (PROHIBIDO __all__)
 # Usados por los ViewSets para evitar N+1 queries y cargar solo lo necesario.
 # ==============================================================================
 
-# ⚠️ v2.60: Constantes de campos para LISTAS (SSoT: Single Source of Truth)
+# WARNING: v2.60: Constantes de campos para LISTAS (SSoT: Single Source of Truth)
 # Campos estrictamente necesarios para tablas Tabulator (mínima exposición de datos)
 EMPLEADO_LIST_FIELDS = (
     'id', 'tipo_documento', 'numero_documento', 'primer_nombre', 'primer_apellido',
@@ -52,7 +54,7 @@ DEVENGO_LIST_FIELDS = (
     'neto_pagar', 'anulado', 'empresa_id'
 )
 
-# ⚠️ v2.60: Constantes de campos para DETALLE (campos completos para edición)
+# WARNING: v2.60: Constantes de campos para DETALLE (campos completos para edición)
 # Incluye todos los campos necesarios para formularios de edición
 EMPLEADO_DETAIL_FIELDS = (
     'id', 'empresa', 'empresa__id', 'tipo_documento', 'numero_documento',
@@ -79,7 +81,7 @@ DEVENGO_DETAIL_FIELDS = (
 
 def qs_empleado_list(empresa_id, search=None):
     """
-    ⚠️ v2.60: QuerySet optimizado para LISTAR Empleados (tabla Tabulator).
+    WARNING: v2.60: QuerySet optimizado para LISTAR Empleados (tabla Tabulator).
     Campos estrictamente necesarios para listado (mínima exposición de datos).
     Anota estados secuenciales (Contrato y Nómina) para lógica de botones en Tabulator.
     
@@ -95,17 +97,17 @@ def qs_empleado_list(empresa_id, search=None):
         empleado_id=OuterRef('pk'),
         activo=True,
         estado='ACTIVO',
-        empresa_id=empresa_id  # ⚠️ v2.60: Zero Trust
+        empresa_id=empresa_id  # WARNING: v2.60: Zero Trust
     )
     
     has_payroll = Devengo.objects.filter(
         empleado_id=OuterRef('pk'),
         anulado=False,
-        empresa_id=empresa_id  # ⚠️ v2.60: Zero Trust
+        empresa_id=empresa_id  # WARNING: v2.60: Zero Trust
     )
 
-    # ⚠️ Zero Trust: Filtrar por empresa_id (SSoT)
-    # ⚠️ Performance: .only(*EMPLEADO_LIST_FIELDS) para cargar solo campos necesarios
+    # WARNING: Zero Trust: Filtrar por empresa_id (SSoT)
+    # WARNING: Performance: .only(*EMPLEADO_LIST_FIELDS) para cargar solo campos necesarios
     # Anotación de campos booleanos para control de UI en la columna de acciones
     qs = Empleado.objects.filter(empresa_id=empresa_id).annotate(
         tiene_contrato_activo=Exists(has_contract),
@@ -122,13 +124,13 @@ def qs_empleado_list(empresa_id, search=None):
             Q(segundo_apellido__icontains=search)
         )
     
-    # ⚠️ v2.40: Ordenamiento explícito para evitar UnorderedObjectListWarning
+    # WARNING: v2.40: Ordenamiento explícito para evitar UnorderedObjectListWarning
     return qs.order_by('-fecha_ingreso', 'id')
 
 
 def qs_empleado_detail(empresa_id, empleado_id):
     """
-    ⚠️ v2.60: QuerySet optimizado para DETALLE de Empleado (formulario de edición).
+    WARNING: v2.60: QuerySet optimizado para DETALLE de Empleado (formulario de edición).
     Campos completos necesarios para edición.
     
     Args:
@@ -141,9 +143,9 @@ def qs_empleado_detail(empresa_id, empleado_id):
     Raises:
         Empleado.DoesNotExist: Si el empleado no existe o no pertenece al tenant
     """
-    # ⚠️ Zero Trust: Filtrar por empresa_id (SSoT)
-    # ⚠️ Performance: select_related('empresa') para evitar N+1 queries
-    # ⚠️ Performance: .only(*EMPLEADO_DETAIL_FIELDS) para cargar solo campos necesarios
+    # WARNING: Zero Trust: Filtrar por empresa_id (SSoT)
+    # WARNING: Performance: select_related('empresa') para evitar N+1 queries
+    # WARNING: Performance: .only(*EMPLEADO_DETAIL_FIELDS) para cargar solo campos necesarios
     return Empleado.objects.filter(empresa_id=empresa_id, pk=empleado_id)\
         .select_related('empresa')\
         .only(*EMPLEADO_DETAIL_FIELDS)\
@@ -152,7 +154,7 @@ def qs_empleado_detail(empresa_id, empleado_id):
 
 def qs_contrato_list(empresa_id, search=None, empleado_id=None):
     """
-    ⚠️ v2.60: QuerySet optimizado para LISTAR Contratos (tabla Tabulator).
+    WARNING: v2.60: QuerySet optimizado para LISTAR Contratos (tabla Tabulator).
     Campos estrictamente necesarios para listado (mínima exposición de datos).
     
     Args:
@@ -163,9 +165,9 @@ def qs_contrato_list(empresa_id, search=None, empleado_id=None):
     Returns:
         QuerySet: Optimizado con .only(*CONTRATO_LIST_FIELDS) y select_related('empleado')
     """
-    # ⚠️ Zero Trust: Filtrar por empresa_id (SSoT)
-    # ⚠️ Performance: select_related('empleado') para evitar N+1 queries
-    # ⚠️ Performance: .only(*CONTRATO_LIST_FIELDS) para cargar solo campos necesarios
+    # WARNING: Zero Trust: Filtrar por empresa_id (SSoT)
+    # WARNING: Performance: select_related('empleado') para evitar N+1 queries
+    # WARNING: Performance: .only(*CONTRATO_LIST_FIELDS) para cargar solo campos necesarios
     qs = Contrato.objects.filter(empresa_id=empresa_id)\
         .select_related('empleado')\
         .only(*CONTRATO_LIST_FIELDS)
@@ -185,7 +187,7 @@ def qs_contrato_list(empresa_id, search=None, empleado_id=None):
 
 def qs_contrato_detail(empresa_id, contrato_id):
     """
-    ⚠️ v2.60: QuerySet optimizado para DETALLE de Contrato (formulario de edición).
+    WARNING: v2.60: QuerySet optimizado para DETALLE de Contrato (formulario de edición).
     Campos completos necesarios para edición.
     
     Args:
@@ -198,9 +200,9 @@ def qs_contrato_detail(empresa_id, contrato_id):
     Raises:
         Contrato.DoesNotExist: Si el contrato no existe o no pertenece al tenant
     """
-    # ⚠️ Zero Trust: Filtrar por empresa_id (SSoT)
-    # ⚠️ Performance: select_related('empresa', 'empleado') para evitar N+1 queries
-    # ⚠️ Performance: .only(*CONTRATO_DETAIL_FIELDS) para cargar solo campos necesarios
+    # WARNING: Zero Trust: Filtrar por empresa_id (SSoT)
+    # WARNING: Performance: select_related('empresa', 'empleado') para evitar N+1 queries
+    # WARNING: Performance: .only(*CONTRATO_DETAIL_FIELDS) para cargar solo campos necesarios
     return Contrato.objects.filter(empresa_id=empresa_id, pk=contrato_id)\
         .select_related('empresa', 'empleado')\
         .only(*CONTRATO_DETAIL_FIELDS)\
@@ -209,7 +211,7 @@ def qs_contrato_detail(empresa_id, contrato_id):
 
 def qs_devengo_list(empresa_id, search=None, empleado_id=None, periodo_mes=None):
     """
-    ⚠️ v2.60: QuerySet optimizado para LISTAR Devengos/Nóminas (tabla Tabulator).
+    WARNING: v2.60: QuerySet optimizado para LISTAR Devengos/Nóminas (tabla Tabulator).
     Campos estrictamente necesarios para listado (mínima exposición de datos).
     
     Args:
@@ -221,9 +223,9 @@ def qs_devengo_list(empresa_id, search=None, empleado_id=None, periodo_mes=None)
     Returns:
         QuerySet: Optimizado con .only(*DEVENGO_LIST_FIELDS) y select_related('empleado', 'contrato')
     """
-    # ⚠️ Zero Trust: Filtrar por empresa_id (SSoT)
-    # ⚠️ Performance: select_related('empleado', 'contrato') para evitar N+1 queries
-    # ⚠️ Performance: .only(*DEVENGO_LIST_FIELDS) para cargar solo campos necesarios
+    # WARNING: Zero Trust: Filtrar por empresa_id (SSoT)
+    # WARNING: Performance: select_related('empleado', 'contrato') para evitar N+1 queries
+    # WARNING: Performance: .only(*DEVENGO_LIST_FIELDS) para cargar solo campos necesarios
     qs = Devengo.objects.filter(empresa_id=empresa_id)\
         .select_related('empleado', 'contrato')\
         .only(*DEVENGO_LIST_FIELDS)
@@ -246,7 +248,7 @@ def qs_devengo_list(empresa_id, search=None, empleado_id=None, periodo_mes=None)
 
 def qs_historial_list(empleado_id, empresa_id, search=None):
     """
-    ⚠️ v2.60: QuerySet optimizado para HISTORIAL de Nóminas de un empleado específico.
+    WARNING: v2.60: QuerySet optimizado para HISTORIAL de Nóminas de un empleado específico.
     Campos estrictamente necesarios para listado en el historial (mínima exposición de datos).
     
     Args:
@@ -258,9 +260,9 @@ def qs_historial_list(empleado_id, empresa_id, search=None):
         QuerySet: Optimizado con .only(*DEVENGO_LIST_FIELDS) y select_related('empleado', 'contrato')
         Ordenado por fecha de pago descendente (más reciente primero)
     """
-    # ⚠️ Zero Trust: Filtrar por empresa_id y empleado_id (SSoT)
-    # ⚠️ Performance: select_related('empleado', 'contrato') para evitar N+1 queries
-    # ⚠️ Performance: .only(*DEVENGO_LIST_FIELDS) para cargar solo campos necesarios
+    # WARNING: Zero Trust: Filtrar por empresa_id y empleado_id (SSoT)
+    # WARNING: Performance: select_related('empleado', 'contrato') para evitar N+1 queries
+    # WARNING: Performance: .only(*DEVENGO_LIST_FIELDS) para cargar solo campos necesarios
     qs = Devengo.objects.filter(
         empresa_id=empresa_id,
         empleado_id=empleado_id
@@ -278,7 +280,7 @@ def qs_historial_list(empleado_id, empresa_id, search=None):
 
 def qs_devengo_detail(empresa_id, devengo_id):
     """
-    ⚠️ v2.60: QuerySet optimizado para DETALLE de Devengo/Nómina (formulario de edición).
+    WARNING: v2.60: QuerySet optimizado para DETALLE de Devengo/Nómina (formulario de edición).
     Campos completos necesarios para edición.
     
     Args:
@@ -291,9 +293,9 @@ def qs_devengo_detail(empresa_id, devengo_id):
     Raises:
         Devengo.DoesNotExist: Si el devengo no existe o no pertenece al tenant
     """
-    # ⚠️ Zero Trust: Filtrar por empresa_id (SSoT)
-    # ⚠️ Performance: select_related('empresa', 'empleado', 'contrato') para evitar N+1 queries
-    # ⚠️ Performance: .only(*DEVENGO_DETAIL_FIELDS) para cargar solo campos necesarios
+    # WARNING: Zero Trust: Filtrar por empresa_id (SSoT)
+    # WARNING: Performance: select_related('empresa', 'empleado', 'contrato') para evitar N+1 queries
+    # WARNING: Performance: .only(*DEVENGO_DETAIL_FIELDS) para cargar solo campos necesarios
     return Devengo.objects.filter(empresa_id=empresa_id, pk=devengo_id)\
         .select_related('empresa', 'empleado', 'contrato')\
         .only(*DEVENGO_DETAIL_FIELDS)\
@@ -301,7 +303,7 @@ def qs_devengo_detail(empresa_id, devengo_id):
 
 def get_nomina_summary(empresa_id):
     """
-    ⚠️ v2.60: Calcula analítica para el panel superior.
+    WARNING: v2.60: Calcula analítica para el panel superior.
     Usa empresa_id para Zero Trust.
     
     Args:
@@ -313,10 +315,10 @@ def get_nomina_summary(empresa_id):
     hoy = timezone.now().date()
     mes_actual = hoy.strftime("%Y-%m")
     
-    # ⚠️ v2.60: Zero Trust - Filtrar por empresa_id directamente
+    # WARNING: v2.60: Zero Trust - Filtrar por empresa_id directamente
     # Excluir devengos anulados para mantener integridad contable
     qs_mes = Devengo.objects.filter(
-        empresa_id=empresa_id,  # ⚠️ v2.60: Zero Trust
+        empresa_id=empresa_id,  # WARNING: v2.60: Zero Trust
         periodo_mes=mes_actual,
         anulado=False
     )
@@ -340,7 +342,7 @@ def gestionar_contrato_service(empleado, data, contrato_existente=None):
     Fase 2: Crea o actualiza el contrato de un empleado.
     Al activarse, habilitará el botón 'Registrar Nómina' en Tabulator.
     
-    ⚠️ v2.60: El modelo Contrato tiene campo empresa (SSoT).
+    WARNING: v2.60: El modelo Contrato tiene campo empresa (SSoT).
     La empresa se sincroniza desde empleado.empresa en el método save() del modelo.
     
     Args:
@@ -351,11 +353,11 @@ def gestionar_contrato_service(empleado, data, contrato_existente=None):
     Returns:
         Contrato: Instancia creada o actualizada
     """
-    # ⚠️ v2.60: SSoT - Asignar empresa desde empleado si no viene en data
+    # WARNING: v2.60: SSoT - Asignar empresa desde empleado si no viene en data
     if 'empresa' not in data:
         data['empresa'] = empleado.empresa
     
-    # ⚠️ Sincronizar el campo legacy 'activo' con el nuevo 'estado'
+    # WARNING: Sincronizar el campo legacy 'activo' con el nuevo 'estado'
     if 'estado' in data:
         data['activo'] = (data['estado'] == 'ACTIVO')
     
@@ -368,7 +370,7 @@ def gestionar_contrato_service(empleado, data, contrato_existente=None):
         qs_previos = Contrato.objects.filter(
             empleado=empleado, 
             estado='ACTIVO',
-            empresa_id=empleado.empresa_id  # ⚠️ v2.60: Zero Trust
+            empresa_id=empleado.empresa_id  # WARNING: v2.60: Zero Trust
         )
         
         # Si es una actualización, excluimos el contrato actual de la desactivación masiva
@@ -399,16 +401,41 @@ def gestionar_contrato_service(empleado, data, contrato_existente=None):
             **data
         )
 
+
+def preparar_datos_contrato(data):
+    """
+    Normaliza payload de contrato para mantener validaciones y defaults en un solo lugar.
+    """
+    prepared_data = dict(data)
+
+    if 'fecha_fin' in prepared_data and (prepared_data['fecha_fin'] == '' or prepared_data['fecha_fin'] is None):
+        prepared_data['fecha_fin'] = None
+
+    if 'auxilio_transporte' not in prepared_data or prepared_data['auxilio_transporte'] is None:
+        prepared_data['auxilio_transporte'] = Decimal('0.00')
+    elif isinstance(prepared_data['auxilio_transporte'], str):
+        prepared_data['auxilio_transporte'] = Decimal(prepared_data['auxilio_transporte'] or '0.00')
+
+    if 'prestamos_empresa' not in prepared_data or prepared_data['prestamos_empresa'] is None:
+        prepared_data['prestamos_empresa'] = Decimal('0.00')
+    elif isinstance(prepared_data['prestamos_empresa'], str):
+        prepared_data['prestamos_empresa'] = Decimal(prepared_data['prestamos_empresa'] or '0.00')
+
+    if 'estado' not in prepared_data or prepared_data['estado'] is None:
+        prepared_data['estado'] = 'ACTIVO'
+
+    return prepared_data
+
 @transaction.atomic
 def registrar_devengo_nomina_service(empleado, data):
     """
     Fase 3: Registra un pago de nómina.
     Requiere validación de contrato previo para habilitar el historial.
     
-    ⚠️ v2.60: El modelo Devengo tiene campo empresa (SSoT).
+    WARNING: v2.60: El modelo Devengo tiene campo empresa (SSoT).
     La empresa se sincroniza desde empleado.empresa en el método save() del modelo.
     """
-    # ⚠️ v2.60: SSoT - Asignar empresa desde empleado si no viene en data
+    # WARNING: v2.60: SSoT - Asignar empresa desde empleado si no viene en data
     if 'empresa' not in data:
         data['empresa'] = empleado.empresa
     
@@ -416,7 +443,7 @@ def registrar_devengo_nomina_service(empleado, data):
     if not empleado.contratos.filter(
         activo=True, 
         estado='ACTIVO',
-        empresa_id=empleado.empresa_id  # ⚠️ v2.60: Zero Trust
+        empresa_id=empleado.empresa_id  # WARNING: v2.60: Zero Trust
     ).exists():
         raise ValidationError("No se puede registrar nómina: El empleado no tiene un contrato activo.")
     
@@ -428,7 +455,7 @@ def registrar_devengo_nomina_service(empleado, data):
 
 def anular_devengo_service(devengo_id, empresa_id):
     """
-    ⚠️ v2.60: Lógica de inmutabilidad: Marca un desprendible como anulado.
+    WARNING: v2.60: Lógica de inmutabilidad: Marca un desprendible como anulado.
     Usa empresa_id para Zero Trust.
     
     Args:
@@ -445,7 +472,7 @@ def anular_devengo_service(devengo_id, empresa_id):
     with transaction.atomic():
         devengo = Devengo.objects.select_for_update().get(
             id=devengo_id, 
-            empresa_id=empresa_id  # ⚠️ v2.60: Zero Trust
+            empresa_id=empresa_id  # WARNING: v2.60: Zero Trust
         )
         
         if devengo.anulado:
@@ -458,7 +485,7 @@ def anular_devengo_service(devengo_id, empresa_id):
 
 def validar_limite_dias_mes(empleado_id, periodo_mes, nuevos_dias, empresa_id, devengo_id_excluir=None):
     """
-    ⚠️ v2.60: Zero Trust - Valida que la suma de todos los pagos del mes no exceda 31 días.
+    WARNING: v2.60: Zero Trust - Valida que la suma de todos los pagos del mes no exceda 31 días.
     
     Args:
         empleado_id: ID del empleado
@@ -515,10 +542,10 @@ def validar_limite_dias_mes(empleado_id, periodo_mes, nuevos_dias, empresa_id, d
 
 def eliminar_empleado_retirado(empleado):
     """
-    ⚠️ v2.40: Eliminación en cascada de empleado RETIRADO y todas sus dependencias.
+    WARNING: v2.40: Eliminación en cascada de empleado RETIRADO y todas sus dependencias.
     Elimina físicamente nóminas y contratos para liberar FK protegidas.
     """
-    # ⚠️ v2.40: Validación estricta - Solo permitir eliminación si está RETIRADO
+    # WARNING: v2.40: Validación estricta - Solo permitir eliminación si está RETIRADO
     if empleado.estado != 'RETIRADO':
         raise ValidationError(
             f'Solo se pueden eliminar empleados con estado RETIRADO. Estado actual: {empleado.estado}'
@@ -547,7 +574,7 @@ def eliminar_empleado_retirado(empleado):
 
 def cancelar_contratos_activos_al_retirar(empleado):
     """
-    ⚠️ v2.40: Cancela contratos activos cuando un empleado pasa a estado RETIRADO.
+    WARNING: v2.40: Cancela contratos activos cuando un empleado pasa a estado RETIRADO.
     """
     with transaction.atomic():
         contratos_activos = empleado.contratos.filter(estado='ACTIVO')
@@ -565,7 +592,7 @@ def cancelar_contratos_activos_al_retirar(empleado):
 
 def calcular_nomina_colombia(contrato, dias_laborados, horas_trabajadas=None, otros_devengos=0, prestamos=0, descuentos_operativos=0, empresa_id=None):
     """
-    ⚠️ v2.60: Función única fuente de verdad para cálculo de nómina colombiana.
+    WARNING: v2.60: Función única fuente de verdad para cálculo de nómina colombiana.
     Cumple con normativa laboral colombiana (Ley 2101 de 2021 - 46 horas semanales).
     Base de cálculo: 30 días mensuales.
     
@@ -617,7 +644,7 @@ def calcular_nomina_colombia(contrato, dias_laborados, horas_trabajadas=None, ot
 
 def calcular_liquidacion_nomina(contrato, dias_laborados, horas_trabajadas=None, otros_devengos=0, prestamos=0, descuentos_operativos=0, empresa_id=None):
     """
-    ⚠️ v2.60: Función única fuente de verdad para cálculo de liquidación de nómina.
+    WARNING: v2.60: Función única fuente de verdad para cálculo de liquidación de nómina.
     Cumple con normativa laboral colombiana (Ley 2101 de 2021 - 46 horas semanales).
     
     Args:
@@ -663,21 +690,20 @@ def calcular_liquidacion_nomina(contrato, dias_laborados, horas_trabajadas=None,
         ValueError: Si el contrato no está ACTIVO o los días/horas son inválidos
         ValidationError: Si el contrato no pertenece a la empresa especificada (Zero Trust)
     """
-    from apps.tenant.empleados.models import Contrato
     from rest_framework.exceptions import ValidationError
     
-    # ⚠️ Zero Trust: Validar que el contrato pertenezca a la empresa especificada
+    # WARNING: Zero Trust: Validar que el contrato pertenezca a la empresa especificada
     if empresa_id is not None:
         if contrato.empresa_id != empresa_id:
             raise ValidationError({
                 'contrato': f'El contrato no pertenece a la empresa especificada (empresa_id: {empresa_id}).'
             })
     
-    # ⚠️ Validación: Contrato debe estar ACTIVO
+    # WARNING: Validación: Contrato debe estar ACTIVO
     if contrato.estado != 'ACTIVO' or not contrato.activo:
         raise ValueError("No se puede calcular nómina para un contrato inactivo")
     
-    # ⚠️ Validación: Días laborados (0.5-30) - Normalizar a Decimal
+    # WARNING: Validación: Días laborados (0.5-30) - Normalizar a Decimal
     try:
         dias_laborados = Decimal(str(dias_laborados))
     except (ValueError, TypeError):
@@ -686,7 +712,7 @@ def calcular_liquidacion_nomina(contrato, dias_laborados, horas_trabajadas=None,
     if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('30'):
         raise ValueError("Los días laborados deben estar entre 0.5 y 30")
     
-    # ⚠️ Ley 2101 de 2021: 46 horas semanales = 200 horas mensuales (46 * 4.33 ≈ 200)
+    # WARNING: Ley 2101 de 2021: 46 horas semanales = 200 horas mensuales (46 * 4.33 ≈ 200)
     HORAS_MENSUALES = Decimal('200')  # Jornada de 46 horas semanales
     DIAS_MENSUALES = Decimal('30')   # Mes estándar de 30 días
     
@@ -712,7 +738,7 @@ def calcular_liquidacion_nomina(contrato, dias_laborados, horas_trabajadas=None,
             auxilio_transporte = auxilio_mensual * factor
     
     # 3. CÁLCULO DE IBC (Ingreso Base de Cotización)
-    # ⚠️ CRÍTICO: IBC = SOLO Salario Base (NO incluye auxilio de transporte)
+    # WARNING: CRÍTICO: IBC = SOLO Salario Base (NO incluye auxilio de transporte)
     ibc = salario_base
     
     # 4. DEDUCCIONES DE LEY (Salud y Pensión - 4% cada una)
@@ -741,7 +767,7 @@ def calcular_liquidacion_nomina(contrato, dias_laborados, horas_trabajadas=None,
     return {
         "salario_base": str(salario_base.quantize(Decimal('0.01'))),
         "auxilio_transporte": str(auxilio_transporte.quantize(Decimal('0.01'))),
-        "ibc": str(ibc.quantize(Decimal('0.01'))),  # ⚠️ IBC para referencia
+        "ibc": str(ibc.quantize(Decimal('0.01'))),  # WARNING: IBC para referencia
         "salud_empleado": str(salud_empleado.quantize(Decimal('0.01'))),
         "pension_empleado": str(pension_empleado.quantize(Decimal('0.01'))),
         "neto_pagar": str(neto_pagar.quantize(Decimal('0.01')))
@@ -750,7 +776,7 @@ def calcular_liquidacion_nomina(contrato, dias_laborados, horas_trabajadas=None,
 
 def calcular_devengo_proporcional(contrato, dias_laborados, otros_devengos=0, prestamos=0, descuentos_operativos=0):
     """
-    ⚠️ DEPRECATED v2.60: Usar calcular_liquidacion_nomina() en su lugar.
+    WARNING: DEPRECATED v2.60: Usar calcular_liquidacion_nomina() en su lugar.
     Mantenido para compatibilidad hacia atrás.
     """
     resultado = calcular_liquidacion_nomina(
@@ -792,7 +818,7 @@ def calcular_nomina_dinamica(contrato, dias_laborados, horas_extras=0, otros_dev
         auxilio = (Decimal(contrato.auxilio_transporte) / 30) * Decimal(dias_laborados)
     
     # 4. Deducciones de Ley (Salud y Pensión 4% c/u)
-    # ⚠️ REGLA: 0% si es PRESTACION, 4% si es Laboral
+    # WARNING: REGLA: 0% si es PRESTACION, 4% si es Laboral
     salud = pension = Decimal(0)
     if contrato.tipo in ['FIJO', 'INDEF', 'OBRA']:
         salud = salario_base * Decimal('0.04')
@@ -806,3 +832,357 @@ def calcular_nomina_dinamica(contrato, dias_laborados, horas_extras=0, otros_dev
         "pension_empleado": str(pension.quantize(Decimal('0.01'))),
         "neto_pagar": str(neto.quantize(Decimal('0.01')))
     }
+
+
+class EmpleadoServiceMixin:
+    """Service mixin for Empleado read/query orchestration."""
+
+    def service_get_empresa_id(self, request):
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            empresa_id = getattr(user, "empresa_id", None)
+            if empresa_id:
+                return empresa_id
+            empresa_obj = getattr(user, "empresa", None)
+            if empresa_obj and getattr(empresa_obj, "id", None):
+                return empresa_obj.id
+
+        Empresa = apps.get_model("empresa", "Empresa")
+        empresa = Empresa.objects.only("id").first()
+        return empresa.id if empresa else None
+
+    def service_empleado_get_queryset(self, request, action, empleado_id=None):
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            return Empleado.objects.none()
+
+        search = request.query_params.get("search")
+        if action == "list":
+            return qs_empleado_list(empresa_id, search=search)
+        if action == "retrieve" and empleado_id:
+            return qs_empleado_detail(empresa_id, empleado_id)
+        return Empleado.objects.filter(empresa_id=empresa_id).only(*EMPLEADO_LIST_FIELDS).order_by("-fecha_ingreso", "id")
+
+    def service_get_nomina_summary(self, request):
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            return None
+        return get_nomina_summary(empresa_id)
+
+    def service_crear_empleado(self, serializer):
+        Empresa = apps.get_model("empresa", "Empresa")
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            raise ValueError("No se encontró una empresa. Debe crear una empresa antes de crear empleados.")
+        return serializer.save(empresa=empresa)
+
+    def service_actualizar_empleado(self, serializer):
+        instance = serializer.instance
+        nuevo_estado = serializer.validated_data.get('estado', instance.estado)
+        estado_anterior = instance.estado
+
+        empleado = serializer.save()
+
+        if estado_anterior != 'RETIRADO' and nuevo_estado == 'RETIRADO':
+            contratos_cancelados = cancelar_contratos_activos_al_retirar(empleado)
+            if contratos_cancelados > 0:
+                logger.info(
+                    f"[EmpleadoServiceMixin] Empleado {empleado.id} retirado. "
+                    f"Se cancelaron {contratos_cancelados} contrato(s) activo(s)."
+                )
+
+        return empleado
+
+    def service_cancelar_contratos_activos_al_retirar(self, empleado):
+        return cancelar_contratos_activos_al_retirar(empleado)
+
+    def service_eliminar_empleado_retirado(self, empleado):
+        return eliminar_empleado_retirado(empleado)
+
+
+class ContratoServiceMixin:
+    """Service mixin for Contrato read/query orchestration."""
+
+    def service_get_empresa_id(self, request):
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            empresa_id = getattr(user, "empresa_id", None)
+            if empresa_id:
+                return empresa_id
+            empresa_obj = getattr(user, "empresa", None)
+            if empresa_obj and getattr(empresa_obj, "id", None):
+                return empresa_obj.id
+
+        Empresa = apps.get_model("empresa", "Empresa")
+        empresa = Empresa.objects.only("id").first()
+        return empresa.id if empresa else None
+
+    def service_contrato_get_queryset(self, request, action, contrato_id=None):
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            return Contrato.objects.none()
+
+        search = request.query_params.get("search")
+        empleado_id = request.query_params.get("empleado")
+        if action == "list":
+            return qs_contrato_list(empresa_id, search=search, empleado_id=empleado_id)
+        if action == "retrieve" and contrato_id:
+            return qs_contrato_detail(empresa_id, contrato_id)
+        return Contrato.objects.filter(empresa_id=empresa_id).only(*CONTRATO_LIST_FIELDS).order_by("-fecha_inicio", "id")
+
+    def service_gestionar_contrato(self, empleado, data, contrato_existente=None):
+        return gestionar_contrato_service(empleado, data, contrato_existente=contrato_existente)
+
+    def service_preparar_datos_contrato(self, data):
+        return preparar_datos_contrato(data)
+
+
+class DevengoServiceMixin:
+    """Service mixin for Devengo read/query orchestration."""
+
+    def service_get_empresa_id(self, request):
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            empresa_id = getattr(user, "empresa_id", None)
+            if empresa_id:
+                return empresa_id
+            empresa_obj = getattr(user, "empresa", None)
+            if empresa_obj and getattr(empresa_obj, "id", None):
+                return empresa_obj.id
+
+        Empresa = apps.get_model("empresa", "Empresa")
+        empresa = Empresa.objects.only("id").first()
+        return empresa.id if empresa else None
+
+    def service_devengo_get_queryset(self, request, action, devengo_id=None):
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            return Devengo.objects.none()
+
+        search = request.query_params.get("search")
+        empleado_id = request.query_params.get("empleado")
+        periodo_mes = request.query_params.get("periodo_mes")
+        if empleado_id:
+            try:
+                empleado_id = int(empleado_id)
+            except (TypeError, ValueError):
+                empleado_id = None
+
+        if action == "list":
+            return qs_devengo_list(empresa_id, search=search, empleado_id=empleado_id, periodo_mes=periodo_mes)
+        if action == "retrieve" and devengo_id:
+            return qs_devengo_detail(empresa_id, devengo_id)
+        return Devengo.objects.filter(empresa_id=empresa_id).only(*DEVENGO_LIST_FIELDS).order_by("-fecha_pago", "-periodo_mes", "id")
+
+    def service_validar_limite_dias_mes(self, empleado_id, periodo_mes, nuevos_dias, request, devengo_id_excluir=None):
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            raise ValidationError("No se encontro configuracion de Empresa para este tenant.")
+        return validar_limite_dias_mes(
+            empleado_id=empleado_id,
+            periodo_mes=periodo_mes,
+            nuevos_dias=nuevos_dias,
+            empresa_id=empresa_id,
+            devengo_id_excluir=devengo_id_excluir,
+        )
+
+    def service_validar_duplicado_devengo(self, payload, request):
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            return None
+
+        empleado_id = payload.get('empleado')
+        periodo_mes = payload.get('periodo_mes')
+        fecha_pago = payload.get('fecha_pago')
+
+        if not (empleado_id and periodo_mes and fecha_pago):
+            return None
+
+        from datetime import datetime
+
+        try:
+            fecha_pago_obj = datetime.strptime(fecha_pago, '%Y-%m-%d').date() if isinstance(fecha_pago, str) else fecha_pago
+        except (ValueError, TypeError):
+            logger.warning(f"[DevengoServiceMixin:validar_duplicado] Formato de fecha_pago inválido: {fecha_pago}")
+            return None
+
+        devengo_existente = Devengo.objects.filter(
+            empleado_id=empleado_id,
+            periodo_mes=periodo_mes,
+            fecha_pago=fecha_pago_obj,
+            anulado=False,
+            empresa_id=empresa_id,
+        ).only('id', 'periodo_mes', 'fecha_pago').first()
+
+        if not devengo_existente:
+            return None
+
+        logger.warning(
+            "[DevengoServiceMixin:validar_duplicado] Intento de crear nómina duplicada: "
+            f"empleado_id={empleado_id}, periodo_mes={periodo_mes}, "
+            f"fecha_pago={fecha_pago_obj}, devengo_existente_id={devengo_existente.id}"
+        )
+
+        return {
+            "error": "Ya existe una nómina para este empleado, periodo y fecha de pago. Debe anular la nómina existente antes de crear una nueva.",
+            "detail": f"Ya existe una nómina registrada para el periodo {periodo_mes} con fecha de pago {fecha_pago_obj.strftime('%Y-%m-%d')}. Para modificar, vaya al Historial de Nóminas, anule la existente y luego cree una nueva.",
+            "devengo_existente_id": devengo_existente.id,
+            "periodo_mes": periodo_mes,
+            "fecha_pago": fecha_pago_obj.strftime('%Y-%m-%d'),
+            "code": "duplicate_nomina",
+        }
+
+    def service_prevalidar_limite_dias_devengo(self, payload, request):
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            return None
+
+        empleado_id = payload.get('empleado')
+        periodo_mes = payload.get('periodo_mes')
+        dias_laborados = payload.get('dias_laborados')
+        if not (empleado_id and periodo_mes and dias_laborados):
+            return None
+
+        return validar_limite_dias_mes(
+            empleado_id=empleado_id,
+            periodo_mes=periodo_mes,
+            nuevos_dias=dias_laborados,
+            empresa_id=empresa_id,
+            devengo_id_excluir=None,
+        )
+
+    def service_procesar_devengo_serializer(self, serializer, request):
+        from decimal import Decimal
+
+        validated_data = serializer.validated_data
+        instance = serializer.instance
+        contrato = validated_data.get('contrato', instance.contrato if instance else None)
+        empleado = validated_data.get('empleado', instance.empleado if instance else None)
+
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            raise ValidationError({'empresa': 'No se encontró configuración de Empresa para este tenant.'})
+
+        if not contrato:
+            raise ValidationError({'contrato': 'No se encontró contrato para procesar la nómina.'})
+
+        if contrato.empresa_id != empresa_id:
+            raise ValidationError({'contrato': 'El contrato no pertenece a este tenant.'})
+
+        if contrato.estado != 'ACTIVO' or not contrato.activo:
+            raise ValidationError({'contrato': f'No se puede registrar nómina: El contrato no está activo (estado actual: {contrato.estado}).'})
+
+        if instance and instance.anulado:
+            raise ValidationError({'anulado': 'No se puede actualizar una nómina anulada. Debe crear una nueva.'})
+
+        dias_laborados = validated_data.get('dias_laborados', instance.dias_laborados if instance else 30)
+        horas_trabajadas = validated_data.get('horas_trabajadas', None)
+        otros_devengos = validated_data.get('otros_devengos', instance.otros_devengos if instance else Decimal('0')) or Decimal('0')
+        prestamos = validated_data.get('prestamos', instance.prestamos if instance else Decimal('0')) or Decimal('0')
+        descuentos_operativos = validated_data.get('descuentos_operativos', instance.descuentos_operativos if instance else Decimal('0')) or Decimal('0')
+        periodo_mes = validated_data.get('periodo_mes', instance.periodo_mes if instance else None)
+
+        if periodo_mes and dias_laborados and empleado:
+            devengo_id_excluir = instance.pk if instance else None
+            validar_limite_dias_mes(
+                empleado_id=empleado.id,
+                periodo_mes=periodo_mes,
+                nuevos_dias=dias_laborados,
+                empresa_id=empresa_id,
+                devengo_id_excluir=devengo_id_excluir,
+            )
+
+        prestamo_anterior = instance.prestamos if instance else Decimal('0')
+        diferencia_prestamos = prestamos - (prestamo_anterior or Decimal('0'))
+
+        if prestamos > 0:
+            prestamo_disponible = Decimal(str(contrato.prestamos_empresa or 0))
+            if instance:
+                if diferencia_prestamos > 0 and diferencia_prestamos > prestamo_disponible:
+                    raise ValidationError({
+                        'prestamos': f'El monto adicional a descontar (${diferencia_prestamos:,.2f}) no puede ser mayor al préstamo disponible en el contrato (${prestamo_disponible:,.2f})'
+                    })
+            elif prestamos > prestamo_disponible:
+                raise ValidationError({
+                    'prestamos': f'El monto a descontar (${prestamos:,.2f}) no puede ser mayor al préstamo disponible en el contrato (${prestamo_disponible:,.2f})'
+                })
+
+        calculo = calcular_liquidacion_nomina(
+            contrato=contrato,
+            dias_laborados=dias_laborados,
+            horas_trabajadas=horas_trabajadas,
+            otros_devengos=otros_devengos,
+            prestamos=prestamos,
+            descuentos_operativos=descuentos_operativos,
+            empresa_id=empresa_id,
+        )
+
+        serializer.validated_data['salario_base'] = Decimal(calculo['salario_base'])
+        serializer.validated_data['auxilio_transporte'] = Decimal(calculo['auxilio_transporte'])
+        serializer.validated_data['salud_empleado'] = Decimal(calculo['salud_empleado'])
+        serializer.validated_data['pension_empleado'] = Decimal(calculo['pension_empleado'])
+
+        with transaction.atomic():
+            devengo = serializer.save()
+
+            if instance:
+                if diferencia_prestamos != 0:
+                    contrato.refresh_from_db()
+                    prestamo_actual = Decimal(str(contrato.prestamos_empresa or 0))
+                    nuevo_prestamo = prestamo_actual - diferencia_prestamos
+                    contrato.prestamos_empresa = max(Decimal('0'), nuevo_prestamo)
+                    contrato.save(update_fields=['prestamos_empresa'])
+                    logger.info(
+                        f"[DevengoServiceMixin:procesar_serializer] Préstamo actualizado: diferencia=${diferencia_prestamos:,.2f}. "
+                        f"Saldo anterior: ${prestamo_actual:,.2f}. Nuevo saldo: ${contrato.prestamos_empresa:,.2f}"
+                    )
+            elif prestamos > 0:
+                contrato.refresh_from_db()
+                prestamo_actual = Decimal(str(contrato.prestamos_empresa or 0))
+                nuevo_prestamo = prestamo_actual - prestamos
+                contrato.prestamos_empresa = max(Decimal('0'), nuevo_prestamo)
+                contrato.save(update_fields=['prestamos_empresa'])
+                logger.info(
+                    f"[DevengoServiceMixin:procesar_serializer] Préstamo descontado: ${prestamos:,.2f}. "
+                    f"Saldo anterior: ${prestamo_actual:,.2f}. Nuevo saldo: ${contrato.prestamos_empresa:,.2f}"
+                )
+
+            return devengo
+
+    def service_eliminar_devengo(self, instance, request):
+        from decimal import Decimal
+
+        empresa_id = self.service_get_empresa_id(request)
+        if not empresa_id:
+            raise ValidationError({'empresa': 'No se encontró configuración de Empresa para este tenant.'})
+
+        if instance.empresa_id != empresa_id:
+            raise ValidationError({'empresa': 'La nómina no pertenece a este tenant.'})
+
+        devengo_id = instance.id
+        empleado_id = instance.empleado_id
+        periodo_mes = instance.periodo_mes
+
+        with transaction.atomic():
+            if instance.prestamos and instance.prestamos > 0:
+                contrato = instance.contrato
+                if contrato:
+                    contrato.refresh_from_db()
+                    prestamo_actual = Decimal(str(contrato.prestamos_empresa or 0))
+                    nuevo_prestamo = prestamo_actual + Decimal(str(instance.prestamos))
+                    contrato.prestamos_empresa = nuevo_prestamo
+                    contrato.save(update_fields=['prestamos_empresa'])
+                    logger.info(
+                        f"[DevengoServiceMixin:eliminar_devengo] Préstamo revertido al eliminar nómina {devengo_id}: "
+                        f"${instance.prestamos:,.2f} agregado al contrato {contrato.id}. Nuevo saldo: ${nuevo_prestamo:,.2f}"
+                    )
+
+            instance.delete()
+
+        logger.info(
+            f"[DevengoServiceMixin:eliminar_devengo] Nómina eliminada: ID={devengo_id}, "
+            f"Empleado={empleado_id}, Periodo={periodo_mes}, Empresa={empresa_id}, "
+            f"Usuario={request.user.id if request.user.is_authenticated else 'Anónimo'}"
+        )
+
+        return devengo_id

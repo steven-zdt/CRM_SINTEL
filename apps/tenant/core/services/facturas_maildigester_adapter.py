@@ -1,21 +1,24 @@
 """
 Adaptador de Core API para ingesta de facturas desde correo.
 
-⚠️ FASE 4/5: Service Layer Adapter - Core API consume servicios de facturas sin HTTP interno.
+# WARNING: FASE 4/5: Service Layer Adapter - Core API consume servicios de facturas sin HTTP interno.
 - Core API sigue siendo orquestador de UI
 - Internamente delega en facturas (dueño del dominio)
 - Expone datos uniformes al workspace
 - SSoT: Las configuraciones se obtienen desde empresa
 """
 from __future__ import annotations
+
 import logging
-from typing import Any, Dict, List, Optional
-# ⚠️ IMPORT LAZY: enqueue_mail_ingestion se importa dentro de las funciones (evita ciclos)
+from typing import Any
+
+from apps.services.maildigester.exceptions import MailboxConnectionError
+from apps.services.maildigester.inbox_client import RealIMAPClient
+from apps.tenant.empresa.models import MailInboxConfig
+
+# # WARNING: IMPORT LAZY: enqueue_mail_ingestion se importa dentro de las funciones (evita ciclos)
 # from apps.tenant.facturas.services_mail_ingestion import enqueue_mail_ingestion
 from apps.tenant.facturas.models import MailIngestionRun
-from apps.tenant.empresa.models import MailInboxConfig
-from apps.services.maildigester.inbox_client import RealIMAPClient
-from apps.services.maildigester.exceptions import MailboxConnectionError
 
 log = logging.getLogger(__name__)
 
@@ -25,12 +28,12 @@ def core_run_mail_ingestion(
     user,
     config_id: int,
     limit_messages: int = 50
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Encola una ejecución de ingesta de facturas desde correo.
     
-    ⚠️ SSoT: Delega en apps.tenant.facturas.services_mail_ingestion.
-    ⚠️ NATURALEZA: No se especifica; se determina automáticamente desde el XML UBL.
+    # WARNING: SSoT: Delega en apps.tenant.facturas.services_mail_ingestion.
+    # WARNING: NATURALEZA: No se especifica; se determina automáticamente desde el XML UBL.
     
     Args:
         user: Usuario que inicia la ingesta
@@ -40,7 +43,7 @@ def core_run_mail_ingestion(
     Returns:
         Dict con run_id, task_id y redirect_url
     """
-    # ⚠️ IMPORT LAZY: Evita ciclos de importación
+    # # WARNING: IMPORT LAZY: Evita ciclos de importación
     from apps.tenant.facturas.services_mail_ingestion import enqueue_mail_ingestion
     
     run = enqueue_mail_ingestion(
@@ -56,11 +59,11 @@ def core_run_mail_ingestion(
     }
 
 
-def core_list_mail_runs() -> List[Dict[str, Any]]:
+def core_list_mail_runs() -> list[dict[str, Any]]:
     """
     Lista ejecuciones recientes de ingesta por correo.
     
-    ⚠️ OPTIMIZACIÓN: Usa only() para limitar columnas.
+    # WARNING: OPTIMIZACIÓN: Usa only() para limitar columnas.
     
     Returns:
         Lista de dicts con datos de ejecuciones
@@ -88,13 +91,13 @@ def core_list_mail_runs() -> List[Dict[str, Any]]:
     ]
 
 
-def core_list_mail_configs() -> List[Dict[str, Any]]:
+def core_list_mail_configs() -> list[dict[str, Any]]:
     """
     Lista configuraciones activas de buzones de correo.
     
-    ⚠️ SSoT: Obtiene configuraciones desde empresa (MailInboxConfig).
-    ⚠️ OPTIMIZACIÓN: Usa only() para limitar columnas.
-    ⚠️ SEGURIDAD: No expone password.
+    # WARNING: SSoT: Obtiene configuraciones desde empresa (MailInboxConfig).
+    # WARNING: OPTIMIZACIÓN: Usa only() para limitar columnas.
+    # WARNING: SEGURIDAD: No expone password.
     
     Returns:
         Lista de dicts con datos de configuraciones
@@ -132,23 +135,23 @@ def core_list_mail_configs() -> List[Dict[str, Any]]:
 
 def core_test_mailbox_connection(
     *,
-    provider: Optional[str] = None,
-    host: Optional[str] = None,
-    port: Optional[int] = None,
+    provider: str | None = None,
+    host: str | None = None,
+    port: int | None = None,
     protocol: str = "imap",
-    ssl: Optional[bool] = None,
-    starttls: Optional[bool] = None,
+    ssl: bool | None = None,
+    starttls: bool | None = None,
     username: str = "",
     password: str = "",
     mailbox: str = "INBOX",
-    email_address: Optional[str] = None
-) -> Dict[str, Any]:
+    email_address: str | None = None
+) -> dict[str, Any]:
     """
     Prueba conexión a un buzón de correo sin persistir configuración.
     
-    ⚠️ DIAGNÓSTICO: Solo prueba conexión, no persiste nada.
-    ⚠️ SEGURIDAD: No expone password en respuestas.
-    ⚠️ GMAIL: Si provider == "gmail", fuerza presets de Gmail (ignora host/port/ssl enviados).
+    # WARNING: DIAGNÓSTICO: Solo prueba conexión, no persiste nada.
+    # WARNING: SEGURIDAD: No expone password en respuestas.
+    # WARNING: GMAIL: Si provider == "gmail", fuerza presets de Gmail (ignora host/port/ssl enviados).
     
     Args:
         provider: "gmail" o "custom" (opcional)
@@ -214,7 +217,7 @@ def core_test_mailbox_connection(
         starttls = starttls if starttls is not None else False
         
         client = RealIMAPClient()
-        config: Dict[str, Any] = {
+        config: dict[str, Any] = {
             "host": host,
             "port": port,
             "protocol": protocol,
@@ -340,11 +343,11 @@ def core_test_mailbox_connection(
         }
 
 
-def core_stop_mail_ingestion_run(run_id: int, *, force: bool = False) -> Dict[str, Any]:
+def core_stop_mail_ingestion_run(run_id: int, *, force: bool = False) -> dict[str, Any]:
     """
     Cancela una ejecución de ingesta de correo (cancelación cooperativa).
     
-    ⚠️ CANCELACIÓN COOPERATIVA:
+    # WARNING: CANCELACIÓN COOPERATIVA:
     a) Marca el run en BD como CANCEL_REQUESTED (la tarea lo detecta periódicamente)
     b) Opcional: app.control.revoke(task_id, terminate=False) para evitar nuevos slots
     
@@ -409,11 +412,11 @@ def core_stop_mail_ingestion_run(run_id: int, *, force: bool = False) -> Dict[st
         }
 
 
-def core_delete_mail_ingestion_run(run_id: int) -> Dict[str, Any]:
+def core_delete_mail_ingestion_run(run_id: int) -> dict[str, Any]:
     """
     Elimina una ejecución de ingesta de correo.
     
-    ⚠️ SEGURIDAD: Solo permite eliminar ejecuciones terminadas (SUCCESS, FAILED, CANCELED, ABORTED).
+    # WARNING: SEGURIDAD: Solo permite eliminar ejecuciones terminadas (SUCCESS, FAILED, CANCELED, ABORTED).
     No permite eliminar ejecuciones en curso (PENDING, RUNNING) para evitar inconsistencias.
     
     Args:
@@ -453,7 +456,7 @@ def core_delete_mail_ingestion_run(run_id: int) -> Dict[str, Any]:
         }
 
 
-def core_get_mail_ingestion_run_details(run_id: int) -> Dict[str, Any]:
+def core_get_mail_ingestion_run_details(run_id: int) -> dict[str, Any]:
     """
     Obtiene detalles de una ejecución de ingesta, incluyendo lista de XMLs detectados.
     

@@ -4,10 +4,11 @@ Comando para verificar que el admin de tenant NO muestra modelos del esquema pú
 Ejecutar:
     docker compose exec web python manage.py verificar_admin_tenant
 """
-from django.core.management.base import BaseCommand
-from apps.tenant.core.admin import tenant_admin_site
 from django.contrib import admin
+from django.core.management.base import BaseCommand
+
 from apps.public.tenants.models import Client, Domain, TenantMembership
+from apps.tenant.core.admin import tenant_admin_site
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 
@@ -27,10 +28,10 @@ class Command(BaseCommand):
         if tenant_models:
             for model in sorted(tenant_models, key=lambda m: m.__name__):
                 self.stdout.write(
-                    f"  ✅ {model.__name__:30s} (app: {model._meta.app_label})"
+                    f"  [OK] {model.__name__:30s} (app: {model._meta.app_label})"
                 )
         else:
-            self.stdout.write(self.style.WARNING("  ⚠️  No hay modelos registrados"))
+            self.stdout.write(self.style.WARNING("  # WARNING:  No hay modelos registrados"))
 
         # 2. Verificar que modelos públicos NO están registrados
         self.stdout.write("\n2. VERIFICACIÓN: Modelos del esquema público NO deben estar registrados:")
@@ -46,12 +47,12 @@ class Command(BaseCommand):
             is_registered = tenant_admin_site.is_registered(model)
             if is_registered:
                 self.stdout.write(
-                    self.style.ERROR(f"  ❌ VULNERABILIDAD: {name:20s} registrado = {is_registered}")
+                    self.style.ERROR(f"  [ERROR] VULNERABILIDAD: {name:20s} registrado = {is_registered}")
                 )
                 all_ok = False
             else:
                 self.stdout.write(
-                    self.style.SUCCESS(f"  ✅ OK: {name:20s} NO registrado")
+                    self.style.SUCCESS(f"  [OK] OK: {name:20s} NO registrado")
                 )
 
         # 3. Verificar que modelos de tenant SÍ están registrados
@@ -66,11 +67,11 @@ class Command(BaseCommand):
             is_registered = tenant_admin_site.is_registered(model)
             if is_registered:
                 self.stdout.write(
-                    self.style.SUCCESS(f"  ✅ OK: {name:20s} registrado")
+                    self.style.SUCCESS(f"  [OK] OK: {name:20s} registrado")
                 )
             else:
                 self.stdout.write(
-                    self.style.ERROR(f"  ❌ FALTA: {name:20s} NO registrado")
+                    self.style.ERROR(f"  [ERROR] FALTA: {name:20s} NO registrado")
                 )
                 all_ok = False
 
@@ -89,10 +90,10 @@ class Command(BaseCommand):
         # 5. Resumen
         self.stdout.write("\n" + "=" * 80)
         if all_ok:
-            self.stdout.write(self.style.SUCCESS("✅ RESULTADO: AISLAMIENTO CORRECTO"))
+            self.stdout.write(self.style.SUCCESS("[OK] RESULTADO: AISLAMIENTO CORRECTO"))
             self.stdout.write("   - Modelos públicos NO aparecen en tenant_admin_site")
             self.stdout.write("   - Modelos de tenant SÍ aparecen en tenant_admin_site")
         else:
-            self.stdout.write(self.style.ERROR("❌ RESULTADO: PROBLEMA DETECTADO"))
+            self.stdout.write(self.style.ERROR("[ERROR] RESULTADO: PROBLEMA DETECTADO"))
             self.stdout.write("   - Hay modelos públicos en tenant_admin_site o faltan modelos de tenant")
         self.stdout.write("=" * 80)

@@ -1,7 +1,7 @@
 """
 Parser para documentos de texto plano (TXT) (FASE 2.3).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Heurísticas para extraer datos estructurados
 - Retorna DTO JSON unificado según apps/services/document_parser/dto.py
 """

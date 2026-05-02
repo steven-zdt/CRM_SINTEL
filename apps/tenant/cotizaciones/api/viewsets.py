@@ -1,103 +1,129 @@
 """
 ViewSets para Cotizaciones v2.60 - Standalone & Resiliente
-⚠️ v2.60: Integración total con DNA Dinámico y Service Layer.
-⚠️ Tabulator Factory v2.40: Paginación remota y búsqueda en tiempo real.
-⚠️ Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
+# WARNING: v2.60: Integración total con DNA Dinámico y Service Layer.
+# WARNING: Tabulator Factory v2.40: Paginación remota y búsqueda en tiempo real.
+# WARNING: Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
 """
 import logging
-from django.conf import settings
-from rest_framework import viewsets, status, permissions, serializers
-from rest_framework.response import Response
-from rest_framework.decorators import action
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
-from django.db import transaction, IntegrityError
-from django.db.models import Sum, Count, Q, DecimalField
-from django.db.models.functions import Coalesce
 from decimal import Decimal
 
-from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.api.permissions import IsTenantMember
+from django.conf import settings
+from django.db import IntegrityError, transaction
+from django.db.models import Count, DecimalField, Q, Sum
+from django.db.models.functions import Coalesce
+from rest_framework import permissions, serializers, status
+from rest_framework.decorators import action
+from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
+from rest_framework.response import Response
+
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.empresa.models import Empresa
+
 from ..models import Cotizacion, CotizacionItem
-from .serializers import CotizacionSerializer, CotizacionItemSerializer
 from ..services import CotizacionService
+from ..services.api_mixins import CotizacionServiceMixin
+from ..services.selectors import CotizacionSelector
+from .serializers import (
+    CotizacionItemSerializer,
+    CotizacionListSerializer,
+    CotizacionSerializer,
+)
 
 logger = logging.getLogger(__name__)
 
-class CotizacionViewSet(BaseTenantViewSet):
+class CotizacionViewSet(CotizacionServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Cotizaciones v2.60.
     
-    ⚠️ Tabulator Factory v2.40:
+    # WARNING: Tabulator Factory v2.40:
     - Endpoint: GET /api/v1/cotizaciones/ con StandardResultsSetPagination
     - Soporte ?search= para búsqueda en tiempo real
     - Lookup por UUID para seguridad
     """
     lookup_field = 'uuid'
+    queryset = Cotizacion.objects.none()
     serializer_class = CotizacionSerializer
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [permissions.IsAuthenticated, IsTenantMember]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     renderer_classes = [JSONRenderer]
     pagination_class = StandardResultsSetPagination
 
+    def _resolve_empresa(self, request):
+        """Resuelve empresa del tenant con fallback seguro al singleton del esquema."""
+        empresa = getattr(request, 'empresa', None)
+        if empresa:
+            return empresa
+
+        tenant = getattr(request, 'tenant', None)
+        empresa = getattr(tenant, 'empresa', None)
+        if empresa:
+            return empresa
+
+        return Empresa.objects.only('id').first()
+
     def get_queryset(self):
         """
-        Filtrado por empresa del tenant actual (singleton).
-        
-        ⚠️ SSoT v2.60: La empresa se obtiene del tenant, no del usuario.
+        Filtrado por empresa del tenant actual via Selectors (Zero Waste).
+
+        - list: CotizacionSelector.get_list() con .only() + select_related
+        - retrieve: CotizacionSelector.get_detail() con prefetch_related('items')
+        - mutations: queryset minimo filtrado por empresa
         """
-        from apps.tenant.empresa.models import Empresa
-        
-        # ⚠️ SSoT: Obtener empresa del tenant actual (singleton)
-        empresa = Empresa.objects.first()
+        empresa = self._resolve_empresa(self.request)
         if not empresa:
             return Cotizacion.objects.none()
-        
-        queryset = Cotizacion.objects.filter(
-            empresa=empresa
-        ).select_related('cliente', 'configuracion').prefetch_related('items')
-        
-        # ⚠️ Tabulator Factory: Soporte para búsqueda
-        search = self.request.query_params.get('search', None)
-        if search:
-            queryset = queryset.filter(
-                numero_cotizacion__icontains=search
-            ) | queryset.filter(
-                cliente__razon_social__icontains=search
+
+        if self.action == 'list':
+            search = self.request.query_params.get('search', None)
+            estado = self.request.query_params.get('estado', None)
+            cliente = self.request.query_params.get('cliente', None)
+            return CotizacionSelector.get_list(
+                empresa_id=empresa.id, search=search, estado=estado, cliente=cliente
             )
-        
-        return queryset.order_by('-fecha_emision', '-numero_cotizacion')
+
+        if self.action == 'retrieve':
+            return CotizacionSelector.get_detail(None, empresa_id=empresa.id)
+
+        # Mutations: queryset minimo
+        return Cotizacion.objects.filter(
+            empresa_id=empresa.id
+        ).only('id', 'uuid', 'estado', 'empresa_id')
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CotizacionListSerializer
+        return CotizacionSerializer
 
     def create(self, request, *args, **kwargs):
         """
-        ⚠️ v2.60: Sobrescribir create para asegurar que se devuelva el UUID correctamente.
+        # WARNING: v2.60: Sobrescribir create para asegurar que se devuelva el UUID correctamente.
         El serializer.create() ya maneja la creación vía Service Layer.
         
-        ⚠️ Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
-        ⚠️ CRÍTICO: get_serializer() ya incluye el contexto del request automáticamente.
-        ⚠️ FUERZA BRUTA ARQUITECTÓNICA: Inyección explícita de empresa en el contexto.
+        # WARNING: Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
+        # WARNING: CRÍTICO: get_serializer() ya incluye el contexto del request automáticamente.
+        # WARNING: FUERZA BRUTA ARQUITECTÓNICA: Inyección explícita de empresa en el contexto.
         """
         try:
-            # ⚠️ FUERZA BRUTA ARQUITECTÓNICA: Obtener empresa del tenant actual
-            empresa = getattr(request, 'empresa', None)
+            # # WARNING: FUERZA BRUTA ARQUITECTÓNICA: Obtener empresa del tenant actual
+            empresa = self._resolve_empresa(request)
             
-            # ⚠️ FUERZA BRUTA ARQUITECTÓNICA: Inyectar empresa y request explícitamente en el contexto
+            # # WARNING: FUERZA BRUTA ARQUITECTÓNICA: Inyectar empresa y request explícitamente en el contexto
             # Esto garantiza que el serializador SIEMPRE tenga acceso a la empresa
             serializer = self.get_serializer(
                 data=request.data, 
                 context={
                     'request': request,
-                    'empresa': empresa  # ⚠️ CRÍTICO: Empresa siempre disponible en el contexto
+                    'empresa': empresa  # # WARNING: CRÍTICO: Empresa siempre disponible en el contexto
                 }
             )
             serializer.is_valid(raise_exception=True)
             
-            # ⚠️ CRÍTICO: El serializer.create() ya retorna la instancia creada
+            # # WARNING: CRÍTICO: El serializer.create() ya retorna la instancia creada
             # No llamamos a serializer.save() porque el método create() del serializer ya lo hace
             instance = serializer.save()
             
-            # ⚠️ CRÍTICO: Re-serializar la instancia para obtener todos los campos (incluyendo UUID)
+            # # WARNING: CRÍTICO: Re-serializar la instancia para obtener todos los campos (incluyendo UUID)
             # Esto asegura que se devuelvan todos los campos read_only como uuid, cliente_display, etc.
             output_serializer = self.get_serializer(instance)
             
@@ -107,7 +133,7 @@ class CotizacionViewSet(BaseTenantViewSet):
         except serializers.ValidationError as e:
             logger.error(f"[CotizacionViewSet] Error de validación en create: {str(e)}", exc_info=True)
             error_detail = e.detail if hasattr(e, 'detail') else str(e)
-            # ⚠️ Error Boundary: Siempre devolver estructura {"error": "...", "detail": "..."}
+            # # WARNING: Error Boundary: Siempre devolver estructura {"error": "...", "detail": "..."}
             if isinstance(error_detail, dict):
                 # Si el dict ya tiene "error" y "detail", usarlo; si no, envolverlo
                 if "error" in error_detail and "detail" in error_detail:
@@ -148,24 +174,25 @@ class CotizacionViewSet(BaseTenantViewSet):
     
     def perform_create(self, serializer):
         """
-        ⚠️ v2.60: Este método ya no se usa porque sobrescribimos create().
+        # WARNING: v2.60: Este método ya no se usa porque sobrescribimos create().
         Se mantiene para compatibilidad pero no hace nada.
         """
         pass
 
+    @transaction.atomic
     def update(self, request, *args, **kwargs):
         """
-        ⚠️ FASE 3: Actualización de cotización.
+        # WARNING: FASE 3: Actualización de cotización.
         
-        ⚠️ Error Boundary Pattern: Todos los errores retornan JSON nativo.
+        # WARNING: Error Boundary Pattern: Todos los errores retornan JSON nativo.
         """
         try:
             instance = self.get_object()
             
-            # ⚠️ FASE 3: Obtener empresa del tenant actual para inyectar en el contexto
-            empresa = getattr(request, 'empresa', None)
+            # # WARNING: FASE 3: Obtener empresa del tenant actual para inyectar en el contexto
+            empresa = self._resolve_empresa(request)
             
-            # ⚠️ FASE 3: Inyectar empresa y request en el contexto del serializer
+            # # WARNING: FASE 3: Inyectar empresa y request en el contexto del serializer
             partial = kwargs.pop('partial', False)
             serializer = self.get_serializer(
                 instance,
@@ -173,15 +200,15 @@ class CotizacionViewSet(BaseTenantViewSet):
                 partial=partial,
                 context={
                     'request': request,
-                    'empresa': empresa  # ⚠️ CRÍTICO: Empresa siempre disponible en el contexto
+                    'empresa': empresa  # # WARNING: CRÍTICO: Empresa siempre disponible en el contexto
                 }
             )
             serializer.is_valid(raise_exception=True)
             
-            # ⚠️ FASE 3: El serializer.update() ya retorna la instancia actualizada
+            # # WARNING: FASE 3: El serializer.update() retorna la cabecera actualizada
             instance = serializer.save()
             
-            # ⚠️ FASE 3: Re-serializar la instancia para obtener todos los campos actualizados
+            # # WARNING: FASE 3: Re-serializar la instancia para obtener todos los campos actualizados
             output_serializer = self.get_serializer(instance)
             
             return Response(output_serializer.data, status=status.HTTP_200_OK)
@@ -189,7 +216,7 @@ class CotizacionViewSet(BaseTenantViewSet):
         except serializers.ValidationError as e:
             logger.error(f"[CotizacionViewSet] Error de validación en update: {str(e)}", exc_info=True)
             error_detail = e.detail if hasattr(e, 'detail') else str(e)
-            # ⚠️ Error Boundary: Siempre devolver estructura {"error": "...", "detail": "..."}
+            # # WARNING: Error Boundary: Siempre devolver estructura {"error": "...", "detail": "..."}
             if isinstance(error_detail, dict):
                 if "error" in error_detail and "detail" in error_detail:
                     return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
@@ -231,9 +258,9 @@ class CotizacionViewSet(BaseTenantViewSet):
         """
         Genera y exporta el PDF de la cotización usando el generador modular.
         
-        ⚠️ ARQUITECTURA MODULAR: Usa CotizacionPDFGenerator directamente.
-        ⚠️ GENERACIÓN MÚLTIPLE: Permite generar el PDF siempre que se solicite, independientemente del estado.
-        ⚠️ TRANSICIÓN DE ESTADO: Solo cambia de BORRADOR a ENVIADA la primera vez (transaction.atomic).
+        # WARNING: ARQUITECTURA MODULAR: Usa CotizacionPDFGenerator directamente.
+        # WARNING: GENERACIÓN MÚLTIPLE: Permite generar el PDF siempre que se solicite, independientemente del estado.
+        # WARNING: TRANSICIÓN DE ESTADO: Solo cambia de BORRADOR a ENVIADA la primera vez (transaction.atomic).
         
         GET /api/v1/cotizaciones/{uuid}/exportar-pdf/
         
@@ -244,30 +271,31 @@ class CotizacionViewSet(BaseTenantViewSet):
         """
         from django.http import HttpResponse
         from django.template.loader import TemplateDoesNotExist
-        from apps.tenant.empresa.models import Empresa
-        from apps.tenant.cotizaciones.utils.pdf_generator import CotizacionPDFGenerator
+
         from apps.tenant.cotizaciones.pdf_service import preparar_contexto_pdf
+        from apps.tenant.cotizaciones.utils.pdf_generator import CotizacionPDFGenerator
+        from apps.tenant.empresa.models import Empresa
         
         try:
             # Obtener cotización
             cotizacion = self.get_object()
             
             # Obtener empresa del tenant
-            empresa = Empresa.objects.first()
+            empresa = self._resolve_empresa(request)
             if not empresa:
                 return Response(
                     {"error": "Empresa no encontrada"},
                     status=status.HTTP_404_NOT_FOUND
                 )
             
-            # ⚠️ ARQUITECTURA: Preparar contexto usando preparar_contexto_pdf (Snapshot Pattern v2.60)
+            # # WARNING: ARQUITECTURA: Preparar contexto usando preparar_contexto_pdf (Snapshot Pattern v2.60)
             # Este método prepara el contexto completo con totales, AIU, secciones agrupadas, etc.
             context = preparar_contexto_pdf(cotizacion, empresa, request)
             
-            # ⚠️ ARQUITECTURA MODULAR: Invocación directa del generador
+            # # WARNING: ARQUITECTURA MODULAR: Invocación directa del generador
             # El generador es el único que conoce xhtml2pdf
-            # ⚠️ Template: formato_profesional.html con layout de tablas clásico (compatible xhtml2pdf)
-            # ⚠️ RUTA: Intentar múltiples rutas posibles para compatibilidad
+            # # WARNING: Template: formato_profesional.html con layout de tablas clásico (compatible xhtml2pdf)
+            # # WARNING: RUTA: Intentar múltiples rutas posibles para compatibilidad
             template_paths = [
                 'cotizaciones/pdf/formato_profesional.html',  # Ruta estándar (apps/tenant/cotizaciones/templates/)
                 'tenant/cotizaciones/pdf/formato_profesional.html',  # Ruta alternativa (apps/tenant/templates/)
@@ -305,10 +333,10 @@ class CotizacionViewSet(BaseTenantViewSet):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
             
-            # ⚠️ TRANSICIÓN DE ESTADO: Solo ocurre si el PDF se generó exitosamente Y está en BORRADOR
+            # # WARNING: TRANSICIÓN DE ESTADO: Solo ocurre si el PDF se generó exitosamente Y está en BORRADOR
             # Esto está dentro de transaction.atomic, por lo que si algo falla después,
             # el cambio de estado se revierte automáticamente
-            # ⚠️ GENERACIÓN MÚLTIPLE: Permite generar PDF siempre, pero solo cambia estado la primera vez
+            # # WARNING: GENERACIÓN MÚLTIPLE: Permite generar PDF siempre, pero solo cambia estado la primera vez
             if cotizacion.estado == Cotizacion.Estado.BORRADOR:
                 cotizacion.estado = Cotizacion.Estado.ENVIADA
                 cotizacion.save(update_fields=['estado'])
@@ -322,7 +350,7 @@ class CotizacionViewSet(BaseTenantViewSet):
             response['Pragma'] = 'no-cache'
             response['Expires'] = '0'
             
-            logger.info(f"[CotizacionViewSet] ✅ PDF generado para cotización {cotizacion.id} (estado: {cotizacion.estado})")
+            logger.info(f"[CotizacionViewSet] [OK] PDF generado para cotización {cotizacion.id} (estado: {cotizacion.estado})")
             return response
             
         except TemplateDoesNotExist as e:
@@ -347,7 +375,7 @@ class CotizacionViewSet(BaseTenantViewSet):
             import traceback
             error_trace = traceback.format_exc()
             logger.error(f"[CotizacionViewSet] Error generando PDF: {str(e)}\n{error_trace}", exc_info=True)
-            # ⚠️ TRANSICIÓN DE ESTADO: Si hay error, la transacción se revierte automáticamente
+            # # WARNING: TRANSICIÓN DE ESTADO: Si hay error, la transacción se revierte automáticamente
             # El estado NO se cambia si el PDF no se genera exitosamente
             return Response(
                 {
@@ -361,169 +389,69 @@ class CotizacionViewSet(BaseTenantViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
     def render_offcanvas_crear(self, request):
         """
-        Endpoint HTMX RESTful para cargar offcanvas de creación de cotizaciones.
-        
-        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado EXCLUSIVAMENTE para creación
-        - GET /api/v1/cotizaciones/render-offcanvas/crear/ → Modo creación
-        
-        Returns:
-            Template HTML: tenant/core/partials/cotizaciones/offcanvas_crear_cotizacion.html
+        Endpoint HTMX para renderizar el editor en modo creación.
         """
-        from apps.tenant.empresa.models import Empresa
         from apps.tenant.clientes.models import Cliente
-        from ..configuracion.models import ConfiguracionCotizacion
-        
-        # ⚠️ v2.61: Obtener contexto necesario para el template (clientes y configuraciones)
-        empresa = Empresa.objects.first()
+        from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
+
+        empresa = self._resolve_empresa(request)
+
         context = {
             'cotizacion': None,
             'is_draft': True,
-            'clientes': Cliente.objects.filter(activo=True).order_by('razon_social')[:100] if empresa else [],
-            'configuraciones': ConfiguracionCotizacion.objects.filter(es_activo=True).order_by('nombre_configuracion') if empresa else []
+            'clientes': Cliente.objects.filter(empresa_id=empresa.id, activo=True).only('id', 'razon_social').order_by('razon_social') if empresa else [],
+            'configuraciones': ConfiguracionCotizacion.objects.filter(empresa_id=empresa.id, es_activo=True).only('id', 'nombre_configuracion').order_by('nombre_configuracion') if empresa else [],
         }
-        return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_crear_cotizacion.html')
+        return Response(context, template_name='cotizaciones/offcanvas_crear_cotizacion.html')
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
     def render_offcanvas_editar(self, request, **kwargs):
         """
-        Endpoint HTMX RESTful para cargar offcanvas de edición de cotizaciones.
-        
-        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado EXCLUSIVAMENTE para edición
-        ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend puede enviar IDs numéricos
-        - GET /api/v1/cotizaciones/{uuid}/render-offcanvas/editar/ → Modo edición
-        
-        Returns:
-            Template HTML: tenant/core/partials/cotizaciones/offcanvas_editar_cotizacion.html
+        Endpoint HTMX para renderizar el editor en modo edición.
         """
-        import traceback
-        try:
-            # ⚠️ v2.61: BaseTenantViewSet usa lookup_field="uuid", pero el frontend puede enviar IDs numéricos
-            # El router de DRF pone el valor en kwargs['uuid'] cuando lookup_field="uuid"
-            cotizacion_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            
-            if not cotizacion_identifier:
-                return Response(
-                    {"detail": ["ID de cotización no proporcionado en la URL."]},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Intentar obtener por UUID primero, luego por ID numérico
-            try:
-                cotizacion = self.get_queryset().get(uuid=cotizacion_identifier)
-            except (Cotizacion.DoesNotExist, ValueError):
-                # Si falla con UUID, intentar con ID numérico
-                try:
-                    cotizacion = self.get_queryset().get(id=cotizacion_identifier)
-                except (Cotizacion.DoesNotExist, ValueError):
-                    return Response(
-                        {"detail": [f"Cotización con ID {cotizacion_identifier} no encontrada."]},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-            
-            from apps.tenant.empresa.models import Empresa
-            from apps.tenant.clientes.models import Cliente
-            from ..configuracion.models import ConfiguracionCotizacion
-            
-            empresa = Empresa.objects.first()
-            context = {
-                'cotizacion': cotizacion,
-                'is_draft': False,
-                'clientes': Cliente.objects.filter(activo=True).order_by('razon_social')[:100] if empresa else [],
-                'configuraciones': ConfiguracionCotizacion.objects.filter(es_activo=True).order_by('nombre_configuracion') if empresa else []
-            }
-            return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_editar_cotizacion.html')
-        
-        except Exception as e:
-            logger.error(f"Error en render_offcanvas_editar: {e}")
-            logger.error(traceback.format_exc())
-            return Response(
-                {"detail": [f"Error al cargar cotización: {str(e)}"]},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        from apps.tenant.clientes.models import Cliente
+        from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
+
+        cotizacion = self.get_object()
+        empresa = self._resolve_empresa(request)
+
+        context = {
+            'cotizacion': cotizacion,
+            'is_draft': False,
+            'clientes': Cliente.objects.filter(empresa_id=empresa.id, activo=True).only('id', 'razon_social').order_by('razon_social') if empresa else [],
+            'configuraciones': ConfiguracionCotizacion.objects.filter(empresa_id=empresa.id, es_activo=True).only('id', 'nombre_configuracion').order_by('nombre_configuracion') if empresa else [],
+        }
+        return Response(context, template_name='cotizaciones/offcanvas_editar_cotizacion.html')
     
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
     def render_offcanvas_detalle(self, request):
         """
-        Endpoint HTMX RESTful para cargar offcanvas de detalle de cotizaciones (read-only).
-        
-        ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado para detalle
-        - GET /api/v1/cotizaciones/render-offcanvas/detalle/?id={uuid} → Modo detalle
-        
-        Query params:
-        - id: ID de la cotización (requerido, puede ser numérico o UUID)
-        
-        Returns:
-            Template HTML: tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html
+        Endpoint HTMX para detalle de cotización en modo solo lectura.
         """
-        import traceback
+        cotizacion_identifier = request.query_params.get('id')
+        if not cotizacion_identifier:
+            return Response({'detail': 'id es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        cotizacion = None
         try:
-            cotizacion_id = request.query_params.get('id')
-            if not cotizacion_id:
-                context = {
-                    'cotizacion': None,
-                    'error': 'ID de cotización no proporcionado'
-                }
-                return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=400)
-            
-            # Intentar obtener por UUID primero, luego por ID numérico
-            cotizacion = None
-            try:
-                cotizacion = self.get_queryset().select_related('cliente', 'configuracion').prefetch_related('items').get(uuid=cotizacion_id)
-                logger.info(f"[CotizacionViewSet] Cotización encontrada por UUID: {cotizacion_id}")
-            except (Cotizacion.DoesNotExist, ValueError) as e:
-                logger.debug(f"[CotizacionViewSet] No se encontró por UUID {cotizacion_id}, intentando por ID numérico: {e}")
-                # Si falla con UUID, intentar con ID numérico
-                try:
-                    cotizacion = self.get_queryset().select_related('cliente', 'configuracion').prefetch_related('items').get(id=cotizacion_id)
-                    logger.info(f"[CotizacionViewSet] Cotización encontrada por ID numérico: {cotizacion_id}")
-                except (Cotizacion.DoesNotExist, ValueError) as e2:
-                    logger.warning(f"[CotizacionViewSet] Cotización no encontrada con ID {cotizacion_id}: {e2}")
-                    context = {
-                        'cotizacion': None,
-                        'error': f'Cotización con ID {cotizacion_id} no encontrada'
-                    }
-                    return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=404)
-            
-            if not cotizacion:
-                context = {
-                    'cotizacion': None,
-                    'error': f'Cotización con ID {cotizacion_id} no encontrada'
-                }
-                return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=404)
-            
-            # Preparar contexto con validaciones
-            context = {
-                'cotizacion': cotizacion
-            }
-            
-            logger.info(f"[CotizacionViewSet] Renderizando detalle de cotización {cotizacion.id} (UUID: {cotizacion.uuid})")
-            
-            # ⚠️ v2.61: Intentar renderizar el template y capturar errores específicos
-            try:
-                return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html')
-            except Exception as template_error:
-                logger.error(f"[CotizacionViewSet] Error al renderizar template: {template_error}", exc_info=True)
-                logger.error(f"[CotizacionViewSet] Traceback del template: {traceback.format_exc()}")
-                # Retornar error más específico
-                context = {
-                    'cotizacion': None,
-                    'error': f'Error al renderizar template: {str(template_error)}'
-                }
-                return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=500)
-        
-        except Exception as e:
-            logger.error(f"[CotizacionViewSet] Error en render_offcanvas_detalle: {e}", exc_info=True)
-            logger.error(f"[CotizacionViewSet] Traceback completo: {traceback.format_exc()}")
-            context = {
-                'cotizacion': None,
-                'error': f'Error al cargar cotización: {str(e)}'
-            }
-            return Response(context, template_name='tenant/core/partials/cotizaciones/offcanvas_cotizacion_detalle.html', status=500)
+            cotizacion = self.get_queryset().get(uuid=cotizacion_identifier)
+        except (Cotizacion.DoesNotExist, ValueError):
+            cotizacion = self.get_queryset().filter(id=cotizacion_identifier).first()
+
+        if not cotizacion:
+            return Response({'detail': 'Cotización no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+        context = {
+            'cotizacion': cotizacion,
+            'is_draft': False,
+            'readonly': True,
+        }
+        return Response(context, template_name='cotizaciones/offcanvas_detalle_cotizacion.html')
 
     @action(detail=False, methods=['get'], url_path='estadisticas')
     def estadisticas(self, request):
         """
-        ⚠️ v2.61: Endpoint para obtener estadísticas de cotizaciones.
+        # WARNING: v2.61: Endpoint para obtener estadísticas de cotizaciones.
         
         Retorna resumen con:
         - total_neto: Suma de total_con_impuestos de todas las cotizaciones
@@ -544,59 +472,43 @@ class CotizacionViewSet(BaseTenantViewSet):
             }
         """
         try:
-            from apps.tenant.empresa.models import Empresa
-            
-            # ⚠️ SSoT: Obtener empresa del tenant actual (singleton)
-            empresa = Empresa.objects.first()
-            if not empresa:
-                return Response({
-                    "total_neto": "0.00",
-                    "cantidad_total": 0,
-                    "cantidad_aceptadas": 0,
-                    "cantidad_enviadas": 0,
-                    "cantidad_borrador": 0
-                }, status=status.HTTP_200_OK)
-            
-            # Base queryset filtrado por empresa
-            base_qs = Cotizacion.objects.filter(empresa=empresa)
-            
-            # Agregaciones para total neto y cantidad total
+            base_qs = self.get_queryset()
             totales = base_qs.aggregate(
                 total_neto=Coalesce(Sum('total_con_impuestos', output_field=DecimalField()), Decimal('0.00')),
-                cantidad_total=Count('id')
+                cantidad_total=Count('id'),
+                cantidad_aceptadas=Count('id', filter=Q(estado=Cotizacion.Estado.ACEPTADA)),
+                cantidad_enviadas=Count('id', filter=Q(estado=Cotizacion.Estado.ENVIADA)),
+                cantidad_borrador=Count('id', filter=Q(estado=Cotizacion.Estado.BORRADOR)),
             )
-            
-            # Conteos por estado
-            cantidad_aceptadas = base_qs.filter(estado=Cotizacion.Estado.ACEPTADA).count()
-            cantidad_enviadas = base_qs.filter(estado=Cotizacion.Estado.ENVIADA).count()
-            cantidad_borrador = base_qs.filter(estado=Cotizacion.Estado.BORRADOR).count()
-            
-            return Response({
-                "total_neto": str(totales['total_neto'] or Decimal('0.00')),
-                "cantidad_total": totales['cantidad_total'] or 0,
-                "cantidad_aceptadas": cantidad_aceptadas,
-                "cantidad_enviadas": cantidad_enviadas,
-                "cantidad_borrador": cantidad_borrador
-            }, status=status.HTTP_200_OK)
-            
+
+            return Response(
+                {
+                    'total_neto': str(totales.get('total_neto') or Decimal('0.00')),
+                    'cantidad_total': totales.get('cantidad_total') or 0,
+                    'cantidad_aceptadas': totales.get('cantidad_aceptadas') or 0,
+                    'cantidad_enviadas': totales.get('cantidad_enviadas') or 0,
+                    'cantidad_borrador': totales.get('cantidad_borrador') or 0,
+                },
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
             logger.error(f"[CotizacionViewSet] Error calculando estadísticas: {e}", exc_info=True)
             return Response(
-                {"error": "error_calculando_estadisticas", "message": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {'error': 'error_calculando_estadisticas', 'message': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     @action(detail=True, methods=['post'])
     def recalcular(self, request, uuid=None):
         """
-        ⚠️ v2.60: Dispara el recálculo total de la cabecera usando el servicio (SSoT).
+        # WARNING: v2.60: Dispara el recálculo total de la cabecera usando el servicio (SSoT).
         
-        ⚠️ Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
+        # WARNING: Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
         """
         try:
             cotizacion = self.get_object()
             
-            # ⚠️ v2.60: Usar calcular_totales() del servicio (SSoT)
+            # # WARNING: v2.60: Usar calcular_totales() del servicio (SSoT)
             CotizacionService.calcular_totales(cotizacion.id)
             # Refrescar la instancia para obtener los valores actualizados
             cotizacion.refresh_from_db()
@@ -605,7 +517,7 @@ class CotizacionViewSet(BaseTenantViewSet):
         except serializers.ValidationError as e:
             logger.error(f"[CotizacionViewSet] Error de validación en recalcular: {str(e)}", exc_info=True)
             error_detail = e.detail if hasattr(e, 'detail') else str(e)
-            # ⚠️ Error Boundary: Siempre devolver estructura {"error": "...", "detail": "..."}
+            # # WARNING: Error Boundary: Siempre devolver estructura {"error": "...", "detail": "..."}
             if isinstance(error_detail, dict):
                 # Si el dict ya tiene "error" y "detail", usarlo; si no, envolverlo
                 if "error" in error_detail and "detail" in error_detail:
@@ -630,44 +542,51 @@ class CotizacionViewSet(BaseTenantViewSet):
 class CotizacionItemViewSet(BaseTenantViewSet):
     """CRUD para ítems individuales manejados por Tabulator."""
     serializer_class = CotizacionItemSerializer
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [permissions.IsAuthenticated, IsTenantMember]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     renderer_classes = [JSONRenderer]
 
     def get_queryset(self):
         """
         Filtrado por empresa del tenant actual (singleton).
         
-        ⚠️ SSoT v2.60: La empresa se obtiene del tenant, no del usuario.
+        # WARNING: SSoT v2.60: La empresa se obtiene del tenant, no del usuario.
         """
-        from apps.tenant.empresa.models import Empresa
-        
-        # ⚠️ SSoT: Obtener empresa del tenant actual (singleton)
-        empresa = Empresa.objects.first()
+        empresa = getattr(self.request, 'empresa', None)
+        if not empresa:
+            tenant = getattr(self.request, 'tenant', None)
+            empresa = getattr(tenant, 'empresa', None)
+        if not empresa:
+            empresa = Empresa.objects.only('id').first()
         if not empresa:
             return CotizacionItem.objects.none()
         
+        from ..services.selectors import ITEM_LIST_FIELDS
         return CotizacionItem.objects.filter(
             cotizacion__empresa=empresa
-        ).select_related('cotizacion', 'producto', 'servicio')
+        ).select_related('cotizacion', 'producto', 'servicio').only(*ITEM_LIST_FIELDS)
 
     def perform_create(self, serializer):
         """
-        ⚠️ SSoT v2.60: Validar que la cotización pertenezca a la empresa del usuario.
+        # WARNING: SSoT v2.60: Validar que la cotización pertenezca a la empresa del usuario.
         
-        ⚠️ Error Boundary Pattern: Errores se propagan al método create() del ViewSet.
+        # WARNING: Error Boundary Pattern: Errores se propagan al método create() del ViewSet.
         """
         try:
             # Validar que la cotización pertenezca a la empresa del usuario
             cotizacion_id = serializer.validated_data.get('cotizacion')
             if cotizacion_id:
-                empresa = getattr(self.request.user, 'empresa', None)
+                empresa = getattr(self.request, 'empresa', None)
+                if not empresa:
+                    tenant = getattr(self.request, 'tenant', None)
+                    empresa = getattr(tenant, 'empresa', None)
+                if not empresa:
+                    empresa = Empresa.objects.only('id').first()
                 if empresa and cotizacion_id.empresa != empresa:
                     from rest_framework.exceptions import PermissionDenied
                     raise PermissionDenied("No tiene permisos para agregar items a esta cotización.")
             
             item = serializer.save()
-            # ⚠️ v2.60: Usar calcular_totales() del servicio (SSoT)
+            # # WARNING: v2.60: Usar calcular_totales() del servicio (SSoT)
             CotizacionService.calcular_totales(item.cotizacion.id)
         
         except serializers.ValidationError as e:
@@ -696,11 +615,11 @@ class CotizacionItemViewSet(BaseTenantViewSet):
 
     def perform_update(self, serializer):
         """
-        ⚠️ Error Boundary Pattern: Errores se propagan al método update() del ViewSet.
+        # WARNING: Error Boundary Pattern: Errores se propagan al método update() del ViewSet.
         """
         try:
             item = serializer.save()
-            # ⚠️ v2.60: Usar calcular_totales() del servicio (SSoT)
+            # # WARNING: v2.60: Usar calcular_totales() del servicio (SSoT)
             CotizacionService.calcular_totales(item.cotizacion.id)
         
         except serializers.ValidationError as e:
@@ -729,13 +648,13 @@ class CotizacionItemViewSet(BaseTenantViewSet):
 
     def perform_destroy(self, instance):
         """
-        ⚠️ Error Boundary Pattern: Errores se propagan al método destroy() del ViewSet.
+        # WARNING: Error Boundary Pattern: Errores se propagan al método destroy() del ViewSet.
         """
         try:
             cotizacion = instance.cotizacion
             cotizacion_id = cotizacion.id
             instance.delete()
-            # ⚠️ v2.60: Usar calcular_totales() del servicio (SSoT)
+            # # WARNING: v2.60: Usar calcular_totales() del servicio (SSoT)
             CotizacionService.calcular_totales(cotizacion_id)
         
         except Exception as e:

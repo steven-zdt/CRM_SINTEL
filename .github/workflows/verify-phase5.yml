@@ -1,0 +1,59 @@
+name: Verify Phase 5 - Smoke & Audit
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main ]
+
+jobs:
+  audit:
+    name: Phase 5 Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Run Phase 5 Audit
+        run: |
+          node scripts/auditoria_fase5.js || exit $?
+      
+      - name: Upload Audit Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase5-audit
+          path: |
+            AUDITORIA_FASE5.md
+            auditoria_fase5.json
+          retention-days: 7
+      
+      - name: Comment PR with Audit Results
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## ❌ Auditoría Fase 5: Infracciones Detectadas\n\n';
+            
+            try {
+              const report = fs.readFileSync('AUDITORIA_FASE5.md', 'utf8');
+              comment += '```\n' + report + '\n```\n';
+              comment += '\n**Revisa los detalles en los artifacts del workflow.**';
+            } catch (e) {
+              comment += 'Error leyendo reporte de auditoría.';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

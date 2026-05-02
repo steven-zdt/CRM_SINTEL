@@ -1,24 +1,24 @@
 """Core API v1 - Contabilidad serializers facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - No copiar lógica de negocio.
 - Composición vía herencia de serializers existentes de la app contabilidad.
-- ⚠️ v2.61: Incluye CatalogoMaestroNIIF para el catálogo oficial NIIF Colombia.
+- # WARNING: v2.61: Incluye CatalogoMaestroNIIF para el catálogo oficial NIIF Colombia.
 """
 
 from apps.tenant.contabilidad.api.serializers import (
-    CuentaContableListSerializer,
+    AsientoContableDetailSerializer,
+    AsientoContableListDTSerializer,
+    AsientoContableListSerializer,
+    CatalogoMaestroNIIFDetailSerializer,
+    CatalogoMaestroNIIFListSerializer,
     CuentaContableDetailSerializer,
     CuentaContableListDTSerializer,
-    AsientoContableListSerializer,
-    AsientoContableListDTSerializer,
-    AsientoContableDetailSerializer,
-    MovimientoContableListSerializer,
+    CuentaContableListSerializer,
     MovimientoContableDetailSerializer,
-    PeriodoContableListSerializer,  # ⚠️ v2.61
-    PeriodoContableDetailSerializer,  # ⚠️ v2.61
-    CatalogoMaestroNIIFListSerializer,
-    CatalogoMaestroNIIFDetailSerializer,
+    MovimientoContableListSerializer,
+    PeriodoContableDetailSerializer,  # # WARNING: v2.61
+    PeriodoContableListSerializer,  # # WARNING: v2.61
 )
 
 

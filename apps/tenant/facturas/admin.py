@@ -2,7 +2,8 @@
 Admin para la app facturas (por tenant).
 """
 from django.contrib import admin
-from .models import Factura, ItemFactura, FacturaAnexos
+
+from .models import Factura, FacturaAnexos, ItemFactura
 
 
 class ItemFacturaInline(admin.TabularInline):

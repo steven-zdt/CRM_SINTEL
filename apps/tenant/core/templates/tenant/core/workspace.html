@@ -4,6 +4,8 @@
 
 {% block extra_head %}
   <link rel="stylesheet" href="{% static 'tenant/core/css/workspace.css' %}">
+  <link rel="icon" type="image/x-icon" href="{% static 'tenant/core/favicon.ico' %}">
+  <link rel="icon" type="image/svg+xml" href="{% static 'tenant/core/favicon.svg' %}">
 {% endblock extra_head %}
 
 {% block content %}
@@ -62,93 +64,56 @@
     </div>
 
     <div class="workspace-content p-4" aria-live="polite">
+      {# [STANDARD] Universal UI Connect: Inyección modular de aplicaciones refactorizadas #}
+      {# Cada módulo debe residir en su propia section[id="tab-<name>"] para gestión de visibilidad por workspace.js #}
       
-      {# Módulo Empresa #}
+      {# Módulo Empresa (REFERENCIA GOLDEN v2.61.4) #}
       <section id="tab-empresa" class="workspace-tab" style="display: none;">
-        {% include 'tenant/core/partials/empresa/list.html' %}
-        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
-        {# {% include 'tenant/core/partials/empresa/modals.html' %} #}
+        {% include 'tenant/empresa/empresa_list.html' %}
       </section>
 
       {# Módulo Proyectos #}
       <section id="tab-proyectos" class="workspace-tab" style="display: none;">
-        {% include 'tenant/core/partials/proyectos/list.html' %}
-        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
-        {# {% include 'tenant/core/partials/proyectos/modals.html' %} #}
+        {% include 'tenant/proyectos/proyectos_list.html' %}
+        <div id="offcanvas-container-proyectos"></div>
       </section>
-      
-      {# Módulo Facturas v2.61.3 - HTML Centralizado en Core #}
-      {# ⚠️ v2.60: Toolbar y contenido centralizados en Core #}
-      {# ⚠️ v2.61.2: Facturas son solo lectura - botón "Ver" carga offcanvas_ver_factura.html #}
-      {# ⚠️ v2.61.2: upload-ubl batch (files[]) + pre-validación CUFE + Celery >10 archivos #}
-      {# ⚠️ v2.61.2: Eliminación redirige a #facturas, flag _eliminandoFactura evita rowClick #}
-      {# ⚠️ v2.61.3: persisted:True en backend + !data.id en frontend = sin 422 post-subida #}
-      {# Flujo URL: workspace.html → list.html → facturas_list.js → gestor-offcanvas?readonly=true #}
-      {#            → ver_detalle_factura.js (GET /api/v1/core/v1/facturas/facturas/{id}/) #}
+
       <section id="tab-facturas" class="workspace-tab" style="display: none;">
-        {% include 'tenant/core/partials/facturas/list.html' %}
-        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
-        {# El contenedor del offcanvas está en list.html: #offcanvas-container-facturas #}
+       {% include 'tenant/facturas/list_factura.html' %}
       </section>
-      
+
       {# Módulo Clientes #}
       <section id="tab-clientes" class="workspace-tab" style="display: none;">
-        {% include 'tenant/core/partials/clientes/list.html' %}
-        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
-        <div id="offcanvas-container-clientes"></div>
-        <div id="offcanvas-container-contactos"></div>
+        {% include 'tenant/clientes/clientes_list.html' %}
       </section>
-      
-      {# Módulo Proveedores #}
+
+      {# Módulo Proveedores v2.61 - Feature-Sliced Architecture (Purga ACE) #}
       <section id="tab-proveedores" class="workspace-tab" style="display: none;">
-        {% include 'tenant/core/partials/proveedores/list.html' %}
-        {% include 'tenant/core/partials/proveedores/modals.html' %}
+        {% include 'tenant/proveedores/proveedores_list.html' %}
         <div id="offcanvas-container-proveedor"></div>
       </section>
-      
-      {# Módulo Empleados #}
+
+      {# Módulo Empleados v3.5 - Feature-Sliced Architecture #}
       <section id="tab-empleados" class="workspace-tab" style="display: none;">
-        {% include 'tenant/core/partials/empleados/list.html' %}
+        {% include 'tenant/empleados/list.html' %}
         <div id="offcanvas-container-empleado"></div>
         <div id="offcanvas-container-contrato"></div>
         <div id="offcanvas-container-devengo"></div>
         <div id="offcanvas-container-historial-nominas"></div>
       </section>
-      
-      {# Módulo Gastos v2.60 - Feature-Sliced Architecture #}
+
+      {# Módulo Gastos v3.5 - Feature-Sliced Architecture #}
       <section id="tab-gastos" class="workspace-tab" style="display: none;">
-        {% include 'tenant/core/partials/gastos/list.html' %}
-        {% include 'tenant/core/partials/gastos/modals.html' %}
+        {% include 'tenant/gastos/list.html' %}
         <div id="offcanvas-container-gastos"></div>
       </section>
-      
-      {# Módulo Cotizaciones v2.60 - DNA Dinámico con Edición Completa #}
+
+      {# Módulo Cotizaciones v3.5 - Feature-Sliced Architecture #}
       <section id="tab-cotizaciones" class="workspace-tab" style="display: none;">
-        <div class="ui-module ui-cotizaciones">
-          <ul class="nav nav-pills mb-3" id="cotizaciones-subnav" role="tablist">
-            <li class="nav-item" role="presentation">
-              <button class="nav-link active" id="cotizaciones-cotizaciones-tab" data-bs-toggle="tab" data-bs-target="#subtab-cotizaciones" type="button" role="tab" aria-controls="subtab-cotizaciones" aria-selected="true">
-                <i class="bi bi-file-earmark-text me-2"></i>Cotizaciones
-              </button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button class="nav-link" id="cotizaciones-catalogo-tab" data-bs-toggle="tab" data-bs-target="#subtab-catalogo" type="button" role="tab" aria-controls="subtab-catalogo" aria-selected="false">
-                <i class="bi bi-box-seam me-2"></i>Catálogo (STS)
-              </button>
-            </li>
-          </ul>
-          
-          <div class="tab-content" id="cotizaciones-tab-content">
-            <div class="tab-pane fade show active" id="subtab-cotizaciones" role="tabpanel" aria-labelledby="cotizaciones-cotizaciones-tab">
-              {% include 'tenant/core/partials/cotizaciones/list.html' %}
-            </div>
-            <div class="tab-pane fade" id="subtab-catalogo" role="tabpanel" aria-labelledby="cotizaciones-catalogo-tab">
-            </div>
-          </div>
-        </div>
+        {% include 'cotizaciones/list.html' %}
         <div id="offcanvas-container-cotizaciones"></div>
       </section>
-      
+
       {# Módulo Contabilidad v2.61 - Feature-Sliced Architecture #}
       <section id="tab-contabilidad" class="workspace-tab" style="display: none;">
         <ul class="nav nav-pills mb-3" id="contabilidad-subnav" role="tablist">
@@ -168,35 +133,37 @@
             </button>
           </li>
         </ul>
-        
         <div class="tab-content" id="contabilidad-tab-content">
           <div class="tab-pane fade show active" id="subtab-cuentas" role="tabpanel" aria-labelledby="contabilidad-cuentas-tab">
-            {% include 'tenant/core/contabilidad/partials/list_cuentas.html' %}
+            {% include 'tenant/contabilidad/partials/list_cuentas.html' %}
           </div>
           <div class="tab-pane fade" id="subtab-asientos" role="tabpanel" aria-labelledby="contabilidad-asientos-tab">
-            {% include 'tenant/core/partials/contabilidad/list_asientos.html' %}
+            {% include 'tenant/contabilidad/partials/list_asientos.html' %}
           </div>
           <div class="tab-pane fade" id="subtab-periodos" role="tabpanel" aria-labelledby="contabilidad-periodos-tab">
-            {% include 'tenant/core/partials/contabilidad/partials/list_periodos.html' %}
+            {% include 'tenant/contabilidad/partials/list_periodos.html' %}
           </div>
         </div>
         <div id="offcanvas-container-cuentas"></div>
         <div id="offcanvas-container-asientos"></div>
         <div id="offcanvas-container-periodo"></div>
       </section>
-      
-      {# Módulo Inventario #}
+
+      {# Módulo Inventario (Refactorizado v3.5) #}
       <section id="tab-inventario" class="workspace-tab" style="display: none;">
-        {% include 'tenant/core/partials/inventario/list.html' %}
-        {# ⚠️ v2.60: modals.html eliminado - Todo funciona con HTMX + Offcanvas #}
-        {# {% include 'tenant/core/partials/inventario/modals.html' %} #}
+        {% include 'inventario/list_inventario.html' %}
+      </section>
+
+      {# Módulo Perfil (Mi Perfil) - FSD SSoT #}
+      <section id="tab-perfil" class="workspace-tab" style="display: none;">
+        {% include 'tenant/perfil/partials/list.html' %}
+        {% include 'tenant/perfil/partials/modals.html' %}
       </section>
 
       <div id="workspace-welcome" class="text-center py-5">
         <i class="bi bi-grid-3x3-gap text-light" style="font-size: 5rem;"></i>
         <h4 class="mt-4 text-muted">Selecciona un módulo para comenzar la gestión</h4>
       </div>
-
     </div>
   </main>
 </div>
@@ -204,18 +171,18 @@
 {% endblock content %}
 
 {% block extra_js %}
-  {# ⚠️ ORDEN CRÍTICO DE CARGA - v2.60 #}
+  {# [ALERT] ORDEN CRÍTICO DE CARGA - v2.60 #}
   {# 0. NOTYF (Feedback visual) #}
-  <!-- ⚠️ v2.60: Fallback a cdnjs si jsdelivr falla -->
+  <!-- [ALERT] v2.60: Fallback a cdnjs si jsdelivr falla -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.css" onerror="this.onerror=null; this.href='https://cdnjs.cloudflare.com/ajax/libs/notyf/3.10.0/notyf.min.css';">
   <script src="https://cdn.jsdelivr.net/npm/notyf@3/notyf.min.js" onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/notyf/3.10.0/notyf.min.js';"></script>
   <script src="{% static 'core/js/common/notyf.init.js' %}"></script>
   
-  {# ⚠️ CRÍTICO: HTMX debe cargarse ANTES de assets_core.html (ui-manager.js depende de HTMX) #}
-  {# ⚠️ Bootstrap ya está cargado en base.html (línea 74) - ANTES de este bloque #}
-  {# ⚠️ Tabulator ya está cargado en base.html (línea 77) - ANTES de este bloque #}
+  {# [ALERT] CRÍTICO: HTMX debe cargarse ANTES de assets_core.html (ui-manager.js depende de HTMX) #}
+  {# [ALERT] Bootstrap ya está cargado en base.html (línea 74) - ANTES de este bloque #}
+  {# [ALERT] Tabulator ya está cargado en base.html (línea 77) - ANTES de este bloque #}
   <!-- HTMX -->
-  <!-- ⚠️ v2.60: Fallback automático a CDN alternativo si unpkg falla -->
+  <!-- [ALERT] v2.60: Fallback automático a CDN alternativo si unpkg falla -->
   <script src="https://unpkg.com/htmx.org@1.9.10" onerror="this.onerror=null; console.warn('[HTMX] Fallback: Intentando cargar desde cdnjs...'); this.src='https://cdnjs.cloudflare.com/ajax/libs/htmx/1.9.10/htmx.min.js';"></script>
   <script>
     // ⚠️ v2.60: Verificar que HTMX se cargó correctamente
@@ -227,7 +194,7 @@
         }
         
         if (retries < 2) {
-          console.warn(`[HTMX] ⚠️ HTMX no disponible. Reintento ${retries + 1}/2...`);
+          console.warn(`[HTMX] [ALERT] HTMX no disponible. Reintento ${retries + 1}/2...`);
           const script = document.createElement('script');
           script.src = 'https://cdnjs.cloudflare.com/ajax/libs/htmx/1.9.10/htmx.min.js';
           script.onload = function() {
@@ -237,8 +204,8 @@
             if (retries < 1) {
               setTimeout(() => checkHTMX(retries + 1), 1000);
             } else {
-              console.error('[HTMX] ❌ CRÍTICO: No se pudo cargar HTMX desde ningún CDN.');
-              console.error('[HTMX] 💡 SOLUCIÓN: Implementa recursos locales en apps/tenant/core/static/core/vendor/');
+              console.error('[HTMX] [CRITICAL] CRÍTICO: No se pudo cargar HTMX desde ningún CDN.');
+              console.error('[HTMX] [SUGGESTION] SOLUCIÓN: Implementa recursos locales en apps/tenant/core/static/core/vendor/');
             }
           };
           document.head.appendChild(script);
@@ -260,13 +227,20 @@
   {% include 'tenant/core/partials/assets_core.html' %}
   
   {# 2. NAVEGACIÓN Y ORQUESTACIÓN #}
-  <script src="{% static 'core/js/workspace.js' %}"></script>
+  <script type="module" src="{% static 'core/js/workspace.js' %}"></script>
   
-  {# 3. ASSETS MODULARES #}
-  {% include 'tenant/core/partials/empresa/assets_empresa.html' %}
-  {% include 'tenant/core/partials/proyectos/assets_proyectos.html' %}
+  {# [STANDARD] Registro de Assets Modulares: Inyección de JS/CSS por aplicación #}
+  {# El orden recomendado es: 1. API (.api.js), 2. UI/Modals (.ui.js), 3. Orquestador (.page.js) #}
+  {% include 'tenant/empresa/assets_empresa.html' %}
+  {% include 'tenant/proyectos/assets_proyectos.html' %}
   {% include 'tenant/facturas/partials/assets_facturas.html' %}
-  {% include 'tenant/core/partials/empleados/assets_empleados.html' %}
+  {% include 'tenant/clientes/assets_clientes.html' %}
+  {% include 'tenant/contactos/assets_contactos.html' %}
+  {% include 'tenant/empleados/assets_empleados.html' %}
+  {% include 'tenant/gastos/assets_gastos.html' %}
+  {% include 'cotizaciones/assets_cotizaciones.html' %}
+  {% include 'tenant/dashboard/assets_dashboard.html' %}
+  {% include 'tenant/proveedores/assets_proveedores.html' %}
   {# ⚠️ v2.60: Spinner global para indicadores HTMX #}
   <div id="spinner" class="htmx-indicator position-fixed top-50 start-50 translate-middle" style="z-index: 9999; display: none;">
     <div class="spinner-border text-primary" role="status">
@@ -274,16 +248,15 @@
     </div>
   </div>
 
-  {% include 'tenant/core/partials/gastos/assets_gastos.html' %}
-  {% include 'tenant/core/partials/cotizaciones/assets_cotizaciones.html' %}
   {# ⚠️ v2.61: Módulo Contabilidad - Tabulator (DataTables eliminado) #}
   {# ⚠️ v2.61: Validación de cuadratura: BORRADOR permite guardar sin cuadrar, APROBADO/CERRADO requiere cuadratura estricta #}
-  {% include 'tenant/core/contabilidad/partials/assets_cuentas.html' %}
-  {% include 'tenant/core/contabilidad/partials/assets_asientos.html' %}
-  {% include 'tenant/core/contabilidad/partials/assets_periodos.html' %}
-  {% include 'tenant/core/partials/inventario/assets_inventario.html' %}
-  {% include 'tenant/core/partials/clientes/assets_clientes.html' %}
-  {% include 'tenant/core/partials/proveedores/assets_proveedores.html' %}
+  {% include 'tenant/contabilidad/partials/assets_cuentas.html' %}
+  {% include 'tenant/contabilidad/partials/assets_asientos.html' %}
+  {% include 'tenant/contabilidad/partials/assets_periodos.html' %}
+  {% include 'inventario/assets_inventario.html' %}
+
+  {# Módulo Perfil (Mi Perfil) - FSD SSoT #}
+  {% include 'tenant/perfil/partials/assets_perfil.html' %}
 
   {# UX SMOKE AUTO-RUNNER v2.95 #}
   <script>

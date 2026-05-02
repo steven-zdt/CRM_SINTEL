@@ -1,11 +1,10 @@
 """
 Redirecciones de compatibilidad para rutas API.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Mantener compatibilidad con rutas antiguas (singular → plural)
 - Redirecciones 301 (Permanent Redirect) para SEO y caché
 """
-from django.shortcuts import redirect
 from django.http import HttpResponsePermanentRedirect
 
 
@@ -13,7 +12,7 @@ def empresa_singular_redirect(request):
     """
     Redirige /api/v1/empresa/ → /api/v1/empresas/
     
-    ⚠️ COMPATIBILIDAD: Mantiene compatibilidad con código antiguo que usa singular.
+    # WARNING: COMPATIBILIDAD: Mantiene compatibilidad con código antiguo que usa singular.
     """
     # Preservar query parameters si existen
     query_string = request.META.get('QUERY_STRING', '')

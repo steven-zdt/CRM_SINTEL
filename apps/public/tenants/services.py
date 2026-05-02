@@ -1,5 +1,4 @@
 import logging
-from typing import Optional, Tuple
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -34,7 +33,8 @@ def generar_schema_name(nombre: str) -> str:
     slug = nombre.lower()
     # Normalizar caracteres acentuados
     import unicodedata
-    slug = unicodedata.normalize('NFKD', slug).encode('ascii', 'ignore').decode('ascii')
+
+    slug = unicodedata.normalize("NFKD", slug).encode("ascii", "ignore").decode("ascii")
     # Remover caracteres especiales, mantener solo letras, números y espacios
     slug = re.sub(r"[^\w\s]", "", slug)
     # Reemplazar espacios y guiones con guiones bajos
@@ -61,10 +61,10 @@ def generar_schema_name(nombre: str) -> str:
 def crear_tenant_con_owner(
     nombre: str,
     admin_user_id: int,
-    schema_name: Optional[str] = None,
-    paid_until: Optional[str] = None,
+    schema_name: str | None = None,
+    paid_until: str | None = None,
     on_trial: bool = True,
-) -> Tuple[Client, Domain, TenantMembership, str]:
+) -> tuple[Client, Domain, TenantMembership, str]:
     """
     Crea un tenant completo en el esquema público y asigna un owner (primary admin).
 
@@ -124,20 +124,20 @@ def crear_tenant_con_owner(
         # 4. Crear dominio principal manualmente (las señales están desactivadas)
         expected_domain = f"{schema_normalized}.{settings.TENANT_DOMAIN_BASE}"
         domain, created = Domain.objects.get_or_create(
-            tenant=client,
-            domain=expected_domain,
-            defaults={'is_primary': True}
+            tenant=client, domain=expected_domain, defaults={"is_primary": True}
         )
-        
+
         if not domain.is_primary:
             domain.is_primary = True
             domain.save()
-        
-        logger.info(f"✅ Dominio creado: {domain.domain} (is_primary={domain.is_primary})")
+
+        logger.info(f"OK: Dominio creado: {domain.domain} (is_primary={domain.is_primary})")
 
         # 5. Migraciones del schema del tenant
         logger.info("🛠 Aplicando migraciones a schema '%s'…", schema_normalized)
-        call_command("migrate_schemas", "--schema", schema_normalized, "--fake-initial", verbosity=0)
+        call_command(
+            "migrate_schemas", "--schema", schema_normalized, "--fake-initial", verbosity=0
+        )
 
         # 6. TenantMembership (owner)
         membership = TenantMembership.objects.create(
@@ -150,7 +150,7 @@ def crear_tenant_con_owner(
 
     except Exception as exc:
         logger.error(
-            "❌ ROLLBACK creando tenant '%s' (schema=%s): %s",
+            "ERROR: ROLLBACK creando tenant '%s' (schema=%s): %s",
             nombre,
             schema_normalized,
             exc,
@@ -188,11 +188,10 @@ def crear_tenant_con_owner(
     login_url = f"{protocol}://{tenant_domain}/login/"
 
     logger.info(
-        "✅ Tenant creado: %s (%s) -> %s",
+        "OK: Tenant creado: %s (%s) -> %s",
         client.nombre,
         client.schema_name,
         login_url,
     )
 
     return client, domain, membership, login_url
-

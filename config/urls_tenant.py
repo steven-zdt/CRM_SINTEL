@@ -29,7 +29,6 @@ WARNING: SEGURIDAD:
 """
 from django.conf import settings
 from django.conf.urls.static import static
-from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import include, path
 from django.views.generic import RedirectView, View
@@ -72,22 +71,17 @@ class TenantRootView(View):
     El shell estático de landing consume /api/v1/landing/info/ para obtener información del tenant.
     """
     def get(self, request):
-        print(f"DEBUG: TenantRootView host={request.get_host()}, user={request.user}")
+        # [v2.61] Segmentación Estricta: No servir landing genérica en dominios privados
+        # Si el usuario no está autenticado, forzar redirección al shell de login de core
+        static_url = settings.STATIC_URL.rstrip('/')
+        
         if request.user.is_authenticated:
             # Redirigir al shell estático del dashboard (API-First)
-            # WARNING: v2.30+: Shell estático en Core
-            from django.conf import settings
-            static_url = settings.STATIC_URL.rstrip('/')
             return redirect(f"{static_url}/tenant/core/dashboard/index.html")
         else:
-            # WARNING: PÁGINA PRINCIPAL DEL TENANT: Redirigir al shell estático de landing
-            # WARNING: v2.30+: Shell estático en apps/tenant/landing/static/tenant/landing/
-            # Esta es la página principal para TODOS los tenants (cliente.sintel.com, etc.)
-            # El shell estático tiene botón de login e información del servicio
-            # Consume /api/v1/landing/info/ para obtener datos del tenant
-            from django.conf import settings
-            static_url = settings.STATIC_URL.rstrip('/')
-            return redirect(f"{static_url}/tenant/landing/index.html")
+            # WARNING: SEGURIDAD: Nunca mostrar UI pública en dominios privados
+            # Redirigir al shell de login centralizado en Core
+            return redirect(f"{static_url}/tenant/core/auth/login.html")
 
 
 def redirect_to_static_shell(request, filename, subdirectory='landing'):
@@ -130,11 +124,11 @@ urlpatterns = [
     # WARNING: POLÍTICA: Auth centralizado en Core - todos los shells están en tenant Core
     # Estos shells consumen las APIs REST de /api/v1/core/auth/* (centralizado)
     # WARNING: CRÍTICO: Usar redirect_to_static_shell para preservar query parameters (?token=...)
-    path('activate/', lambda request: redirect_to_static_shell(request, 'activate.html', subdirectory='landing'), name='tenant_activate_shell'),
-    path('login/', RedirectView.as_view(url='/static/tenant/landing/login.html', permanent=False), name='tenant_login_shell'),
-    path('reset-password/', RedirectView.as_view(url='/static/tenant/landing/reset-request.html', permanent=False), name='tenant_reset_request_shell'),
-    path('reset-password/confirm/', RedirectView.as_view(url='/static/tenant/landing/reset-confirm.html', permanent=False), name='tenant_reset_confirm_shell'),
-    path('reset/', RedirectView.as_view(url='/static/tenant/landing/reset-confirm.html', permanent=False), name='tenant-reset-shell'),
+    path('activate/', lambda request: redirect_to_static_shell(request, 'activate.html', subdirectory='core/auth'), name='tenant_activate_shell'),
+    path('login/', RedirectView.as_view(url='/static/tenant/core/auth/login.html', permanent=False), name='tenant_login_shell'),
+    path('reset-password/', RedirectView.as_view(url='/static/tenant/core/auth/reset-request.html', permanent=False), name='tenant_reset_request_shell'),
+    path('reset-password/confirm/', RedirectView.as_view(url='/static/tenant/core/auth/reset-confirm.html', permanent=False), name='tenant_reset_confirm_shell'),
+    path('reset/', RedirectView.as_view(url='/static/tenant/core/auth/reset-confirm.html', permanent=False), name='tenant-reset-shell'),
     path('favicon.ico', RedirectView.as_view(url='/static/tenant/core/favicon.ico', permanent=False), name='tenant-favicon'),
     
     # WARNING: v2.30+: Short routes (UI only via Core static shells)
@@ -174,6 +168,14 @@ urlpatterns = [
     path('ui/landing/', include('apps.tenant.landing.urls_ui')),
     path('ui/dashboard/', include('apps.tenant.dashboard.urls_ui')),
     path('ui/empresa/', include('apps.tenant.empresa.urls_ui')),
+    path('ui/empleados/', include('apps.tenant.empleados.urls', namespace='empleados')),
+    path('ui/gastos/', include('apps.tenant.gastos.urls', namespace='gastos')),
+    path('ui/facturas/', include('apps.tenant.facturas.urls', namespace='facturas')),
+    path('ui/contabilidad/', include('apps.tenant.contabilidad.urls', namespace='contabilidad')),
+    path('ui/inventario/', include('apps.tenant.inventario.urls', namespace='inventario')),
+    path('ui/proveedores/', include('apps.tenant.proveedores.urls', namespace='proveedores')),
+    path('ui/proyectos/', include('apps.tenant.proyectos.urls', namespace='proyectos')),
+    path('ui/clientes/', include('apps.tenant.clientes.urls', namespace='clientes')),
     # WARNING: v2.30: Facturas migrado a API-First - UI deprecada
     # path('ui/facturas/', include('apps.tenant.facturas.urls_ui')),
     # WARNING: v2.61: Contabilidad migrado a API-First - URLs migradas a api/urls.py
@@ -188,11 +190,9 @@ urlpatterns = [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/verify/', LoggedTokenVerifyView.as_view(), name='token_verify'),
-    
+    # --- Core API REST: expone /api/v1/core/landing/info/ y otros endpoints core ---
+    path('api/v1/core/', include('apps.tenant.core.api.urls')),
 ]
-
-# --- Core API REST: expone /api/v1/core/landing/info/ y otros endpoints core ---
-path('api/v1/core/', include('apps.tenant.core.api.urls'))
 
 # WARNING: SEGURIDAD: Manejadores de error personalizados
 # Estos handlers se activan solo en TENANT_URLCONF para mantener

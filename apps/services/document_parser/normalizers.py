@@ -1,7 +1,7 @@
 """
 Normalizador de contenido de documentos (FASE 2.2).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Convertir a UTF-8
 - Limpiar acentos y caracteres ilegales
 - Normalizar whitespace
@@ -14,9 +14,9 @@ Normalizador de contenido de documentos (FASE 2.2).
 """
 import re
 import unicodedata
-from typing import Optional, Dict, Any, List, Tuple
 from decimal import Decimal
 from difflib import SequenceMatcher
+from typing import Any
 
 try:
     import chardet
@@ -38,7 +38,7 @@ except ImportError:
     HAS_PDFMINER = False
 
 
-def normalize_encoding(content: bytes, encoding: Optional[str] = None) -> bytes:
+def normalize_encoding(content: bytes, encoding: str | None = None) -> bytes:
     """
     Normaliza la codificación del contenido a UTF-8.
     
@@ -117,7 +117,7 @@ def sanitize_text(text: str) -> str:
     return text
 
 
-def normalize_nit(nit: Optional[str]) -> Optional[str]:
+def normalize_nit(nit: str | None) -> str | None:
     """
     Normaliza un NIT: elimina guiones, espacios, puntos.
     
@@ -139,7 +139,7 @@ def normalize_nit(nit: Optional[str]) -> Optional[str]:
     return nit.upper()
 
 
-def normalize_currency(moneda: Optional[str]) -> str:
+def normalize_currency(moneda: str | None) -> str:
     """
     Normaliza código de moneda a formato estándar.
     
@@ -174,7 +174,7 @@ def normalize_whitespace(text: str) -> str:
     """
     Normaliza whitespace: múltiples espacios a uno, trimming.
     
-    ⚠️ FASE 2.2: Normalización de whitespace.
+    WARNING: FASE 2.2: Normalización de whitespace.
     
     Args:
         text: Texto a normalizar
@@ -198,7 +198,7 @@ def clean_accents(text: str) -> str:
     """
     Limpia acentos y caracteres ilegales.
     
-    ⚠️ FASE 2.2: Limpieza de acentos y caracteres especiales.
+    WARNING: FASE 2.2: Limpieza de acentos y caracteres especiales.
     
     Args:
         text: Texto a limpiar
@@ -222,7 +222,7 @@ def normalize_numeric_to_decimal_string(value: Any) -> str:
     """
     Convierte valores numéricos a decimal-string.
     
-    ⚠️ FASE 2.2: Conversión de valores numéricos.
+    WARNING: FASE 2.2: Conversión de valores numéricos.
     
     Args:
         value: Valor numérico (int, float, Decimal, str)
@@ -251,7 +251,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     """
     Extrae texto desde PDF usando pdfminer.
     
-    ⚠️ FASE 2.2: Extracción de texto desde PDF.
+    WARNING: FASE 2.2: Extracción de texto desde PDF.
     
     Args:
         pdf_bytes: Contenido del PDF en bytes
@@ -287,11 +287,11 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         raise ValueError(f"Error al extraer texto del PDF: {str(e)}")
 
 
-def normalize_excel_to_dataframe(excel_bytes: bytes, sheet_name: Optional[str] = None) -> Optional[Any]:
+def normalize_excel_to_dataframe(excel_bytes: bytes, sheet_name: str | None = None) -> Any | None:
     """
     Pasa XLS/XLSX a DataFrame normalizado.
     
-    ⚠️ FASE 2.2: Conversión de Excel a DataFrame.
+    WARNING: FASE 2.2: Conversión de Excel a DataFrame.
     
     Args:
         excel_bytes: Contenido del archivo Excel en bytes
@@ -320,11 +320,11 @@ def normalize_excel_to_dataframe(excel_bytes: bytes, sheet_name: Optional[str] =
         raise ValueError(f"Error al leer Excel: {str(e)}")
 
 
-def normalize_csv_to_dataframe(csv_bytes: bytes, delimiter: Optional[str] = None) -> Optional[Any]:
+def normalize_csv_to_dataframe(csv_bytes: bytes, delimiter: str | None = None) -> Any | None:
     """
     Pasa CSV a DataFrame normalizado.
     
-    ⚠️ FASE 2.2: Conversión de CSV a DataFrame.
+    WARNING: FASE 2.2: Conversión de CSV a DataFrame.
     
     Args:
         csv_bytes: Contenido del archivo CSV en bytes
@@ -371,7 +371,7 @@ def normalize_txt(text: str) -> str:
     """
     Normaliza texto plano (TXT).
     
-    ⚠️ FASE 2.2: Normalización de texto plano.
+    WARNING: FASE 2.2: Normalización de texto plano.
     
     Args:
         text: Texto a normalizar
@@ -399,7 +399,7 @@ def normalize_xml(xml_bytes: bytes) -> bytes:
     """
     Normaliza contenido XML a UTF-8, elimina BOM, limpia firmas XAdES opcionales.
     
-    ⚠️ REVERSIÓN: Normalización SIEMPRE aplicada a XML.
+    WARNING: REVERSIÓN: Normalización SIEMPRE aplicada a XML.
     
     Args:
         xml_bytes: Contenido XML en bytes
@@ -430,13 +430,13 @@ def normalize_xml(xml_bytes: bytes) -> bytes:
 
 def normalize_content(
     content: bytes,
-    filename: Optional[str] = None,
-    mime_type: Optional[str] = None
-) -> Dict[str, Any]:
+    filename: str | None = None,
+    mime_type: str | None = None
+) -> dict[str, Any]:
     """
     Normaliza contenido de documento de forma unificada y determinística.
     
-    ⚠️ REVERSIÓN: Normalización SIEMPRE aplicada a TODOS los tipos (XML, CSV, XLS/XLSX, TXT, PDF).
+    WARNING: REVERSIÓN: Normalización SIEMPRE aplicada a TODOS los tipos (XML, CSV, XLS/XLSX, TXT, PDF).
     
     Esta función es el punto único de normalización antes del parsing.
     Todos los parsers deben consumir exclusivamente el valor 'normalized' devuelto.
@@ -625,7 +625,7 @@ class SemanticMapper:
     """
     Mapeador semántico para columnas de archivos externos.
     
-    ⚠️ v2.40: Realiza mapeo inteligente de columnas desconocidas a campos del modelo
+    WARNING: v2.40: Realiza mapeo inteligente de columnas desconocidas a campos del modelo
     usando sinónimos y fuzzy matching.
     
     Uso:
@@ -729,7 +729,7 @@ class SemanticMapper:
         """
         return SequenceMatcher(None, text1.lower(), text2.lower()).ratio()
     
-    def _find_best_match(self, column: str, synonyms: List[str]) -> Tuple[Optional[str], float]:
+    def _find_best_match(self, column: str, synonyms: list[str]) -> tuple[str | None, float]:
         """
         Encuentra el mejor match para una columna entre una lista de sinónimos.
         
@@ -770,7 +770,7 @@ class SemanticMapper:
         
         return None, 0.0
     
-    def map_columns(self, columns: List[str]) -> Tuple[Dict[str, str], Dict[str, float]]:
+    def map_columns(self, columns: list[str]) -> tuple[dict[str, str], dict[str, float]]:
         """
         Mapea una lista de columnas a campos del modelo Producto.
         
@@ -807,7 +807,7 @@ class SemanticMapper:
         
         return mapping, confidence
     
-    def infer_field_by_type(self, value: Any, available_fields: List[str]) -> Optional[str]:
+    def infer_field_by_type(self, value: Any, available_fields: list[str]) -> str | None:
         """
         Infiere el campo del modelo basándose en el tipo de dato del valor.
         

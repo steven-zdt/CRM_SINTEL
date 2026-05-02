@@ -1,12 +1,12 @@
 """
 Document Ingest Service Layer (Orchestration/routing/validation).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Orquestación: Coordina parsing, normalización, validación y opcionalmente persistencia
 - Agnóstico del dominio: No conoce modelos Django, delega persistencia a services de dominio
 - Preview mode: Permite parsear sin persistir
 - Transaccional: Todo o nada (transaction.atomic)
-- ⚠️ v2.40: Routing por app - cada app tiene sus parsers y validadores independientes
+- WARNING: v2.40: Routing por app - cada app tiene sus parsers y validadores independientes
 
 Estructura (FASE 1 + v2.40):
 - router.py: Enrutamiento de documentos a parsers (incluye registry simplificado)
@@ -15,7 +15,7 @@ Estructura (FASE 1 + v2.40):
 - validators.py: Validación de integridad y campos obligatorios
 - validations/: Validadores específicos por app
 """
-# ⚠️ v2.40: Auto-importar parsers de apps para registro automático
+# WARNING: v2.40: Auto-importar parsers de apps para registro automático
 try:
     # Importar registro de parsers (registra automáticamente todos los parsers de todas las apps)
     from apps.services.document_parser import register_parsers  # noqa: F401

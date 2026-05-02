@@ -25,10 +25,10 @@ Uso:
         regimen_tributario="Responsable de IVA"
     )
 """
-from typing import Dict, Any, Optional
-from django.db import transaction
-from django.core.exceptions import ValidationError
+from typing import Any
 
+from django.core.exceptions import ValidationError
+from django.db import transaction
 
 # Multiplicadores primos según norma DIAN (Módulo 11)
 # Referencia: Resolución 000042 de 2015 de la DIAN
@@ -115,17 +115,17 @@ def crear_o_actualizar_empresa(
     direccion: str,
     telefono: str,
     email_contacto: str,
-    regimen_tributario: Optional[str] = None,  # Legacy, deprecado
-    dv: Optional[str] = None,
+    regimen_tributario: str | None = None,  # Legacy, deprecado
+    dv: str | None = None,
     moneda: str = 'COP',
-    logo: Optional[Any] = None,
-    website: Optional[str] = None,
+    logo: Any | None = None,
+    website: str | None = None,
     # Campos de configuración tributaria (autónomos)
-    tipo_contribuyente_clase: Optional[str] = None,
-    tipo_contribuyente_segmento: Optional[str] = None,
-    regimen_renta_codigo: Optional[str] = None,
-    responsabilidades_rut_codigos: Optional[list] = None,
-    actividad_economica: Optional[str] = None,
+    tipo_contribuyente_clase: str | None = None,
+    tipo_contribuyente_segmento: str | None = None,
+    regimen_renta_codigo: str | None = None,
+    responsabilidades_rut_codigos: list | None = None,
+    actividad_economica: str | None = None,
     **kwargs
 ):
     """
@@ -137,7 +137,7 @@ def crear_o_actualizar_empresa(
     
     El Dígito de Verificación (DV) se calcula automáticamente si no se proporciona.
     
-    ⚠️ IMPORTANTE:
+    WARNING: IMPORTANTE:
     - Esta función debe ejecutarse dentro del contexto del tenant (django-tenants)
     - Usa transaction.atomic() para garantizar consistencia
     - NO usa signals, toda la lógica es explícita
@@ -226,7 +226,9 @@ def crear_o_actualizar_empresa(
     if responsabilidades_rut_codigos is not None:
         # Validar responsabilidades usando choices locales
         try:
-            from apps.tenant.empresa.choices.responsabilidad_rut import validate_responsabilidades_rut
+            from apps.tenant.empresa.choices.responsabilidad_rut import (
+                validate_responsabilidades_rut,
+            )
             validate_responsabilidades_rut(responsabilidades_rut_codigos)
         except (ImportError, ValueError) as e:
             if isinstance(e, ValueError):

@@ -1,0 +1,154 @@
+{# proyectos_list.html - Proyectos Module v3.5 (Feature-Sliced) #}
+{# Zero JS in HTML - All logic in proyectos_list.js #}
+
+<div class="card shadow-sm" data-module="proyectos">
+  <div class="card-header bg-white">
+    <ul class="nav nav-tabs card-header-tabs" id="proyectos-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab-proyectos" data-bs-toggle="tab" data-bs-target="#tab-pane-proyectos" 
+                type="button" role="tab" aria-controls="tab-pane-proyectos" aria-selected="true">
+          <i class="bi bi-kanban me-2"></i>Proyectos
+          <span data-module="proyectos" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-tareas" data-bs-toggle="tab" data-bs-target="#tab-pane-tareas" 
+                type="button" role="tab" aria-controls="tab-pane-tareas" aria-selected="false">
+          <i class="bi bi-list-check me-2"></i>Tareas
+          <span data-module="tareas" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card-body">
+    <div class="tab-content" id="proyectos-tab-content">
+      
+      {# TAB 1: PROYECTOS #}
+      <div class="tab-pane fade show active" id="tab-pane-proyectos" role="tabpanel" 
+           aria-labelledby="tab-proyectos" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="proyectos">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-proyecto" 
+                   class="form-control" 
+                   placeholder="Buscar proyecto..."
+                   data-module="proyectos"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="proyectos" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/api/v1/proyectos/gestor-offcanvas/?tipo=proyecto" 
+                  hx-target="#offcanvas-container-proyectos" 
+                  hx-swap="innerHTML"
+                  data-module="proyectos"
+                  data-create-button>
+            <i class="bi bi-plus-lg me-1"></i>Nuevo Proyecto
+          </button>
+        </div>
+        
+        {# Resumen de Proyectos #}
+        <div id="proyectos-summary" class="mb-3"></div>
+        
+        {# Spinner #}
+        <div data-spinner="proyectos" class="text-center py-5" style="display: none;">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando tabla de proyectos...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-proyectos" data-grid="proyectos" style="display: none;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="proyectos" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay proyectos registrados
+          </p>
+        </div>
+      </div>
+
+      {# TAB 2: TAREAS #}
+      <div class="tab-pane fade" id="tab-pane-tareas" role="tabpanel" 
+           aria-labelledby="tab-tareas" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="tareas">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-tarea" 
+                   class="form-control" 
+                   placeholder="Buscar tarea..."
+                   data-module="tareas"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="tareas" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/api/v1/proyectos/gestor-offcanvas/?tipo=tarea" 
+                  hx-target="#offcanvas-container-proyectos" 
+                  hx-swap="innerHTML"
+                  data-module="tareas"
+                  data-create-button>
+            <i class="bi bi-plus-lg me-1"></i>Nueva Tarea
+          </button>
+        </div>
+        
+        {# Spinner #}
+        <div data-spinner="tareas" class="text-center py-5" style="display: none;">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando tabla de tareas...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-tareas" data-grid="tareas" style="display: none;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="tareas" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-inbox"></i> No hay tareas registradas
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Offcanvas Container #}
+<div id="offcanvas-container-proyectos"></div>
+
+{# Modal de Confirmacion Eliminar #}
+<div class="modal fade" id="confirmarEliminarModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirmar Eliminacion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Esta seguro de que desea eliminar este registro?</p>
+        <p class="text-danger"><strong>Esta accion no se puede deshacer.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include 'tenant/proyectos/assets_proyectos.html' %}

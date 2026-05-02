@@ -1,14 +1,15 @@
 """
 Validador para gastos (FASE 4.1).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Validaciones específicas para gastos
 - Reglas de negocio del dominio de gastos
 - Hereda de BaseValidator
 """
-from typing import Dict, Any, Tuple, List, Optional
-from decimal import Decimal, InvalidOperation
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from typing import Any
+
 from .base import BaseValidator
 
 
@@ -32,7 +33,7 @@ class GastoValidator(BaseValidator):
         """Nombre de la app que usa este validador."""
         return "gastos"
     
-    def validate(self, dto: Dict[str, Any], document_type: str) -> Tuple[bool, Optional[str], List[str]]:
+    def validate(self, dto: dict[str, Any], document_type: str) -> tuple[bool, str | None, list[str]]:
         """
         Valida un DTO de gasto (FASE 4.1).
         

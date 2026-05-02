@@ -3,12 +3,13 @@ Clase base para tests de apps tenant.
 
 Hereda de TenantTestCase y proporciona helpers para tests multi-tenant.
 """
+from django.contrib.auth import get_user_model
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import schema_context
+import json
 from rest_framework import status
-from django.contrib.auth import get_user_model
-from apps.public.tenants.models import Client, Domain
+from rest_framework_simplejwt.tokens import AccessToken
 
 User = get_user_model()
 
@@ -49,6 +50,20 @@ class TenantAPITestCase(TenantTestCase):
         super().setUp()
         
         # TenantTestCase ya crea self.tenant y self.domain automáticamente
+        # Asegurar que el dominio primario del tenant use un sufijo de desarrollo
+        # permitido (ej: '.localhost') para que la middleware de seguridad acepte
+        # solicitudes en el entorno de pruebas.
+        try:
+            from apps.public.tenants.models import Domain
+            primary_domain_qs = Domain.objects.filter(tenant=self.tenant, is_primary=True)
+            if primary_domain_qs.exists():
+                primary_domain = primary_domain_qs.first()
+                primary_domain.domain = f"{self.tenant.schema_name}.localhost"
+                primary_domain.save()
+        except Exception:
+            # Best-effort: si no existe o falla, continuar (TenantClient puede aún resolver)
+            pass
+
         # Crear cliente con el dominio del tenant (propaga HTTP_HOST correcto)
         self.client = TenantClient(self.tenant)
         
@@ -59,9 +74,28 @@ class TenantAPITestCase(TenantTestCase):
                 email='testuser@example.com',
                 password='testpass123',
             )
+            # Crear TenantMembership para el tenant actual con rol ADMIN (permite mutaciones en tests)
+            try:
+                from apps.public.tenants.models import TenantMembership
+                TenantMembership.objects.update_or_create(
+                    client=self.tenant,
+                    user=self.user,
+                    defaults={'rol': 'ADMIN', 'is_active': True, 'is_primary_admin': True},
+                )
+            except Exception:
+                # Si falla por cualquier razón, continuar (tests pueden ajustar permisos manualmente)
+                pass
         
-        # Autenticar como usuario en el tenant
+        # Autenticar como usuario en el tenant (session) y preparar JWT
         self.client.force_login(self.user)
+        try:
+            # Crear token de acceso JWT para el usuario (stateless)
+            access = AccessToken.for_user(self.user)
+            # Guardar como string para incluir en headers de prueba
+            self.jwt_token = str(access)
+        except Exception:
+            # Si no está disponible simplejwt, seguir sin JWT
+            self.jwt_token = None
     
     def tget(self, url, **kwargs):
         """
@@ -74,6 +108,16 @@ class TenantAPITestCase(TenantTestCase):
         Returns:
             Response
         """
+        # Ensure tests use an allowed host to bypass Tenant domain restrictions
+        if 'HTTP_HOST' not in kwargs:
+            # Usar el dominio del tenant para que django-tenants seleccione el esquema correcto
+            try:
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.localhost"
+            except Exception:
+                kwargs['HTTP_HOST'] = 'testserver'
+        # Incluir JWT Authorization por defecto si existe y no fue proporcionada
+        if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:
+            kwargs['HTTP_AUTHORIZATION'] = f'Bearer {self.jwt_token}'
         return self.client.get(url, **kwargs)
     
     def tpost(self, url, data=None, **kwargs):
@@ -89,8 +133,15 @@ class TenantAPITestCase(TenantTestCase):
             Response
         """
         if data is not None:
-            kwargs['data'] = data
-            kwargs['format'] = 'json'
+            kwargs['data'] = json.dumps(data)
+            kwargs['content_type'] = 'application/json'
+        if 'HTTP_HOST' not in kwargs:
+            try:
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.localhost"
+            except Exception:
+                kwargs['HTTP_HOST'] = 'testserver'
+        if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:
+            kwargs['HTTP_AUTHORIZATION'] = f'Bearer {self.jwt_token}'
         return self.client.post(url, **kwargs)
     
     def tput(self, url, data=None, **kwargs):
@@ -106,8 +157,15 @@ class TenantAPITestCase(TenantTestCase):
             Response
         """
         if data is not None:
-            kwargs['data'] = data
-            kwargs['format'] = 'json'
+            kwargs['data'] = json.dumps(data)
+            kwargs['content_type'] = 'application/json'
+        if 'HTTP_HOST' not in kwargs:
+            try:
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.localhost"
+            except Exception:
+                kwargs['HTTP_HOST'] = 'testserver'
+        if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:
+            kwargs['HTTP_AUTHORIZATION'] = f'Bearer {self.jwt_token}'
         return self.client.put(url, **kwargs)
     
     def tpatch(self, url, data=None, **kwargs):
@@ -123,8 +181,15 @@ class TenantAPITestCase(TenantTestCase):
             Response
         """
         if data is not None:
-            kwargs['data'] = data
-            kwargs['format'] = 'json'
+            kwargs['data'] = json.dumps(data)
+            kwargs['content_type'] = 'application/json'
+        if 'HTTP_HOST' not in kwargs:
+            try:
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.localhost"
+            except Exception:
+                kwargs['HTTP_HOST'] = 'testserver'
+        if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:
+            kwargs['HTTP_AUTHORIZATION'] = f'Bearer {self.jwt_token}'
         return self.client.patch(url, **kwargs)
     
     def tdelete(self, url, **kwargs):
@@ -138,6 +203,13 @@ class TenantAPITestCase(TenantTestCase):
         Returns:
             Response
         """
+        if 'HTTP_HOST' not in kwargs:
+            try:
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.localhost"
+            except Exception:
+                kwargs['HTTP_HOST'] = 'testserver'
+        if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:
+            kwargs['HTTP_AUTHORIZATION'] = f'Bearer {self.jwt_token}'
         return self.client.delete(url, **kwargs)
     
     def assertJSONResponse(self, response, expected_status=status.HTTP_200_OK):

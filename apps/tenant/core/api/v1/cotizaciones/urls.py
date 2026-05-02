@@ -1,16 +1,17 @@
 """Core API v1 - Cotizaciones URLs facade.
 
-⚠️ POLÍTICA:
+# WARNING: POLÍTICA:
 - Este módulo expone los endpoints de cotizaciones a través de Core API v1
 - Ruta base: /api/v1/core/v1/cotizaciones/
-- ⚠️ v2.61: Alineado con patrón de contabilidad
+- # WARNING: v2.61: Alineado con patrón de contabilidad
 """
 
 from rest_framework.routers import DefaultRouter
+
 from .viewsets import (
+    ConfiguracionCotizacionCoreViewSet,
     CotizacionCoreViewSet,
     CotizacionItemCoreViewSet,
-    ConfiguracionCotizacionCoreViewSet,
 )
 
 # Router para cotizaciones en Core API

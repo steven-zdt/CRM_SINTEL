@@ -1,17 +1,18 @@
 """
 Admin para proveedores (aislado por tenant).
 
-⚠️ v2.40: Alineado con modelo actual.
+WARNING: v2.40: Alineado con modelo actual.
 django-tenants maneja automáticamente el aislamiento por esquema.
 """
 from django.contrib import admin
+
 from .models import Proveedor
 
 
 @admin.register(Proveedor)
 class ProveedorAdmin(admin.ModelAdmin):
     """
-    ⚠️ v2.40: Admin alineado con modelo actual.
+    WARNING: v2.40: Admin alineado con modelo actual.
     """
     list_display = ("razon_social", "numero_documento", "tipo_persona", "tipo_documento", "regimen_tributario", "activo")
     search_fields = ("razon_social", "numero_documento", "nombre_comercial", "email_contacto")

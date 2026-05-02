@@ -2,15 +2,15 @@ from django.apps import AppConfig
 
 
 class TenantsConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'apps.public.tenants'
-    verbose_name = 'Tenants'
-    
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.public.tenants"
+    verbose_name = "Tenants"
+
     def ready(self):
         """
         Inicialización ligera de la app tenants.
 
-        ⚠️ CERO SIGNALS:
+        WARNING: CERO SIGNALS:
         - No se registran señales que creen dominios ni que escriban en BD.
         - Toda la lógica de onboarding vive en servicios explícitos.
 

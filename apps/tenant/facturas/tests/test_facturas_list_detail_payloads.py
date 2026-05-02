@@ -1,8 +1,9 @@
 """
 Tests de humo para validar que listado no trae blobs y detalle sí (opcional).
 """
-from django_tenants.test.cases import TenantTestCase
 from django.urls import reverse
+from django_tenants.test.cases import TenantTestCase
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
 
@@ -61,17 +62,20 @@ class PayloadsTests(TenantTestCase):
                            "El listado NO debe incluir application_response_xml")
     
     def test_detail_con_anexos(self):
-        """Valida que el detalle SÍ incluye anexos bajo demanda."""
+        """Valida que el detalle reporta metadatos de anexos sin incluir blobs."""
         url = reverse("factura-detail", args=[self.f.id])
         resp = self.client.get(url)
         
         self.assertEqual(resp.status_code, 200)
         row = resp.json()
         
-        # Validar que el detalle incluye anexos
-        self.assertIsNotNone(row.get("ubl_xml"), "El detalle debe incluir ubl_xml")
-        self.assertIsNotNone(row.get("application_response_xml"),
-                           "El detalle debe incluir application_response_xml")
+        # Contrato actual: metadatos y flags, no contenido XML pesado
+        self.assertTrue(row.get("has_ubl_xml"), "El detalle debe reportar has_ubl_xml=true")
+        self.assertTrue(row.get("has_application_response_xml"),
+                "El detalle debe reportar has_application_response_xml=true")
+        self.assertIn("anexos_meta", row)
+        self.assertNotIn("ubl_xml", row)
+        self.assertNotIn("application_response_xml", row)
         
         # Validar que la naturaleza está presente
         self.assertEqual(row.get("naturaleza"), NaturalezaFactura.COMPRA)

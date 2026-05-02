@@ -1,26 +1,27 @@
 """
 ViewSet independiente para generación de PDFs de cotizaciones v2.40.
 
-⚠️ MÓDULO INDEPENDIENTE: ViewSet completamente separado del CotizacionViewSet principal.
+# WARNING: MÓDULO INDEPENDIENTE: ViewSet completamente separado del CotizacionViewSet principal.
 - Endpoint: GET /api/v1/cotizaciones/pdf/{id}/
 - Lógica delegada a pdf_service.py
 - Respuesta: application/pdf
 """
 import logging
+
 from django.conf import settings
 from django.http import HttpResponse
-from rest_framework import viewsets, status
-from rest_framework.response import Response
-from rest_framework.decorators import action
+from rest_framework import status, viewsets
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.response import Response
 
-from apps.tenant.empresa.models import Empresa
-from apps.tenant.cotizaciones.permissions import IsCotizacionesMember, IsCotizacionesAdminOrReadOnly
+from apps.tenant.api.permissions import IsTenantMember
 from apps.tenant.cotizaciones.pdf_service import (
+    generar_pdf_bytes,
     obtener_cotizacion_para_pdf,
     preparar_contexto_pdf,
-    generar_pdf_bytes
 )
+from apps.tenant.cotizaciones.permissions import IsCotizacionesAdminOrReadOnly
+from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +30,12 @@ class CotizacionPDFViewSet(viewsets.ViewSet):
     """
     ViewSet independiente para generación de PDFs de cotizaciones.
     
-    ⚠️ v2.40: Módulo completamente independiente del CotizacionViewSet principal.
+    # WARNING: v2.40: Módulo completamente independiente del CotizacionViewSet principal.
     - Endpoint: GET /api/v1/cotizaciones/pdf/{id}/
     - Lógica delegada a pdf_service.py
     - Respuesta: application/pdf
     """
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [IsCotizacionesMember, IsCotizacionesAdminOrReadOnly]
+    permission_classes = [IsTenantMember, IsCotizacionesAdminOrReadOnly]
     
     def retrieve(self, request, pk=None):
         """
@@ -43,7 +43,7 @@ class CotizacionPDFViewSet(viewsets.ViewSet):
         
         GET /api/v1/cotizaciones/pdf/{id}/
         
-        ⚠️ v2.40: Generación dinámica de PDF (WeasyPrint eliminado - función deshabilitada)
+        # WARNING: v2.40: Generación dinámica de PDF (WeasyPrint eliminado - función deshabilitada)
         - Agrupa ítems por seccion_modulo (1.0, 2.0, 3.0)
         - Oculta secciones vacías
         - Resumen económico secuencial con lógica AIU
@@ -55,7 +55,7 @@ class CotizacionPDFViewSet(viewsets.ViewSet):
             - 500 INTERNAL SERVER ERROR: Si hay error generando el PDF
         """
         try:
-            # ⚠️ PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
+            # # WARNING: PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
             empresa = Empresa.objects.only('id').first()
             if not empresa:
                 return Response(
@@ -63,7 +63,7 @@ class CotizacionPDFViewSet(viewsets.ViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
             
-            # ⚠️ REPARACIÓN: Obtener cotización optimizada para PDF con refresh
+            # # WARNING: REPARACIÓN: Obtener cotización optimizada para PDF con refresh
             cotizacion = obtener_cotizacion_para_pdf(empresa.id, int(pk))
             
             if not cotizacion:
@@ -72,14 +72,14 @@ class CotizacionPDFViewSet(viewsets.ViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
             
-            # ⚠️ REPARACIÓN: Refrescar desde BD para asegurar datos actualizados
+            # # WARNING: REPARACIÓN: Refrescar desde BD para asegurar datos actualizados
             try:
                 cotizacion.refresh_from_db()
-                logger.info(f"[PDF ViewSet] ✅ Cotización {cotizacion.id} refrescada desde BD")
+                logger.info(f"[PDF ViewSet] [OK] Cotización {cotizacion.id} refrescada desde BD")
             except Exception as refresh_error:
-                logger.warning(f"[PDF ViewSet] ⚠️ Error refrescando cotización: {refresh_error}")
+                logger.warning(f"[PDF ViewSet] # WARNING: Error refrescando cotización: {refresh_error}")
             
-            # ⚠️ v2.40: Obtener perfil_id del request si está disponible (opcional)
+            # # WARNING: v2.40: Obtener perfil_id del request si está disponible (opcional)
             perfil_id = request.query_params.get('perfil_id', None)
             if perfil_id:
                 try:
@@ -94,16 +94,16 @@ class CotizacionPDFViewSet(viewsets.ViewSet):
             # Generar PDF
             pdf_bytes = generar_pdf_bytes(context, request)
             
-            # ⚠️ REPARACIÓN: Crear respuesta HTTP con el PDF y headers de no-cache
+            # # WARNING: REPARACIÓN: Crear respuesta HTTP con el PDF y headers de no-cache
             response = HttpResponse(pdf_bytes, content_type='application/pdf')
             response['Content-Disposition'] = f'inline; filename="cotizacion_{cotizacion.numero}.pdf"'
             
-            # ⚠️ REPARACIÓN: Headers para evitar caché y asegurar PDF dinámico
+            # # WARNING: REPARACIÓN: Headers para evitar caché y asegurar PDF dinámico
             response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response['Pragma'] = 'no-cache'
             response['Expires'] = '0'
             
-            logger.info(f"[PDF ViewSet] ✅ PDF generado para cotización {cotizacion.id} (sin caché)")
+            logger.info(f"[PDF ViewSet] [OK] PDF generado para cotización {cotizacion.id} (sin caché)")
             
             return response
             

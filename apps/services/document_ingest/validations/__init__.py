@@ -1,7 +1,7 @@
 """
 Sistema de validadores por app (validation plugins) (FASE 4.1).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - SSoT: El pipeline produce solo DTO JSON
 - El dominio aplica validaciones específicas
 - Cada app puede tener su propio validador especializado
@@ -18,24 +18,25 @@ Estructura:
 """
 from .base import BaseValidator
 from .router import (
+    VALIDATORS,
     get_validator,
-    register_validator,
     get_validator_by_document_type,
     list_validators,
+    register_validator,
     run_validations,
-    VALIDATORS,
 )
+
 
 # Auto-registrar validadores al importar
 def _register_default_validators():
     """Registra los validadores por defecto."""
+    from .cotizaciones import CotizacionesValidator
     from .factura import FacturaValidator
-    from .nota_credito import NotaCreditoValidator
     from .gasto import GastoValidator
     from .inventario import InventarioValidator
-    from .cotizaciones import CotizacionesValidator
+    from .nota_credito import NotaCreditoValidator
     
-    # ⚠️ v2.40: IMPORTANTE - Registrar CotizacionesValidator ANTES de InventarioValidator
+    # WARNING: v2.40: IMPORTANTE - Registrar CotizacionesValidator ANTES de InventarioValidator
     # para que tenga prioridad en el override del registro
     register_validator(CotizacionesValidator())
     
@@ -51,11 +52,11 @@ def _register_default_validators():
 _register_default_validators()
 
 # Exportar validadores
+from .cotizaciones import CotizacionesValidator
 from .factura import FacturaValidator
-from .nota_credito import NotaCreditoValidator
 from .gasto import GastoValidator
 from .inventario import InventarioValidator
-from .cotizaciones import CotizacionesValidator
+from .nota_credito import NotaCreditoValidator
 
 __all__ = [
     'BaseValidator',

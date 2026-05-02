@@ -1,22 +1,28 @@
 """
 Parser para documentos PDF (FASE 2.3 + FASE 1 - Servicios Globales).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Extracción de texto usando pdfminer
 - Regex + tablas DIAN para extraer datos estructurados
 - Retorna DTO JSON unificado según apps/services/document_parser/dto.py
-- ⚠️ FASE 1: Mejoras específicas para Notas de Crédito en PDF
+- WARNING: FASE 1: Mejoras específicas para Notas de Crédito en PDF
 """
-from typing import Dict, Any, Optional
 import re
-from apps.services.document_parser.normalizers import extract_text_from_pdf, sanitize_text, normalize_nit, normalize_currency, normalize_numeric_to_decimal_string
+from typing import Any
+
+from apps.services.document_parser.normalizers import (
+    extract_text_from_pdf,
+    normalize_nit,
+    normalize_numeric_to_decimal_string,
+    sanitize_text,
+)
 
 
-def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str, Any]:
+def parse_to_dto(file_bytes: bytes, filename: str | None = None) -> dict[str, Any]:
     """
     Parsea un documento PDF a DTO JSON unificado.
     
-    ⚠️ FASE 2.3: Regex + tablas DIAN.
+    WARNING: FASE 2.3: Regex + tablas DIAN.
     
     Args:
         file_bytes: Contenido del archivo PDF en bytes
@@ -76,7 +82,7 @@ def parse_to_dto(file_bytes: bytes, filename: Optional[str] = None) -> Dict[str,
     dto = {
         "document_type": document_type,
         "type": type_base,  # Tipo base para router de validaciones
-        # ⚠️ FASE 1: Campos planos requeridos para acceso directo
+        # WARNING: FASE 1: Campos planos requeridos para acceso directo
         "numero": numero or "",
         "referencia_factura": referencia_factura,  # Campo plano para Notas de Crédito
         "fecha_emision": fecha_emision or "",
@@ -116,7 +122,7 @@ def _is_credit_note(text: str) -> bool:
     """
     Detecta si el PDF es una Nota Crédito.
     
-    ⚠️ FASE 1: Patrones mejorados para detección robusta de Notas de Crédito.
+    WARNING: FASE 1: Patrones mejorados para detección robusta de Notas de Crédito.
     """
     patterns = [
         r'nota\s*cr[ée]dito',
@@ -130,11 +136,11 @@ def _is_credit_note(text: str) -> bool:
     return any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in patterns)
 
 
-def _extract_numero(text: str) -> Optional[str]:
+def _extract_numero(text: str) -> str | None:
     """
     Extrae número de factura/nota crédito.
     
-    ⚠️ FASE 1: Patrones mejorados para Notas de Crédito.
+    WARNING: FASE 1: Patrones mejorados para Notas de Crédito.
     Busca patrones como (NC|NOTA CR[ÉE]DITO)\\s*[-:]?\\s*([A-Z0-9]+)
     """
     patterns = [
@@ -156,7 +162,7 @@ def _extract_numero(text: str) -> Optional[str]:
     return None
 
 
-def _extract_cufe(text: str) -> Optional[str]:
+def _extract_cufe(text: str) -> str | None:
     """Extrae CUFE/CUDE."""
     patterns = [
         r'cufe\s*:?\s*([A-Z0-9\-]+)',
@@ -170,11 +176,11 @@ def _extract_cufe(text: str) -> Optional[str]:
     return None
 
 
-def _extract_fecha_emision(text: str) -> Optional[str]:
+def _extract_fecha_emision(text: str) -> str | None:
     """
     Extrae fecha de emisión.
     
-    ⚠️ FASE 1: Soporta múltiples formatos de fecha (YYYY-MM-DD, DD/MM/YYYY).
+    WARNING: FASE 1: Soporta múltiples formatos de fecha (YYYY-MM-DD, DD/MM/YYYY).
     """
     patterns = [
         # Patrones específicos con etiqueta
@@ -201,11 +207,11 @@ def _extract_fecha_emision(text: str) -> Optional[str]:
     return None
 
 
-def _extract_emisor_nit(text: str) -> Optional[str]:
+def _extract_emisor_nit(text: str) -> str | None:
     """
     Extrae NIT del emisor.
     
-    ⚠️ FASE 1: Patrones mejorados para extraer NIT (patrón estándar de NIT).
+    WARNING: FASE 1: Patrones mejorados para extraer NIT (patrón estándar de NIT).
     """
     patterns = [
         # Patrones específicos con etiqueta
@@ -226,7 +232,7 @@ def _extract_emisor_nit(text: str) -> Optional[str]:
     return None
 
 
-def _extract_emisor_razon_social(text: str) -> Optional[str]:
+def _extract_emisor_razon_social(text: str) -> str | None:
     """Extrae razón social del emisor."""
     patterns = [
         r'raz[óo]n\s*social\s*(?:emisor)?\s*:?\s*([^\n]+)',
@@ -239,7 +245,7 @@ def _extract_emisor_razon_social(text: str) -> Optional[str]:
     return None
 
 
-def _extract_receptor_nit(text: str) -> Optional[str]:
+def _extract_receptor_nit(text: str) -> str | None:
     """Extrae NIT del receptor."""
     patterns = [
         r'nit\s*(?:receptor|cliente)?\s*:?\s*([0-9\-]+)',
@@ -252,7 +258,7 @@ def _extract_receptor_nit(text: str) -> Optional[str]:
     return None
 
 
-def _extract_receptor_razon_social(text: str) -> Optional[str]:
+def _extract_receptor_razon_social(text: str) -> str | None:
     """Extrae razón social del receptor."""
     patterns = [
         r'raz[óo]n\s*social\s*(?:receptor)?\s*:?\s*([^\n]+)',
@@ -265,11 +271,11 @@ def _extract_receptor_razon_social(text: str) -> Optional[str]:
     return None
 
 
-def _extract_totales(text: str) -> Dict[str, Any]:
+def _extract_totales(text: str) -> dict[str, Any]:
     """
     Extrae totales monetarios.
     
-    ⚠️ FASE 1: Mejoras para manejar puntos/comas de miles/decimales.
+    WARNING: FASE 1: Mejoras para manejar puntos/comas de miles/decimales.
     Busca el monto total considerando puntos/comas de miles/decimales.
     """
     patterns = {
@@ -321,11 +327,11 @@ def _extract_totales(text: str) -> Dict[str, Any]:
     return totales
 
 
-def _extract_referencia(text: str) -> Optional[Dict[str, str]]:
+def _extract_referencia(text: str) -> dict[str, str] | None:
     """
     Extrae referencia a factura (para Notas Crédito).
     
-    ⚠️ FASE 1: Patrones mejorados para extraer referencia_factura.
+    WARNING: FASE 1: Patrones mejorados para extraer referencia_factura.
     Busca patrones como (Factura|Ref|Afecta)\\s*[-:]?\\s*([A-Z0-9]+)
     """
     patterns = [

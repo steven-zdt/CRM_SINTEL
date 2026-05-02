@@ -1,7 +1,7 @@
 """
 DTO (Data Transfer Object) unificado para documentos (FASE 3).
 
-⚠️ PRINCIPIOS:
+WARNING: PRINCIPIOS:
 - Contrato estable: Formato JSON único para todos los formatos (XML, PDF, XLS, CSV, TXT)
 - Agnóstico del formato: El DTO no expone detalles del formato origen
 - Compatible con DRF: Estructura JSON serializable
@@ -15,10 +15,9 @@ Tipos de documentos soportados:
 - recibo: Recibo de pago
 - orden_compra: Orden de compra
 """
-from typing import Dict, Any, Optional, Literal
+from dataclasses import asdict, dataclass
 from decimal import Decimal
-from dataclasses import dataclass, asdict, field
-from datetime import datetime
+from typing import Any, Literal
 
 # Tipos de documentos soportados (FASE 3)
 DocumentTypeBase = Literal[
@@ -34,11 +33,11 @@ DocumentTypeBase = Literal[
 @dataclass
 class IdentificadoresDTO:
     """Identificadores legales del documento (CUFE, UUID, etc.)."""
-    cufe: Optional[str] = None
-    uuid: Optional[str] = None
-    numero: Optional[str] = None
+    cufe: str | None = None
+    uuid: str | None = None
+    numero: str | None = None
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {k: v for k, v in asdict(self).items() if v is not None}
 
@@ -46,13 +45,13 @@ class IdentificadoresDTO:
 @dataclass
 class PartyDTO:
     """Datos de una parte (emisor o receptor)."""
-    nit: Optional[str] = None
-    razon_social: Optional[str] = None
-    direccion: Optional[str] = None
-    email: Optional[str] = None
-    telefono: Optional[str] = None
+    nit: str | None = None
+    razon_social: str | None = None
+    direccion: str | None = None
+    email: str | None = None
+    telefono: str | None = None
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {k: v for k, v in asdict(self).items() if v is not None}
 
@@ -65,7 +64,7 @@ class TotalesDTO:
     impuestos: Decimal = Decimal('0.00')
     total: Decimal = Decimal('0.00')
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {
             "moneda": self.moneda,
@@ -78,11 +77,11 @@ class TotalesDTO:
 @dataclass
 class ReferenciaDTO:
     """Referencia a documento relacionado (para Notas Crédito)."""
-    numero: Optional[str] = None
-    cufe: Optional[str] = None
-    tipo: Optional[str] = None  # "invoice", "creditnote", etc.
+    numero: str | None = None
+    cufe: str | None = None
+    tipo: str | None = None  # "invoice", "creditnote", etc.
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {k: v for k, v in asdict(self).items() if v is not None}
 
@@ -100,10 +99,10 @@ class DocumentoDTO:
     - recibo: Recibo de pago
     - orden_compra: Orden de compra
     
-    ⚠️ CONTRATO ESTABLE: Esta estructura es la única representación de intercambio
+    WARNING: CONTRATO ESTABLE: Esta estructura es la única representación de intercambio
     entre el pipeline y las capas de dominio para materializar documentos.
     
-    ⚠️ FASE 3: El campo "type" permite que el router de validaciones dirija
+    WARNING: FASE 3: El campo "type" permite que el router de validaciones dirija
     correctamente según el tipo de documento, sin depender del formato completo.
     """
     # Campos requeridos (sin default)
@@ -116,37 +115,37 @@ class DocumentoDTO:
     totales: TotalesDTO
     
     # Campos opcionales (con default)
-    type: Optional[str] = None  # Tipo base para router: "invoice", "creditnote", "gasto", etc. (FASE 3)
+    type: str | None = None  # Tipo base para router: "invoice", "creditnote", "gasto", etc. (FASE 3)
     
     # Referencia (solo para Notas Crédito, OrdenCompra)
-    referencia: Optional[ReferenciaDTO] = None
+    referencia: ReferenciaDTO | None = None
     
     # Motivo (solo para Notas Crédito)
-    motivo: Optional[str] = None
+    motivo: str | None = None
     
     # Campos específicos para Gasto (FASE 3)
-    categoria: Optional[str] = None
-    centro_costo: Optional[str] = None
+    categoria: str | None = None
+    centro_costo: str | None = None
     
     # Campos específicos para Inventario (FASE 3)
-    items: Optional[list] = None
-    almacen: Optional[str] = None
+    items: list | None = None
+    almacen: str | None = None
     
     # Campos específicos para Recibo (FASE 3)
-    metodo_pago: Optional[str] = None
-    banco: Optional[str] = None
+    metodo_pago: str | None = None
+    banco: str | None = None
     
     # Campos específicos para OrdenCompra (FASE 3)
-    proveedor: Optional[PartyDTO] = None
-    fecha_entrega: Optional[str] = None
-    condiciones_pago: Optional[str] = None
+    proveedor: PartyDTO | None = None
+    fecha_entrega: str | None = None
+    condiciones_pago: str | None = None
     
     # Metadata del parsing
-    formato_origen: Optional[str] = None  # "xml", "pdf", "xlsx", etc.
-    parser_usado: Optional[str] = None  # Clase del parser que procesó el documento
-    sha256: Optional[str] = None  # Hash SHA-256 del documento original
+    formato_origen: str | None = None  # "xml", "pdf", "xlsx", etc.
+    parser_usado: str | None = None  # Clase del parser que procesó el documento
+    sha256: str | None = None  # Hash SHA-256 del documento original
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convierte a dict JSON-serializable (FASE 3).
         

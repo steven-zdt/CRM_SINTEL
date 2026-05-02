@@ -5,7 +5,8 @@ Todas las integraciones deben heredar de esta clase para mantener
 consistencia en el manejo de errores y logging.
 """
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any
+
 from django_tenants.utils import schema_context
 
 
@@ -16,7 +17,7 @@ class BaseIntegration(ABC):
     Proporciona métodos comunes y estructura para todas las integraciones.
     """
     
-    def __init__(self, schema_name: Optional[str] = None):
+    def __init__(self, schema_name: str | None = None):
         """
         Inicializa la integración.
         
@@ -44,7 +45,7 @@ class BaseIntegration(ABC):
         """
         Ejecuta una función en el contexto del tenant.
         
-        ⚠️ IMPORTANTE: Usa schema_context para operaciones específicas de tenant.
+        WARNING: IMPORTANTE: Usa schema_context para operaciones específicas de tenant.
         
         Args:
             funcion: Función a ejecutar
@@ -60,7 +61,7 @@ class BaseIntegration(ABC):
         else:
             return funcion(*args, **kwargs)
     
-    def validar_configuracion(self) -> Dict[str, Any]:
+    def validar_configuracion(self) -> dict[str, Any]:
         """
         Valida la configuración de la integración.
         
@@ -72,7 +73,7 @@ class BaseIntegration(ABC):
             'errores': [],
         }
     
-    def obtener_estado(self) -> Dict[str, Any]:
+    def obtener_estado(self) -> dict[str, Any]:
         """
         Obtiene el estado de la integración.
         

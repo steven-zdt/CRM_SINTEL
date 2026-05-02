@@ -3,25 +3,24 @@ Extracción de adjuntos desde mensajes de correo.
 
 Valida tamaños, filtra tipos obvios y retorna lista de AttachmentDTO.
 
-⚠️ IMPLEMENTACIÓN: Delega a inbox_client.get_attachments() que ya implementa parsing MIME real.
-⚠️ SEGURIDAD: Valida límites de tamaño para prevenir DoS.
+WARNING: IMPLEMENTACIÓN: Delega a inbox_client.get_attachments() que ya implementa parsing MIME real.
+WARNING: SEGURIDAD: Valida límites de tamaño para prevenir DoS.
 """
-from typing import List
+
 from .schemas import AttachmentDTO
-from .exceptions import AttachmentTooLarge
 
 
-def extract_attachments(message: dict, *, max_mb: int = 50) -> List[AttachmentDTO]:
+def extract_attachments(message: dict, *, max_mb: int = 50) -> list[AttachmentDTO]:
     """
     Extrae adjuntos de un mensaje validando tamaños.
     
-    ⚠️ NOTA: Esta función es un wrapper que delega a inbox_client.get_attachments().
+    WARNING: NOTA: Esta función es un wrapper que delega a inbox_client.get_attachments().
     La implementación real del parsing MIME está en RealIMAPClient.get_attachments().
     
     Filtra tipos obvios no relevantes (imágenes, documentos ofimáticos sin XML, etc.)
     y valida que no excedan el límite de tamaño.
     
-    ⚠️ LÍMITE: max_mb debe alinearse con el límite de ingesta (50MB por defecto).
+    WARNING: LÍMITE: max_mb debe alinearse con el límite de ingesta (50MB por defecto).
     
     Args:
         message: Dict con datos del mensaje (debe tener campo '_email_message' de email.message)
@@ -38,7 +37,7 @@ def extract_attachments(message: dict, *, max_mb: int = 50) -> List[AttachmentDT
         attachments = extract_attachments(message, max_mb=50)
         # Retorna: [AttachmentDTO(filename="factura.xml", ...)]
     """
-    # ⚠️ NOTA: La extracción real de adjuntos se hace en inbox_client.get_attachments()
+    # WARNING: NOTA: La extracción real de adjuntos se hace en inbox_client.get_attachments()
     # Esta función es un wrapper para mantener compatibilidad con el código existente
     # Si el mensaje ya tiene adjuntos extraídos, usarlos directamente
     
@@ -53,7 +52,7 @@ def extract_attachments(message: dict, *, max_mb: int = 50) -> List[AttachmentDT
         attachments = []
     
     # Filtrar y validar tamaños
-    valid_attachments: List[AttachmentDTO] = []
+    valid_attachments: list[AttachmentDTO] = []
     for att in attachments:
         size_bytes = att.get("size_bytes", 0)
         if size_bytes > max_bytes:

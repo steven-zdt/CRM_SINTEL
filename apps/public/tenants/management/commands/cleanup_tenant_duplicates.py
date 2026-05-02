@@ -6,6 +6,7 @@ Estrategia:
 - Mantiene el más antiguo (pk más pequeño) marcado como primario si procede.
 - Elimina los duplicados adicionales no primarios.
 """
+
 from collections import defaultdict
 
 from django.core.management.base import BaseCommand
@@ -31,7 +32,9 @@ class Command(BaseCommand):
 
             self.stdout.write(f"\n🌐 Dominio duplicado: {dom} ({len(items)} registros)")
             keeper = items[0]
-            self.stdout.write(f"   Manteniendo: id={keeper.id}, tenant_id={keeper.tenant_id}, is_primary={keeper.is_primary}")
+            self.stdout.write(
+                f"   Manteniendo: id={keeper.id}, tenant_id={keeper.tenant_id}, is_primary={keeper.is_primary}"
+            )
 
             for extra in items[1:]:
                 total_duplicates += 1
@@ -41,9 +44,10 @@ class Command(BaseCommand):
                 extra.delete()
 
         if total_duplicates == 0:
-            self.stdout.write(self.style.SUCCESS("✅ No se encontraron dominios duplicados."))
+            self.stdout.write(self.style.SUCCESS("OK: No se encontraron dominios duplicados."))
         else:
             self.stdout.write(
-                self.style.SUCCESS(f"\n✅ Limpieza completada. Duplicados eliminados: {total_duplicates}")
+                self.style.SUCCESS(
+                    f"\nOK: Limpieza completada. Duplicados eliminados: {total_duplicates}"
+                )
             )
-
