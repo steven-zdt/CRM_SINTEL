@@ -534,6 +534,9 @@
         if (tabName === 'clientes') {
             log.info('Tab shown from workspace: clientes');
             loadClientesTable();
+        } else if (tabName === 'contactos') {
+            log.info('Tab shown from workspace: contactos');
+            loadContactosTable();
         }
     });
 
@@ -568,7 +571,7 @@
         if (tabName === 'clientes') {
             log.info('Tab activated, initializing: clientes');
             loadClientesTable();
-        } else if (tabName === 'contactos') { // Wait, is it tab-contactos?
+        } else if (tabName === 'contactos') {
             log.info('Tab activated, initializing: contactos');
             loadContactosTable();
         }
@@ -591,35 +594,29 @@
     d.body.addEventListener('htmx:afterSettle', (e) => {
         const target = e.detail.target;
         
-        if (target && target.id === 'offcanvas-container-clientes') {
-            // Cliente offcanvas loaded (create/edit/view)
-            log.info('Cliente offcanvas loaded, waiting for DOM...');
-            
-            // Wait for next frame to ensure DOM is fully updated
-            requestAnimationFrame(() => {
+        const showOffcanvas = (containerId, offcanvasId) => {
+            if (target && target.id === containerId) {
+                log.info(`${containerId} loaded, showing offcanvas...`);
                 requestAnimationFrame(() => {
-                    const offcanvasEl = d.getElementById('offcanvas-cliente');
-                    if (offcanvasEl) {
-                        // Wait for Bootstrap to be available
-                        waitForBootstrap(() => {
-                            try {
-                                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                                offcanvasInstance.show();
-                                log.info('Cliente offcanvas shown successfully');
-                            } catch (err) {
-                                log.error('Error showing offcanvas', err);
-                            }
-                        });
-                    } else {
-                        log.error('offcanvas-cliente not found in DOM', {
-                            container: target.innerHTML.substring(0, 100)
-                        });
-                    }
+                    requestAnimationFrame(() => {
+                        const offcanvasEl = d.getElementById(offcanvasId);
+                        if (offcanvasEl) {
+                            waitForBootstrap(() => {
+                                try {
+                                    bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                                    log.info(`${offcanvasId} shown successfully`);
+                                } catch (err) {
+                                    log.error(`Error showing ${offcanvasId}`, err);
+                                }
+                            });
+                        }
+                    });
                 });
-            });
-        }
-        // Note: ContactoCliente offcanvas handling is managed by contacto_cliente_main.js (FSD)
-        // No need to handle it here - the new modules are self-contained
+            }
+        };
+
+        showOffcanvas('offcanvas-container-clientes', 'offcanvas-cliente');
+        showOffcanvas('offcanvas-container-contactos', 'offcanvas-contacto-cliente');
     });
 
     /**
