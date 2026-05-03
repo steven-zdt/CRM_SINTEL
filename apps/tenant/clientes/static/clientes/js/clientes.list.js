@@ -527,6 +527,17 @@
     });
 
     /**
+     * Bootstrap sub-tab shown inside #clientes workspace tab
+     */
+    d.addEventListener('shown.bs.tab', (e) => {
+        const target = e.target?.dataset?.bsTarget;
+        if (target === '#tab-pane-contactos') {
+            log.info('Contactos sub-tab shown, initializing table');
+            loadContactosTable();
+        }
+    });
+
+    /**
      * Custom events from workspace
      */
     d.addEventListener('tab-shown', (e) => {
@@ -534,9 +545,6 @@
         if (tabName === 'clientes') {
             log.info('Tab shown from workspace: clientes');
             loadClientesTable();
-        } else if (tabName === 'contactos') {
-            log.info('Tab shown from workspace: contactos');
-            loadContactosTable();
         }
     });
 
