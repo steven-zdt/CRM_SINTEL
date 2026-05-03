@@ -33,23 +33,31 @@ class ClienteListSerializer(serializers.ModelSerializer):
     tipo_documento_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
     tipo_persona_display = serializers.CharField(source='get_tipo_persona_display', read_only=True)
     regimen_tributario_display = serializers.CharField(source='get_regimen_tributario_display', read_only=True)
-    
+    encargado = serializers.SerializerMethodField()
+
+    def get_encargado(self, obj):
+        principal = obj.contactos_prefetched[0] if hasattr(obj, 'contactos_prefetched') and obj.contactos_prefetched else None
+        if principal:
+            return {'nombre': principal.nombre_completo, 'email': principal.email}
+        return None
+
     class Meta:
         model = Cliente
         fields = [
-            'id', 
+            'id',
             'tipo_persona', 'tipo_persona_display',
-            'tipo_documento', 'tipo_documento_display', 
-            'numero_documento', 
-            'razon_social', 
+            'tipo_documento', 'tipo_documento_display',
+            'numero_documento',
+            'razon_social',
             'nombre_comercial',
             'regimen_tributario', 'regimen_tributario_display',
-            'email', 
+            'email',
             'telefono',
             'ciudad',
+            'encargado',
             'activo'
         ]
-        read_only_fields = ['id', 'tipo_documento_display', 'tipo_persona_display', 'regimen_tributario_display']
+        read_only_fields = ['id', 'tipo_documento_display', 'tipo_persona_display', 'regimen_tributario_display', 'encargado']
 
 
 class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer):

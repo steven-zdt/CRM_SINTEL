@@ -8,6 +8,7 @@ ViewSet para Clientes v2.61.4 - Tabulator Implementation + HTMX Offcanvas
 """
 import logging
 from django.db.utils import ProgrammingError
+from django.db.models import Prefetch
 from django.utils.functional import cached_property
 from rest_framework import status, serializers, filters
 from rest_framework.decorators import action
@@ -124,6 +125,9 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
         if not empresa:
             return Cliente.objects.none()
 
+        contactos_qs = ContactoCliente.objects.filter(is_principal=True).only('id', 'cliente_id', 'nombre_completo', 'email')
+        prefetch = Prefetch('contactos', queryset=contactos_qs, to_attr='contactos_prefetched')
+
         return Cliente.objects.filter(empresa_id=empresa.id).only(
             'id',
             'empresa_id',
@@ -139,7 +143,7 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
             'ciudad',
             'activo',
             'observaciones'
-        )
+        ).prefetch_related(prefetch)
 
     @cached_property
     def tenant_empresa(self):
@@ -422,41 +426,27 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
             request=request,
         )
     
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
-    def render_offcanvas_detalle(self, request):
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
+    def render_offcanvas_detalle(self, request, pk=None):
         """
         # WARNING: v2.61: Endpoint HTMX RESTful para cargar offcanvas de detalle de clientes (read-only).
-        
-        GET /api/v1/clientes/render-offcanvas/detalle/?id={id}
-        
-        Query params:
-        - id: ID del cliente (requerido)
-        
+
+        GET /api/v1/clientes/{id}/render-offcanvas/detalle/
+
         Returns:
             Template HTML: clientes/offcanvas_detalle_cliente.html
         """
-        cliente_id = request.query_params.get('id')
-        
-        if not cliente_id:
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({'id': 'El parámetro "id" es requerido'})
-        
-        # # WARNING: Zero Trust: Obtener cliente validando el tenant
-        cliente = self.get_queryset().filter(id=cliente_id).first()
-        
-        if not cliente:
-            from rest_framework.exceptions import NotFound
-            raise NotFound('Cliente de organization no encontrado')
-        
+        cliente = self.get_object()
+
         # # WARNING: PERFORMANCE BIBLE: Cargar contactos con .only()
         contactos = self.contacto_selector.get_contacto_list(empresa_id=cliente.empresa_id, cliente_id=cliente.id)
-        
+
         context = {
             'cliente': cliente,
             'contactos': contactos,
             'modo': 'detalle'
         }
-        
+
         # # WARNING: v2.61.4: Usar wrapper seguro para TemplateHTMLRenderer
         return render_template_safe(
             context,

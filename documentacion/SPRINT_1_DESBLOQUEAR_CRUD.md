@@ -927,3 +927,26 @@ Como la única dependencia añadida (Playwright) vive en `tests/e2e/node_modules
 Cualquier desviación durante la ejecución debe registrarse en el PR como comentario y, si afecta a otros módulos, reflejarse en la tabla §4.14.
 
 
+
+ Tarea 5 completada — 6 duplicados en contabilidad eliminados.
+
+🎉 Sprint 4 — Completado
+Resumen de limpieza ejecutada:
+
+Tarea	Eliminados	Resultado
+Tarea 1	Grep confirmación	✅ Cero referencias a huérfanos
+Tarea 2	7 directorios en core/partials/	✅ empleados, gastos, contabilidad, cotizaciones, empresa, dashboard + gastos intermedio
+Tarea 3	2 directorios en core/static/core/js/	✅ empleados, gastos (JS legacy)
+Tarea 4	7 templates en facturas/partials/	✅ offcanvas duplicados
+Tarea 5	6 templates en contabilidad/ raíz	✅ offcanvas huérfanos
+Total: 20+ archivos y 9 directorios eliminados.
+
+Ahora hago un git commit:
+
+ Siguiente paso
+Con Sprint 4 completado, el proyecto está limpio y consolidado. Las opciones son:
+
+Sprint 5 — Consolidación de *.api.js duplicados (mail, mailinbox, landing módulos)
+Sprint 6 — Refactor de estructura/arquitectura según lecciones aprendidas
+Desarrollo de features — Nuevas funcionalidades del CRM
+¿En qué quieres enfocarte ahora?

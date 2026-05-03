@@ -49,6 +49,16 @@
             { title: 'Teléfono', field: 'telefono' },
             { title: 'Ciudad', field: 'ciudad' },
             {
+                title: 'Encargado',
+                field: 'encargado',
+                formatter: (cell) => {
+                    const enc = cell.getValue();
+                    if (!enc) return '<span class="text-muted">—</span>';
+                    return `<div class="small"><strong>${enc.nombre}</strong><br><span class="text-muted">${enc.email}</span></div>`;
+                },
+                minWidth: 180
+            },
+            {
                 title: 'Acciones',
                 width: 150,
                 hozAlign: 'center',
@@ -92,11 +102,14 @@
             },
             {
                 title: 'Acciones',
-                width: 120,
+                width: 140,
                 hozAlign: 'center',
                 headerSort: false,
                 formatter: () => `
                     <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-info" data-action="view" title="Ver">
+                            <i class="bi bi-eye"></i>
+                        </button>
                         <button class="btn btn-outline-primary" data-action="edit" title="Editar">
                             <i class="bi bi-pencil"></i>
                         </button>
@@ -296,6 +309,7 @@
                 break;
             case 'view':
                 if (type === 'clientes') viewCliente(rowData.id);
+                else if (type === 'contactos') viewContacto(rowData.id);
                 break;
             case 'delete':
                 if (type === 'clientes') deleteCliente(rowData);
@@ -327,10 +341,10 @@
      * View cliente details - Load form and show offcanvas
      */
     function viewCliente(id) {
-        const url = `/api/v1/clientes/render-offcanvas/detalle/?id=${id}`;
+        const url = `/api/v1/clientes/${id}/render-offcanvas/detalle/`;
         try {
             log.info(`Loading detail view for cliente ${id}`);
-            
+
             // Use htmx.ajax with swap listener pattern
             htmx.ajax('GET', url, {
                 target: '#offcanvas-container-clientes',
@@ -386,6 +400,24 @@
                 || 'No se pudo eliminar el cliente';
             log.error('Error eliminando cliente ' + id, response.data);
             showError(msg);
+        }
+    }
+
+    /**
+     * View contacto details
+     */
+    function viewContacto(id) {
+        const url = `/api/v1/clientes/contactos/${id}/render-offcanvas/detalle/`;
+        try {
+            log.info(`Loading detail view for contacto ${id}`);
+
+            htmx.ajax('GET', url, {
+                target: '#offcanvas-container-contactos',
+                swap: 'innerHTML'
+            });
+        } catch (error) {
+            log.error(`Error loading detail view for contacto ${id}`, error);
+            showError('Error al cargar detalles');
         }
     }
 

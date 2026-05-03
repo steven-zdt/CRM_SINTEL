@@ -15,7 +15,7 @@
     <div id="form-cliente-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     <div id="cliente-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
     
-    <form id="form-cliente" method="POST">
+    <form id="form-cliente" method="POST" onsubmit="return false;">
       <input type="hidden" id="cliente-id" name="id" value="{{ cliente.id }}">
       
       {# Sección: Identificación #}
