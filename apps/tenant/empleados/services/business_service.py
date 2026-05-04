@@ -288,7 +288,10 @@ class DevengoBusinessService:
         if instance:
             devengo = DevengoCRUDService.actualizar_devengo(instance, data)
         else:
-            devengo = DevengoCRUDService.crear_devengo(empleado, data)
+            # Remover 'empleado' de data para evitar conflicto (se pasa explícitamente como parámetro)
+            data_copy = data.copy()
+            data_copy.pop('empleado', None)
+            devengo = DevengoCRUDService.crear_devengo(empleado, data_copy)
 
         return devengo
 
