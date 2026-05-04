@@ -98,13 +98,17 @@
     function setupOffcanvasLoadListener() {
         d.body.addEventListener('htmx:afterSettle', function(evt) {
             const target = evt.detail.target;
-            if (!target) return;
+            if (!target || target.id !== CONTAINER_ID) return;
 
-            const offcanvasEl = target.querySelector('#offcanvas-devengo');
-            if (!offcanvasEl) return;
+            const offcanvasEl = target.querySelector('.offcanvas');
+            if (offcanvasEl && window.bootstrap) {
+                console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
+                const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                bsOffcanvas.show();
 
-            // Pequeño delay para asegurar que el DOM está listo
-            setTimeout(triggerPreviewCalculo, 100);
+                // Pequeño delay para asegurar que el DOM está listo antes del cálculo
+                setTimeout(triggerPreviewCalculo, 100);
+            }
         });
     }
 
@@ -112,14 +116,16 @@
      * Configurar eventos HTMX para manejo de errores y éxito
      */
     function setupHTMXListeners() {
-        // Listener para éxito del form (guardar nómina)
+        // Listener para el botón guardar nómina (hx-post movido del form al botón)
         d.body.addEventListener('htmx:afterRequest', function(evt) {
             const target = evt.target;
-            const isDevengoForm = target.id === 'form-devengo';
-            const requestPath = evt.detail.pathInfo?.requestPath || '';
-            const isPreview = requestPath.includes('preview-calculo');
+            if (target.id !== 'btn-guardar-devengo') return;
 
-            if (evt.detail.successful && isDevengoForm && !isPreview) {
+            // Siempre resetear el botón al terminar (éxito o error)
+            target.disabled = false;
+            target.innerHTML = '<i class="bi bi-check-lg me-1"></i>Guardar Nómina';
+
+            if (evt.detail.successful) {
                 // 1. Cerrar Offcanvas
                 const offcanvasEl = d.getElementById('offcanvas-devengo');
                 if (offcanvasEl) {

@@ -12,12 +12,7 @@
   <div class="offcanvas-body">
     <div id="form-devengo-feedback" class="alert d-none mb-3" role="alert"></div>
     
-    <form id="form-devengo" method="POST" onsubmit="return false;"
-          hx-post="/api/v1/empleados/devengos/"
-          hx-target="#grid-empleados" 
-          hx-swap="none"
-          hx-on::htmx:before-request="const btn = document.getElementById('btn-guardar-devengo'); if(btn && !btn.disabled){ btn.disabled = true; btn.innerHTML = '<span class=\"spinner-border spinner-border-sm me-1\" role=\"status\" aria-hidden=\"true\"></span>Guardando...'; }"
-          hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[devengo.offcanvas]', {errorContainerSelector: '#form-devengo-feedback'})">
+    <form id="form-devengo" method="POST" onsubmit="return false;">
       {% csrf_token %}
       <input type="hidden" id="devengo-id" name="id" value="">
       <input type="hidden" id="devengo-empleado-id" name="empleado" value="{{ empleado.id }}">
@@ -167,7 +162,13 @@
   <div class="offcanvas-footer border-top bg-light p-3">
     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
       <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
-      <button type="submit" class="btn btn-primary" id="btn-guardar-devengo" form="form-devengo">
+      <button type="button" class="btn btn-primary" id="btn-guardar-devengo"
+              hx-post="/api/v1/empleados/devengos/"
+              hx-target="#grid-empleados"
+              hx-swap="none"
+              hx-include="#form-devengo"
+              hx-on::htmx:before-request="const btn=this; if(!btn.disabled){btn.disabled=true; btn.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\' aria-hidden=\'true\'></span>Guardando...';}"
+              hx-on::htmx:response-error="window.UIManager&&window.UIManager.handleError&&window.UIManager.handleError(event.detail,'[devengo.offcanvas]',{errorContainerSelector:'#form-devengo-feedback'})">
         <i class="bi bi-check-lg me-1"></i>Guardar Nómina
       </button>
     </div>
