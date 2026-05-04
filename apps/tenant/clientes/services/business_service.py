@@ -16,25 +16,29 @@ class ClienteBusinessService:
         self.selector = ClienteSelector()
 
     @transaction.atomic
-    def registrar_cliente_completo(self, empresa_id: int, data: dict, contactos_raw: list = None) -> Cliente:
+    def registrar_cliente_completo(self, empresa_id: int, data: dict, contactos_raw: list = None, cliente_instance: Cliente = None) -> Cliente:
         """
-        Orchestrates creation of a client and their initial contacts.
+        Orchestrates creation or update of a client and their contacts.
+        If cliente_instance is provided, updates directly without upsert logic.
         """
-        # 1. Normalize and check uniqueness
-        tipo_doc = data.get("tipo_documento")
-        num_doc = data.get("numero_documento")
-        
-        # Upsert logic (Idempotency)
-        existing = Cliente.objects.filter(
-            empresa_id=empresa_id,
-            tipo_documento=tipo_doc,
-            numero_documento=num_doc
-        ).first()
-
-        if existing:
-            cliente = self.crud.update_cliente(existing, data)
+        if cliente_instance:
+            cliente = self.crud.update_cliente(cliente_instance, data)
         else:
-            cliente = self.crud.create_cliente(empresa_id, data)
+            # 1. Normalize and check uniqueness
+            tipo_doc = data.get("tipo_documento")
+            num_doc = data.get("numero_documento")
+            
+            # Upsert logic (Idempotency)
+            existing = Cliente.objects.filter(
+                empresa_id=empresa_id,
+                tipo_documento=tipo_doc,
+                numero_documento=num_doc
+            ).first()
+
+            if existing:
+                cliente = self.crud.update_cliente(existing, data)
+            else:
+                cliente = self.crud.create_cliente(empresa_id, data)
 
         # 2. Sync contacts if provided
         if contactos_raw is not None:

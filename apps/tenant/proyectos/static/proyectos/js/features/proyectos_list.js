@@ -295,9 +295,11 @@
                         swap: 'innerHTML'
                     });
 
-                    // ⚠️ Safeguard: Verificar que el elemento existe antes de abrir
+                    // ⚠️ v2.62.3: Abrir Offcanvas usando el orquestador central (apertura segura)
                     const offcanvasEl = d.getElementById('offcanvas-proyecto');
-                    if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                    if (offcanvasEl && w.UIManager?.handleOffcanvas) {
+                        w.UIManager.handleOffcanvas(offcanvasEl, 'show');
+                    } else if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
                         bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
                     } else {
                         console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);

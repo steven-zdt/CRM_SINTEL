@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "statusMessage": "Verificando restricciones SINTEL...",
+            "command": "$json = [Console]::In.ReadToEnd() | ConvertFrom-Json; $f = $json.tool_input.file_path; if ($f -match 'apps[/\\\\]public[/\\\\]') { @{hookSpecificOutput=@{hookEventName='PreToolUse'; permissionDecision='deny'; permissionDecisionReason='[SINTEL GUARD] Modificacion en apps/public/ BLOQUEADA. Requiere RFC + Issue + etiqueta needs-admin-approval. Solicita autorizacion explicita del USUARIO antes de continuar (AGENTS.md seccion 4.2).'}} | ConvertTo-Json -Compress -Depth 5 }"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "statusMessage": "Validando sintaxis Python (SINTEL GUARD)...",
+            "command": "$json = [Console]::In.ReadToEnd() | ConvertFrom-Json; $f = $json.tool_input.file_path; if ($f -match '\\.py$' -and (Test-Path \"$f\")) { $err = (& '.\\venv\\Scripts\\python.exe' -m py_compile \"$f\" 2>&1 | Out-String).Trim(); if ($LASTEXITCODE -ne 0) { @{decision='block'; reason=\"[SINTEL GUARD] SyntaxError detectado en $f -- $err -- Corrige el archivo antes de continuar.\"} | ConvertTo-Json -Compress } }"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -14,6 +14,31 @@
 
     w.AppCliente = w.AppCliente || {};
 
+    // ============================================================
+    // DOM SELECTORS (SSoT)
+    // ============================================================
+    const DOM = {
+        offcanvas:          '#offcanvas-contacto-cliente',
+        form:               '#form-contacto-cliente',
+        btnGuardar:         '#btn-guardar-contacto',
+        btnCancelar:        '#btn-cancelar-contacto',
+        feedback:           '#form-contacto-cliente-feedback',
+        contactoId:         '#contacto-id',
+        
+        // Relación con cliente
+        clienteSelect:      '#contacto-cliente-select',
+        clienteInput:       '#contacto-cliente-id',
+        selectContainer:    '#contacto-cliente-select-container',
+        
+        // Campos específicos
+        activo:             '#contacto-activo',
+        is_principal:       '#contacto-is_principal',
+        
+        // Utilidades dinámicas
+        contenedorContactos: '#contenedor-contactos',
+        btnAgregarContacto:  '#btn-agregar-contacto'
+    };
+
     /**
      * Eliminar contacto del contenedor dinámico
      */
@@ -32,7 +57,7 @@
      * @returns {Object} Datos del contacto
      */
     function recolectarDatosFormulario() {
-        const form = d.querySelector('#form-contacto-cliente');
+        const form = d.querySelector(DOM.form);
         if (!form) {
             console.error('[clientes.contactos] Formulario no encontrado');
             return null;
@@ -40,16 +65,16 @@
 
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
-        const clienteInput = d.querySelector('#contacto-cliente-id');
-        const clienteSelect = d.querySelector('#contacto-cliente-select');
+        const clienteInput = d.querySelector(DOM.clienteInput);
+        const clienteSelect = d.querySelector(DOM.clienteSelect);
 
         if (clienteSelect && clienteInput) {
             clienteInput.value = clienteSelect.value || clienteInput.value || '';
         }
 
         // Convertir checkboxes
-        data.activo = d.querySelector('#contacto-activo')?.checked ?? false;
-        data.is_principal = d.querySelector('#contacto-is_principal')?.checked ?? false;
+        data.activo = d.querySelector(DOM.activo)?.checked ?? false;
+        data.is_principal = d.querySelector(DOM.is_principal)?.checked ?? false;
 
         // Remover campos vacíos
         Object.keys(data).forEach(key => {
@@ -78,8 +103,8 @@
             return;
         }
 
-        const contactoId = d.querySelector('#contacto-id')?.value;
-        const btnGuardar = d.querySelector('#btn-guardar-contacto');
+        const contactoId = d.querySelector(DOM.contactoId)?.value;
+        const btnGuardar = d.querySelector(DOM.btnGuardar);
 
         // Deshabilitar botón
         if (btnGuardar) {
@@ -105,20 +130,16 @@
                     );
                 }
 
-                // Cerrar offcanvas
-                const offcanvasEl = d.getElementById('offcanvas-contacto-cliente');
-                if (offcanvasEl && w.bootstrap) {
-                    const offcanvasInstance = w.bootstrap.Offcanvas.getInstance(offcanvasEl);
-                    if (offcanvasInstance) {
-                        offcanvasInstance.hide();
-                    }
+                // ⚠️ v2.62: Cerrar offcanvas usando el orquestador central
+                if (w.UIManager?.handleOffcanvas) {
+                    w.UIManager.handleOffcanvas(DOM.offcanvas, 'hide');
                 }
 
                 // Disparar evento para recargar tabla
                 d.dispatchEvent(new CustomEvent('contactoGuardado'));
             } else {
                 // Error
-                const errorContainer = d.querySelector('#form-contacto-cliente-feedback');
+                const errorContainer = d.querySelector(DOM.feedback);
                 if (errorContainer && response.data) {
                     const errorFields = Object.keys(response.data).filter(k => k !== 'detail');
                     if (errorFields.length > 0) {
@@ -162,11 +183,11 @@
      * Inicializar formulario de contactos
      */
     async function initFormulario() {
-        const offcanvasEl = d.querySelector('#offcanvas-contacto-cliente');
+        const offcanvasEl = d.querySelector(DOM.offcanvas);
         if (!offcanvasEl) return;
 
-        const clienteSelect = d.querySelector('#contacto-cliente-select');
-        const clienteInput = d.querySelector('#contacto-cliente-id');
+        const clienteSelect = d.querySelector(DOM.clienteSelect);
+        const clienteInput = d.querySelector(DOM.clienteInput);
 
         if (clienteSelect) {
             clienteSelect.removeAttribute('name');
@@ -178,11 +199,11 @@
         }
         
         // ⚠️ Poblar select si es creación global
-        const selectContainer = d.querySelector('#contacto-cliente-select-container');
+        const selectContainer = d.querySelector(DOM.selectContainer);
         if (selectContainer && selectContainer.style.display !== 'none') {
             if (clienteSelect) {
                 try {
-                    const response = await w.clientesAPI.list({ page_size: 1000 });
+                    const response = await w.clientesAPI.list({ activo: true, page_size: 1000 });
                     if (response.ok) {
                         const clientes = response.data.results || response.data;
                         clienteSelect.innerHTML = '<option value="">Seleccione un cliente...</option>' + 
@@ -206,45 +227,56 @@
             }
         }
 
-        // Botón guardar
-        const btnGuardar = d.querySelector('#btn-guardar-contacto');
-        if (btnGuardar) {
-            btnGuardar.addEventListener('click', async function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                await guardarContacto();
-            });
-        }
+        // ⚠️ v2.62: Delegación de eventos para botones del formulario (evita duplicidad)
+        // Se adjuntan al documento una sola vez o se limpian previo a init
+        const setupEventListeners = () => {
+            const form = d.querySelector(DOM.form);
+            if (!form) return;
 
-        // Botón cancelar
-        const btnCancelar = d.querySelector('#btn-cancelar-contacto');
-        if (btnCancelar) {
-            btnCancelar.addEventListener('click', function(e) {
-                e.preventDefault();
-                if (offcanvasEl && w.bootstrap) {
-                    const offcanvasInstance = w.bootstrap.Offcanvas.getInstance(offcanvasEl);
-                    if (offcanvasInstance) {
-                        offcanvasInstance.hide();
+            // Limpiar listeners previos si el elemento persiste (fallback)
+            const btnGuardar = d.querySelector(DOM.btnGuardar);
+            if (btnGuardar) {
+                const newBtn = btnGuardar.cloneNode(true);
+                btnGuardar.parentNode.replaceChild(newBtn, btnGuardar);
+                newBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    await guardarContacto();
+                });
+            }
+
+            const btnCancelar = d.querySelector(DOM.btnCancelar);
+            if (btnCancelar) {
+                btnCancelar.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (w.UIManager?.handleOffcanvas) {
+                        w.UIManager.handleOffcanvas(DOM.offcanvas, 'hide');
                     }
-                }
-            });
-        }
+                });
+            }
+
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                await guardarContacto();
+            };
+        };
+
+        setupEventListeners();
 
         // Botones para agregar/eliminar contactos dinámicos (si están presentes)
-        const btnAgregarContacto = d.querySelector('#btn-agregar-contacto');
+        const btnAgregarContacto = d.querySelector(DOM.btnAgregarContacto);
         if (btnAgregarContacto) {
             btnAgregarContacto.addEventListener('click', () => {
-                w.ClienteUtils.agregarContacto('#contenedor-contactos');
+                w.ClienteUtils.agregarContacto(DOM.contenedorContactos);
             });
         }
 
-        const contenedorContactos = d.querySelector('#contenedor-contactos');
+        const contenedorContactos = d.querySelector(DOM.contenedorContactos);
         if (contenedorContactos) {
             contenedorContactos.addEventListener('click', w.ClienteUtils.eliminarContacto);
         }
 
         // Formulario submit
-        const form = d.querySelector('#form-contacto-cliente');
+        const form = d.querySelector(DOM.form);
         if (form) {
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
@@ -260,7 +292,7 @@
      * Escuchar evento cuando offcanvas se muestra
      */
     d.addEventListener('shown.bs.offcanvas', function(e) {
-        if (e.target?.id === 'offcanvas-contacto-cliente') {
+        if (e.target?.id === DOM.offcanvas.substring(1)) {
             initFormulario();
         }
     });
@@ -268,11 +300,11 @@
     // Inicialización en DOMContentLoaded (por si ya existe el offcanvas)
     if (d.readyState === 'loading') {
         d.addEventListener('DOMContentLoaded', function() {
-            if (d.querySelector('#offcanvas-contacto-cliente')) {
+            if (d.querySelector(DOM.offcanvas)) {
                 initFormulario();
             }
         });
-    } else if (d.querySelector('#offcanvas-contacto-cliente')) {
+    } else if (d.querySelector(DOM.offcanvas)) {
         initFormulario();
     }
 

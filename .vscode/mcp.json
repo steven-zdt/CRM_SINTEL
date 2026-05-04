@@ -3,12 +3,18 @@
     "sintel-agent": {
       "type": "stdio",
       "command": "c:/Users/Administrator/Documents/crm_sintel/venv/Scripts/python.exe",
-      "args": ["sintel_agent_unified.py"],
+      "args": [
+        "sintel_agent_unified.py"
+      ],
       "env": {
         "PYTHONPATH": "${workspaceFolder}",
         "WORKSPACE_ROOT": "${workspaceFolder}",
         "DJANGO_SETTINGS_MODULE": "config.settings"
       }
+    },
+    "gemini-api-docs-mcp": {
+      "type": "http",
+      "url": "https://gemini-api-docs-mcp.dev"
     }
   }
 }

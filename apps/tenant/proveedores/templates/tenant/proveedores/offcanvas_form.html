@@ -6,7 +6,13 @@
     <h5 class="offcanvas-title" id="offcanvas-proveedor-label">
       <i class="bi bi-building me-2"></i>
       <span id="offcanvas-proveedor-titulo">
-        {% if proveedor %}Editar Proveedor{% else %}Nuevo Proveedor{% endif %}
+        {% if modo_detalle %}
+          Detalle de Proveedor
+        {% elif proveedor %}
+          Editar Proveedor
+        {% else %}
+          Nuevo Proveedor
+        {% endif %}
       </span>
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
@@ -15,220 +21,223 @@
     {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
     <div id="form-proveedor-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     
-    <form id="form-proveedor" method="POST" onsubmit="return false;"
-          hx-post="/api/v1/proveedores/" 
-          hx-target="#grid-proveedores" 
-          hx-swap="none">
+    <form id="form-proveedor" method="POST" onsubmit="return false;">
       <input type="hidden" id="proveedor-id" name="id" value="{% if proveedor %}{{ proveedor.id }}{% endif %}">
       
-      {# Identificación Legal #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-card-text me-2"></i>Identificación Legal
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label for="proveedor-tipo_persona" class="form-label text-danger fw-bold">Tipo Persona *</label>
-            <select class="form-select" id="proveedor-tipo_persona" name="tipo_persona" required>
-              <option value="">Seleccionar...</option>
-              {% for value, label in tipo_persona_choices %}
-                <option value="{{ value }}" {% if proveedor and proveedor.tipo_persona == value %}selected{% elif not proveedor and value == "JURIDICA" %}selected{% endif %}>
-                  {{ label }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-tipo_documento" class="form-label text-danger fw-bold">Tipo Documento *</label>
-            <select class="form-select" id="proveedor-tipo_documento" name="tipo_documento" required>
-              <option value="">Seleccionar...</option>
-              {% for value, label in tipo_documento_choices %}
-                <option value="{{ value }}" {% if proveedor and proveedor.tipo_documento == value %}selected{% elif not proveedor and value == "NIT" %}selected{% endif %}>
-                  {{ label }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-numero_documento" class="form-label text-danger fw-bold">Número Documento *</label>
-            <input type="text" class="form-control" id="proveedor-numero_documento" name="numero_documento" 
-                   value="{% if proveedor %}{{ proveedor.numero_documento }}{% endif %}" 
-                   placeholder="Sin dígito de verificación" required>
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-digito_verificacion" class="form-label">Dígito de Verificación</label>
-            <input type="text" class="form-control" id="proveedor-digito_verificacion" name="digito_verificacion" 
-                   value="{% if proveedor %}{{ proveedor.digito_verificacion|default:'' }}{% endif %}" 
-                   maxlength="1" placeholder="DV">
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-razon_social" class="form-label text-danger fw-bold">Razón Social *</label>
-            <input type="text" class="form-control" id="proveedor-razon_social" name="razon_social" 
-                   value="{% if proveedor %}{{ proveedor.razon_social }}{% endif %}" 
-                   placeholder="Nombre legal completo" required>
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-nombre_comercial" class="form-label">Nombre Comercial</label>
-            <input type="text" class="form-control" id="proveedor-nombre_comercial" name="nombre_comercial" 
-                   value="{% if proveedor %}{{ proveedor.nombre_comercial|default:'' }}{% endif %}" 
-                   placeholder="Nombre comercial">
-          </div>
-        </div>
-      </div>
-
-      {# Información Tributaria #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-receipt me-2"></i>Información Tributaria
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label for="proveedor-regimen_tributario" class="form-label text-danger fw-bold">Régimen Tributario *</label>
-            <select class="form-select" id="proveedor-regimen_tributario" name="regimen_tributario" required>
-              <option value="">Seleccionar...</option>
-              {% for value, label in regimen_choices %}
-                <option value="{{ value }}" {% if proveedor and proveedor.regimen_tributario == value %}selected{% elif not proveedor and value == "ORDINARIO" %}selected{% endif %}>
-                  {{ label }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-actividad_economica_ciiu" class="form-label">Código CIIU</label>
-            <input type="text" class="form-control" id="proveedor-actividad_economica_ciiu" name="actividad_economica_ciiu" 
-                   value="{% if proveedor %}{{ proveedor.actividad_economica_ciiu|default:'' }}{% endif %}" 
-                   maxlength="10" placeholder="Código CIIU Principal">
-          </div>
-          <div class="col-md-4">
-            <div class="form-check mt-4">
-              <input class="form-check-input" type="checkbox" id="proveedor-responsable_iva" name="responsable_iva" 
-                     {% if proveedor and proveedor.responsable_iva or not proveedor %}checked{% endif %}>
-              <label class="form-check-label" for="proveedor-responsable_iva">
-                Responsable de IVA
-              </label>
+      <fieldset {% if modo_detalle %}disabled{% endif %}>
+        {# Identificación Legal #}
+        <div class="mb-4">
+          <h6 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-card-text me-2"></i>Identificación Legal
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="proveedor-tipo_persona" class="form-label text-danger fw-bold">Tipo Persona *</label>
+              <select class="form-select" id="proveedor-tipo_persona" name="tipo_persona" required>
+                <option value="">Seleccionar...</option>
+                {% for value, label in tipo_persona_choices %}
+                  <option value="{{ value }}" {% if proveedor and proveedor.tipo_persona == value %}selected{% elif not proveedor and value == "JURIDICA" %}selected{% endif %}>
+                    {{ label }}
+                  </option>
+                {% endfor %}
+              </select>
             </div>
-          </div>
-          <div class="col-md-4">
-            <div class="form-check mt-4">
-              <input class="form-check-input" type="checkbox" id="proveedor-gran_contribuyente" name="gran_contribuyente" 
-                     {% if proveedor and proveedor.gran_contribuyente %}checked{% endif %}>
-              <label class="form-check-label" for="proveedor-gran_contribuyente">
-                Gran Contribuyente
-              </label>
+            <div class="col-md-6">
+              <label for="proveedor-tipo_documento" class="form-label text-danger fw-bold">Tipo Documento *</label>
+              <select class="form-select" id="proveedor-tipo_documento" name="tipo_documento" required>
+                <option value="">Seleccionar...</option>
+                {% for value, label in tipo_documento_choices %}
+                  <option value="{{ value }}" {% if proveedor and proveedor.tipo_documento == value %}selected{% elif not proveedor and value == "NIT" %}selected{% endif %}>
+                    {{ label }}
+                  </option>
+                {% endfor %}
+              </select>
             </div>
-          </div>
-          <div class="col-md-4">
-            <div class="form-check mt-4">
-              <input class="form-check-input" type="checkbox" id="proveedor-autoretenedor" name="autoretenedor" 
-                     {% if proveedor and proveedor.autoretenedor %}checked{% endif %}>
-              <label class="form-check-label" for="proveedor-autoretenedor">
-                Autoretenedor
-              </label>
+            <div class="col-md-6">
+              <label for="proveedor-numero_documento" class="form-label text-danger fw-bold">Número Documento *</label>
+              <input type="text" class="form-control" id="proveedor-numero_documento" name="numero_documento" 
+                     value="{% if proveedor %}{{ proveedor.numero_documento }}{% endif %}" 
+                     placeholder="Sin dígito de verificación" required>
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-digito_verificacion" class="form-label">Dígito de Verificación</label>
+              <input type="text" class="form-control" id="proveedor-digito_verificacion" name="digito_verificacion" 
+                     value="{% if proveedor %}{{ proveedor.digito_verificacion|default:'' }}{% endif %}" 
+                     maxlength="1" placeholder="DV">
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-razon_social" class="form-label text-danger fw-bold">Razón Social *</label>
+              <input type="text" class="form-control" id="proveedor-razon_social" name="razon_social" 
+                     value="{% if proveedor %}{{ proveedor.razon_social }}{% endif %}" 
+                     placeholder="Nombre legal completo" required>
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-nombre_comercial" class="form-label">Nombre Comercial</label>
+              <input type="text" class="form-control" id="proveedor-nombre_comercial" name="nombre_comercial" 
+                     value="{% if proveedor %}{{ proveedor.nombre_comercial|default:'' }}{% endif %}" 
+                     placeholder="Nombre comercial">
             </div>
           </div>
         </div>
-      </div>
 
-      {# Contacto y Ubicación #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label for="proveedor-email_contacto" class="form-label">Email</label>
-            <input type="email" class="form-control" id="proveedor-email_contacto" name="email_contacto" 
-                   value="{% if proveedor %}{{ proveedor.email_contacto|default:'' }}{% endif %}" 
-                   placeholder="Email de contacto">
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-telefono_contacto" class="form-label">Teléfono</label>
-            <input type="text" class="form-control" id="proveedor-telefono_contacto" name="telefono_contacto" 
-                   value="{% if proveedor %}{{ proveedor.telefono_contacto|default:'' }}{% endif %}" 
-                   placeholder="Teléfono de contacto">
-          </div>
-          <div class="col-md-12">
-            <label for="proveedor-direccion" class="form-label">Dirección</label>
-            <input type="text" class="form-control" id="proveedor-direccion" name="direccion" 
-                   value="{% if proveedor %}{{ proveedor.direccion|default:'' }}{% endif %}" 
-                   placeholder="Dirección">
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-ciudad" class="form-label">Ciudad</label>
-            <input type="text" class="form-control" id="proveedor-ciudad" name="ciudad" 
-                   value="{% if proveedor %}{{ proveedor.ciudad|default:'' }}{% endif %}" 
-                   placeholder="Ciudad">
-          </div>
-        </div>
-      </div>
-
-      {# Información Comercial y Bancaria #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-bank me-2"></i>Información Comercial y Bancaria
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label for="proveedor-plazo_pago_dias" class="form-label">Plazo de Pago (días)</label>
-            <input type="number" class="form-control" id="proveedor-plazo_pago_dias" name="plazo_pago_dias" 
-                   value="{% if proveedor %}{{ proveedor.plazo_pago_dias|default:30 }}{% else %}30{% endif %}" 
-                   min="0" placeholder="Días de crédito estándar">
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-banco" class="form-label">Banco</label>
-            <input type="text" class="form-control" id="proveedor-banco" name="banco" 
-                   value="{% if proveedor %}{{ proveedor.banco|default:'' }}{% endif %}" 
-                   placeholder="Banco">
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-tipo_cuenta" class="form-label">Tipo de Cuenta</label>
-            <select class="form-select" id="proveedor-tipo_cuenta" name="tipo_cuenta">
-              <option value="">Seleccionar...</option>
-              {% for value, label in tipo_cuenta_choices %}
-                <option value="{{ value }}" {% if proveedor and proveedor.tipo_cuenta == value %}selected{% endif %}>
-                  {{ label }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label for="proveedor-numero_cuenta" class="form-label">Número de Cuenta</label>
-            <input type="text" class="form-control" id="proveedor-numero_cuenta" name="numero_cuenta" 
-                   value="{% if proveedor %}{{ proveedor.numero_cuenta|default:'' }}{% endif %}" 
-                   placeholder="Número de cuenta">
-          </div>
-        </div>
-      </div>
-
-      {# Estado #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-toggle-on me-2"></i>Estado
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" id="proveedor-activo" name="activo" 
-                     {% if proveedor and proveedor.activo or not proveedor %}checked{% endif %}>
-              <label class="form-check-label" for="proveedor-activo">
-                Activo
-              </label>
+        {# Información Tributaria #}
+        <div class="mb-4">
+          <h6 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-receipt me-2"></i>Información Tributaria
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="proveedor-regimen_tributario" class="form-label text-danger fw-bold">Régimen Tributario *</label>
+              <select class="form-select" id="proveedor-regimen_tributario" name="regimen_tributario" required>
+                <option value="">Seleccionar...</option>
+                {% for value, label in regimen_choices %}
+                  <option value="{{ value }}" {% if proveedor and proveedor.regimen_tributario == value %}selected{% elif not proveedor and value == "ORDINARIO" %}selected{% endif %}>
+                    {{ label }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-actividad_economica_ciiu" class="form-label">Código CIIU</label>
+              <input type="text" class="form-control" id="proveedor-actividad_economica_ciiu" name="actividad_economica_ciiu" 
+                     value="{% if proveedor %}{{ proveedor.actividad_economica_ciiu|default:'' }}{% endif %}" 
+                     maxlength="10" placeholder="Código CIIU Principal">
+            </div>
+            <div class="col-md-4">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="proveedor-responsable_iva" name="responsable_iva" 
+                       {% if proveedor and proveedor.responsable_iva or not proveedor %}checked{% endif %}>
+                <label class="form-check-label" for="proveedor-responsable_iva">
+                  Responsable de IVA
+                </label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="proveedor-gran_contribuyente" name="gran_contribuyente" 
+                       {% if proveedor and proveedor.gran_contribuyente %}checked{% endif %}>
+                <label class="form-check-label" for="proveedor-gran_contribuyente">
+                  Gran Contribuyente
+                </label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" id="proveedor-autoretenedor" name="autoretenedor" 
+                       {% if proveedor and proveedor.autoretenedor %}checked{% endif %}>
+                <label class="form-check-label" for="proveedor-autoretenedor">
+                  Autoretenedor
+                </label>
+              </div>
             </div>
           </div>
-          <div class="col-md-12">
-            <label for="proveedor-observaciones" class="form-label">Observaciones</label>
-            <textarea class="form-control" id="proveedor-observaciones" name="observaciones" rows="3" 
-                      placeholder="Observaciones adicionales">{% if proveedor %}{{ proveedor.observaciones|default:'' }}{% endif %}</textarea>
+        </div>
+
+        {# Contacto y Ubicación #}
+        <div class="mb-4">
+          <h6 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="proveedor-email_contacto" class="form-label">Email</label>
+              <input type="email" class="form-control" id="proveedor-email_contacto" name="email_contacto" 
+                     value="{% if proveedor %}{{ proveedor.email_contacto|default:'' }}{% endif %}" 
+                     placeholder="Email de contacto">
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-telefono_contacto" class="form-label">Teléfono</label>
+              <input type="text" class="form-control" id="proveedor-telefono_contacto" name="telefono_contacto" 
+                     value="{% if proveedor %}{{ proveedor.telefono_contacto|default:'' }}{% endif %}" 
+                     placeholder="Teléfono de contacto">
+            </div>
+            <div class="col-md-12">
+              <label for="proveedor-direccion" class="form-label">Dirección</label>
+              <input type="text" class="form-control" id="proveedor-direccion" name="direccion" 
+                     value="{% if proveedor %}{{ proveedor.direccion|default:'' }}{% endif %}" 
+                     placeholder="Dirección">
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-ciudad" class="form-label">Ciudad</label>
+              <input type="text" class="form-control" id="proveedor-ciudad" name="ciudad" 
+                     value="{% if proveedor %}{{ proveedor.ciudad|default:'' }}{% endif %}" 
+                     placeholder="Ciudad">
+            </div>
           </div>
         </div>
-      </div>
+
+        {# Información Comercial y Bancaria #}
+        <div class="mb-4">
+          <h6 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-bank me-2"></i>Información Comercial y Bancaria
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="proveedor-plazo_pago_dias" class="form-label">Plazo de Pago (días)</label>
+              <input type="number" class="form-control" id="proveedor-plazo_pago_dias" name="plazo_pago_dias" 
+                     value="{% if proveedor %}{{ proveedor.plazo_pago_dias|default:30 }}{% else %}30{% endif %}" 
+                     min="0" placeholder="Días de crédito estándar">
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-banco" class="form-label">Banco</label>
+              <input type="text" class="form-control" id="proveedor-banco" name="banco" 
+                     value="{% if proveedor %}{{ proveedor.banco|default:'' }}{% endif %}" 
+                     placeholder="Banco">
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-tipo_cuenta" class="form-label">Tipo de Cuenta</label>
+              <select class="form-select" id="proveedor-tipo_cuenta" name="tipo_cuenta">
+                <option value="">Seleccionar...</option>
+                {% for value, label in tipo_cuenta_choices %}
+                  <option value="{{ value }}" {% if proveedor and proveedor.tipo_cuenta == value %}selected{% endif %}>
+                    {{ label }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label for="proveedor-numero_cuenta" class="form-label">Número de Cuenta</label>
+              <input type="text" class="form-control" id="proveedor-numero_cuenta" name="numero_cuenta" 
+                     value="{% if proveedor %}{{ proveedor.numero_cuenta|default:'' }}{% endif %}" 
+                     placeholder="Número de cuenta">
+            </div>
+          </div>
+        </div>
+
+        {# Estado #}
+        <div class="mb-4">
+          <h6 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-toggle-on me-2"></i>Estado
+          </h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="proveedor-activo" name="activo" 
+                       {% if proveedor and proveedor.activo or not proveedor %}checked{% endif %}>
+                <label class="form-check-label" for="proveedor-activo">
+                  Activo
+                </label>
+              </div>
+            </div>
+            <div class="col-md-12">
+              <label for="proveedor-observaciones" class="form-label">Observaciones</label>
+              <textarea class="form-control" id="proveedor-observaciones" name="observaciones" rows="3" 
+                        placeholder="Observaciones adicionales">{% if proveedor %}{{ proveedor.observaciones|default:'' }}{% endif %}</textarea>
+            </div>
+          </div>
+        </div>
+      </fieldset>
 
       {# Botones de Acción #}
       <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
-        <button type="button" class="btn btn-primary" id="btn-guardar-proveedor">
-          <i class="bi bi-check-lg me-1"></i>{% if proveedor %}Actualizar{% else %}Crear{% endif %} Proveedor
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+          {% if modo_detalle %}Cerrar{% else %}Cancelar{% endif %}
         </button>
+        {% if not modo_detalle %}
+          <button type="button" class="btn btn-primary" id="btn-guardar-proveedor">
+            <i class="bi bi-check-lg me-1"></i>{% if proveedor %}Actualizar{% else %}Crear{% endif %} Proveedor
+          </button>
+        {% endif %}
       </div>
     </form>
   </div>

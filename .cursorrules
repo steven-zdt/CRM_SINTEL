@@ -1,0 +1,113 @@
+# SINTEL ERP — Cursor Rules v2.62.0
+# These rules are STRICT, IMMUTABLE, and MANDATORY for all code in this project.
+# Process this file before implementing any suggestion.
+
+## CRITICAL RULE — ZERO EMOJIS IN .py FILES
+NEVER use emojis or Unicode special characters in any Python file.
+They cause SyntaxError and Django 500 Internal Server Error.
+
+## STACK (no alternatives without explicit user authorization)
+- Backend: Python + Django + DRF + django-tenants + PostgreSQL + Celery
+- Frontend: HTMX + Vanilla JS ES6+ + Bootstrap 5 + Tabulator
+- Auth: JWT (djangorestframework-simplejwt) + Session (Dual-Auth)
+
+## ARCHITECTURE — Feature-Sliced Design (FSD)
+
+Each Django tenant app follows this structure:
+```
+apps/tenant/<app>/
+  services/
+    __init__.py       → re-exports main classes
+    crud_service.py   → ONLY DB persistence, @transaction.atomic, NO business logic
+    business_service.py → business rules, Double Semantic Verification (IDOR)
+    selectors.py      → read-only QuerySets, defines LIST_FIELDS / DETAIL_FIELDS tuples
+    api_mixins.py     → <Model>ServiceMixin for ViewSets
+    services.py       → facade re-export from business_service.py
+  api/viewsets.py     → inherits BaseTenantViewSet + ServiceMixin
+  templates/tenant/<app>/  ← prefix 'tenant/' is MANDATORY
+  static/<app>/js/
+    <app>.api.js      → SSoT for all endpoint URLs
+    features/<model>_list.js, <model>_editor.js
+```
+
+## ABSOLUTE PROHIBITIONS
+
+1. NO `models.Model` inheritance → always `SintelTenantBaseModel` from `apps.tenant.core.models`
+2. NO `.all()` or unguarded `.filter()` → always chain `.only()` or `.defer()`
+3. NO ORM queries without `empresa_id` filter in TENANT_APPS
+4. NO Django Signals for business logic → Service Layer only
+5. NO `from apps.public.*` in tenant apps (except core + api)
+6. NO creating `AsientoContable` directly → always `Contabilizador(empresa_id).contabilizar(dto)`
+7. NO `views.py` for business logic → ViewSet + ServiceMixin pattern
+8. NO new `.py` files outside Service Layer without user authorization
+9. NO modifying `apps/public/` without RFC + `needs-admin-approval`
+10. NO ForeignKey to `settings.AUTH_USER_MODEL` → use `'perfil.TenantProfile'`
+
+## MODELS PATTERN
+```python
+from apps.tenant.core.models import SintelTenantBaseModel
+
+class MyModel(SintelTenantBaseModel):
+    # Injected: empresa (FK), created_at, updated_at, indexes [empresa], [empresa, -created_at]
+    nombre = models.CharField(max_length=200)
+```
+
+## VIEWSET PATTERN
+```python
+from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+
+class MyViewSet(MyModelServiceMixin, BaseTenantViewSet):
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    lookup_field = "uuid"
+    queryset = MyModel.objects.none()
+```
+
+## QUERYSET PATTERN
+```python
+# CORRECT
+MyModel.objects.filter(empresa_id=empresa_id).only('id', 'uuid', 'nombre', 'created_at')
+
+# WRONG
+MyModel.objects.all()
+MyModel.objects.filter(empresa_id=empresa_id)  # missing .only()
+```
+
+## ACCOUNTING INTEGRATION (Contabilizador)
+```python
+# Always via service function — never create AsientoContable directly
+from apps.tenant.contabilidad.services.asientos_service import materializar_asiento_desde_gasto
+asiento = materializar_asiento_desde_gasto(gasto)
+
+# DTO lado field controls DEBE/HABER side:
+LineaTransaccion(concepto='GASTO_OPERATIVO', monto=..., lado='DEBE')   # default
+ImpuestoLinea(tipo='RETEFUENTE', valor=..., lado='HABER')              # default
+```
+
+## SECURITY — DSV (Double Semantic Verification)
+Every mutation in business_service.py MUST validate FK ownership:
+```python
+if not Model.objects.filter(empresa_id=empresa_id, id=data['fk_id']).exists():
+    raise ValidationError("IDOR attempt blocked")
+```
+
+## CROSS-SCHEMA BRIDGE
+```python
+# CORRECT — through bridge only
+from apps.tenant.core.services.membership import check_membership
+
+# WRONG — direct import from public schema
+from apps.public.tenants.models import TenantMembership  # BLOCKED
+```
+
+## JWT FRONTEND
+```javascript
+const token = window.jwtAuth?.getAccessToken?.();  // CORRECT
+// window.jwtAuth.token  ← DOES NOT EXIST, never use
+```
+
+## PERMISSIONS PATTERN
+```python
+permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+# Import ONLY from apps.tenant.api.permissions — never from apps.tenant.empresa.permissions (deprecated)
+```

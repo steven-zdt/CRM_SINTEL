@@ -74,16 +74,41 @@
             <div class="row">
                 <div class="col-md-4 mb-3">
                     <label for="eps" class="form-label">EPS</label>
-                    <input type="text" class="form-control" id="eps" name="eps" required>
+                    <select class="form-select" id="eps" name="eps" required>
+                        <option value="">Seleccione...</option>
+                        {% for code, name in EPS_CHOICES %}
+                            <option value="{{ code }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="col-md-4 mb-3">
                     <label for="afp" class="form-label">Fondo de Pensión</label>
-                    <input type="text" class="form-control" id="afp" name="afp" required>
+                    <select class="form-select" id="afp" name="afp" required>
+                        <option value="">Seleccione...</option>
+                        {% for code, name in AFP_CHOICES %}
+                            <option value="{{ code }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="col-md-4 mb-3">
                     <label for="arl" class="form-label">ARL</label>
-                    <input type="text" class="form-control" id="arl" name="arl" required>
+                    <select class="form-select" id="arl" name="arl" required>
+                        <option value="">Seleccione...</option>
+                        {% for code, name in ARL_CHOICES %}
+                            <option value="{{ code }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
+            </div>
+
+            <!-- Nivel de Riesgo ARL -->
+            <div class="mb-3">
+                <label for="nivel_riesgo_arl" class="form-label">Nivel de Riesgo ARL</label>
+                <select class="form-select" id="nivel_riesgo_arl" name="nivel_riesgo_arl" required>
+                    {% for code, name in RIESGO_ARL_CHOICES %}
+                        <option value="{{ code }}" {% if code == 'I' %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             
             <!-- Fecha de Ingreso -->

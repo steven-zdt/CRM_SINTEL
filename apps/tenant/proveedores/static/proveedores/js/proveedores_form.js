@@ -7,31 +7,61 @@
 
   const MOD = '[proveedores:form]';
   const API_URL = '/api/v1/proveedores/';
-  const CONTAINER_ID = '#offcanvas-container-proveedor';
+  const CONTAINER_ID = '#containerOffcanvasProveedor';
   const BOOLEAN_FIELDS = ['activo', 'responsable_iva', 'gran_contribuyente', 'autoretenedor'];
   const NUMERIC_FIELDS = ['plazo_pago_dias'];
 
   /**
-   * Abrir Offcanvas vía HTMX
+   * Abrir Offcanvas vía HTMX (v2.61.7 - Resiliente)
    */
   async function openOffcanvas(id) {
+    let container = d.querySelector(CONTAINER_ID);
+    
+    // Auto-healing: Si el contenedor no existe, lo creamos
+    if (!container) {
+      console.warn(`${MOD} Contenedor ${CONTAINER_ID} no encontrado. Creando...`);
+      container = d.createElement('div');
+      container.id = CONTAINER_ID.substring(1);
+      d.body.appendChild(container);
+    }
+
     const url = id 
-      ? `${API_URL}render-offcanvas/editar/?id=${id}` // ⚠️ Regla 6.1: render-offcanvas/
+      ? `${API_URL}render-offcanvas/editar/?id=${id}` 
       : `${API_URL}render-offcanvas/crear/`;
 
-    await htmx.ajax('GET', url, {
+    console.log(`${MOD} Cargando formulario desde: ${url}`);
+    
+    return htmx.ajax('GET', url, {
       target: CONTAINER_ID,
       swap: 'innerHTML'
     });
+  }
 
-    const offcanvasEl = d.querySelector('.offcanvas');
-    if (offcanvasEl) {
-      const instance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-      instance.show();
+  /**
+   * Listener centralizado para inicializar el Offcanvas tras el swap de HTMX
+   */
+  d.body.addEventListener('htmx:afterSettle', async (e) => {
+    const target = e.detail.target;
+    if (target && target.id === CONTAINER_ID.substring(1)) {
+      const offcanvasEl = target.querySelector('.offcanvas');
+      if (!offcanvasEl) return;
+
+      console.log(`${MOD} DOM Settle detectado, activando offcanvas...`);
+
+      // 1. Mostrar Offcanvas vía UIManager
+      if (w.UIManager?.handleOffcanvas) {
+        w.UIManager.handleOffcanvas(offcanvasEl, 'show');
+      } else {
+        bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+      }
+
+      // 2. Configurar validaciones y eventos
       configurarEventos(offcanvasEl);
+
+      // 3. Cargar datos dinámicos
       await cargarCuentasNIIF(offcanvasEl);
     }
-  }
+  });
 
   /**
    * Carga dinámica de cuentas de Pasivo desde el catálogo contable
@@ -148,13 +178,24 @@
 
     if (!res.ok) {
       return w.UIManager?.handleError(res, MOD, {
-        errorContainerSelector: '#form-feedback'
+        errorContainerSelector: '#form-proveedor-feedback'
       });
     }
 
     // Éxito
-    w.SintelFeedback?.success(id ? 'Proveedor actualizado' : 'Proveedor creado');
-    bootstrap.Offcanvas.getInstance(form.closest('.offcanvas'))?.hide();
+    if (w.UIManager?.showSuccess) {
+        w.UIManager.showSuccess(id ? 'Proveedor actualizado' : 'Proveedor creado');
+    } else {
+        w.SintelFeedback?.success(id ? 'Proveedor actualizado' : 'Proveedor creado');
+    }
+
+    // ⚠️ v2.62.3: Cerrar Offcanvas usando el orquestador central
+    const offcanvasEl = form.closest('.offcanvas');
+    if (offcanvasEl && w.UIManager?.handleOffcanvas) {
+        w.UIManager.handleOffcanvas(offcanvasEl, 'hide');
+    } else {
+        bootstrap.Offcanvas.getInstance(offcanvasEl)?.hide();
+    }
     w.Sintel.Proveedores.Main?.refresh();
   }
 

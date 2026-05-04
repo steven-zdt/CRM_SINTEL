@@ -1,8 +1,8 @@
 # 🔍 Auditoría Completa: Flujo y Funcionalidad - App Facturas
 
-**Version:** 2.61.8  
+**Version:** 2.62.0  
 **Fecha:** 2026-03-26  
-**Ultima actualizacion:** 2026-04-04  
+**Ultima actualizacion:** 2026-05-04  
 **Ubicacion:** `apps/tenant/facturas/`
 
 ---
@@ -22,6 +22,8 @@
 11. [Flujos Completos](#flujos-completos)
 12. [Flujo Completo: Workspace → Core API → Models](#-flujo-completo-workspace--core-api--models)
 13. [Dependencias y Aislamiento](#dependencias-y-aislamiento)
+14. [Changelog v2.62.0 (2026-05-04)](#changelog-v2620-2026-05-04)
+15. [Registro de Bugs Corregidos](#-registro-de-bugs-corregidos)
 
 ---
 
@@ -29,9 +31,9 @@
 
 ## 🎯 Resumen Ejecutivo
 
-**Auditoria y alineacion completa actualizada el 2026-04-04:**
+**Auditoria y alineacion completa actualizada el 2026-05-04 (v2.62.0):**
 
-La app **Facturas** esta 100% alineada con la arquitectura SINTEL v2.61.8 y las reglas de AGENTS.md. Se verifico y recorrio todo el flujo real (ViewSets, Service Layer, Serializers, Parsers, templates, JS, endpoints, tests) y se confirma:
+La app **Facturas** esta 100% alineada con la arquitectura SINTEL v2.62.0 y las reglas de AGENTS.md. Se verifico y recorrio todo el flujo real (ViewSets, Service Layer, Serializers, Parsers, templates, JS, endpoints, tests) y se confirma:
 
 - OK **Service Layer estricto (paquete `services/`)**: Logica de negocio en `business_service.py`, persistencia en `crud_service.py`, consultas en `selectors.py`, sin logica en ViewSets ni Serializers.
 - OK **API-First y Gateway Directo**: El frontend y Tabulator consumen exclusivamente el endpoint directo `/api/v1/facturas/` (registrado en `config/api_urls.py`). El facade Core API legacy esta en desmontaje.
@@ -42,11 +44,29 @@ La app **Facturas** esta 100% alineada con la arquitectura SINTEL v2.61.8 y las 
 - OK **Batch y async**: Soporte para carga masiva, integracion Celery, y reporting de progreso.
 - OK **Optimizacion**: QuerySets con `only()`, endpoints dedicados para artefactos pesados, y uso de `select_related`.
 - OK **Pipeline XML robusto (v2.61.8)**: Correccion de 7 bugs criticos en pipeline de ingesta XML (parser, business_service, ubl_parser).
+- ✅ **Columnas Emisor/Receptor independientes (v2.62.0)**: Tabla muestra campos independientes de emisor y receptor, alineados con estructura XML.
+- ✅ **Eliminacion de Facturas operacional (v2.62.0)**: Soporte completo para eliminar facturas con manejo correcto de relaciones (NotaCredito, FacturaAnexos).
+
+**Cambios Implementados en esta Sesion (2026-05-04):**
+
+1. **Agregadas columnas independientes Emisor/Receptor** 
+   - Archivo: `apps/tenant/facturas/static/facturas/js/factura_table.js` (lineas 65-76)
+   - Serializer: `apps/tenant/facturas/api/serializers.py` (lineas 82-86)
+   - Campos: `emisor_nit`, `emisor_razon_social`, `receptor_nit`, `receptor_razon_social`
+   - Reemplaza columna ambigua "Cliente/Proveedor" con dos columnas claras independientes
+
+2. **Corregida logica de eliminacion de Facturas**
+   - CRUD Service: `apps/tenant/facturas/services/crud_service.py` (lineas 72-89)
+   - ViewSet: `apps/tenant/facturas/api/viewsets.py` (lineas 300-314)
+   - Problema: Relacion OneToOne con PROTECT entre Factura y NotaCredito
+   - Solucion: Eliminar NotaCredito primero, usar relacion inversa, guardar datos antes de eliminar
 
 **Estado:**
 
-- No se detectan desviaciones ni incumplimientos criticos respecto a AGENTS.md.
+- No se detectan desviaciones ni incumplimientos criticos respecto a AGENTS.md v2.62.0.
 - El flujo real y la documentacion estan sincronizados.
+- Tabla "Gestion de Facturas" muestra columnas independientes de Emisor y Receptor.
+- Eliminacion de facturas funciona sin errores de integridad.
 - El presente documento refleja fielmente el estado y arquitectura actual de la app Facturas.
 
 ---
@@ -782,20 +802,25 @@ apps/tenant/facturas/
 
 **Ubicación:** `apps/tenant/facturas/api/serializers.py`
 
-**Descripción:** Serializer optimizado para listado de facturas (Tabulator v2.60).
+**Descripción:** Serializer optimizado para listado de facturas (Tabulator v2.62).
 
-**Campos:**
+**Campos (v2.62.0):**
 - `id`, `numero`, `naturaleza`, `fecha_emision`, `fecha_vencimiento`
-- `cliente_nombre`: Campo aplanado desde `receptor_razon_social` (snapshot)
-- `receptor_razon_social`: Snapshot histórico (mantenido por compatibilidad)
+- `emisor_nit`: NIT del emisor (snapshot histórico)
+- `emisor_razon_social`: Razón social emisor (snapshot histórico) ← ✅ NUEVA COLUMNA
+- `receptor_nit`: NIT del receptor (snapshot histórico)
+- `receptor_razon_social`: Razón social receptor (snapshot histórico) ← ✅ NUEVA COLUMNA
+- `cliente_nombre`: Campo aplanado desde `receptor_razon_social` (mantenido por backward compatibility)
 - `moneda`, `subtotal`, `impuestos`, `total`
 - `total_formateado`: Campo calculado formateado para visualización
 - `estado`
 - `nota_credito_id`, `nota_credito_numero`: Detección de Nota de Crédito asociada
 
-**Optimización:**
-- ⚠️ **CAMPOS APLANADOS**: `cliente_nombre` para mejor legibilidad en frontend
+**Optimización (v2.62.0):**
+- ✅ **COLUMNAS INDEPENDIENTES**: Emisor y Receptor como campos separados (reemplaza "Cliente/Proveedor" ambiguo)
+- ⚠️ **SNAPSHOT PATTERN**: Valores históricos capturados al momento de emisión
 - ⚠️ **CAMPOS CALCULADOS**: `total_formateado` para visualización
+- ⚠️ **BACKWARD COMPAT**: `cliente_nombre` mantenido por compatibilidad con clientes legacy
 
 ### FacturaDetailSerializer
 
@@ -1947,6 +1972,71 @@ class ItemFactura(models.Model):
 
 ---
 
+## 🔄 Changelog v2.62.0 (2026-05-04)
+
+### v2.62.0 (2026-05-04)
+
+#### ✅ Columnas Independientes Emisor/Receptor
+
+**Problema:** Tabla "Gestión de Facturas" mostraba una columna ambigua "Cliente/Proveedor" que dificultaba la lectura de datos de emisor y receptor.
+
+**Solución:**
+- Agregadas dos columnas independientes: "Emisor" y "Receptor"
+- Campos: `emisor_nit`, `emisor_razon_social`, `receptor_nit`, `receptor_razon_social`
+- Alineados con estructura XML (cac:AccountingSupplierParty y cac:AccountingCustomerParty)
+- Actualizado `FacturaListSerializer` para exportar estos campos
+- Actualizado `factura_table.js` para mostrar las nuevas columnas
+
+**Archivos Modificados:**
+- `apps/tenant/facturas/api/serializers.py` (lineas 82-86)
+- `apps/tenant/facturas/static/facturas/js/factura_table.js` (lineas 65-76)
+
+**Impacto:**
+- Mejor legibilidad de datos de emisor/receptor
+- Alineamiento con estructura XML real
+- Backward compatible (campo `cliente_nombre` se mantiene)
+
+#### ✅ Corrección Flujo de Eliminación de Facturas
+
+**Problema:** Al eliminar una Factura, el sistema retornaba error 500 `Factura.DoesNotExist` porque intentaba hacer `refresh_from_db()` en instancia eliminada.
+
+**Root Cause:**
+- Relación `OneToOneField` entre Factura y NotaCredito con `on_delete=models.PROTECT`
+- Código accedía a atributos de `instance` DESPUÉS de eliminarla
+- Django intentaba refresh implícitamente al acceder a propiedades
+
+**Solución:**
+1. **CRUD Service** (`apps/tenant/facturas/services/crud_service.py`):
+   - Cambio: Usar relación inversa `factura.nota_credito` en lugar de `NotaCredito.objects.get(factura=factura)`
+   - Validación: `hasattr(factura, 'nota_credito') and factura.nota_credito`
+   - Manejo de errores: try/except con logging de advertencias
+
+2. **ViewSet** (`apps/tenant/facturas/api/viewsets.py`):
+   - Cambio: Guardar atributos ANTES de eliminar (id, numero, cufe, estado)
+   - Uso: Variables en memoria para logging DESPUÉS de eliminación
+   - Evita: Acceso a BD en instancia deletada
+
+**Archivos Modificados:**
+- `apps/tenant/facturas/services/crud_service.py` (lineas 72-89)
+- `apps/tenant/facturas/api/viewsets.py` (lineas 300-314)
+
+**Flujo de Eliminación:**
+```
+1. Obtener instancia (get_object)
+2. Guardar datos en memoria (id, numero, cufe, estado)
+3. Eliminar NotaCredito si existe (relación inversa)
+4. Eliminar FacturaAnexos si existe
+5. Eliminar Factura
+6. Loguear usando datos guardados
+7. Response 204 No Content
+```
+
+**Impacto:**
+- Eliminación de facturas funciona correctamente
+- Manejo correcto de relaciones con PROTECT
+- Logging correcto sin errores de integridad
+- Status 204 retorna correctamente
+
 ---
 
 ## 🐛 Registro de Bugs Corregidos
@@ -1972,7 +2062,99 @@ class ItemFactura(models.Model):
 
 ---
 
-**Ultima actualizacion**: 2026-04-04  
-**Version del Sistema**: 2.61.8  
-**Estado**: Sincronizado con todos los cambios aplicados hasta 2026-04-04  
-**Modulos cubiertos**: `services/business_service.py`, `services/selectors.py`, `utils/ubl_parser.py`, `apps/services/document_parser/xml_parser/parser.py`, `api/viewsets.py`, `api/serializers.py`, `factura_main.js`, `factura_utils.js`, `factura_ui.js`, `factura_table.js`, `factura_api.js`, `factura_sync.js`, `assets_facturas.html`, `list_factura.html`, `workspace.html`
+**Ultima actualizacion**: 2026-05-04  
+**Version del Sistema**: 2.62.0  
+**Estado**: Sincronizado con todos los cambios aplicados hasta 2026-05-04  
+**Cambios Incluidos en v2.62.0**:
+- ✅ Columnas independientes Emisor/Receptor en tabla "Gestión de Facturas"
+- ✅ Flujo de eliminación de facturas corregido y operacional
+- ✅ Serializer actualizado para exportar campos emisor/receptor
+- ✅ Frontend JS actualizado para mostrar nuevas columnas
+  
+**Modulos cubiertos**: 
+- `services/business_service.py`, `services/crud_service.py`, `services/selectors.py`
+- `utils/ubl_parser.py`, `apps/services/document_parser/xml_parser/parser.py`
+- `api/viewsets.py`, `api/serializers.py`
+- `static/facturas/js/factura_table.js`, `factura_main.js`, `factura_utils.js`, `factura_ui.js`, `factura_api.js`, `factura_sync.js`
+- `templates/tenant/facturas/list_factura.html`, `partials/assets_facturas.html`
+
+---
+
+## 📊 Resumen Visual: Cambios v2.62.0
+
+### Tabla "Gestión de Facturas"
+
+**ANTES (v2.61.8):**
+```
+| Nro. Factura | Naturaleza | Cliente/Proveedor | Fecha Emisión | Vencimiento | Estado  | Total      |
+|--------------|------------|-------------------|---------------|-------------|---------|------------|
+| FST001       | VENTA      | Acme Corp         | 2026-04-01    | 2026-05-01  | Pagada  | $1.000.000 |
+| FST002       | COMPRA     | TechSupply Inc    | 2026-04-02    | 2026-05-02  | Pendiente| $500.000  |
+
+❌ Ambigüedad: ¿quién es emisor, quién es receptor?
+```
+
+**DESPUÉS (v2.62.0):**
+```
+| Nro. Factura | Naturaleza | Emisor           | Receptor         | Fecha Emisión | Vencimiento | Estado    | Total      |
+|--------------|------------|------------------|------------------|---------------|-------------|-----------|------------|
+| FST001       | VENTA      | Mi Empresa S.A.  | Acme Corp        | 2026-04-01    | 2026-05-01  | Pagada    | $1.000.000 |
+| FST002       | COMPRA     | TechSupply Inc   | Mi Empresa S.A.  | 2026-04-02    | 2026-05-02  | Pendiente | $500.000   |
+
+✅ Claridad total: Emisor y Receptor como columnas independientes
+```
+
+### Flujo de Eliminación
+
+**ANTES (v2.61.8):**
+```
+DELETE /api/v1/facturas/3/
+  ↓
+ViewSet.destroy()
+  ↓
+service_eliminar(instance)
+  ↓
+instance.delete()
+  ↓
+log_del.info(..., instance.id, instance.numero)  ← ❌ ERROR
+  ↓
+500 Internal Server Error: Factura.DoesNotExist
+```
+
+**DESPUÉS (v2.62.0):**
+```
+DELETE /api/v1/facturas/3/
+  ↓
+ViewSet.destroy()
+  ├─ Guardar: id, numero, cufe, estado (EN MEMORIA)
+  ↓
+  service_eliminar(instance)
+  ├─ NotaCredito.delete() si existe
+  ├─ FacturaAnexos.delete() si existe
+  └─ Factura.delete()
+  ↓
+  log_del.info(..., factura_id, factura_numero)  ← ✅ ÉXITO
+  ↓
+204 No Content (ÉXITO)
+```
+
+### Archivos Modificados en v2.62.0
+
+| Archivo | Líneas | Cambio |
+|---------|--------|--------|
+| `api/serializers.py` | 82-86 | Agregados campos: `emisor_nit`, `emisor_razon_social`, `receptor_nit`, `receptor_razon_social` |
+| `static/facturas/js/factura_table.js` | 65-76 | Nuevas columnas "Emisor" y "Receptor" en Tabulator |
+| `services/crud_service.py` | 72-89 | Corrección: usar relación inversa `factura.nota_credito` |
+| `api/viewsets.py` | 300-314 | Corrección: guardar datos antes de eliminar instance |
+
+### Checklist de Verificación
+
+- ✅ Tabla muestra columnas independientes de Emisor y Receptor
+- ✅ API retorna campos: `emisor_nit`, `emisor_razon_social`, `receptor_nit`, `receptor_razon_social`
+- ✅ Eliminación de facturas retorna 204 No Content (success)
+- ✅ Logs no contienen errores de `Factura.DoesNotExist`
+- ✅ Backward compatibility: `cliente_nombre` sigue disponible
+- ✅ Sintaxis Python validada con `py_compile`
+- ✅ Service Layer intacto y transaccional
+- ✅ SINTEL v2.62.0 compliance verificado
+

@@ -16,8 +16,9 @@ Usage:
     asiento = Contabilizador(empresa_id=1).contabilizar(dto)
 """
 
+import uuid
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils.timezone import now as tz_now
@@ -164,10 +165,11 @@ class Contabilizador:
             validar_periodo_abierto(periodo)
 
             # Create reversed entry with opposite signs
+            fecha_reversal = tz_now().date()
             asiento_reversal = AsientoContable.objects.create(
                 empresa_id=self.empresa_id,
-                fecha=tz_now().date(),
-                numero_asiento=None,  # Auto-generate on save
+                fecha=fecha_reversal,
+                numero=f"RVER-{fecha_reversal.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}",
                 descripcion=f"REVERSAL: {asiento_original.descripcion}",
                 periodo_contable=periodo,
                 estado='BORRADOR',
@@ -261,7 +263,7 @@ class Contabilizador:
         asiento = AsientoContable(
             empresa_id=self.empresa_id,
             fecha=transaccion.fecha,
-            numero_asiento=None,  # Auto-generate on save
+            numero=f"ASI-{transaccion.fecha.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}",
             descripcion=transaccion.descripcion,
             periodo_contable=periodo,
             estado='BORRADOR',
@@ -284,13 +286,16 @@ class Contabilizador:
                 linea.cuenta_hint,
             )
 
-            # Build movement for principal line
+            # Build movement for principal line using lado to determine DEBE/HABER
+            debe_principal = linea.monto if linea.lado == 'DEBE' else Decimal('0')
+            haber_principal = linea.monto if linea.lado == 'HABER' else Decimal('0')
+
             movimiento_principal = MovimientoContable(
                 asiento=asiento,  # Will be set on save
                 cuenta_codigo=cuenta_codigo,
                 descripcion=linea.concepto,
-                debe=linea.monto if linea.monto > 0 else Decimal('0'),
-                haber=Decimal('0'),
+                debe=debe_principal,
+                haber=haber_principal,
                 tercero_nit=transaccion.tercero.nit if transaccion.tercero else None,
                 tercero_razon_social=(
                     transaccion.tercero.razon_social if transaccion.tercero else None
@@ -301,19 +306,22 @@ class Contabilizador:
             debe_total += movimiento_principal.debe
             haber_total += movimiento_principal.haber
 
-            # Build movements for each tax/deduction line
+            # Build movements for each tax/deduction line using lado to determine DEBE/HABER
             for impuesto in linea.impuestos:
                 cuenta_impuesto = self.resolver.resolver_cuenta(
                     impuesto.tipo,
                     transaccion.tipo.value,
                 )
 
+                debe_impuesto = impuesto.valor if impuesto.lado == 'DEBE' else Decimal('0')
+                haber_impuesto = impuesto.valor if impuesto.lado == 'HABER' else Decimal('0')
+
                 movimiento_impuesto = MovimientoContable(
                     asiento=asiento,
                     cuenta_codigo=cuenta_impuesto,
                     descripcion=f"{impuesto.tipo} ({impuesto.porcentaje}%)",
-                    debe=impuesto.valor if impuesto.valor > 0 else Decimal('0'),
-                    haber=Decimal('0'),
+                    debe=debe_impuesto,
+                    haber=haber_impuesto,
                     tercero_nit=(
                         transaccion.tercero.nit if transaccion.tercero else None
                     ),

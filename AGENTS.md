@@ -2,10 +2,10 @@
 
 ---
 name: reglas
-description: Reglas Core de Arquitectura y Desarrollo - Proyecto SINTEL v2.61.8
+description: Reglas Core de Arquitectura y Desarrollo - Proyecto SINTEL v2.62.0
 ---
 
-# [CORE] SINTEL v2.61.8 - Reglas de Arquitectura y Estructura de Proyecto
+# [CORE] SINTEL v2.62.0 - Reglas de Arquitectura y Estructura de Proyecto
 
 Estas reglas son **ESTRICTAS, INMUTABLES Y OBLIGATORIAS** para cualquier modificación, refactorización o creación de código en este proyecto. Este archivo debe ser procesado y asimilado antes de implementar cualquier prompt o sugerencia de código.
 
@@ -91,9 +91,10 @@ El proyecto se rige estrictamente por este stack; queda prohibido sugerir tecnol
 
 ## [INFO] 3. Única Fuente de Verdad Documental (SSoT)
 
-1. **Documentación Global:** `documentacion/arquitectura_general.md` es la referencia suprema.
-2. **Flujo por Aplicación:** Cada `apps/<app_name>/` DEBE contener un archivo `AUDITORIA_FLUJO_COMPLETO.md` o `flujo_app.md` que describa su lógica secuencial específica.
-3. **Gestión de Documentos:** Todos los demás archivos `.md` de soporte deben residir exclusivamente en `documentacion/`.
+1. **PASO INICIAL OBLIGATORIO:** Antes de ejecutar CUALQUIER cambio en una app, se DEBE consultar SIEMPRE de forma inicial el documento de flujo de la misma. Todas las aplicaciones tienen este documento en su raíz. (Ejemplo: `apps/tenant/clientes/AUDITORIA_FLUJO_CLIENTES.md` o `apps/<app_name>/flujo_app.md`).
+2. **Documentación Global:** `documentacion/arquitectura_general.md` es la referencia suprema.
+3. **Flujo por Aplicación:** Cada `apps/<app_name>/` DEBE contener y mantener un archivo de auditoría/flujo que describa su lógica secuencial específica.
+4. **Gestión de Documentos:** Todos los demás archivos `.md` de soporte deben residir exclusivamente en `documentacion/`.
 
 ## [BACKEND] 4. Capa de Datos y Optimización Backend (Zero Waste)
 
@@ -308,6 +309,99 @@ Todas las apps tenant DEBEN importar permisos desde este modulo centralizado.
 4. **Regla de Extension:** Si una app tenant necesita una nueva consulta al esquema publico, se DEBE agregar una nueva operacion al bridge (`membership.py`). Queda PROHIBIDO crear imports directos como alternativa.
 5. **Validacion Automatizada:** El tool `audit_bridge_isolation` del MCP server (`sintel_agent_unified.py`) escanea imports en todas las apps tenant para detectar violaciones a esta regla. Toda PR debe pasar esta auditoria con cero violaciones.
 6. **Excepciones:** Solo `apps/tenant/core/` y `apps/tenant/api/` (permisos centrales) pueden importar desde `apps.public`. Ninguna otra app tenant tiene esta autorizacion.
+
+## [CONTAB] 18. Capa de Integración Contable Centralizada (v3.0 — Fase 1)
+
+**PRINCIPIO:** Todo asiento contable es generado EXCLUSIVAMENTE por el `Contabilizador`. Ninguna app puede crear `AsientoContable` ni `MovimientoContable` directamente.
+
+### 18.1. Paquete de Integración (`apps/tenant/contabilidad/integracion/`)
+
+| Módulo | Responsabilidad |
+|---|---|
+| `dtos.py` | DTOs inmutables (`@dataclass(frozen=True)`) — contrato entre apps fuente y Contabilizador |
+| `contabilizador.py` | Orquestador único — valida, resuelve cuentas, construye y persiste asientos atómicamente |
+| `resolver.py` | Mapea (`tipo_transaccion` + `concepto`) → código PUC vía `ReglaContable` por tenant |
+| `validadores.py` | Validators stateless — cuadratura, período abierto, documento origen existe |
+| `excepciones.py` | Jerarquía de errores (`ContabilidadError` y subclases) |
+
+### 18.2. DTOs — Contrato Inmutable
+
+```python
+# DTO principal — frozen dataclass (inmutable por diseño)
+TransaccionEconomica(
+    tipo=TipoTransaccion.COMPRA_GASTO,    # Enum
+    fecha=date(2026, 5, 3),
+    descripcion="...",
+    tercero=TerceroSnapshot(...),          # Snapshot, sin FK
+    lineas=[LineaTransaccion(...)],        # Lista de partidas
+    documento_origen=DocumentoOrigen(...) # Trazabilidad para idempotencia
+)
+
+# Campo critico en LineaTransaccion e ImpuestoLinea:
+LineaTransaccion(concepto='GASTO_OPERATIVO', monto=..., lado='DEBE')   # default='DEBE'
+ImpuestoLinea(tipo='RETEFUENTE', valor=..., lado='HABER')              # default='HABER'
+```
+
+- **`lado`**: controla qué columna del asiento recibe el monto (`'DEBE'` o `'HABER'`). Campo OBLIGATORIO para cuadratura correcta.
+- **Idempotencia**: `documento_origen` (app_label + modelo + id) mapea a `AsientoContable.documento_origen_*`. La restricción `UNIQUE` en BD garantiza un solo asiento por documento fuente.
+
+### 18.3. Servicio de Materialización por App Fuente
+
+Cada app fuente expone su propia función en `apps/tenant/contabilidad/services/asientos_service.py`:
+
+```python
+# PATRON OBLIGATORIO para toda app fuente
+from apps.tenant.contabilidad.services.asientos_service import materializar_asiento_desde_gasto
+
+asiento = materializar_asiento_desde_gasto(gasto)  # Acepta objeto, no ID
+```
+
+**Reglas del patrón:**
+- La función construye el DTO completo y llama a `Contabilizador(empresa_id).contabilizar(dto)`
+- El hook en el service de la app fuente debe estar dentro de `try/except Exception` (no bloquear el negocio)
+- Errores de contabilización se loguean como `WARNING`, no como `ERROR` crítico
+
+### 18.4. Cuadratura Obligatoria (DEBE = HABER)
+
+Todo asiento DEBE cuadrar. Fórmula para `COMPRA_GASTO`:
+
+```
+DEBE 51xxxx Gasto              [subtotal]
+HABER 236540 Retefuente        [retefuente]  (si > 0)
+HABER 236801 ReteICA           [reteica]     (si > 0)
+HABER 233595 CXP Proveedor     [total = subtotal - retenciones]
+─────────────────────────────────────────────
+TOTAL DEBE == TOTAL HABER == subtotal
+```
+
+### 18.5. ReglaContable — Mapeo PUC por Tenant
+
+- Modelo: `ReglaContable(empresa, tipo_transaccion, concepto, cuenta_codigo, activo)`
+- Seed inicial: `python manage.py seed_reglas_contables`
+- `ResolverCuentas.resolver_cuenta(concepto, tipo_transaccion, cuenta_hint=None)` → `str PUC`
+- `cuenta_hint` sobreescribe el lookup del catálogo (para gastos con `Gasto.codigo_contable` configurado)
+
+### 18.6. Numero de Asiento — Formato Canónico
+
+- Asiento nuevo: `ASI-{YYYYMMDD}-{UUID8}` (ej. `ASI-20260503-A1B2C3D4`)
+- Reversal: `RVER-{YYYYMMDD}-{UUID8}`
+- Generado por `Contabilizador._construir_asiento()` — **nunca por el caller externo**
+
+### 18.7. Prohibiciones Absolutas
+
+- **PROHIBIDO** crear `AsientoContable` o `MovimientoContable` directamente desde ViewSets, Services de otras apps o Signals
+- **PROHIBIDO** pasar `empresa_id` dentro del DTO (`TransaccionEconomica.empresa_id` queda `None` — lo inyecta el Contabilizador)
+- **PROHIBIDO** usar `lado='DEBE'` para impuestos/retenciones (su natural es `'HABER'`)
+- **PROHIBIDO** hardcodear códigos PUC en apps fuente — siempre usar `cuenta_hint` o `ReglaContable`
+
+## [MEMORY] 19. Memory Bank y Estado a Largo Plazo (MEMORY.md)
+
+**REGLA OBLIGATORIA PARA TODOS LOS AGENTES Y EDITORES DE CÓDIGO (Claude Code, Cursor, Copilot, Antigravity, etc.)**
+
+1. **Lectura Inicial Obligatoria:** Al iniciar cualquier sesión, tarea o contexto nuevo, el agente/editor DEBE leer el archivo `MEMORY.md` ubicado en la raíz del proyecto.
+2. **Propósito del Memory Bank:** `MEMORY.md` es la fuente canónica del estado actual del proyecto, decisiones arquitectónicas recientes (ADRs) y el progreso activo. Su objetivo es evitar refactorizaciones cíclicas y la pérdida de contexto en tareas extensas.
+3. **Mantenimiento Continuo:** Al finalizar hitos importantes, implementar cambios estructurales o resolver bugs complejos, el agente DEBE actualizar proactivamente `MEMORY.md` para reflejar el nuevo estado, garantizando que futuras sesiones hereden este conocimiento.
+4. **Inmutabilidad de ADRs:** Las decisiones listadas bajo la sección de ADRs en `MEMORY.md` no pueden ser alteradas ni refactorizadas sin autorización explícita del usuario principal.
 
 ---
 

@@ -2,7 +2,19 @@
   "permissions": {
     "allow": [
       "Bash(mv 'AUDITORIA_*.md' 'AUDIT_REPORT_*.md' 'ANTES_Y_DESPUES*.md' 'FASE_*.md' 'FASE[0-9]_*.md' 'DIAGNOS*.md' 'INFORME_*.md' 'REPORTE_*.md' 'COMPLETADA*.md' 'COMPLETION_*.md' 'COMPLETION_*.md' 'CORRECCION_*.md' 'CORRECCIONES_*.md' 'LIMPEZA_*.md' 'LIMPIEZA_*.md' 'PURGA_*.md' 'ENTREGA_*.md' 'PUNTO_CIEGO_*.md' 'POSTMORTEM_*.md' 'FINAL_*.md' 'BEFORE_*.md' 'DEBUG_*.md' 'DELIVERABLES_*.md' 'DEPLOYMENT_*.md' 'ELIMINATION_*.md' 'ESTADO_*.md' 'ESTADO_*.md' 'INSPECCIÓN_*.md' _archive/)",
-      "Bash(mv documentacion/ESTADO_*.md documentacion/_archive/)"
+      "Bash(mv documentacion/ESTADO_*.md documentacion/_archive/)",
+      "Bash(docker-compose restart *)",
+      "Bash(docker exec *)",
+      "Bash(2>&1)",
+      "Bash(.\\venv\\Scripts\\python.exe -m py_compile *)",
+      "Bash(.\\venv\\Scripts\\python.exe manage.py test *)",
+      "Bash(.\\venv\\Scripts\\python.exe manage.py migrate_schemas*)",
+      "Bash(.\\venv\\Scripts\\python.exe manage.py seed_reglas_contables*)",
+      "Bash(.\\venv\\Scripts\\python.exe manage.py backfill_asientos_gastos*)",
+      "Bash(.\\venv\\Scripts\\python.exe manage.py collectstatic*)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
     ]
   }
 }

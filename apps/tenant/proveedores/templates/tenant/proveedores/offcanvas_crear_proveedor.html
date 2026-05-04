@@ -1,17 +1,17 @@
 {# offcanvas_crear_proveedor.html - Template dedicado para creación de proveedor según FSD #}
 {# [INFO] AGENTS.md: Arquitectura Feature-Sliced Design - Template dedicado para creación #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label" style="width: 90%; max-width: 800px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasProveedor" aria-labelledby="offcanvasProveedorLabel" style="width: 90%; max-width: 800px;">
   <div class="offcanvas-header border-bottom bg-light">
-    <h5 class="offcanvas-title" id="offcanvas-proveedor-label">
+    <h5 class="offcanvas-title" id="offcanvasProveedorLabel">
       <i class="bi bi-building me-2"></i>Nuevo Proveedor
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
   <div class="offcanvas-body">
-    <div id="form-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <div id="formFeedbackProveedor" class="alert alert-danger d-none mb-3" role="alert"></div>
     
-    <form id="form-proveedor" method="POST" onsubmit="return false;">
+    <form id="formProveedor" method="POST" onsubmit="return false;">
       {# Identificación Legal #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
@@ -182,7 +182,7 @@
       {# Botones de Acción #}
       <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
-        <button type="button" class="btn btn-primary" id="btn-guardar-proveedor">
+        <button type="button" class="btn btn-primary" id="btnGuardarProveedor">
           <i class="bi bi-check-lg me-1"></i>Crear Proveedor
         </button>
       </div>

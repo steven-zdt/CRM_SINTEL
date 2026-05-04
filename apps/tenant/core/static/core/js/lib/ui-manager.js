@@ -311,6 +311,57 @@
   }
 
   /**
+   * Maneja la apertura/cierre de Offcanvas Bootstrap 5 de forma segura
+   * ⚠️ v3.5: Implementa limpieza de backdrops y destrucción de instancias previas
+   * 
+   * @param {string|Element} selector - Selector CSS o Elemento DOM
+   * @param {string} action - 'show' o 'hide'
+   * @returns {boolean}
+   */
+  function handleOffcanvas(selector, action = 'show') {
+    if (!selector) return false;
+    const el = (typeof selector === 'string') ? d.querySelector(selector) : selector;
+    if (!el) {
+      console.warn(`[UIManager] handleOffcanvas: Elemento ${selector} no encontrado`);
+      return false;
+    }
+
+    if (typeof bootstrap === 'undefined' || !bootstrap.Offcanvas) {
+      console.error('[UIManager] Bootstrap Offcanvas no disponible');
+      return false;
+    }
+
+    try {
+      let instance = bootstrap.Offcanvas.getInstance(el);
+      
+      if (action === 'show') {
+        // ⚠️ v3.5: Limpieza preventiva de backdrops huérfanos que bloquean la UI
+        d.querySelectorAll('.offcanvas-backdrop, .modal-backdrop').forEach(b => b.remove());
+        d.body.style.overflow = '';
+        d.body.style.paddingRight = '';
+
+        // Si ya existe una instancia, la destruimos para evitar conflictos de estado
+        if (instance) {
+          instance.dispose();
+        }
+        
+        instance = new bootstrap.Offcanvas(el);
+        instance.show();
+      } else {
+        if (instance) {
+          instance.hide();
+          // Opcional: dispose después de ocultar si HTMX va a remover el elemento
+          el.addEventListener('hidden.bs.offcanvas', () => instance.dispose(), { once: true });
+        }
+      }
+      return true;
+    } catch (e) {
+      console.error('[UIManager] Error handleOffcanvas:', e);
+      return false;
+    }
+  }
+
+  /**
    * Limpia un formulario y oculta contenedores de error locales
    * 
    * @param {string} selector - Selector CSS del formulario (ej: '#form-cliente')
@@ -398,6 +449,7 @@
     handleError,  // ⚠️ v2.60: Boundary principal (decide dónde mostrar error)
     notifyError,  // Notificación flotante (fallback)
     handleModal,
+    handleOffcanvas,
     resetForm,
     showError: w.showError,
     showSuccess: w.showSuccess,

@@ -292,19 +292,25 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
         
         try:
             instance = self.get_object()  # Si no existe -> DRF lanza 404 automáticamente
-            
+
             # # WARNING: v2.95: Eliminación directa sin validaciones de negocio
             # Se eliminan todas las restricciones de CUFE, estado, notas de crédito, etc.
             # La eliminación se permite siempre, excepto por restricciones de integridad de BD
-            
+
+            # Guardar datos ANTES de eliminar (avoid refresh_from_db() en instancia deletada)
+            factura_id = instance.id
+            factura_numero = instance.numero
+            factura_cufe = instance.cufe
+            factura_estado = instance.estado
+
             # Eliminar usando servicio (a través del mixin de herencia)
             self.service_eliminar(instance)
-            
+
             log_del.info("delete_ok", extra=safe_extra({
-                "id": instance.id,
-                "numero": instance.numero,
-                "cufe": instance.cufe,
-                "estado": instance.estado,
+                "id": factura_id,
+                "numero": factura_numero,
+                "cufe": factura_cufe,
+                "estado": factura_estado,
             }))
             
             resp = Response(status=status.HTTP_204_NO_CONTENT)

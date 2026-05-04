@@ -11,10 +11,13 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
+from django.db.utils import ProgrammingError
 from django.template.exceptions import TemplateDoesNotExist
 from django.template.loader import get_template
 from rest_framework import serializers, status
 from rest_framework.response import Response
+
+from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +82,6 @@ def render_template_safe(context, template_name, request=None):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content_type='application/json'
         )
-    
     except Exception as e:
         logger.critical(f'[render_template_safe] Error inesperado: {e}', exc_info=True)
         return Response(
@@ -91,6 +93,42 @@ def render_template_safe(context, template_name, request=None):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content_type='application/json'
         )
+
+
+# ============================================================================
+# RESOLUCIÓN DE TENANT EMPRESA
+# ============================================================================
+def resolve_tenant_empresa(request, view_instance=None):
+    """
+    Resuelve la empresa activa del tenant con fallback seguro.
+
+    Orden:
+    1) Propiedad tenant_empresa del viewset (si existe en __dict__ por cached_property)
+    2) request.tenant.empresa (inyectado por middleware django-tenants)
+    3) request.tenant_empresa (compatibilidad legacy)
+    4) Singleton Empresa del esquema tenant actual
+    """
+    # Evitar recursión: no llamar a hasattr/getattr sobre cached_property tenant_empresa.
+    if view_instance is not None:
+        cached_empresa = view_instance.__dict__.get('tenant_empresa')
+        if cached_empresa:
+            return cached_empresa
+
+    tenant = getattr(request, 'tenant', None)
+    empresa = getattr(tenant, 'empresa', None)
+    if empresa:
+        return empresa
+
+    empresa = getattr(request, 'tenant_empresa', None)
+    if empresa:
+        return empresa
+
+    # Fallback final: singleton de Empresa en el esquema tenant activo.
+    try:
+        return Empresa.objects.only('id', 'razon_social').first()
+    except ProgrammingError:
+        logger.warning('[api:resolve_tenant_empresa] Tabla empresa_empresa no disponible en el esquema actual')
+        return None
 
 
 # ============================================================================

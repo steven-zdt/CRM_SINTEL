@@ -11,61 +11,58 @@
 (function(w, d) {
   'use strict';
 
+  let initialized = false;
+
   function initClientesTable() {
+    if (initialized) {
+      // Si ya está inicializado, opcionalmente refrescar datos
+      if (w.clientesDT && typeof w.clientesDT.refresh === 'function') {
+        w.clientesDT.refresh();
+      }
+      return;
+    }
+
     try {
       if (w.clientesDT && typeof w.clientesDT.init === 'function') {
         w.clientesDT.init();
+        initialized = true;
+        console.log('[clientes.module] Inicializado correctamente');
       }
     } catch (err) {
       console.error('[clientes.module] Error inicializando clientesDT:', err);
       if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
         w.UIManager.notifyError({ status: 500, data: { detail: 'Error inicializando el módulo de Clientes.' } }, '[clientes.module]');
-      } else if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-        w.SintelFeedback.error('Error inicializando el módulo de Clientes.');
       }
     }
   }
 
-  // Lazy init cuando el tab del workspace cambia a "clientes"
-  // workspace.js dispara shown.bs.tab para tabs Bootstrap internos, pero el sidebar
-  // es custom; por eso escuchamos el evento "hashchange" y clicks en el nav.
-  function bindLazyInit() {
-    // Caso 1: navegación por hash (#clientes)
-    function maybeInitFromHash() {
-      if (w.location && typeof w.location.hash === 'string' && w.location.hash === '#clientes') {
-        initClientesTable();
-      }
+  /**
+   * Registro centralizado de inicialización v2.60.2
+   */
+  function handleInit() {
+    // Pequeño delay de cortesía para estabilizar el DOM y evitar colisiones de mensajes en el navegador
+    setTimeout(initClientesTable, 50);
+  }
+
+  // Escuchar evento centralizado de workspace.js
+  d.addEventListener('tab-activated', function(event) {
+    if (event.detail?.tabName === 'clientes') {
+      handleInit();
     }
+  });
 
-    w.addEventListener('hashchange', maybeInitFromHash);
-
-    // Caso 2: click en sidebar (workspace)
-    const nav = d.getElementById('nav');
-    if (nav) {
-      nav.addEventListener('click', function(e) {
-        const link = e.target.closest('a[data-tab]');
-        if (!link) return;
-        const tabName = link.getAttribute('data-tab');
-        if (tabName === 'clientes') {
-          // dejar que el DOM muestre el tab primero
-          setTimeout(initClientesTable, 0);
-        }
-      });
+  // Caso: Carga directa con hash
+  if (w.location.hash === '#clientes') {
+    if (d.readyState === 'loading') {
+      d.addEventListener('DOMContentLoaded', handleInit);
+    } else {
+      handleInit();
     }
-
-    // Caso 3: si ya estamos en hash #clientes al cargar
-    maybeInitFromHash();
   }
 
   // Export simple
   w.ClientesWorkspaceModule = {
-    init: initClientesTable,
-    bind: bindLazyInit,
+    init: initClientesTable
   };
 
-  if (d.readyState === 'loading') {
-    d.addEventListener('DOMContentLoaded', bindLazyInit);
-  } else {
-    bindLazyInit();
-  }
 })(window, document);

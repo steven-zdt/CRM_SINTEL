@@ -16,6 +16,33 @@
     w.AppCliente = w.AppCliente || {};
 
     // ============================================================
+    // DOM SELECTORS (SSoT)
+    // ============================================================
+    const DOM = {
+        // Contenedores Principales
+        containerClientes:  '#offcanvas-container-clientes',
+        containerContactos: '#offcanvas-container-contactos',
+        
+        // Tablas/Grillas
+        gridClientes:       '#grid-clientes',
+        gridContactos:      '#grid-contactos',
+        
+        // Buscadores
+        searchCliente:      '#search-cliente',
+        searchContacto:     '#search-contacto',
+        
+        // IDs de Offcanvas (dentro de los contenedores)
+        offcanvasCliente:   'offcanvas-cliente',
+        offcanvasContacto:  'offcanvas-contacto-cliente',
+        
+        // Selectores de Atributos
+        dataSpinner:        (type) => `[data-spinner="${type}"]`,
+        dataGrid:           (type) => `[data-grid="${type}"]`,
+        dataEmpty:          (type) => `[data-empty-state="${type}"]`,
+        dataModule:         (type) => `[data-module="${type}"] .btn`
+    };
+
+    // ============================================================
     // MODULE STATE
     // ============================================================
     const state = {
@@ -81,6 +108,7 @@
         ],
         contactos: [
             { title: 'Nombre', field: 'nombre_completo', widthGrow: 2 },
+            { title: 'Cliente', field: 'cliente_nombre', widthGrow: 1.5 },
             { title: 'Email', field: 'email' },
             { title: 'Teléfono', field: 'telefono' },
             {
@@ -131,7 +159,7 @@
      * Initialize clientes table (lazy loading)
      */
     async function loadClientesTable() {
-        const gridElement = d.querySelector('#grid-clientes');
+        const gridElement = d.querySelector(DOM.gridClientes);
         
         // ⚠️ v2.61.4: Verificar si la tabla ya está cargada Y existe en el DOM
         if (state.clientesLoaded && gridElement && gridElement.children.length > 0) {
@@ -159,10 +187,10 @@
 
             log.info('Creating clientes table...');
             state.clientesTable = w.TabulatorFactory.create(
-                '#grid-clientes',
+                DOM.gridClientes,
                 '/api/v1/clientes/',
                 TABLE_COLUMNS.clientes,
-                { searchInputSelector: '#search-cliente' }
+                { searchInputSelector: DOM.searchCliente }
             );
 
             if (!state.clientesTable) {
@@ -193,7 +221,7 @@
      * Initialize contactos table (lazy loading)
      */
     async function loadContactosTable() {
-        const gridElement = d.querySelector('#grid-contactos');
+        const gridElement = d.querySelector(DOM.gridContactos);
         
         // ⚠️ v2.61.4: Verificar si la tabla ya está cargada Y existe en el DOM
         if (state.contactosLoaded && gridElement && gridElement.children.length > 0) {
@@ -220,10 +248,10 @@
 
             log.info('Creating contactos table...');
             state.contactosTable = w.TabulatorFactory.create(
-                '#grid-contactos',
+                DOM.gridContactos,
                 '/api/v1/clientes/contactos/',
                 TABLE_COLUMNS.contactos,
-                { searchInputSelector: '#search-contacto' }
+                { searchInputSelector: DOM.searchContacto }
             );
 
             if (!state.contactosTable) {
@@ -328,7 +356,7 @@
             
             // Use htmx.ajax with swap listener pattern
             htmx.ajax('GET', url, {
-                target: '#offcanvas-container-clientes',
+                target: DOM.containerClientes,
                 swap: 'innerHTML'
             });
         } catch (error) {
@@ -347,7 +375,7 @@
 
             // Use htmx.ajax with swap listener pattern
             htmx.ajax('GET', url, {
-                target: '#offcanvas-container-clientes',
+                target: DOM.containerClientes,
                 swap: 'innerHTML'
             });
         } catch (error) {
@@ -358,8 +386,8 @@
 
     /**
      * Delete cliente with confirmation.
-     * Regla de negocio: un cliente activo no puede eliminarse directamente.
-     * Si esta activo, se ofrece desactivarlo + eliminarlo en un solo flujo.
+     * Regla de negocio: un cliente activo no puede eliminarse.
+     * Si esta activo, se bloquea la accion en UI obligando a edicion manual.
      * @param {Object} rowData - Fila completa de Tabulator (requiere id y activo)
      */
     async function deleteCliente(rowData) {
@@ -368,28 +396,12 @@
 
         if (isActive) {
             const razon = rowData.razon_social || 'este cliente';
-            const confirmar = confirm(
-                'El cliente "' + razon + '" esta activo.\n' +
-                'Para eliminarlo primero debe marcarse como inactivo.\n\n' +
-                '\u00bfDesea inactivarlo y eliminarlo ahora?'
-            );
-            if (!confirmar) return;
-
-            // Paso 1: Inactivar
-            const patchRes = await w.clientesAPI.update(id, { activo: false });
-            if (!patchRes.ok) {
-                const msg = patchRes.data?.detail
-                    || patchRes.data?.activo?.join(', ')
-                    || 'No se pudo inactivar el cliente';
-                log.error('Error inactivando cliente ' + id, patchRes.data);
-                showError(msg);
-                return;
-            }
-        } else {
-            if (!confirm('\u00bfEsta seguro de eliminar este cliente?')) return;
+            showError(`El cliente "${razon}" está activo. Debe inactivarlo manualmente editando su registro antes de poder eliminarlo.`);
+            return;
         }
 
-        // Paso 2 (o unico paso): Eliminar
+        if (!confirm('\u00bfEsta seguro de eliminar este cliente de forma permanente?')) return;
+
         const response = await w.clientesAPI.delete(id);
         if (response.ok || response.status === 204) {
             showSuccess('Cliente eliminado correctamente');
@@ -412,7 +424,7 @@
             log.info(`Loading detail view for contacto ${id}`);
 
             htmx.ajax('GET', url, {
-                target: '#offcanvas-container-contactos',
+                target: DOM.containerContactos,
                 swap: 'innerHTML'
             });
         } catch (error) {
@@ -430,7 +442,7 @@
         const url = `/api/v1/clientes/contactos/gestor-offcanvas/?id=${id}`;
         try {
             await htmx.ajax('GET', url, {
-                target: '#offcanvas-container-contactos',
+                target: DOM.containerContactos,
                 swap: 'innerHTML'
             });
             log.info(`Loaded edit form for contacto ${id}`);
@@ -474,25 +486,25 @@
         const count = isClientes ? state.clientesCount : state.contactosCount;
 
         // Update spinner visibility
-        const spinner = d.querySelector(`[data-spinner="${type}"]`);
+        const spinner = d.querySelector(DOM.dataSpinner(type));
         if (spinner) {
             spinner.style.display = (!loaded && loading) ? 'block' : 'none';
         }
 
         // Update grid visibility
-        const grid = d.querySelector(`[data-grid="${type}"]`);
+        const grid = d.querySelector(DOM.dataGrid(type));
         if (grid) {
             grid.style.display = loaded ? 'block' : 'none';
         }
 
         // Update empty state
-        const empty = d.querySelector(`[data-empty-state="${type}"]`);
+        const empty = d.querySelector(DOM.dataEmpty(type));
         if (empty) {
             empty.style.display = (!loading && loaded && count === 0) ? 'block' : 'none';
         }
 
         // Update buttons disabled state
-        const buttons = d.querySelectorAll(`[data-module="${type}"] .btn`);
+        const buttons = d.querySelectorAll(DOM.dataModule(type));
         buttons.forEach(btn => {
             btn.disabled = loading;
         });
@@ -506,10 +518,10 @@
      * Search input - debounced reload
      */
     d.addEventListener('keyup', (e) => {
-        if (e.target.matches('#search-cliente')) {
+        if (e.target.matches(DOM.searchCliente)) {
             clearTimeout(e.target._searchTimeout);
             e.target._searchTimeout = setTimeout(() => reloadTable('clientes'), 300);
-        } else if (e.target.matches('#search-contacto')) {
+        } else if (e.target.matches(DOM.searchContacto)) {
             clearTimeout(e.target._searchTimeout);
             e.target._searchTimeout = setTimeout(() => reloadTable('contactos'), 300);
         }
@@ -605,26 +617,21 @@
         const showOffcanvas = (containerId, offcanvasId) => {
             if (target && target.id === containerId) {
                 log.info(`${containerId} loaded, showing offcanvas...`);
+                
+                // ⚠️ v2.62: Usar UIManager para manejo seguro de instancia y backdrops
                 requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        const offcanvasEl = d.getElementById(offcanvasId);
-                        if (offcanvasEl) {
-                            waitForBootstrap(() => {
-                                try {
-                                    bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
-                                    log.info(`${offcanvasId} shown successfully`);
-                                } catch (err) {
-                                    log.error(`Error showing ${offcanvasId}`, err);
-                                }
-                            });
-                        }
-                    });
+                    const offcanvasEl = d.getElementById(offcanvasId);
+                    if (offcanvasEl && w.UIManager?.handleOffcanvas) {
+                        w.UIManager.handleOffcanvas(offcanvasEl, 'show');
+                    } else {
+                        log.warn(`No se pudo mostrar offcanvas ${offcanvasId}: Elemento o UIManager no disponible`);
+                    }
                 });
             }
         };
 
-        showOffcanvas('offcanvas-container-clientes', 'offcanvas-cliente');
-        showOffcanvas('offcanvas-container-contactos', 'offcanvas-contacto-cliente');
+        showOffcanvas(DOM.containerClientes.substring(1), DOM.offcanvasCliente);
+        showOffcanvas(DOM.containerContactos.substring(1), DOM.offcanvasContacto);
     });
 
     /**

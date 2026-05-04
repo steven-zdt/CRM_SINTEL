@@ -101,6 +101,29 @@ apps/tenant/clientes/
 
 ---
 
+## 2.3. Changelog v2.62.3 — Estabilización de UI Offcanvas y Gestión de Ciclo de Vida
+**MEJORAS IMPLEMENTADAS:** Resolución de inestabilidad en la apertura/cierre de Offcanvas y persistencia de backdrops.
+- **UIManager (`ui-manager.js`):** Implementación de `handleOffcanvas()` para centralizar la lógica de apertura segura.
+- **Gestión de Ciclo de Vida:** Limpieza automática de backdrops huérfanos y `dispose()` de instancias previas para evitar conflictos de estado.
+- **Delegación de Eventos:** Refactorización de listeners en `clientes.editor.js` y `clientes.contactos.js` mediante clonación de nodos, neutralizando la ejecución múltiple de eventos.
+
+## 2.2. Changelog v2.62.2 — Estabilización CRUD, Zero-Automation y UX de Contactos
+
+**MEJORAS IMPLEMENTADAS:** Se incrementó la seguridad en la capa de persistencia y UI, y se expandió la funcionalidad del directorio de contactos.
+
+### 1. Zero-Automation en Eliminación
+- **Backend (`crud_service.py`):** Si se intenta eliminar un registro (Cliente o Contacto) con `activo=True`, el backend rechaza la operación (`HTTP 400 Bad Request`).
+- **Frontend (`clientes.list.js` y `clientes.contactos.js`):** Se eliminó la automatización de `PATCH {activo: false}` previo a un borrado. Si el registro está activo, la UI bloquea la eliminación y obliga al usuario a **inactivar manualmente** el registro editándolo.
+
+### 2. Upsert Seguro (IntegrityError Fix)
+- **Backend (`business_service.py`):** Los métodos `patch_cliente` y relacionados ahora requieren explícitamente el parámetro `instance=obj`. Esto asegura que al actualizar campos, el ORM excluya al propio objeto de la validación de los constraints UNIQUE (ej. `numero_documento`), previniendo `IntegrityErrors`.
+
+### 3. Mejoras en UI y FSD
+- **Columna Cliente en Directorio:** Se añadió la columna **"Cliente"** en `TABLE_COLUMNS.contactos` para visibilidad global, aprovechando el `.only()` y `select_related('cliente')` en el `ContactoSelector` (Zero Waste).
+- **Selector Activos en Nuevo Contacto:** Se implementó `filterset_fields = ['activo']` en `ClienteViewSet`. El modal global de "Nuevo Contacto" ahora filtra correctamente y permite seleccionar únicamente a clientes vigentes.
+
+---
+
 ## 3. Modelos (Anémicos)
 
 ### 3.1. `Cliente`
@@ -634,6 +657,14 @@ deleteCliente(rowData):
 - [x] htmx:afterSettle: Abre offcanvas para clientes (`offcanvas-cliente`) y contactos (`offcanvas-contacto-cliente`).
 - [x] Sub-tab Contactos: Carga lazy al primer clic vía `shown.bs.tab`.
 - [x] `onsubmit="return false;"` en ambos forms (crear y editar cliente).
+- [x] Zero-Automation: Bloqueo explícito en UI y backend si se intenta eliminar un registro `activo=True`.
+- [x] Upsert Seguro: Instancia explícita en `BusinessService.patch_*` para prevenir IntegrityErrors.
+- [x] Columna Cliente: Trazabilidad en la tabla de contactos sin N+1 gracias a `select_related`.
+- [x] API Filtros: `DjangoFilterBackend` habilitado para filtrar clientes `activo=True` en selects.
+- [x] UI Stability: `UIManager.handleOffcanvas` centraliza apertura y cierre.
+- [x] UI Stability: Limpieza forzada de backdrops huérfanos previa a cada `show()`.
+- [x] UI Stability: `instance.dispose()` previo a re-instanciación para evitar fugas de memoria y bloqueos.
+- [x] UI Stability: Clonación de botones en `setupEventListeners` para neutralizar listeners duplicados.
 
 ---
 
@@ -649,5 +680,6 @@ deleteCliente(rowData):
 - [static/clientes/js/clientes.list.js](static/clientes/js/clientes.list.js)
 - [static/clientes/js/clientes.editor.js](static/clientes/js/clientes.editor.js)
 - [static/clientes/js/clientes.api.js](static/clientes/js/clientes.api.js)
+- [.agents/skills/frontend/ui-management.md](../../../.agents/skills/frontend/ui-management.md)
 - [templates/tenant/clientes/clientes_list.html](templates/tenant/clientes/clientes_list.html)
 - [apps/tenant/api/utils.py](../api/utils.py)

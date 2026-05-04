@@ -1,0 +1,74 @@
+# SINTEL ERP — Windsurf Rules v2.62.0
+# STRICT AND MANDATORY for all AI code suggestions in this project.
+
+## IDENTITY OF THIS PROJECT
+Multi-tenant SaaS ERP (django-tenants + PostgreSQL schemas).
+Every tenant is isolated by empresa_id. Zero cross-tenant data leakage is non-negotiable.
+
+## ZERO TOLERANCE RULES
+
+### Python files (.py)
+- ZERO emojis or Unicode special characters → SyntaxError + Django 500
+- ZERO `models.Model` direct inheritance → use `SintelTenantBaseModel`
+- ZERO `.all()` without `.only()` → performance contract
+- ZERO ORM queries without `empresa_id` filter → multi-tenant security
+- ZERO Django Signals for business logic → explicit Service Layer only
+- ZERO new files outside the Service Layer structure without user authorization
+
+### Cross-module
+- ZERO imports from `apps.public.*` in tenant apps → use Core Membership Bridge
+- ZERO `AsientoContable.objects.create()` directly → always `Contabilizador.contabilizar(dto)`
+- ZERO ForeignKey to `AUTH_USER_MODEL` → use `'perfil.TenantProfile'`
+- ZERO modifications to `apps/public/` without RFC + `needs-admin-approval`
+
+## MANDATORY STACK
+Python + Django + DRF + django-tenants + PostgreSQL + Celery
+HTMX + Vanilla JS ES6+ + Bootstrap 5 + Tabulator
+NO alternatives suggested without explicit user authorization.
+
+## SERVICE LAYER STRUCTURE (every tenant app)
+
+```
+services/
+  __init__.py          — re-exports
+  crud_service.py      — @transaction.atomic, pure DB, NO logic
+  business_service.py  — business rules + Double Semantic Verification
+  selectors.py         — read-only .only() QuerySets, LIST_FIELDS, DETAIL_FIELDS
+  api_mixins.py        — <Model>ServiceMixin for ViewSets
+  services.py          — stable facade
+```
+
+ViewSets inherit `BaseTenantViewSet` + `<Model>ServiceMixin`. `lookup_field = "uuid"`.
+
+## TEMPLATES PATH
+`apps/tenant/<app>/templates/tenant/<app>/` ← prefix `tenant/` is MANDATORY
+
+## ACCOUNTING LAYER
+```python
+# Build DTO then materialize:
+from apps.tenant.contabilidad.services.asientos_service import materializar_asiento_desde_gasto
+try:
+    asiento = materializar_asiento_desde_gasto(gasto)
+except Exception as e:
+    logger.warning(f"Asiento failed: {e}")  # never block business flow
+
+# DTO fields:
+LineaTransaccion(concepto='GASTO_OPERATIVO', monto=D('1000000'), lado='DEBE')
+ImpuestoLinea(tipo='RETEFUENTE', valor=D('40000'), lado='HABER')
+# DEBE total == HABER total (cuadratura obligatoria)
+```
+
+## SECURITY PATTERN
+```python
+# Every mutation validates FK ownership (DSV):
+if not Model.objects.filter(empresa_id=empresa_id, id=fk_id).exists():
+    raise PermissionDenied("IDOR blocked")
+
+# Permissions in ViewSet:
+permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+```
+
+## BEFORE ANY CODE CHANGE
+1. Read AGENTS.md (project root) for the applicable section
+2. Read AUDITORIA_FLUJO_COMPLETO.md of the target app if it exists
+3. Verify the target file path is within authorized Service Layer structure

@@ -104,103 +104,96 @@
   }
 
   /**
-   * Delegación de eventos para la lista
+   * Delegación de eventos resiliente (v2.61.7)
    */
   function initListEvents() {
     if (listEventsBound) return;
 
-    const gridEl = d.querySelector(GRID_ID);
-    if (!gridEl) return;
+    console.log(`${MOD} Inicializando delegación de eventos global...`);
+    
+    d.addEventListener('click', function(e) {
+      // 1. Botón "Nuevo" (Resiliencia total: múltiples IDs y clases)
+      const btnNuevo = e.target.closest('#btn-nuevo-proveedor, #btnNuevoProveedor, .btn-nuevo-proveedor');
+      if (btnNuevo) {
+        console.log(`${MOD} Click en "Nuevo" detectado via delegación`);
+        e.preventDefault();
+        w.Sintel.Proveedores.Form?.openOffcanvas(null);
+        return;
+      }
 
-    listEventsBound = true;
+      // 2. Acciones de Tabla (Editar/Eliminar)
+      const btnAction = e.target.closest('.btn-edit-proveedor, .btn-delete-proveedor');
+      if (btnAction) {
+        e.stopPropagation();
+        if (btnAction.disabled || btnAction.classList.contains('disabled')) return;
+        
+        const id = btnAction.getAttribute('data-id');
+        if (!id) return;
 
-    gridEl.addEventListener('click', function(e) {
-      const btn = e.target.closest('.btn-edit-proveedor, .btn-delete-proveedor');
-      if (!btn) return;
-
-      e.stopPropagation();
-
-      if (btn.disabled || btn.classList.contains('disabled')) return;
-
-      const id = btn.getAttribute('data-id');
-      if (!id) return;
-
-      if (btn.classList.contains('btn-edit-proveedor')) {
-        w.Sintel.Proveedores.Form?.openOffcanvas(id);
-      } else if (btn.classList.contains('btn-delete-proveedor')) {
-        w.Sintel.Proveedores.Form?.eliminar(id);
+        if (btnAction.classList.contains('btn-edit-proveedor')) {
+          w.Sintel.Proveedores.Form?.openOffcanvas(id);
+        } else if (btnAction.classList.contains('btn-delete-proveedor')) {
+          w.Sintel.Proveedores.Form?.eliminar(id);
+        }
       }
     });
 
+    listEventsBound = true;
+
+    // Vinculación con eventos de Tabulator
     if (table) {
       table.on('rowClick', (e, row) => {
-        // Patron del proyecto: prevenir rowClick durante eliminacion
         if (_eliminandoProveedor) return;
-
-        // Evitar abrir offcanvas si el clic fue en un boton de accion
         const target = e.target || e.originalEvent?.target;
         if (target && target.closest && target.closest('button')) return;
-
         const id = row.getData().id;
         if (id) w.Sintel.Proveedores.Form?.openOffcanvas(id);
       });
     }
   }
 
-  function bindNuevoButton() {
-    const btnNuevo = d.querySelector('#btn-nuevo-proveedor');
-    if (!btnNuevo) return;
+  /**
+   * Inicialización controlada del módulo
+   */
+  function init() {
+    const gridEl = d.querySelector(GRID_ID);
+    if (!gridEl) return; // No estamos en la vista de proveedores
 
-    if (newButtonBound && btnNuevo.dataset.boundNuevoProveedor === 'true') {
+    if (initialized) {
+      if (table) w.Sintel.Proveedores.Main.refresh();
       return;
     }
 
-    const replacement = btnNuevo.cloneNode(true);
-    btnNuevo.parentNode.replaceChild(replacement, btnNuevo);
-    replacement.dataset.boundNuevoProveedor = 'true';
-    replacement.addEventListener('click', function () {
-      w.Sintel.Proveedores.Form?.openOffcanvas(null);
-    });
-    newButtonBound = true;
+    console.log(`${MOD} Ejecutando orquestación inicial...`);
+    initTable();
+    initialized = true;
+    console.log(`${MOD} Módulo estabilizado.`);
   }
 
-  /**
-   * Inicialización diferida del módulo
-   */
-  function init() {
-    const tabEl = d.querySelector(TAB_ID);
-    const gridEl = d.querySelector(GRID_ID);
-    if (!tabEl || !gridEl) return;
-
-    bindNuevoButton();
-
-    if (!initialized) {
-      initTable();
-      initialized = true;
-    } else if (table) {
-      w.Sintel.Proveedores.Main.refresh();
-    }
-  }
-
-  // Registro en Namespace Global v2.61.4
+  // Registro en Namespace Global
   w.Sintel = w.Sintel || {};
   w.Sintel.Proveedores = w.Sintel.Proveedores || {};
   w.Sintel.Proveedores.Main = {
     init: init,
-    refresh: () => table && table.replaceData()
+    refresh: () => {
+      if (table && typeof table.replaceData === 'function') {
+        table.replaceData().catch(err => console.warn(`${MOD} Error al refrescar tabla:`, err));
+      }
+    }
   };
 
-  // Lazy Load
-  if (w.DOMUtils?.onVisibleOnce) {
-    w.DOMUtils.onVisibleOnce(TAB_ID, init);
-  } else {
-    d.addEventListener('DOMContentLoaded', init);
-  }
+  // Delegación inmediata (disponible antes de la carga del tab)
+  initListEvents();
 
+  // Escuchar activación de tab
   d.addEventListener('tab-activated', function (event) {
     if (event.detail?.tabName === 'proveedores') {
-      init();
+      setTimeout(init, 100);
     }
   });
+
+  // Fallback si ya estamos en el tab al cargar
+  if (d.readyState === 'complete') init();
+  else w.addEventListener('load', init);
 
 })(window, document);

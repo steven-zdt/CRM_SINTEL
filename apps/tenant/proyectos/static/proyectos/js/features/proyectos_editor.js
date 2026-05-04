@@ -124,8 +124,10 @@
             return;
         }
 
-        // ⚠️ Éxito: Cerrar Offcanvas, mostrar feedback y disparar evento
-        if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+        // ⚠️ v2.62.3: Cerrar Offcanvas usando el orquestador central
+        if (offcanvasEl && w.UIManager?.handleOffcanvas) {
+            w.UIManager.handleOffcanvas(offcanvasEl, 'hide');
+        } else if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
             const offcanvasInstance = bootstrap.Offcanvas.getInstance(offcanvasEl);
             if (offcanvasInstance) {
                 offcanvasInstance.hide();

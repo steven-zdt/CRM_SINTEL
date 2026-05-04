@@ -63,10 +63,16 @@
                 }
             },
             {
-                title: 'Cliente / Proveedor',
-                field: 'cliente_nombre',
+                title: 'Emisor',
+                field: 'emisor_razon_social',
                 formatter: fmtValorOFallback,
-                minWidth: 220
+                minWidth: 250
+            },
+            {
+                title: 'Receptor',
+                field: 'receptor_razon_social',
+                formatter: fmtValorOFallback,
+                minWidth: 250
             },
             {
                 title: 'Fecha Emision',

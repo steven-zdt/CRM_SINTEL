@@ -74,26 +74,31 @@ class FacturaListSerializer(serializers.ModelSerializer):
         model = Factura
         # # WARNING: v2.60: Campos optimizados para Tabulator con campos aplanados
         fields = (
-            "id",  # # WARNING: PRIMERO: Requerido para Tabulator
-            "numero",  # <cbc:ID> del XML
-            "naturaleza",  # # WARNING: VENTA/COMPRA (calculado automáticamente en Service Layer)
-            "fecha_emision",  # <cbc:IssueDate> + <cbc:IssueTime>
-            "fecha_vencimiento",  # # WARNING: v2.60: Fecha de vencimiento para estado de pago
-            "cliente_nombre",  # # WARNING: v2.60: Campo aplanado (alias de receptor_razon_social)
-            "receptor_razon_social",  # Snapshot histórico (mantenido por compatibilidad)
-            "moneda",  # <cbc:DocumentCurrencyCode>
-            "subtotal",  # <cac:LegalMonetaryTotal><cbc:LineExtensionAmount>
-            "impuestos",  # <cac:TaxTotal><cbc:TaxAmount>
-            "total",  # <cac:LegalMonetaryTotal><cbc:PayableAmount>
-            "total_formateado",  # # WARNING: v2.60: Campo calculado formateado
-            "estado",  # Estado DIAN (CUFE/CUDE)
-            "nota_credito_id",  # ID de NotaCrédito si existe
-            "nota_credito_numero",  # Número de NotaCrédito si existe
+            "id",
+            "numero",
+            "naturaleza",
+            "fecha_emision",
+            "fecha_vencimiento",
+            # NUEVAS COLUMNAS INDEPENDIENTES (Fase 1):
+            "emisor_nit",
+            "emisor_razon_social",
+            "receptor_nit",
+            "receptor_razon_social",
+            "cliente_nombre",  # MANTENER por compatibilidad backward
+            "moneda",
+            "subtotal",
+            "impuestos",
+            "total",
+            "total_formateado",
+            "estado",
+            "nota_credito_id",
+            "nota_credito_numero",
         )
         read_only_fields = (
-            "id", "fecha_emision", "fecha_vencimiento", "naturaleza", "cliente_nombre", 
+            "id", "numero", "fecha_emision", "fecha_vencimiento", "naturaleza", "cliente_nombre", 
+            "emisor_nit", "emisor_razon_social", "receptor_nit", "receptor_razon_social",
             "nota_credito_id", "nota_credito_numero", "subtotal", 
-            "impuestos", "total", "total_formateado"
+            "impuestos", "total", "total_formateado", "estado"
         )
     
     def get_total_formateado(self, obj):

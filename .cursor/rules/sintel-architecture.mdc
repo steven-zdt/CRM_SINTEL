@@ -1,0 +1,80 @@
+---
+description: SINTEL ERP Architecture Rules — applied to all files in this project
+globs: ["**/*.py", "**/*.js", "**/*.html", "**/*.ts"]
+alwaysApply: true
+---
+
+# SINTEL ERP Architecture Rules v2.62.0
+
+These rules are STRICT, IMMUTABLE, and MANDATORY. Apply before any code suggestion.
+Full reference: `AGENTS.md` at project root.
+
+## ZERO TOLERANCE
+
+| Rule | Why |
+|---|---|
+| No emojis in `.py` | SyntaxError → Django 500 |
+| No `models.Model` inheritance | Must use `SintelTenantBaseModel` |
+| No `.all()` or unguarded `.filter()` | Zero Waste ORM contract |
+| No ORM without `empresa_id` | Multi-tenant data isolation |
+| No Django Signals for logic | Explicit Service Layer only |
+| No `from apps.public.*` in tenant apps | Cross-schema isolation |
+| No direct `AsientoContable.objects.create()` | Always via Contabilizador |
+| No modifying `apps/public/` | Requires RFC + admin approval |
+| No FK to `AUTH_USER_MODEL` | Use `'perfil.TenantProfile'` |
+
+## SERVICE LAYER STRUCTURE
+
+```python
+# apps/tenant/<app>/services/
+crud_service.py      # @transaction.atomic — pure DB writes ONLY
+business_service.py  # Business logic + Double Semantic Verification (IDOR)
+selectors.py         # .only() QuerySets — LIST_FIELDS, DETAIL_FIELDS tuples
+api_mixins.py        # <Model>ServiceMixin → injected into ViewSet
+services.py          # Stable facade re-exporting business_service
+```
+
+## CORRECT PATTERNS
+
+```python
+# Model
+from apps.tenant.core.models import SintelTenantBaseModel
+class MyModel(SintelTenantBaseModel): ...  # empresa + timestamps auto-injected
+
+# QuerySet
+MyModel.objects.filter(empresa_id=empresa_id).only('id', 'uuid', 'nombre')
+
+# ViewSet
+class MyViewSet(MyModelServiceMixin, BaseTenantViewSet):
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    lookup_field = "uuid"
+    queryset = MyModel.objects.none()
+
+# Accounting
+from apps.tenant.contabilidad.services.asientos_service import materializar_asiento_desde_gasto
+asiento = materializar_asiento_desde_gasto(gasto)  # never create AsientoContable directly
+
+# Cross-schema
+from apps.tenant.core.services.membership import check_membership  # bridge ONLY
+
+# JWT (frontend)
+const token = window.jwtAuth?.getAccessToken?.();  # never .token
+```
+
+## TEMPLATE PATHS
+- Tenant: `apps/tenant/<app>/templates/tenant/<app>/` ← `tenant/` prefix MANDATORY
+- Public: `apps/public/<app>/templates/<app>/`
+
+## ACCOUNTING DTOs
+```python
+LineaTransaccion(concepto='GASTO_OPERATIVO', monto=Decimal('1000000'), lado='DEBE')
+ImpuestoLinea(tipo='RETEFUENTE', valor=Decimal('40000'), lado='HABER')
+# DEBE total == HABER total (cuadratura) — always balanced
+```
+
+## PERMISSIONS
+```python
+# Import ONLY from this module:
+from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+# NEVER from: apps.tenant.empresa.permissions (deprecated)
+```

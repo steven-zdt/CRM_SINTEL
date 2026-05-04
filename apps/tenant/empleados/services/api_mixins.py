@@ -41,8 +41,8 @@ class EmpleadoServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        # Usado por get_object() en ViewSet
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
+        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'pk')
+        return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
     def service_crear_empleado(self, serializer):
         """Crea empleado usando business service."""
@@ -68,9 +68,9 @@ class EmpleadoServiceMixin:
         return self.summary_selector_class.get_summary(empresa_id)
 
     def _get_empresa(self):
-        """Helper para obtener empresa actual."""
-        from apps.tenant.empresa.models import Empresa
-        return Empresa.objects.only('id').first()
+        """Helper para obtener empresa actual de forma segura."""
+        from apps.tenant.api.utils import resolve_tenant_empresa
+        return resolve_tenant_empresa(self.request, self)
 
 
 class ContratoServiceMixin:
@@ -97,7 +97,8 @@ class ContratoServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
+        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'pk')
+        return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
     def service_gestionar_contrato(self, empleado, data, contrato_existente=None):
         """Gestiona creación/actualización de contrato."""
@@ -141,7 +142,8 @@ class DevengoServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
+        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'pk')
+        return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
     def get_historial_qs(self, empleado_id: int):
         """Retorna queryset de historial de nóminas de un empleado."""

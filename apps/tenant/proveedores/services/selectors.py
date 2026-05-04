@@ -59,7 +59,6 @@ def qs_list(empresa_id, search=None):
         qs = qs.filter(
             Q(razon_social__icontains=search) | 
             Q(numero_documento__icontains=search) |
-            Q(nit__icontains=search) |  # Mantener nit por si acaso hay busqueda por ese alias
             Q(email_contacto__icontains=search) |
             Q(nombre_comercial__icontains=search)
         ).distinct()

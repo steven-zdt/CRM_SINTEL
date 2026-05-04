@@ -44,6 +44,27 @@
           </div>
         </div>
       </div>
+
+      {# Información de Seguridad Social (Solo lectura) #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-shield-check me-2"></i>Seguridad Social
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label text-muted small">EPS</label>
+            <input type="text" class="form-control bg-light" value="{{ empleado.get_eps_display }}" readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-muted small">Fondo de Pensión (AFP)</label>
+            <input type="text" class="form-control bg-light" value="{{ empleado.get_afp_display }}" readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-muted small">ARL</label>
+            <input type="text" class="form-control bg-light" value="{{ empleado.get_arl_display }}" readonly>
+          </div>
+        </div>
+      </div>
       
       {# Periodo y Fecha #}
       <div class="mb-4">

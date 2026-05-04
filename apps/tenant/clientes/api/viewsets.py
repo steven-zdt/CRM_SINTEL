@@ -21,7 +21,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
-from apps.tenant.api.utils import render_template_safe
+from apps.tenant.api.utils import render_template_safe, resolve_tenant_empresa
 from .mixins import ClienteServiceMixin, ContactoClienteServiceMixin
 from apps.tenant.clientes.api.serializers import (
     ClienteDetailSerializer,
@@ -37,39 +37,7 @@ from apps.tenant.empresa.models import Empresa
 logger = logging.getLogger(__name__)
 
 
-def resolve_tenant_empresa(request, view_instance=None):
-    """
-    Resuelve la empresa activa del tenant con fallback seguro.
 
-    Orden:
-    1) Propiedad tenant_empresa del viewset (si existe en mixins/custom views)
-    2) request.tenant.empresa (middleware multi-tenant)
-    3) request.tenant_empresa (compatibilidad)
-    4) Singleton Empresa del esquema tenant actual
-    """
-    # Avoid recursion: do not call hasattr/getattr on cached_property tenant_empresa.
-    # If already cached in __dict__, use it directly.
-    if view_instance is not None:
-        cached_empresa = view_instance.__dict__.get('tenant_empresa')
-        if cached_empresa:
-            return cached_empresa
-
-    tenant = getattr(request, 'tenant', None)
-    empresa = getattr(tenant, 'empresa', None)
-    if empresa:
-        return empresa
-
-    empresa = getattr(request, 'tenant_empresa', None)
-    if empresa:
-        return empresa
-
-    # Fallback final: singleton de Empresa en el esquema tenant activo.
-    # En esquemas sin migraciones tenant aplicadas (o fuera de tenant), devolver None.
-    try:
-        return Empresa.objects.only('id', 'razon_social').first()
-    except ProgrammingError:
-        logger.warning('[clientes:get_empresa] Tabla empresa_empresa no disponible en el esquema actual')
-        return None
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -82,7 +50,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
+class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenantViewSet):
     """
     # WARNING: v2.60: ViewSet para Clientes con soporte Tabulator y HTMX Offcanvas.
     
@@ -103,6 +71,10 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     lookup_field = 'id'
     lookup_url_kwarg = 'id'
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['activo']
+    search_fields = ['razon_social', 'numero_documento', 'email']
+    ordering_fields = ['razon_social', 'created_at']
 
     def get_object(self):
         """
@@ -239,7 +211,8 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
                 cliente = self.cliente_service.registrar_cliente_completo(
                     empresa_id=cliente.empresa_id,
                     data=serializer.validated_data,
-                    contactos_raw=contactos_raw
+                    contactos_raw=contactos_raw,
+                    cliente_instance=cliente
                 )
             except serializers.ValidationError as e:
                 return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
@@ -263,7 +236,8 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
                 cliente = self.cliente_service.registrar_cliente_completo(
                     empresa_id=cliente.empresa_id,
                     data=serializer.validated_data,
-                    contactos_raw=contactos_raw
+                    contactos_raw=contactos_raw,
+                    cliente_instance=cliente
                 )
             except serializers.ValidationError as e:
                 return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
@@ -394,7 +368,7 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
         renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
         url_path='render-offcanvas/editar'
     )
-    def render_offcanvas_editar(self, request, pk=None):
+    def render_offcanvas_editar(self, request, id=None):
         """
         # WARNING: v2.61.4: Endpoint HTMX RESTful para cargar offcanvas de edición de clientes.
         
@@ -409,7 +383,7 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
         cliente = self.get_object() # DSV auto filters by tenant
         if cliente is None:
             return Response(
-                {'error': 'cliente_not_found', 'detail': f'Cliente {pk} no existe en este tenant'},
+                {'error': 'cliente_not_found', 'detail': f'Cliente {id} no existe en este tenant'},
                 status=status.HTTP_404_NOT_FOUND,
             )
         # PERFORMANCE BIBLE: Cargar contactos con .only()
@@ -427,7 +401,7 @@ class ClienteViewSet(ClienteServiceMixin, BaseTenantViewSet):
         )
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
-    def render_offcanvas_detalle(self, request, pk=None):
+    def render_offcanvas_detalle(self, request, id=None):
         """
         # WARNING: v2.61: Endpoint HTMX RESTful para cargar offcanvas de detalle de clientes (read-only).
 
@@ -642,7 +616,7 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
         renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
         url_path='render-offcanvas/editar'
     )
-    def render_offcanvas_editar(self, request, pk=None):
+    def render_offcanvas_editar(self, request, id=None):
         """
         Endpoint HTMX RESTful para cargar offcanvas de edición de contacto.
         GET /api/v1/clientes/contactos/{id}/render-offcanvas/editar/
@@ -651,7 +625,7 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
             contacto = self.get_object()
         except ContactoCliente.DoesNotExist:
             return Response(
-                {'error': 'contacto_not_found', 'detail': f'Contacto {pk} no existe'},
+                {'error': 'contacto_not_found', 'detail': f'Contacto {id} no existe'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
@@ -666,29 +640,21 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
         )
 
     @action(
-        detail=False, 
+        detail=True, 
         methods=['get'], 
         renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
         url_path='render-offcanvas/detalle'
     )
-    def render_offcanvas_detalle(self, request):
+    def render_offcanvas_detalle(self, request, id=None):
         """
         Endpoint HTMX RESTful para cargar offcanvas de detalle (read-only).
-        GET /api/v1/clientes/contactos/render-offcanvas/detalle/?id={id}
-        
-        Query params:
-        - id: ID del contacto (requerido)
+        GET /api/v1/clientes/contactos/{id}/render-offcanvas/detalle/
         """
-        contacto_id = request.query_params.get('id')
+        from rest_framework.exceptions import NotFound
         
-        if not contacto_id:
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({'id': 'El parámetro "id" es requerido'})
-        
-        contacto = self.get_queryset().filter(id=contacto_id).first()
-        
-        if not contacto:
-            from rest_framework.exceptions import NotFound
+        try:
+            contacto = self.get_object()
+        except Exception:
             raise NotFound('Contacto no encontrado')
         
         context = {

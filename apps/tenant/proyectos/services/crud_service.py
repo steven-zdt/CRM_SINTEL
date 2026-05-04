@@ -13,8 +13,20 @@ from ..models import Proyecto, AsignacionPersonal, PedidoProyecto
 def save_proyecto(proyecto, update_fields=None):
     """
     Guarda una instancia de Proyecto.
+    Captura errores de integridad (como duplicados de código) para evitar 500.
     """
-    proyecto.save(update_fields=update_fields)
+    from django.db import IntegrityError
+    from rest_framework.exceptions import ValidationError
+    
+    try:
+        proyecto.save(update_fields=update_fields)
+    except IntegrityError as e:
+        # Si es un error de unicidad del código, lanzar error de validación descriptivo
+        if 'uniq_proyecto_codigo_empresa' in str(e):
+            raise ValidationError({'codigo': f'El código "{proyecto.codigo}" ya está en uso para otro proyecto.'})
+        # Otros errores de integridad
+        raise ValidationError({'detail': f'Error de integridad al guardar el proyecto: {str(e)}'})
+    
     return proyecto
 
 @transaction.atomic

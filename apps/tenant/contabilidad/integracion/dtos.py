@@ -58,6 +58,7 @@ class ImpuestoLinea:
     base: Decimal                   # Taxable base
     porcentaje: Decimal             # Rate (19.0, 4.0, etc.)
     valor: Decimal                  # Calculated amount
+    lado: str = 'HABER'             # 'DEBE' or 'HABER' - which side of journal entry
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ class LineaTransaccion:
     """
     concepto: str                   # VENTA_PRODUCTO, AUXILIO_TRANSPORTE, PROVISION_CESANTIAS, etc.
     monto: Decimal                  # Principal amount (before taxes)
+    lado: str = 'DEBE'              # 'DEBE' or 'HABER' - which side of journal entry
     impuestos: list['ImpuestoLinea'] = field(default_factory=list)
     centro_costo_id: Optional[int] = None  # Project/cost center for reporting
     cuenta_hint: Optional[str] = None      # Override default PUC account (advanced)

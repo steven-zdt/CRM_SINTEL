@@ -1,18 +1,18 @@
 {# offcanvas_editar_proveedor.html - Template dedicado para edición de proveedor según FSD #}
 {# [INFO] AGENTS.md: Arquitectura Feature-Sliced Design - Template dedicado para edición #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label" style="width: 90%; max-width: 800px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasProveedor" aria-labelledby="offcanvasProveedorLabel" style="width: 90%; max-width: 800px;">
   <div class="offcanvas-header border-bottom bg-light">
-    <h5 class="offcanvas-title" id="offcanvas-proveedor-label">
+    <h5 class="offcanvas-title" id="offcanvasProveedorLabel">
       <i class="bi bi-building me-2"></i>Editar Proveedor
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
   <div class="offcanvas-body">
-    <div id="form-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <div id="formFeedbackProveedor" class="alert alert-danger d-none mb-3" role="alert"></div>
     
-    <form id="form-proveedor" method="POST" onsubmit="return false;">
-      <input type="hidden" id="proveedor-id" name="id" value="{{ proveedor.id }}">
+    <form id="formProveedor" method="POST" onsubmit="return false;">
+      <input type="hidden" id="proveedorId" name="id" value="{{ proveedor.id }}">
       
       {# Identificación Legal #}
       <div class="mb-4">
@@ -191,7 +191,7 @@
       {# Botones de Acción #}
       <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
-        <button type="button" class="btn btn-primary" onclick="w.Sintel.Proveedores.Form.openOffcanvas('{{ proveedor.id }}')">
+        <button type="button" class="btn btn-primary" id="btnGuardarProveedor">
           <i class="bi bi-check-lg me-1"></i>Actualizar Proveedor
         </button>
       </div>

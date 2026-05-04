@@ -13,14 +13,11 @@
   function normalizePayload(data) {
     const p = Object.assign({}, data || {});
     
-    // Normalización de IDs/NITs
-    const nit = String(p.nit || p.numero_documento || '').trim();
-    p.numero_documento = nit;
-    p.nit = nit;
-
+    // Normalización de Identificación (SSoT: numero_documento)
+    p.numero_documento = String(p.numero_documento || '').trim();
+    
     // Normalización de booleanos
-    const bools = ['responsable_iva', 'gran_contribuyente', 'autoretenedor', 'activo'];
-    bools.forEach(f => {
+    ['responsable_iva', 'gran_contribuyente', 'autoretenedor', 'activo'].forEach(f => {
       if (p[f] !== undefined) {
         p[f] = (p[f] === true || p[f] === 'true' || p[f] === 'on' || p[f] === 1);
       }

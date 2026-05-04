@@ -86,34 +86,32 @@ def calcular_indicadores_financieros(proyecto):
 
 def generar_codigo_proyecto(empresa):
     """
-    Genera un código único de proyecto para la empresa.
-    Formato: PRJ-{timestamp}-{random_4digitos}-{secuencia}
+    Generar un código único de proyecto para la empresa.
+    Formato: PRJ-{timestamp}-{random_4digitos}
     """
     import time
     import random
+    import datetime
     
-    # Generar base del código con timestamp y random de 4 dígitos
-    timestamp = int(time.time())
-    random_suffix = random.randint(1000, 9999)
+    # Intentar generar con timestamp y random
     attempt = 0
     max_attempts = 10
     
-    # Verificar unicidad y regenerar si existe
     from ..models import Proyecto
     while attempt < max_attempts:
-        codigo = f"PRJ-{timestamp}-{random_suffix}"
-        if not Proyecto.objects.filter(empresa=empresa, codigo=codigo).exists():
-            return codigo
-        # Si existe, generar nuevo random y actualizar timestamp
-        random_suffix = random.randint(1000, 9999)
         timestamp = int(time.time())
+        random_suffix = random.randint(1000, 9999)
+        codigo = f"PRJ-{timestamp}-{random_suffix}"
+        
+        # [v3.5] Normalizar y Verificar unicidad
+        if not Proyecto.objects.filter(empresa=empresa, codigo=codigo.strip()).exists():
+            return codigo.strip()
         attempt += 1
     
-    # Si no encontramos código único en 10 intentos, usar timestamp + microsegundos
-    import datetime
+    # Fallback: Usar timestamp completo con microsegundos
     now = datetime.datetime.now()
     codigo = f"PRJ-{now.strftime('%Y%m%d%H%M%S%f')}"
-    return codigo
+    return codigo.strip()
 
 
 # ==============================================================================
@@ -198,19 +196,22 @@ def orchestrate_create_proyecto(empresa, data):
     
     # ⚠️ Generar o validar código único
     codigo = data.get('codigo', None)
-    # Limpiar código vacío o solo espacios
+    
+    # [SHIELD] Normalizar código: quitar espacios en blanco
     if codigo:
         codigo = str(codigo).strip()
+    
     if not codigo:
+        # Si no hay código, generar uno automáticamente
         data['codigo'] = generar_codigo_proyecto(empresa)
     else:
-        # Validar que el código no exista ya - si existe, generar uno nuevo automáticamente
+        # Validar que el código no exista ya
         from ..models import Proyecto
         if Proyecto.objects.filter(empresa=empresa, codigo=codigo).exists():
-            # ⚠️ Auto-generar código en lugar de fallar (mejor UX)
-            data['codigo'] = generar_codigo_proyecto(empresa)
-        else:
-            data['codigo'] = codigo
+            # [UX] Si el usuario envió un código que ya existe, preferimos lanzar error
+            # en lugar de cambiarlo por uno aleatorio sin avisar (v3.5 Strict)
+            raise ValidationError({'codigo': f'El código "{codigo}" ya está registrado para otro proyecto.'})
+        data['codigo'] = codigo
     
     cliente_id = data.pop('cliente_id', None)
     cliente_nombre = data.pop('cliente_nombre', None)
@@ -237,7 +238,7 @@ def orchestrate_update_proyecto(proyecto, data):
     
     # ⚠️ Validar código único si se está actualizando
     codigo = data.get('codigo', None)
-    if codigo:
+    if codigo is not None: # Si el campo viene en el payload (aunque sea para cambiarlo)
         codigo = str(codigo).strip()
         from ..models import Proyecto
         # Solo validar si el código cambió y ya existe en OTRO proyecto
@@ -245,7 +246,13 @@ def orchestrate_update_proyecto(proyecto, data):
             empresa=proyecto.empresa, codigo=codigo
         ).exclude(id=proyecto.id).exists():
             raise ValidationError({'codigo': f'El código "{codigo}" ya existe para otro proyecto.'})
-        data['codigo'] = codigo
+        
+        # [SHIELD] Asegurar que el código vacío se maneje según la regla de negocio
+        if not codigo and not proyecto.codigo:
+             # Si no hay código previo y se envía vacío, generar uno
+             data['codigo'] = generar_codigo_proyecto(proyecto.empresa)
+        else:
+             data['codigo'] = codigo
     
     cliente_id = data.pop('cliente_id', None)
     cliente_nombre = data.pop('cliente_nombre', None)

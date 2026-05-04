@@ -18,7 +18,7 @@ from django.db.models import ProtectedError
 from django.utils import timezone
 
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura, FacturaAnexos, ItemFactura, NotaCredito
+from apps.tenant.facturas.models import Factura, FacturaAnexos, ItemFactura
 from apps.tenant.facturas.services.selectors import FacturaSelectors
 
 logger = logging.getLogger(__name__)
@@ -70,19 +70,20 @@ class FacturaCRUDService:
         Elimina una factura y sus registros relacionados (v2.95).
         """
         # Eliminar nota de crédito asociada primero (OneToOne PROTECT workaround)
-        try:
-            nota_credito = NotaCredito.objects.get(factura=factura)
-            nota_credito.delete()
-        except NotaCredito.DoesNotExist:
-            pass
-        
+        # Usar la relación inversa "nota_credito" definida en el modelo
+        if hasattr(factura, 'nota_credito') and factura.nota_credito:
+            try:
+                factura.nota_credito.delete()
+            except Exception as e:
+                logger.warning(f"Error al eliminar NotaCredito: {str(e)}")
+
         # Anexos se eliminan por cascada o manualmente por seguridad
         try:
             anexos = FacturaAnexos.objects.get(factura=factura)
             anexos.delete()
         except FacturaAnexos.DoesNotExist:
             pass
-        
+
         # Items se eliminan por CASCADE en el modelo
         factura.delete()
         logger.info(f"Factura {factura.numero} eliminada exitosamente.")

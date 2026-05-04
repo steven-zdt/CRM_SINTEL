@@ -138,8 +138,16 @@
                 }
             },
             {
-                title: "Cliente",
-                field: "cliente_nombre",
+                title: "Emisor",
+                field: "emisor_razon_social",
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                    return cell.getValue() || '---';
+                },
+                minWidth: 250
+            },
+            {
+                title: "Receptor",
+                field: "receptor_razon_social",
                 formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
                     return cell.getValue() || '---';
                 },

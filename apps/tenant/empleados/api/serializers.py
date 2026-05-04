@@ -90,7 +90,8 @@ class EmpleadoListSerializer(serializers.ModelSerializer):
         model = Empleado
         fields = (
             'id', 'tipo_documento', 'tipo_doc_display', 'numero_documento', 
-            'nombre_completo', 'estado', 'estado_display', 'fecha_ingreso',
+            'primer_nombre', 'primer_apellido', 'nombre_completo', 
+            'estado', 'estado_display', 'fecha_ingreso',
             'tiene_contrato_activo', 'tiene_nominas_registradas'
         )
         read_only_fields = ['id', 'nombre_completo', 'tipo_doc_display', 'estado_display', 
@@ -137,14 +138,17 @@ class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
         """
         attrs = self.normalize_data(attrs)
         
-        # Validar que fecha_fin sea posterior a fecha_inicio si ambas están presentes
-        fecha_inicio = attrs.get('fecha_inicio')
-        fecha_fin = attrs.get('fecha_fin')
-        
-        if fecha_inicio and fecha_fin and fecha_fin < fecha_inicio:
-            raise serializers.ValidationError({
-                'fecha_fin': 'La fecha de fin debe ser posterior a la fecha de inicio.'
-            })
+        # WARNING: v2.60: Validar un solo contrato ACTIVO por empleado (DB constraint)
+        if attrs.get('estado') == 'ACTIVO':
+            empleado = attrs.get('empleado')
+            if empleado:
+                qs = Contrato.objects.filter(empleado=empleado, estado='ACTIVO')
+                if self.instance:
+                    qs = qs.exclude(pk=self.instance.pk)
+                if qs.exists():
+                    raise serializers.ValidationError({
+                        'estado': 'Este empleado ya tiene un contrato ACTIVO. Debe finalizarlo antes de crear uno nuevo.'
+                    })
         
         return attrs
     
@@ -265,6 +269,25 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     'dias_laborados': ['Los días laborados deben estar entre 0.5 y 30.']
                 })
+
+        # WARNING: v2.60: Validar unicidad (empleado, periodo_mes, fecha_pago)
+        # Evita duplicados en la misma tanda de pago
+        empleado = attrs.get('empleado')
+        periodo = attrs.get('periodo_mes')
+        fecha = attrs.get('fecha_pago')
+        if empleado and periodo and fecha:
+            qs = Devengo.objects.filter(
+                empleado=empleado, 
+                periodo_mes=periodo, 
+                fecha_pago=fecha,
+                anulado=False
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({
+                    'fecha_pago': f'Ya existe una nómina registrada para este empleado en el periodo {periodo} con fecha {fecha}.'
+                })
         
         return attrs
     
@@ -350,7 +373,7 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'nombre_completo', 'contratos'
         )
         read_only_fields = ('empresa', 'nombre_completo', 'contratos')
-    
+
     def validate(self, attrs):
         """
         WARNING: v2.60: Zero Trust - Normalización estricta antes de persistir.
@@ -358,6 +381,27 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         # Remover empresa si viene en los datos (debe ser asignada por perform_create)
         attrs.pop('empresa', None)
         attrs = self.normalize_data(attrs)
+        
+        # WARNING: v2.60: Validación de unicidad preventiva (empresa, tipo, numero)
+        # Evita IntegrityError 500 y proporciona feedback 400 limpio
+        empresa = self.context.get('empresa')
+        tipo = attrs.get('tipo_documento')
+        numero = attrs.get('numero_documento')
+        
+        if tipo and numero and empresa:
+            qs = Empleado.objects.filter(
+                empresa_id=empresa.id,
+                tipo_documento=tipo,
+                numero_documento=numero
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            
+            if qs.exists():
+                raise serializers.ValidationError({
+                    'numero_documento': f'Ya existe un empleado con {tipo} {numero} en esta empresa.'
+                })
+                
         return attrs
     
     def validate_email(self, value):

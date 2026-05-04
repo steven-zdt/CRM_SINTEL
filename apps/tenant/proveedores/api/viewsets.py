@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+from apps.tenant.api.utils import render_template_safe, resolve_tenant_empresa
 from apps.tenant.empresa.models import Empresa
 from .mixins import ProveedorServiceMixin
 from apps.tenant.proveedores.api.serializers import (
@@ -34,15 +35,8 @@ class ProveedorViewSet(ProveedorServiceMixin, viewsets.ModelViewSet):
         return ProveedorDetailSerializer
 
     def get_empresa(self):
-        """Zero Trust - Obtiene la empresa del tenant actual via core singleton."""
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            from rest_framework.exceptions import APIException
-            raise APIException(
-                detail='No se encontró empresa para este tenant.',
-                code='empresa_not_found'
-            )
-        return empresa
+        """Zero Trust - Obtiene la empresa del tenant actual via core helper."""
+        return resolve_tenant_empresa(self.request, self)
 
     def list(self, request):
         """Endpoint para Tabulator (Selector Modular)."""
@@ -150,11 +144,12 @@ class ProveedorViewSet(ProveedorServiceMixin, viewsets.ModelViewSet):
             'regimen_choices': Proveedor.REGIMEN,
             'tipo_cuenta_choices': [("AHORROS", "Ahorros"), ("CORRIENTE", "Corriente")],
             'niif_choices': PROVEEDORES_NIIF_CHOICES,
+            'modo_detalle': template_suffix == 'detalle',
         }
         
-        # WARNING: v3.5: Ruta FSD local de la app
-        template_name = f'tenant/proveedores/offcanvas_{template_suffix}_proveedor.html'
-        return Response(context, template_name=template_name)
+        # v3.5.2: Template universal unificado para evitar desincronización de IDs
+        template_name = 'tenant/proveedores/offcanvas_form.html'
+        return render_template_safe(context, template_name, request=request)
     
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):

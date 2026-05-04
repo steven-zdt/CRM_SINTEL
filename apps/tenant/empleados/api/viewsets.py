@@ -26,6 +26,12 @@ from apps.tenant.empleados.api.serializers import (
     EmpleadoListSerializer,
 )
 from apps.tenant.empleados.models import Contrato, Devengo, Empleado
+from apps.tenant.empleados.choices import (
+    EPS_CHOICES,
+    AFP_CHOICES,
+    ARL_CHOICES,
+    RIESGO_ARL_CHOICES,
+)
 from apps.tenant.empleados.services import (
     ContratoServiceMixin,
     DevengoServiceMixin,
@@ -63,10 +69,11 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
 
     def get_queryset(self):
         """
-        WARNING: v2.60: QuerySet optimizado usando service layer.
+        WARNING: v2.62.4: QuerySet optimizado usando service layer.
         """
-        empleado_id = self.kwargs.get('id') if self.action == 'retrieve' else None
-        return self.service_empleado_get_queryset(self.request, self.action, empleado_id=empleado_id)
+        if self.action == 'list':
+            return self.get_qs_list()
+        return self.get_qs_detail()
     
     def get_object(self):
         """
@@ -83,6 +90,11 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
             raise NotFound(f'Empleado {pk} no encontrado o no pertenece a este tenant.')
         return obj
     
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['empresa'] = self.get_empresa()
+        return context
+
     def list(self, request, *args, **kwargs):
         """
         WARNING: v2.60: Listado paginado con formato DRF {count, results} para Tabulator Factory.
@@ -326,6 +338,12 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
         context = {'empresa_id': empresa_id}
         
         if tipo == 'empleado':
+            context.update({
+                'EPS_CHOICES': EPS_CHOICES,
+                'AFP_CHOICES': AFP_CHOICES,
+                'ARL_CHOICES': ARL_CHOICES,
+                'RIESGO_ARL_CHOICES': RIESGO_ARL_CHOICES,
+            })
             if obj_id:
                 context['empleado'] = get_object_or_404(Empleado, id=obj_id, empresa_id=empresa_id)
                 return Response(context, template_name='tenant/empleados/offcanvas_editar_empleado.html')
@@ -1156,7 +1174,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         WARNING: v2.60: Método para actualizar nómina existente (usado en lógica de Upsert).
         Recalcula todos los valores usando la Capa de Servicio antes de guardar (Zero Trust).
         """
-        self.service_procesar_devengo_serializer(serializer, self.request)
+        self.service_procesar_devengo(serializer, instance=serializer.instance)
 
     def perform_create(self, serializer):
         """
@@ -1167,9 +1185,8 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         También actualiza el préstamo del contrato restando el monto descontado.
         
         WARNING: Máquina de Estados: Bloquea nómina si el contrato no está ACTIVO (Backend Guard).
-        WARNING: v2.95: Usa registrar_devengo_nomina_service para mantener consistencia con service layer.
         """
-        self.service_procesar_devengo_serializer(serializer, self.request)
+        self.service_procesar_devengo(serializer)
 
     @action(detail=True, methods=["post"], url_path="anular")
     def anular(self, request, pk=None):
@@ -1294,9 +1311,10 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                         "error": f"El monto a descontar (${prestamos:,.2f}) no puede ser mayor al préstamo disponible en el contrato (${prestamo_disponible:,.2f})"
                     }, status=status.HTTP_400_BAD_REQUEST)
             
-            # WARNING: v2.60: Calcular usando calcular_nomina_colombia (SSoT - Normativa Colombiana)
+            # WARNING: v2.60: Calcular usando NominaCalculationService.calcular_liquidacion (SSoT - Normativa Colombiana)
             # WARNING: Zero Trust: Pasar empresa_id para validación
-            calculo = calcular_nomina_colombia(
+            from apps.tenant.empleados.services.business_service import NominaCalculationService
+            calculo = NominaCalculationService.calcular_liquidacion(
                 contrato=contrato,
                 dias_laborados=dias_laborados,
                 horas_trabajadas=horas_trabajadas_decimal,
@@ -1438,8 +1456,9 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                         "error": f"El monto a descontar (${prestamos:,.2f}) no puede ser mayor al préstamo disponible en el contrato (${prestamo_disponible:,.2f})"
                     }, status=status.HTTP_400_BAD_REQUEST)
             
-            # WARNING: v2.60: Calcular usando calcular_liquidacion_nomina (SSoT - Normativa Colombiana)
-            calculo = calcular_liquidacion_nomina(
+            # WARNING: v2.60: Calcular usando NominaCalculationService.calcular_liquidacion (SSoT - Normativa Colombiana)
+            from apps.tenant.empleados.services.business_service import NominaCalculationService
+            calculo = NominaCalculationService.calcular_liquidacion(
                 contrato=contrato,
                 dias_laborados=dias_laborados,
                 horas_trabajadas=horas_trabajadas_decimal,
