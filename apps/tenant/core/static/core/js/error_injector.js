@@ -361,11 +361,20 @@
             return;
         }
 
+        let response;
         try {
-            const response = typeof xhr.response === 'string' 
+            response = typeof xhr.response === 'string' 
                 ? JSON.parse(xhr.response) 
                 : xhr.response;
+        } catch (e) {
+            // ⚠️ Fallback v2.60: Si no es JSON (ej: 403 Forbidden de Django), usar texto plano
+            console.warn(`${MOD} Respuesta no es JSON válida, usando fallback de texto`, e);
+            response = { 
+                detail: xhr.responseText || xhr.response || `Error ${xhr.status}: ${xhr.statusText}` 
+            };
+        }
 
+        if (response) {
             // Mostrar contenedor
             container.classList.remove('d-none');
 

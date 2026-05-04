@@ -63,6 +63,11 @@
         htmx.ajax('POST', `${API_URL}devengos/preview-calculo/`, {
             target: '#devengo-campos-calculados-wrapper',
             swap: 'innerHTML',
+            headers: {
+                'X-CSRFToken': (w.API_HELPERS && typeof w.API_HELPERS.getCSRF === 'function') 
+                    ? w.API_HELPERS.getCSRF() 
+                    : (w.getCookie ? w.getCookie('csrftoken') : d.querySelector('[name=csrfmiddlewaretoken]')?.value)
+            },
             values: {
                 contrato: contrato.value,
                 dias_laborados: diasLaborados.value,

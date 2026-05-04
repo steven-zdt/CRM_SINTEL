@@ -57,7 +57,11 @@
     
     // Prioridad 2: cookie (fallback)
     const m = document.cookie.match(/(^|;\s*)csrftoken=([^;]+)/);
-    return m ? decodeURIComponent(m[2]) : '';
+    if (m) return decodeURIComponent(m[2]);
+
+    // Prioridad 3: input oculto (último recurso)
+    const input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    return input?.value || '';
   }
 
   /**
