@@ -10,8 +10,15 @@ from rest_framework.permissions import SAFE_METHODS
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
+from django.db.utils import ProgrammingError
+from django.utils.functional import cached_property
+from rest_framework.exceptions import NotFound
+
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.mixins import SintelDSVMixin, SintelServiceMixin
 from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.empleados.api.serializers import (
     ContratoNestedSerializer,
     DevengoSerializer,
@@ -33,60 +40,48 @@ from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
 
-class EnforcedModeMixin:
-    """Restricción de escritura v2.40 solo para ADMIN."""
-    def check_mutation_permission(self, request):
-        if request.method in SAFE_METHODS:
-            return True, None
-        if IsTenantAdmin().has_permission(request, self):
-            return True, None
-        return False, f"Solo usuarios ADMIN pueden realizar {request.method}."
 
-    def dispatch(self, request, *args, **kwargs):
-        if request.method not in SAFE_METHODS:
-            ok, reason = self.check_mutation_permission(request)
-            if not ok:
-                return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-        return super().dispatch(request, *args, **kwargs)
-
-class EmpleadoViewSet(EmpleadoServiceMixin, EnforcedModeMixin, viewsets.ModelViewSet):
+class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     """
-    WARNING: v2.40: ViewSet para Empleados con Tabulator Factory.
-    Usa StandardResultsSetPagination para paginación remota.
+    WARNING: v2.62.4: ViewSet para Empleados migrado a BaseTenantViewSet.
+    Implementa resolución optimizada de empresa y lookup por ID (Legacy).
     """
+    queryset = Empleado.objects.none()
+    lookup_field = 'id'
+    lookup_url_kwarg = 'id'
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["numero_documento", "primer_nombre", "primer_apellido"]
 
+    @cached_property
+    def tenant_empresa(self):
+        return resolve_tenant_empresa(self.request, self)
+
+    def get_empresa(self):
+        return self.tenant_empresa
+
     def get_queryset(self):
         """
         WARNING: v2.60: QuerySet optimizado usando service layer.
-        Soporta ?search= para filtrado en Tabulator.
-        WARNING: CORRECCIÓN: Filtra siempre por request.user.empresa para evitar 404.
-        WARNING: IMPORTANTE: get_queryset() debe retornar un queryset, no un objeto individual.
-        DRF usa get_object() para obtener el objeto específico en retrieve.
         """
-        empleado_id = self.kwargs.get('pk') if self.action == 'retrieve' else None
+        empleado_id = self.kwargs.get('id') if self.action == 'retrieve' else None
         return self.service_empleado_get_queryset(self.request, self.action, empleado_id=empleado_id)
     
     def get_object(self):
         """
-        WARNING: v2.60: Sobrescribir get_object() para usar qs_empleado_detail del service layer.
-        Esto asegura que se use el queryset optimizado con .only() y select_related().
+        WARNING: v2.62.4: Recuperación de objeto filtrada por empresa activa.
         """
-        empresa_id = self.service_get_empresa_id(self.request)
-        if not empresa_id:
-            from rest_framework.exceptions import NotFound
-            raise NotFound("No se encontró configuración de Empresa para este tenant")
-        empleado_id = self.kwargs.get('pk')
+        pk = self.kwargs.get(self.lookup_url_kwarg)
+        empresa = self.get_empresa()
         
-        # WARNING: v2.60: Usar qs_empleado_detail del service layer para obtener el objeto optimizado
-        try:
-            return qs_empleado_detail(empresa_id, empleado_id)
-        except Empleado.DoesNotExist:
-            from rest_framework.exceptions import NotFound
-            raise NotFound(f"Empleado con ID {empleado_id} no encontrado o no pertenece a este tenant")
+        if not empresa:
+            raise NotFound("No se encontró configuración de Empresa para este tenant")
+
+        obj = Empleado.objects.filter(pk=pk, empresa_id=empresa.id).first()
+        if not obj:
+            raise NotFound(f'Empleado {pk} no encontrado o no pertenece a este tenant.')
+        return obj
     
     def list(self, request, *args, **kwargs):
         """
@@ -304,16 +299,7 @@ class EmpleadoViewSet(EmpleadoServiceMixin, EnforcedModeMixin, viewsets.ModelVie
         }
         
         return Response(context, template_name='tenant/empleados/offcanvas_historial_nominas.html')
-    
-    def get_empresa(self):
-        """
-        WARNING: v2.60: Zero Trust - Obtiene la empresa del tenant actual.
-        """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise serializers.ValidationError("No se encontró configuración de Empresa para este tenant.")
-        return empresa
-    
+
     @action(detail=False, methods=["get"], renderer_classes=[TemplateHTMLRenderer, JSONRenderer], url_path="gestor-offcanvas")
     def gestor_offcanvas(self, request):
         """
@@ -384,12 +370,10 @@ class EmpleadoViewSet(EmpleadoServiceMixin, EnforcedModeMixin, viewsets.ModelVie
         """
         from datetime import datetime
 
-        from apps.tenant.empresa.models import Empresa
-        
-        empresa = Empresa.objects.first()
+        empresa = self.get_empresa()
         if not empresa:
             return Response({"error": "sin_empresa"}, status=status.HTTP_404_NOT_FOUND)
-        
+
         empleado = self.get_object()
         
         # 1. Buscar contrato activo del empleado (WARNING: v2.40: Máquina de Estados - usar estado='ACTIVO')
@@ -462,27 +446,51 @@ class EmpleadoViewSet(EmpleadoServiceMixin, EnforcedModeMixin, viewsets.ModelVie
             "periodo_mes": periodo_mes
         }, status=status.HTTP_200_OK)
 
-class ContratoViewSet(ContratoServiceMixin, EnforcedModeMixin, viewsets.ModelViewSet):
+class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     """
-    WARNING: v2.40: ViewSet para gestionar la relación Empleado-Contrato.
-    Usa service layer para garantizar unicidad de contratos activos.
+    WARNING: v2.62.4: ViewSet para Contratos migrado a BaseTenantViewSet.
     """
+    lookup_field = 'id'
+    lookup_url_kwarg = 'id'
     serializer_class = ContratoNestedSerializer
-    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     # WARNING: v2.40: Permitir subida de archivos PDF (opcional)
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['empleado', 'estado', 'activo']  # WARNING: v2.40: Permite filtrar por empleado, estado y activo (legacy)
-    
+    filterset_fields = ['empleado', 'estado', 'activo']
+
+    @cached_property
+    def tenant_empresa(self):
+        return resolve_tenant_empresa(self.request, self)
+
     def get_empresa(self):
-        """
-        WARNING: v2.61: Zero Trust - Obtiene la empresa del tenant actual.
-        """
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise serializers.ValidationError("No se encontró configuración de Empresa para este tenant.")
-        return empresa
+        return self.tenant_empresa
     
+    def get_queryset(self):
+        """
+        WARNING: v2.60: QuerySet optimizado usando service layer.
+        """
+        contrato_id = self.kwargs.get('id') if self.action == 'retrieve' else None
+        try:
+            return self.service_contrato_get_queryset(self.request, self.action, contrato_id=contrato_id)
+        except Contrato.DoesNotExist:
+            return Contrato.objects.none()
+
+    def get_object(self):
+        """
+        WARNING: v2.62.4: Recuperación de objeto filtrada por empresa activa.
+        """
+        pk = self.kwargs.get(self.lookup_url_kwarg)
+        empresa = self.get_empresa()
+        
+        if not empresa:
+            raise NotFound("No se encontró configuración de Empresa para este tenant")
+
+        obj = Contrato.objects.filter(pk=pk, empresa_id=empresa.id).first()
+        if not obj:
+            raise NotFound(f'Contrato {pk} no encontrado o no pertenece a este tenant.')
+        return obj
+
     def create(self, request, *args, **kwargs):
         """
         WARNING: v2.95: Sobrescribir create para manejar errores y validaciones.
@@ -545,15 +553,6 @@ class ContratoViewSet(ContratoServiceMixin, EnforcedModeMixin, viewsets.ModelVie
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    def get_queryset(self):
-        """
-        WARNING: v2.60: QuerySet optimizado usando service layer.
-        """
-        contrato_id = self.kwargs.get('pk') if self.action == 'retrieve' else None
-        try:
-            return self.service_contrato_get_queryset(self.request, self.action, contrato_id=contrato_id)
-        except Contrato.DoesNotExist:
-            return Contrato.objects.none()
     
     def list(self, request, *args, **kwargs):
         """
@@ -818,29 +817,37 @@ class ContratoViewSet(ContratoServiceMixin, EnforcedModeMixin, viewsets.ModelVie
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-class DevengoViewSet(DevengoServiceMixin, EnforcedModeMixin, viewsets.ModelViewSet):
-    """Nómina Inmutable v2.40."""
+class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
+    """
+    WARNING: v2.62.4: ViewSet para Nómina migrado a BaseTenantViewSet.
+    """
+    lookup_field = 'id'
+    lookup_url_kwarg = 'id'
     serializer_class = DevengoSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
-    # WARNING: v2.40: Filtrado por empleado para el historial de pagos
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['empleado', 'anulado']  # Permite filtrar por empleado y estado anulado
+    filterset_fields = ['empleado', 'anulado']
     ordering_fields = ['fecha_pago', 'periodo_mes', 'id']
     ordering = ['-fecha_pago', '-periodo_mes', 'id']
+
+    @cached_property
+    def tenant_empresa(self):
+        return resolve_tenant_empresa(self.request, self)
+
+    def get_empresa(self):
+        return self.tenant_empresa
     
     def get_queryset(self):
         """
         WARNING: v2.60: QuerySet optimizado usando service layer.
-        Ordena por fecha de pago (más reciente primero), luego por periodo y ID.
         """
-        devengo_id = self.kwargs.get('pk') if self.action == 'retrieve' else None
+        devengo_id = self.kwargs.get('id') if self.action == 'retrieve' else None
         try:
             queryset = self.service_devengo_get_queryset(self.request, self.action, devengo_id=devengo_id)
         except Devengo.DoesNotExist:
             return Devengo.objects.none()
 
         if self.action == 'list':
-            
             # WARNING: v2.95: Filtros de fecha para historial de nómina (adicionales al service layer)
             fecha_inicio = self.request.query_params.get('fecha_inicio')
             fecha_fin = self.request.query_params.get('fecha_fin')
@@ -864,6 +871,21 @@ class DevengoViewSet(DevengoServiceMixin, EnforcedModeMixin, viewsets.ModelViewS
             return queryset
 
         return queryset
+
+    def get_object(self):
+        """
+        WARNING: v2.62.4: Recuperación de objeto filtrada por empresa activa.
+        """
+        pk = self.kwargs.get(self.lookup_url_kwarg)
+        empresa = self.get_empresa()
+        
+        if not empresa:
+            raise NotFound("No se encontró configuración de Empresa para este tenant")
+
+        obj = Devengo.objects.filter(pk=pk, empresa_id=empresa.id).first()
+        if not obj:
+            raise NotFound(f'Nómina {pk} no encontrada o no pertenece a este tenant.')
+        return obj
     
     def list(self, request, *args, **kwargs):
         """
@@ -1151,7 +1173,7 @@ class DevengoViewSet(DevengoServiceMixin, EnforcedModeMixin, viewsets.ModelViewS
 
     @action(detail=True, methods=["post"], url_path="anular")
     def anular(self, request, pk=None):
-        empresa = Empresa.objects.only('id').first()
+        empresa = self.get_empresa()
         if not empresa:
             return Response({"error": "sin_empresa"}, status=status.HTTP_404_NOT_FOUND)
         devengo = anular_devengo_service(pk, empresa.id)

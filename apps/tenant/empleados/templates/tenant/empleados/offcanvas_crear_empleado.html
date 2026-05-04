@@ -1,7 +1,7 @@
 {# offcanvas_crear_empleado.html - Formulario de creación de Empleado v2.61 #}
 {% load static %}
 
-<div class="offcanvas offcanvas-end show" tabindex="-1" id="empleadoOffcanvas" aria-labelledby="empleadoOffcanvasLabel">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="empleadoOffcanvas" aria-labelledby="empleadoOffcanvasLabel">
     <div class="offcanvas-header border-bottom bg-light">
         <h5 class="offcanvas-title" id="empleadoOffcanvasLabel">
             <i class="bi bi-person-plus me-2"></i>Nuevo Empleado
@@ -11,7 +11,7 @@
     <div class="offcanvas-body">
         <div id="form-empleado-feedback" class="alert d-none mb-3" role="alert"></div>
 
-        <form id="empleado-form" hx-post="/api/v1/empleados/empleados/" 
+        <form id="empleado-form" hx-post="/api/v1/empleados/"
               hx-swap="none"
               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
               hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[empleados.crear]', {errorContainerSelector: '#form-empleado-feedback'})">

@@ -14,21 +14,41 @@
     let empleadoIdEliminar = null;
 
     /**
-     * Configuración de la tabla de empleados
+     * Handler con event delegation para acciones de la celda
      */
-    const defaultConfig = {
-        layout: "fitColumns",
-        pagination: true,
-        paginationMode: "remote",
-        ajaxURL: window.Sintel.Empleados.API.empleados.list,
-        ajaxConfig: {
-            method: "GET",
-            headers: window.Sintel.Empleados.getHeaders()
-        },
-        columns: [
-            { title: "Documento", field: "numero_documento", headerFilter: true, width: 120 },
-            { title: "Nombre", field: "primer_nombre", headerFilter: true },
-            { title: "Apellido", field: "primer_apellido", headerFilter: true },
+    function handleCellAction(e, cell) {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        
+        switch (action) {
+            case 'editar':           editar(id);         break;
+            case 'crear-contrato':   
+            case 'editar-contrato':  
+                if (window.Sintel.Empleados.ContratoEditor) {
+                    window.Sintel.Empleados.ContratoEditor.openContratoOffcanvas(id);
+                }
+                break;
+            case 'registrar-nomina': registrarNomina(id);   break;
+            case 'historial':        
+                if (window.Sintel.Empleados.NominaHistorial) {
+                    window.Sintel.Empleados.NominaHistorial.openHistorial(id);
+                }
+                break;
+            case 'eliminar':         confirmarEliminar(id);  break;
+        }
+    }
+
+    /**
+     * Definición de columnas para la tabla
+     */
+    function getColumnas() {
+        return [
+            { title: "Documento", field: "numero_documento", headerFilter: "input", width: 120 },
+            { title: "Nombre", field: "primer_nombre", headerFilter: "input" },
+            { title: "Apellido", field: "primer_apellido", headerFilter: "input" },
             { 
                 title: "Estado", 
                 field: "estado", 
@@ -41,106 +61,146 @@
             },
             { title: "Ingreso", field: "fecha_ingreso", width: 100 },
             {
-                title: "Acciones",
+                title: 'Acciones',
                 width: 250,
-                formatter: function(cell) {
+                hozAlign: 'center',
+                headerSort: false,
+                formatter: (cell) => {
                     const data = cell.getRow().getData();
                     const id = data.id;
                     const tieneContrato = data.tiene_contrato_activo;
                     const esRetirado = data.estado === 'RETIRADO';
-                    
-                    let html = '<div class="btn-group btn-group-sm" role="group">';
-                    
-                    // Editar Empleado
-                    html += `<button class="btn btn-outline-primary" onclick="Sintel.Empleados.EmpleadoList.editar('${id}')" title="Editar Empleado"><i class="bi bi-pencil"></i></button>`;
-                    
+
+                    let html = '<div class="btn-group btn-group-sm">';
+                    html += `<button data-action="editar" data-id="${id}" class="btn btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></button>`;
                     if (!esRetirado) {
-                        // Contrato
-                        const btnContratoClass = tieneContrato ? 'btn-outline-success' : 'btn-success';
-                        const btnContratoTitle = tieneContrato ? 'Editar Contrato' : 'Crear Contrato';
-                        html += `<button class="btn ${btnContratoClass}" onclick="Sintel.Empleados.ContratoEditor.openContratoOffcanvas('${id}')" title="${btnContratoTitle}"><i class="bi bi-file-text"></i></button>`;
-                        
+                        html += `<button data-action="${tieneContrato ? 'editar-contrato' : 'crear-contrato'}" data-id="${id}" class="btn btn-outline-success" title="Contrato"><i class="bi bi-file-text"></i></button>`;
                         if (tieneContrato) {
-                            // Registrar Nómina
-                            html += `<button class="btn btn-outline-info" onclick="Sintel.Empleados.EmpleadoList.registrarNomina('${id}')" title="Registrar Nómina"><i class="bi bi-cash-coin"></i></button>`;
-                            
-                            // Historial Nóminas
-                            html += `<button class="btn btn-outline-secondary" onclick="Sintel.Empleados.NominaHistorial.openHistorial('${id}')" title="Historial Nóminas"><i class="bi bi-clock-history"></i></button>`;
+                            html += `<button data-action="registrar-nomina" data-id="${id}" class="btn btn-outline-info" title="Nómina"><i class="bi bi-cash-coin"></i></button>`;
+                            html += `<button data-action="historial" data-id="${id}" class="btn btn-outline-secondary" title="Historial"><i class="bi bi-clock-history"></i></button>`;
                         }
                     } else {
-                        // Eliminar (solo si está retirado)
-                        html += `<button class="btn btn-outline-danger" onclick="Sintel.Empleados.EmpleadoList.confirmarEliminar('${id}')" title="Eliminar"><i class="bi bi-trash"></i></button>`;
+                        html += `<button data-action="eliminar" data-id="${id}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>`;
                     }
-                    
                     html += '</div>';
                     return html;
-                }
+                },
+                cellClick: (e, cell) => handleCellAction(e, cell)
             }
-        ]
-    };
+        ];
+    }
 
     /**
-     * Inicializa la tabla de empleados
+     * Inicializa la tabla de empleados usando TabulatorFactory
      */
-    function init(selector, config = {}) {
-        const element = document.querySelector(selector);
-        if (!element) {
-            console.error('[EmpleadoList] Selector no encontrado:', selector);
-            return null;
+    async function init(selector, config = {}) {
+        // Esperar a que TabulatorFactory esté disponible
+        if (!window.TabulatorFactory) {
+            console.warn('[EmpleadoList] TabulatorFactory no disponible, reintentando en 100ms...');
+            setTimeout(() => init(selector, config), 100);
+            return;
         }
 
-        const mergedConfig = { ...defaultConfig, ...config };
-        const table = new Tabulator(element, mergedConfig);
+        const apiUrl = window.Sintel.Empleados.API.empleados.list;
+        const columns = getColumnas();
+        
+        // Opciones para TabulatorFactory
+        const options = {
+            searchInputSelector: config.searchInputSelector || '#search-empleado',
+            paginationSize: config.paginationSize || 10,
+            ...config
+        };
 
-        // Guardar referencia
-        window.Sintel.Empleados.table = table;
+        const table = window.TabulatorFactory.create(selector, apiUrl, columns, options);
 
-        // Configurar evento de confirmar eliminar
-        const btnConfirmar = document.getElementById('btn-confirmar-eliminar');
-        if (btnConfirmar) {
-            btnConfirmar.addEventListener('click', ejecutarEliminar);
+        if (table) {
+            // Guardar referencia
+            window.Sintel.Empleados.table = table;
+
+            // Configurar evento de confirmar eliminar
+            const btnConfirmar = document.getElementById('btn-confirmar-eliminar');
+            if (btnConfirmar) {
+                // Eliminar listeners previos para evitar duplicados
+                const newBtnConfirmar = btnConfirmar.cloneNode(true);
+                btnConfirmar.parentNode.replaceChild(newBtnConfirmar, btnConfirmar);
+                newBtnConfirmar.addEventListener('click', ejecutarEliminar);
+            }
         }
 
         return table;
     }
 
     /**
-     * Cargar resumen de empleados
+     * Cargar resumen de empleados usando window.http
      */
-    function loadSummary(selector) {
+    async function loadSummary(selector) {
         const element = document.querySelector(selector);
         if (!element) return;
 
-        fetch(window.Sintel.Empleados.API.empleados.summary, {
-            headers: window.Sintel.Empleados.getHeaders()
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            element.innerHTML = '<div class="col-md-3"><div class="card"><div class="card-body"><h6 class="card-title text-muted">Total Empleados</h6><h4 class="text-primary">' + (data.total_empleados || 0) + '</h4></div></div></div>' +
-                '<div class="col-md-3"><div class="card"><div class="card-body"><h6 class="card-title text-muted">Activos</h6><h4 class="text-success">' + (data.empleados_activos || 0) + '</h4></div></div></div>' +
-                '<div class="col-md-3"><div class="card"><div class="card-body"><h6 class="card-title text-muted">Retirados</h6><h4 class="text-danger">' + (data.empleados_retirados || 0) + '</h4></div></div></div>' +
-                '<div class="col-md-3"><div class="card"><div class="card-body"><h6 class="card-title text-muted">Nominas Mes</h6><h4 class="text-info">' + (data.total_nomina_mes || 0) + '</h4></div></div></div>';
-        })
-        .catch(function(err) {
+        const url = window.Sintel.Empleados.API.empleados.summary;
+        
+        try {
+            const res = await window.http('GET', url);
+            if (res.ok) {
+                const data = res.data;
+                element.innerHTML = `
+                    <div class="col-md-3">
+                        <div class="card bg-glass border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-0">Total Empleados</h6>
+                                <h4 class="text-primary mb-0">${data.total_empleados || 0}</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-glass border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-0">Activos</h6>
+                                <h4 class="text-success mb-0">${data.empleados_activos || 0}</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-glass border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-0">Retirados</h6>
+                                <h4 class="text-danger mb-0">${data.empleados_retirados || 0}</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-glass border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-0">Nóminas Mes</h6>
+                                <h4 class="text-info mb-0">${data.total_nomina_mes || 0}</h4>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                throw new Error(res.data?.detail || 'Error cargando resumen');
+            }
+        } catch (err) {
             console.error('[EmpleadoList] Error cargando summary:', err);
             element.innerHTML = '<div class="alert alert-warning">Error cargando resumen</div>';
-        });
+        }
     }
 
     /**
-     * Ver detalle de empleado
+     * Ver detalle de empleado usando window.http
      */
-    function verDetalle(id) {
+    async function verDetalle(id) {
         const url = window.Sintel.Empleados.API.empleados.detail(id);
         
-        fetch(url, {
-            headers: window.Sintel.Empleados.getHeaders()
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            console.log('[EmpleadoList] Detalle:', data);
-        })
-        .catch(function(err) { console.error('[EmpleadoList] Error:', err); });
+        try {
+            const res = await window.http('GET', url);
+            if (res.ok) {
+                console.log('[EmpleadoList] Detalle:', res.data);
+                return res.data;
+            }
+        } catch (err) {
+            console.error('[EmpleadoList] Error:', err);
+        }
     }
 
     /**
@@ -148,27 +208,29 @@
      */
     function confirmarEliminar(id) {
         empleadoIdEliminar = id;
-        const modal = new bootstrap.Modal(document.getElementById('confirmarEliminarModal'));
-        modal.show();
+        const modalElement = document.getElementById('confirmarEliminarModal');
+        if (modalElement) {
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+        }
     }
 
     /**
-     * Ejecutar eliminacion del empleado
+     * Ejecutar eliminacion del empleado usando window.http
      */
-    function ejecutarEliminar() {
+    async function ejecutarEliminar() {
         if (!empleadoIdEliminar) return;
 
         const url = window.Sintel.Empleados.API.empleados.detail(empleadoIdEliminar);
         
-        fetch(url, {
-            method: 'DELETE',
-            headers: window.Sintel.Empleados.getHeaders()
-        })
-        .then(function(r) {
-            if (r.ok) {
+        try {
+            const res = await window.http('DELETE', url);
+            if (res.ok) {
                 const modalEl = document.getElementById('confirmarEliminarModal');
-                const modal = bootstrap.Modal.getInstance(modalEl);
-                modal.hide();
+                if (modalEl) {
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                }
 
                 if (window.UIManager) {
                     window.UIManager.notifySuccess('Empleado eliminado correctamente');
@@ -177,18 +239,16 @@
                 reload();
                 loadSummary('#empleados-summary');
             } else {
-                return r.json().then(function(err) { throw err; });
+                throw new Error(res.data?.error || res.data?.detail || 'Error al eliminar empleado');
             }
-        })
-        .catch(function(err) {
+        } catch (err) {
             console.error('[EmpleadoList] Error eliminando:', err);
             if (window.UIManager) {
-                window.UIManager.notifyError(err.error || 'Error al eliminar empleado');
+                window.UIManager.notifyError(err.message || 'Error al eliminar empleado');
             }
-        })
-        .finally(function() {
+        } finally {
             empleadoIdEliminar = null;
-        });
+        }
     }
 
     /**
@@ -196,6 +256,7 @@
      */
     function reload() {
         if (window.Sintel.Empleados.table) {
+            // TabulatorFactory usa setData() para refrescar con los mismos params
             window.Sintel.Empleados.table.setData();
         }
     }
@@ -234,6 +295,37 @@
             console.error('[EmpleadoList] DevengoEditor no cargado');
         }
     }
+
+    /**
+     * Abrir Bootstrap Offcanvas tras inyeccion HTMX.
+     * Necesario porque HTMX inyecta el HTML pero Bootstrap no lo activa solo.
+     */
+    document.body.addEventListener('htmx:afterSettle', function(e) {
+        var target = e.detail.target;
+        if (!target) return;
+
+        var offcanvasMap = {
+            'offcanvas-container-empleados': 'empleadoOffcanvas',
+            'offcanvas-container-contratos': null,    // ContratoEditor gestiona los suyos
+            'offcanvas-container-nominas':   'offcanvas-devengo'
+        };
+
+        var offcanvasId = offcanvasMap[target.id];
+        if (!offcanvasId) return;
+
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                var offcanvasEl = document.getElementById(offcanvasId);
+                if (offcanvasEl && window.bootstrap) {
+                    try {
+                        bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                    } catch (err) {
+                        console.error('[EmpleadoList] Error abriendo offcanvas:', err);
+                    }
+                }
+            });
+        });
+    });
 
     // Exportar modulo
     window.Sintel.Empleados.EmpleadoList = {
