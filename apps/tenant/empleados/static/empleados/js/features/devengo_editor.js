@@ -53,8 +53,20 @@
         const contrato = d.getElementById('devengo-contrato-id');
         const diasLaborados = d.getElementById('devengo-dias_laborados');
 
-        if (!contrato?.value || !diasLaborados?.value) {
-            console.log(`${MOD} Campos incompletos, no dispara preview`);
+        if (!contrato?.value) {
+            if (wrapper) {
+                wrapper.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Este empleado no tiene un contrato activo. Registre un contrato primero.
+                    </div>`;
+            }
+            console.log(`${MOD} Contrato no disponible, no dispara preview`);
+            return;
+        }
+
+        if (!diasLaborados?.value) {
+            console.log(`${MOD} Días laborados no disponible, no dispara preview`);
             return;
         }
 
@@ -100,6 +112,7 @@
      * Configurar eventos HTMX para manejo de errores y éxito
      */
     function setupHTMXListeners() {
+        // Listener para éxito del form (guardar nómina)
         d.body.addEventListener('htmx:afterRequest', function(evt) {
             const target = evt.target;
             const isDevengoForm = target.id === 'form-devengo';
@@ -119,6 +132,25 @@
                 // 3. Recargar tabla
                 window.Sintel.Empleados.EmpleadoList?.reload();
             }
+        });
+
+        // Listener para errores en preview-calculo (mostrar error formateado)
+        d.body.addEventListener('htmx:responseError', function(evt) {
+            const target = evt.detail.target;
+            if (!target || target.id !== 'devengo-campos-calculados-wrapper') return;
+
+            const xhr = evt.detail.xhr;
+            let errorMsg = 'Error al calcular la nómina. Verifique los datos ingresados.';
+            try {
+                const data = JSON.parse(xhr.responseText);
+                errorMsg = data.error || errorMsg;
+            } catch (e) {}
+
+            target.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>Error de cálculo:</strong> ${errorMsg}
+                </div>`;
         });
     }
 
