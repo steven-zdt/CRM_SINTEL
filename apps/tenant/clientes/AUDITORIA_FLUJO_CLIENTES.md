@@ -1,7 +1,7 @@
-# AUDITORIA DE FLUJO COMPLETO - Módulo Clientes SINTEL v3.6
+# AUDITORIA DE FLUJO COMPLETO - Módulo Clientes SINTEL v2.62.1
 
-**Última Actualización:** 2026-05-03
-**Estado:** SPRINT 5 COMPLETADO — Columna Encargado, estandarización REST endpoints, tabla Directorio Contactos con View/Edit/Delete, sub-tabs Bootstrap independientes.
+**Última Actualización:** 2026-05-04
+**Estado:** SPRINT 5 + HOTFIX v2.62.1 — Auditoría y corrección de funciones CRUD en columna Acciones. IDs de offcanvas sincronizados, botones guardables renombrados, contenedores de error alineados.
 
 ---
 
@@ -60,6 +60,44 @@ apps/tenant/clientes/
             contacto_cliente_form.js
             contacto_cliente_main.js
 ```
+
+---
+
+## 2.1. Changelog v2.62.1 — HOTFIX: Auditoría y Corrección de Funciones CRUD
+
+**PROBLEMA CRÍTICO IDENTIFICADO:** Las funciones CRUD en la columna Acciones no estaban operativas debido a inconsistencias en nombres de IDs de elementos HTML (offcanvas, botones, contenedores de error).
+
+**ROOT CAUSE:** Desincronización entre nombres de elementos en templates vs. búsquedas en JavaScript (`querySelector`).
+
+### Correcciones Implementadas
+
+#### 1. IDs de Offcanvas para Contactos
+| Componente | Problema | Solución |
+|---|---|---|
+| **clientes.contactos.js** | Búsquedas por `#offcanvas-contactos` | Cambiar a `#offcanvas-contacto-cliente` (líneas 109, 165, 263, 271, 275) |
+| **Templates contactos** | Definidos con ID `#offcanvas-contacto-cliente` | ✅ Alineados correctamente |
+
+#### 2. IDs de Botones Guardables
+| Componente | Problema | Solución |
+|---|---|---|
+| **offcanvas_crear_contacto_cliente.html** | Button ID: `#btn-guardar-contacto-cliente` | Cambiar a `#btn-guardar-contacto` (línea 84) |
+| **offcanvas_editar_contacto_cliente.html** | Button ID: `#btn-guardar-contacto-cliente` | Cambiar a `#btn-guardar-contacto` (línea 85) |
+| **clientes.contactos.js** | Busca `#btn-guardar-contacto` | ✅ Alineado con templates actualizados |
+
+#### 3. Contenedores de Error
+| Componente | Problema | Solución |
+|---|---|---|
+| **clientes.contactos.js** | Busca `#form-contacto-feedback` | Cambiar a `#form-contacto-cliente-feedback` (línea 121) |
+| **Templates contactos** | Definido como `#form-contacto-cliente-feedback` | ✅ Alineado correctamente |
+
+### Verificación Post-Fix
+
+- ✅ **Editar cliente:** Clic en botón edit → offcanvas aparece → edita → guarda → tabla recarga
+- ✅ **Ver cliente:** Clic en botón view → offcanvas read-only aparece
+- ✅ **Eliminar cliente:** Clic en botón delete → confirmación → inactiva/elimina → tabla recarga
+- ✅ **Crear contacto:** Clic en nuevo contacto → offcanvas → guarda → tabla recarga
+- ✅ **Editar contacto:** Clic en edit → offcanvas edición → actualiza → tabla recarga
+- ✅ **Eliminar contacto:** Clic en delete → confirmación → tabla recarga
 
 ---
 

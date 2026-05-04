@@ -106,7 +106,7 @@
                 }
 
                 // Cerrar offcanvas
-                const offcanvasEl = d.getElementById('offcanvas-contactos');
+                const offcanvasEl = d.getElementById('offcanvas-contacto-cliente');
                 if (offcanvasEl && w.bootstrap) {
                     const offcanvasInstance = w.bootstrap.Offcanvas.getInstance(offcanvasEl);
                     if (offcanvasInstance) {
@@ -118,7 +118,7 @@
                 d.dispatchEvent(new CustomEvent('contactoGuardado'));
             } else {
                 // Error
-                const errorContainer = d.querySelector('#form-contacto-feedback');
+                const errorContainer = d.querySelector('#form-contacto-cliente-feedback');
                 if (errorContainer && response.data) {
                     const errorFields = Object.keys(response.data).filter(k => k !== 'detail');
                     if (errorFields.length > 0) {
@@ -162,7 +162,7 @@
      * Inicializar formulario de contactos
      */
     async function initFormulario() {
-        const offcanvasEl = d.querySelector('#offcanvas-contactos');
+        const offcanvasEl = d.querySelector('#offcanvas-contacto-cliente');
         if (!offcanvasEl) return;
 
         const clienteSelect = d.querySelector('#contacto-cliente-select');
@@ -260,7 +260,7 @@
      * Escuchar evento cuando offcanvas se muestra
      */
     d.addEventListener('shown.bs.offcanvas', function(e) {
-        if (e.target?.id === 'offcanvas-contactos') {
+        if (e.target?.id === 'offcanvas-contacto-cliente') {
             initFormulario();
         }
     });
@@ -268,11 +268,11 @@
     // Inicialización en DOMContentLoaded (por si ya existe el offcanvas)
     if (d.readyState === 'loading') {
         d.addEventListener('DOMContentLoaded', function() {
-            if (d.querySelector('#offcanvas-contactos')) {
+            if (d.querySelector('#offcanvas-contacto-cliente')) {
                 initFormulario();
             }
         });
-    } else if (d.querySelector('#offcanvas-contactos')) {
+    } else if (d.querySelector('#offcanvas-contacto-cliente')) {
         initFormulario();
     }
 
