@@ -18,16 +18,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 class BaseTenantViewSet(viewsets.ModelViewSet):
     """
     ViewSet base para modelos tenant con lookup por UUID y Dual-Auth.
-    """
-    lookup_field = "uuid"
-    lookup_url_kwarg = "uuid"
-    authentication_classes = [JWTAuthentication, SessionAuthentication]
 
-
-class BaseTenantGenericViewSet(viewsets.GenericViewSet):
-    """
-    ViewSet genérico base para modelos tenant con lookup por UUID y Dual-Auth.
-    Útil para ViewSets que solo implementan algunos mixins.
+    WARNING: IMPORTANTE:
+    - lookup_field="uuid" garantiza que las URLs usen UUID en lugar de PK
+    - authentication_classes=[JWTAuthentication, SessionAuthentication]:
+      Acepta JWT (Bearer header) con fallback a Session (cookies).
+    - Todos los ViewSets de tenant deben heredar de esta clase
     """
     lookup_field = "uuid"
     lookup_url_kwarg = "uuid"

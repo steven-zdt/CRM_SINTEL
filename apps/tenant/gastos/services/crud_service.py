@@ -12,7 +12,7 @@ from decimal import Decimal
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.gastos.models import Gasto, ResolucionDIAN, DocumentoSoporte
+from apps.tenant.gastos.models import Gasto, ResolucionDIAN, DocumentoSoporte, ItemGasto
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +34,14 @@ class GastoCRUDService:
 
     @staticmethod
     @transaction.atomic
-    def anular_gasto(gasto: Gasto, motivo: str = None, usuario = None) -> Gasto:
+    def anular_gasto(gasto: Gasto) -> Gasto:
         """Marca un gasto como anulado vía su documento soporte."""
         if not gasto.documento_soporte:
             raise ValidationError("El gasto no tiene documento soporte asociado")
 
         # Anular documento soporte (inmutabilidad contable)
-        doc = gasto.documento_soporte
-        doc.anulado = True
-        doc.motivo_anulacion = motivo
-        doc.usuario_anulacion = usuario
-        doc.save(update_fields=['anulado', 'motivo_anulacion', 'usuario_anulacion'])
+        gasto.documento_soporte.anulado = True
+        gasto.documento_soporte.save(update_fields=['anulado'])
 
         logger.info(f"[GastoCRUD] Anulado gasto ID={gasto.id}")
         return gasto
@@ -176,7 +173,28 @@ class DocumentoCRUDService:
         return documento
 
 
+class ItemGastoCRUDService:
+    """Operaciones CRUD puras para ItemGasto."""
 
+    @staticmethod
+    @transaction.atomic
+    def crear_item(data: dict, empresa, gasto=None, documento=None) -> ItemGasto:
+        """Crea un ítem de gasto."""
+        item = ItemGasto.objects.create(
+            empresa=empresa,
+            gasto=gasto,
+            documento_soporte=documento,
+            **data
+        )
+        logger.info(f"[ItemCRUD] Creado ítem ID={item.id}")
+        return item
+
+    @staticmethod
+    @transaction.atomic
+    def eliminar_items_por_gasto(gasto: Gasto):
+        """Elimina todos los ítems asociados a un gasto."""
+        count = ItemGasto.objects.filter(gasto=gasto).delete()[0]
+        logger.info(f"[ItemCRUD] Eliminados {count} ítems del gasto {gasto.id}")
 
 
 # Import necesario para _obtener_siguiente_consecutivo

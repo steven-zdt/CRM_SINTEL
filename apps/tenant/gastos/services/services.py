@@ -15,7 +15,7 @@ from django.db.models import Count, DecimalField, Max, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.tenant.gastos.models import DocumentoSoporte, Gasto, ResolucionDIAN
+from apps.tenant.gastos.models import DocumentoSoporte, Gasto, ItemGasto, ResolucionDIAN
 from apps.tenant.proveedores.services.services import ProveedorBusinessService
 
 logger = logging.getLogger(__name__)
@@ -812,6 +812,22 @@ class GastoService:
             observaciones=payload['observaciones']
         )
 
+        # --- 7. Crear ItemGasto automatico ---
+        descripcion_item = str(
+            payload.get('descripcion')
+            or payload.get('observaciones')
+            or payload.get('categoria_contable')
+            or f"Gasto - {proveedor.get('razon_social') or 'Proveedor'}"
+        ).strip()
+
+        ItemGasto.objects.create(
+            gasto=gasto,
+            empresa=empresa,
+            descripcion=descripcion_item[:255],
+            cantidad=Decimal('1.00'),
+            valor_unitario=subtotal,
+            total_linea=subtotal,
+        )
 
         # --- 8. Hook contable (materializar_asiento_desde_gasto) ---
         if documento_soporte.activo and not documento_soporte.anulado:

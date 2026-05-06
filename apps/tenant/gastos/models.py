@@ -323,21 +323,6 @@ class DocumentoSoporte(SintelTenantBaseModel):
         verbose_name=_('Fecha de Anulación'),
         help_text=_('Fecha y hora de anulación')
     )
-    motivo_anulacion = models.TextField(
-        blank=True,
-        null=True,
-        verbose_name=_('Motivo de Anulación'),
-        help_text=_('Razón por la cual se anula el documento (Requerido por DIAN)')
-    )
-    usuario_anulacion = models.ForeignKey(
-        'perfil.TenantProfile',
-        on_delete=models.PROTECT,
-        related_name='documentos_anulados',
-        blank=True,
-        null=True,
-        verbose_name=_('Usuario que Anuló'),
-        help_text=_('Operador que realizó la acción de anulación')
-    )
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -380,14 +365,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
         Valida coherencia de totales y rango de consecutivo.
         WARNING: v2.40: Calcula automáticamente las retenciones basándose en los porcentajes.
         """
-        # 0. Inmutabilidad: No permitir cambios si ya está anulado (excepto la anulación misma)
-        if self.pk:
-            # Evitar recursión infinita en clean() si se llama desde save()
-            old_inst = DocumentoSoporte.objects.only('anulado').get(pk=self.pk)
-            if old_inst.anulado:
-                raise ValidationError(_("No se puede modificar un documento que ya ha sido anulado."))
-
-        # 1. Validar que el consecutivo esté dentro del rango de la resolución
+        # Validar que el consecutivo esté dentro del rango de la resolución
         if self.resolucion_dian and self.consecutivo:
             if not (self.resolucion_dian.rango_desde <= self.consecutivo <= self.resolucion_dian.rango_hasta):
                 raise ValidationError({
