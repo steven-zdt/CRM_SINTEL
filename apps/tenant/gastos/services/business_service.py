@@ -20,7 +20,6 @@ from apps.tenant.gastos.services.crud_service import (
     GastoCRUDService,
     ResolucionCRUDService,
     DocumentoCRUDService,
-    ItemGastoCRUDService,
 )
 
 logger = logging.getLogger(__name__)
@@ -250,10 +249,23 @@ class GastoBusinessService:
         )
 
         # 8. Crear gasto
+        codigo_contable = (
+            str(data.get('codigo_contable') or data.get('cuenta_contable_codigo') or '').strip() or None
+        )
+        if codigo_contable:
+            from apps.tenant.gastos.choices.niif_gastos_choices import (
+                GASTOS_NIIF_CODIGOS_VALIDOS,
+            )
+            if codigo_contable not in GASTOS_NIIF_CODIGOS_VALIDOS:
+                raise ValidationError({
+                    "codigo_contable": [f"Codigo contable '{codigo_contable}' no pertenece al catalogo NIIF permitido."]
+                })
+
         gasto_data = {
             'periodo': data.get('periodo'),
             'centro_costo': data.get('centro_costo', ''),
             'categoria_contable': data.get('categoria_contable'),
+            'codigo_contable': codigo_contable,
             'descripcion': data.get('descripcion', ''),
             'observaciones': data.get('observaciones', ''),
             'cuenta_contable_uuid': str(UUID(cuenta_uuid)),
@@ -266,18 +278,16 @@ class GastoBusinessService:
             documento_soporte=documento
         )
 
-        # 9. Crear ítem genérico
-        ItemGastoCRUDService.crear_item(
-            data={
-                'descripcion': data.get('descripcion') or 'Gasto operativo',
-                'cantidad': 1,
-                'valor_unitario': subtotal,
-                'valor_total': subtotal
-            },
-            empresa=empresa,
-            gasto=gasto,
-            documento=documento
-        )
+
+        # 10. Asientos Contables (Auto-materialización)
+        try:
+            from apps.tenant.contabilidad.services.asientos_service import (
+                materializar_asiento_desde_gasto,
+            )
+            materializar_asiento_desde_gasto(gasto)
+            logger.info(f"[GastoBusiness] Asiento contable automaterializado {documento.numero_documento}")
+        except Exception as e:
+            logger.warning(f"[GastoBusiness] Falló asiento contable (aislado): {str(e)}")
 
         logger.info(f"[GastoBusiness] Procesado gasto ID={gasto.id}")
         return gasto
@@ -293,6 +303,24 @@ class ResolucionBusinessService:
             empresa_id=empresa_id,
             vigente=True
         ).first()
+
+    @staticmethod
+    @transaction.atomic
+    def crear_resolucion(empresa: Any, data: Dict[str, Any]) -> ResolucionDIAN:
+        """
+        Crea una nueva resolución DIAN.
+        Asegura que solo una resolución esté vigente por empresa.
+        """
+        vigente = data.get('vigente', True)
+        
+        # Si se marca como vigente, desactivar las anteriores
+        if vigente:
+            ResolucionDIAN.objects.filter(
+                empresa=empresa,
+                vigente=True
+            ).update(vigente=False)
+            
+        return ResolucionCRUDService.crear_resolucion(data, empresa)
 
     @staticmethod
     def validar_resolucion_para_gasto(

@@ -32,6 +32,7 @@ class ResolucionDIANNestedSerializer(serializers.ModelSerializer):
         model = ResolucionDIAN
         fields = (
             'id',
+            'uuid',
             'numero_resolucion',
             'prefijo',
             'rango_desde',
@@ -152,6 +153,7 @@ class ResolucionDIANDetailSerializer(serializers.ModelSerializer):
         model = ResolucionDIAN
         fields = (
             'id',
+            'uuid',
             'empresa',
             'numero_resolucion',
             'prefijo',
@@ -223,12 +225,14 @@ class GastoListSerializer(serializers.ModelSerializer):
         model = Gasto
         fields = (
             'id',
+            'uuid',
             'categoria_contable',
             'categoria_contable_display',
             'centro_costo',
             'centro_costo_display',
             'codigo_contable',
             'codigo_contable_display',
+            'descripcion',
             'ds_consecutivo',
             'ds_prefijo',
             'ds_numero_documento',
@@ -261,6 +265,7 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
         model = DocumentoSoporte
         fields = (
             'id',
+            'uuid',
             'empresa',
             'resolucion_dian',
             'prefijo',
@@ -328,6 +333,7 @@ class GastoDetailSerializer(serializers.ModelSerializer):
         model = Gasto
         fields = (
             'id',
+            'uuid',
             'empresa',
             'documento_soporte',
             'periodo',

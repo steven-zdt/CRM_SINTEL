@@ -18,30 +18,30 @@ from apps.tenant.gastos.models import Gasto, ResolucionDIAN, DocumentoSoporte
 
 # Campos estrictamente necesarios para LISTAS (Tabulator)
 GASTO_LIST_FIELDS = (
-    'id', 'periodo', 'centro_costo', 'categoria_contable',
-    'empresa_id', 'created_at'
+    'id', 'uuid', 'periodo', 'centro_costo', 'categoria_contable',
+    'descripcion', 'empresa_id', 'created_at'
 )
 
 RESOLUCION_LIST_FIELDS = (
-    'id', 'numero_resolucion', 'prefijo', 'vigente',
+    'id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
     'rango_desde', 'rango_hasta', 'fecha_inicio', 'fecha_fin',
     'empresa_id'
 )
 
 DOCUMENTO_LIST_FIELDS = (
-    'id', 'consecutivo', 'prefijo', 'fecha', 'total',
+    'id', 'uuid', 'consecutivo', 'prefijo', 'fecha', 'total',
     'anulado', 'empresa_id'
 )
 
 # Campos completos para DETALLE (formularios de edición)
 GASTO_DETAIL_FIELDS = (
-    'id', 'periodo', 'centro_costo', 'categoria_contable',
+    'id', 'uuid', 'periodo', 'centro_costo', 'categoria_contable',
     'descripcion', 'observaciones', 'codigo_contable',
     'empresa_id', 'created_at', 'updated_at'
 )
 
 RESOLUCION_DETAIL_FIELDS = (
-    'id', 'numero_resolucion', 'prefijo', 'vigente',
+    'id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
     'rango_desde', 'rango_hasta', 'fecha_resolucion',
     'fecha_inicio', 'fecha_fin', 'clave_tecnica',
     'empresa_id', 'created_at', 'updated_at'
@@ -84,13 +84,13 @@ class GastoSelector:
         return qs.order_by('-created_at')
 
     @staticmethod
-    def get_detail(empresa_id: int, gasto_id: int):
+    def get_detail(empresa_id: int):
         """QuerySet optimizado para DETALLE de Gasto."""
         return Gasto.objects.filter(
-            empresa_id=empresa_id, pk=gasto_id
+            empresa_id=empresa_id
         ).select_related(
-            'documento_soporte', 'empresa', 'resolucion_dian'
-        ).only(*GASTO_DETAIL_FIELDS).get()
+            'documento_soporte', 'empresa'
+        ).only(*GASTO_DETAIL_FIELDS)
 
     @staticmethod
     def get_summary(empresa_id: int):
@@ -141,11 +141,11 @@ class ResolucionSelector:
         return qs.order_by('-vigente', '-fecha_resolucion')
 
     @staticmethod
-    def get_detail(empresa_id: int, resolucion_id: int):
+    def get_detail(empresa_id: int):
         """QuerySet optimizado para DETALLE de ResolucionDIAN."""
         return ResolucionDIAN.objects.filter(
-            empresa_id=empresa_id, pk=resolucion_id
-        ).only(*RESOLUCION_DETAIL_FIELDS).get()
+            empresa_id=empresa_id
+        ).only(*RESOLUCION_DETAIL_FIELDS)
 
     @staticmethod
     def get_vigente(empresa_id: int):
@@ -183,11 +183,11 @@ class DocumentoSelector:
         return qs.order_by('-consecutivo')
 
     @staticmethod
-    def get_detail(empresa_id: int, documento_id: int):
+    def get_detail(empresa_id: int):
         """QuerySet optimizado para DETALLE de DocumentoSoporte."""
         return DocumentoSoporte.objects.filter(
-            empresa_id=empresa_id, pk=documento_id
-        ).select_related('resolucion_dian').get()
+            empresa_id=empresa_id
+        ).select_related('resolucion_dian')
 
 
 # Compatibilidad legacy - tuplas de campos por modelo

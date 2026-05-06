@@ -42,7 +42,7 @@ class GastoServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
+        return self.selector_class.get_detail(empresa_id)
 
     def service_calcular_retenciones(self, subtotal, retefuente_pct, reteica_pct):
         """Calcula retenciones usando business service."""
@@ -58,9 +58,34 @@ class GastoServiceMixin:
             data=serializer.validated_data
         )
 
+    def crear_gasto_service(self, data: dict, empresa) -> tuple:
+        """
+        Legacy bridge for ViewSet.
+        Retorna (success, result, status_code).
+        """
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from rest_framework import status
+        
+        try:
+            gasto = self.business_service_class.procesar_gasto(
+                empresa=empresa,
+                data=data
+            )
+            return True, gasto, status.HTTP_201_CREATED
+        except (DRFValidationError, DjangoValidationError) as e:
+            detail = e.detail if hasattr(e, 'detail') else str(e)
+            return False, {"error": "validation_error", "message": str(detail)}, status.HTTP_422_UNPROCESSABLE_ENTITY
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Error en crear_gasto_service: {e}", exc_info=True)
+            return False, {"error": "internal_error", "message": str(e)}, status.HTTP_500_INTERNAL_SERVER_ERROR
+
     def service_anular_gasto(self, gasto):
         """Anula un gasto usando CRUD service."""
-        return self.crud_service_class.anular_gasto(gasto)
+        motivo = self.request.data.get('motivo_anulacion', '')
+        usuario = getattr(self.request.user, 'perfil', None)
+        return self.crud_service_class.anular_gasto(gasto, motivo=motivo, usuario=usuario)
 
     def service_desactivar_gasto(self, gasto):
         """Desactiva un gasto usando CRUD service."""
@@ -98,14 +123,14 @@ class ResolucionServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
+        return self.selector_class.get_detail(empresa_id)
 
     def service_crear_resolucion(self, serializer):
-        """Crea resolución usando CRUD service."""
+        """Crea resolución usando Business Service (maneja vigencia)."""
         empresa = self._get_empresa()
-        return self.crud_service_class.crear_resolucion(
-            data=serializer.validated_data,
-            empresa=empresa
+        return self.business_service_class.crear_resolucion(
+            empresa=empresa,
+            data=serializer.validated_data
         )
 
     def service_desactivar_resolucion(self, resolucion):
@@ -150,4 +175,4 @@ class DocumentoServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
+        return self.selector_class.get_detail(empresa_id)

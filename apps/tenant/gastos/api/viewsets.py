@@ -18,11 +18,15 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.tenant.api.base import BaseTenantGenericViewSet, BaseTenantViewSet
+from apps.tenant.api.mixins import SintelDSVMixin, SintelServiceMixin
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.gastos.choices.niif_gastos_choices import GASTOS_NIIF_CHOICES
 from apps.tenant.gastos.models import Gasto, ResolucionDIAN
 from apps.tenant.gastos.services import (
     GastoServiceMixin,  # v2.61: Service Layer Pattern
+    ResolucionServiceMixin,
     anular_gasto_service,
     calcular_retenciones,  # v2.40: Función para calcular retenciones
     crear_resolucion,
@@ -52,8 +56,9 @@ class GastoViewSet(
     mixins.RetrieveModelMixin,
     mixins.CreateModelMixin,
     mixins.DestroyModelMixin,
+    SintelDSVMixin,
     GastoServiceMixin,  # Inyección de dependencias DDD
-    viewsets.GenericViewSet
+    BaseTenantGenericViewSet
 ):
     """
     ViewSet para gastos (v2.40).
@@ -97,25 +102,13 @@ class GastoViewSet(
         if not hasattr(self, 'action') or self.action is None:
             return Gasto.objects.none()
         
-        # Obtener empresa_id del tenant (Zero-Trust)
-        if hasattr(self.request, 'user') and hasattr(self.request.user, 'tenant_profile'):
-            empresa_id = self.request.user.tenant_profile.empresa_id
-        else:
-            from apps.tenant.empresa.models import Empresa
-            empresa = Empresa.objects.only('id').first()
-            empresa_id = empresa.id if empresa else None
-
-        if not empresa_id:
-            return Gasto.objects.none()
-
-        search = self.request.query_params.get('search', None)
-
         if self.action == "list":
-            return qs_list(empresa_id, search=search)
+            return self.get_qs_list()
         elif self.action == "retrieve":
-            return qs_detail(empresa_id)
+            return self.get_qs_detail()
         else:
             # Fallback estricto por tenant para mutaciones (anular, desactivar)
+            empresa_id = self.get_empresa_id()
             return Gasto.objects.filter(empresa_id=empresa_id)
 
     def get_serializer_class(self):
@@ -149,18 +142,16 @@ class GastoViewSet(
         ha sido encapsulada en GastoServiceMixin.crear_gasto_service().
         """
         try:
-            from apps.tenant.empresa.models import Empresa
-            
             # SSoT: Obtener empresa del tenant
-            empresa = Empresa.objects.first()
+            empresa = resolve_tenant_empresa(request, self)
             if not empresa:
                 return Response(
                     {
                         "error": "empresa_no_configurada",
-                        "message": "No hay empresa configurada para este tenant.",
+                        "message": "No se pudo determinar la empresa activa para este tenant.",
                         "missing_fields": ["empresa"]
                     },
-                    status=status.HTTP_422_UNPROCESSABLE_ENTITY
+                    status=status.HTTP_403_FORBIDDEN
                 )
             
             # DDD: Inyección y delegación al Service Layer
@@ -189,8 +180,8 @@ class GastoViewSet(
         """
         try:
             gasto = self.get_object()
-            resultado = desactivar_gasto_service(gasto.id)
-            return Response(resultado, status=status.HTTP_200_OK)
+            resultado = self.service_desactivar_gasto(gasto)
+            return Response({"detail": "Gasto desactivado correctamente"}, status=status.HTTP_200_OK)
         except ValidationError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -208,8 +199,8 @@ class GastoViewSet(
         try:
             gasto = self.get_object()
             # WARNING: REGLA: No se puede editar, solo anular a través del service
-            resultado = anular_gasto_service(gasto.id)
-            return Response(resultado, status=status.HTTP_200_OK)
+            resultado = self.service_anular_gasto(gasto)
+            return Response({"detail": "Gasto anulado correctamente"}, status=status.HTTP_200_OK)
         except ValidationError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -233,11 +224,16 @@ class GastoViewSet(
             }
         """
         try:
-            # Obtener empresa del tenant (opcional, para filtrado futuro)
-            empresa_id = None
-            if hasattr(request.user, 'empresa_id'):
-                empresa_id = request.user.empresa_id
+            # Obtener empresa del tenant (Zero-Trust)
+            empresa = resolve_tenant_empresa(request, self)
+            empresa_id = empresa.id if empresa else None
             
+            if not empresa_id:
+                return Response(
+                    {"error": "empresa_no_encontrada", "message": "No se pudo determinar la empresa activa."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             summary_data = get_gastos_summary(empresa_id=empresa_id)
             
             # Convertir Decimal a string para JSON (si es necesario)
@@ -302,13 +298,11 @@ class GastoViewSet(
         WARNING: v2.60: Actualizado para retornar TODAS las resoluciones (no solo vigentes)
         para que el usuario pueda seleccionar entre todas las disponibles.
         """
-        from apps.tenant.empresa.models import Empresa
-        
-        empresa = Empresa.objects.first()
+        empresa = resolve_tenant_empresa(request, self)
         if not empresa:
             return Response(
-                {"error": "empresa_no_configurada", "message": "No hay empresa configurada para este tenant."},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
+                status=status.HTTP_403_FORBIDDEN
             )
         
         # WARNING: v2.60: Retornar TODAS las resoluciones de la empresa (no solo vigentes)
@@ -326,13 +320,12 @@ class GastoViewSet(
         """
         try:
             # Obtener empresa del tenant (SSoT)
-            from apps.tenant.empresa.models import Empresa
-            empresa = Empresa.objects.first()  # Singleton por tenant
+            empresa = resolve_tenant_empresa(request, self)
             
             if not empresa:
                 return Response(
-                    {"error": "empresa_no_configurada", "message": "No hay empresa configurada para este tenant."},
-                    status=status.HTTP_404_NOT_FOUND
+                    {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
+                    status=status.HTTP_403_FORBIDDEN
                 )
             
             resolucion = ResolucionDIAN.objects.filter(
@@ -379,11 +372,10 @@ class GastoViewSet(
         if mode == 'detail' and gasto_id:
             try:
                 # Modo detalle: cargar gasto
-                from apps.tenant.empresa.models import Empresa
-                empresa = Empresa.objects.only('id').first()
+                empresa = resolve_tenant_empresa(request, self)
                 if not empresa:
-                    context['error'] = "No se encontró la empresa (SSoT) configurada para este tenant."
-                    return Response(context, template_name='tenant/core/gastos/offcanvas_detalle.html')
+                    context['error'] = "No se pudo determinar la empresa activa."
+                    return Response(context, template_name='tenant/core/gastos/offcanvas_detalle.html', status=status.HTTP_403_FORBIDDEN)
                 
                 # Zero Waste: only() carga solo lo necesario para el visualizador
                 gasto = Gasto.objects.select_related('documento_soporte', 'documento_soporte__resolucion').filter(
@@ -485,11 +477,10 @@ class GastoViewSet(
         
         try:
             # Modo detalle: cargar gasto
-            from apps.tenant.empresa.models import Empresa
-            empresa = Empresa.objects.only('id').first()
+            empresa = resolve_tenant_empresa(request, self)
             if not empresa:
-                context['error'] = "No se encontró la empresa (SSoT) configurada para este tenant."
-                return Response(context, template_name='tenant/core/gastos/offcanvas_detalle.html')
+                context['error'] = "No se pudo determinar la empresa activa."
+                return Response(context, template_name='tenant/core/gastos/offcanvas_detalle.html', status=status.HTTP_403_FORBIDDEN)
             
             # Zero Waste: only() carga solo lo necesario para el visualizador
             gasto = Gasto.objects.select_related('documento_soporte', 'documento_soporte__resolucion').filter(
@@ -543,17 +534,14 @@ class GastoViewSet(
         """
         try:
             from django.db import transaction
-
-            from apps.tenant.empresa.models import Empresa
-
             from .serializers import ResolucionDIANCreateSerializer
-            
-            empresa = Empresa.objects.first()  # Singleton por tenant
+
+            empresa = resolve_tenant_empresa(request, self)
             
             if not empresa:
                 return Response(
-                    {"error": "empresa_no_configurada", "message": "No hay empresa configurada para este tenant."},
-                    status=status.HTTP_404_NOT_FOUND
+                    {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
+                    status=status.HTTP_403_FORBIDDEN
                 )
             
             # WARNING: v2.60: Usar serializer para validación y manejo de valores HTML
@@ -633,7 +621,9 @@ class ResolucionDIANViewSet(
     mixins.RetrieveModelMixin,
     mixins.CreateModelMixin,
     mixins.DestroyModelMixin,
-    viewsets.GenericViewSet
+    SintelDSVMixin,
+    ResolucionServiceMixin,
+    BaseTenantGenericViewSet
 ):
     """
     ViewSet para Resoluciones DIAN (v2.40).
@@ -670,11 +660,10 @@ class ResolucionDIANViewSet(
         WARNING: PERFORMANCE BIBLE: Usa .first() en lugar de .all()[0]
         Singleton pattern: Solo debe existir una empresa por tenant
         """
-        from apps.tenant.empresa.models import Empresa
-        empresa = Empresa.objects.only('id').first()
+        empresa = resolve_tenant_empresa(self.request, self)
         if not empresa:
-            from rest_framework.exceptions import APIException
-            raise APIException(detail='No se encontró empresa para este tenant')
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(detail='No se pudo determinar la empresa activa para este tenant')
         return empresa
     
     def get_queryset(self):
@@ -689,12 +678,12 @@ class ResolucionDIANViewSet(
         empresa = self.get_empresa()
         
         if self.action == "list":
-            return qs_resolucion_list(empresa.id)
+            return self.get_qs_list()
         elif self.action == "retrieve":
-            # DRF get_object() requiere un QuerySet, no una instancia.
-            return qs_resolucion_list(empresa.id).filter(id=self.kwargs.get('pk'))
+            return self.get_qs_detail()
         else:
-            return ResolucionDIAN.objects.filter(empresa=empresa)
+            empresa_id = self.get_empresa_id()
+            return ResolucionDIAN.objects.filter(empresa_id=empresa_id)
     
     def get_serializer_class(self):
         """Alineación v2.40: ListSerializer para listado, DetailSerializer para detalle."""
