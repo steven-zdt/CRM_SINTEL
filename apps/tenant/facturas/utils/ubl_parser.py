@@ -902,8 +902,8 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
                 'valor_reteica': v_reteica,
             })
         
-        # Determinar naturaleza (VENTA si el tenant es emisor, COMPRA si es receptor)
-        # Esto se hace comparando el NIT del tenant con el emisor/receptor
+        # Determinar naturaleza (VENTA si el tenant es emisor, COMPRA si el tenant es receptor)
+        # Esto se hace comparando el NIT y Razón Social del emisor con los datos de la empresa del tenant
         from apps.tenant.facturas.models import Factura
         # # WARNING: RESILIENCIA: Import lazy para evitar ImportError en import-time
         try:
@@ -914,11 +914,20 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
             empresa_data = None
         naturaleza = Factura.Naturaleza.VENTA  # Default
         if empresa_data:
-            tenant_nit = empresa_data.get('nit', '')
-            # Si el tenant es el receptor, es COMPRA
-            if receptor_nit == tenant_nit:
+            tenant_nit = empresa_data.get('nit', '').strip() if empresa_data.get('nit') else ''
+            tenant_razon_social = empresa_data.get('razon_social', '').strip() if empresa_data.get('razon_social') else ''
+            # Comparar NIT y Razón Social del emisor del XML con los datos del tenant
+            # Si son IGUALES: el tenant es el emisor → VENTA
+            # Si son DIFERENTES: el tenant es el receptor → COMPRA
+            emisor_nit_clean = (emisor_nit or '').strip()
+            emisor_razon_social_clean = (emisor_razon_social or '').strip()
+
+            if emisor_nit_clean == tenant_nit and emisor_razon_social_clean == tenant_razon_social:
+                # El tenant es el emisor de la factura
+                naturaleza = Factura.Naturaleza.VENTA
+            else:
+                # El tenant es el receptor de la factura
                 naturaleza = Factura.Naturaleza.COMPRA
-            # Si el tenant es el emisor, es VENTA (ya es el default)
         
         # Determinar categoría (PRODUCTO/SERVICIO/MIXTO) basado en items
         es_servicio_count = sum(1 for item in items_data if item.get('unidad_medida', '').upper() in {'ZZ', 'SERVICIO'})
