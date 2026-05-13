@@ -312,8 +312,6 @@ class FacturaBusinessService:
                 porcentaje_iva=item.get("porcentaje_iva", 0),
                 porcentaje_retefuente=item.get("porcentaje_retefuente", 0),
                 valor_retefuente=item.get("valor_retefuente", 0),
-                porcentaje_reteiva=item.get("porcentaje_reteiva", 0),
-                valor_reteiva=item.get("valor_reteiva", 0),
                 porcentaje_reteica=item.get("porcentaje_reteica", 0),
                 valor_reteica=item.get("valor_reteica", 0),
                 total=item.get("total", 0),

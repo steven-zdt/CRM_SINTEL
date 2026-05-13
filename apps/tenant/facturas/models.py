@@ -232,6 +232,10 @@ class ItemFactura(SintelTenantBaseModel):
                                                 validators=[MinValueValidator(Decimal('0.00'))])
     valor_retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
                                            validators=[MinValueValidator(Decimal('0.00'))])
+    porcentaje_reteiva = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
+                                             validators=[MinValueValidator(Decimal('0.00'))])
+    valor_reteiva = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                        validators=[MinValueValidator(Decimal('0.00'))])
     porcentaje_reteica = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
                                              validators=[MinValueValidator(Decimal('0.00'))])
     valor_reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),

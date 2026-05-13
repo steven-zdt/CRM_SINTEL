@@ -898,8 +898,6 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
                 'porcentaje_iva': porcentaje_iva,
                 'porcentaje_retefuente': p_retefuente,
                 'valor_retefuente': v_retefuente,
-                'porcentaje_reteiva': p_reteiva,
-                'valor_reteiva': v_reteiva,
                 'porcentaje_reteica': p_reteica,
                 'valor_reteica': v_reteica,
             })
@@ -1007,8 +1005,6 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
                 porcentaje_iva=item.get('porcentaje_iva', 0),
                 porcentaje_retefuente=item.get('porcentaje_retefuente', 0),
                 valor_retefuente=item.get('valor_retefuente', 0),
-                porcentaje_reteiva=item.get('porcentaje_reteiva', 0),
-                valor_reteiva=item.get('valor_reteiva', 0),
                 porcentaje_reteica=item.get('porcentaje_reteica', 0),
                 valor_reteica=item.get('valor_reteica', 0),
             )
