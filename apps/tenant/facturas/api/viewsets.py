@@ -1288,10 +1288,11 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], url_path='obtener-retenciones')
     def obtener_retenciones(self, request: Request) -> Response:
         """
-        Obtiene retenciones aplicables desde Cliente (VENTA) o Proveedor (COMPRA).
+        Obtiene retenciones aplicables desde Cliente (VENTA).
+        Para COMPRA, retorna defaults (0.00) ya que las retenciones están en el XML.
 
         Query params:
-        - nit: NIT del cliente o proveedor
+        - nit: NIT del cliente (solo para VENTA)
         - naturaleza: VENTA o COMPRA
 
         Returns:
@@ -1306,23 +1307,31 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
         """
         from apps.tenant.perfil.services.perfil_service import get_or_create_profile
 
-        nit = request.query_params.get('nit')
         naturaleza = request.query_params.get('naturaleza', 'VENTA')
 
-        if not nit:
-            return Response({
-                "error": "missing_nit",
-                "message": "Parámetro 'nit' es obligatorio"
-            }, status=status.HTTP_400_BAD_REQUEST)
-
         try:
+            # COMPRA: retenciones ya están en el XML, no extraer de Proveedores
+            if naturaleza == 'COMPRA':
+                return Response({
+                    "aplica_retefuente": False,
+                    "retefuente_porcentaje": "0.00",
+                    "aplica_reteica": False,
+                    "reteica_porcentaje": "0.00",
+                    "aplica_reteiva": False,
+                    "reteiva_porcentaje": "0.00",
+                }, status=status.HTTP_200_OK)
+
+            # VENTA: extraer desde Cliente
+            nit = request.query_params.get('nit')
+            if not nit:
+                return Response({
+                    "error": "missing_nit",
+                    "message": "Parámetro 'nit' es obligatorio"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             perfil = get_or_create_profile(request.user)
             empresa_id = perfil.empresa_id
-
-            if naturaleza == 'VENTA':
-                retenciones = self.service_obtener_retenciones_cliente(nit, empresa_id)
-            else:
-                retenciones = self.service_obtener_retenciones_proveedor(nit, empresa_id)
+            retenciones = self.service_obtener_retenciones_cliente(nit, empresa_id)
 
             # Convertir Decimal a string para JSON
             result = {

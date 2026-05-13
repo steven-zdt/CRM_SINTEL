@@ -125,8 +125,10 @@ class FacturaBusinessService:
     @staticmethod
     def obtener_retenciones_desde_proveedor(proveedor_nit: str | None, empresa_id: int | None = None) -> dict[str, Any]:
         """
-        Extrae retenciones desde Proveedor (para facturas COMPRA).
-        Retorna dict con aplica_retefuente, retefuente_porcentaje, etc.
+        [DEPRECATED v3.7.1] Extrae retenciones desde Proveedor.
+
+        Nota: Para facturas COMPRA, las retenciones ya están en el XML — este método
+        NO se usa. Se mantiene para compatibilidad futura si se requiere.
         """
         if not proveedor_nit or not empresa_id:
             return {

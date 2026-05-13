@@ -537,6 +537,18 @@
         async function cargarRetenciones(nit) {
             const naturaleza = naturalezaSelect.value || 'VENTA';
 
+            // Para COMPRA, las retenciones ya están en el XML — no consultar Proveedores
+            if (naturaleza === 'COMPRA') {
+                d.querySelector('#factura-retefuente-porcentaje').value = '0.00';
+                d.querySelector('#factura-reteica-porcentaje').value = '0.00';
+                d.querySelector('#factura-reteiva-porcentaje').value = '0.00';
+                d.querySelector('#helper-retefuente').textContent = '';
+                d.querySelector('#helper-reteica').textContent = '';
+                d.querySelector('#helper-reteiva').textContent = '';
+                return;
+            }
+
+            // VENTA: extraer desde Clientes
             try {
                 const response = await fetch(
                     `/api/v1/facturas/obtener-retenciones/?nit=${encodeURIComponent(nit)}&naturaleza=${naturaleza}`,
