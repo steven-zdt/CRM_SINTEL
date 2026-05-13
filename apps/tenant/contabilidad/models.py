@@ -838,3 +838,271 @@ class TarifaImpuesto(SintelTenantBaseModel):
         if self.fecha_fin and fecha > self.fecha_fin:
             return False
         return True
+
+
+# ============================================================================
+# RETENCIONES - Pull Model desde Facturas/Gastos/etc.
+# ============================================================================
+
+class ConfiguracionRetenciones(SintelTenantBaseModel):
+    """
+    Configuración de retenciones por tercero y naturaleza de transacción.
+
+    WARNING: Pull Model - Cada tercero puede tener diferentes tasas de retención
+    según su perfil fiscal (NIT específico o por defecto del tipo de tercero).
+
+    Estructura:
+    - Si nit_tercero está definido: aplica a ese tercero específico
+    - Si nit_tercero es nulo: aplica como default para tipo_tercero
+
+    Ejemplo:
+    - ConfiguracionRetenciones(tipo_tercero='CLIENTE', nit_tercero='800123456', tipo_retencion='RETEFUENTE', porcentaje=3.5)
+    - ConfiguracionRetenciones(tipo_tercero='CLIENTE', nit_tercero=None, tipo_retencion='RETEFUENTE', porcentaje=0.0)
+    """
+    TIPO_TERCERO_CHOICES = [
+        ('CLIENTE', _('Cliente')),
+        ('PROVEEDOR', _('Proveedor')),
+        ('EMPLEADO', _('Empleado')),
+    ]
+
+    TIPO_RETENCION_CHOICES = [
+        ('RETEFUENTE', _('Retención en la Fuente')),
+        ('RETEICA', _('Retención ICA')),
+        ('RETEIVA', _('Retención IVA')),
+    ]
+
+    NATURALEZA_CHOICES = [
+        ('VENTA', _('Venta (Invoice)')),
+        ('COMPRA', _('Compra (PO)')),
+    ]
+
+    tipo_tercero = models.CharField(
+        max_length=20,
+        choices=TIPO_TERCERO_CHOICES,
+        verbose_name=_('Tipo de Tercero'),
+        help_text=_('Clasificación del tercero (cliente, proveedor, empleado)')
+    )
+    nit_tercero = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        verbose_name=_('NIT del Tercero'),
+        help_text=_('Si está definido, aplica solo a este tercero. Si es nulo, es el default.')
+    )
+    tipo_retencion = models.CharField(
+        max_length=20,
+        choices=TIPO_RETENCION_CHOICES,
+        verbose_name=_('Tipo de Retención'),
+        help_text=_('Tipo de retención a aplicar (Retefuente, ReteICA, ReteIVA)')
+    )
+    porcentaje_por_defecto = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Porcentaje por Defecto'),
+        help_text=_('Porcentaje de retención a aplicar (0.00 para no retener)')
+    )
+    cuenta_retencion = models.ForeignKey(
+        'CuentaContable',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name=_('Cuenta de Retención'),
+        help_text=_('Cuenta contable donde se registra esta retención (ej: Retenciones por Pagar)')
+    )
+    activa = models.BooleanField(
+        default=True,
+        verbose_name=_('Activa'),
+        help_text=_('Si está inactiva, no se aplica en nuevas transacciones')
+    )
+    naturaleza = models.CharField(
+        max_length=20,
+        choices=NATURALEZA_CHOICES,
+        default='VENTA',
+        verbose_name=_('Naturaleza de Transacción'),
+        help_text=_('Contexto de la transacción (venta o compra)')
+    )
+
+    class Meta(SintelTenantBaseModel.Meta):
+        verbose_name = _('Configuración de Retención')
+        verbose_name_plural = _('Configuraciones de Retención')
+        ordering = ['tipo_tercero', 'nit_tercero', 'tipo_retencion']
+        indexes = SintelTenantBaseModel.Meta.indexes + [
+            models.Index(fields=['tipo_tercero', 'nit_tercero', 'tipo_retencion']),
+            models.Index(fields=['activa', 'tipo_retencion']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tipo_tercero', 'nit_tercero', 'tipo_retencion', 'naturaleza'],
+                name='unique_config_retencion',
+                condition=models.Q(activa=True)
+            ),
+        ]
+
+    def __str__(self):
+        tercero = self.nit_tercero or f'Default {self.tipo_tercero}'
+        return f'{self.tipo_retencion} ({tercero}): {self.porcentaje_por_defecto}%'
+
+
+class Retencion(SintelTenantBaseModel):
+    """
+    Registro de retención aplicada a un documento (Factura, NotaCredito, Gasto, etc.).
+
+    WARNING: Pull Model - Las retenciones se registran aquí (en Contabilidad) cuando:
+    1. Un documento es importado (factura XML)
+    2. Un usuario ingresa/edita un documento
+    3. Contabilidad procesa la integración
+
+    Responsabilidades:
+    - Guardar el monto y porcentaje de cada retención
+    - Asociar a documento origen (Factura, Gasto, etc.)
+    - Vincular a AsientoContable cuando se contabiliza
+    - Permitir reversión en notas de crédito
+
+    Integridad:
+    - Cada retención está asociada exactamente a un documento origen
+    - Múltiples retenciones (RETEFUENTE + RETEICA + RETEIVA) pueden existir para el mismo documento
+    """
+    TIPO_RETENCION_CHOICES = [
+        ('RETEFUENTE', _('Retención en la Fuente')),
+        ('RETEICA', _('Retención ICA')),
+        ('RETEIVA', _('Retención IVA')),
+    ]
+
+    # Identificador de retención
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        verbose_name=_('UUID'),
+        help_text=_('Identificador único de la retención')
+    )
+
+    # Tipo de retención
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPO_RETENCION_CHOICES,
+        verbose_name=_('Tipo de Retención'),
+        help_text=_('RETEFUENTE, RETEICA o RETEIVA')
+    )
+
+    # Cálculo
+    porcentaje = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Porcentaje Aplicado'),
+        help_text=_('Porcentaje usado para calcular el monto')
+    )
+    base = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Base de Cálculo'),
+        help_text=_('Base sobre la cual se calculó la retención')
+    )
+    monto = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Monto de Retención'),
+        help_text=_('Monto total retenido')
+    )
+
+    # Documento origen (Pull Model - referencia a documento en otra app)
+    documento_origen_app = models.CharField(
+        max_length=50,
+        verbose_name=_('Aplicación Origen'),
+        help_text=_('Nombre de la app donde se originó (ej: facturas, gastos, inventario)')
+    )
+    documento_origen_modelo = models.CharField(
+        max_length=50,
+        verbose_name=_('Modelo Origen'),
+        help_text=_('Nombre del modelo (ej: Factura, NotaCredito, ItemFactura, DocumentoSoporte)')
+    )
+    documento_origen_id = models.PositiveIntegerField(
+        verbose_name=_('ID del Documento Origen'),
+        help_text=_('ID del documento en la tabla origen')
+    )
+
+    # Vinculación contable
+    asiento_contable = models.ForeignKey(
+        'AsientoContable',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='retenciones',
+        verbose_name=_('Asiento Contable'),
+        help_text=_('Asiento contable donde se registró esta retención')
+    )
+
+    # Configuración aplicada
+    configuracion = models.ForeignKey(
+        'ConfiguracionRetenciones',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_('Configuración Aplicada'),
+        help_text=_('Configuración de retención que se usó para este cálculo')
+    )
+
+    # Metadata
+    aplicada_por_cliente = models.BooleanField(
+        default=False,
+        verbose_name=_('Aplicada por Cliente'),
+        help_text=_('Si True, la retención es requerida por el cliente (VENTA). Si False, es requerida por el proveedor (COMPRA)')
+    )
+    aplicada_por_proveedor = models.BooleanField(
+        default=False,
+        verbose_name=_('Aplicada por Proveedor'),
+        help_text=_('Si True, la retención es requerida por el proveedor (COMPRA). Si False, es requerida por la empresa (VENTA)')
+    )
+    reversada = models.BooleanField(
+        default=False,
+        verbose_name=_('Reversada'),
+        help_text=_('Si True, esta retención fue reversada por nota de crédito')
+    )
+    retencion_reversada_por = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reversales',
+        verbose_name=_('Retención Reversada Por'),
+        help_text=_('Si está reversada, apunta a la retención que la reversa')
+    )
+    fecha_creacion = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Fecha de Creación'),
+        help_text=_('Cuándo se creó el registro de retención')
+    )
+    notas = models.TextField(
+        blank=True,
+        default='',
+        verbose_name=_('Notas'),
+        help_text=_('Notas sobre la retención (auditoría)')
+    )
+
+    class Meta(SintelTenantBaseModel.Meta):
+        verbose_name = _('Retención')
+        verbose_name_plural = _('Retenciones')
+        ordering = ['-fecha_creacion']
+        indexes = SintelTenantBaseModel.Meta.indexes + [
+            models.Index(fields=['documento_origen_app', 'documento_origen_modelo', 'documento_origen_id']),
+            models.Index(fields=['tipo', 'reversada']),
+            models.Index(fields=['asiento_contable']),
+        ]
+
+    def __str__(self):
+        reversada = '(REVERSADA)' if self.reversada else ''
+        doc = f'{self.documento_origen_modelo}#{self.documento_origen_id}'
+        return f'{self.tipo}: ${self.monto} en {doc} {reversada}'
+
+    def calcular_monto(self):
+        """Recalcula el monto basado en porcentaje y base."""
+        self.monto = (self.base * self.porcentaje) / Decimal('100')
+        return self.monto
