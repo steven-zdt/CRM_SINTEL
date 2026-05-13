@@ -1490,30 +1490,47 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
         return Response(context, template_name='tenant/facturas/offcanvas_editar_factura.html')
     
 
-class ItemFacturaViewSet(mixins.RetrieveModelMixin,
+class ItemFacturaViewSet(mixins.ListModelMixin,
+                         mixins.RetrieveModelMixin,
                          mixins.DestroyModelMixin,
                          viewsets.GenericViewSet):
     """
-    Endpoints puntuales para ítems (opcional).
-    
+    Endpoints para ítems de factura.
+
     # WARNING: NOTA: CRUD completo de ítems se recomienda gestionarlo a través de Factura (items embed).
-    Este ViewSet solo expone retrieve y destroy para casos específicos.
-    
+    Este ViewSet expone list, retrieve y destroy para casos específicos.
+
     # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() cuando sea necesario.
+
+    Endpoints disponibles:
+    - GET /api/v1/items-factura/ (lista de ítems con filtro por factura)
+    - GET /api/v1/items-factura/{id}/ (detalle de un ítem)
+    - DELETE /api/v1/items-factura/{id}/ (eliminar un ítem)
     """
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     serializer_class = ItemFacturaSerializer
-    
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['factura_id']
+
     def get_queryset(self):
         """
         QuerySet optimizado - NO usa .all().
+        Filtra por factura si se proporciona el parámetro factura_id o factura.
         """
-        # Para retrieve/destroy, cargar solo campos necesarios
-        return ItemFactura.objects.only(
+        qs = ItemFactura.objects.only(
             "id", "factura_id", "linea_id", "codigo", "descripcion",
             "cantidad", "unidad_medida", "valor_unitario", "porcentaje_iva",
-            "valor_iva", "subtotal", "total", "es_servicio", "orden"
+            "valor_iva", "porcentaje_retefuente", "valor_retefuente",
+            "porcentaje_reteiva", "valor_reteiva", "porcentaje_reteica", "valor_reteica",
+            "subtotal", "total", "es_servicio", "orden"
         )
+
+        # Filtro por factura (soporta 'factura' o 'factura_id' en query params)
+        factura_id = self.request.query_params.get('factura') or self.request.query_params.get('factura_id')
+        if factura_id:
+            qs = qs.filter(factura_id=factura_id)
+
+        return qs.order_by('orden')
 
 
 class NotaCreditoViewSet(mixins.ListModelMixin,
