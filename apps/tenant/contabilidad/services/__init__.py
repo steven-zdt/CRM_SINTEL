@@ -28,6 +28,7 @@ from .selectors import (
 )
 from .crud_service import ContabilidadCRUDService
 from .business_service import ContabilidadBusinessService
+from .retenciones_service import RetencionesService
 
 __all__ = [
     # Selectors
@@ -45,8 +46,9 @@ __all__ = [
     'verificar_periodo_cerrado',
     'calcular_saldos_cuenta',
     'get_tercero_movimiento',
-    
+
     # Services
     'ContabilidadCRUDService',
     'ContabilidadBusinessService',
+    'RetencionesService',
 ]
