@@ -2,7 +2,7 @@
 {# ⚠️ Feature-Sliced: Template modular solo para vista de lectura #}
 {# ⚠️ HTMX: Auto-inicialización del offcanvas #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente" 
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente"
      data-cliente-id="{{ cliente.id }}" aria-labelledby="offcanvas-cliente-label">
   <div class="offcanvas-header border-bottom">
     <h5 class="offcanvas-title" id="offcanvas-cliente-label">
@@ -17,27 +17,27 @@
         <i class="bi bi-card-text me-2"></i>Identificación
       </h6>
       <div class="row g-3">
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Tipo Persona</label>
           <p class="form-control-plaintext">{{ cliente.get_tipo_persona_display }}</p>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Tipo Documento</label>
           <p class="form-control-plaintext">{{ cliente.get_tipo_documento_display }}</p>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Número Documento</label>
           <p class="form-control-plaintext">{{ cliente.numero_documento }}</p>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Razón Social</label>
           <p class="form-control-plaintext">{{ cliente.razon_social }}</p>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Nombre Comercial</label>
           <p class="form-control-plaintext">{{ cliente.nombre_comercial|default:'-' }}</p>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Régimen Tributario</label>
           <p class="form-control-plaintext">{{ cliente.get_regimen_tributario_display }}</p>
         </div>
@@ -50,23 +50,23 @@
         <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
       </h6>
       <div class="row g-3">
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Email</label>
           <p class="form-control-plaintext">{{ cliente.email|default:'-' }}</p>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Teléfono</label>
           <p class="form-control-plaintext">{{ cliente.telefono|default:'-' }}</p>
         </div>
-        <div class="col-12">
-          <label class="form-label fw-bold">Dirección</label>
-          <p class="form-control-plaintext">{{ cliente.direccion|default:'-' }}</p>
-        </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-bold">Ciudad</label>
           <p class="form-control-plaintext">{{ cliente.ciudad|default:'-' }}</p>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-8">
+          <label class="form-label fw-bold">Dirección</label>
+          <p class="form-control-plaintext">{{ cliente.direccion|default:'-' }}</p>
+        </div>
+        <div class="col-md-4">
           <label class="form-label fw-bold">Estado</label>
           <p class="form-control-plaintext">
             {% if cliente.activo %}
@@ -77,6 +77,40 @@
           </p>
         </div>
       </div>
+    </div>
+
+    {# Sección: Retenciones (v3.5.0) #}
+    <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-percent me-2"></i>Retenciones
+        </h6>
+        <div class="row g-3">
+            <div class="col-md-12 mb-2">
+                <label class="form-label fw-bold">Es Agente Retenedor:</label>
+                <span class="ms-2">{% if cliente.es_retenedor %}✅ Sí{% else %}❌ No{% endif %}</span>
+            </div>
+            
+            {% if cliente.es_retenedor %}
+            <div class="col-md-4">
+                <div class="p-2 border rounded-3 bg-light">
+                    <label class="form-label small fw-bold d-block">Retefuente</label>
+                    <span class="small">{% if cliente.aplica_retefuente %}✅ {{ cliente.retefuente_porcentaje }}%{% else %}❌ No aplica{% endif %}</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-2 border rounded-3 bg-light">
+                    <label class="form-label small fw-bold d-block">ReteICA</label>
+                    <span class="small">{% if cliente.aplica_reteica %}✅ {{ cliente.reteica_porcentaje }}%{% else %}❌ No aplica{% endif %}</span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-2 border rounded-3 bg-light">
+                    <label class="form-label small fw-bold d-block">ReteIVA</label>
+                    <span class="small">{% if cliente.aplica_reteiva %}✅ {{ cliente.reteiva_porcentaje }}%{% else %}❌ No aplica{% endif %}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
     </div>
 
     {# Sección: Personas de Contacto (Solo lectura) #}

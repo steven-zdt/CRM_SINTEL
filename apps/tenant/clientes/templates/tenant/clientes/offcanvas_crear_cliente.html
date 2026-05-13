@@ -10,6 +10,7 @@
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
   <div class="offcanvas-body">
+
     {# ⚠️ Contenedor de errores para Error Boundary Pattern #}
     <div id="form-cliente-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     <div id="cliente-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
@@ -21,7 +22,7 @@
           <i class="bi bi-card-text me-2"></i>Identificación
         </h6>
         <div class="row g-3">
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-tipo_persona" class="form-label">Tipo Persona *</label>
             <select class="form-select" id="cliente-tipo_persona" name="tipo_persona" required>
               <option value="">Seleccionar...</option>
@@ -29,7 +30,7 @@
               <option value="JURIDICA">Persona jurídica</option>
             </select>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-tipo_documento" class="form-label">Tipo Documento *</label>
             <select class="form-select" id="cliente-tipo_documento" name="tipo_documento" required>
               <option value="">Seleccionar...</option>
@@ -39,22 +40,22 @@
               <option value="PA">Pasaporte</option>
             </select>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-numero_documento" class="form-label">Número Documento *</label>
             <input type="text" class="form-control" id="cliente-numero_documento" name="numero_documento" 
                    required placeholder="Número de documento" />
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-razon_social" class="form-label">Razón Social *</label>
             <input type="text" class="form-control" id="cliente-razon_social" name="razon_social" 
                    required placeholder="Razón social o nombre completo" />
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-nombre_comercial" class="form-label">Nombre Comercial</label>
             <input type="text" class="form-control" id="cliente-nombre_comercial" name="nombre_comercial" 
                    placeholder="Nombre comercial" />
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-regimen_tributario" class="form-label">Régimen Tributario *</label>
             <select class="form-select" id="cliente-regimen_tributario" name="regimen_tributario" required>
               <option value="">Seleccionar...</option>
@@ -72,30 +73,31 @@
           <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
         </h6>
         <div class="row g-3">
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-email" class="form-label">Email</label>
             <input type="email" class="form-control" id="cliente-email" name="email" 
-                   placeholder="Email de contacto" />
+                   placeholder="correo@ejemplo.com" />
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-telefono" class="form-label">Teléfono</label>
             <input type="text" class="form-control" id="cliente-telefono" name="telefono" 
-                   placeholder="Teléfono" />
+                   placeholder="Número de teléfono" />
           </div>
-          <div class="col-12">
-            <label for="cliente-direccion" class="form-label">Dirección</label>
-            <input type="text" class="form-control" id="cliente-direccion" name="direccion" 
-                   placeholder="Dirección" />
-          </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <label for="cliente-ciudad" class="form-label">Ciudad</label>
             <input type="text" class="form-control" id="cliente-ciudad" name="ciudad" 
                    placeholder="Ciudad" />
           </div>
-          <div class="col-md-6">
-            <div class="form-check mt-4">
+          <div class="col-md-8">
+            <label for="cliente-direccion" class="form-label">Dirección</label>
+            <input type="text" class="form-control" id="cliente-direccion" name="direccion" 
+                   placeholder="Dirección completa" />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label d-block">Estado</label>
+            <div class="form-check form-switch pt-1">
               <input class="form-check-input" type="checkbox" id="cliente-activo" name="activo" checked />
-              <label class="form-check-label" for="cliente-activo">Activo</label>
+              <label class="form-check-label small fw-medium" for="cliente-activo">Activo</label>
             </div>
           </div>
         </div>
@@ -113,6 +115,88 @@
         </div>
         <div id="contenedor-contactos">
           {# Los contactos se agregarán dinámicamente aquí mediante JS #}
+        </div>
+      </div>
+
+      {# Sección: Retenciones (NUEVO v3.5.0) #}
+      <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+            <h6 class="text-primary mb-0">
+                <i class="bi bi-percent me-2"></i>Retenciones
+            </h6>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="cliente-es_retenedor" name="es_retenedor">
+                <label class="form-check-label small fw-medium" for="cliente-es_retenedor">Es Agente Retenedor</label>
+            </div>
+        </div>
+
+        <!-- Contenedor dinámico de retenciones -->
+        <div id="contenedor-retenciones" class="p-3 mt-2 rounded-3 bg-light border d-none">
+            <div class="row g-3">
+                <!-- Retefuente -->
+                <div class="col-md-4">
+                    <div class="p-2 border rounded-3 bg-white h-100">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="cliente-aplica_retefuente" name="aplica_retefuente">
+                            <label class="form-check-label small fw-bold" for="cliente-aplica_retefuente">Retefuente</label>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="number" step="0.01" class="form-control" id="cliente-retefuente_porcentaje" name="retefuente_porcentaje" value="0" placeholder="0.00">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ReteICA -->
+                <div class="col-md-4">
+                    <div class="p-2 border rounded-3 bg-white h-100">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="cliente-aplica_reteica" name="aplica_reteica">
+                            <label class="form-check-label small fw-bold" for="cliente-aplica_reteica">ReteICA</label>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="number" step="0.001" class="form-control" id="cliente-reteica_porcentaje" name="reteica_porcentaje" value="0" placeholder="0.000">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ReteIVA -->
+                <div class="col-md-4">
+                    <div class="p-2 border rounded-3 bg-white h-100">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="cliente-aplica_reteiva" name="aplica_reteiva">
+                            <label class="form-check-label small fw-bold" for="cliente-aplica_reteiva">ReteIVA</label>
+                        </div>
+                        <div class="input-group input-group-sm">
+                            <input type="number" step="0.01" class="form-control" id="cliente-reteiva_porcentaje" name="reteiva_porcentaje" value="0" placeholder="0.00">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+      </div>
+
+      {# Sección: Configuración Contable (NUEVO v3.5.0) #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-journal-check me-2"></i>Configuración Contable
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="cliente-cuenta_contable_search" class="form-label small fw-bold">Cuenta de Cartera (Control) *</label>
+            <div class="position-relative">
+                <input type="text" class="form-control" id="cliente-cuenta_contable_search" 
+                       placeholder="Buscar cuenta nivel 6 (ej: 130505)..." autocomplete="off">
+                <input type="hidden" id="cliente-cuenta_contable_uuid" name="cuenta_contable_uuid">
+                <div id="cliente-cuenta-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050;">
+                    <!-- Sugerencias dinámicas -->
+                </div>
+            </div>
+            <small class="text-muted">Asigne la cuenta contable donde se registrarán las deudas de este cliente.</small>
+          </div>
         </div>
       </div>
 
