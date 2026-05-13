@@ -172,7 +172,7 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para Tabulator (v2.40).
     Alineado con DocumentoSoporte tras unificacion.
-    WARNING: v3.7.1 - Campos UUID opacos para integracion contable (§18 Pull Model).
+    WARNING: v3.7.1 - Campo UUID opaco para integracion contable (§18 Pull Model).
     """
     ds_consecutivo = serializers.IntegerField(source='consecutivo', read_only=True)
     ds_prefijo = serializers.SerializerMethodField()
@@ -184,7 +184,6 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     ds_anulado = serializers.BooleanField(source='anulado', read_only=True)
     ds_numero_documento_proveedor = serializers.CharField(source='numero_documento_proveedor', read_only=True)
     cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, read_only=True)
-    cuenta_contrapartida_uuid = serializers.UUIDField(allow_null=True, read_only=True)
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
 
@@ -217,7 +216,6 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             'ds_anulado',
             'ds_numero_documento_proveedor',
             'cuenta_gasto_uuid',
-            'cuenta_contrapartida_uuid',
         )
         read_only_fields = fields
 
@@ -225,7 +223,8 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
 class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     """
     Serializer completo para evidencia legal y clasificacion operativa (v2.40).
-    WARNING: v3.7.1 - Campos UUID opacos para integracion contable (§18 Pull Model).
+    WARNING: v3.7.1 - Campo UUID opaco para integracion contable (§18 Pull Model).
+    Contrapartida orquestada por app contabilidad.
     """
     resolucion_dian = ResolucionDIANNestedSerializer(read_only=True)
     numero_documento_full = serializers.CharField(source='numero_documento', read_only=True)
@@ -235,7 +234,6 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(read_only=True)
     prefijo = serializers.CharField(source='resolucion_dian.prefijo', read_only=True)
     cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, required=False)
-    cuenta_contrapartida_uuid = serializers.UUIDField(allow_null=True, required=False)
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
 
@@ -270,7 +268,6 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'anulado',
             'fecha_anulacion',
             'cuenta_gasto_uuid',
-            'cuenta_contrapartida_uuid',
             'created_at',
             'updated_at',
         )

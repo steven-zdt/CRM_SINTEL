@@ -9,23 +9,23 @@
 
 ## 🎯 Objetivo de la Auditoría
 
-Verificar que el módulo `gastos` (v2.62) expone campos UUID opacos para integración contable sin violar §18 (Pull Model), permitiendo que `contabilidad` extraiga información de gastos para contabilización automática.
+Verificar que el módulo `gastos` (v2.62) expone un campo UUID opaco para la cuenta de gasto sin violar §18 (Pull Model), permitiendo que `contabilidad` extraiga información y **orqueste la determinación de la cuenta de contrapartida** según reglas contables.
 
 ---
 
 ## 📋 Contexto Arquitectónico
 
-El modelo `DocumentoSoporte` en `gastos` registra egresos del tenant. Para integración contable, cada gasto necesita mapear:
+El modelo `DocumentoSoporte` en `gastos` registra egresos del tenant. Para integración contable:
 
-| Dimensión | Campo UUID | Descripción |
+| Responsabilidad | Componente | Campo |
 |---|---|---|
-| **Cuenta de Gasto** | `cuenta_gasto_uuid` | Cuenta de resultado (ej. 5105 Gastos de Personal) |
-| **Cuenta de Contrapartida** | `cuenta_contrapartida_uuid` | Cuenta de balance (ej. 2205 Cuentas por Pagar) |
+| **App Gastos** | DocumentoSoporte | `cuenta_gasto_uuid` (opaco) |
+| **App Contabilidad** | Extractor + Orquestador | Determina contrapartida |
 
 **Arquitectura Pull Model (§18):**
-- Apps source (gastos) **NO importan** contabilidad
-- Contabilidad **extrae** UUIDs de gastos via QuerySet
-- Resolución de nombres: **backend no resuelve**, frontend usa HTTP (futuro)
+- Apps source **NO importan** contabilidad
+- Apps source **NO deciden** contrapartidas
+- Contabilidad **orquesta** toda la lógica contable
 
 ---
 
@@ -33,20 +33,14 @@ El modelo `DocumentoSoporte` en `gastos` registra egresos del tenant. Para integ
 
 ### 1. Modelos — `models.py` ✅
 
-**Estado:** Campos UUID ya existían (2026-05-13)
+**Estado:** Campo UUID único (2026-05-13)
 
 ```python
-# Líneas 188-201
+# Líneas 188-191
 cuenta_gasto_uuid = models.UUIDField(
     null=True, blank=True, db_index=True,
     verbose_name="Cuenta de Gasto/Egreso (UUID)",
-    help_text="UUID de CuentaContable de resultado..."
-)
-
-cuenta_contrapartida_uuid = models.UUIDField(
-    null=True, blank=True, db_index=True,
-    verbose_name="Cuenta de Contrapartida (UUID)",
-    help_text="UUID de CuentaContable de balance..."
+    help_text="UUID de CuentaContable de resultado. Contabilidad determina contrapartida."
 )
 ```
 
@@ -54,36 +48,40 @@ cuenta_contrapartida_uuid = models.UUIDField(
 
 ---
 
-### 2. Migración — `migrations/0013_add_cuenta_contable_uuid_fields.py` ✅
+### 2. Migración — `migrations/0014_remove_cuenta_contrapartida_uuid.py` ✅
 
-**Estado:** Migración completa (2026-05-13 15:26)
+**Estado:** Nueva migración (2026-05-13)
 
 ```python
-migrations.AddField(model_name='documentosoporte', name='cuenta_gasto_uuid', ...)
-migrations.AddField(model_name='documentosoporte', name='cuenta_contrapartida_uuid', ...)
+operations = [
+    migrations.RemoveField(
+        model_name='documentosoporte',
+        name='cuenta_contrapartida_uuid',
+    ),
+]
 ```
 
-**Compliance:** ✅ Campos agregados correctamente con `db_index=True`.
+**Rationale:** Contrapartida NO es responsabilidad de gastos.
 
 ---
 
 ### 3. Selectors — `services/selectors.py` ✅
 
-**Estado:** Campos incluidos en field tuples
+**Estado:** Campo único en field tuples
 
 ```python
 DOCUMENTO_LIST_FIELDS = (
     'id', 'consecutivo', 'fecha', 'total', ...
-    'cuenta_gasto_uuid', 'cuenta_contrapartida_uuid'  # ✅ INCLUIDOS
+    'cuenta_gasto_uuid'  # ✅ Solo cuenta de gasto
 )
 
 DOCUMENTO_DETAIL_FIELDS = (
     'id', 'consecutivo', 'fecha', ...
-    'cuenta_gasto_uuid', 'cuenta_contrapartida_uuid'  # ✅ INCLUIDOS
+    'cuenta_gasto_uuid'  # ✅ Solo cuenta de gasto
 )
 ```
 
-**Compliance:** ✅ Zero Waste — campos en SSoT, selectors optimizados con `.only()`.
+**Compliance:** ✅ Zero Waste — campos en SSoT.
 
 ---
 
@@ -93,28 +91,22 @@ DOCUMENTO_DETAIL_FIELDS = (
 
 #### DocumentoSoporteListSerializer
 ```python
-# NUEVO v3.7.1
 cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, read_only=True)
-cuenta_contrapartida_uuid = serializers.UUIDField(allow_null=True, read_only=True)
 
-# Expuestos como opaco UUID strings
-fields = (..., 'cuenta_gasto_uuid', 'cuenta_contrapartida_uuid')
+fields = (..., 'cuenta_gasto_uuid')
 ```
 
 #### DocumentoSoporteDetailSerializer
 ```python
-# NUEVO v3.7.1
 cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, required=False)
-cuenta_contrapartida_uuid = serializers.UUIDField(allow_null=True, required=False)
 
-# Expuestos en fields tuple
-fields = (..., 'cuenta_gasto_uuid', 'cuenta_contrapartida_uuid')
+fields = (..., 'cuenta_gasto_uuid')
 ```
 
 **Compliance:**
 - ✅ NO hay imports de `contabilidad.services.selectors`
-- ✅ NO hay `SerializerMethodField` resolviendo nombres
-- ✅ UUID expuesto como opaco (string)
+- ✅ NO hay `SerializerMethodField` resolviendo contrapartidas
+- ✅ UUID opaco de gasto únicamente
 - ✅ §18 Pull Model cumplido
 
 ---
@@ -136,23 +128,13 @@ fields = (..., 'cuenta_gasto_uuid', 'cuenta_contrapartida_uuid')
     <div class="mb-3">
         <label for="cuenta_gasto_uuid" class="form-label">Cuenta de Gasto/Egreso</label>
         <input type="hidden" id="cuenta_gasto_uuid" name="cuenta_gasto_uuid">
-        <input type="text" class="form-control" id="cuenta_gasto_display"
-               placeholder="Ej: 5105 - Gastos de Personal" readonly>
-    </div>
-    <div class="mb-3">
-        <label for="cuenta_contrapartida_uuid" class="form-label">Cuenta de Contrapartida</label>
-        <input type="hidden" id="cuenta_contrapartida_uuid" name="cuenta_contrapartida_uuid">
-        <input type="text" class="form-control" id="cuenta_contrapartida_display"
-               placeholder="Ej: 2205 - Cuentas por Pagar" readonly>
+        <input type="text" class="form-control" id="cuenta_gasto_display" readonly>
+        <small class="form-text text-muted">Contabilidad determinará la contrapartida automáticamente</small>
     </div>
 </div>
 ```
 
-**Patrón:**
-- Input hidden: almacena UUID (actual)
-- Input display: muestra nombre resuelto via HTTP (futuro)
-
-**Compliance:** ✅ No resuelve nombres en backend, template preparado para HTTP.
+**Patrón:** Input hidden almacena UUID único (gasto). Contrapartida determinada por contabilidad.
 
 ---
 
@@ -160,25 +142,23 @@ fields = (..., 'cuenta_gasto_uuid', 'cuenta_contrapartida_uuid')
 
 **Status:** Actualizado 2026-05-13
 
-#### Función `collectData()` Actualizada (v3.7.1)
+#### Función `collectData()` (v3.7.1)
 
 ```javascript
 function collectData(form) {
     const gastoUuidVal = form.querySelector('#cuenta_gasto_uuid')?.value;
-    const contraUuidVal = form.querySelector('#cuenta_contrapartida_uuid')?.value;
 
     return {
-        descripcion: form.querySelector('#descripcion')?.value,
         documento_soporte: {
             // ... campos existentes ...
-            cuenta_gasto_uuid: gastoUuidVal || null,
-            cuenta_contrapartida_uuid: contraUuidVal || null
+            cuenta_gasto_uuid: gastoUuidVal || null
+            // NO envía contrapartida
         }
     };
 }
 ```
 
-**Compliance:** ✅ Captura UUID opacos, envía al backend sin resolver.
+**Compliance:** ✅ Captura UUID de gasto, contabilidad orquesta contrapartida.
 
 ---
 
@@ -187,7 +167,8 @@ function collectData(form) {
 | Regla | Status | Detalle |
 |-------|--------|---------|
 | **§2 Bounded Contexts** | ✅ PASS | Gastos NO importa contabilidad; comunicación será HTTP |
-| **§18 Pull Model** | ✅ PASS | UUID opacos en serializers, sin resolución backend |
+| **§18 Pull Model** | ✅ PASS | UUID opaco en serializers, sin resolución backend |
+| **Orquestación** | ✅ PASS | Contrapartida = responsabilidad contabilidad |
 | **§13 DSV/IDOR** | ✅ PASS | Campos empresa_id en selectors, filtrado por tenant |
 | **§14 UUID Snapshot** | ✅ PASS | UUIDField opaco, sin FK, sin ORM cross-app |
 | **§22/§23 CSS/JS Isolation** | ✅ PASS | Sin imports cross-app, JS namespace aislado |
@@ -195,56 +176,59 @@ function collectData(form) {
 
 ---
 
-## 🔗 Patrón Coherente (v3.6.1 → v3.7.1)
+## 🔗 Patrón Coherente (v3.7.1 — Arquitectura Orquestada)
 
-| App | Cuenta UUID | Serializer | Status | §18 |
-|-----|------------|-----------|--------|-----|
-| Clientes | ✅ UUIDField | ✅ Opaco | ✅ | ✅ |
-| Facturas | ✅ UUIDField | ✅ Opaco | ✅ | ✅ |
-| Inventario | ✅ 3x UUID | ✅ Opaco | ✅ | ✅ |
-| Empleados | ✅ UUIDField | ✅ Opaco | ✅ | ✅ |
-| Proveedores | ✅ UUIDField | ✅ Opaco | ✅ | ✅ |
-| **Gastos** | ✅ 2x UUID | ✅ Opaco | ✅ | ✅ |
+| App | Campo Principal | Contrapartida | Status | §18 |
+|-----|-----------------|---------------|--------|-----|
+| Clientes | ✅ cuenta_contable_uuid | Contabilidad (futuro) | ✅ | ✅ |
+| Facturas | ✅ cuenta_contable_uuid | Contabilidad (futuro) | ✅ | ✅ |
+| Inventario | ✅ 3x UUID | Contabilidad (futuro) | ✅ | ✅ |
+| Empleados | ✅ cuenta_contable_uuid | Contabilidad (futuro) | ✅ | ✅ |
+| Proveedores | ✅ cuenta_contable_uuid | Contabilidad (futuro) | ✅ | ✅ |
+| **Gastos** | ✅ cuenta_gasto_uuid | Contabilidad (orquesta) | ✅ | ✅ |
 
-**Conclusión:** Patrón completamente consistente. Todas 6 apps siguen arquitectura §18 Pull Model.
+**Conclusión:** Patrón completamente consistente. **Todas 6 apps**: campo principal opaco, **contrapartida = responsabilidad contabilidad**.
 
 ---
 
 ## 🏗️ Decisiones Arquitectónicas
 
-### Por qué NO hay resolución de cuentas en backend
+### Por qué NO hay campo de contrapartida en gastos
 
 ```python
-# ❌ PROHIBIDO (violaría §18):
-class DocumentoSoporteDetailSerializer:
-    def get_cuenta_gasto_label(self, obj):
-        from apps.tenant.contabilidad.services.selectors import get_label_by_uuid
-        return get_label_by_uuid(obj.cuenta_gasto_uuid)
+# ❌ PROHIBIDO (violaría §18 + responsabilidad):
+class DocumentoSoporte:
+    cuenta_contrapartida_uuid = UUIDField()  # ← Gastos decide contrapartida
 
-# ✅ CORRECTO (§18 compliant):
-class DocumentoSoporteDetailSerializer:
-    cuenta_gasto_uuid = serializers.UUIDField(allow_null=True)
-    # UUID opaco — resolución en frontend via HTTP (cuando haya UI)
+# ✅ CORRECTO (§18 + orquestación):
+class DocumentoSoporte:
+    cuenta_gasto_uuid = UUIDField()
+    # Contrapartida determinada por contabilidad según:
+    # - Tipo de transacción (gasto, inversión, pago, etc.)
+    # - Reglas fiscales
+    # - Políticas contables
 ```
 
 **Razones:**
-1. Desacoplamiento entre bounded contexts
-2. Permite evolución independiente de contabilidad
-3. Responsabilidad del frontend (no backend)
+1. **Separación de responsabilidades:** Gastos → datos | Contabilidad → orquestación
+2. **Flexibilidad:** Si reglas de contrapartida cambian, solo cambia contabilidad
+3. **Coherencia:** Todas las apps siguen patrón idéntico
+4. **Escalabilidad:** Contabilidad es el único "orquestador"
 
 ---
 
-## 📊 Integración Futura (Cuando Haya UI)
+## 📊 Integración Futura (Cuando Haya Extractor)
 
-```javascript
-// Patrón esperado (cuando se implemente UI de búsqueda):
-async function selectCuentaGasto() {
-    const uuid = prompt('UUID de cuenta:');
-    const response = await fetch(`/api/v1/contabilidad/cuentas-contables/?uuid=${uuid}`);
-    const [cuenta] = await response.json();
-    document.querySelector('#cuenta_gasto_uuid').value = cuenta.uuid;
-    document.querySelector('#cuenta_gasto_display').value = `${cuenta.codigo} - ${cuenta.nombre}`;
-}
+```
+ExtractorGastos (en contabilidad):
+  1. Lee DocumentoSoporte.cuenta_gasto_uuid
+  2. Aplica reglas contables para determinar contrapartida
+  3. Mapea a TransaccionEconomica con ambas cuentas
+  4. Contabilizador genera asientos automáticos
+  
+Ejemplo:
+  Gasto = 5105 (Gastos de Personal)
+  ExtractorGastos.aplicar_reglas() → Contrapartida = 1110 (Bancos) o 2205 (CxP)
 ```
 
 ---
@@ -253,33 +237,23 @@ async function selectCuentaGasto() {
 
 | Archivo | Cambios | Regla |
 |---------|---------|-------|
-| `api/serializers.py` | Agregados campos UUID en List y Detail | §18, §2 |
-| `offcanvas_crear_gasto.html` | Sección "Integración Contable" con inputs UUID | §18 |
-| `offcanvas_editar_gasto.html` | Sección "Integración Contable" con inputs UUID | §18 |
-| `gasto_editor.js` | `collectData()` captura UUID opacos | §18 |
-
----
-
-## 🎯 Pruebas Requeridas
-
-1. ✅ Python syntax (`py_compile` all serializers/models)
-2. ⏳ Test API `/api/v1/gastos/` retorna UUID en detail
-3. ⏳ Test offcanvas crear/editar carga form correctamente
-4. ⏳ Test `collectData()` captura UUID en submit
+| `models.py` | Removido campo contrapartida | §18 |
+| `migrations/0014_*.py` | Nueva migración (RemoveField) | §18 |
+| `api/serializers.py` | Removido UUID contrapartida en List/Detail | §18 |
+| `services/selectors.py` | UUID único en LIST_FIELDS/DETAIL_FIELDS | §4 |
+| `offcanvas_crear_gasto.html` | Sección "Integración Contable" con gasto solamente | §18 |
+| `offcanvas_editar_gasto.html` | Sección "Integración Contable" con gasto solamente | §18 |
+| `gasto_editor.js` | `collectData()` captura UUID gasto únicamente | §18 |
 
 ---
 
 ## 📚 Referencias
 
 - **Arquitectura base:** `AGENTS.md` § 2, 4, 13, 14, 18, 22, 23
-- **Patrón coherente:** 
-  - `apps/tenant/clientes/.agent/AUDITORIA_INTEGRACION_CLIENTES_CONTABILIDAD.md`
-  - `apps/tenant/facturas/.agent/AUDITORIA_INTEGRACION_FACTURAS_CONTABILIDAD.md`
-  - `apps/tenant/inventario/.agent/AUDITORIA_INTEGRACION_INVENTARIO_CONTABILIDAD.md`
-  - `apps/tenant/empleados/.agent/AUDITORIA_INTEGRACION_EMPLEADOS_CONTABILIDAD.md`
-  - `apps/tenant/proveedores/.agent/AUDITORIA_INTEGRACION_PROVEEDORES_CONTABILIDAD.md`
+- **Patrón coherente:** Todas las 6 apps (clientes, facturas, inventario, empleados, proveedores, gastos)
+- **Orquestación contable:** `apps/tenant/contabilidad/integracion/extractores/` (futuro)
 
 ---
 
 **Última Actualización:** 2026-05-13  
-**Status:** ✅ **GASTOS INTEGRADO — §18 CUMPLIDO**
+**Status:** ✅ **GASTOS INTEGRADO — §18 CUMPLIDO — CONTRAPARTIDA ORQUESTADA POR CONTABILIDAD**

@@ -9,7 +9,7 @@ WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 from django.db.models import Q, Sum, Count
 from django.utils import timezone
 
-from apps.tenant.gastos.models import Gasto, ResolucionDIAN, DocumentoSoporte
+from apps.tenant.gastos.models import ResolucionDIAN, DocumentoSoporte
 
 
 # ==============================================================================
@@ -17,10 +17,7 @@ from apps.tenant.gastos.models import Gasto, ResolucionDIAN, DocumentoSoporte
 # ==============================================================================
 
 # Campos estrictamente necesarios para LISTAS (Tabulator)
-GASTO_LIST_FIELDS = (
-    'id', 'periodo', 'centro_costo', 'categoria_contable',
-    'empresa_id', 'created_at'
-)
+# No GASTO_LIST_FIELDS needed, unified in DOCUMENTO
 
 RESOLUCION_LIST_FIELDS = (
     'id', 'numero_resolucion', 'prefijo', 'vigente',
@@ -29,15 +26,22 @@ RESOLUCION_LIST_FIELDS = (
 )
 
 DOCUMENTO_LIST_FIELDS = (
-    'id', 'consecutivo', 'prefijo', 'fecha', 'total',
-    'anulado', 'empresa_id'
+    'id', 'consecutivo',
+    'fecha', 'total', 'categoria_contable', 'descripcion',
+    'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
+    'cuenta_gasto_uuid'
 )
 
-# Campos completos para DETALLE (formularios de edición)
-GASTO_DETAIL_FIELDS = (
-    'id', 'periodo', 'centro_costo', 'categoria_contable',
-    'descripcion', 'observaciones', 'codigo_contable',
-    'empresa_id', 'created_at', 'updated_at'
+# Campos completos para DETALLE (formularios de edicion)
+DOCUMENTO_DETAIL_FIELDS = (
+    'id', 'consecutivo', 'fecha', 'total', 'subtotal',
+    'categoria_contable', 'descripcion', 'observaciones',
+    'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
+    'retefuente_porcentaje', 'retefuente',
+    'reteica_porcentaje', 'reteica',
+    'cuenta_gasto_uuid',
+    'resolucion_dian_id', 'proveedor_id',
+    'created_at', 'updated_at'
 )
 
 RESOLUCION_DETAIL_FIELDS = (
@@ -52,45 +56,107 @@ RESOLUCION_DETAIL_FIELDS = (
 # SELECTOR CLASSES - Organizadas por modelo
 # ==============================================================================
 
-class GastoSelector:
-    """Read-only selectors para modelo Gasto."""
+# GastoSelector removed (Merged into DocumentoSelector)
+
+
+class ResolucionSelector:
+    """Read-only selectors para modelo ResolucionDIAN."""
 
     @staticmethod
-    def get_list(empresa_id: int, search: str = None):
-        """
-        QuerySet optimizado para LISTAR Gastos.
-        Incluye related DocumentoSoporte para mostrar consecutivo.
-        """
-        qs = Gasto.objects.filter(empresa_id=empresa_id).select_related(
-            'documento_soporte', 'empresa'
-        ).only(
-            *GASTO_LIST_FIELDS,
-            'documento_soporte__consecutivo',
-            'documento_soporte__prefijo',
-            'documento_soporte__vendedor_nombre',
-            'documento_soporte__fecha',
-            'documento_soporte__total',
-            'documento_soporte__anulado'
-        )
+    def get_list(empresa_id: int, search: str = None, solo_vigentes: bool = False):
+        """QuerySet optimizado para LISTAR Resoluciones DIAN."""
+        qs = ResolucionDIAN.objects.filter(
+            empresa_id=empresa_id
+        ).annotate(
+            conteo_documentos=Count('documentos_soporte')
+        ).only(*RESOLUCION_LIST_FIELDS)
+
+        if solo_vigentes:
+            qs = qs.filter(vigente=True)
 
         if search:
             qs = qs.filter(
-                Q(periodo__icontains=search) |
-                Q(centro_costo__icontains=search) |
-                Q(categoria_contable__icontains=search) |
-                Q(documento_soporte__vendedor_nombre__icontains=search)
+                Q(numero_resolucion__icontains=search) |
+                Q(prefijo__icontains=search)
             )
 
-        return qs.order_by('-created_at')
+        return qs.order_by('-vigente', '-fecha_resolucion')
 
     @staticmethod
-    def get_detail(empresa_id: int, gasto_id: int):
-        """QuerySet optimizado para DETALLE de Gasto."""
-        return Gasto.objects.filter(
-            empresa_id=empresa_id, pk=gasto_id
+    def get_detail(empresa_id: int, resolucion_id: int = None):
+        """QuerySet optimizado para DETALLE de ResolucionDIAN."""
+        qs = ResolucionDIAN.objects.filter(
+            empresa_id=empresa_id
+        ).only(*RESOLUCION_DETAIL_FIELDS)
+
+        if resolucion_id:
+            return qs.filter(pk=resolucion_id)
+        return qs
+
+    @staticmethod
+    def get_vigente(empresa_id: int):
+        """
+        Obtiene la resolucion vigente para una empresa (Optimizado con Cache).
+        """
+        from django.core.cache import cache
+        cache_key = f"resolucion_vigente_{empresa_id}"
+        resolucion = cache.get(cache_key)
+        
+        if resolucion is None:
+            resolucion = ResolucionDIAN.objects.filter(
+                empresa_id=empresa_id,
+                vigente=True
+            ).first()
+            if resolucion:
+                # Cachear por 1 hora
+                cache.set(cache_key, resolucion, timeout=3600)
+        
+        return resolucion
+
+
+class DocumentoSelector:
+    """Read-only selectors para modelo DocumentoSoporte."""
+
+    @staticmethod
+    def get_list(empresa_id: int, resolucion_id: int = None, search: str = None):
+        """QuerySet optimizado para LISTAR Documentos Soporte."""
+        qs = DocumentoSoporte.objects.filter(
+            empresa_id=empresa_id
         ).select_related(
-            'documento_soporte', 'empresa', 'resolucion_dian'
-        ).only(*GASTO_DETAIL_FIELDS).get()
+            'resolucion_dian',
+            'proveedor'
+        ).only(
+            *DOCUMENTO_LIST_FIELDS,
+            'resolucion_dian_id',
+            'resolucion_dian__prefijo',
+            'resolucion_dian__consecutivo',
+            'proveedor__razon_social',
+            'proveedor_id'
+        )
+
+        if resolucion_id:
+            qs = qs.filter(resolucion_dian_id=resolucion_id)
+
+        if search:
+            qs = qs.filter(
+                Q(descripcion__icontains=search) |
+                Q(numero_documento_proveedor__icontains=search) |
+                Q(proveedor__razon_social__icontains=search)
+            )
+
+        # Incluir TODOS los documentos (anulados y no anulados) para mantener consecutividad
+        return qs.order_by('-fecha', '-consecutivo')
+
+    @staticmethod
+    def get_detail(empresa_id: int, documento_id: int):
+        """QuerySet optimizado para DETALLE de DocumentoSoporte."""
+        return DocumentoSoporte.objects.filter(
+            empresa_id=empresa_id, pk=documento_id
+        ).select_related(
+            'resolucion_dian',
+            'proveedor',
+            'usuario_anulacion'
+        )
 
     @staticmethod
     def get_summary(empresa_id: int):
@@ -119,85 +185,12 @@ class GastoSelector:
         }
 
 
-class ResolucionSelector:
-    """Read-only selectors para modelo ResolucionDIAN."""
-
-    @staticmethod
-    def get_list(empresa_id: int, search: str = None, solo_vigentes: bool = False):
-        """QuerySet optimizado para LISTAR Resoluciones DIAN."""
-        qs = ResolucionDIAN.objects.filter(
-            empresa_id=empresa_id
-        ).only(*RESOLUCION_LIST_FIELDS)
-
-        if solo_vigentes:
-            qs = qs.filter(vigente=True)
-
-        if search:
-            qs = qs.filter(
-                Q(numero_resolucion__icontains=search) |
-                Q(prefijo__icontains=search)
-            )
-
-        return qs.order_by('-vigente', '-fecha_resolucion')
-
-    @staticmethod
-    def get_detail(empresa_id: int, resolucion_id: int):
-        """QuerySet optimizado para DETALLE de ResolucionDIAN."""
-        return ResolucionDIAN.objects.filter(
-            empresa_id=empresa_id, pk=resolucion_id
-        ).only(*RESOLUCION_DETAIL_FIELDS).get()
-
-    @staticmethod
-    def get_vigente(empresa_id: int):
-        """Obtiene la resolución vigente para una empresa."""
-        return ResolucionDIAN.objects.filter(
-            empresa_id=empresa_id,
-            vigente=True
-        ).first()
-
-
-class DocumentoSelector:
-    """Read-only selectors para modelo DocumentoSoporte."""
-
-    @staticmethod
-    def get_list(empresa_id: int, resolucion_id: int = None, search: str = None):
-        """QuerySet optimizado para LISTAR Documentos Soporte."""
-        qs = DocumentoSoporte.objects.filter(
-            empresa_id=empresa_id
-        ).select_related('resolucion_dian').only(
-            *DOCUMENTO_LIST_FIELDS,
-            'resolucion_dian__numero_resolucion',
-            'resolucion_dian__prefijo'
-        )
-
-        if resolucion_id:
-            qs = qs.filter(resolucion_dian_id=resolucion_id)
-
-        if search:
-            qs = qs.filter(
-                Q(consecutivo__icontains=search) |
-                Q(vendedor_nombre__icontains=search)
-            )
-
-        # Incluir TODOS los documentos (anulados y no anulados) para mantener consecutividad
-        return qs.order_by('-consecutivo')
-
-    @staticmethod
-    def get_detail(empresa_id: int, documento_id: int):
-        """QuerySet optimizado para DETALLE de DocumentoSoporte."""
-        return DocumentoSoporte.objects.filter(
-            empresa_id=empresa_id, pk=documento_id
-        ).select_related('resolucion_dian').get()
-
-
 # Compatibilidad legacy - tuplas de campos por modelo
 LIST_FIELDS = {
-    'gasto': GASTO_LIST_FIELDS,
-    'resolucion': RESOLUCION_LIST_FIELDS,
     'documento': DOCUMENTO_LIST_FIELDS,
+    'resolucion': RESOLUCION_LIST_FIELDS,
 }
 
 DETAIL_FIELDS = {
-    'gasto': GASTO_DETAIL_FIELDS,
     'resolucion': RESOLUCION_DETAIL_FIELDS,
 }
