@@ -507,18 +507,13 @@
                 // Pequeño delay para asegurar que el DOM esté completamente renderizado
                 setTimeout(() => {
                     // ⚠️ Validación temprana: Solo inicializar si existe el formulario de edición
-                    const formEdicion = d.querySelector('#form-factura');
-                    const formSubida = d.querySelector('#form-upload-factura');
-
-                    if (formEdicion) {
+                    const form = d.querySelector('#form-factura');
+                    if (form) {
                         // Solo inicializar si estamos en modo edición (formulario existe)
                         initEditorEvents();
                         actualizarTotalesEnDOM();
-                    } else if (formSubida) {
-                        // Modo "Subir" - inicializar solo el buscador de cuentas contables
-                        initCuentaContableSearch();
                     }
-                    // Si no hay ningún formulario, es modo "Lectura" - no hacer nada
+                    // Modo "Subir" (form-upload-factura) o "Lectura": no requieren inicialización
                 }, 50);
             }
         });
