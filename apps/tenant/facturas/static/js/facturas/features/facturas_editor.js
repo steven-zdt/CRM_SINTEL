@@ -465,28 +465,38 @@
     }
 
     /**
-     * [v3.7.0] Inicializar buscador de Cliente/Proveedor para extraer retenciones
+     * [v3.7.1] Inicializar buscador de Cliente para extraer retenciones (VENTA).
+     * Para COMPRA, las retenciones están en el XML — no hay búsqueda.
      */
     function initClienteProveedorSearch() {
         const searchInput = d.querySelector('#factura-cliente-proveedor-search');
         const suggestions = d.querySelector('#factura-cliente-proveedor-suggestions');
         const btnLimpiar = d.querySelector('#btn-limpiar-cliente-proveedor');
         const naturalezaSelect = d.querySelector('#factura-naturaleza');
+        const sectionBuscar = d.querySelector('#section-buscar-cliente');
+        const sectionInfoCompra = d.querySelector('#section-info-compra');
 
-        if (!searchInput || !suggestions) return;
+        if (!searchInput || !suggestions || !naturalezaSelect) return;
 
         let debounceTimer;
 
-        // Actualizar etiqueta según naturaleza
-        function actualizarEtiqueta() {
+        // Sincronizar UI según naturaleza
+        function actualizarVisibilidad() {
             const naturaleza = naturalezaSelect.value;
-            const etiquetaEls = d.querySelectorAll('#label-cliente-proveedor, #label-cliente-proveedor-2');
-            const tipo = naturaleza === 'VENTA' ? 'Cliente' : 'Proveedor';
-            etiquetaEls.forEach(el => el.textContent = tipo.toLowerCase());
+            const esVenta = naturaleza === 'VENTA';
+
+            // Mostrar búsqueda solo para VENTA
+            if (esVenta) {
+                sectionBuscar.classList.remove('d-none');
+                sectionInfoCompra.classList.add('d-none');
+            } else {
+                sectionBuscar.classList.add('d-none');
+                sectionInfoCompra.classList.remove('d-none');
+            }
         }
 
-        naturalezaSelect.addEventListener('change', actualizarEtiqueta);
-        actualizarEtiqueta(); // Inicializar
+        naturalezaSelect.addEventListener('change', actualizarVisibilidad);
+        actualizarVisibilidad(); // Inicializar
 
         searchInput.addEventListener('input', () => {
             const query = searchInput.value.trim();
