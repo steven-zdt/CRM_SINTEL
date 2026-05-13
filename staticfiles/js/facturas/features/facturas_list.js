@@ -173,13 +173,22 @@
             },
             {
                 title: "Estado",
-                field: "estado",
+                field: "dian_validation_desc",
                 formatter: function(cell) {
                     const rowData = cell.getRow().getData();
+                    // Mostrar dian_validation_desc si está disponible (estado DIAN desde XML)
+                    // Si no, mostrar estado de la base de datos
+                    const estadoDian = cell.getValue() || rowData.estado;
                     const estadoPago = determinarEstadoPago(rowData);
+
+                    // Si hay descripción DIAN, mostrarla
+                    if (cell.getValue()) {
+                        return `<span class="badge bg-info">${cell.getValue()}</span>`;
+                    }
+                    // Si no, mostrar estado de base de datos
                     return `<span class="badge ${estadoPago.clase}">${estadoPago.texto}</span>`;
                 },
-                width: 120
+                width: 200
             },
             {
                 title: "Estado de Pago",

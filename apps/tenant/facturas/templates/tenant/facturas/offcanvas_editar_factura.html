@@ -445,3 +445,7 @@
     </form>
   </div>
 </div>
+
+{# v3.7.1: Cargar scripts del editor después del DOM #}
+{% load static %}
+<script src="{% static 'js/facturas/features/facturas_editor.js' %}"></script>

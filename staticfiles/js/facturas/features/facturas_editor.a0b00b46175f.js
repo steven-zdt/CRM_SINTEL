@@ -314,6 +314,9 @@
         // [v3.7.0] Buscador de Cuentas Contables
         initCuentaContableSearch();
 
+        // [v3.7.0] Buscador de Cliente/Proveedor para extraer retenciones
+        initClienteProveedorSearch();
+
         // ⚠️ Listener para botón agregar ítem
         const btnAgregarItem = d.querySelector('#btn-agregar-item');
         if (btnAgregarItem) {
@@ -459,6 +462,160 @@
                 console.warn('[facturas.editor:cuenta_search] No se pudo pre-cargar cuenta:', err);
             });
         }
+    }
+
+    /**
+     * [v3.7.1] Inicializar buscador de Cliente para extraer retenciones (VENTA).
+     * Para COMPRA, las retenciones están en el XML — no hay búsqueda.
+     */
+    function initClienteProveedorSearch() {
+        const searchInput = d.querySelector('#factura-cliente-proveedor-search');
+        const suggestions = d.querySelector('#factura-cliente-proveedor-suggestions');
+        const btnLimpiar = d.querySelector('#btn-limpiar-cliente-proveedor');
+        const naturalezaSelect = d.querySelector('#factura-naturaleza');
+        const sectionBuscar = d.querySelector('#section-buscar-cliente');
+        const sectionInfoCompra = d.querySelector('#section-info-compra');
+
+        if (!searchInput || !suggestions || !naturalezaSelect) return;
+
+        let debounceTimer;
+
+        // Sincronizar UI según naturaleza
+        function actualizarVisibilidad() {
+            const naturaleza = naturalezaSelect.value;
+            const esVenta = naturaleza === 'VENTA';
+
+            // Mostrar búsqueda solo para VENTA
+            if (esVenta) {
+                sectionBuscar.classList.remove('d-none');
+                sectionInfoCompra.classList.add('d-none');
+            } else {
+                sectionBuscar.classList.add('d-none');
+                sectionInfoCompra.classList.remove('d-none');
+            }
+        }
+
+        naturalezaSelect.addEventListener('change', actualizarVisibilidad);
+        actualizarVisibilidad(); // Inicializar
+
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.trim();
+            clearTimeout(debounceTimer);
+
+            if (query.length < 2) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+
+            debounceTimer = setTimeout(async () => {
+                const naturaleza = naturalezaSelect.value || 'VENTA';
+                // TODO: Buscar cliente/proveedor por NIT o razón social
+                // Por ahora, solo mostrar un placeholder
+                renderSuggestionsClienteProveedor([]);
+            }, 300);
+        });
+
+        function renderSuggestionsClienteProveedor(data) {
+            suggestions.innerHTML = '';
+            if (!data || !data.length) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+
+            data.forEach(item => {
+                const btnItem = d.createElement('button');
+                btnItem.type = 'button';
+                btnItem.className = 'list-group-item list-group-item-action small py-2';
+                btnItem.innerHTML = `<div><span class="fw-bold text-primary">${item.nit}</span> - ${item.razon_social}</div>`;
+
+                btnItem.addEventListener('click', async () => {
+                    searchInput.value = `${item.nit} - ${item.razon_social}`;
+                    suggestions.classList.add('d-none');
+
+                    // Cargar retenciones
+                    await cargarRetenciones(item.nit);
+
+                    // Feedback visual
+                    searchInput.classList.add('is-valid');
+                    setTimeout(() => searchInput.classList.remove('is-valid'), 2000);
+                });
+                suggestions.appendChild(btnItem);
+            });
+            suggestions.classList.remove('d-none');
+        }
+
+        async function cargarRetenciones(nit) {
+            const naturaleza = naturalezaSelect.value || 'VENTA';
+
+            // Para COMPRA, las retenciones ya están en el XML — no consultar Proveedores
+            if (naturaleza === 'COMPRA') {
+                d.querySelector('#factura-retefuente-porcentaje').value = '0.00';
+                d.querySelector('#factura-reteica-porcentaje').value = '0.00';
+                d.querySelector('#factura-reteiva-porcentaje').value = '0.00';
+                d.querySelector('#helper-retefuente').textContent = '';
+                d.querySelector('#helper-reteica').textContent = '';
+                d.querySelector('#helper-reteiva').textContent = '';
+                return;
+            }
+
+            // VENTA: extraer desde Clientes
+            try {
+                const response = await fetch(
+                    `/api/v1/facturas/obtener-retenciones/?nit=${encodeURIComponent(nit)}&naturaleza=${naturaleza}`,
+                    { headers: { 'Content-Type': 'application/json' } }
+                );
+
+                if (!response.ok) {
+                    console.warn('[facturas.editor:retenciones] Error obteniendo retenciones');
+                    return;
+                }
+
+                const data = await response.json();
+
+                // Cargar porcentajes en campos read-only
+                d.querySelector('#factura-retefuente-porcentaje').value = data.retefuente_porcentaje || '0.00';
+                d.querySelector('#factura-reteica-porcentaje').value = data.reteica_porcentaje || '0.00';
+                d.querySelector('#factura-reteiva-porcentaje').value = data.reteiva_porcentaje || '0.00';
+
+                // Mostrar helpers con fórmula de cálculo
+                if (data.aplica_retefuente) {
+                    d.querySelector('#helper-retefuente').textContent =
+                        `= Subtotal × ${data.retefuente_porcentaje}%`;
+                }
+                if (data.aplica_reteica) {
+                    d.querySelector('#helper-reteica').textContent =
+                        `= Subtotal × ${data.reteica_porcentaje}%`;
+                }
+                if (data.aplica_reteiva) {
+                    d.querySelector('#helper-reteiva').textContent =
+                        `= Subtotal × ${data.reteiva_porcentaje}%`;
+                }
+
+            } catch (err) {
+                console.warn('[facturas.editor:retenciones] Error:', err);
+            }
+        }
+
+        // Botón limpiar
+        if (btnLimpiar) {
+            btnLimpiar.addEventListener('click', () => {
+                searchInput.value = '';
+                suggestions.classList.add('d-none');
+                d.querySelector('#factura-retefuente-porcentaje').value = '';
+                d.querySelector('#factura-reteica-porcentaje').value = '';
+                d.querySelector('#factura-reteiva-porcentaje').value = '';
+                d.querySelector('#helper-retefuente').textContent = '';
+                d.querySelector('#helper-reteica').textContent = '';
+                d.querySelector('#helper-reteiva').textContent = '';
+            });
+        }
+
+        // Cerrar sugerencias al hacer click fuera
+        d.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
     }
 
     // Inicialización principal

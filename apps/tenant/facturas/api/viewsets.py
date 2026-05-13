@@ -1436,9 +1436,12 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
                     ).only(
                         'id', 'numero', 'prefijo', 'consecutivo', 'tipo', 'estado', 'naturaleza',
                         'fecha_emision', 'fecha_vencimiento',
-                        'emisor_nit', 'emisor_razon_social', 'emisor_direccion', 'emisor_email',
-                        'receptor_nit', 'receptor_razon_social', 'receptor_direccion', 'receptor_email',
-                        'moneda', 'subtotal', 'impuestos', 'total',
+                        'emisor_nit', 'emisor_razon_social', 'emisor_direccion', 'emisor_email', 'emisor_telefono',
+                        'receptor_nit', 'receptor_razon_social', 'receptor_direccion', 'receptor_email', 'receptor_telefono',
+                        'moneda', 'categoria', 'forma_pago', 'medio_pago_codigo', 'payment_due_date',
+                        'subtotal', 'impuestos', 'total',
+                        'retefuente', 'reteica', 'reteiva',
+                        'cuenta_contable_uuid',
                         'cufe', 'qr_url',
                         'anexos__pdf_file', 'anexos__ubl_xml', 'anexos__application_response_xml',
                     ).first()
