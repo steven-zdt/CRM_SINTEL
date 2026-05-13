@@ -1,11 +1,11 @@
-{# offcanvas_crear_gasto.html - Offcanvas para CREAR gasto v2.62 #}
-{# ⚠️ Feature-Sliced: Template modular solo para creación #}
+{# offcanvas_editar_gasto.html - Offcanvas para EDITAR gasto v2.62 #}
+{# ⚠️ Feature-Sliced: Template modular solo para edición #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-gasto-crear" 
-     aria-labelledby="offcanvas-gasto-crear-label">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-gasto-editar" 
+     data-instance-id="{{ instance.id }}" aria-labelledby="offcanvas-gasto-label">
     <div class="offcanvas-header border-bottom">
-        <h5 class="offcanvas-title" id="offcanvas-gasto-crear-label">
-            <i class="bi bi-plus-circle me-2"></i>Nuevo Gasto
+        <h5 class="offcanvas-title" id="offcanvas-gasto-label">
+            <i class="bi bi-pencil-square me-2"></i>Editar Gasto
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
     </div>
@@ -15,7 +15,7 @@
         <div id="form-gasto-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
         <div id="gasto-feedback" class="alert d-none" role="alert"></div>
 
-        <form id="gasto-form" data-mode="create">
+        <form id="gasto-form" data-mode="edit" data-instance-id="{{ instance.id }}">
             {% csrf_token %}
             
             {# Sección: Origen y Resolución #}
@@ -26,18 +26,21 @@
                 <div class="row g-3">
                     <div class="col-12">
                         <label for="resolucion" class="form-label">Resolución DIAN *</label>
-                        <select class="form-select" id="resolucion" name="resolucion" required data-value="{{ resolucion_activa.id|default:'' }}">
+                        <select class="form-select" id="resolucion" name="resolucion" required 
+                                data-selected="{{ instance.resolucion.id }}">
                             <option value="">Cargando...</option>
                         </select>
                     </div>
                     <div class="col-md-6">
                         <label for="fecha" class="form-label">Fecha Emisión *</label>
-                        <input type="date" class="form-control" id="fecha" name="fecha" required>
+                        <input type="date" class="form-control" id="fecha" name="fecha" 
+                               value="{{ instance.fecha|date:'Y-m-d' }}" required>
                     </div>
                     <div class="col-md-6">
                         <label for="numero_documento_proveedor" class="form-label">Doc. Soporte Ext. *</label>
                         <input type="text" class="form-control" id="numero_documento_proveedor" 
-                               name="numero_documento_proveedor" placeholder="Ej: FAC-123" required>
+                               name="numero_documento_proveedor" value="{{ instance.numero_documento_proveedor }}" 
+                               placeholder="Ej: FAC-123" required>
                     </div>
                 </div>
             </div>
@@ -49,7 +52,8 @@
                 </h6>
                 <div class="col-12 mb-3">
                     <label for="proveedor_uuid" class="form-label">Proveedor *</label>
-                    <select class="form-select" id="proveedor_uuid" name="proveedor_uuid" required>
+                    <select class="form-select" id="proveedor_uuid" name="proveedor_uuid" required
+                            data-selected="{{ instance.proveedor.id }}">
                         <option value="">Seleccione...</option>
                     </select>
                 </div>
@@ -57,15 +61,15 @@
                 <div class="row bg-light p-3 mx-0 rounded border g-2 small">
                     <div class="col-md-6">
                         <span class="text-muted d-block">NIT/Documento</span>
-                        <strong id="vendedor_nit_display">N/A</strong>
+                        <strong id="vendedor_nit_display">{{ instance.proveedor.numero_documento }}</strong>
                     </div>
                     <div class="col-md-6">
                         <span class="text-muted d-block">Teléfono</span>
-                        <strong id="vendedor_telefono_display">N/A</strong>
+                        <strong id="vendedor_telefono_display">{{ instance.proveedor.telefono_contacto|default:'N/A' }}</strong>
                     </div>
                     <div class="col-12 mt-2">
                         <span class="text-muted d-block">Dirección</span>
-                        <strong id="vendedor_direccion_display">Seleccione un proveedor</strong>
+                        <strong id="vendedor_direccion_display">{{ instance.proveedor.direccion|default:'N/A' }}</strong>
                     </div>
                 </div>
             </div>
@@ -81,34 +85,34 @@
                         <div class="input-group">
                             <span class="input-group-text">$</span>
                             <input type="number" class="form-control" id="subtotal" name="subtotal" 
-                                   step="0.01" min="0.01" required>
+                                   value="{{ instance.subtotal }}" step="0.01" min="0.01" required>
                         </div>
                     </div>
                     <div class="col-md-6">
                         <label for="retefuente_porcentaje" class="form-label">ReteFuente</label>
                         <select class="form-select" id="retefuente_porcentaje" name="retefuente_porcentaje">
-                            <option value="0.00">0%</option>
-                            <option value="0.04">4%</option>
-                            <option value="0.06">6%</option>
-                            <option value="0.10">10%</option>
-                            <option value="0.11">11%</option>
+                            <option value="0.00" {% if instance.retefuente_porcentaje == 0 %}selected{% endif %}>0%</option>
+                            <option value="0.04" {% if instance.retefuente_porcentaje == 0.04 %}selected{% endif %}>4%</option>
+                            <option value="0.06" {% if instance.retefuente_porcentaje == 0.06 %}selected{% endif %}>6%</option>
+                            <option value="0.10" {% if instance.retefuente_porcentaje == 0.10 %}selected{% endif %}>10%</option>
+                            <option value="0.11" {% if instance.retefuente_porcentaje == 0.11 %}selected{% endif %}>11%</option>
                         </select>
                     </div>
                     <div class="col-md-6">
                         <label for="reteica_porcentaje" class="form-label">ReteICA</label>
                         <select class="form-select" id="reteica_porcentaje" name="reteica_porcentaje">
-                            <option value="0.00">0%</option>
-                            <option value="0.0069">0.69%</option>
-                            <option value="0.00966">0.966%</option>
-                            <option value="0.01104">1.104%</option>
+                            <option value="0.00" {% if instance.reteica_porcentaje == 0 %}selected{% endif %}>0%</option>
+                            <option value="0.0069" {% if instance.reteica_porcentaje == 0.0069 %}selected{% endif %}>0.69%</option>
+                            <option value="0.00966" {% if instance.reteica_porcentaje == 0.00966 %}selected{% endif %}>0.966%</option>
+                            <option value="0.01104" {% if instance.reteica_porcentaje == 0.01104 %}selected{% endif %}>1.104%</option>
                         </select>
                     </div>
                     <div class="col-12">
                         <div class="card bg-primary text-white border-0">
                             <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
-                                <span>Total Neto Estimado:</span>
-                                <h4 class="mb-0" id="total_display">$0.00</h4>
-                                <input type="hidden" id="total" name="total" value="0">
+                                <span>Total Neto:</span>
+                                <h4 class="mb-0" id="total_display">${{ instance.total }}</h4>
+                                <input type="hidden" id="total" name="total" value="{{ instance.total }}">
                             </div>
                         </div>
                         <div id="calculo-preview" class="form-text mt-1 text-end small"></div>
@@ -124,12 +128,12 @@
                 <div class="mb-3">
                     <label for="descripcion" class="form-label">Descripción del Gasto</label>
                     <textarea class="form-control" id="descripcion" name="descripcion"
-                              rows="2" placeholder="Breve descripción del servicio o producto"></textarea>
+                              rows="2" placeholder="Breve descripción del servicio o producto">{{ instance.descripcion|default:'' }}</textarea>
                 </div>
                 <div class="mb-3">
                     <label for="observaciones" class="form-label">Observaciones Internas</label>
                     <textarea class="form-control" id="observaciones" name="observaciones"
-                              rows="2" placeholder="Notas adicionales para contabilidad"></textarea>
+                              rows="2" placeholder="Notas adicionales para contabilidad">{{ instance.observaciones|default:'' }}</textarea>
                 </div>
             </div>
 
@@ -140,14 +144,16 @@
                 </h6>
                 <div class="mb-3">
                     <label for="cuenta_gasto_uuid" class="form-label">Cuenta de Gasto/Egreso</label>
-                    <input type="hidden" id="cuenta_gasto_uuid" name="cuenta_gasto_uuid">
+                    <input type="hidden" id="cuenta_gasto_uuid" name="cuenta_gasto_uuid"
+                           value="{{ instance.cuenta_gasto_uuid|default:'' }}">
                     <input type="text" class="form-control" id="cuenta_gasto_display"
                            placeholder="Ej: 5105 - Gastos de Personal" readonly>
                     <small class="form-text text-muted d-block mt-1">Búsqueda de cuenta contable para gasto</small>
                 </div>
                 <div class="mb-3">
                     <label for="cuenta_contrapartida_uuid" class="form-label">Cuenta de Contrapartida</label>
-                    <input type="hidden" id="cuenta_contrapartida_uuid" name="cuenta_contrapartida_uuid">
+                    <input type="hidden" id="cuenta_contrapartida_uuid" name="cuenta_contrapartida_uuid"
+                           value="{{ instance.cuenta_contrapartida_uuid|default:'' }}">
                     <input type="text" class="form-control" id="cuenta_contrapartida_display"
                            placeholder="Ej: 2205 - Cuentas por Pagar" readonly>
                     <small class="form-text text-muted d-block mt-1">Búsqueda de cuenta contable para contrapartida</small>
@@ -160,7 +166,7 @@
         <div class="d-flex justify-content-end gap-2">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
             <button type="submit" class="btn btn-primary" id="btn-guardar-gasto" form="gasto-form">
-                <i class="bi bi-plus-lg me-1"></i>Crear Gasto
+                <i class="bi bi-save me-1"></i>Actualizar Gasto
             </button>
         </div>
     </div>
