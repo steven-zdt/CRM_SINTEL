@@ -1,0 +1,137 @@
+{# offcanvas_detalle_gasto.html - Detalle de Gasto v2.62 #}
+{% extends "tenant/core/partials/_base_offcanvas.html" %}
+
+{% block offcanvas_title %}
+    <i class="bi bi-eye me-2"></i>Detalle de Gasto
+{% endblock %}
+
+{% block offcanvas_body %}
+    {% if instance %}
+        {# Cabecera de Estado #}
+        <div class="mb-4 d-flex justify-content-between align-items-center bg-light p-3 rounded border">
+            <div>
+                <span class="text-muted d-block small">Consecutivo DIAN</span>
+                <h5 class="mb-0 text-primary">{{ instance.prefijo }} {{ instance.consecutivo }}</h5>
+            </div>
+            <div class="text-end">
+                <span class="text-muted d-block small">Estado</span>
+                {% if instance.anulado %}
+                    <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Anulado</span>
+                {% elif instance.activo %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Activo</span>
+                {% else %}
+                    <span class="badge bg-secondary">Inactivo</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Sección: Información General #}
+        <div class="mb-4">
+            <h6 class="text-primary border-bottom pb-2 mb-3">
+                <i class="bi bi-info-circle me-2"></i>Información General
+            </h6>
+            <div class="row g-3">
+                <div class="col-6">
+                    <span class="text-muted d-block small">Fecha Emisión</span>
+                    <span>{{ instance.fecha|date:"d/m/Y" }}</span>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted d-block small">Documento Externo</span>
+                    <span>{{ instance.numero_documento_proveedor|default:"N/A" }}</span>
+                </div>
+                <div class="col-12">
+                    <span class="text-muted d-block small">Categoría Contable</span>
+                    <span>{{ instance.categoria_contable_display }}</span>
+                </div>
+            </div>
+        </div>
+
+        {# Sección: Proveedor #}
+        <div class="mb-4">
+            <h6 class="text-primary border-bottom pb-2 mb-3">
+                <i class="bi bi-person-badge me-2"></i>Proveedor
+            </h6>
+            <div class="row g-3">
+                <div class="col-12">
+                    <span class="text-muted d-block small">Razón Social</span>
+                    <strong>{{ instance.vendedor_nombre }}</strong>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted d-block small">NIT / Identificación</span>
+                    <span>{{ instance.vendedor_nit }}</span>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted d-block small">Teléfono</span>
+                    <span>{{ instance.vendedor_telefono|default:"N/A" }}</span>
+                </div>
+                <div class="col-12">
+                    <span class="text-muted d-block small">Dirección</span>
+                    <span>{{ instance.vendedor_direccion|default:"N/A" }}</span>
+                </div>
+            </div>
+        </div>
+
+        {# Sección: Valores #}
+        <div class="mb-4">
+            <h6 class="text-primary border-bottom pb-2 mb-3">
+                <i class="bi bi-currency-dollar me-2"></i>Valores Financieros
+            </h6>
+            <div class="card border-0 bg-light">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Subtotal:</span>
+                        <span>${{ instance.subtotal }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 text-danger">
+                        <span class="text-muted">ReteFuente ({{ instance.retefuente_porcentaje|floatformat:0 }}%):</span>
+                        <span>- ${{ instance.retefuente }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 text-danger">
+                        <span class="text-muted">ReteICA ({{ instance.reteica_porcentaje|floatformat:4 }}%):</span>
+                        <span>- ${{ instance.reteica }}</span>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong class="text-primary">Total Neto:</strong>
+                        <h4 class="mb-0 text-primary">${{ instance.total }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Sección: Observaciones #}
+        {% if instance.descripcion or instance.observaciones %}
+        <div class="mb-4">
+            <h6 class="text-primary border-bottom pb-2 mb-3">
+                <i class="bi bi-chat-left-text me-2"></i>Notas y Descripciones
+            </h6>
+            {% if instance.descripcion %}
+                <div class="mb-3">
+                    <span class="text-muted d-block small">Descripción</span>
+                    <p class="mb-0">{{ instance.descripcion }}</p>
+                </div>
+            {% endif %}
+            {% if instance.observaciones %}
+                <div class="mb-3">
+                    <span class="text-muted d-block small">Observaciones Internas</span>
+                    <p class="mb-0 italic text-secondary">{{ instance.observaciones }}</p>
+                </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+    {% else %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>No se encontró información del gasto.
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block offcanvas_footer %}
+    <div class="d-grid gap-2">
+        <button type="button" class="btn btn-outline-secondary" 
+                onclick="window.UIManager?.handleOffcanvas('#offcanvas-gasto-detalle', 'hide')">
+            Cerrar Detalle
+        </button>
+    </div>
+{% endblock %}

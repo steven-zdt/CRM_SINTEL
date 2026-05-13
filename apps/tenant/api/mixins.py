@@ -23,20 +23,35 @@ class SintelDSVMixin:
 
     def get_empresa_id(self) -> int:
         """Obtiene el ID de la empresa desde el perfil del usuario (SSoT)."""
+        # 1. Intentar obtener del perfil (Producción / Auth OK)
         if hasattr(self.request.user, 'tenant_profile') and self.request.user.tenant_profile:
             return self.request.user.tenant_profile.empresa_id
         
-        # Fallback de seguridad: Singleton de Empresa por Tenant
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise DRFValidationError("No se encontró configuración de empresa para este tenant.")
-        return empresa.id
+        # 2. Fallback para desarrollo (v2.62.1)
+        from django.conf import settings
+        if settings.DEBUG:
+            from apps.tenant.empresa.models import Empresa
+            empresa = Empresa.objects.first()
+            if empresa:
+                logger.warning(f"[DSV:DEBUG] Usando fallback empresa_id={empresa.id} (usuario anónimo o sin perfil)")
+                return empresa.id
+
+        raise DRFValidationError("No se encontró configuración de empresa para este tenant.")
 
     def handle_service_error(self, exc: Exception) -> Response:
         """Mapeo estandarizado de excepciones de servicios a respuestas DRF."""
+        from django.core.exceptions import ObjectDoesNotExist
+        from django.http import Http404
+
         if isinstance(exc, DRFValidationError):
             return Response(exc.detail, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         
+        if isinstance(exc, (ObjectDoesNotExist, Http404)):
+            return Response(
+                {"error": "not_found", "message": "El recurso solicitado no existe."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         logger.error(f"[DSV:Error] {type(exc).__name__}: {str(exc)}", exc_info=True)
         return Response(
             {

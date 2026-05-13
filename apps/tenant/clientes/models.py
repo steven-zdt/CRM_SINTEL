@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 
 from apps.tenant.core.models import SintelTenantBaseModel
@@ -22,18 +23,37 @@ class Cliente(SintelTenantBaseModel):
         ("NO_RESP", "No responsable de IVA"),
     ]
 
+    # UUID Lookup Field (AGENTS.md §14)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+
     tipo_persona = models.CharField(max_length=10, choices=TIPO_PERSONA)
     tipo_documento = models.CharField(max_length=5, choices=TIPO_DOCUMENTO)
     numero_documento = models.CharField(max_length=32)
     razon_social = models.CharField(max_length=180)
     nombre_comercial = models.CharField(max_length=180, blank=True)
     regimen_tributario = models.CharField(max_length=15, choices=REGIMEN)
+    
+    # Retenciones (NUEVO v3.5.0)
+    es_retenedor = models.BooleanField(default=False, verbose_name="Es Agente Retenedor")
+    aplica_retefuente = models.BooleanField(default=False, verbose_name="Aplica Retención en la Fuente")
+    retefuente_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Porcentaje Retefuente")
+    aplica_reteica = models.BooleanField(default=False, verbose_name="Aplica Retención de ICA")
+    reteica_porcentaje = models.DecimalField(max_digits=5, decimal_places=3, default=0, verbose_name="Porcentaje ReteICA")
+    aplica_reteiva = models.BooleanField(default=False, verbose_name="Aplica Retención de IVA")
+    reteiva_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Porcentaje ReteIVA")
     email = models.EmailField(blank=True)
     telefono = models.CharField(max_length=32, blank=True)
     direccion = models.CharField(max_length=255, blank=True)
     ciudad = models.CharField(max_length=80, blank=True)
     activo = models.BooleanField(default=True)
-    observaciones = models.TextField(blank=True)
+    observaciones = models.TextField(blank=True, help_text="Observaciones adicionales")
+
+    # [NEW v3.5.0] Vinculación con Contabilidad
+    cuenta_contable_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Cartera)"
+    )
 
     class Meta:
         verbose_name = "Cliente"
@@ -56,6 +76,9 @@ class Cliente(SintelTenantBaseModel):
 
 class ContactoCliente(SintelTenantBaseModel):
     """Contact record attached to a customer."""
+
+    # UUID Lookup Field (AGENTS.md §14)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
 
     cliente = models.ForeignKey(
         Cliente,

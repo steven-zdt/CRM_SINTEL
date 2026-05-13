@@ -60,6 +60,7 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings
       - SERVICE_ROLE=web
+      - DATABASE_HOST=db
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     restart: unless-stopped
 
@@ -71,6 +72,7 @@ services:
       - DJANGO_SETTINGS_MODULE=config.settings
       - SERVICE_ROLE=celery
       - C_FORCE_ROOT=1
+      - DATABASE_HOST=db
     command: ["celery", "-A", "config", "worker", "-l", "info"]
     restart: unless-stopped
 

@@ -3,6 +3,10 @@ Get-ChildItem -Path ".\apps" -Filter "*.py" -Recurse | Where-Object { $_.FullNam
 Get-ChildItem -Path "." -Filter "__pycache__" -Recurse | Remove-Item -Force -Recurse   
 ================================================================================
 
+git config --unset extensions.worktreeConfig
+rmdir /s /q %APPDATA%\Antigravity\Cache
+
+
 docker compose up -d db redis
 
 docker compose run --rm web python manage.py makemigrations accounts tenant_core tenants
@@ -167,7 +171,7 @@ docker compose exec web python manage.py showmigrations apps.public.impuestos
 docker compose exec web python manage.py makemigrations <app_name>
 # Ejemplo:
 > docker compose exec web python manage.py makemigrations --shared
-docker compose exec web python manage.py makemigrations tenants
+docker compose exec web python manage.py makemigrations tenants1
 docker compose exec web python manage.py makemigrations facturas
 
 # Ver estado de las migraciones
@@ -303,6 +307,8 @@ docker system df
 
 # Reconstruir contenedor sin caché
 docker compose build --no-cache web
+
+docker-compose build --no-cache web
 
 # Reiniciar todo desde cero (CUIDADO: borra datos)
 docker compose down -v

@@ -14,11 +14,12 @@ from django.db.models.functions import Coalesce
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.contabilidad.models import (
-    AsientoContable, 
-    CuentaContable, 
-    PeriodoContable, 
+    AsientoContable,
+    CuentaContable,
+    PeriodoContable,
     CatalogoMaestroNIIF,
-    MovimientoContable
+    MovimientoContable,
+    TipoComprobante,
 )
 
 # ============================================================================
@@ -41,7 +42,8 @@ ASIENTO_LIST_FIELDS = (
 
 ASIENTO_DETAIL_FIELDS = (
     "id", "uuid", "numero", "fecha", "descripcion", "estado", 
-    "total_debe", "total_haber", "factura", "created_at", "updated_at",
+    "total_debe", "total_haber", "tipo_comprobante", "numero_comprobante",
+    "created_at", "updated_at",
 )
 
 PERIODO_LIST_FIELDS = (
@@ -58,69 +60,209 @@ CATALOGO_LIST_FIELDS = (
     "id", "codigo", "nombre", "nivel", "naturaleza", "activa",
 )
 
+TIPO_COMPROBANTE_LIST_FIELDS = (
+    "id", "uuid", "codigo", "nombre", "prefijo", "activa",
+)
+
+TIPO_COMPROBANTE_DETAIL_FIELDS = (
+    "id", "uuid", "codigo", "nombre", "prefijo", "consecutivo_actual", "activa", "created_at",
+)
+
 MOVIMIENTO_LIST_FIELDS = (
     "id", "cuenta", "debe", "haber", "descripcion", "orden",
 )
 
 MOVIMIENTO_DETAIL_FIELDS = (
-    "id", "asiento", "cuenta", "tipo_tercero", "tercero_id", "tercero_nit", 
-    "tercero_razon_social", "debe", "haber", "descripcion", "base_iva", 
+    "id", "asiento", "cuenta", "tipo_tercero", "tercero_id", "tercero_nit",
+    "tercero_razon_social", "debe", "haber", "descripcion", "base_iva",
     "iva_generado", "iva_descontable", "retefuente", "reteica", "orden",
 )
+
+# ============================================================================
+# PREFIJOS PUC POR APP ORIGEN — SSoT para filtrado contextual de cuentas
+# ============================================================================
+# Mapea app_label → lista de prefijos de codigo PUC (startswith) relevantes.
+# Usado en CuentaContableViewSet.get_queryset() cuando llega ?app_origen=X.
+# Incluye tanto cuentas de nivel 6 como de nivel 4 para que el usuario
+# pueda buscar por grupo (ej. "5135") y ver todas las auxiliares del grupo.
+APP_ORIGEN_PREFIJOS: dict = {
+    'facturas': [
+        # Activo — Cartera clientes
+        '130505', '130510', '1305',
+        # Activo — Retenciones a favor
+        '135515', '135517', '135518', '1355',
+        # Ingresos operacionales
+        '413505', '413510', '4135',
+        # Devoluciones en ventas
+        '4175',
+        # IVA generado
+        '240805',
+        # Retenciones por pagar (aplicadas por el cliente)
+        '236505', '236510', '236515', '236525', '236540', '2365',
+        '236805', '2368',
+    ],
+    'clientes': [
+        # Activo — Cartera clientes (Cuenta Control)
+        '1305', '130505',
+    ],
+    'gastos': [
+        # Pasivo — Cuentas por pagar proveedores
+        '233505', '233550', '233595', '2335',
+        # Pasivo — Retenciones practicadas
+        '236505', '236510', '236515', '236525', '236540', '2365',
+        '236805', '2368',
+        # Pasivo — IVA descontable
+        '240810',
+        # Gastos administrativos (grupos y auxiliares comunes)
+        '510506', '511005', '511505', '512010',
+        '513505', '513520', '513525', '513530', '513535',
+        '514510', '514525', '519525', '519530',
+        '5110', '5115', '5120', '5130', '5135', '5140', '5145', '5150', '5155', '5195', '5199',
+    ],
+    'empleados': [
+        # Gastos de personal
+        '510506', '510527', '510530', '510533', '510536', '510539', '510568', '510570', '5105',
+        # Pasivo — Aportes y retenciones de nomina
+        '2505', '2370', '2380', # Salarios, Retenciones y aportes, Acreedores varios
+    ],
+    'inventario': [
+        # Activo — Inventarios
+        '143505', '143510', '1435',
+        # Costos de ventas
+        '613505', '613510', '6135',
+        # Ingresos (contraparte de salida inventario)
+        '413505', '413510', '4135',
+        # Gastos bajas / deterioro
+        '5199',
+        # Propiedades, Planta y Equipo (Activos Fijos)
+        '15',
+    ],
+    'proveedores': [
+        # Pasivo — Proveedores nacionales
+        '2205', '220501', '220505',
+        # Pasivo — Cuentas por pagar
+        '2335', '233505', '233550', '233595',
+    ],
+}
+
+
+
+def filtrar_cuentas_por_app_origen(qs, app_origen: str):
+    """
+    Aplica filtro de prefijos PUC a un queryset de CuentaContable
+    segun el app de origen del documento. Retorna el queryset filtrado
+    si app_origen es reconocido, o el queryset original si no lo es.
+    """
+    prefijos = APP_ORIGEN_PREFIJOS.get(app_origen, [])
+    if not prefijos:
+        return qs
+    q_filter = Q()
+    for p in prefijos:
+        q_filter |= Q(codigo__startswith=p)
+    return qs.filter(q_filter)
+
 
 # ============================================================================
 # SELECTORS (QuerySets Optimizados)
 # ============================================================================
 
-def qs_cuenta_list(empresa_id: Optional[int] = None):
-    qs = CuentaContable.objects.only(*CUENTA_LIST_FIELDS)
-    if empresa_id:
-        qs = qs.filter(empresa_id=empresa_id)
-    return qs
+class CuentaContableSelector:
+    @staticmethod
+    def get_qs_list(empresa_id: Optional[int] = None):
+        qs = CuentaContable.objects.only(*CUENTA_LIST_FIELDS)
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
 
-def qs_cuenta_detail(empresa_id: Optional[int] = None):
-    qs = CuentaContable.objects.select_related("cuenta_padre", "catalogo_referencia").only(
-        *CUENTA_DETAIL_FIELDS, "catalogo_referencia"
-    )
-    if empresa_id:
-        qs = qs.filter(empresa_id=empresa_id)
-    return qs
+    @staticmethod
+    def get_qs_detail(empresa_id: Optional[int] = None):
+        qs = CuentaContable.objects.select_related("cuenta_padre", "catalogo_referencia").only(
+            *CUENTA_DETAIL_FIELDS, "catalogo_referencia"
+        )
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
 
-def qs_asiento_list(empresa_id: Optional[int] = None):
-    qs = AsientoContable.objects.only(*ASIENTO_LIST_FIELDS).prefetch_related('movimientos')
-    if empresa_id:
-        qs = qs.filter(empresa_id=empresa_id)
-    return qs
+    @staticmethod
+    def get_by_uuid(uuid: Any, empresa_id: int) -> Optional[CuentaContable]:
+        return CuentaContable.objects.filter(uuid=uuid, empresa_id=empresa_id).first()
 
-def qs_asiento_detail(empresa_id: Optional[int] = None):
-    qs = AsientoContable.objects.select_related("factura").prefetch_related(
-        "movimientos", "movimientos__cuenta"
-    ).only(*ASIENTO_DETAIL_FIELDS)
-    if empresa_id:
-        qs = qs.filter(empresa_id=empresa_id)
-    return qs
+    @staticmethod
+    def exists_by_uuid(uuid: Any, empresa_id: int) -> bool:
+        if not uuid:
+            return False
+        return CuentaContable.objects.filter(uuid=uuid, empresa_id=empresa_id).exists()
 
-def qs_periodo_list(empresa_id: Optional[int] = None):
-    qs = PeriodoContable.objects.select_related("cerrado_por").only(*PERIODO_LIST_FIELDS, "cerrado_por")
-    if empresa_id:
-        qs = qs.filter(empresa_id=empresa_id)
-    return qs
+    @staticmethod
+    def get_label_by_uuid(uuid: Any, empresa_id: int) -> str:
+        if not uuid:
+            return ""
+        try:
+            cuenta = CuentaContable.objects.filter(
+                uuid=uuid, 
+                empresa_id=empresa_id
+            ).only('codigo', 'nombre').first()
+            if cuenta:
+                return f"{cuenta.codigo} - {cuenta.nombre}"
+        except Exception:
+            pass
+        return ""
 
-def qs_periodo_detail(empresa_id: Optional[int] = None):
-    qs = PeriodoContable.objects.select_related("cerrado_por").only(*PERIODO_DETAIL_FIELDS, "cerrado_por")
-    if empresa_id:
-        qs = qs.filter(empresa_id=empresa_id)
-    return qs
+class AsientoContableSelector:
+    @staticmethod
+    def get_qs_list(empresa_id: Optional[int] = None):
+        qs = AsientoContable.objects.only(*ASIENTO_LIST_FIELDS).prefetch_related('movimientos')
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
 
-def qs_catalogo_list(empresa_id: Optional[int] = None):
-    qs = CatalogoMaestroNIIF.objects.only(*CATALOGO_LIST_FIELDS)
-    if empresa_id:
-        qs = qs.filter(empresa_id=empresa_id)
-    return qs
+    @staticmethod
+    def get_qs_detail(empresa_id: Optional[int] = None):
+        qs = AsientoContable.objects.prefetch_related(
+            "movimientos", "movimientos__cuenta"
+        ).only(*ASIENTO_DETAIL_FIELDS)
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
+
+class PeriodoContableSelector:
+    @staticmethod
+    def get_qs_list(empresa_id: Optional[int] = None):
+        qs = PeriodoContable.objects.select_related("cerrado_por").only(*PERIODO_LIST_FIELDS, "cerrado_por")
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
+
+    @staticmethod
+    def get_qs_detail(empresa_id: Optional[int] = None):
+        qs = PeriodoContable.objects.select_related("cerrado_por").only(*PERIODO_DETAIL_FIELDS, "cerrado_por")
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
+
+class TipoComprobanteSelector:
+    @staticmethod
+    def get_qs_list(empresa_id: Optional[int] = None):
+        qs = TipoComprobante.objects.only(*TIPO_COMPROBANTE_LIST_FIELDS)
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
+
+    @staticmethod
+    def get_qs_detail(empresa_id: Optional[int] = None):
+        qs = TipoComprobante.objects.only(*TIPO_COMPROBANTE_DETAIL_FIELDS)
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
+
+# [LEGACY WRAPPER] Para compatibilidad con modulos que ya usan ContabilidadSelector
+class ContabilidadSelector(CuentaContableSelector):
+    """v3.5: Fachada de compatibilidad para CuentaContableSelector."""
+    pass
 
 def get_asiento_by_identifier(identifier: Any, empresa_id: Optional[int] = None) -> AsientoContable:
     """Obtiene un asiento por ID numérico o UUID."""
-    qs = qs_asiento_detail(empresa_id)
+    qs = AsientoContableSelector.get_qs_detail(empresa_id)
     try:
         return qs.get(id=int(identifier))
     except (ValueError, TypeError):
@@ -130,7 +272,7 @@ def get_asiento_by_identifier(identifier: Any, empresa_id: Optional[int] = None)
 
 def get_cuenta_by_identifier(identifier: Any, empresa_id: Optional[int] = None) -> CuentaContable:
     """Obtiene una cuenta por ID numérico o UUID."""
-    qs = qs_cuenta_detail(empresa_id)
+    qs = CuentaContableSelector.get_qs_detail(empresa_id)
     try:
         return qs.get(id=int(identifier))
     except (ValueError, TypeError):
@@ -140,13 +282,158 @@ def get_cuenta_by_identifier(identifier: Any, empresa_id: Optional[int] = None) 
 
 def get_periodo_by_identifier(identifier: Any, empresa_id: Optional[int] = None) -> PeriodoContable:
     """Obtiene un periodo por ID numérico o UUID."""
-    qs = qs_periodo_detail(empresa_id)
+    qs = PeriodoContableSelector.get_qs_detail(empresa_id)
     try:
         return qs.get(id=int(identifier))
     except (ValueError, TypeError):
         return qs.get(uuid=identifier)
     except PeriodoContable.DoesNotExist:
         raise ValidationError({"detail": [f"Periodo contable no encontrado con identificador: {identifier}"]})
+
+def get_tipo_comprobante_by_identifier(identifier: Any, empresa_id: Optional[int] = None) -> TipoComprobante:
+    """Obtiene un tipo de comprobante por ID numérico o UUID."""
+    qs = TipoComprobanteSelector.get_qs_detail(empresa_id)
+    try:
+        return qs.get(id=int(identifier))
+    except (ValueError, TypeError):
+        return qs.get(uuid=identifier)
+    except TipoComprobante.DoesNotExist:
+        raise ValidationError({"detail": [f"Tipo de comprobante no encontrado con identificador: {identifier}"]})
+
+# ============================================================================
+# PENDIENTES DE CONTABILIZAR (Flujo Manual On-Demand)
+# ============================================================================
+
+PENDIENTE_FACTURA_FIELDS = (
+    'id', 'numero', 'fecha_emision', 'emisor_nit', 'emisor_razon_social',
+    'receptor_nit', 'receptor_razon_social', 'subtotal', 'impuestos', 'total',
+    'naturaleza', 'estado',
+)
+
+PENDIENTE_GASTO_FIELDS = (
+    'id', 'consecutivo', 'fecha', 'subtotal', 'retefuente', 'reteica', 'total',
+)
+
+PENDIENTE_NOMINA_FIELDS = (
+    'id', 'periodo_mes', 'fecha_pago', 'neto_pagar', 'anulado',
+)
+
+PENDIENTE_INVENTARIO_FIELDS = (
+    'id', 'tipo', 'cantidad', 'costo_unitario', 'created_at',
+)
+
+
+def qs_facturas_pendientes(empresa_id: int):
+    """Facturas del tenant que aun no tienen AsientoContable asociado."""
+    from apps.tenant.facturas.models import Factura
+    ya_ids = AsientoContable.objects.filter(
+        empresa_id=empresa_id,
+        documento_origen_app='facturas',
+        documento_origen_modelo='Factura',
+        documento_origen_id__isnull=False,
+    ).values_list('documento_origen_id', flat=True)
+    return (
+        Factura.objects.filter(empresa_id=empresa_id)
+        .exclude(id__in=ya_ids)
+        .only(*PENDIENTE_FACTURA_FIELDS)
+        .order_by('-fecha_emision')
+    )
+
+
+def qs_gastos_pendientes(empresa_id: int):
+    """DocumentosSoporte activos del tenant que aun no tienen AsientoContable asociado."""
+    from apps.tenant.gastos.models import DocumentoSoporte
+    ya_ids = AsientoContable.objects.filter(
+        empresa_id=empresa_id,
+        documento_origen_app='gastos',
+        documento_origen_modelo='DocumentoSoporte',
+        documento_origen_id__isnull=False,
+    ).values_list('documento_origen_id', flat=True)
+    return (
+        DocumentoSoporte.objects.filter(empresa_id=empresa_id, anulado=False)
+        .exclude(id__in=ya_ids)
+        .select_related('proveedor', 'resolucion_dian')
+        .only(*PENDIENTE_GASTO_FIELDS, 'proveedor', 'resolucion_dian')
+        .order_by('-fecha')
+    )
+
+
+def qs_nominas_pendientes(empresa_id: int):
+    """Nominas del tenant que aun no tienen AsientoContable asociado."""
+    from apps.tenant.empleados.models import Devengo
+    ya_ids = AsientoContable.objects.filter(
+        empresa_id=empresa_id,
+        documento_origen_app='empleados',
+        documento_origen_modelo='Devengo',
+        documento_origen_id__isnull=False,
+    ).values_list('documento_origen_id', flat=True)
+    return (
+        Devengo.objects.filter(empresa_id=empresa_id, anulado=False)
+        .exclude(id__in=ya_ids)
+        .select_related('empleado')
+        .only(*PENDIENTE_NOMINA_FIELDS, 'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido')
+        .order_by('-fecha_pago')
+    )
+
+
+def qs_inventario_pendientes(empresa_id: int):
+    """Movimientos de inventario del tenant que aun no tienen AsientoContable asociado."""
+    from apps.tenant.inventario.models import MovimientoInventario
+    ya_ids = AsientoContable.objects.filter(
+        empresa_id=empresa_id,
+        documento_origen_app='inventario',
+        documento_origen_modelo='MovimientoInventario',
+        documento_origen_id__isnull=False,
+    ).values_list('documento_origen_id', flat=True)
+    return (
+        MovimientoInventario.objects.filter(empresa_id=empresa_id)
+        .exclude(id__in=ya_ids)
+        .select_related('producto')
+        .only(*PENDIENTE_INVENTARIO_FIELDS, 'producto__codigo', 'producto__nombre')
+        .order_by('-created_at')
+    )
+
+
+def get_documento_pendiente(app_label: str, modelo: str, documento_id: int, empresa_id: int):
+    """
+    Obtiene un documento especifico para el offcanvas de contabilizacion manual.
+    Aplica DSV: filtra por empresa_id para garantizar aislamiento de tenant.
+    """
+    if app_label == 'facturas' and modelo == 'Factura':
+        from apps.tenant.facturas.models import Factura
+        return (
+            Factura.objects.filter(empresa_id=empresa_id, id=documento_id)
+            .only(*PENDIENTE_FACTURA_FIELDS)
+            .first()
+        )
+    if app_label == 'gastos' and modelo == 'DocumentoSoporte':
+        from apps.tenant.gastos.models import DocumentoSoporte
+        return (
+            DocumentoSoporte.objects.filter(empresa_id=empresa_id, id=documento_id)
+            .select_related('proveedor', 'resolucion_dian')
+            .only(*PENDIENTE_GASTO_FIELDS, 'proveedor__numero_documento', 'proveedor__razon_social',
+                  'resolucion_dian__prefijo', 'resolucion_dian__consecutivo')
+            .first()
+        )
+    if app_label == 'empleados' and modelo == 'Devengo':
+        from apps.tenant.empleados.models import Devengo
+        return (
+            Devengo.objects.filter(empresa_id=empresa_id, id=documento_id, anulado=False)
+            .select_related('empleado', 'contrato')
+            .only(*PENDIENTE_NOMINA_FIELDS, 'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido', 
+                  'contrato__salario_mensual', 'auxilio_transporte', 'otros_devengos', 'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos')
+            .first()
+        )
+    if app_label == 'inventario' and modelo == 'MovimientoInventario':
+        from apps.tenant.inventario.models import MovimientoInventario
+        return (
+            MovimientoInventario.objects.filter(empresa_id=empresa_id, id=documento_id)
+            .select_related('producto')
+            .only(*PENDIENTE_INVENTARIO_FIELDS, 'producto__codigo', 'producto__nombre')
+            .first()
+        )
+    return None
+
 
 # ============================================================================
 # HELPER SELECTORS (Lógica de Lectura)
@@ -235,7 +522,7 @@ def get_tercero_movimiento(tipo_tercero: str, tercero_id: int) -> Optional[Any]:
     try:
         if tipo_tercero == 'CLIENTE':
             from apps.tenant.clientes.models import Cliente
-            return Cliente.objects.filter(id=tercero_id).only('id', 'nombre', 'nit').first()
+            return Cliente.objects.filter(id=tercero_id).only('id', 'razon_social', 'numero_documento').first()
         elif tipo_tercero == 'PROVEEDOR':
             from apps.tenant.proveedores.models import Proveedor
             return Proveedor.objects.filter(id=tercero_id).only('id', 'nombre', 'nit').first()
@@ -245,3 +532,158 @@ def get_tercero_movimiento(tipo_tercero: str, tercero_id: int) -> Optional[Any]:
     except Exception:
         return None
     return None
+# ============================================================================
+# REPORTES FINANCIEROS (SELECTORS)
+# ============================================================================
+
+def balance_prueba_selector(empresa_id: int, fecha_inicio: Any, fecha_fin: Any):
+    """
+    Calcula el Balance de Prueba (Saldos y Movimientos) para un periodo.
+    
+    Retorna una lista de dicts con:
+    - codigo, nombre, nivel
+    - saldo_anterior
+    - debito_periodo, credito_periodo
+    - nuevo_saldo
+    """
+    from apps.tenant.contabilidad.models import MovimientoContable
+    from django.db.models import Sum, Case, When, Value, DecimalField, F
+    
+    # 1. Movimientos del periodo
+    qs_periodo = MovimientoContable.objects.filter(
+        asiento__empresa_id=empresa_id,
+        asiento__fecha__range=(fecha_inicio, fecha_fin),
+        asiento__estado='APROBADO'
+    ).exclude(
+        cuenta__isnull=True
+    ).values(
+        'cuenta__codigo',
+        'cuenta__nombre',
+        'cuenta__nivel'
+    ).annotate(
+        debito=Sum('debe'),
+        credito=Sum('haber')
+    )
+
+    # 2. Saldos anteriores (fecha < fecha_inicio)
+    qs_anterior = MovimientoContable.objects.filter(
+        asiento__empresa_id=empresa_id,
+        asiento__fecha__lt=fecha_inicio,
+        asiento__estado='APROBADO'
+    ).exclude(
+        cuenta__isnull=True
+    ).values(
+        'cuenta__codigo'
+    ).annotate(
+        total_debe_ant=Sum('debe'),
+        total_haber_ant=Sum('haber')
+    )
+
+    anteriores_map = {x['cuenta__codigo']: x for x in qs_anterior}
+    
+    resultado = []
+    # Usamos todas las cuentas que tienen movimientos en el periodo o saldo anterior
+    # Por simplicidad en esta v1, iteramos sobre las del periodo
+    # TODO: Unir ambos QuerySets para cubrir cuentas con saldo pero sin movimiento
+    
+    for item in qs_periodo:
+        codigo = item['cuenta__codigo']
+        if not codigo:
+            continue
+
+        ant = anteriores_map.get(codigo, {'total_debe_ant': Decimal('0'), 'total_haber_ant': Decimal('0')})
+
+        debito_ant = ant['total_debe_ant'] or Decimal('0')
+        credito_ant = ant['total_haber_ant'] or Decimal('0')
+
+        debito_p = item['debito'] or Decimal('0')
+        credito_p = item['credito'] or Decimal('0')
+
+        # Determinar naturaleza por primer digito
+        naturaleza = 'D' if codigo[0] in ['1', '5', '6'] else 'C'
+        
+        if naturaleza == 'D':
+            saldo_ant = debito_ant - credito_ant
+            nuevo_saldo = saldo_ant + debito_p - credito_p
+        else:
+            saldo_ant = credito_ant - debito_ant
+            nuevo_saldo = saldo_ant + credito_p - debito_p
+            
+        resultado.append({
+            'codigo': codigo,
+            'nombre': item['cuenta__nombre'],
+            'nivel': item['cuenta__nivel'],
+            'saldo_anterior': saldo_ant,
+            'debito': debito_p,
+            'credito': credito_p,
+            'nuevo_saldo': nuevo_saldo,
+        })
+        
+    return sorted(resultado, key=lambda x: x['codigo'])
+
+
+def estado_resultados_selector(empresa_id: int, fecha_inicio: Any, fecha_fin: Any):
+    """
+    Calcula el Estado de Resultados (P&G) para un periodo.
+    Filtra cuentas de Clase 4 (Ingresos), 5 (Gastos) y 6 (Costos).
+    """
+    from apps.tenant.contabilidad.models import MovimientoContable
+    from django.db.models import Sum
+    
+    # Movimientos del periodo para cuentas de resultado (4, 5, 6)
+    qs = MovimientoContable.objects.filter(
+        asiento__empresa_id=empresa_id,
+        asiento__fecha__range=(fecha_inicio, fecha_fin),
+        asiento__estado='APROBADO',
+        cuenta__codigo__regex=r'^[456]'
+    ).values(
+        'cuenta__codigo', 
+        'cuenta__nombre', 
+        'cuenta__nivel'
+    ).annotate(
+        debito=Sum('debe'),
+        credito=Sum('haber')
+    ).order_by('cuenta__codigo')
+    
+    ingresos = []
+    gastos = []
+    costos = []
+    
+    total_ingresos = Decimal('0')
+    total_gastos = Decimal('0')
+    total_costos = Decimal('0')
+    
+    for item in qs:
+        codigo = item['cuenta__codigo']
+        debito = item['debito'] or Decimal('0')
+        credito = item['credito'] or Decimal('0')
+        
+        # Valor neto según naturaleza
+        if codigo.startswith('4'): # Ingresos (C)
+            valor = credito - debito
+            ingresos.append({'codigo': codigo, 'nombre': item['cuenta__nombre'], 'valor': valor})
+            total_ingresos += valor
+        elif codigo.startswith('5'): # Gastos (D)
+            valor = debito - credito
+            gastos.append({'codigo': codigo, 'nombre': item['cuenta__nombre'], 'valor': valor})
+            total_gastos += valor
+        elif codigo.startswith('6'): # Costos (D)
+            valor = debito - credito
+            costos.append({'codigo': codigo, 'nombre': item['cuenta__nombre'], 'valor': valor})
+            total_costos += valor
+            
+    utilidad_bruta = total_ingresos - total_costos
+    utilidad_neta = utilidad_bruta - total_gastos
+    
+    return {
+        'ingresos': ingresos,
+        'gastos': gastos,
+        'costos': costos,
+        'totales': {
+            'ingresos': total_ingresos,
+            'gastos': total_gastos,
+            'costos': total_costos,
+            'utilidad_bruta': utilidad_bruta,
+            'utilidad_neta': utilidad_neta
+        }
+    }

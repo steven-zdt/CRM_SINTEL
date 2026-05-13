@@ -1,7 +1,10 @@
 {# offcanvas_historial_nominas.html - Offcanvas del Historial de Nóminas v2.61 #}
 {# ⚠️ v2.61: HTMX + Offcanvas con Tabulator Factory #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-historial-nominas" aria-labelledby="offcanvas-historial-nominas-label" style="width: 98%; max-width: 1600px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-historial-nominas" 
+     aria-labelledby="offcanvas-historial-nominas-label" 
+     data-empleado-id="{{ empleado.id }}"
+     style="width: 98%; max-width: 1600px;">
   <div class="offcanvas-header border-bottom bg-light">
     <h5 class="offcanvas-title" id="offcanvas-historial-nominas-label">
       <i class="bi bi-clock-history me-2"></i>

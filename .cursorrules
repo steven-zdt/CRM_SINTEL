@@ -109,5 +109,10 @@ const token = window.jwtAuth?.getAccessToken?.();  // CORRECT
 ## PERMISSIONS PATTERN
 ```python
 permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
-# Import ONLY from apps.tenant.api.permissions — never from apps.tenant.empresa.permissions (deprecated)
 ```
+
+## KARPATHY GUIDELINES (Caution over Speed)
+1. **Think Before Coding**: State assumptions. Ask if uncertain. Present tradeoffs.
+2. **Simplicity First**: Minimum code. No speculative abstractions. If 200 lines could be 50, rewrite.
+3. **Surgical Changes**: Touch only what you must. Don't refactor what isn't broken. Match style.
+4. **Goal-Driven Execution**: Define success criteria. `Step → verify` loops.

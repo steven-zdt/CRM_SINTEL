@@ -265,24 +265,22 @@
      * Abrir offcanvas para editar empleado
      */
     function editar(id) {
-        const url = window.Sintel.Empleados.API.empleados.gestorOffcanvas + `?tipo=empleado&id=${id}`;
-        
-        htmx.ajax('GET', url, {
-            target: '#offcanvas-container-empleados',
-            swap: 'innerHTML'
-        });
+        if (window.Sintel.Empleados.EmpleadoEditor) {
+            window.Sintel.Empleados.EmpleadoEditor.open(id);
+        } else {
+            console.error('[EmpleadoList] EmpleadoEditor no cargado');
+        }
     }
 
     /**
      * Abrir offcanvas para crear empleado
      */
     function crear() {
-        const url = window.Sintel.Empleados.API.empleados.gestorOffcanvas + '?tipo=empleado';
-        
-        htmx.ajax('GET', url, {
-            target: '#offcanvas-container-empleados',
-            swap: 'innerHTML'
-        });
+        if (window.Sintel.Empleados.EmpleadoEditor) {
+            window.Sintel.Empleados.EmpleadoEditor.open();
+        } else {
+            console.error('[EmpleadoList] EmpleadoEditor no cargado');
+        }
     }
 
     /**
@@ -295,37 +293,6 @@
             console.error('[EmpleadoList] DevengoEditor no cargado');
         }
     }
-
-    /**
-     * Abrir Bootstrap Offcanvas tras inyeccion HTMX.
-     * Necesario porque HTMX inyecta el HTML pero Bootstrap no lo activa solo.
-     */
-    document.body.addEventListener('htmx:afterSettle', function(e) {
-        var target = e.detail.target;
-        if (!target) return;
-
-        var offcanvasMap = {
-            'offcanvas-container-empleados': 'empleadoOffcanvas',
-            'offcanvas-container-contratos': null,    // ContratoEditor gestiona los suyos
-            'offcanvas-container-nominas':   'offcanvas-devengo'
-        };
-
-        var offcanvasId = offcanvasMap[target.id];
-        if (!offcanvasId) return;
-
-        requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-                var offcanvasEl = document.getElementById(offcanvasId);
-                if (offcanvasEl && window.bootstrap) {
-                    try {
-                        bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
-                    } catch (err) {
-                        console.error('[EmpleadoList] Error abriendo offcanvas:', err);
-                    }
-                }
-            });
-        });
-    });
 
     // Exportar modulo
     window.Sintel.Empleados.EmpleadoList = {

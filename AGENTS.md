@@ -2,14 +2,14 @@
 
 ---
 name: reglas
-description: Reglas Core de Arquitectura y Desarrollo - Proyecto SINTEL v2.62.0
+description: Reglas Core de Arquitectura y Desarrollo - Proyecto SINTEL v3.5.0
 ---
 
-# [CORE] SINTEL v2.62.0 - Reglas de Arquitectura y Estructura de Proyecto
+# [CORE] SINTEL v3.5.0 — Reglas de Arquitectura y Estructura de Proyecto
 
 Estas reglas son **ESTRICTAS, INMUTABLES Y OBLIGATORIAS** para cualquier modificación, refactorización o creación de código en este proyecto. Este archivo debe ser procesado y asimilado antes de implementar cualquier prompt o sugerencia de código.
 
-Este documento refleja el **ADN real** del codebase: patrones, convenciones y estructuras que ya están materializados en producción.
+Este documento refleja el **ADN real** del codebase: patrones, convenciones y estructuras que están siendo implementadas y refinadas **EN DESARROLLO**.
 
 ## [CRITICAL] 0. Cero Caracteres Especiales en Código Python
 
@@ -52,6 +52,7 @@ Este documento refleja el **ADN real** del codebase: patrones, convenciones y es
    - `business_service.py`: Orquestación y lógica de negocio (idempotencia, validaciones semánticas, cálculos, persistencia desde DTO). Sin acceso directo a ViewSets.
    - `selectors.py`: Consultas `GET` optimizadas (read-only). Define tuplas `LIST_FIELDS`, `DETAIL_FIELDS` como SSoT de campos, y clases `<Modelo>Selector` con `@staticmethod` que retornan QuerySets filtrados por `empresa_id` con `.only()`.
    - `services.py`: Fachada estable que reexporta desde `business_service.py` para compatibilidad de imports existentes.
+   - se crearara un servicio por modelo item de modelo existente 
    - `api_mixins.py`: `<Modelo>ServiceMixin` que inyecta acceso estandarizado a Selectors, CRUDService y BusinessService desde el ViewSet. Metodos: `get_qs_list()`, `get_qs_detail()`, `service_crear_*()`.
 - Todos los métodos son `@staticmethod` o `@classmethod` y stateless.
 - El ViewSet hereda de `BaseTenantViewSet` (`apps.tenant.api.base`) y opcionalmente de un `<Modelo>ServiceMixin`.
@@ -91,14 +92,18 @@ El proyecto se rige estrictamente por este stack; queda prohibido sugerir tecnol
 
 ## [INFO] 3. Única Fuente de Verdad Documental (SSoT)
 
-1. **PASO INICIAL OBLIGATORIO:** Antes de ejecutar CUALQUIER cambio en una app, se DEBE consultar SIEMPRE de forma inicial el documento de flujo de la misma. Todas las aplicaciones tienen este documento en su raíz. (Ejemplo: `apps/tenant/clientes/AUDITORIA_FLUJO_CLIENTES.md` o `apps/<app_name>/flujo_app.md`).
-2. **Documentación Global:** `documentacion/arquitectura_general.md` es la referencia suprema.
-3. **Flujo por Aplicación:** Cada `apps/<app_name>/` DEBE contener y mantener un archivo de auditoría/flujo que describa su lógica secuencial específica.
-4. **Gestión de Documentos:** Todos los demás archivos `.md` de soporte deben residir exclusivamente en `documentacion/`.
+1. **PASO INICIAL OBLIGATORIO:** Antes de ejecutar CUALQUIER cambio en una app, se DEBE consultar SIEMPRE de forma inicial el documento de flujo de la misma. Todas las aplicaciones tienen este documento en su directorio `.agent/`. (Ejemplo: `apps/tenant/clientes/.agent/AUDITORIA_FLUJO_CLIENTES.md`).
+2. **Documentación Global:** `documentacion/arquitectura_general.md` es la referencia suprema para infraestructura.
+3. **Flujo por Aplicación (Modularizado):** Cada `apps/<app_name>/` DEBE contener una carpeta `.agent/` con el archivo de auditoría principal.
+4. **Estructura de Documentación Modular:**
+   - Portal SSoT: `apps/<app_name>/.agent/AUDITORIA_FLUJO_*.md`
+   - Documentos de Soporte: `apps/<app_name>/.agent/docs/` (Flow Maps, Business Logic, Microtasks).
+   - Habilidades y Scripts: `apps/<app_name>/.agent/skills/` (Automatizaciones locales).
+5. **Gestión de Documentos:** Los archivos `.md` globales residen en `documentacion/`. Los específicos de app residen en su propia carpeta `.agent/docs/`.
 
 ## [BACKEND] 4. Capa de Datos y Optimización Backend (Zero Waste)
 
-1. **Cero Creación de Archivos `.py` no Autorizados:** Queda PROHIBIDO crear nuevos archivos `.py` fuera de la estructura de Service Layer establecida (`services/selectors.py`, `services/crud_service.py`, `services/business_service.py`, `services/api_mixins.py`, `services/__init__.py`). Cualquier otro archivo nuevo requiere autorización explícita.
+1. **Cero Creación de Archivos `.py` no Autorizados:** Queda PROHIBIDO crear nuevos archivos `.py` fuera de la estructura de Service Layer establecida (`services/selectors.py`, `services/crud_service.py`, `services/business_service.py`, `services/api_mixins.py`, `services/__init__.py`). Para la app `contabilidad`, la extensión autorizada adicional es `integracion/extractores/` (ver §18). Cualquier otro archivo nuevo requiere autorización explícita.
 2. **Restricción de Ambientes (`apps/public/`):** Estrictamente PROHIBIDO modificar, refactorizar o crear archivos dentro de `apps/public/` sin la aprobación explícita (requiere RFC/Issue y etiqueta `needs-admin-approval`). Toda lógica nueva debe acoplarse a la estructura existente.
 3. **Prohibición de `views.py` Tradicionales:** No usar el archivo `views.py` legacy para lógica de negocio.
 4. **Multi-Tenant Estricto (Zero-Trust SaaS):** Prohibido realizar consultas a modelos sin filtrar por la empresa del tenant (`empresa` o `empresa_id`) en las `TENANT_APPS`.
@@ -106,6 +111,7 @@ El proyecto se rige estrictamente por este stack; queda prohibido sugerir tecnol
    - **ESTRICTAMENTE PROHIBIDO** el uso de `.all()`, o `.filter()` sin encadenar un `.only()` o `.defer()`.
    - Toda consulta DEBE especificar explícitamente los campos necesarios para minimizar la saturación de memoria y cuellos de botella en la red.
    - **Patrón DRF obligatorio:** `queryset = Model.objects.none()` a nivel de clase + override en `get_queryset()` con `.only()`/`.defer()` según la acción.
+   - **Joins obligatorios:** Toda consulta que acceda a campos de modelos relacionados DEBE encadenar `select_related('campo')` (FK / OneToOne) o `prefetch_related('campo')` (M2M / FK inversa) para evitar el problema N+1. Prohibido acceder a `obj.fk.campo` sin `select_related` previo.
 6. **Desacoplamiento Operativo:** Las relaciones (`ForeignKey`) que referencien operadores del tenant DEBEN apuntar al modelo del perfil operativo (`'perfil.TenantProfile'`), NUNCA a `settings.AUTH_USER_MODEL`. Esto aísla la autenticación global de la lógica del negocio del tenant.
 7. **Cero Efectos Secundarios Ocultos (Cero Signals):** Se prohíbe el uso de *Signals* nativas de Django para ejecutar lógica de negocio. Toda mutación dependiente debe ser orquestada explícitamente en la Capa de Servicios.
 
@@ -310,9 +316,9 @@ Todas las apps tenant DEBEN importar permisos desde este modulo centralizado.
 5. **Validacion Automatizada:** El tool `audit_bridge_isolation` del MCP server (`sintel_agent_unified.py`) escanea imports en todas las apps tenant para detectar violaciones a esta regla. Toda PR debe pasar esta auditoria con cero violaciones.
 6. **Excepciones:** Solo `apps/tenant/core/` y `apps/tenant/api/` (permisos centrales) pueden importar desde `apps.public`. Ninguna otra app tenant tiene esta autorizacion.
 
-## [CONTAB] 18. Capa de Integración Contable Centralizada (v3.0 — Fase 1)
+## [CONTAB] 18. Capa de Integración Contable Centralizada (v3.5 — Modelo Pull / Extractores)
 
-**PRINCIPIO:** Todo asiento contable es generado EXCLUSIVAMENTE por el `Contabilizador`. Ninguna app puede crear `AsientoContable` ni `MovimientoContable` directamente.
+**PRINCIPIO:** Todo asiento contable es generado EXCLUSIVAMENTE por el `Contabilizador`. Ninguna app puede crear `AsientoContable` ni `MovimientoContable` directamente. Las apps fuente NO conocen ni dependen de `contabilidad` — la extracción es activa (Pull), no pasiva (Push).
 
 ### 18.1. Paquete de Integración (`apps/tenant/contabilidad/integracion/`)
 
@@ -320,79 +326,184 @@ Todas las apps tenant DEBEN importar permisos desde este modulo centralizado.
 |---|---|
 | `dtos.py` | DTOs inmutables (`@dataclass(frozen=True)`) — contrato entre apps fuente y Contabilizador |
 | `contabilizador.py` | Orquestador único — valida, resuelve cuentas, construye y persiste asientos atómicamente |
-| `resolver.py` | Mapea (`tipo_transaccion` + `concepto`) → código PUC vía `ReglaContable` por tenant |
+| `resolver.py` | Mapea (`tipo_transaccion` + `concepto`) a código PUC vía `ReglaContable` por tenant |
 | `validadores.py` | Validators stateless — cuadratura, período abierto, documento origen existe |
-| `excepciones.py` | Jerarquía de errores (`ContabilidadError` y subclases) |
+| `excepciones.py` | Jerarquía `ContabilidadError` y subclases |
+| `extractores/base.py` | `AbstractExtractor` — interfaz común (ver §18.3) |
+| `extractores/gastos.py` | `ExtractorGastos` — extrae `DocumentoSoporte` pendientes |
+| `extractores/inventario.py` | `ExtractorInventario` — extrae `MovimientoInventario` pendientes |
+| `extractores/facturas.py` | `ExtractorFacturas` — extrae `Factura` ACEPTADA pendientes |
+| `extractores/nomina.py` | `ExtractorNomina` — extrae `Devengo` aprobados pendientes |
 
 ### 18.2. DTOs — Contrato Inmutable
 
 ```python
-# DTO principal — frozen dataclass (inmutable por diseño)
 TransaccionEconomica(
-    tipo=TipoTransaccion.COMPRA_GASTO,    # Enum
+    tipo=TipoTransaccion.COMPRA_GASTO,
     fecha=date(2026, 5, 3),
-    descripcion="...",
     tercero=TerceroSnapshot(...),          # Snapshot, sin FK
-    lineas=[LineaTransaccion(...)],        # Lista de partidas
-    documento_origen=DocumentoOrigen(...) # Trazabilidad para idempotencia
+    lineas=[LineaTransaccion(...)],
+    documento_origen=DocumentoOrigen(...)  # Para idempotencia
 )
-
-# Campo critico en LineaTransaccion e ImpuestoLinea:
 LineaTransaccion(concepto='GASTO_OPERATIVO', monto=..., lado='DEBE')   # default='DEBE'
 ImpuestoLinea(tipo='RETEFUENTE', valor=..., lado='HABER')              # default='HABER'
 ```
 
-- **`lado`**: controla qué columna del asiento recibe el monto (`'DEBE'` o `'HABER'`). Campo OBLIGATORIO para cuadratura correcta.
-- **Idempotencia**: `documento_origen` (app_label + modelo + id) mapea a `AsientoContable.documento_origen_*`. La restricción `UNIQUE` en BD garantiza un solo asiento por documento fuente.
+- **`lado`**: controla columna del asiento (`'DEBE'` o `'HABER'`). OBLIGATORIO para cuadratura.
+- **Idempotencia**: `documento_origen` mapea a `AsientoContable.documento_origen_*`. Constraint UNIQUE en BD.
+- **`empresa_id`**: PROHIBIDO pasarlo dentro del DTO — lo inyecta el `Contabilizador` desde su contexto.
 
-### 18.3. Servicio de Materialización por App Fuente
+### 18.3. Patrón de Integración — Modelo Pull (Extractores)
 
-Cada app fuente expone su propia función en `apps/tenant/contabilidad/services/asientos_service.py`:
+**Arquitectura:** `contabilidad` extrae activamente de apps fuente. Las apps fuente no conocen ni importan de `contabilidad`.
 
 ```python
-# PATRON OBLIGATORIO para toda app fuente
-from apps.tenant.contabilidad.services.asientos_service import materializar_asiento_desde_gasto
+# En apps/tenant/contabilidad/integracion/extractores/base.py
+class AbstractExtractor(ABC):
+    def __init__(self, empresa_id: int):
+        self.empresa_id = empresa_id
+        self.contabilizador = Contabilizador(empresa_id)
 
-asiento = materializar_asiento_desde_gasto(gasto)  # Acepta objeto, no ID
+    @abstractmethod
+    def extraer_pendientes(self) -> list[TransaccionEconomica]: ...
+
+    def contabilizar_pendientes(self) -> dict:
+        resultados = {'contabilizados': 0, 'errores': [], 'omitidos': 0}
+        for dto in self.extraer_pendientes():
+            try:
+                self.contabilizador.contabilizar(dto)
+                resultados['contabilizados'] += 1
+            except Exception as e:
+                resultados['errores'].append({'origen': str(dto.documento_origen), 'error': str(e)})
+        return resultados
 ```
 
-**Reglas del patrón:**
-- La función construye el DTO completo y llama a `Contabilizador(empresa_id).contabilizar(dto)`
-- El hook en el service de la app fuente debe estar dentro de `try/except Exception` (no bloquear el negocio)
-- Errores de contabilización se loguean como `WARNING`, no como `ERROR` crítico
+**Activación:** Extractores se invocan desde management commands (`manage.py backfill_asientos_gastos`) o tareas Celery periódicas. Nunca desde ViewSets ni Signals.
 
-### 18.4. Cuadratura Obligatoria (DEBE = HABER)
+**Detección de pendientes:** Cada extractor usa `Contabilizador.existe_asiento_para(app_label, modelo, id)` para filtrar documentos ya contabilizados. La idempotencia queda delegada al `Contabilizador` — el extractor no la gestiona.
 
-Todo asiento DEBE cuadrar. Fórmula para `COMPRA_GASTO`:
+### 18.4. Cuadratura Obligatoria (Ejemplo COMPRA_GASTO)
 
 ```
 DEBE 51xxxx Gasto              [subtotal]
 HABER 236540 Retefuente        [retefuente]  (si > 0)
 HABER 236801 ReteICA           [reteica]     (si > 0)
-HABER 233595 CXP Proveedor     [total = subtotal - retenciones]
-─────────────────────────────────────────────
+HABER 233595 CXP Proveedor     [total neto]
 TOTAL DEBE == TOTAL HABER == subtotal
 ```
 
-### 18.5. ReglaContable — Mapeo PUC por Tenant
+### 18.5. Numero de Asiento — Formato Canonico
 
-- Modelo: `ReglaContable(empresa, tipo_transaccion, concepto, cuenta_codigo, activo)`
-- Seed inicial: `python manage.py seed_reglas_contables`
-- `ResolverCuentas.resolver_cuenta(concepto, tipo_transaccion, cuenta_hint=None)` → `str PUC`
-- `cuenta_hint` sobreescribe el lookup del catálogo (para gastos con `Gasto.codigo_contable` configurado)
+- Normal: `ASI-{YYYYMMDD}-{UUID8}` — generado por `Contabilizador._construir_asiento()`.
+- Reversal: `RVER-{YYYYMMDD}-{UUID8}`.
+- PROHIBIDO que el caller externo provea el número.
 
-### 18.6. Numero de Asiento — Formato Canónico
+### 18.6. Prohibiciones
 
-- Asiento nuevo: `ASI-{YYYYMMDD}-{UUID8}` (ej. `ASI-20260503-A1B2C3D4`)
-- Reversal: `RVER-{YYYYMMDD}-{UUID8}`
-- Generado por `Contabilizador._construir_asiento()` — **nunca por el caller externo**
+- PROHIBIDO crear `AsientoContable`/`MovimientoContable` directamente desde ViewSets, Signals o apps fuente.
+- PROHIBIDO que apps fuente (`gastos`, `facturas`, `inventario`, `empleados`) importen desde `apps.tenant.contabilidad`.
+- PROHIBIDO hardcodear códigos PUC en apps fuente — usar `cuenta_hint` o `ReglaContable`.
+- PROHIBIDO usar `lado='DEBE'` para impuestos/retenciones (su natural es `'HABER'`).
+- PROHIBIDO el patrón Push (app fuente llama función de contabilidad) — solo Pull (extractor de contabilidad lee app fuente).
 
-### 18.7. Prohibiciones Absolutas
+## [AI-AGENTS] 20. Arquitectura de Agentes IA Especializados (Asistente Contable)
 
-- **PROHIBIDO** crear `AsientoContable` o `MovimientoContable` directamente desde ViewSets, Services de otras apps o Signals
-- **PROHIBIDO** pasar `empresa_id` dentro del DTO (`TransaccionEconomica.empresa_id` queda `None` — lo inyecta el Contabilizador)
-- **PROHIBIDO** usar `lado='DEBE'` para impuestos/retenciones (su natural es `'HABER'`)
-- **PROHIBIDO** hardcodear códigos PUC en apps fuente — siempre usar `cuenta_hint` o `ReglaContable`
+### 20.1. Principio de Diseño
+
+El asistente IA es un **método de entrada rápida** para las líneas del asiento contable en el flujo Manual On-Demand. Actúa como autocompletado inteligente: el contador revisa y confirma antes de generar. La validación local (cuadratura, nivel 6, `TipoComprobante`) siempre es la fuente de verdad final.
+
+**Contrato inmutable:**
+- Input: JSON estructurado del documento origen (montos, retenciones, tercero, app_label)
+- Output: array de `LineaManual` validadas contra el PUC del tenant, con `|ΣDebe - ΣHaber| = 0`
+- El asiento no se persiste hasta que el usuario presiona "Generar Asiento"
+
+### 20.2. Agentes Especializados por Dominio
+
+| Agent ID | App Label | Conocimiento NIIF | Modelo de IA |
+|----------|-----------|-------------------|--------------|
+| `FacturacionAgent` | `facturas` | Causación Factura de Venta: CxC (1305), IVA generado (240805), Retefuente (2365xx), ReteICA (2368xx), Ingresos (4135xx) | claude-haiku-4-5-20251001 |
+| `GastosAgent` | `gastos` | Causación Compra/Gasto: CxP Proveedor (2335xx), IVA descontable (240810), Retefuente (2365xx), Gastos operativos (51xx) | claude-haiku-4-5-20251001 |
+| `NominaAgent` | `empleados` | Causación Nómina: Salarios (5105xx), Aportes seguridad social (2370xx), Obligaciones laborales (25xx) | claude-haiku-4-5-20251001 |
+| `InventarioAgent` | `inventario` | Sincronización Kardex: Inventario (1435xx), CMV (6135xx), Ingresos (4135xx) | claude-haiku-4-5-20251001 |
+
+El enrutamiento es automático: el orquestador lee `app_label` del request y filtra las cuentas PUC disponibles via `APP_ORIGEN_PREFIJOS[app_label]` antes de construir el prompt.
+
+### 20.3. Flujo de Enrutamiento (Orquestador)
+
+```
+POST /api/v1/contabilidad/pendientes/asistente-ia/
+    │
+    ├─ AsistenteIAInputSerializer.validate()
+    │       ← app_label, modelo, documento_id, subtotal, impuestos, total, tercero
+    │
+    ├─ DocumentosPendientesViewSet.asistente_ia()
+    │       ← IsTenantMember + IsTenantAdminOrReadOnly
+    │
+    ├─ ContabilidadBusinessService.sugerir_lineas_asiento_ia(empresa_id, app_label, ctx)
+    │       ├─ filtrar_cuentas_por_app_origen(qs, app_label)  → cuentas nivel-6 del tenant
+    │       ├─ anthropic.Anthropic(api_key=ANTHROPIC_API_KEY).messages.create(...)
+    │       │       model = 'claude-haiku-4-5-20251001'
+    │       │       prompt = [tipo_label + cuentas disponibles + montos del documento]
+    │       ├─ json.loads(response)
+    │       ├─ Validar cada cuenta_codigo: CuentaContable.nivel==6, activa==True, empresa_id
+    │       └─ Validar cuadratura: |ΣDebe - ΣHaber| < 0.01
+    │
+    └─ Response({'lineas': [{cuenta_codigo, cuenta_nombre, debe, haber, descripcion}, ...]})
+```
+
+### 20.4. Prompt Engineering — Estructura Canónica
+
+El prompt enviado al modelo Claude tiene la siguiente estructura fija:
+
+```
+Eres un contador experto en NIIF PYMES Colombia con amplio conocimiento del PUC.
+
+Documento a contabilizar:
+- Tipo: {tipo_label}           ← FacturacionAgent / GastosAgent / etc.
+- Numero: {numero}
+- Tercero: {tercero_nombre} (NIT: {tercero_nit})
+- Subtotal: $ {subtotal}
+- Impuestos/Retenciones: $ {impuestos}
+- Total a pagar/cobrar: $ {total}
+
+Cuentas PUC nivel 6 disponibles para {tipo_label}:
+- 130505: Clientes nacionales (ACTIVO)
+- 510506: Salarios (GASTO)
+- ...  ← máx 50 cuentas filtradas por APP_ORIGEN_PREFIJOS[app_label]
+
+Genera las lineas del asiento contable en partida doble garantizando que
+la suma del Debe sea exactamente igual a la suma del Haber.
+Responde UNICAMENTE con un JSON valido (sin markdown, sin texto adicional):
+{"lineas": [{"cuenta_codigo": "string", "debe": 0.00, "haber": 0.00, "descripcion": "string"}, ...]}
+```
+
+### 20.5. Seguridad y Validaciones Post-IA
+
+Toda cuenta sugerida por la IA es validada antes de ser retornada al frontend:
+1. **Existencia**: `CuentaContable.objects.filter(empresa_id=empresa_id, codigo=codigo)` — IDOR prevention
+2. **Nivel auxiliar**: `nivel == 6` — cumple NIIF PYMES y `_validar_cuentas_auxiliares()`
+3. **Activa**: `activa == True` — no se pueden usar cuentas desactivadas
+4. **Cuadratura**: `|ΣDebe - ΣHaber| < 0.01` — partida doble garantizada antes de enviar al frontend
+
+Si alguna validación falla, el endpoint devuelve `HTTP 400` con clave `ia` explicando el error.
+
+### 20.6. Configuración
+
+| Variable | Descripción | Requerida |
+|----------|-------------|-----------|
+| `ANTHROPIC_API_KEY` | API key del tenant Anthropic | Sí |
+
+El paquete `anthropic>=0.40.0,<1.0` está declarado en `requirements.txt`.
+Si la clave no está configurada, el endpoint devuelve `HTTP 400` con mensaje descriptivo — no hace fallback silencioso.
+
+### 20.7. Reglas de Compliance para Agentes IA en SINTEL
+
+1. **[PROHIBIDO]** Persistir asientos desde el asistente IA sin confirmación explícita del usuario
+2. **[PROHIBIDO]** Retornar cuentas no validadas contra el DB del tenant — toda cuenta pasa por DSV
+3. **[OBLIGATORIO]** El botón "Generar Asiento" sigue requiriendo cuadratura local < 0.01 — independiente de la IA
+4. **[OBLIGATORIO]** El asistente IA solo opera en el contexto del ViewSet autenticado — `IsTenantMember` siempre activo
+5. **[OBLIGATORIO]** Las líneas sugeridas son editables — el contador es la autoridad final
+6. **[PROHIBIDO]** Los agentes IA no pueden importar directamente de apps fuente — solo operan sobre el contexto de `contabilidad`
 
 ## [MEMORY] 19. Memory Bank y Estado a Largo Plazo (MEMORY.md)
 
@@ -406,11 +517,157 @@ TOTAL DEBE == TOTAL HABER == subtotal
 ---
 
 ## Apendice A. Comandos de Operacion
-- **Instalación:** `pip install -r requirements.txt`
-- **Docker (Desarrollo):** `docker compose up --build`
-- **Migraciones Multi-Tenant:** `docker compose exec web python manage.py migrate_schemas`
-- **Migraciones Shared:** `docker compose exec web python manage.py migrate_schemas --shared`
-- **Linter (Ruff):** `ruff check .`
-- **Formateador (Ruff):** `ruff format .`
-- **Testing:** `python manage.py test` / `python manage.py test apps.tenant.<app_name>`
-- **Compilación Python:** `python -m py_compile archivo.py` (validación pre-PR)
+
+### Docker / Make (Desarrollo)
+- **Levantar servicios:** `make up` (web:8000, db:5432, redis:6379, celery)
+- **Detener:** `make down` | **Logs:** `make logs` | **Shell:** `make shell`
+- **Directo:** `docker compose up --build`
+
+### Migraciones Multi-Tenant
+- **Tenants:** `make migrate-tenants` / `docker compose exec web python manage.py migrate_schemas`
+- **Shared (público):** `make migrate-shared` / `docker compose exec web python manage.py migrate_schemas --shared`
+- **Crear migraciones:** `make makemigrations` | **Verificar pendientes:** `make check-migrations`
+
+### Tests
+- **Todos:** `make test` | **Archivo:** `make test-file FILE="path/to/test.py"` | **Smoke:** `make smoke`
+- **Directo:** `python manage.py test apps.tenant.<app_name>`
+
+### Calidad de Código (target py3.12, line-length 100)
+- **Auditoría completa:** `make audit` (ruff + bandit + django check + static check)
+- **Lint + autofix:** `make ruff` / `ruff check . --fix`
+- **Seguridad:** `make bandit` | **Django check:** `make dj-check`
+- **Compilación Python (pre-PR):** `python -m py_compile archivo.py`
+
+### Contabilidad
+- **Seed reglas contables:** `python manage.py seed_reglas_contables`
+- **Seed catálogo NIIF:** `python manage.py poblar_catalogo_niif`
+- **Backfill asientos gastos:** `python manage.py backfill_asientos_gastos [--dry-run] [--empresa-id N]`
+
+### One-off
+- **Crear empresa:** `make crear-empresa NOMBRE="Acme" DOMINIO="acme" EMAIL="admin@acme.com"`
+- **Superusuario:** `docker compose exec web python manage.py createsuperuser`
+
+## [KARPATHY] 21. Karpathy Coding Principles (Caution over Speed)
+
+**PRINCIPIO FUNDAMENTAL:** Reducir errores comunes de LLMs mediante cautela, simplicidad y cambios quirúrgicos.
+
+1.  **Pensar antes de Codificar**: No asumir. Si hay incertidumbre, preguntar. Explicitar suposiciones. Si hay múltiples interpretaciones, presentarlas antes de elegir una.
+2.  **Simplicidad Primero**: Código mínimo necesario. Prohibido crear abstracciones para código de un solo uso o añadir "flexibilidad" no solicitada. Si se puede hacer en 50 líneas en vez de 200, reescribir.
+3.  **Cambios Quirúrgicos**: Tocar SOLO lo estrictamente necesario. No "mejorar" código adyacente ni refactorizar lo que no está roto. Empatar el estilo existente. Si se detecta código muerto no relacionado, reportarlo pero NO borrarlo sin permiso.
+4.  **Ejecución Basada en Objetivos**: Transformar tareas en metas verificables. Para tareas de múltiples pasos, definir un plan: `1. [Paso] → verificar: [check]`.
+
+## [CSS-ISOLATION] 22. Aislamiento de Estilos CSS por Aplicacion
+
+**PRINCIPIO FUNDAMENTAL:** Los estilos visuales (CSS) de cada aplicacion son propiedad exclusiva de esa app. Ninguna app puede modificar, inyectar ni sobreescribir la apariencia visual de otra app desde el exterior. Los estilos solo pueden originarse y aplicarse desde dentro de la misma app.
+
+### 22.1. SSoT de Assets CSS por App
+
+- Todo estilo visual que afecte los templates de una app DEBE provenir EXCLUSIVAMENTE del directorio estatico de esa misma app.
+- **Ruta obligatoria (apps tenant):** `apps/tenant/<app_name>/static/<app_name>/css/`
+- **Ruta obligatoria (apps public):** `apps/public/<app_name>/static/<app_name>/css/`
+- Cada app centraliza la inclusion de sus hojas de estilo en el partial `partials/assets_<app_name>.html`. Esa es la UNICA puerta de entrada autorizada para CSS de la app.
+
+### 22.2. Prohibiciones Estrictas (Cross-App CSS)
+
+1. **[PROHIBIDO] `<link>` cross-app:** Un template de `clientes` NO puede cargar un CSS ubicado en `facturas/static/facturas/css/` ni en ninguna app distinta de `clientes`.
+2. **[PROHIBIDO] Reglas CSS cross-app:** Un archivo `gastos.css` NO puede definir reglas que apunten a selectores o clases visuales de `proveedores`, `clientes` u otra app.
+3. **[PROHIBIDO] Bloques `<style>` cross-app:** Prohibido agregar `<style>` en templates de una app con reglas que modifiquen componentes de otra app.
+4. **[PROHIBIDO] Atributos `style=""` cross-app:** Prohibido usar `style=""` inline en templates de una app para sobreescribir estilos definidos por otra app.
+
+**Ejemplo PROHIBIDO:**
+```html
+<!-- En apps/tenant/clientes/templates/tenant/clientes/list_cliente.html -->
+<link href="{% static 'facturas/css/tabla.css' %}" rel="stylesheet">
+<style>.proveedor-card { color: red; }</style>
+```
+
+**Ejemplo CORRECTO:**
+```html
+<!-- En apps/tenant/clientes/templates/tenant/clientes/list_cliente.html -->
+{% include "tenant/clientes/partials/assets_clientes.html" %}
+```
+
+### 22.3. Excepciones Controladas (CSS Global Autorizado)
+
+| Fuente | Razon |
+|---|---|
+| Bootstrap 5 via CDN | Sistema de diseno UI compartido — infraestructura global |
+| `apps/tenant/core/static/core/css/` | Shell UI estructural: navbar, sidebar, layout base. NUNCA reglas de apps de dominio |
+| Variables CSS `--sintel-*` del shell `core` | Tokens de diseno globales permitidos como custom properties |
+
+### 22.4. Auditoria y Cumplimiento
+
+- Toda PR que modifique archivos `.css` o templates DEBE verificar que no hay referencias cross-app en `<link href>`, `{% static %}` ni bloques `<style>`.
+- Un agente que detecte una violacion DEBE reportarla al usuario antes de continuar, sin propagarla.
+
+## [JS-ISOLATION] 23. Aislamiento de JavaScript por Aplicacion
+
+**PRINCIPIO FUNDAMENTAL:** El codigo JavaScript de cada aplicacion es propiedad exclusiva de esa app. Ninguna app puede importar, invocar ni extender la logica JS de otra app de dominio directamente. Los scripts solo pueden originarse y ejecutarse desde dentro de la misma app.
+
+### 23.1. SSoT de Assets JS por App
+
+- Todo script que controle la logica o UI de una app DEBE residir EXCLUSIVAMENTE en el directorio estatico de esa misma app.
+- **Ruta obligatoria (apps tenant):** `apps/tenant/<app_name>/static/<app_name>/js/`
+- **Ruta obligatoria (apps public):** `apps/public/<app_name>/static/<app_name>/js/`
+- Cada app carga sus propios scripts via el partial `partials/assets_<app_name>.html`. Esa es la UNICA puerta de entrada autorizada para JS de la app.
+- Namespace obligatorio: `window.Sintel.<AppName>` — cada app opera bajo su propio namespace global sin colisionar con otros.
+
+### 23.2. Prohibiciones Estrictas (Cross-App JS)
+
+1. **[PROHIBIDO] `<script src>` cross-app:** Un template de `clientes` NO puede cargar un `.js` ubicado en `facturas/static/facturas/js/` ni en ninguna app distinta de `clientes`.
+2. **[PROHIBIDO] Llamadas cross-namespace:** Un modulo de `gastos` NO puede invocar directamente funciones de `window.Sintel.Clientes`, `window.Sintel.Facturas` u otro namespace de app de dominio.
+3. **[PROHIBIDO] Importar modulos JS de otra app:** Prohibido referenciar funciones, clases o utilidades definidas en los archivos `.js` de otra app de dominio (ej. usar `clientes.api.js` desde `proveedores`).
+4. **[PROHIBIDO] Modificar el namespace de otra app:** Prohibido extender, sobreescribir o monkey-patchear el objeto `window.Sintel.<OtraApp>` desde fuera de esa app.
+5. **[PROHIBIDO] Eventos cross-app con acoplamiento directo:** Prohibido que una app escuche eventos HTMX o DOM disparados por otra app para ejecutar logica de negocio propia, salvo via eventos estandarizados del shell `core` (ej. `sintel:tenant-ready`).
+
+**Ejemplo PROHIBIDO:**
+```html
+<!-- En apps/tenant/clientes/templates/tenant/clientes/list_cliente.html -->
+<script src="{% static 'facturas/js/facturas.api.js' %}"></script>
+<script>
+  // Llamada directa al namespace de otra app
+  window.Sintel.Proveedores.table.reload();
+</script>
+```
+
+**Ejemplo CORRECTO:**
+```html
+<!-- En apps/tenant/clientes/templates/tenant/clientes/list_cliente.html -->
+{% include "tenant/clientes/partials/assets_clientes.html" %}
+<script>
+  // Solo invoca el namespace propio
+  window.Sintel.Clientes.init();
+</script>
+```
+
+### 23.3. Excepciones Controladas (JS Global Autorizado)
+
+| Fuente | Razon |
+|---|---|
+| CDN: Bootstrap 5, HTMX, Tabulator, Font Awesome | Infraestructura UI compartida — permitida globalmente |
+| `apps/tenant/core/static/core/js/common/` | Helpers globales de infraestructura: `ui-manager.js`, `tabulator.factory.js`, `notyf.init.js`, `http.js` |
+| `apps/public/console/static/js/jwt-auth.js` | Helper global de autenticacion JWT — `window.jwtAuth` |
+| Eventos del shell `core` (`sintel:*`) | Canal de comunicacion inter-app autorizado via Custom Events estandarizados |
+
+### 23.4. Canal de Comunicacion Inter-App Autorizado (Custom Events)
+
+Cuando una app necesita notificar a otra de un cambio de estado (ej. un cliente nuevo creado que debe reflejarse en facturas), el mecanismo autorizado es:
+
+```javascript
+// App emisora (clientes): dispara evento estandarizado
+document.dispatchEvent(new CustomEvent('sintel:cliente:created', { detail: { uuid } }));
+
+// App receptora (facturas): escucha el evento estandarizado
+document.addEventListener('sintel:cliente:created', (e) => {
+    window.Sintel.Facturas.ClienteSelector.refresh(e.detail.uuid);
+});
+```
+
+- El nombre del evento DEBE seguir el patron `sintel:<app>:<accion>`.
+- El `detail` solo expone datos minimos necesarios (UUID, estado). NUNCA objetos internos del modulo emisor.
+- La app receptora es responsable de manejar el evento con su propia logica encapsulada.
+
+### 23.5. Auditoria y Cumplimiento
+
+- Toda PR que modifique archivos `.js` o templates DEBE verificar que no hay `<script src>` cross-app ni llamadas a `window.Sintel.<OtraApp>` desde fuera de esa app.
+- Un agente que detecte una violacion DEBE reportarla al usuario antes de continuar, sin propagarla.

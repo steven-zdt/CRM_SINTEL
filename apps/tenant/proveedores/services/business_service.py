@@ -5,7 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from rest_framework.exceptions import ValidationError
 from django.db import transaction, IntegrityError
 from .crud_service import ProveedorCRUDService
-from .selectors import qs_detail
+from .selectors import ProveedorSelector
 from ..choices.niif_proveedores_choices import PROVEEDORES_NIIF_CODIGOS_VALIDOS
 from apps.tenant.empresa.models import Empresa
 
@@ -60,7 +60,32 @@ class ProveedorBusinessService:
                 'codigo_contable': [f"El codigo contable '{codigo_contable}' no pertenece al catalogo NIIF de pasivos."]
             })
 
+    def _sanitize_retenciones(self, payload: dict) -> dict:
+        """
+        Zero Trust: Limpia flags y porcentajes de retención si el proveedor no es retenedor.
+        """
+        es_retenedor = payload.get("es_retenedor", False)
+        
+        if not es_retenedor:
+            payload["aplica_retefuente"] = False
+            payload["retefuente_porcentaje"] = 0
+            payload["aplica_reteica"] = False
+            payload["reteica_porcentaje"] = 0
+            payload["aplica_reteiva"] = False
+            payload["reteiva_porcentaje"] = 0
+        else:
+            # Sanitización fina: si la flag individual es False, el porcentaje debe ser 0
+            if not payload.get("aplica_retefuente", False):
+                payload["retefuente_porcentaje"] = 0
+            if not payload.get("aplica_reteica", False):
+                payload["reteica_porcentaje"] = 0
+            if not payload.get("aplica_reteiva", False):
+                payload["reteiva_porcentaje"] = 0
+                
+        return payload
+
     # ==============================================================================
+
     # 2. FINANCIAL CALCULATIONS (SSoT)
     # ==============================================================================
 
@@ -137,24 +162,37 @@ class ProveedorBusinessService:
     def crear_proveedor(self, empresa_id, data):
         """Orquesta la creación de un proveedor con validaciones."""
         self.validate_niif_code(data.get('codigo_contable'))
+        data = self._sanitize_retenciones(data)
         return self.crud.create(empresa_id, data)
 
     def actualizar_proveedor(self, proveedor, data):
         """Orquesta la actualización de un proveedor con validaciones."""
         self.validate_niif_code(data.get('codigo_contable'))
+        data = self._sanitize_retenciones(data)
         return self.crud.update(proveedor, data)
+
 
     def inactivar_proveedor(self, proveedor):
         """Cambia el estado del proveedor a inactivo."""
         return self.crud.update(proveedor, {'activo': False})
 
     def eliminar_proveedor(self, proveedor):
-        """Elimina el proveedor validando que no esté activo."""
+        """
+        Elimina el proveedor de forma segura (hard delete con cascada automática).
+
+        Comportamiento:
+        - Si el proveedor está activo → Error (debe inactivarse primero)
+        - Si el proveedor está inactivo → Eliminación física completa
+        - Los DocumentoSoporte asociados se eliminan en cascada (CASCADE FK)
+        """
+        # Paso 1: Validar que no esté activo
         if proveedor.activo:
             raise ValidationError({
                 "error": "active_record",
-                "message": "No se puede eliminar un ítem activo. Cámbielo a 'Inactivo' antes de borrar."
+                "message": "No se puede eliminar un proveedor activo. Márquelo como 'Inactivo' primero."
             })
+
+        # Paso 2: Hard delete (CASCADE automático de DocumentoSoporte)
         return self.crud.delete(proveedor)
 
     @transaction.atomic

@@ -47,12 +47,12 @@
             </button>
           </div>
           <button class="btn btn-primary btn-sm" 
-                  hx-get="/ui/gastos/gestor-offcanvas/?tipo=gasto" 
+                  hx-get="/api/v1/gastos/render-offcanvas/crear/" 
                   hx-target="#offcanvas-container-gastos" 
                   hx-swap="innerHTML"
                   data-module="gastos"
                   data-create-button>
-            <i class="bi bi-plus-lg me-1"></i>Nuevo Gasto
+            <i class="bi bi-plus-lg me-2"></i>Nuevo Gasto
           </button>
         </div>
         
@@ -97,7 +97,7 @@
             </button>
           </div>
           <button class="btn btn-primary btn-sm" 
-                  hx-get="/ui/gastos/gestor-offcanvas/?tipo=resolucion" 
+                  hx-get="/api/v1/gastos/render-offcanvas/resolucion/" 
                   hx-target="#offcanvas-container-gastos" 
                   hx-swap="innerHTML"
                   data-module="resoluciones"

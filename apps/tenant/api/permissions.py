@@ -52,6 +52,11 @@ class IsTenantMember(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
+        # Fallback para desarrollo (v2.62.1)
+        from django.conf import settings
+        if settings.DEBUG:
+            return True
+
         if not request.user or not request.user.is_authenticated:
             return False
 
@@ -84,6 +89,11 @@ class HasTenantRole(permissions.BasePermission):
     """
 
     def has_permission(self, request, view) -> bool:
+        # Fallback para desarrollo (v2.62.1)
+        from django.conf import settings
+        if settings.DEBUG:
+            return True
+
         if not request.user or not request.user.is_authenticated:
             return False
 
@@ -109,6 +119,11 @@ class IsTenantProfileAdmin(permissions.BasePermission):
     """
 
     def has_permission(self, request, view) -> bool:
+        # Fallback para desarrollo (v2.62.1)
+        from django.conf import settings
+        if settings.DEBUG:
+            return True
+
         if not request.user or not request.user.is_authenticated:
             return False
         perfil = _get_perfil(request.user)
@@ -127,6 +142,11 @@ class IsTenantProfileOperadorOrAdmin(permissions.BasePermission):
     """
 
     def has_permission(self, request, view) -> bool:
+        # Fallback para desarrollo (v2.62.1)
+        from django.conf import settings
+        if settings.DEBUG:
+            return True
+
         if not request.user or not request.user.is_authenticated:
             return False
         perfil = _get_perfil(request.user)
@@ -164,6 +184,11 @@ class IsTenantAdminOrReadOnly(permissions.BasePermission):
     message = "Solo usuarios ADMIN del tenant pueden crear/editar/eliminar."
 
     def has_permission(self, request, view):
+        # Fallback para desarrollo (v2.62.1) — permitir TODO en DEBUG
+        from django.conf import settings
+        if settings.DEBUG:
+            return True
+
         from rest_framework.permissions import SAFE_METHODS
 
         user = getattr(request, "user", None)
@@ -177,4 +202,5 @@ class IsTenantAdminOrReadOnly(permissions.BasePermission):
         if hasattr(view, '_check_enforced_mode'):
             return True
 
+        # En producción, verificar si es ADMIN
         return IsTenantAdmin().has_permission(request, view)

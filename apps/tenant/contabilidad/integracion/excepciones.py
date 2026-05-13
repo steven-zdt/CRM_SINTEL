@@ -22,7 +22,7 @@ class ReglaContableNoDefinidaError(ContabilidadError):
 
 
 class AsientoNoCuadradoError(ContabilidadError):
-    """Raised when journal entry debit ≠ credit (internal validation error)."""
+    """Raised when journal entry debit != credit (internal validation error)."""
     pass
 
 

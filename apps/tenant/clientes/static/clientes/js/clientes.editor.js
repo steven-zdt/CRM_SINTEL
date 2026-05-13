@@ -40,6 +40,15 @@
             ciudad:             '#cliente-ciudad',
             observaciones:      '#cliente-observaciones',
             activo:             '#cliente-activo',
+            // [v3.5.0] Retenciones
+            es_retenedor:       '#cliente-es_retenedor',
+            aplica_retefuente:  '#cliente-aplica_retefuente',
+            retefuente_porcentaje: '#cliente-retefuente_porcentaje',
+            aplica_reteica:     '#cliente-aplica_reteica',
+            reteica_porcentaje: '#cliente-reteica_porcentaje',
+            aplica_reteiva:     '#cliente-aplica_reteiva',
+            reteiva_porcentaje: '#cliente-reteiva_porcentaje',
+            cuenta_contable_uuid: '#cliente-cuenta_contable_uuid',
         }
     };
 
@@ -72,6 +81,15 @@
             ciudad:             getText(DOM.fields.ciudad),
             observaciones:      getText(DOM.fields.observaciones),
             activo:             getBool(DOM.fields.activo),
+            // [v3.5.0] Retenciones
+            es_retenedor:       getBool(DOM.fields.es_retenedor),
+            aplica_retefuente:  getBool(DOM.fields.aplica_retefuente),
+            retefuente_porcentaje: parseFloat(getText(DOM.fields.retefuente_porcentaje)) || 0,
+            aplica_reteica:     getBool(DOM.fields.aplica_reteica),
+            reteica_porcentaje: parseFloat(getText(DOM.fields.reteica_porcentaje)) || 0,
+            aplica_reteiva:     getBool(DOM.fields.aplica_reteiva),
+            reteiva_porcentaje: parseFloat(getText(DOM.fields.reteiva_porcentaje)) || 0,
+            cuenta_contable_uuid: getText(DOM.fields.cuenta_contable_uuid),
         };
 
         // Remover campos de texto opcionales vacios
@@ -277,6 +295,61 @@
             w.ClienteUtils._actualizarBotonesEliminar(contenedorContactos);
         }
 
+        // [v3.5.0] Lógica de Retenciones
+        const checkRetenedor = d.querySelector(DOM.fields.es_retenedor);
+        const contenedorRetenciones = d.querySelector('#contenedor-retenciones');
+        
+        if (checkRetenedor && contenedorRetenciones) {
+            const toggleRetenciones = () => {
+                const isRetenedor = checkRetenedor.checked;
+                console.log('[clientes.editor] Toggling retenciones:', isRetenedor);
+                
+                if (isRetenedor) {
+                    contenedorRetenciones.classList.remove('d-none');
+                    contenedorRetenciones.style.display = 'block';
+                } else {
+                    contenedorRetenciones.classList.add('d-none');
+                    contenedorRetenciones.style.display = 'none';
+                }
+                
+                if (!isRetenedor) {
+                    // Limpiar todo si se apaga el switch (Zero Waste Frontend)
+                    ['aplica_retefuente', 'aplica_reteica', 'aplica_reteiva'].forEach(f => {
+                        const cb = d.querySelector(DOM.fields[f]);
+                        if (cb) cb.checked = false;
+                    });
+                    ['retefuente_porcentaje', 'reteica_porcentaje', 'reteiva_porcentaje'].forEach(f => {
+                        const inp = d.querySelector(DOM.fields[f]);
+                        if (inp) {
+                            inp.value = 0;
+                            inp.disabled = true;
+                        }
+                    });
+                }
+            };
+
+            // v3.5.1: Control fino por campo de retención
+            ['retefuente', 'reteica', 'reteiva'].forEach(key => {
+                const cb = d.querySelector(DOM.fields[`aplica_${key}`]);
+                const inp = d.querySelector(DOM.fields[`${key}_porcentaje`]);
+                if (cb && inp) {
+                    const syncInput = () => {
+                        inp.disabled = !cb.checked;
+                        if (!cb.checked) inp.value = 0;
+                    };
+                    cb.addEventListener('change', syncInput);
+                    syncInput(); // Inicial
+                }
+            });
+
+            checkRetenedor.addEventListener('change', toggleRetenciones);
+            // Ejecutar inicial (para modo edición)
+            toggleRetenciones();
+        }
+
+        // [v3.5.0] Buscador de Cuentas Contables
+        initCuentaContableSearch();
+
         // ⚠️ v2.62: Delegación de eventos para botones del formulario (evita duplicidad)
         const setupEventListeners = () => {
             const btnGuardar = d.querySelector(DOM.btnGuardar);
@@ -302,6 +375,98 @@
         setupEventListeners();
 
         console.log('[clientes.editor] Formulario inicializado');
+    }
+
+    /**
+     * [v3.5.0] Inicializar buscador asíncrono de cuentas contables
+     */
+    function initCuentaContableSearch() {
+        const searchInput = d.querySelector('#cliente-cuenta_contable_search');
+        const uuidInput = d.querySelector('#cliente-cuenta_contable_uuid');
+        const suggestions = d.querySelector('#cliente-cuenta-suggestions');
+
+        if (!searchInput || !uuidInput || !suggestions) return;
+
+        let debounceTimer;
+
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.trim();
+            clearTimeout(debounceTimer);
+
+            if (query.length < 2) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const response = await w.clientesAPI.searchCuentas(query);
+                    if (response && response.ok && response.data) {
+                        const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
+                        renderSuggestions(results);
+                    }
+                } catch (err) {
+                    console.error('[clientes.editor:cuenta_search] Error:', err);
+                }
+            }, 300);
+        });
+
+        function renderSuggestions(data) {
+            suggestions.innerHTML = '';
+            if (!data || !data.length) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+
+            data.forEach(cuenta => {
+                const item = d.createElement('button');
+                item.type = 'button';
+                item.className = 'list-group-item list-group-item-action small py-2';
+                item.innerHTML = `<div><span class="fw-bold text-primary">${cuenta.codigo}</span> - ${cuenta.nombre}</div>`;
+                
+                item.addEventListener('click', () => {
+                    searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
+                    uuidInput.value = cuenta.uuid;
+                    suggestions.classList.add('d-none');
+                    // Trigger visual feedback
+                    searchInput.classList.add('is-valid');
+                    setTimeout(() => searchInput.classList.remove('is-valid'), 2000);
+                });
+                suggestions.appendChild(item);
+            });
+            suggestions.classList.remove('d-none');
+        }
+
+        // Cerrar sugerencias al hacer click fuera
+        d.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
+
+        // Limpiar UUID si el campo de búsqueda se vacía
+        searchInput.addEventListener('change', () => {
+            if (!searchInput.value.trim()) {
+                uuidInput.value = '';
+            }
+        });
+
+        // [v3.6.1] Pre-poblar campo de texto si hay UUID inicial (modo edición)
+        // §18: resolución via HTTP al endpoint de contabilidad, no via Python import
+        const initialUuid = uuidInput.value.trim();
+        if (initialUuid && !searchInput.value.trim()) {
+            w.clientesAPI.getCuentaByUuid(initialUuid).then(response => {
+                if (response && response.ok && response.data) {
+                    const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
+                    if (results.length > 0) {
+                        const cuenta = results[0];
+                        searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
+                    }
+                }
+            }).catch(err => {
+                console.warn('[clientes.editor:cuenta_search] No se pudo pre-cargar cuenta:', err);
+            });
+        }
     }
 
     /**

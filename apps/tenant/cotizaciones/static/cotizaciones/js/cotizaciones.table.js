@@ -52,8 +52,19 @@
    * Columna de acciones CRUD
    */
   function accionesFormatter(cell) {
-    var data = cell.getRow().getData();
-    var uuid = data.uuid || '';
+    var uuid = '';
+    try {
+      var row = cell.getRow();
+      if (row && typeof row.getData === 'function') {
+        var data = row.getData();
+        uuid = data && data.uuid ? data.uuid : '';
+      }
+    } catch (e) {
+      console.warn(MOD + ' Error obteniendo UUID en formatter:', e);
+    }
+
+    if (!uuid) return '<span class="text-muted">Error</span>';
+
     return '<div class="btn-group btn-group-sm" role="group">' +
       '<button class="btn btn-outline-primary btn-edit-cotizacion" data-uuid="' + uuid + '" title="Editar"><i class="bi bi-pencil"></i></button>' +
       '<button class="btn btn-outline-info btn-detail-cotizacion" data-uuid="' + uuid + '" title="Detalle"><i class="bi bi-eye"></i></button>' +
@@ -85,9 +96,16 @@
     var gridEl = d.querySelector(GRID_ID);
     if (!gridEl) return;
 
+    // Validar que el elemento esté visible en el DOM
+    if (gridEl.offsetParent === null) {
+      console.warn(MOD + ' Elemento grid no es visible, aplazando inicializacion');
+      w.requestAnimationFrame(function () { initTable(); });
+      return;
+    }
+
     // Destruir instancia previa si existe
     if (_table && typeof _table.destroy === 'function') {
-      try { _table.destroy(); } catch (e) { /* ignore */ }
+      _table.destroy();
       _table = null;
     }
 
@@ -120,14 +138,28 @@
       var api = w.Sintel.Cotizaciones.api;
       if (!api) return;
 
+      // ⚠️ v2.62: Patrón HTMX para abrir Offcanvas desde Tabulator
+      var htmxUrl = null;
       if (btn.classList.contains('btn-edit-cotizacion')) {
-        w.Sintel.Cotizaciones.editor.showEdit(uuid);
+        htmxUrl = api.offcanvasEditarUrl(uuid);
       } else if (btn.classList.contains('btn-detail-cotizacion')) {
-        w.Sintel.Cotizaciones.detalle.show(uuid);
+        htmxUrl = api.offcanvasDetalleUrl(uuid);
       } else if (btn.classList.contains('btn-pdf-cotizacion')) {
         window.open(api.exportarPdfUrl(uuid), '_blank');
+        return;
       } else if (btn.classList.contains('btn-delete-cotizacion')) {
         w.Sintel.Cotizaciones.ui.confirmarEliminar(uuid);
+        return;
+      }
+
+      if (htmxUrl) {
+          var trigger = d.createElement('button');
+          trigger.setAttribute('hx-get', htmxUrl);
+          trigger.setAttribute('hx-target', '#offcanvas-container');
+          d.body.appendChild(trigger);
+          if (w.htmx) w.htmx.process(trigger);
+          trigger.click();
+          trigger.remove();
       }
     });
   }
@@ -136,7 +168,22 @@
   w.Sintel.Cotizaciones.table = {
     init: initTable,
     refresh: function () { if (_table) _table.replaceData(); },
-    redraw: function () { if (_table && typeof _table.redraw === 'function') _table.redraw(true); },
+    redraw: function () {
+      if (!_table || typeof _table.redraw !== 'function') return;
+      var gridEl = _table.element || d.querySelector(GRID_ID);
+      if (!gridEl || gridEl.offsetParent === null) return;
+
+      try {
+        // requestAnimationFrame asegura que el layout esté completo antes de redraw
+        requestAnimationFrame(function () {
+          if (_table && typeof _table.redraw === 'function') {
+            _table.redraw(true);
+          }
+        });
+      } catch (e) {
+        console.warn(MOD + ' Error en redraw:', e);
+      }
+    },
     getInstance: function () { return _table; }
   };
 

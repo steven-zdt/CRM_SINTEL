@@ -30,22 +30,25 @@ from django.core.exceptions import ValidationError
 # ==============================================================================
 
 CATEGORIA_LIST_FIELDS = (
-    'id', 'nombre', 'descripcion', 'aplicacion', 'activo', 'empresa_id'
+    'id', 'nombre', 'descripcion', 'aplicacion', 'activo', 'empresa_id',
+    'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'cuenta_ingreso_uuid'
 )
 
 PRODUCTO_LIST_FIELDS = (
     'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
-    'stock_actual', 'stock_minimo', 'precio_venta', 'costo_promedio', 'activo', 'imagen', 'unidad', 'empresa_id'
+    'stock_actual', 'stock_minimo', 'precio_venta', 'costo_promedio', 'activo', 'imagen', 'unidad', 
+    'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'empresa_id'
 )
 
 SERVICIO_LIST_FIELDS = (
     'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
-    'precio_venta', 'activo', 'imagen', 'empresa_id'
+    'precio_venta', 'activo', 'imagen', 'cuenta_ingreso_uuid', 'empresa_id'
 )
 
 ACTIVO_LIST_FIELDS = (
     'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
-    'ubicacion', 'responsable', 'estado', 'fecha_adquisicion', 'costo_adquisicion', 'empresa_id'
+    'ubicacion', 'responsable', 'estado', 'fecha_adquisicion', 'costo_adquisicion', 
+    'cuenta_activo_uuid', 'cuenta_depreciacion_uuid', 'empresa_id'
 )
 
 MOVIMIENTO_LIST_FIELDS = (
@@ -55,6 +58,7 @@ MOVIMIENTO_LIST_FIELDS = (
 
 CATEGORIA_DETAIL_FIELDS = (
     'id', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo',
+    'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'cuenta_ingreso_uuid',
     'created_at', 'updated_at', 'empresa_id'
 )
 
@@ -63,12 +67,14 @@ PRODUCTO_DETAIL_FIELDS = (
     'descripcion', 'unidad', 'imagen',
     'precio_venta', 'costo_promedio',
     'stock_actual', 'stock_minimo',
+    'cuenta_inventario_uuid', 'cuenta_costo_uuid',
     'activo', 'created_at', 'updated_at', 'empresa_id'
 )
 
 SERVICIO_DETAIL_FIELDS = (
     'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
     'descripcion', 'imagen', 'precio_venta',
+    'cuenta_ingreso_uuid',
     'activo', 'created_at', 'updated_at', 'empresa_id'
 )
 
@@ -77,6 +83,7 @@ ACTIVO_DETAIL_FIELDS = (
     'marca', 'modelo', 'descripcion', 'imagen',
     'ubicacion', 'responsable',
     'fecha_adquisicion', 'costo_adquisicion', 'estado',
+    'cuenta_activo_uuid', 'cuenta_depreciacion_uuid',
     'created_at', 'updated_at', 'empresa_id'
 )
 
@@ -121,240 +128,192 @@ def _obtener_empresa_singleton():
 
 
 # ==============================================================================
-# 3. QUERYSETS OPTIMIZADOS - LISTADOS
+# 3. QUERYSETS OPTIMIZADOS (Class-based Selectors)
 # ==============================================================================
 
-def qs_producto_list(empresa_id, search=None):
-    """
-    QuerySet optimizado para LISTAR Productos (tabla Tabulator).
-
-    Args:
-        empresa_id: ID de la empresa (Zero Trust).
-        search: Termino de busqueda (codigo, nombre, categoria__nombre).
-
-    Returns:
-        QuerySet: Optimizado con .only(*PRODUCTO_LIST_FIELDS) y select_related('categoria').
-    """
-    qs = (
-        Producto.objects
-        .filter(empresa_id=empresa_id)
-        .select_related('categoria')
-        .only(*PRODUCTO_LIST_FIELDS)
-    )
-    if search:
-        qs = qs.filter(
-            Q(codigo__icontains=search) |
-            Q(nombre__icontains=search) |
-            Q(categoria__nombre__icontains=search)
+class ProductoSelector:
+    @staticmethod
+    def get_list(empresa_id: int, search: str = None):
+        """
+        QuerySet optimizado para LISTAR Productos (tabla Tabulator).
+        """
+        qs = (
+            Producto.objects
+            .filter(empresa_id=empresa_id)
+            .select_related('categoria')
+            .only(*PRODUCTO_LIST_FIELDS)
         )
-    return qs
+        if search:
+            qs = qs.filter(
+                Q(codigo__icontains=search) |
+                Q(nombre__icontains=search) |
+                Q(categoria__nombre__icontains=search)
+            )
+        return qs
 
-
-def qs_servicio_list(empresa_id, search=None):
-    """
-    QuerySet optimizado para LISTAR Servicios (tabla Tabulator).
-
-    Args:
-        empresa_id: ID de la empresa (Zero Trust).
-        search: Termino de busqueda (codigo, nombre, categoria__nombre).
-
-    Returns:
-        QuerySet: Optimizado con .only(*SERVICIO_LIST_FIELDS) y select_related('categoria').
-    """
-    qs = (
-        Servicio.objects
-        .filter(empresa_id=empresa_id)
-        .select_related('categoria')
-        .only(*SERVICIO_LIST_FIELDS)
-    )
-    if search:
-        qs = qs.filter(
-            Q(codigo__icontains=search) |
-            Q(nombre__icontains=search) |
-            Q(categoria__nombre__icontains=search)
+    @staticmethod
+    def get_detail(empresa_id: int, producto_id: int):
+        """
+        QuerySet optimizado para DETALLE de Producto.
+        """
+        return (
+            Producto.objects
+            .filter(empresa_id=empresa_id, pk=producto_id)
+            .select_related('categoria')
+            .only(*PRODUCTO_DETAIL_FIELDS)
+            .get()
         )
-    return qs
 
 
-def qs_activo_list(empresa_id, search=None):
-    """
-    QuerySet optimizado para LISTAR Activos Fijos (tabla Tabulator).
-
-    Args:
-        empresa_id: ID de la empresa (Zero Trust).
-        search: Termino de busqueda (codigo, nombre, ubicacion, responsable).
-
-    Returns:
-        QuerySet: Optimizado con .only(*ACTIVO_LIST_FIELDS) y select_related('categoria').
-    """
-    qs = (
-        ActivoFijo.objects
-        .filter(empresa_id=empresa_id)
-        .select_related('categoria')
-        .only(*ACTIVO_LIST_FIELDS)
-    )
-    if search:
-        qs = qs.filter(
-            Q(codigo__icontains=search) |
-            Q(nombre__icontains=search) |
-            Q(categoria__nombre__icontains=search) |
-            Q(ubicacion__icontains=search) |
-            Q(responsable__icontains=search)
+class ServicioSelector:
+    @staticmethod
+    def get_list(empresa_id: int, search: str = None):
+        """
+        QuerySet optimizado para LISTAR Servicios (tabla Tabulator).
+        """
+        qs = (
+            Servicio.objects
+            .filter(empresa_id=empresa_id)
+            .select_related('categoria')
+            .only(*SERVICIO_LIST_FIELDS)
         )
-    return qs
+        if search:
+            qs = qs.filter(
+                Q(codigo__icontains=search) |
+                Q(nombre__icontains=search) |
+                Q(categoria__nombre__icontains=search)
+            )
+        return qs
 
-
-def qs_movimiento_list(empresa_id, search=None):
-    """
-    QuerySet optimizado para LISTAR Movimientos de Inventario (Kardex).
-
-    Args:
-        empresa_id: ID de la empresa (Zero Trust).
-        search: Termino de busqueda (producto__codigo, producto__nombre, origen_referencia).
-
-    Returns:
-        QuerySet: Optimizado con .only(*MOVIMIENTO_LIST_FIELDS) y select_related('producto').
-    """
-    qs = (
-        MovimientoInventario.objects
-        .filter(producto__empresa_id=empresa_id)
-        .select_related('producto')
-        .only(*MOVIMIENTO_LIST_FIELDS)
-    )
-    if search:
-        qs = qs.filter(
-            Q(producto__codigo__icontains=search) |
-            Q(producto__nombre__icontains=search) |
-            Q(origen_referencia__icontains=search) |
-            Q(observaciones__icontains=search)
+    @staticmethod
+    def get_detail(empresa_id: int, servicio_id: int):
+        """
+        QuerySet optimizado para DETALLE de Servicio.
+        """
+        return (
+            Servicio.objects
+            .filter(empresa_id=empresa_id, pk=servicio_id)
+            .select_related('categoria')
+            .only(*SERVICIO_DETAIL_FIELDS)
+            .get()
         )
-    return qs
 
 
-def qs_categoria_list(empresa_id=None, search=None):
-    """
-    QuerySet optimizado para LISTAR Categorias (tabla Tabulator).
-
-    Args:
-        empresa_id: ID de la empresa (Zero Trust, opcional para compatibilidad).
-        search: Termino de busqueda (nombre, descripcion).
-
-    Returns:
-        QuerySet: Optimizado con .only(*CATEGORIA_LIST_FIELDS).
-    """
-    if empresa_id:
-        qs = CategoriaItem.objects.filter(empresa_id=empresa_id).only(*CATEGORIA_LIST_FIELDS)
-    else:
-        qs = CategoriaItem.objects.only(*CATEGORIA_LIST_FIELDS)
-    if search:
-        qs = qs.filter(
-            Q(nombre__icontains=search) |
-            Q(descripcion__icontains=search)
+class ActivoFijoSelector:
+    @staticmethod
+    def get_list(empresa_id: int, search: str = None):
+        """
+        QuerySet optimizado para LISTAR Activos Fijos (tabla Tabulator).
+        """
+        qs = (
+            ActivoFijo.objects
+            .filter(empresa_id=empresa_id)
+            .select_related('categoria')
+            .only(*ACTIVO_LIST_FIELDS)
         )
-    return qs
+        if search:
+            qs = qs.filter(
+                Q(codigo__icontains=search) |
+                Q(nombre__icontains=search) |
+                Q(categoria__nombre__icontains=search) |
+                Q(ubicacion__icontains=search) |
+                Q(responsable__icontains=search)
+            )
+        return qs
 
-
-def qs_historial_list(empresa):
-    """
-    QuerySet optimizado para LISTAR Historial de Servicios.
-
-    Args:
-        empresa: Instancia Empresa (Zero Trust).
-
-    Returns:
-        QuerySet: Optimizado con select_related('servicio').
-    """
-    return (
-        HistorialServicio.objects
-        .select_related('servicio')
-        .filter(empresa=empresa)
-        .only(
-            'id', 'fecha_registro', 'cantidad', 'valor_cobrado',
-            'origen_referencia', 'cliente_referencia', 'observaciones',
-            'servicio__nombre'
+    @staticmethod
+    def get_detail(empresa_id: int, activo_id: int):
+        """
+        QuerySet optimizado para DETALLE de Activo Fijo.
+        """
+        return (
+            ActivoFijo.objects
+            .filter(empresa_id=empresa_id, pk=activo_id)
+            .select_related('categoria')
+            .only(*ACTIVO_DETAIL_FIELDS)
+            .get()
         )
-        .order_by('-fecha_registro')
-    )
 
 
-# ==============================================================================
-# 4. QUERYSETS OPTIMIZADOS - DETALLE
-# ==============================================================================
+class MovimientoInventarioSelector:
+    @staticmethod
+    def get_list(empresa_id: int, search: str = None):
+        """
+        QuerySet optimizado para LISTAR Movimientos de Inventario (Kardex).
+        """
+        qs = (
+            MovimientoInventario.objects
+            .filter(producto__empresa_id=empresa_id)
+            .select_related('producto')
+            .only(*MOVIMIENTO_LIST_FIELDS)
+        )
+        if search:
+            qs = qs.filter(
+                Q(producto__codigo__icontains=search) |
+                Q(producto__nombre__icontains=search) |
+                Q(origen_referencia__icontains=search) |
+                Q(observaciones__icontains=search)
+            )
+        return qs
 
-def qs_producto_detail(empresa_id, producto_id):
-    """
-    QuerySet optimizado para DETALLE de Producto (formulario de edicion).
-
-    Raises:
-        Producto.DoesNotExist: Si el producto no existe o no pertenece al tenant.
-    """
-    return (
-        Producto.objects
-        .filter(empresa_id=empresa_id, pk=producto_id)
-        .select_related('categoria')
-        .only(*PRODUCTO_DETAIL_FIELDS)
-        .get()
-    )
-
-
-def qs_servicio_detail(empresa_id, servicio_id):
-    """
-    QuerySet optimizado para DETALLE de Servicio (formulario de edicion).
-
-    Raises:
-        Servicio.DoesNotExist: Si el servicio no existe o no pertenece al tenant.
-    """
-    return (
-        Servicio.objects
-        .filter(empresa_id=empresa_id, pk=servicio_id)
-        .select_related('categoria')
-        .only(*SERVICIO_DETAIL_FIELDS)
-        .get()
-    )
-
-
-def qs_activo_detail(empresa_id, activo_id):
-    """
-    QuerySet optimizado para DETALLE de Activo Fijo (formulario de edicion).
-
-    Raises:
-        ActivoFijo.DoesNotExist: Si el activo no existe o no pertenece al tenant.
-    """
-    return (
-        ActivoFijo.objects
-        .filter(empresa_id=empresa_id, pk=activo_id)
-        .select_related('categoria')
-        .only(*ACTIVO_DETAIL_FIELDS)
-        .get()
-    )
+    @staticmethod
+    def get_detail(empresa_id: int, movimiento_id: int):
+        """
+        QuerySet optimizado para DETALLE de Movimiento.
+        """
+        return (
+            MovimientoInventario.objects
+            .filter(empresa_id=empresa_id, pk=movimiento_id)
+            .select_related('producto')
+            .only(*MOVIMIENTO_DETAIL_FIELDS)
+            .get()
+        )
 
 
-def qs_movimiento_detail(empresa_id, movimiento_id):
-    """
-    QuerySet optimizado para DETALLE de Movimiento (formulario de edicion).
+class CategoriaItemSelector:
+    @staticmethod
+    def get_list(empresa_id: int = None, search: str = None):
+        """
+        QuerySet optimizado para LISTAR Categorias (tabla Tabulator).
+        """
+        if empresa_id:
+            qs = CategoriaItem.objects.filter(empresa_id=empresa_id).only(*CATEGORIA_LIST_FIELDS)
+        else:
+            qs = CategoriaItem.objects.only(*CATEGORIA_LIST_FIELDS)
+        if search:
+            qs = qs.filter(
+                Q(nombre__icontains=search) |
+                Q(descripcion__icontains=search)
+            )
+        return qs
 
-    Raises:
-        MovimientoInventario.DoesNotExist: Si el movimiento no existe o no pertenece al tenant.
-    """
-    return (
-        MovimientoInventario.objects
-        .filter(empresa_id=empresa_id, pk=movimiento_id)
-        .select_related('producto')
-        .only(*MOVIMIENTO_DETAIL_FIELDS)
-        .get()
-    )
+    @staticmethod
+    def get_detail(empresa_id: int, categoria_id: int):
+        """
+        QuerySet optimizado para DETALLE de Categoria.
+        """
+        return (
+            CategoriaItem.objects
+            .filter(empresa_id=empresa_id, pk=categoria_id)
+            .only(*CATEGORIA_DETAIL_FIELDS)
+            .get()
+        )
 
 
-def qs_categoria_detail(empresa_id, categoria_id):
-    """
-    QuerySet optimizado para DETALLE de Categoria (formulario de edicion).
-
-    Raises:
-        CategoriaItem.DoesNotExist: Si la categoria no existe o no pertenece al tenant.
-    """
-    return (
-        CategoriaItem.objects
-        .filter(empresa_id=empresa_id, pk=categoria_id)
-        .only(*CATEGORIA_DETAIL_FIELDS)
-        .get()
-    )
+class HistorialServicioSelector:
+    @staticmethod
+    def get_list(empresa):
+        """
+        QuerySet optimizado para LISTAR Historial de Servicios.
+        """
+        return (
+            HistorialServicio.objects
+            .select_related('servicio')
+            .filter(empresa=empresa)
+            .only(
+                'id', 'fecha_registro', 'cantidad', 'valor_cobrado',
+                'origen_referencia', 'cliente_referencia', 'observaciones',
+                'servicio__nombre'
+            )
+            .order_by('-fecha_registro')
+        )

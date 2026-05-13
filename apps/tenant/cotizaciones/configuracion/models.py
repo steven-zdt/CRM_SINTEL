@@ -29,7 +29,7 @@ class ConfiguracionCotizacion(SintelTenantBaseModel):
     Campos nuevos:
     - dias_validez: Días de validez de la cotización (1 a 30 días)
     """
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    # empresa field inherited from SintelTenantBaseModel
     nombre_configuracion = models.CharField(
         max_length=100,
         verbose_name=_('Nombre de Configuración'),

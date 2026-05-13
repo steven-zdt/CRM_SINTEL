@@ -1,0 +1,21 @@
+<div class="offcanvas-header">
+  <h5 class="offcanvas-title">Plantillas de Cotización</h5>
+  <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+</div>
+<div class="offcanvas-body">
+  <div class="d-flex justify-content-between mb-3">
+    <button class="btn btn-sm btn-outline-primary" 
+            hx-get="/cotizaciones/partials/configuracion/crear/" 
+            hx-target="#offcanvas-container">
+      <i class="fas fa-plus me-1"></i>Nueva Plantilla
+    </button>
+  </div>
+
+  <div id="table-configuraciones" style="height: 300px;"></div>
+</div>
+
+<script>
+  if (window.Sintel && window.Sintel.Cotizaciones && window.Sintel.Cotizaciones.features && window.Sintel.Cotizaciones.features.configuracionList) {
+    window.Sintel.Cotizaciones.features.configuracionList.init('table-configuraciones');
+  }
+</script>

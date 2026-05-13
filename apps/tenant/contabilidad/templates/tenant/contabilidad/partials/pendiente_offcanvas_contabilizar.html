@@ -1,0 +1,447 @@
+{% load static %}
+{# pendiente_offcanvas_contabilizar.html - Asignacion manual de cuentas PUC #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-pendiente-contabilizar"
+     aria-labelledby="offcanvas-pendiente-label" style="width:90%;max-width:780px;">
+  <div class="offcanvas-header border-bottom bg-success text-white">
+    <h5 class="offcanvas-title" id="offcanvas-pendiente-label">
+      <i class="bi bi-journal-plus me-2"></i>Contabilizar Documento
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body">
+    <div id="feedback-contabilizar" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    {# Resumen del documento (readonly) #}
+    <div class="card border-0 bg-light mb-4">
+      <div class="card-body py-2">
+        <div class="row g-2 small">
+          <div class="col-md-3">
+            <span class="text-muted d-block">Numero</span>
+            <strong id="doc-numero">{{ numero }}</strong>
+          </div>
+          <div class="col-md-3">
+            <span class="text-muted d-block">Fecha</span>
+            <strong id="doc-fecha">{{ fecha }}</strong>
+          </div>
+          <div class="col-md-6">
+            <span class="text-muted d-block">Tercero</span>
+            <strong id="doc-tercero">{{ tercero_nit }} - {{ tercero_nombre }}</strong>
+          </div>
+          <div class="col-md-3">
+            <span class="text-muted d-block">Subtotal</span>
+            <strong id="doc-subtotal">$ {{ subtotal }}</strong>
+          </div>
+          <div class="col-md-3">
+            <span class="text-muted d-block">Impuestos/Retenciones</span>
+            <strong id="doc-impuestos">$ {{ impuestos }}</strong>
+          </div>
+          <div class="col-md-3">
+            <span class="text-muted d-block">Total</span>
+            <strong id="doc-total" class="text-success">$ {{ total }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Campos del asiento #}
+    <div class="row g-2 mb-3">
+      <div class="col-md-5">
+        <label class="form-label small fw-bold">Tipo Comprobante *</label>
+        <select class="form-select form-select-sm" id="asiento-tipo-comprobante">
+          <option value="" selected disabled>Seleccione...</option>
+          {% for tc in tipos_comprobante %}
+            <option value="{{ tc.id }}" data-prefijo="{{ tc.prefijo|default:'' }}"
+                    data-consecutivo="{{ tc.consecutivo_actual }}">
+              {{ tc.codigo }} - {{ tc.nombre }}
+            </option>
+          {% endfor %}
+        </select>
+        <small class="text-muted d-block" id="preview-numero">Siguiente: -</small>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small fw-bold">Fecha del Asiento *</label>
+        <input type="date" class="form-control form-control-sm" id="asiento-fecha"
+               value="{{ fecha|date:'Y-m-d' }}">
+      </div>
+      <div class="col-12">
+        <label class="form-label small fw-bold">Descripcion *</label>
+        <input type="text" class="form-control form-control-sm" id="asiento-descripcion"
+               value="Contabilizacion {{ numero }} - {{ tercero_nombre }}" maxlength="500">
+      </div>
+    </div>
+
+    {# Tabla de lineas dinamicas #}
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h6 class="mb-0 small fw-bold text-primary">LINEAS DEL ASIENTO (Partida Doble)</h6>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-primary" id="btn-ia-sugerir"
+                title="El asistente de IA sugiere las lineas contables. Revisa antes de confirmar.">
+          <i class="bi bi-stars me-1"></i>Diligenciar con IA
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-success" id="btn-agregar-linea">
+          <i class="bi bi-plus-circle"></i> Agregar Linea
+        </button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle" id="tabla-lineas">
+        <thead class="table-light">
+          <tr>
+            <th style="min-width:200px">Cuenta PUC *</th>
+            <th style="width:160px">Debe</th>
+            <th style="width:160px">Haber</th>
+            <th>Descripcion</th>
+            <th style="width:48px"></th>
+          </tr>
+        </thead>
+        <tbody id="lineas-body">
+          {# Filas generadas por JS #}
+        </tbody>
+        <tfoot>
+          <tr class="table-secondary fw-bold">
+            <td>TOTALES</td>
+            <td class="text-end" id="total-debe-display">$ 0.00</td>
+            <td class="text-end" id="total-haber-display">$ 0.00</td>
+            <td colspan="2">
+              <span id="cuadratura-badge" class="badge bg-danger">Sin cuadrar</span>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex gap-2 justify-content-end align-items-center">
+      <small class="text-muted me-auto" id="hint-cuadratura">El Debe debe ser igual al Haber para generar el asiento.</small>
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-success" id="btn-generar-asiento" disabled>
+        <i class="bi bi-check2-circle me-1"></i>Generar Asiento
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const APP_LABEL = '{{ app_label }}';
+  const MODELO = '{{ modelo }}';
+  const DOC_ID = {{ documento_id }};
+  const DOC_NUM = '{{ numero }}';
+  const DOC_SUBTOTAL = '{{ subtotal }}';
+  const DOC_IMPUESTOS = '{{ impuestos }}';
+  const DOC_TOTAL = '{{ total }}';
+  const DOC_TERCERO_NIT = '{{ tercero_nit }}';
+  const DOC_TERCERO_NOMBRE = '{{ tercero_nombre|escapejs }}';
+  const API_CUENTAS = '/api/v1/contabilidad/cuentas-contables/';
+  const API_CONTABILIZAR = '/api/v1/contabilidad/pendientes/contabilizar-manual/';
+  const API_ASISTENTE_IA = '/api/v1/contabilidad/pendientes/asistente-ia/';
+  const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const SUGERENCIAS = {{ sugerencias_puc|safe|default:'[]' }};
+
+  const offcanvasEl = document.getElementById('offcanvas-pendiente-contabilizar');
+  const selectComprobante = document.getElementById('asiento-tipo-comprobante');
+  const previewNumero = document.getElementById('preview-numero');
+  const lineasBody = document.getElementById('lineas-body');
+  const feedback = document.getElementById('feedback-contabilizar');
+  const btnGenerar = document.getElementById('btn-generar-asiento');
+  const totalDebeEl = document.getElementById('total-debe-display');
+  const totalHaberEl = document.getElementById('total-haber-display');
+  const cuadraturaBadge = document.getElementById('cuadratura-badge');
+
+  if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
+    window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+  }
+
+  // Lógica de Previsualización de Comprobante v3.6
+  selectComprobante.addEventListener('change', () => {
+    const opt = selectComprobante.options[selectComprobante.selectedIndex];
+    if (opt && opt.value) {
+      const prefijo = opt.dataset.prefijo || '';
+      const consecutivo = opt.dataset.consecutivo || '1';
+      previewNumero.innerHTML = `Siguiente: <span class="badge bg-light text-dark border">${prefijo}${consecutivo}</span>`;
+      recalcularTotales(); // Para habilitar/deshabilitar botón
+    } else {
+      previewNumero.innerText = 'Siguiente: -';
+      btnGenerar.disabled = true;
+    }
+  });
+
+  // Agregar fila manual
+  document.getElementById('btn-agregar-linea').addEventListener('click', () => agregarLinea());
+
+  // Inicialización con sugerencias v3.6
+  if (SUGERENCIAS.length > 0) {
+    SUGERENCIAS.forEach(s => agregarLinea({
+      codigo: s.cuenta_codigo,
+      nombre: s.cuenta_nombre
+    }));
+  } else {
+    agregarLinea();
+    agregarLinea();
+  }
+
+  function agregarLinea(initialData = {}) {
+    const idx = lineasBody.querySelectorAll('tr').length;
+    const tr = document.createElement('tr');
+    tr.dataset.idx = idx;
+    tr.innerHTML = `
+      <td>
+        <input type="text" class="form-control form-control-sm cuenta-search" placeholder="Buscar cuenta nivel 6..."
+               autocomplete="off" data-idx="${idx}" value="${initialData.codigo ? (initialData.codigo + ' - ' + initialData.nombre) : ''}">
+        <input type="hidden" class="cuenta-codigo-hidden" value="${initialData.codigo || ''}">
+        <div class="list-group cuenta-suggestions position-absolute shadow-sm" style="z-index:2000;min-width:320px;display:none;"></div>
+        <small class="text-muted cuenta-nombre-display">${initialData.nombre || ''}</small>
+      </td>
+      <td>
+        <input type="number" class="form-control form-control-sm debe-input text-end" min="0" step="0.01"
+               placeholder="0.00" value="${initialData.debe || ''}" data-idx="${idx}">
+      </td>
+      <td>
+        <input type="number" class="form-control form-control-sm haber-input text-end" min="0" step="0.01"
+               placeholder="0.00" value="${initialData.haber || ''}" data-idx="${idx}">
+      </td>
+      <td>
+        <input type="text" class="form-control form-control-sm descripcion-input" placeholder="Descripcion linea..."
+               value="${initialData.nombre || ''}">
+      </td>
+      <td class="text-center">
+        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-linea">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>`;
+    lineasBody.appendChild(tr);
+    attachLineaListeners(tr);
+    if (initialData.codigo) recalcularTotales();
+  }
+
+  function attachLineaListeners(tr) {
+    const searchInput = tr.querySelector('.cuenta-search');
+    const hiddenCodigo = tr.querySelector('.cuenta-codigo-hidden');
+    const nombreDisplay = tr.querySelector('.cuenta-nombre-display');
+    const suggestionsDiv = tr.querySelector('.cuenta-suggestions');
+    const debeInput = tr.querySelector('.debe-input');
+    const haberInput = tr.querySelector('.haber-input');
+    const removeBtn = tr.querySelector('.btn-remove-linea');
+
+    let searchTimer = null;
+    searchInput.addEventListener('input', function () {
+      const q = this.value.trim();
+      hiddenCodigo.value = '';
+      nombreDisplay.textContent = '';
+      clearTimeout(searchTimer);
+      if (q.length < 2) { suggestionsDiv.style.display = 'none'; return; }
+      searchTimer = setTimeout(() => buscarCuenta(q, suggestionsDiv, searchInput, hiddenCodigo, nombreDisplay), 280);
+    });
+
+    searchInput.addEventListener('blur', () => {
+      setTimeout(() => { suggestionsDiv.style.display = 'none'; }, 200);
+    });
+
+    [debeInput, haberInput].forEach(inp => {
+      inp.addEventListener('input', () => {
+        if (inp === debeInput && parseFloat(inp.value) > 0) haberInput.value = '';
+        if (inp === haberInput && parseFloat(inp.value) > 0) debeInput.value = '';
+        recalcularTotales();
+      });
+    });
+
+    removeBtn.addEventListener('click', () => {
+      if (lineasBody.querySelectorAll('tr').length > 2) {
+        tr.remove();
+        recalcularTotales();
+      } else {
+        if (window.notyf) window.notyf.error('El asiento necesita al menos 2 lineas.');
+      }
+    });
+  }
+
+  function buscarCuenta(q, suggestionsDiv, searchInput, hiddenCodigo, nombreDisplay) {
+    const jwt = window.jwtAuth?.getAccessToken?.() || '';
+    const appOrigenParam = APP_LABEL ? `&app_origen=${encodeURIComponent(APP_LABEL)}` : '';
+    fetch(`${API_CUENTAS}?search=${encodeURIComponent(q)}&activa=true&page_size=8${appOrigenParam}`, {
+      headers: jwt ? { 'Authorization': `Bearer ${jwt}` } : {},
+      credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(data => {
+      const items = data.results || data;
+      if (!Array.isArray(items) || items.length === 0) {
+        suggestionsDiv.innerHTML = '<div class="list-group-item list-group-item-action disabled small text-muted">Sin resultados</div>';
+        suggestionsDiv.style.display = 'block';
+        return;
+      }
+      suggestionsDiv.innerHTML = '';
+      items.forEach(c => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action small py-1';
+        btn.innerHTML = `<strong>${c.codigo}</strong> — ${c.nombre} <span class="badge bg-secondary ms-1">${c.tipo}</span>`;
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          searchInput.value = `${c.codigo} - ${c.nombre}`;
+          hiddenCodigo.value = c.codigo;
+          nombreDisplay.textContent = c.nombre;
+          suggestionsDiv.style.display = 'none';
+        });
+        suggestionsDiv.appendChild(btn);
+      });
+      suggestionsDiv.style.display = 'block';
+    })
+    .catch(() => { suggestionsDiv.style.display = 'none'; });
+  }
+
+  // ---- ASISTENTE IA ----
+  document.getElementById('btn-ia-sugerir').addEventListener('click', diligenciarConIA);
+
+  function diligenciarConIA() {
+    const btn = document.getElementById('btn-ia-sugerir');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
+    feedback.classList.add('d-none');
+
+    const jwt = window.jwtAuth?.getAccessToken?.() || '';
+    fetch(API_ASISTENTE_IA, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': CSRF,
+        ...(jwt ? { 'Authorization': `Bearer ${jwt}` } : {}),
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        app_label: APP_LABEL,
+        modelo: MODELO,
+        documento_id: DOC_ID,
+        numero: DOC_NUM,
+        subtotal: DOC_SUBTOTAL,
+        impuestos: DOC_IMPUESTOS,
+        total: DOC_TOTAL,
+        tercero_nit: DOC_TERCERO_NIT,
+        tercero_nombre: DOC_TERCERO_NOMBRE,
+      }),
+    })
+    .then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw d;
+      return d;
+    })
+    .then(res => {
+      const lineas = res.lineas || [];
+      if (!lineas.length) { mostrarError('La IA no retorno lineas validas.'); return; }
+      // Limpiar lineas actuales e inyectar las sugeridas
+      lineasBody.innerHTML = '';
+      lineas.forEach(l => agregarLinea({
+        codigo: l.cuenta_codigo,
+        nombre: l.cuenta_nombre,
+        debe: l.debe || '',
+        haber: l.haber || '',
+      }));
+      if (window.notyf) window.notyf.success('Lineas sugeridas por IA. Revisa y confirma antes de generar.');
+    })
+    .catch(err => {
+      const msg = err?.ia || err?.detail || JSON.stringify(err);
+      mostrarError(Array.isArray(msg) ? msg.join(' ') : String(msg));
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    });
+  }
+  // ---- FIN ASISTENTE IA ----
+
+  function recalcularTotales() {
+    let debe = 0, haber = 0;
+    lineasBody.querySelectorAll('tr').forEach(tr => {
+      debe += parseFloat(tr.querySelector('.debe-input')?.value || 0) || 0;
+      haber += parseFloat(tr.querySelector('.haber-input')?.value || 0) || 0;
+    });
+    totalDebeEl.textContent = `$ ${debe.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
+    totalHaberEl.textContent = `$ ${haber.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
+    const cuadrado = Math.abs(debe - haber) < 0.01 && debe > 0;
+    const comprobanteSeleccionado = selectComprobante.value !== "";
+    cuadraturaBadge.textContent = cuadrado ? 'Cuadrado' : 'Sin cuadrar';
+    cuadraturaBadge.className = `badge ${cuadrado ? 'bg-success' : 'bg-danger'}`;
+    btnGenerar.disabled = !cuadrado || !comprobanteSeleccionado;
+  }
+
+  btnGenerar.addEventListener('click', function () {
+    feedback.classList.add('d-none');
+    const fecha = document.getElementById('asiento-fecha').value;
+    const descripcion = document.getElementById('asiento-descripcion').value.trim();
+    const tipoComprobanteId = selectComprobante.value;
+
+    if (!fecha || !descripcion || !tipoComprobanteId) {
+      mostrarError('Fecha, descripcion y tipo de comprobante son obligatorios.');
+      return;
+    }
+
+    const lineas = [];
+    let valido = true;
+    lineasBody.querySelectorAll('tr').forEach(tr => {
+      const codigo = tr.querySelector('.cuenta-codigo-hidden')?.value?.trim();
+      const debe = parseFloat(tr.querySelector('.debe-input')?.value || 0) || 0;
+      const haber = parseFloat(tr.querySelector('.haber-input')?.value || 0) || 0;
+      const desc = tr.querySelector('.descripcion-input')?.value?.trim() || '';
+      if (!codigo) { valido = false; return; }
+      if (debe === 0 && haber === 0) { valido = false; return; }
+      lineas.push({ cuenta_codigo: codigo, debe: debe.toFixed(2), haber: haber.toFixed(2), descripcion: desc });
+    });
+
+    if (!valido || lineas.length < 2) {
+      mostrarError('Cada linea debe tener cuenta PUC seleccionada y monto > 0.');
+      return;
+    }
+
+    btnGenerar.disabled = true;
+    const orig = btnGenerar.innerHTML;
+    btnGenerar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
+
+    const jwt = window.jwtAuth?.getAccessToken?.() || '';
+    fetch(API_CONTABILIZAR, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': CSRF,
+        ...(jwt ? { 'Authorization': `Bearer ${jwt}` } : {}),
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        app_label: APP_LABEL,
+        modelo: MODELO,
+        documento_id: DOC_ID,
+        documento_numero: DOC_NUM,
+        tipo_comprobante_id: tipoComprobanteId,
+        fecha: fecha,
+        descripcion: descripcion,
+        lineas: lineas,
+      }),
+    })
+    .then(async r => {
+      const d = await r.json();
+      if (!r.ok) throw d;
+      return d;
+    })
+    .then(res => {
+      if (window.notyf) window.notyf.success(`Asiento ${res.numero} generado correctamente.`);
+      window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).hide();
+      document.body.dispatchEvent(new CustomEvent('pendientes:refresh'));
+    })
+    .catch(err => {
+      btnGenerar.disabled = false;
+      btnGenerar.innerHTML = orig;
+      const msg = err?.documento || err?.lineas || err?.detail || JSON.stringify(err);
+      mostrarError(Array.isArray(msg) ? msg.join(' ') : String(msg));
+    });
+  });
+
+  function mostrarError(msg) {
+    feedback.textContent = msg;
+    feedback.classList.remove('d-none');
+  }
+})();
+</script>

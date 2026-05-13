@@ -46,6 +46,12 @@
         if (data.valor_contrato_proyectado) {
             data.valor_contrato_proyectado = parseFloat(data.valor_contrato_proyectado);
         }
+        if (data.factura_costo) {
+            data.factura_costo = parseInt(data.factura_costo);
+        }
+        if (data.proveedor_id) {
+            data.proveedor_id = parseInt(data.proveedor_id);
+        }
 
         // ⚠️ Manejo del select de cliente (si existe)
         const clienteSelect = form.querySelector('#proyecto-cliente-select');
@@ -59,6 +65,26 @@
                 if (match) {
                     data.cliente_nombre = match[1].trim();
                 }
+            }
+        }
+        
+        // ⚠️ Manejo del select de factura_costo (Centro de Costos)
+        const facturaSelect = form.querySelector('#proyecto-factura-costo');
+        const facturaIdInput = form.querySelector('#proyecto-factura-costo-id');
+        const facturaNumeroInput = form.querySelector('#proyecto-factura-costo-numero');
+
+        if (facturaSelect && facturaSelect.value) {
+            data.factura_costo = parseInt(facturaSelect.value);
+        } else if (facturaIdInput && facturaIdInput.value) {
+            data.factura_costo = parseInt(facturaIdInput.value);
+        }
+
+        if (facturaNumeroInput && facturaNumeroInput.value) {
+            data.factura_costo_numero = facturaNumeroInput.value;
+        } else if (facturaSelect && facturaSelect.selectedIndex > -1) {
+            const selectedOption = facturaSelect.options[facturaSelect.selectedIndex];
+            if (selectedOption && selectedOption.getAttribute('data-numero')) {
+                data.factura_costo_numero = selectedOption.getAttribute('data-numero');
             }
         }
 
@@ -146,6 +172,37 @@
     }
 
     /**
+     * Cargar lista de facturas para centros de costos
+     * @param {HTMLSelectElement} selectElement 
+     */
+    async function cargarCentrosCostos(selectElement) {
+        if (!w.proyectosAPI || typeof w.proyectosAPI.fetchCentrosCostos !== 'function') {
+            console.error(`${MOD} proyectosAPI.fetchCentrosCostos no disponible`);
+            return;
+        }
+
+        const initialValue = selectElement.getAttribute('data-initial-value');
+
+        const res = await w.proyectosAPI.fetchCentrosCostos();
+        if (!res.ok) {
+            console.error(`${MOD} Error al cargar centros de costos:`, res);
+            selectElement.innerHTML = '<option value="">Error al cargar facturas</option>';
+            return;
+        }
+
+        const facturas = res.data || [];
+        let html = '<option value="">-- Seleccionar Factura (Opcional) --</option>';
+        
+        facturas.forEach(f => {
+            const selected = (initialValue && initialValue == f.id) ? 'selected' : '';
+            html += `<option value="${f.id}" data-numero="${f.numero}" ${selected}>${f.numero} - ${f.receptor_nombre || 'S/N'}</option>`;
+        });
+
+        selectElement.innerHTML = html;
+        console.log(`${MOD} ${facturas.length} centros de costos cargados`);
+    }
+
+    /**
      * Configurar listeners del formulario
      */
     function initEditorEvents() {
@@ -186,6 +243,80 @@
                     // Si se limpia el select, limpiar también los campos manuales
                     clienteIdInput.value = '';
                     clienteNombreInput.value = '';
+                }
+            });
+        }
+
+        // ⚠️ Sincronización del select de responsable con los campos manuales
+        const responsableSelect = form.querySelector('#proyecto-responsable-select');
+        const responsableIdInput = form.querySelector('#proyecto-responsable-id');
+        const responsableNombreInput = form.querySelector('#proyecto-responsable-nombre');
+
+        if (responsableSelect && responsableIdInput && responsableNombreInput) {
+            responsableSelect.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    const selectedOption = e.target.options[e.target.selectedIndex];
+                    if (selectedOption) {
+                        responsableIdInput.value = e.target.value;
+                        responsableNombreInput.value = selectedOption.text.trim();
+                    }
+                } else {
+                    responsableIdInput.value = '';
+                    responsableNombreInput.value = '';
+                }
+            });
+        }
+
+        // ⚠️ Sincronización del select de proveedor con los campos manuales
+        const proveedorSelect = form.querySelector('#proyecto-proveedor-select');
+        const proveedorIdInput = form.querySelector('#proyecto-proveedor-id');
+        const proveedorNombreInput = form.querySelector('#proyecto-proveedor-nombre');
+
+        if (proveedorSelect && proveedorIdInput && proveedorNombreInput) {
+            proveedorSelect.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    const selectedOption = e.target.options[e.target.selectedIndex];
+                    if (selectedOption) {
+                        proveedorIdInput.value = e.target.value;
+                        // Extraer nombre del texto del option (formato: "Nombre (Documento)")
+                        const match = selectedOption.text.match(/^(.+?)\s*\(/);
+                        if (match) {
+                            proveedorNombreInput.value = match[1].trim();
+                        } else {
+                            proveedorNombreInput.value = selectedOption.text.trim();
+                        }
+                    }
+                } else {
+                    proveedorIdInput.value = '';
+                    proveedorNombreInput.value = '';
+                }
+            });
+        }
+
+        // --- Lógica de Centros de Costos (Facturas) ---
+        const facturaSelect = form.querySelector('#proyecto-factura-costo');
+        const facturaIdInput = form.querySelector('#proyecto-factura-costo-id');
+        const facturaNumeroInput = form.querySelector('#proyecto-factura-costo-numero');
+
+        if (facturaSelect) {
+            // Cargar facturas disponibles al abrir el editor
+            cargarCentrosCostos(facturaSelect);
+
+            // Escuchar cambios para sincronizar campos (SIN autocompletar código)
+            facturaSelect.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    const selectedOption = e.target.options[e.target.selectedIndex];
+                    if (selectedOption) {
+                        if (facturaIdInput) facturaIdInput.value = e.target.value;
+                        
+                        const numFactura = selectedOption.getAttribute('data-numero');
+                        if (numFactura && facturaNumeroInput) {
+                            facturaNumeroInput.value = numFactura;
+                        }
+                    }
+                } else {
+                    if (facturaIdInput) facturaIdInput.value = '';
+                    if (facturaNumeroInput) facturaNumeroInput.value = '';
                 }
             });
         }
@@ -248,10 +379,19 @@
     if (typeof htmx !== 'undefined') {
         d.addEventListener('htmx:afterSwap', (event) => {
             if (event.detail.target.id === 'offcanvas-container-proyectos') {
-                // Pequeño delay para asegurar que el DOM esté completamente renderizado
-                setTimeout(() => {
+                const offcanvasEl = d.getElementById('offcanvas-proyecto');
+                if (offcanvasEl) {
+                    // 1. Inicializar eventos del formulario
                     initEditorEvents();
-                }, 50);
+
+                    // 2. Abrir el Offcanvas usando el UIManager (apertura centralizada)
+                    if (w.UIManager?.handleOffcanvas) {
+                        w.UIManager.handleOffcanvas(offcanvasEl, 'show');
+                    } else if (typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                        bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                    }
+                    console.log(`${MOD} Offcanvas abierto y eventos inicializados tras HTMX swap`);
+                }
             }
         });
     }

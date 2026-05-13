@@ -1,3 +1,4 @@
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -17,7 +18,7 @@ from apps.tenant.proveedores.api.serializers import (
 from apps.tenant.proveedores.models import Proveedor
 from apps.config.api.pagination import StandardResultsSetPagination
 
-class ProveedorViewSet(ProveedorServiceMixin, viewsets.ModelViewSet):
+class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Proveedores v3.5 - Refactorizado a Service Layer (DSV Mixins).
     """
@@ -26,13 +27,17 @@ class ProveedorViewSet(ProveedorServiceMixin, viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
-    lookup_field = 'pk'  # Volver a PK por inconsistencia en modelos core
 
     def get_serializer_class(self):
         """Selecciona el serializer según la acción."""
         if self.action == 'list':
             return ProveedorListSerializer
         return ProveedorDetailSerializer
+    
+    def get_queryset(self):
+        """Zero Trust - Filtra siempre por la empresa del tenant."""
+        empresa = self.get_empresa()
+        return Proveedor.objects.filter(empresa=empresa)
 
     def get_empresa(self):
         """Zero Trust - Obtiene la empresa del tenant actual via core helper."""
@@ -54,14 +59,29 @@ class ProveedorViewSet(ProveedorServiceMixin, viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def get_object(self):
-        """DSV - Obtiene el Proveedor validando pertenencia al tenant via Selector."""
-        empresa = self.get_empresa()
-        pk = self.kwargs.get('pk')
-        proveedor = self.proveedor_selector.get_by_id(empresa.id, pk)
-        if not proveedor:
-            from rest_framework.exceptions import NotFound
-            raise NotFound('Proveedor no encontrado')
-        return proveedor
+        """
+        Sobrescribe get_object para soportar lookup por uuid (v3.5 SSoT).
+        Mantiene compatibilidad con PK si el uuid no es un UUID válido.
+        """
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        lookup_value = self.kwargs.get(lookup_url_kwarg)
+
+        if not lookup_value:
+            raise Http404("ID no proporcionado")
+
+        # 1. Intentar por UUID si el valor parece uno (len > 10)
+        if len(str(lookup_value)) > 10:
+            obj = self.get_queryset().filter(uuid=lookup_value).first()
+            if obj:
+                return obj
+        
+        # 2. Fallback a PK (si es numérico)
+        if str(lookup_value).isdigit():
+            obj = self.get_queryset().filter(pk=lookup_value).first()
+            if obj:
+                return obj
+                
+        raise Http404("Proveedor no encontrado")
     
     def retrieve(self, request, *args, **kwargs):
         """Obtiene detalle de un proveedor."""
@@ -130,7 +150,11 @@ class ProveedorViewSet(ProveedorServiceMixin, viewsets.ModelViewSet):
         id_instancia = request.query_params.get('id')
         
         if id_instancia:
-            proveedor = self.proveedor_selector.get_by_id(empresa.id, id_instancia)
+            # v3.5.2: Priorizamos UUID para lookup seguro
+            proveedor = self.proveedor_selector.get_by_uuid(empresa.id, id_instancia)
+            if not proveedor and str(id_instancia).isdigit():
+                # Fallback por PK para compatibilidad
+                proveedor = self.proveedor_selector.get_by_id(empresa.id, id_instancia)
         
         from apps.tenant.proveedores.choices.niif_proveedores_choices import (
             PROVEEDORES_NIIF_CHOICES,

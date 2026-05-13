@@ -69,8 +69,6 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
     serializer_class = ClienteDetailSerializer  # # WARNING: CRITICO: DRF necesita serializer_class para generar rutas
     pagination_class = StandardResultsSetPagination
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['activo']
     search_fields = ['razon_social', 'numero_documento', 'email']
@@ -388,6 +386,10 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
             )
         # PERFORMANCE BIBLE: Cargar contactos con .only()
         contactos = self.contacto_selector.get_contacto_list(empresa_id=cliente.empresa_id, cliente_id=cliente.id)
+        # §18: cuenta_contable_uuid se pasa como opaco al template.
+        # El nombre se resuelve en frontend via JS (GET /api/v1/contabilidad/cuentas-contables/?uuid=)
+        # NO importar desde apps.tenant.contabilidad aqui (viola §18 Pull Model / Bounded Context).
+
         context = {
             'cliente': cliente,
             'contactos': contactos,
@@ -433,9 +435,7 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
     """
     # WARNING: v2.60: ViewSet para Contactos de Cliente con Zero Trust estricto.
     """
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
-    
+
     queryset = ContactoCliente.objects.none()
     serializer_class = ContactoClienteSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]

@@ -30,6 +30,7 @@ Ventajas:
 - Garantiza SSoT (empresa es la única fuente de verdad de contexto)
 """
 
+import uuid
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -104,18 +105,12 @@ class SintelTenantBaseModel(models.Model):
         else:
             return f"{self.__class__.__name__}({self.pk})"
     
-    @property
-    def empresa_id(self):
-        """Acceso rápido a empresa_id sin query adicional (si ya está cargado)."""
-        return self._state.fields.get('empresa_id') or \
-               (self.empresa_id if hasattr(self, '_empresa_id_value') else None)
-    
     def save(self, *args, **kwargs):
         """
         Sobrescribe save() para garantizar que empresa NUNCA sea NULL.
         [SHIELD] Protección adicional contra asignación accidental de NULL.
         """
-        if self.empresa_id is None:
+        if not getattr(self, 'empresa_id', None):
             raise ValueError(
                 f"[ERROR] {self.__class__.__name__}.empresa no puede ser NULL. "
                 f"Todos los registros en TENANT_APPS deben tener empresa asignada explícitamente."

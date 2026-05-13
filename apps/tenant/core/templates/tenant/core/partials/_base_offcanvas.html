@@ -1,0 +1,18 @@
+{# _base_offcanvas.html - Base para componentes Offcanvas Bootstrap 5 #}
+{% load static %}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="{{ offcanvas_id|default:'baseOffcanvas' }}" aria-labelledby="{{ offcanvas_id|default:'baseOffcanvas' }}Label">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="{{ offcanvas_id|default:'baseOffcanvas' }}Label">
+            {% block offcanvas_title %}Título{% endblock %}
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        {% block offcanvas_body %}
+            Contenido base
+        {% endblock %}
+    </div>
+    {% block offcanvas_footer %}
+    {% endblock %}
+</div>

@@ -9,7 +9,7 @@
 
     const MOD = '[ContratoEditor]';
     const API_CONTRATOS = '/api/v1/empleados/contratos/';
-    const CONTAINER_ID = 'offcanvas-container-empleados';
+    const CONTAINER_ID = 'offcanvas-container-contratos';
 
     /**
      * Abrir offcanvas de contrato (Crear o Editar)
@@ -29,18 +29,6 @@
                 target: `#${CONTAINER_ID}`,
                 swap: 'innerHTML'
             });
-
-            const offcanvasId = contratoId ? 'offcanvas-contrato-editar' : 'offcanvas-contrato-crear';
-            const offcanvasEl = d.getElementById(offcanvasId);
-            
-            if (offcanvasEl) {
-                const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                bsOffcanvas.show();
-                
-                // Inicializar lógica del formulario
-                const formId = contratoId ? 'form-contrato-editar' : 'form-contrato-crear';
-                setTimeout(() => initForm(formId), 300);
-            }
         } catch (error) {
             console.error(`${MOD} Error:`, error);
             window.UIManager?.notifyError('Error al cargar el formulario de contrato');
@@ -58,16 +46,33 @@
                 target: `#${CONTAINER_ID}`,
                 swap: 'innerHTML'
             });
-
-            const offcanvasEl = d.getElementById('offcanvas-contrato-detalle');
-            if (offcanvasEl) {
-                const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                bsOffcanvas.show();
-            }
         } catch (error) {
             console.error(`${MOD} Error:`, error);
             window.UIManager?.notifyError('Error al cargar detalle del contrato');
         }
+    }
+
+    /**
+     * Listener para activar offcanvas tras inyección HTMX
+     */
+    function setupOffcanvasLoadListener() {
+        d.body.addEventListener('htmx:afterSettle', function(evt) {
+            const target = evt.detail.target;
+            if (!target || target.id !== CONTAINER_ID) return;
+
+            const offcanvasEl = target.querySelector('.offcanvas');
+            if (offcanvasEl && window.bootstrap) {
+                console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
+                const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                bsOffcanvas.show();
+
+                // Inicializar lógica del formulario tras apertura
+                const form = offcanvasEl.querySelector('form');
+                if (form) {
+                    setTimeout(() => initForm(form.id), 100);
+                }
+            }
+        });
     }
 
     /**
@@ -133,6 +138,9 @@
             window.Sintel.Empleados.EmpleadoList?.reload();
         }
     });
+
+    // Inicializar listeners
+    setupOffcanvasLoadListener();
 
     // Exportar al namespace
     window.Sintel = window.Sintel || {};

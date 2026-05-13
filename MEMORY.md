@@ -38,12 +38,17 @@ Estas decisiones ya han sido tomadas y consolidadas en el código. **No deben se
     *   **UI/Frontend:** Sincronización de IDs DOM en Offcanvas y creación de SSoT inmutable en JavaScript (`DOM`).
     *   **Backend (DRF):** Resolución de error 500 (`TypeError: unexpected keyword argument 'id'`) igualando la firma de las acciones (`id=None`) con `lookup_url_kwarg='id'`.
     *   **Backend (Service Layer):** Resolución de error 500 (`AttributeError: no attribute 'contacto_selector'`) mediante la herencia estricta de `ContactoClienteServiceMixin` en el `ClienteViewSet` para asegurar la inyección de dependencias entre dominios relacionados.
+*   **2026-05-06 | Modulo Gastos + Docker:** Se corrigio el arranque Docker forzando `DATABASE_HOST=db` en `web` y `celery`. Se estabilizo `apps/tenant/gastos` corrigiendo referencias ORM, templates HTMX, contrato JSON de creacion, cache de resolucion sin signals, fallback de empresa para sesiones y compatibilidad de `DocumentoSoporte`. Validado con `py_compile`, `manage.py check`, `pytest apps/tenant/gastos/tests -q` (6 passed) y contenedores Docker activos.
+*   **2026-05-06 | Antigravity MCP + Skills:** Se amplio `sintel_agent_unified.py` para descubrir skills en carpetas `SKILL.md`, skills markdown legacy bajo `.agents/skills/<grupo>/<skill>.md`, `.antigravity/skills` y `documentacion/skills`. Se agrego el skill `.antigravity/skills/sintel-antigravity-mcp` y la skill workflow `.agents/skills/workflow/antigravity-mcp.md`.
+*   **2026-05-06 | Antigravity Flash Oficial:** Se validaron fuentes oficiales de Google sobre Antigravity y Gemini 3 Flash. Se agregaron herramientas MCP `antigravity_official_context`, `antigravity_flash_brief` y `antigravity_flash_check`, mas la guia `documentacion/ANTIGRAVITY_FLASH_OFICIAL.md`, para respuestas Flash breves, verificables y con fuente oficial cuando aplique.
+*   **2026-05-06 | Generalizacion MCP Por App:** Se elimino dependencia de apps concretas en las herramientas nuevas. `check_infrastructure_health` ya no usa tabla default de un modulo, `antigravity_flash_brief` detecta cualquier app tenant dinamicamente y se agrego `sintel_app_quality_plan(app_name, scope)` como marco reusable para auditoria, validacion y handoff de cualquier `apps/tenant/<app_name>`.
 
 ---
 
 ## 🚧 3. Estado Activo (Active Context)
 
-*   **Sprint/Fase Actual:** Refinamiento y Hardening (Estabilización de UI y Backend).
+*   **Fase Actual:** 🚧 Desarrollo Activo (Refactorización y Estabilización UI/UX)
+**Modo:** EN DESARROLLO (Development Mode)
 *   **Tarea en Curso:** Ninguna. (Esperando siguiente directiva).
 *   **Bloqueos Conocidos:** Ninguno.
 *   **Próximos Pasos Posibles:**

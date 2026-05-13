@@ -215,6 +215,38 @@ class CuentaContable(SintelTenantBaseModel):
         return f"{self.codigo} - {self.nombre}"
 
 
+class TipoComprobante(SintelTenantBaseModel):
+    """
+    Define los tipos de documentos contables (plantillas).
+    Permite prefijos y consecutivos dinámicos por tipo (ej: CC, RC, ND).
+    """
+    # Identificador público v3.5
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
+    
+    codigo = models.CharField(max_length=10, verbose_name=_('Código/Sigla'))
+    nombre = models.CharField(max_length=100, verbose_name=_('Nombre del Comprobante'))
+    prefijo = models.CharField(max_length=5, blank=True, null=True, verbose_name=_('Prefijo'))
+    consecutivo_actual = models.PositiveIntegerField(default=1, verbose_name=_('Consecutivo Actual'))
+    
+    activa = models.BooleanField(default=True, verbose_name=_('Activa'))
+
+    class Meta(SintelTenantBaseModel.Meta):
+        verbose_name = _('Tipo de Comprobante')
+        verbose_name_plural = _('Tipos de Comprobante')
+        ordering = ['codigo']
+        unique_together = [['empresa', 'codigo']]
+
+    def __str__(self):
+        return f"{self.codigo} - {self.nombre}"
+
+    def obtener_siguiente_numero(self):
+        """Retorna el siguiente número formateado con prefijo."""
+        numero = str(self.consecutivo_actual).zfill(5)
+        self.consecutivo_actual += 1
+        self.save(update_fields=['consecutivo_actual'])
+        return f"{self.prefijo}{numero}" if self.prefijo else numero
+
+
 class AsientoContable(SintelTenantBaseModel):
     """
     Asiento contable (por tenant).
@@ -265,8 +297,17 @@ class AsientoContable(SintelTenantBaseModel):
         choices=TIPO_COMPROBANTE_CHOICES,
         blank=True,
         null=True,
-        verbose_name=_('Tipo de Comprobante'),
+        verbose_name=_('Tipo de Comprobante (Legado)'),
         help_text=_('Tipo de documento que originó el asiento (FVE, CE, RC, GN, ND, NC)')
+    )
+    tipo_comprobante_ref = models.ForeignKey(
+        'TipoComprobante',
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name='asientos',
+        verbose_name=_('Tipo de Comprobante'),
+        help_text=_('Vínculo dinámico a la plantilla de comprobante')
     )
     numero_comprobante = models.CharField(
         max_length=50,
@@ -362,20 +403,6 @@ class AsientoContable(SintelTenantBaseModel):
         editable=False
     )
 
-    # WARNING: ENFORCED MODE v2.40: FK NO NULA a Empresa (SSoT)
-
-    # Relación con factura (opcional)
-    factura = models.ForeignKey(
-        'facturas.Factura',
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name='asientos',
-        verbose_name=_('Factura Relacionada'),
-        help_text=_('Factura relacionada con este asiento (opcional)')
-    )
-
-
     class Meta(SintelTenantBaseModel.Meta):
         verbose_name = _('Asiento Contable')
         verbose_name_plural = _('Asientos Contables')
@@ -385,14 +412,6 @@ class AsientoContable(SintelTenantBaseModel):
             models.Index(fields=['estado']),
             models.Index(fields=['tipo_comprobante', 'numero_comprobante']),  # WARNING: NORMATIVA: Trazabilidad
             models.Index(fields=['documento_origen_app', 'documento_origen_modelo', 'documento_origen_id']),  # v3.0: Idempotencia
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=['empresa', 'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id'],
-                condition=models.Q(documento_origen_reversado=False),
-                name='%(class)s_unique_documento_origen',
-                violation_error_message=_('Ya existe asiento para este documento origen')
-            )
         ]
 
     def __str__(self):
@@ -810,7 +829,6 @@ class TarifaImpuesto(SintelTenantBaseModel):
             fecha_str += " — ∞"
         return f"{self.tipo} {self.valor_porcentaje}% ({fecha_str})"
 
-    @property
     def vigente_en(self, fecha):
         """Verifica si la tarifa está vigente en una fecha específica."""
         if not self.vigente:

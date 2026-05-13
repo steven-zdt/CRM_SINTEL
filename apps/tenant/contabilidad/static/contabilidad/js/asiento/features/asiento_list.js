@@ -138,7 +138,7 @@
         title: "Acciones",
         formatter: function(cell) {
           const rowData = cell.getRow().getData();
-          const asientoId = rowData.id || '';
+          const asientoId = rowData.uuid || '';
           if (!asientoId) return '-';
           
           const estado = rowData.estado || 'BORRADOR';

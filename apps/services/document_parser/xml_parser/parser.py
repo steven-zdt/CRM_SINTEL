@@ -141,6 +141,53 @@ def parse_to_dto(file_bytes: bytes, filename: str | None = None) -> dict[str, An
         raise ValueError(f"Tipo de documento XML no soportado: {root_tag}")
 
 
+def _extract_retentions(root: etree._Element) -> dict[str, str]:
+    """
+    Extrae retenciones (Retefuente, ReteICA, ReteIVA) de un XML UBL.
+    
+    Args:
+        root: Element raíz (Invoice o CreditNote)
+        
+    Returns:
+        Dict con strings normalizados: {"retefuente": "0.00", "reteica": "0.00", "reteiva": "0.00"}
+    """
+    retentions = {
+        "retefuente": Decimal("0.00"),
+        "reteica": Decimal("0.00"),
+        "reteiva": Decimal("0.00")
+    }
+    
+    # # WARNING: DIAN UBL 2.1: Las retenciones suelen estar en cac:WithholdingTaxTotal
+    # local-name() para robustez ante namespaces.
+    withholding_tax_totals = xpath(root, ".//*[local-name()='WithholdingTaxTotal']")
+    for w_tax in withholding_tax_totals:
+        tax_subtotals = xpath(w_tax, ".//*[local-name()='TaxSubtotal']")
+        for ts in tax_subtotals:
+            tax_scheme_id = text(first(ts, ".//*[local-name()='TaxScheme']//*[local-name()='ID']"))
+            tax_amount_str = text(first(ts, ".//*[local-name()='TaxAmount']"))
+            
+            if not tax_scheme_id or not tax_amount_str:
+                continue
+                
+            try:
+                amount = Decimal(normalize_numeric_to_decimal_string(tax_amount_str))
+            except Exception:
+                continue
+            
+            # # WARNING: SINTEL v2.62: Mantenemos mapeo legacy del proyecto (ubl_parser.py):
+            # 05 -> Retefuente (DIAN dice ReteIVA)
+            # 06 -> ReteIVA (DIAN dice Retefuente)
+            # 07 -> ReteICA
+            if tax_scheme_id == "05":
+                retentions["retefuente"] += amount
+            elif tax_scheme_id == "06":
+                retentions["reteiva"] += amount
+            elif tax_scheme_id == "07":
+                retentions["reteica"] += amount
+
+    return {k: normalize_numeric_to_decimal_string(str(v)) for k, v in retentions.items()}
+
+
 def _parse_invoice_ubl21(invoice_root: etree._Element) -> dict[str, Any]:
     """
     Parsea Invoice UBL 2.1 a DTO.
@@ -451,6 +498,7 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> dict[str, Any]:
             "subtotal": subtotal_str,
             "impuestos": impuestos_str,
             "total": total_str,
+            **_extract_retentions(invoice_root)
         },
         "items": items,
         # Metadatos UBL
@@ -639,6 +687,61 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> dict[str, Any]
         total_str = normalize_numeric_to_decimal_string(str(total_decimal))
         moneda = normalize_currency(currency_id)
     
+    # Retenciones
+    retenciones = _extract_retentions(credit_note_root)
+
+    # --- Items (CreditNoteLine) ---
+    items = []
+    credit_note_lines = xpath(credit_note_root, ".//*[local-name()='CreditNoteLine']")
+    for line_elem in credit_note_lines:
+        linea_id = text(first(line_elem, ".//*[local-name()='ID']")) or ""
+        descripcion = text(first(line_elem, ".//*[local-name()='Description']")) or ""
+        cantidad_str = text(first(line_elem, ".//*[local-name()='CreditedQuantity']")) or "1"
+        qty_elem = first(line_elem, ".//*[local-name()='CreditedQuantity']")
+        unidad_medida = attr(qty_elem, "unitCode") or "UND" if qty_elem is not None else "UND"
+
+        valor_unitario_str = text(first(line_elem, ".//*[local-name()='Price']//*[local-name()='PriceAmount']")) or "0"
+        sellers_id = first(line_elem, ".//*[local-name()='SellersItemIdentification']//*[local-name()='ID']")
+        codigo = text(sellers_id) or "" if sellers_id is not None else ""
+
+        # IVA del item
+        porcentaje_iva = Decimal("0.00")
+        tax_subtotals = xpath(line_elem, ".//*[local-name()='TaxTotal']//*[local-name()='TaxSubtotal']")
+        for ts in tax_subtotals:
+            tax_id = text(first(ts, ".//*[local-name()='TaxCategory']//*[local-name()='TaxScheme']//*[local-name()='ID']")) or ""
+            if tax_id == "01":  # IVA
+                pct_str = text(first(ts, ".//*[local-name()='Percent']")) or "0"
+                try:
+                    porcentaje_iva = Decimal(normalize_numeric_to_decimal_string(pct_str))
+                except Exception:
+                    pass
+                break
+
+        try:
+            cantidad_dec = Decimal(normalize_numeric_to_decimal_string(cantidad_str))
+        except Exception:
+            cantidad_dec = Decimal("1")
+        try:
+            valor_unitario_dec = Decimal(normalize_numeric_to_decimal_string(valor_unitario_str))
+        except Exception:
+            valor_unitario_dec = Decimal("0")
+
+        subtotal_item = cantidad_dec * valor_unitario_dec
+        iva_item = subtotal_item * porcentaje_iva / Decimal("100")
+        total_item = subtotal_item + iva_item
+
+        items.append({
+            "linea_id": sanitize_text(linea_id),
+            "codigo": sanitize_text(codigo),
+            "descripcion": sanitize_text(descripcion),
+            "cantidad": cantidad_dec,
+            "unidad_medida": sanitize_text(unidad_medida),
+            "valor_unitario": valor_unitario_dec,
+            "porcentaje_iva": porcentaje_iva,
+            "subtotal": subtotal_item,
+            "total": total_item,
+        })
+
     # Referencia a factura
     ref_factura_numero = ""
     ref_factura_cufe = ""
@@ -766,7 +869,9 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> dict[str, Any]
             "subtotal": subtotal_str,
             "impuestos": impuestos_str,
             "total": total_str,
+            **retenciones
         },
+        "items": items,
         "referencia": {
             "numero": ref_factura_numero,
             "cufe": ref_factura_cufe,

@@ -6,6 +6,7 @@ from ..models import Proveedor
 
 LIST_FIELDS = (
     "id",
+    "uuid",
     "tipo_persona",
     "tipo_documento",
     "numero_documento",
@@ -15,16 +16,27 @@ LIST_FIELDS = (
     "regimen_tributario",
     "responsable_iva",
     "autoretenedor",
+    "es_retenedor",
+    "aplica_retefuente",
+    "retefuente_porcentaje",
+    "aplica_reteica",
+    "reteica_porcentaje",
+    "aplica_reteiva",
+    "reteiva_porcentaje",
     "email_contacto",
+
     "telefono_contacto",
+    "direccion",
     "ciudad",
     "activo",
     "codigo_contable",
+    "cuenta_contable_uuid",
     "created_at",
 )
 
 DETAIL_FIELDS = (
     "id",
+    "uuid",
     "tipo_persona",
     "tipo_documento",
     "numero_documento",
@@ -36,7 +48,15 @@ DETAIL_FIELDS = (
     "responsable_iva",
     "gran_contribuyente",
     "autoretenedor",
+    "es_retenedor",
+    "aplica_retefuente",
+    "retefuente_porcentaje",
+    "aplica_reteica",
+    "reteica_porcentaje",
+    "aplica_reteiva",
+    "reteiva_porcentaje",
     "email_contacto",
+
     "telefono_contacto",
     "direccion",
     "ciudad",
@@ -46,33 +66,35 @@ DETAIL_FIELDS = (
     "numero_cuenta",
     "activo",
     "codigo_contable",
+    "cuenta_contable_uuid",
     "observaciones",
     "created_at",
     "updated_at",
 )
 
-def qs_list(empresa_id, search=None):
-    """Retorna listado optimizado para Tabulator."""
-    qs = Proveedor.objects.filter(empresa_id=empresa_id).only(*LIST_FIELDS).order_by('razon_social')
-    
-    if search:
-        qs = qs.filter(
-            Q(razon_social__icontains=search) | 
-            Q(numero_documento__icontains=search) |
-            Q(email_contacto__icontains=search) |
-            Q(nombre_comercial__icontains=search)
-        ).distinct()
-    return qs
-
-def qs_detail(empresa_id, pk):
-    """Retorna detalle completo para edición."""
-    # Nota: No hay ContactoProveedor en models.py, omitimos prefetch_related por ahora.
-    return Proveedor.objects.filter(empresa_id=empresa_id, pk=pk).only(*DETAIL_FIELDS).first()
-
 class ProveedorSelector:
     """Clase selectora para inyección en mixins."""
-    def get_list(self, empresa_id, search=None):
-        return qs_list(empresa_id, search)
     
-    def get_by_id(self, empresa_id, pk):
-        return qs_detail(empresa_id, pk)
+    @staticmethod
+    def get_list(empresa_id: int, search: str = None):
+        """Retorna listado optimizado para Tabulator."""
+        qs = Proveedor.objects.filter(empresa_id=empresa_id).only(*LIST_FIELDS).order_by('razon_social')
+        
+        if search:
+            qs = qs.filter(
+                Q(razon_social__icontains=search) | 
+                Q(numero_documento__icontains=search) |
+                Q(email_contacto__icontains=search) |
+                Q(nombre_comercial__icontains=search)
+            ).distinct()
+        return qs
+    
+    @staticmethod
+    def get_by_id(empresa_id: int, pk: int):
+        """Retorna detalle completo para edición por PK."""
+        return Proveedor.objects.filter(empresa_id=empresa_id, pk=pk).only(*DETAIL_FIELDS).first()
+
+    @staticmethod
+    def get_by_uuid(empresa_id: int, uuid_val: str):
+        """Retorna detalle completo para edición por UUID."""
+        return Proveedor.objects.filter(empresa_id=empresa_id, uuid=uuid_val).only(*DETAIL_FIELDS).first()

@@ -126,6 +126,60 @@ class ContabilidadCRUDService:
 
     @staticmethod
     @transaction.atomic
+    def crear_asiento_manual(
+        empresa_id: int,
+        data: Dict[str, Any],
+        movimientos: List[Dict[str, Any]],
+    ) -> AsientoContable:
+        """
+        Crea un asiento desde el flujo manual On-Demand.
+        Soporta documento_origen_* para trazabilidad y usa debe_total/haber_total
+        (nuevos campos) como fuente de verdad, dejando que save() sincronice los legados.
+        """
+        asiento = AsientoContable.objects.create(
+            empresa_id=empresa_id,
+            tipo_comprobante_ref_id=data.get('tipo_comprobante_id'),
+            numero=data['numero'],
+            fecha=data['fecha'],
+            descripcion=data['descripcion'],
+            estado=data.get('estado', 'APROBADO'),
+            documento_origen_app=data.get('documento_origen_app', ''),
+            documento_origen_modelo=data.get('documento_origen_modelo', ''),
+            documento_origen_id=data.get('documento_origen_id'),
+            documento_origen_numero=data.get('documento_origen_numero', ''),
+            debe_total=Decimal('0.00'),
+            haber_total=Decimal('0.00'),
+        )
+
+        total_debe = Decimal('0.00')
+        total_haber = Decimal('0.00')
+
+        for idx, mov in enumerate(movimientos):
+            debe = Decimal(str(mov.get('debe', 0)))
+            haber = Decimal(str(mov.get('haber', 0)))
+            MovimientoContable.objects.create(
+                empresa_id=empresa_id,
+                asiento=asiento,
+                cuenta_id=mov['cuenta_id'],
+                cuenta_codigo=mov.get('cuenta_codigo', ''),
+                orden=idx + 1,
+                debe=debe,
+                haber=haber,
+                descripcion=mov.get('descripcion', ''),
+                tercero_nit=mov.get('tercero_nit', ''),
+                tercero_razon_social=mov.get('tercero_razon_social', ''),
+                centro_costo_id=mov.get('centro_costo_id'),
+            )
+            total_debe += debe
+            total_haber += haber
+
+        asiento.debe_total = total_debe
+        asiento.haber_total = total_haber
+        asiento.save(update_fields=['debe_total', 'haber_total', 'total_debe', 'total_haber'])
+        return asiento
+
+    @staticmethod
+    @transaction.atomic
     def eliminar_asiento(asiento_id: int) -> bool:
         """Elimina un asiento (los movimientos se eliminan por CASCADE)."""
         asiento = AsientoContable.objects.get(id=asiento_id)

@@ -285,6 +285,16 @@
       syncMailbox,
       listMailConfigs,
       listMailRuns,
+      // [v3.7.0] Buscador de cuentas PUC vinculadas a facturas
+      searchCuentas: (search = '') => {
+        const url = `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(search)}&app_origen=facturas&solo_auxiliares=true`;
+        return window.http('GET', url);
+      },
+      // [v3.7.0] Resolver nombre de cuenta por UUID — §18: consumo HTTP, no import Python
+      getCuentaByUuid: (uuid = '') => {
+        const url = `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}&app_origen=facturas`;
+        return window.http('GET', url);
+      }
     };
   }
 })();

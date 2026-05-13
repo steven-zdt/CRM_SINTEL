@@ -2,7 +2,7 @@
 URLs de UI para la app gastos.
 
 WARNING: v3.5: UI URLs para HTMX y templates.
-- Las APIs están en api/urls.py (DRF)
+- Las APIs estan en api/urls.py (DRF)
 - Estas URLs son para cargar offcanvas y partials HTML
 """
 from django.urls import path

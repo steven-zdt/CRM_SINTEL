@@ -705,6 +705,25 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
         # Moneda
         moneda = extraer_texto(invoice_root, './/cbc:DocumentCurrencyCode', namespaces, 'COP')
         
+        # Retenciones (v2.62.0)
+        retefuente = Decimal('0.00')
+        reteiva = Decimal('0.00')
+        reteica = Decimal('0.00')
+        
+        # Las retenciones suelen venir en cac:WithholdingTaxTotal
+        withholding_nodes = _x(invoice_root, ".//*[local-name()='WithholdingTaxTotal']")
+        for w_tax in withholding_nodes:
+            subtotal_nodes = _x(w_tax, ".//*[local-name()='TaxSubtotal']")
+            for sub_node in subtotal_nodes:
+                scheme_id = extraer_texto(sub_node, ".//*[local-name()='TaxScheme']//*[local-name()='ID']", namespaces)
+                valor = extraer_decimal(sub_node, ".//*[local-name()='TaxAmount']", namespaces)
+                if scheme_id == '05': # Retefuente
+                    retefuente += valor
+                elif scheme_id == '06': # ReteIVA
+                    reteiva += valor
+                elif scheme_id == '07': # ReteICA
+                    reteica += valor
+        
         # Formas de pago
         forma_pago = extraer_texto(invoice_root, './/cac:PaymentMeans//cbc:PaymentMeansCode', namespaces, '')
         medio_pago_codigo = extraer_texto(invoice_root, './/cac:PaymentMeans//cac:PaymentID//cbc:ID', namespaces, '')
@@ -845,6 +864,30 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
                         porcentaje_iva = extraer_decimal(tax_elem, './/cbc:Percent', namespaces, Decimal('0.00'))
                         break
             
+            # Retenciones del ítem
+            p_retefuente = Decimal('0.00')
+            v_retefuente = Decimal('0.00')
+            p_reteiva = Decimal('0.00')
+            v_reteiva = Decimal('0.00')
+            p_reteica = Decimal('0.00')
+            v_reteica = Decimal('0.00')
+
+            item_w_tax_nodes = _x(item_elem, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxSubtotal']")
+            for w_node in item_w_tax_nodes:
+                scheme_id = extraer_texto(w_node, ".//*[local-name()='TaxScheme']//*[local-name()='ID']", namespaces)
+                percent = extraer_decimal(w_node, ".//*[local-name()='TaxCategory']//*[local-name()='Percent']", namespaces)
+                amount = extraer_decimal(w_node, ".//*[local-name()='TaxAmount']", namespaces)
+                
+                if scheme_id == '05':
+                    p_retefuente = percent
+                    v_retefuente = amount
+                elif scheme_id == '06':
+                    p_reteiva = percent
+                    v_reteiva = amount
+                elif scheme_id == '07':
+                    p_reteica = percent
+                    v_reteica = amount
+
             items_data.append({
                 'linea_id': linea_id,
                 'codigo': codigo,
@@ -853,6 +896,12 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
                 'unidad_medida': unidad_medida,
                 'valor_unitario': valor_unitario,
                 'porcentaje_iva': porcentaje_iva,
+                'porcentaje_retefuente': p_retefuente,
+                'valor_retefuente': v_retefuente,
+                'porcentaje_reteiva': p_reteiva,
+                'valor_reteiva': v_reteiva,
+                'porcentaje_reteica': p_reteica,
+                'valor_reteica': v_reteica,
             })
         
         # Determinar naturaleza (VENTA si el tenant es emisor, COMPRA si es receptor)
@@ -913,6 +962,9 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
             'subtotal': subtotal,
             'impuestos': impuestos,
             'total': total,
+            'retefuente': retefuente,
+            'reteiva': reteiva,
+            'reteica': reteica,
             'forma_pago': forma_pago,
             'medio_pago_codigo': medio_pago_codigo,
             'payment_due_date': payment_due_date,
@@ -953,6 +1005,12 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
                 unidad_medida=item.get('unidad_medida', 'UND'),
                 valor_unitario=item.get('valor_unitario', 0),
                 porcentaje_iva=item.get('porcentaje_iva', 0),
+                porcentaje_retefuente=item.get('porcentaje_retefuente', 0),
+                valor_retefuente=item.get('valor_retefuente', 0),
+                porcentaje_reteiva=item.get('porcentaje_reteiva', 0),
+                valor_reteiva=item.get('valor_reteiva', 0),
+                porcentaje_reteica=item.get('porcentaje_reteica', 0),
+                valor_reteica=item.get('valor_reteica', 0),
             )
         
         return factura
@@ -1076,6 +1134,9 @@ def parse_ubl_to_dict(root: etree._Element, xml_bytes: bytes | None = None, natu
             'subtotal': subtotal,
             'impuestos': impuestos,
             'total': total,
+            'retefuente': extraer_decimal_xpath(invoice_root, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='05']/../..//*[local-name()='TaxAmount']/text()", namespaces, Decimal('0.00')),
+            'reteiva': extraer_decimal_xpath(invoice_root, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='06']/../..//*[local-name()='TaxAmount']/text()", namespaces, Decimal('0.00')),
+            'reteica': extraer_decimal_xpath(invoice_root, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='07']/../..//*[local-name()='TaxAmount']/text()", namespaces, Decimal('0.00')),
             'cufe': cufe,
             'naturaleza': naturaleza,
             'items': [],  # Items se pueden agregar si es necesario para preview

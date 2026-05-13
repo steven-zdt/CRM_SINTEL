@@ -1,83 +1,36 @@
 """
-Selectores para Cotizaciones v3.6 - Zero Waste Queries.
-
-Campos alineados con modelo Cotizacion (models.py):
-- numero_cotizacion (NO "numero")
-- total_con_impuestos (NO "total")
-- cliente__razon_social, cliente__nombre_comercial (NO "cliente__nombre")
+Selectores para Cotizaciones v2.62.0 - Zero Waste Queries.
 """
 from django.db.models import Q
 
-from apps.tenant.cotizaciones.models import Cotizacion, CotizacionItem
-
+from apps.tenant.clientes.models import Cliente
+from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
+from apps.tenant.cotizaciones.models import Cotizacion
 
 LIST_FIELDS = (
-    "id",
-    "uuid",
-    "numero_cotizacion",
-    "estado",
-    "fecha_emision",
-    "fecha_vencimiento",
-    "total_con_impuestos",
-    "empresa_id",
-    "created_at",
+    "id", "uuid", "numero_cotizacion", "estado", "fecha_emision", 
+    "fecha_vencimiento", "total_con_impuestos", "empresa_id", "created_at",
 )
 
 LIST_FK_FIELDS = (
-    "cliente__razon_social",
-    "cliente__nombre_comercial",
+    "cliente__razon_social", "cliente__nombre_comercial",
 )
 
 DETAIL_FIELDS = (
-    "id",
-    "uuid",
-    "numero_cotizacion",
-    "codigo_unico",
-    "fecha_emision",
-    "fecha_vencimiento",
-    "estado",
-    "tipo_cotizacion",
-    "iva_porcentaje",
-    "porcentaje_aiu_admin",
-    "porcentaje_aiu_imprevistos",
-    "porcentaje_aiu_utilidad",
-    "total_con_impuestos",
-    "empresa_id",
-    "created_at",
-    "updated_at",
+    "id", "uuid", "numero_cotizacion", "codigo_unico", "fecha_emision", 
+    "fecha_vencimiento", "estado", "tipo_cotizacion", "iva_porcentaje", 
+    "porcentaje_aiu_admin", "porcentaje_aiu_imprevistos", "porcentaje_aiu_utilidad", 
+    "total_con_impuestos", "empresa_id", "created_at", "updated_at",
 )
 
 DETAIL_FK_FIELDS = (
-    "cliente__razon_social",
-    "cliente__nombre_comercial",
-    "cliente__numero_documento",
-    "configuracion__id",
+    "cliente__razon_social", "cliente__nombre_comercial", 
+    "cliente__numero_documento", "configuracion__id",
 )
-
-ITEM_LIST_FIELDS = (
-    "id",
-    "cotizacion_id",
-    "tipo_item",
-    "descripcion",
-    "marca",
-    "referencia",
-    "unidad",
-    "cantidad",
-    "costo_unitario",
-    "porcentaje_utilidad",
-    "precio_unitario_venta",
-    "subtotal_linea",
-    "orden",
-    "empresa_id",
-)
-
 
 class CotizacionSelector:
-    """Selector para modelo Cotizacion."""
-
     @staticmethod
     def get_list(empresa_id, search=None, estado=None, cliente=None):
-        """Retorna listado optimizado de cotizaciones."""
         qs = Cotizacion.objects.filter(
             empresa_id=empresa_id
         ).select_related('cliente').only(*LIST_FIELDS, *LIST_FK_FIELDS)
@@ -87,10 +40,8 @@ class CotizacionSelector:
                 Q(numero_cotizacion__icontains=search) |
                 Q(cliente__razon_social__icontains=search)
             )
-
         if estado:
             qs = qs.filter(estado=estado)
-
         if cliente:
             qs = qs.filter(cliente_id=cliente)
 
@@ -98,12 +49,6 @@ class CotizacionSelector:
 
     @staticmethod
     def get_detail(cotizacion_id, empresa_id):
-        """Retorna detalle de una cotizacion.
-
-        Si cotizacion_id es None retorna queryset filtrado por empresa
-        (util como base para ViewSet.get_object()).
-        Si cotizacion_id esta presente retorna instancia unica o None.
-        """
         qs = Cotizacion.objects.filter(
             empresa_id=empresa_id
         ).select_related(
@@ -116,29 +61,41 @@ class CotizacionSelector:
         return qs.filter(id=cotizacion_id).first()
 
     @staticmethod
-    def get_by_numero(numero, empresa_id):
-        """Retorna cotizacion por numero."""
+    def get_detail_by_uuid(uuid, empresa_id):
         return Cotizacion.objects.filter(
-            numero_cotizacion=numero,
-            empresa_id=empresa_id
-        ).select_related('cliente').only(*DETAIL_FIELDS, *DETAIL_FK_FIELDS).first()
-
-
-class CotizacionItemSelector:
-    """Selector para modelo CotizacionItem."""
+            empresa_id=empresa_id, uuid=uuid
+        ).select_related('cliente', 'configuracion').prefetch_related('items').only(
+            *DETAIL_FIELDS, *DETAIL_FK_FIELDS
+        )
 
     @staticmethod
-    def get_list(cotizacion_id, empresa_id):
-        """Retorna items de una cotizacion."""
-        return CotizacionItem.objects.filter(
-            cotizacion_id=cotizacion_id,
-            empresa_id=empresa_id
-        ).select_related('producto', 'servicio').only(*ITEM_LIST_FIELDS)
+    def get_clientes_activos(empresa_id):
+        return Cliente.objects.filter(
+            empresa_id=empresa_id,
+            activo=True
+        ).only('id', 'razon_social').order_by('razon_social')
 
     @staticmethod
-    def get_detail(item_id, empresa_id):
-        """Retorna detalle de un item."""
-        return CotizacionItem.objects.filter(
-            id=item_id,
+    def get_configuraciones_activas(empresa_id):
+        return ConfiguracionCotizacion.objects.filter(
+            empresa_id=empresa_id,
+            es_activo=True
+        ).only('id', 'nombre_configuracion').order_by('nombre_configuracion')
+
+    @staticmethod
+    def get_configuracion_by_id(config_id, empresa_id):
+        return ConfiguracionCotizacion.objects.filter(
+            empresa_id=empresa_id, pk=config_id
+        ).only(
+            'id', 'nombre_configuracion', 'es_activo', 'dias_validez',
+            'prefijo_secuencia', 'sufijo_secuencia', 'semilla_inicial', 'ultimo_numero'
+        ).first()
+
+    @staticmethod
+    def get_configuraciones_lista_completa(empresa_id):
+        return ConfiguracionCotizacion.objects.filter(
             empresa_id=empresa_id
-        ).select_related('producto', 'servicio').only(*ITEM_LIST_FIELDS).first()
+        ).only(
+            'id', 'nombre_configuracion', 'es_activo', 'dias_validez',
+            'prefijo_secuencia', 'sufijo_secuencia', 'ultimo_numero'
+        ).order_by('-es_activo', 'nombre_configuracion')

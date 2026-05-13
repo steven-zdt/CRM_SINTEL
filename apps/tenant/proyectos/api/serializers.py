@@ -40,11 +40,13 @@ class ProyectoListSerializer(serializers.ModelSerializer):
     # Snapshots (campos desacoplados)
     cliente_nombre = serializers.CharField(read_only=True)
     responsable_actual_nombre = serializers.CharField(read_only=True)
+    proveedor_nombre = serializers.CharField(read_only=True)
     
     # Campos financieros calculados
     costo_total = serializers.SerializerMethodField()
     utilidad_estimada = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
     margen_rentabilidad = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+    factura_costo_numero = serializers.CharField(source='factura_costo.numero', read_only=True)
 
     class Meta:
         model = Proyecto
@@ -57,6 +59,10 @@ class ProyectoListSerializer(serializers.ModelSerializer):
             # Snapshots
             'cliente_id', 'cliente_nombre',
             'responsable_actual_id', 'responsable_actual_nombre',
+            'proveedor_id', 'proveedor_nombre',
+            
+            # Vínculos
+            'factura_costo', 'factura_costo_numero',
             
             # Financieros
             'valor_contrato_proyectado', 'costo_mano_obra_real', 'costo_materiales_real',
@@ -177,6 +183,9 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     fase_actual_display = serializers.CharField(source='get_fase_actual_display', read_only=True)
     estado_tarea_display = serializers.CharField(source='get_estado_tarea_display', read_only=True)
     
+    # Vínculos cross-app
+    factura_costo_numero = serializers.CharField(source='factura_costo.numero', read_only=True)
+    
     # Relaciones anidadas
     equipo_trabajo = AsignacionPersonalSerializer(many=True, read_only=True)
     pedidos = PedidoProyectoSerializer(many=True, read_only=True)
@@ -188,6 +197,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     # Snapshots (información desacoplada)
     cliente_info = serializers.SerializerMethodField()
     responsables_info = serializers.SerializerMethodField()
+    proveedor_info = serializers.SerializerMethodField()
 
     class Meta:
         model = Proyecto
@@ -202,6 +212,8 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             # (La lectura se realiza vía cliente_info y responsables_info)
             'cliente_id': {'write_only': True},
             'cliente_nombre': {'write_only': True},
+            'proveedor_id': {'write_only': True},
+            'proveedor_nombre': {'write_only': True},
             'responsable_actual_id': {'write_only': True},
             'responsable_actual_nombre': {'write_only': True},
             'responsable_comercial_id': {'write_only': True},
@@ -272,3 +284,12 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
                 "nombre": obj.responsable_actual_nombre or "N/A",
             },
         }
+
+    def get_proveedor_info(self, obj):
+        """Información del proveedor (snapshot)."""
+        if obj.proveedor_id:
+            return {
+                "id": obj.proveedor_id,
+                "nombre": obj.proveedor_nombre or "N/A",
+            }
+        return None

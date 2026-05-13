@@ -151,6 +151,43 @@
               <label class="form-check-label" for="producto-activo">Producto Activo</label>
             </div>
           </div>
+
+          <!-- Integración Contable v3.5 -->
+          <div class="col-12 mt-3 pt-3 border-top">
+            <h6 class="text-primary mb-3"><i class="bi bi-calculator me-2"></i>Vinculación Contable Dual</h6>
+            
+            <div class="mb-3 position-relative">
+              <label for="producto-cuenta-inventario-busqueda" class="form-label text-danger fw-bold">Cuenta de Inventario (Activo) *</label>
+              <div class="input-group shadow-sm">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" 
+                       class="form-control border-start-0 ps-0" 
+                       id="producto-cuenta-inventario-busqueda" 
+                       placeholder="Buscar por código o nombre (ej: 143505)..."
+                       autocomplete="off"
+                       value="{% if producto %}{{ producto.cuenta_inventario_label|default:'' }}{% endif %}">
+              </div>
+              <input type="hidden" name="cuenta_inventario_uuid" id="producto-cuenta-inventario-uuid" value="{% if producto %}{{ producto.cuenta_inventario_uuid|default:'' }}{% endif %}">
+              <div id="producto-cuenta-inventario-resultados" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+              <div class="form-text">Cuenta del activo donde se capitaliza el inventario.</div>
+            </div>
+
+            <div class="mb-3 position-relative">
+              <label for="producto-cuenta-costo-busqueda" class="form-label text-danger fw-bold">Cuenta de Costo de Ventas (Resultados) *</label>
+              <div class="input-group shadow-sm">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" 
+                       class="form-control border-start-0 ps-0" 
+                       id="producto-cuenta-costo-busqueda" 
+                       placeholder="Buscar por código o nombre (ej: 6135)..."
+                       autocomplete="off"
+                       value="{% if producto %}{{ producto.cuenta_costo_label|default:'' }}{% endif %}">
+              </div>
+              <input type="hidden" name="cuenta_costo_uuid" id="producto-cuenta-costo-uuid" value="{% if producto %}{{ producto.cuenta_costo_uuid|default:'' }}{% endif %}">
+              <div id="producto-cuenta-costo-resultados" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+              <div class="form-text">Cuenta de egreso/costo afectada al realizar una venta.</div>
+            </div>
+          </div>
         </div>
         <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>

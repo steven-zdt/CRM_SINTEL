@@ -160,6 +160,10 @@ urlpatterns = [
     # WARNING: DEPRECADO: APIs de landing (se mantienen por compatibilidad, pero se recomienda usar Core API)
     # Nuevos endpoints centralizados: /api/v1/core/auth/* (login, logout, password-reset)
     path('api/v1/landing/', include('apps.tenant.landing.api.urls', namespace='tenant_landing_api')),
+    # MCP endpoint (django-rest-framework-mcp): expone ViewSets anotados como herramientas MCP
+    # Accesible en: http://<tenant>/mcp/
+    # Conectar desde Antigravity via mcp-remote apuntando a esta URL con Bearer token
+    path('mcp/', include('djangorestframework_mcp.urls')),
     
     # UI Routes (partials HTML sin datos, API-First)
     # Workspace compositor

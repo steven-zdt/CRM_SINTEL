@@ -174,14 +174,26 @@ class DevengoServiceMixin:
         empresa_id = self.get_empresa_id()
         return self.business_service_class.anular_devengo(devengo, empresa_id)
 
-    def service_eliminar_devengo(self, devengo):
+    def service_eliminar_devengo(self, devengo, *args, **kwargs):
         """Elimina un devengo."""
         empresa_id = self.get_empresa_id()
         return self.business_service_class.eliminar_devengo(devengo, empresa_id)
 
-    def service_validar_limite_dias(self, empleado_id, periodo_mes, dias_laborados, devengo_id_excluir=None):
-        """Valida límite de días en un mes."""
+    def service_validar_limite_dias(self, payload=None, *args, **kwargs):
+        """Valida límite de días en un mes. Soporta payload o argumentos directos."""
         empresa_id = self.get_empresa_id()
+        
+        if payload:
+            empleado_id = payload.get('empleado')
+            periodo_mes = payload.get('periodo_mes')
+            dias_laborados = payload.get('dias_laborados')
+            devengo_id_excluir = payload.get('id')
+        else:
+            empleado_id = kwargs.get('empleado_id')
+            periodo_mes = kwargs.get('periodo_mes')
+            dias_laborados = kwargs.get('dias_laborados')
+            devengo_id_excluir = kwargs.get('devengo_id_excluir')
+
         return self.business_service_class.validar_limite_dias_mes(
             empleado_id=empleado_id,
             periodo_mes=periodo_mes,

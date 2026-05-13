@@ -323,6 +323,11 @@
     const el = (typeof selector === 'string') ? d.querySelector(selector) : selector;
     if (!el) {
       console.warn(`[UIManager] handleOffcanvas: Elemento ${selector} no encontrado`);
+      // ⚠️ v3.7: Si intentamos ocultar pero el elemento ya no existe, 
+      // forzar limpieza de backdrops por si acaso
+      if (action === 'hide') {
+        _forceCleanup();
+      }
       return false;
     }
 
@@ -336,9 +341,7 @@
       
       if (action === 'show') {
         // ⚠️ v3.5: Limpieza preventiva de backdrops huérfanos que bloquean la UI
-        d.querySelectorAll('.offcanvas-backdrop, .modal-backdrop').forEach(b => b.remove());
-        d.body.style.overflow = '';
-        d.body.style.paddingRight = '';
+        _forceCleanup();
 
         // Si ya existe una instancia, la destruimos para evitar conflictos de estado
         if (instance) {
@@ -348,17 +351,65 @@
         instance = new bootstrap.Offcanvas(el);
         instance.show();
       } else {
-        if (instance) {
-          instance.hide();
-          // Opcional: dispose después de ocultar si HTMX va a remover el elemento
-          el.addEventListener('hidden.bs.offcanvas', () => instance.dispose(), { once: true });
+        // ⚠️ v3.6: Si no hay instancia pero el elemento existe, crear una para cerrar
+        if (!instance) {
+          instance = new bootstrap.Offcanvas(el);
         }
+        instance.hide();
+        // Limpieza de instancia tras el cierre para liberar recursos
+        el.addEventListener('hidden.bs.offcanvas', () => {
+            // Verificar que el elemento siga en el DOM antes de disponer
+            if (d.body.contains(el)) {
+                const currentInstance = bootstrap.Offcanvas.getInstance(el);
+                if (currentInstance) currentInstance.dispose();
+            }
+        }, { once: true });
       }
       return true;
     } catch (e) {
       console.error('[UIManager] Error handleOffcanvas:', e);
+      _forceCleanup(); // Fallback de seguridad
       return false;
     }
+  }
+
+  /**
+   * ⚠️ v3.7: Destruye una instancia de Offcanvas y limpia el DOM de forma agresiva
+   * Útil para htmx:beforeCleanupElement para evitar errores de referencia.
+   * 
+   * @param {string|Element} selector - Selector o elemento offcanvas
+   */
+  function destroyOffcanvas(selector) {
+    if (!selector) return;
+    const el = (typeof selector === 'string') ? d.querySelector(selector) : selector;
+    if (!el) {
+      _forceCleanup();
+      return;
+    }
+
+    try {
+      const instance = bootstrap.Offcanvas.getInstance(el);
+      if (instance) {
+        // IMPORTANTE: No llamar a hide() aquí si el elemento está siendo removido
+        // para evitar el TypeError en classList de Bootstrap
+        instance.dispose();
+      }
+      _forceCleanup();
+    } catch (e) {
+      console.warn('[UIManager] Error destroyOffcanvas:', e);
+      _forceCleanup();
+    }
+  }
+
+  /**
+   * Limpieza forzada de backdrops y scroll lock
+   * @private
+   */
+  function _forceCleanup() {
+    d.querySelectorAll('.offcanvas-backdrop, .modal-backdrop').forEach(b => b.remove());
+    d.body.style.overflow = '';
+    d.body.style.paddingRight = '';
+    d.documentElement.style.overflow = '';
   }
 
   /**
@@ -444,16 +495,48 @@
   w.showSuccess = function (msg) { _toast('success', msg); };
   w.showInfo    = function (msg) { _toast('info',    msg); };
 
+  /**
+   * Muestra un diálogo de confirmación premium usando SweetAlert2
+   * 
+   * @param {string} message - Mensaje de confirmación
+   * @param {string} title - Título del diálogo
+   * @returns {Promise<boolean>}
+   */
+  async function confirm(message, title = '¿Está seguro?') {
+    if (typeof Swal === 'undefined') {
+      return w.confirm(message);
+    }
+
+    const result = await Swal.fire({
+      title: title,
+      text: message,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, continuar',
+      cancelButtonText: 'Cancelar',
+      reverseButtons: true
+    });
+
+    return result.isConfirmed;
+  }
+
   // Exportar objeto global
   w.UIManager = {
     handleError,  // ⚠️ v2.60: Boundary principal (decide dónde mostrar error)
     notifyError,  // Notificación flotante (fallback)
     handleModal,
     handleOffcanvas,
+    destroyOffcanvas, // ⚠️ v3.7: Centralizado para limpiezas HTMX
     resetForm,
+    confirm,
     showError: w.showError,
     showSuccess: w.showSuccess,
-    showInfo: w.showInfo
+    showInfo: w.showInfo,
+    // Aliases para compatibilidad v2.6x
+    success: w.showSuccess,
+    notifySuccess: w.showSuccess
   };
 
   console.log('[UIManager] Orquestador central de UI inicializado v3.4');

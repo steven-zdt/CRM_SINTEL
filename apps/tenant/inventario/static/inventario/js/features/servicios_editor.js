@@ -46,7 +46,9 @@
             categoria: formData.get('categoria') ? parseInt(formData.get('categoria'), 10) : null,
             descripcion: formData.get('descripcion')?.trim() || '',
             precio_venta: parseFloat(formData.get('precio_venta') || '0') || 0,
-            activo: formData.get('activo') === 'on' || formData.get('activo') === 'true'
+            activo: formData.get('activo') === 'on' || formData.get('activo') === 'true',
+            // v3.5: campo renombrado a cuenta_ingreso_uuid
+            cuenta_ingreso_uuid: d.querySelector('#servicio-cuenta-ingreso-uuid')?.value || null
         };
 
         // Validación básica
@@ -295,6 +297,15 @@
                     // Si es creación, cargar categorías sin selección
                     cargarCategorias();
                 }
+            }
+
+            // v3.5: Inicializar buscador cuenta de ingreso
+            if (d.querySelector('#servicio-cuenta-ingreso-busqueda')) {
+                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
+                    inputSelector: '#servicio-cuenta-ingreso-busqueda',
+                    resultsSelector: '#servicio-cuenta-ingreso-resultados',
+                    uuidSelector: '#servicio-cuenta-ingreso-uuid'
+                });
             }
         }
     }

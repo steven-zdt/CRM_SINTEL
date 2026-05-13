@@ -182,6 +182,70 @@
                 width: 120
             },
             {
+                title: "Estado de Pago",
+                field: "estado_pago",
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    let clase = 'bg-danger';
+                    let texto = 'No Pagada';
+
+                    if (value === 'PAGO_PARCIAL') {
+                        clase = 'bg-warning text-dark';
+                        texto = 'Pago Parcial';
+                    } else if (value === 'PAGADA') {
+                        clase = 'bg-success';
+                        texto = 'Pagada';
+                    }
+
+                    return `<span class="badge ${clase}">${texto}</span>`;
+                },
+                width: 130
+            },
+            {
+                title: "IVA",
+                field: "impuestos",
+                formatter: function(cell) {
+                    return formatearMoneda(cell.getValue());
+                },
+                hozAlign: "right",
+                width: 120
+            },
+            {
+                title: "Ret. Fuente",
+                field: "retefuente",
+                formatter: function(cell) {
+                    return formatearMoneda(cell.getValue());
+                },
+                hozAlign: "right",
+                width: 110
+            },
+            {
+                title: "ReteICA",
+                field: "reteica",
+                formatter: function(cell) {
+                    return formatearMoneda(cell.getValue());
+                },
+                hozAlign: "right",
+                width: 100
+            },
+            {
+                title: "ReteIVA",
+                field: "reteiva",
+                formatter: function(cell) {
+                    return formatearMoneda(cell.getValue());
+                },
+                hozAlign: "right",
+                width: 100
+            },
+            {
+                title: "Forma de Pago",
+                field: "forma_pago",
+                formatter: function(cell) {
+                    return cell.getValue() || '---';
+                },
+                width: 130
+            },
+            {
                 title: "Total",
                 field: "total",
                 formatter: function(cell) {
@@ -195,10 +259,13 @@
                 formatter: function(cell) {
                     const rowData = cell.getRow().getData();
                     const id = rowData.id;
-                    
+
                     return `
                         <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-view-factura" data-id="${id}" title="Ver Factura">
+                            <button type="button" class="btn btn-outline-info btn-edit-factura" data-id="${id}" title="Editar Campos Manuales">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-primary btn-view-factura" data-id="${id}" title="Ver Factura Completa">
                                 <i class="bi bi-eye"></i>
                             </button>
                             <button type="button" class="btn btn-outline-danger btn-delete-factura" data-id="${id}" title="Eliminar Factura">
@@ -209,7 +276,7 @@
                 },
                 headerSort: false,
                 hozAlign: "center",
-                width: 120
+                width: 160
             }
         ];
     }
@@ -251,14 +318,14 @@
         if (table) {
             window.SintelFacturasTables.main = table;
             console.log(`${MOD} Tabulator inicializado y guardado en SintelFacturasTables`);
-            
+
             // ⚠️ Sincronizar summary cuando se carguen los datos
             if (typeof table.on === 'function') {
                 // Sincronizar summary después de cargar datos
                 table.on('dataLoaded', () => {
                     loadSummary();
                 });
-                
+
                 // Sincronizar summary después de procesar datos
                 table.on('dataProcessed', () => {
                     loadSummary();
@@ -370,6 +437,215 @@
 
         // ⚠️ Event Delegation: Escuchar clics en el contenedor del grid
         gridElement.addEventListener('click', async (e) => {
+            // Botón Editar (abre modal de edición de campos manuales)
+            const btnEdit = e.target.closest('.btn-edit-factura');
+            if (btnEdit) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const id = btnEdit.getAttribute('data-id');
+                if (!id) {
+                    console.warn(`${MOD} Botón editar sin data-id`);
+                    return;
+                }
+
+                try {
+                    // Loading state
+                    const originalHTML = btnEdit.innerHTML;
+                    btnEdit.disabled = true;
+                    btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+                    // Cargar datos de factura
+                    const response = await w.http('GET', `/api/v1/facturas/${id}/`);
+
+                    if (!response.ok) {
+                        console.error(`${MOD} Error al cargar factura:`, response);
+                        if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                            w.SintelFeedback.error('Error al cargar la factura');
+                        }
+                        btnEdit.disabled = false;
+                        btnEdit.innerHTML = originalHTML;
+                        return;
+                    }
+
+                    const factura = response.data;
+
+                    // Construir modal de edición
+                    const modalHTML = `
+                        <div class="modal fade" id="modal-editar-factura-${id}" tabindex="-1" aria-labelledby="modal-title-${id}" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header bg-info text-white">
+                                        <h5 class="modal-title" id="modal-title-${id}">
+                                            <i class="bi bi-pencil-square me-2"></i>Editar Factura ${factura.numero}
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="alert alert-info mb-3">
+                                            <small><i class="bi bi-info-circle me-2"></i>Solo puedes editar campos ingresados manualmente. Los datos del XML son de solo lectura.</small>
+                                        </div>
+
+                                        <form id="form-editar-factura-${id}">
+                                            <!-- Emisor (solo lectura) -->
+                                            <div class="mb-3">
+                                                <label class="form-label"><i class="bi bi-building me-2"></i>Emisor</label>
+                                                <input type="text" class="form-control" value="${factura.emisor_razon_social || 'N/A'}" disabled>
+                                                <small class="text-muted d-block mt-1">Este campo es de solo lectura</small>
+                                            </div>
+
+                                            <hr class="my-3">
+
+                                            <!-- Estado -->
+                                            <div class="mb-3">
+                                                <label class="form-label"><i class="bi bi-tag me-2"></i>Estado</label>
+                                                <select class="form-select" id="estado-${id}" name="estado" required>
+                                                    <option value="BORRADOR" ${factura.estado === 'BORRADOR' ? 'selected' : ''}>Borrador</option>
+                                                    <option value="ENVIADA" ${factura.estado === 'ENVIADA' ? 'selected' : ''}>Enviada</option>
+                                                    <option value="ACEPTADA" ${factura.estado === 'ACEPTADA' ? 'selected' : ''}>Aceptada</option>
+                                                    <option value="RECHAZADA" ${factura.estado === 'RECHAZADA' ? 'selected' : ''}>Rechazada</option>
+                                                    <option value="ANULADA" ${factura.estado === 'ANULADA' ? 'selected' : ''}>Anulada</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Estado de Pago -->
+                                            <div class="mb-3">
+                                                <label class="form-label"><i class="bi bi-cash-coin me-2"></i>Estado de Pago</label>
+                                                <select class="form-select" id="estado-pago-${id}" name="estado_pago" required>
+                                                    <option value="NO_PAGADA" ${factura.estado_pago === 'NO_PAGADA' ? 'selected' : ''}>No Pagada</option>
+                                                    <option value="PAGO_PARCIAL" ${factura.estado_pago === 'PAGO_PARCIAL' ? 'selected' : ''}>Pago Parcial</option>
+                                                    <option value="PAGADA" ${factura.estado_pago === 'PAGADA' ? 'selected' : ''}>Pagada</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Vencimiento -->
+                                            <div class="mb-3">
+                                                <label class="form-label"><i class="bi bi-calendar me-2"></i>Fecha de Vencimiento</label>
+                                                <input type="date" class="form-control" id="vencimiento-${id}" name="fecha_vencimiento" value="${factura.fecha_vencimiento || ''}">
+                                            </div>
+
+                                            <!-- Retenciones -->
+                                            <hr class="my-3">
+                                            <h6 class="text-muted mb-2"><i class="bi bi-percent me-2"></i>Retenciones</h6>
+
+                                            <div class="row g-2 mb-3">
+                                                <div class="col-6">
+                                                    <label class="form-label small">Retención Fuente</label>
+                                                    <input type="number" class="form-control form-control-sm" id="retefuente-${id}" name="retefuente" placeholder="0.00" step="0.01" min="0" value="${factura.retefuente || '0'}">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small">ReteICA</label>
+                                                    <input type="number" class="form-control form-control-sm" id="reteica-${id}" name="reteica" placeholder="0.00" step="0.01" min="0" value="${factura.reteica || '0'}">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small">ReteIVA</label>
+                                                    <input type="number" class="form-control form-control-sm" id="reteiva-${id}" name="reteiva" placeholder="0.00" step="0.01" min="0" value="${factura.reteiva || '0'}">
+                                                </div>
+                                            </div>
+
+                                            <!-- Formas de Pago -->
+                                            <hr class="my-3">
+                                            <h6 class="text-muted mb-2"><i class="bi bi-credit-card me-2"></i>Formas de Pago</h6>
+
+                                            <div class="mb-3">
+                                                <label class="form-label small">Forma de Pago</label>
+                                                <input type="text" class="form-control form-control-sm" id="forma-pago-${id}" name="forma_pago" placeholder="Ej: Transferencia" value="${factura.forma_pago || ''}">
+                                            </div>
+
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <label class="form-label small">Código Medio Pago</label>
+                                                    <input type="text" class="form-control form-control-sm" id="medio-pago-${id}" name="medio_pago_codigo" placeholder="Ej: 01" value="${factura.medio_pago_codigo || ''}">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small">Fecha Límite Pago</label>
+                                                    <input type="date" class="form-control form-control-sm" id="payment-date-${id}" name="payment_due_date" value="${factura.payment_due_date || ''}">
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-info btn-guardar-edicion" data-id="${id}">
+                                            <i class="bi bi-check-circle me-2"></i>Guardar Cambios
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    // Insertar modal en DOM
+                    const modalContainer = document.createElement('div');
+                    modalContainer.innerHTML = modalHTML;
+                    document.body.appendChild(modalContainer);
+
+                    // Mostrar modal
+                    const modal = new bootstrap.Modal(document.getElementById(`modal-editar-factura-${id}`));
+                    modal.show();
+
+                    // Manejador para guardar cambios
+                    const btnGuardar = document.querySelector(`.btn-guardar-edicion[data-id="${id}"]`);
+                    if (btnGuardar) {
+                        btnGuardar.addEventListener('click', async () => {
+                            const form = document.getElementById(`form-editar-factura-${id}`);
+                            const formData = new FormData(form);
+                            const payload = Object.fromEntries(formData);
+
+                            // Convertir números
+                            payload.retefuente = parseFloat(payload.retefuente) || 0;
+                            payload.reteica = parseFloat(payload.reteica) || 0;
+                            payload.reteiva = parseFloat(payload.reteiva) || 0;
+
+                            btnGuardar.disabled = true;
+                            btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Guardando...';
+
+                            try {
+                                const saveRes = await w.http('PATCH', `/api/v1/facturas/${id}/`, payload);
+
+                                if (!saveRes.ok) {
+                                    console.error(`${MOD} Error al guardar:`, saveRes);
+                                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                                        w.SintelFeedback.error('Error al guardar los cambios');
+                                    }
+                                } else {
+                                    if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
+                                        w.SintelFeedback.success('Cambios guardados exitosamente');
+                                    }
+                                    modal.hide();
+
+                                    // Actualizar tabla
+                                    if (table && typeof table.replaceData === 'function') {
+                                        table.replaceData();
+                                    }
+
+                                    // Limpiar modal del DOM
+                                    modalContainer.remove();
+                                }
+                            } catch (error) {
+                                console.error(`${MOD} Error al guardar:`, error);
+                                if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                                    w.SintelFeedback.error('Error al guardar los cambios');
+                                }
+                            } finally {
+                                btnGuardar.disabled = false;
+                                btnGuardar.innerHTML = '<i class="bi bi-check-circle me-2"></i>Guardar Cambios';
+                            }
+                        });
+                    }
+
+                } catch (error) {
+                    console.error(`${MOD} Error al abrir editor:`, error);
+                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                        w.SintelFeedback.error('Error al abrir el editor');
+                    }
+                } finally {
+                    btnEdit.disabled = false;
+                    btnEdit.innerHTML = originalHTML;
+                }
+                return;
+            }
+
             // Botón Ver (abre Offcanvas de solo lectura)
             const btnView = e.target.closest('.btn-view-factura');
             if (btnView) {

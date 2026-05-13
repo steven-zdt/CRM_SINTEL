@@ -1,18 +1,17 @@
 {% load static %}
-{# assets_facturas.html - Assets del modulo Facturas v2.61.5 #}
-{# Arquitectura modular: window.Sintel.Facturas + window.AppFacturas (alias) #}
-{#                                                                            #}
-{# ORDEN CRITICO (sin async/defer):                                          #}
-{# 1. facturas.utils.js  - Formatters puros, sin deps                        #}
-{# 2. facturas.api.js    - Core API Facade, requiere window.http             #}
-{# 3. facturas.table.js  - Tabulator + event delegation, requiere utils      #}
-{# 4. facturas.ui.js     - Offcanvas + form + detalle, requiere utils + api  #}
-{# 5. facturas.sync.js   - Sincronizacion correo, requiere utils + api + ui  #}
-{# 6. facturas.main.js   - FacturaController orquestador, monta todo        #}
+{# assets_facturas.html - Assets del módulo Facturas v2.95 #}
+{# Arquitectura modular FSD: Feature-Sliced Design #}
+{# Estructura unificada: apps/tenant/facturas/static/js/facturas/ #}
+{#                                                                  #}
+{# ORDEN CRÍTICO (sin async/defer):                               #}
+{# 1. facturas.api.js      - API Facade, requiere window.http      #}
+{# 2. facturas.components.js - Componentes reutilizables           #}
+{# 3. features/*.js        - Features modulares (list, editor, etc)#}
+{# 4. facturas_main.js     - Orquestador principal                #}
 
-<script src="{% static 'facturas/js/factura_utils.js' %}"></script>
-<script src="{% static 'facturas/js/factura_api.js' %}"></script>
-<script src="{% static 'facturas/js/factura_table.js' %}"></script>
-<script src="{% static 'facturas/js/factura_ui.js' %}"></script>
-<script src="{% static 'facturas/js/factura_sync.js' %}"></script>
-<script src="{% static 'facturas/js/factura_main.js' %}"></script>
+<script src="{% static 'js/facturas/facturas.api.js' %}"></script>
+<script src="{% static 'js/facturas/facturas.components.js' %}"></script>
+<script src="{% static 'js/facturas/features/facturas_list.js' %}"></script>
+<script src="{% static 'js/facturas/features/facturas_editor.js' %}"></script>
+<script src="{% static 'js/facturas/features/ver_detalle_factura.js' %}"></script>
+<script src="{% static 'js/facturas/facturas_main.js' %}"></script>

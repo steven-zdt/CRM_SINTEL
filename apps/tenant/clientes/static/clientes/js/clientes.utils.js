@@ -44,7 +44,7 @@
                 <div class="card mb-2 contacto-item">
                     <div class="card-body p-3">
                         <div class="row g-2">
-                            <div class="col-md-5">
+                            <div class="col-md-4">
                                 <label class="form-label small">Nombre Completo *</label>
                                 <input type="text" class="form-control form-control-sm contacto-nombre" required />
                             </div>
@@ -52,11 +52,11 @@
                                 <label class="form-label small">Cargo</label>
                                 <input type="text" class="form-control form-control-sm contacto-cargo" />
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label class="form-label small">Teléfono</label>
                                 <input type="text" class="form-control form-control-sm contacto-telefono" />
                             </div>
-                            <div class="col-md-5">
+                            <div class="col-md-4">
                                 <label class="form-label small">Email *</label>
                                 <input type="email" class="form-control form-control-sm contacto-email" required />
                             </div>
@@ -66,7 +66,7 @@
                                     <label class="form-check-label small">Activo</label>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <div class="form-check mt-4">
                                     <input class="form-check-input contacto-principal" type="checkbox" />
                                     <label class="form-check-label small">Principal</label>

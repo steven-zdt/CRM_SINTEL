@@ -60,13 +60,8 @@
         <div class="col-md-6">
           <label class="form-label small fw-bold">Tipo de Comprobante</label>
           <select class="form-select" id="select-tipo-comprobante">
-            <option value="">Seleccione tipo...</option>
-            <option value="FVE">FVE - Factura de Venta Electrónica</option>
-            <option value="CE">CE - Comprobante de Egreso</option>
-            <option value="RC">RC - Recibo de Caja</option>
-            <option value="GN">GN - General</option>
-            <option value="ND">ND - Nota Débito</option>
-            <option value="NC">NC - Nota Crédito</option>
+            <option value="">Cargando tipos...</option>
+            {# Se carga dinámicamente vía JavaScript desde TipoComprobante #}
           </select>
           <small class="text-muted">Opcional: Tipo de documento relacionado</small>
         </div>
@@ -180,10 +175,13 @@
       <span class="movimiento-orden">1</span>
     </td>
     <td>
-      <select class="form-select form-select-sm select-cuenta" required>
-        <option value="">Seleccione cuenta...</option>
-        {# Las opciones se cargan dinámicamente vía JavaScript #}
-      </select>
+      <div class="puc-search-container position-relative">
+        <input type="text" class="form-control form-control-sm input-puc-search" 
+               placeholder="Buscar cuenta (código o nombre)..." autocomplete="off">
+        <input type="hidden" class="input-cuenta-id" data-movimiento-field="cuenta">
+        <div class="puc-search-results d-none list-group position-absolute w-100 z-3 shadow-sm border" 
+             style="max-height: 200px; overflow-y: auto;"></div>
+      </div>
     </td>
     <td>
       <input type="text" class="form-control form-control-sm input-descripcion-mov" placeholder="Descripción (opcional)">

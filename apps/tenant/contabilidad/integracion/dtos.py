@@ -18,13 +18,16 @@ class TipoTransaccion(str, Enum):
     VENTA_FACTURA = "VENTA_FACTURA"
     VENTA_NOTA_CREDITO = "VENTA_NOTA_CREDITO"
     VENTA_NOTA_DEBITO = "VENTA_NOTA_DEBITO"
+    COMPRA_NOTA_CREDITO = "COMPRA_NOTA_CREDITO"
     COMPRA_GASTO = "COMPRA_GASTO"
     COMPRA_INVENTARIO = "COMPRA_INVENTARIO"
     SALIDA_INVENTARIO_VENTA = "SALIDA_INVENTARIO_VENTA"
     BAJA_INVENTARIO = "BAJA_INVENTARIO"
     AJUSTE_INVENTARIO = "AJUSTE_INVENTARIO"
+    INVENTARIO_COSTO_VENTA = "INVENTARIO_COSTO_VENTA"
     NOMINA_LIQUIDACION = "NOMINA_LIQUIDACION"
     NOMINA_PROVISION = "NOMINA_PROVISION"
+    NOMINA_PAGO = "NOMINA_PAGO"
     NOMINA_RETIRO = "NOMINA_RETIRO"
     PAGO_PROVEEDOR = "PAGO_PROVEEDOR"
     RECAUDO_CLIENTE = "RECAUDO_CLIENTE"
@@ -112,3 +115,42 @@ class TransaccionEconomica:
     observaciones: str = ""
     periodo_contable_id: Optional[int] = None  # If None, inferred from fecha
     empresa_id: Optional[int] = None           # Injected by Contabilizador from context
+
+
+# ============================================================================
+# DTOs PARA FLUJO MANUAL (On-Demand UI)
+# ============================================================================
+
+@dataclass(frozen=True)
+class LineaManual:
+    """
+    Linea de asiento con cuenta PUC explicita asignada por el usuario en la UI.
+    No requiere resolucion de ReglaContable.
+    """
+    cuenta_codigo: str          # Codigo PUC nivel 6 (ej: 130505)
+    debe: Decimal = Decimal('0')
+    haber: Decimal = Decimal('0')
+    descripcion: str = ''
+    tercero_nit: str = ''
+    tercero_razon_social: str = ''
+    centro_costo_id: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class ComprobanteManualDTO:
+    """
+    DTO para contabilizacion manual On-Demand desde la UI.
+
+    El usuario selecciona el documento pendiente, asigna manualmente
+    la cuenta PUC por cada linea y genera el asiento directamente.
+    No pasa por ReglaContable ni Contabilizador automatico.
+    """
+    empresa_id: int
+    fecha: date
+    descripcion: str
+    app_label: str              # 'facturas' | 'gastos'
+    modelo: str                 # 'Factura' | 'DocumentoSoporte'
+    documento_id: int           # PK en la app origen
+    documento_numero: str       # Numero legible (FV-001, DS-001, etc.)
+    tipo_comprobante_id: int    # ID del TipoComprobante (CC, RC, etc.)
+    lineas: list                # List[LineaManual]

@@ -138,6 +138,9 @@ urlpatterns = [
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    
+    # MCP server: expone ViewSets anotados como herramientas MCP
+    path('mcp/', include('djangorestframework_mcp.urls')),
 ]
 
 # Add a deterministic explicit users create endpoint at the top-level so

@@ -11,25 +11,24 @@
   var MOD = '[cotizaciones.ui]';
   var OFFCANVAS_ID = 'offcanvas-container';
   var _deleteUuid = null;
+  var _eventsBound = false;
 
   /**
-   * Abre el offcanvas Bootstrap 5 si existe y no esta abierto.
+   * Abre el offcanvas Bootstrap 5 usando UIManager (Safe Patterns).
    */
   function showOffcanvas() {
-    var el = d.getElementById(OFFCANVAS_ID);
-    if (!el || !w.bootstrap) return;
-    var instance = w.bootstrap.Offcanvas.getOrCreateInstance(el);
-    instance.show();
+    if (w.UIManager && typeof w.UIManager.handleOffcanvas === 'function') {
+      w.UIManager.handleOffcanvas('#' + OFFCANVAS_ID, 'show');
+    }
   }
 
   /**
-   * Cierra el offcanvas activo.
+   * Cierra el offcanvas activo usando UIManager.
    */
   function hideOffcanvas() {
-    var el = d.getElementById(OFFCANVAS_ID);
-    if (!el || !w.bootstrap) return;
-    var instance = w.bootstrap.Offcanvas.getInstance(el);
-    if (instance) instance.hide();
+    if (w.UIManager && typeof w.UIManager.handleOffcanvas === 'function') {
+      w.UIManager.handleOffcanvas('#' + OFFCANVAS_ID, 'hide');
+    }
   }
 
   /**
@@ -103,12 +102,23 @@
   /**
    * Confirmar eliminacion (muestra modal Bootstrap)
    */
-  function confirmarEliminar(uuid) {
+  function confirmarEliminar(uuid, data) {
+    var estado = data ? data.estado : 'BORRADOR';
+    var codigo = data ? (data.codigo_unico || data.numero_cotizacion) : 'N/A';
+
+    // Borrado Seguro: Solo permitir si está en BORRADOR o CANCELADA
+    if (estado !== 'BORRADOR' && estado !== 'CANCELADA') {
+      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+        w.UIManager.notifyError('La cotización "' + codigo + '" está activa (' + estado + '). Debe cancelarla primero antes de eliminarla.');
+      } else {
+        alert('La cotización debe estar cancelada para ser eliminada.');
+      }
+      return;
+    }
+
     _deleteUuid = uuid;
-    var modalEl = d.getElementById('confirmarEliminarModal');
-    if (modalEl && w.bootstrap) {
-      var modal = new w.bootstrap.Modal(modalEl);
-      modal.show();
+    if (w.UIManager && typeof w.UIManager.handleModal === 'function') {
+      w.UIManager.handleModal('#modal-eliminar-cotizacion', 'show');
     }
   }
 
@@ -123,13 +133,14 @@
     var url = api.deleteUrl(_deleteUuid);
     var headers = typeof api.getHeaders === 'function' ? api.getHeaders() : {};
 
+    var btnConfirmar = d.getElementById('btn-confirmar-eliminar-cotizacion');
+    if (btnConfirmar) btnConfirmar.disabled = true;
+
     fetch(url, { method: 'DELETE', headers: headers, credentials: 'same-origin' })
       .then(function (r) {
         if (r.ok) {
-          var modalEl = d.getElementById('confirmarEliminarModal');
-          if (modalEl && w.bootstrap) {
-            var modal = w.bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
+          if (w.UIManager && typeof w.UIManager.handleModal === 'function') {
+            w.UIManager.handleModal('#modal-eliminar-cotizacion', 'hide');
           }
           if (w.UIManager && typeof w.UIManager.notifySuccess === 'function') {
             w.UIManager.notifySuccess('Cotizacion eliminada correctamente');
@@ -147,28 +158,39 @@
           w.UIManager.notifyError(err.error || 'Error al eliminar cotizacion');
         }
       })
-      .finally(function () { _deleteUuid = null; });
+      .finally(function () { 
+        _deleteUuid = null; 
+        var btnConfirmar = d.getElementById('btn-confirmar-eliminar-cotizacion');
+        if (btnConfirmar) btnConfirmar.disabled = false;
+      });
   }
 
   /**
    * Bind global de eventos UI (botones crear, confirmar eliminar, htmx afterSwap)
+   * Solo se ejecuta UNA VEZ en toda la sesion
    */
   function bindEvents() {
-    // Boton confirmar eliminacion
-    var btnConfirmar = d.getElementById('btn-confirmar-eliminar');
-    if (btnConfirmar && !btnConfirmar.dataset.bound) {
-      btnConfirmar.dataset.bound = 'true';
-      btnConfirmar.addEventListener('click', ejecutarEliminar);
-    }
+    // Guard global: solo ejecutar una vez
+    if (_eventsBound) return;
+    _eventsBound = true;
+
+    // Delegación de eventos para el botón confirmar eliminación
+    d.addEventListener('click', function (e) {
+      if (e.target && e.target.id === 'btn-confirmar-eliminar-cotizacion') {
+        ejecutarEliminar();
+      }
+    });
 
     // HTMX afterSettle: mostrar offcanvas tras inyeccion de HTML
     d.body.addEventListener('htmx:afterSettle', function (evt) {
       var target = evt.detail.target;
       if (target && target.id === OFFCANVAS_ID) {
         showOffcanvas();
-        // Bind forms dentro del offcanvas
+        // Bind forms dentro del offcanvas (cada formulario chequea si ya esta bound)
         bindForm('form-cotizacion-crear');
         bindForm('form-cotizacion-editar');
+        bindForm('form-configuracion-crear');
+        bindForm('form-configuracion-editar');
         // Procesar HTMX en contenido nuevo
         if (typeof htmx !== 'undefined' && typeof htmx.process === 'function') {
           htmx.process(target);

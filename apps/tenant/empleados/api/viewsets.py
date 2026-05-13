@@ -50,11 +50,9 @@ logger = logging.getLogger(__name__)
 class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     """
     WARNING: v2.62.4: ViewSet para Empleados migrado a BaseTenantViewSet.
-    Implementa resolución optimizada de empresa y lookup por ID (Legacy).
+    v3.6.1: UUID lookup field (AGENTS.md §14) - hereda lookup_field="uuid" de BaseTenantViewSet.
     """
     queryset = Empleado.objects.none()
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -77,18 +75,25 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     
     def get_object(self):
         """
-        WARNING: v2.62.4: Recuperación de objeto filtrada por empresa activa.
+        v3.6.1: UUID lookup con fallback a PK para retrocompatibilidad (AGENTS.md §14).
         """
-        pk = self.kwargs.get(self.lookup_url_kwarg)
+        lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
         empresa = self.get_empresa()
-        
+
         if not empresa:
             raise NotFound("No se encontró configuración de Empresa para este tenant")
 
-        obj = Empleado.objects.filter(pk=pk, empresa_id=empresa.id).first()
-        if not obj:
-            raise NotFound(f'Empleado {pk} no encontrado o no pertenece a este tenant.')
-        return obj
+        if lookup_value and len(str(lookup_value)) > 10:
+            obj = Empleado.objects.filter(uuid=lookup_value, empresa_id=empresa.id).first()
+            if obj:
+                return obj
+
+        if str(lookup_value).isdigit():
+            obj = Empleado.objects.filter(pk=lookup_value, empresa_id=empresa.id).first()
+            if obj:
+                return obj
+
+        raise NotFound(f'Empleado {lookup_value} no encontrado o no pertenece a este tenant.')
     
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -260,7 +265,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
         return Response(summary)
     
     @action(detail=True, methods=["get"], renderer_classes=[TemplateHTMLRenderer, JSONRenderer], url_path="historial-nominas")
-    def historial_nominas(self, request, pk=None):
+    def historial_nominas(self, request, id=None):
         """
         WARNING: v2.60: Devuelve el HTML del historial de nóminas para un empleado específico (HTMX)
         o los datos JSON para Tabulator (paginación remota).
@@ -345,7 +350,10 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
                 'RIESGO_ARL_CHOICES': RIESGO_ARL_CHOICES,
             })
             if obj_id:
-                context['empleado'] = get_object_or_404(Empleado, id=obj_id, empresa_id=empresa_id)
+                instance = get_object_or_404(Empleado, id=obj_id, empresa_id=empresa_id)
+                # v3.5: Usar serializer para resolver cuenta_contable_label (Pull Model)
+                serializer = EmpleadoDetailSerializer(instance, context={'empresa': empresa})
+                context['empleado'] = serializer.data
                 return Response(context, template_name='tenant/empleados/offcanvas_editar_empleado.html')
             return Response(context, template_name='tenant/empleados/offcanvas_crear_empleado.html')
             
@@ -381,7 +389,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
         return Response({"error": "Tipo no válido"}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["get"], url_path="contrato-disponible")
-    def contrato_disponible(self, request, pk=None):
+    def contrato_disponible(self, request, id=None):
         """
         WARNING: v2.40: Valida si el empleado tiene contrato activo disponible para nómina.
         Verifica que no exista ya un devengo para el periodo_mes actual.
@@ -467,9 +475,8 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
 class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     """
     WARNING: v2.62.4: ViewSet para Contratos migrado a BaseTenantViewSet.
+    v3.6.1: UUID lookup field (AGENTS.md §14) - hereda lookup_field="uuid" de BaseTenantViewSet.
     """
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
     serializer_class = ContratoNestedSerializer
     # WARNING: v2.40: Permitir subida de archivos PDF (opcional)
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -488,26 +495,31 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         """
         WARNING: v2.60: QuerySet optimizado usando service layer.
         """
-        contrato_id = self.kwargs.get('id') if self.action == 'retrieve' else None
-        try:
-            return self.service_contrato_get_queryset(self.request, self.action, contrato_id=contrato_id)
-        except Contrato.DoesNotExist:
-            return Contrato.objects.none()
+        if self.action == 'list':
+            return self.get_qs_list()
+        return self.get_qs_detail()
 
     def get_object(self):
         """
-        WARNING: v2.62.4: Recuperación de objeto filtrada por empresa activa.
+        v3.6.1: UUID lookup con fallback a PK para retrocompatibilidad (AGENTS.md §14).
         """
-        pk = self.kwargs.get(self.lookup_url_kwarg)
+        lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
         empresa = self.get_empresa()
-        
+
         if not empresa:
             raise NotFound("No se encontró configuración de Empresa para este tenant")
 
-        obj = Contrato.objects.filter(pk=pk, empresa_id=empresa.id).first()
-        if not obj:
-            raise NotFound(f'Contrato {pk} no encontrado o no pertenece a este tenant.')
-        return obj
+        if lookup_value and len(str(lookup_value)) > 10:
+            obj = Contrato.objects.filter(uuid=lookup_value, empresa_id=empresa.id).first()
+            if obj:
+                return obj
+
+        if str(lookup_value).isdigit():
+            obj = Contrato.objects.filter(pk=lookup_value, empresa_id=empresa.id).first()
+            if obj:
+                return obj
+
+        raise NotFound(f'Contrato {lookup_value} no encontrado o no pertenece a este tenant.')
 
     def create(self, request, *args, **kwargs):
         """
@@ -773,7 +785,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
         except Contrato.DoesNotExist:
-            logger.error(f"[ContratoViewSet] Contrato no encontrado: {kwargs.get('pk')}")
+            logger.error(f"[ContratoViewSet] Contrato no encontrado: {kwargs.get('id')}")
             return Response(
                 {"error": "Contrato no encontrado."},
                 status=status.HTTP_404_NOT_FOUND
@@ -809,7 +821,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         return Response(context, template_name='tenant/empleados/offcanvas_detalle_contrato.html')
     
     @action(detail=True, methods=['post'], url_path='cancelar')
-    def cancelar(self, request, pk=None):
+    def cancelar(self, request, id=None):
         """
         WARNING: v2.40: Máquina de Estados - Cambia el estado de un contrato a INACTIVO.
         WARNING: v2.60: Error Boundary Pattern - Manejo de errores estandarizado.
@@ -838,9 +850,8 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
 class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
     """
     WARNING: v2.62.4: ViewSet para Nómina migrado a BaseTenantViewSet.
+    v3.6.1: UUID lookup field (AGENTS.md §14) - hereda lookup_field="uuid" de BaseTenantViewSet.
     """
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
     serializer_class = DevengoSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -859,13 +870,9 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         """
         WARNING: v2.60: QuerySet optimizado usando service layer.
         """
-        devengo_id = self.kwargs.get('id') if self.action == 'retrieve' else None
-        try:
-            queryset = self.service_devengo_get_queryset(self.request, self.action, devengo_id=devengo_id)
-        except Devengo.DoesNotExist:
-            return Devengo.objects.none()
-
         if self.action == 'list':
+            queryset = self.get_qs_list()
+            
             # WARNING: v2.95: Filtros de fecha para historial de nómina (adicionales al service layer)
             fecha_inicio = self.request.query_params.get('fecha_inicio')
             fecha_fin = self.request.query_params.get('fecha_fin')
@@ -888,22 +895,29 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             
             return queryset
 
-        return queryset
+        return self.get_qs_detail()
 
     def get_object(self):
         """
-        WARNING: v2.62.4: Recuperación de objeto filtrada por empresa activa.
+        v3.6.1: UUID lookup con fallback a PK para retrocompatibilidad (AGENTS.md §14).
         """
-        pk = self.kwargs.get(self.lookup_url_kwarg)
+        lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
         empresa = self.get_empresa()
-        
+
         if not empresa:
             raise NotFound("No se encontró configuración de Empresa para este tenant")
 
-        obj = Devengo.objects.filter(pk=pk, empresa_id=empresa.id).first()
-        if not obj:
-            raise NotFound(f'Nómina {pk} no encontrada o no pertenece a este tenant.')
-        return obj
+        if lookup_value and len(str(lookup_value)) > 10:
+            obj = Devengo.objects.filter(uuid=lookup_value, empresa_id=empresa.id).first()
+            if obj:
+                return obj
+
+        if str(lookup_value).isdigit():
+            obj = Devengo.objects.filter(pk=lookup_value, empresa_id=empresa.id).first()
+            if obj:
+                return obj
+
+        raise NotFound(f'Nomina {lookup_value} no encontrada o no pertenece a este tenant.')
     
     def list(self, request, *args, **kwargs):
         """
@@ -1024,7 +1038,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             logger.info(f"[DevengoViewSet] Datos recibidos en create: {request.data}")
             logger.info(f"[DevengoViewSet] Tipo de datos: {type(request.data)}")
 
-            duplicate_error = self.service_validar_duplicado_devengo(request.data, request)
+            duplicate_error = self.service_validar_duplicado(request.data)
             if duplicate_error:
                 return Response(duplicate_error, status=status.HTTP_409_CONFLICT)
             
@@ -1050,7 +1064,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             
             try:
-                validacion = self.service_prevalidar_limite_dias_devengo(request.data, request)
+                validacion = self.service_validar_limite_dias(request.data)
                 if validacion:
                     logger.info(
                         f"[DevengoViewSet] Validación preventiva de días: Total={validacion['total_dias']}, "
@@ -1174,26 +1188,18 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         WARNING: v2.60: Método para actualizar nómina existente (usado en lógica de Upsert).
         Recalcula todos los valores usando la Capa de Servicio antes de guardar (Zero Trust).
         """
-        self.service_procesar_devengo(serializer, instance=serializer.instance)
+        serializer.instance = self.service_procesar_devengo(serializer, instance=serializer.instance)
 
     def perform_create(self, serializer):
         """
         WARNING: v2.40: Usa el service layer para calcular valores proporcionales antes de guardar.
-        El frontend envía valores calculados desde previsualizar, pero este método
-        asegura que los valores sean correctos usando el service layer como validación.
-        
-        También actualiza el préstamo del contrato restando el monto descontado.
-        
-        WARNING: Máquina de Estados: Bloquea nómina si el contrato no está ACTIVO (Backend Guard).
         """
-        self.service_procesar_devengo(serializer)
+        serializer.instance = self.service_procesar_devengo(serializer)
 
     @action(detail=True, methods=["post"], url_path="anular")
-    def anular(self, request, pk=None):
-        empresa = self.get_empresa()
-        if not empresa:
-            return Response({"error": "sin_empresa"}, status=status.HTTP_404_NOT_FOUND)
-        devengo = anular_devengo_service(pk, empresa.id)
+    def anular(self, request, id=None):
+        instance = self.get_object()
+        devengo = self.service_anular_devengo(instance)
         return Response({"status": "Anulado correctamente", "id": devengo.id})
     
     @action(detail=False, methods=["post"], renderer_classes=[TemplateHTMLRenderer, JSONRenderer], url_path="preview-calculo", permission_classes=[IsTenantMember])
@@ -1201,38 +1207,20 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         """
         WARNING: v2.60: Endpoint para previsualizar cálculo de nómina en tiempo real (HTMX Partial).
         Devuelve un partial HTML con los valores calculados actualizados.
-        Usa calcular_nomina_colombia() como única fuente de verdad (SSoT).
-        Aplica Error Boundary Pattern con UIManager para manejar valores negativos.
-        
-        Recibe (POST):
-        - contrato: ID del contrato (requerido)
-        - dias_laborados: Días trabajados (0.5-30, requerido)
-        - periodo_mes: Periodo en formato YYYY-MM (opcional, para validación)
-        - fecha_pago: Fecha de pago (opcional, para validación)
-        - horas_trabajadas: Horas trabajadas (opcional)
-        - otros_devengos: Otros devengos en COP (opcional, default: 0)
-        - prestamos: Préstamos a descontar en COP (opcional, default: 0)
-        - descuentos_operativos: Descuentos operativos en COP (opcional, default: 0)
-        
-        Retorna:
-        - Partial HTML con los campos actualizados (salario_base, auxilio_transporte, 
-          salud_empleado, pension_empleado, neto_pagar)
-        - Si hay error, retorna mensaje de error en el contenedor de feedback
         """
         from decimal import Decimal, InvalidOperation
         
-        # WARNING: Paso 4: Zero Trust - La empresa se extrae del usuario autenticado
-        empresa = getattr(request.user, 'empresa', None)
+        # Template para errores (opcional, si queremos mostrar error dentro del wrapper)
+        ERROR_TEMPLATE = 'tenant/empleados/devengo_error_partial.html'
+        
+        # WARNING: v2.60: SSoT - Obtener empresa desde el contexto del tenant (BaseTenantViewSet)
+        empresa = self.get_empresa()
         
         if not empresa:
-            # Fallback: obtener la empresa del esquema (tenant) actual de forma segura
-            from apps.tenant.empresa.models import Empresa
-            empresa = Empresa.objects.only('id').first()
-            
-        if not empresa:
             return Response(
-                {"error": "No se encontró configuración de Empresa para este tenant (Sin tenant)."}, 
-                status=status.HTTP_403_FORBIDDEN
+                {"error": "No se encontró configuración de Empresa para este tenant."}, 
+                status=status.HTTP_403_FORBIDDEN,
+                template_name=ERROR_TEMPLATE
             )
         
         empresa_id = empresa.id
@@ -1341,19 +1329,15 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             return Response(context, template_name='tenant/empleados/devengo_calculo_partial.html')
             
         except ValueError as e:
-            return Response({
-                "error": str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
         except (InvalidOperation, TypeError) as e:
-            return Response({
-                "error": f"Error en formato de datos numéricos: {str(e)}"
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Error en formato de datos numéricos: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
         except Exception as e:
             logger.error(f"[DevengoViewSet] Error en preview_calculo: {str(e)}", exc_info=True)
             return Response({
                 "error": "Ocurrió un error inesperado al calcular la nómina.",
                 "detail": str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, template_name=ERROR_TEMPLATE)
     
     @action(detail=False, methods=["post"], url_path="previsualizar")
     def previsualizar(self, request):

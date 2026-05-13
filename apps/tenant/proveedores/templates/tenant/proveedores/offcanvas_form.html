@@ -1,192 +1,296 @@
-{# offcanvas_form.html - Offcanvas del módulo Proveedores v2.60 #}
-{# ⚠️ v2.60: HTMX + Offcanvas con Zero Trust #}
+{# offcanvas_form.html - Offcanvas del módulo Proveedores v3.6 #}
+{# v3.6: Layout premium - estructura HTML corregida, distribucion optimizada #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label" style="width: 90%; max-width: 800px;">
-  <div class="offcanvas-header border-bottom bg-light">
-    <h5 class="offcanvas-title" id="offcanvas-proveedor-label">
-      <i class="bi bi-building me-2"></i>
+<div class="offcanvas offcanvas-end offcanvas-xl bg-white d-flex flex-column" tabindex="-1" id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label">
+
+  <div class="offcanvas-header border-bottom bg-light px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-proveedor-label">
+      <i class="bi bi-building me-2 text-primary"></i>
       <span id="offcanvas-proveedor-titulo">
-        {% if modo_detalle %}
-          Detalle de Proveedor
-        {% elif proveedor %}
-          Editar Proveedor
-        {% else %}
-          Nuevo Proveedor
-        {% endif %}
+        {% if modo_detalle %}Detalle de Proveedor{% elif proveedor %}Editar Proveedor{% else %}Nuevo Proveedor{% endif %}
       </span>
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
-  <div class="offcanvas-body">
-    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
+
+  <div class="offcanvas-body px-4 py-3 flex-grow-1 overflow-y-auto">
     <div id="form-proveedor-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
-    
+
     <form id="form-proveedor" method="POST" onsubmit="return false;">
-      <input type="hidden" id="proveedor-id" name="id" value="{% if proveedor %}{{ proveedor.id }}{% endif %}">
-      
+      <input type="hidden" id="proveedor-id" name="id" value="{% if proveedor %}{{ proveedor.uuid }}{% endif %}">
+
       <fieldset {% if modo_detalle %}disabled{% endif %}>
-        {# Identificación Legal #}
+
+        {# ── 1. Identificación Legal ── #}
         <div class="mb-4">
-          <h6 class="text-primary border-bottom pb-2 mb-3">
-            <i class="bi bi-card-text me-2"></i>Identificación Legal
-          </h6>
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <span class="badge bg-primary rounded-pill px-2"><i class="bi bi-card-text"></i></span>
+            <h6 class="mb-0 fw-semibold text-primary">Identificación Legal</h6>
+          </div>
           <div class="row g-3">
-            <div class="col-md-6">
-              <label for="proveedor-tipo_persona" class="form-label text-danger fw-bold">Tipo Persona *</label>
-              <select class="form-select" id="proveedor-tipo_persona" name="tipo_persona" required>
+            <div class="col-md-3">
+              <label for="proveedor-tipo_persona" class="form-label fw-semibold small">Tipo Persona <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm bg-white" id="proveedor-tipo_persona" name="tipo_persona" required>
                 <option value="">Seleccionar...</option>
                 {% for value, label in tipo_persona_choices %}
-                  <option value="{{ value }}" {% if proveedor and proveedor.tipo_persona == value %}selected{% elif not proveedor and value == "JURIDICA" %}selected{% endif %}>
+                  <option value="{{ value }}"
+                    {% if proveedor and proveedor.tipo_persona == value %}selected
+                    {% elif not proveedor and value == "JURIDICA" %}selected{% endif %}>
                     {{ label }}
                   </option>
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-6">
-              <label for="proveedor-tipo_documento" class="form-label text-danger fw-bold">Tipo Documento *</label>
-              <select class="form-select" id="proveedor-tipo_documento" name="tipo_documento" required>
+            <div class="col-md-3">
+              <label for="proveedor-tipo_documento" class="form-label fw-semibold small">Tipo Documento <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm bg-white" id="proveedor-tipo_documento" name="tipo_documento" required>
                 <option value="">Seleccionar...</option>
                 {% for value, label in tipo_documento_choices %}
-                  <option value="{{ value }}" {% if proveedor and proveedor.tipo_documento == value %}selected{% elif not proveedor and value == "NIT" %}selected{% endif %}>
+                  <option value="{{ value }}"
+                    {% if proveedor and proveedor.tipo_documento == value %}selected
+                    {% elif not proveedor and value == "NIT" %}selected{% endif %}>
                     {{ label }}
                   </option>
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-6">
-              <label for="proveedor-numero_documento" class="form-label text-danger fw-bold">Número Documento *</label>
-              <input type="text" class="form-control" id="proveedor-numero_documento" name="numero_documento" 
-                     value="{% if proveedor %}{{ proveedor.numero_documento }}{% endif %}" 
+            <div class="col-md-4">
+              <label for="proveedor-numero_documento" class="form-label fw-semibold small">Número Documento <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-numero_documento" name="numero_documento"
+                     value="{% if proveedor %}{{ proveedor.numero_documento }}{% endif %}"
                      placeholder="Sin dígito de verificación" required>
             </div>
-            <div class="col-md-6">
-              <label for="proveedor-digito_verificacion" class="form-label">Dígito de Verificación</label>
-              <input type="text" class="form-control" id="proveedor-digito_verificacion" name="digito_verificacion" 
-                     value="{% if proveedor %}{{ proveedor.digito_verificacion|default:'' }}{% endif %}" 
-                     maxlength="1" placeholder="DV">
+            <div class="col-md-2">
+              <label for="proveedor-digito_verificacion" class="form-label fw-semibold small">Díg. Verif.</label>
+              <input type="text" class="form-control form-control-sm bg-white text-center" id="proveedor-digito_verificacion" name="digito_verificacion"
+                     value="{% if proveedor %}{{ proveedor.digito_verificacion|default:'' }}{% endif %}"
+                     maxlength="1" placeholder="-">
             </div>
-            <div class="col-md-6">
-              <label for="proveedor-razon_social" class="form-label text-danger fw-bold">Razón Social *</label>
-              <input type="text" class="form-control" id="proveedor-razon_social" name="razon_social" 
-                     value="{% if proveedor %}{{ proveedor.razon_social }}{% endif %}" 
+
+            <div class="col-md-7">
+              <label for="proveedor-razon_social" class="form-label fw-semibold small">Razón Social <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-razon_social" name="razon_social"
+                     value="{% if proveedor %}{{ proveedor.razon_social }}{% endif %}"
                      placeholder="Nombre legal completo" required>
             </div>
-            <div class="col-md-6">
-              <label for="proveedor-nombre_comercial" class="form-label">Nombre Comercial</label>
-              <input type="text" class="form-control" id="proveedor-nombre_comercial" name="nombre_comercial" 
-                     value="{% if proveedor %}{{ proveedor.nombre_comercial|default:'' }}{% endif %}" 
-                     placeholder="Nombre comercial">
+            <div class="col-md-5">
+              <label for="proveedor-nombre_comercial" class="form-label fw-semibold small">Nombre Comercial</label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-nombre_comercial" name="nombre_comercial"
+                     value="{% if proveedor %}{{ proveedor.nombre_comercial|default:'' }}{% endif %}"
+                     placeholder="Nombre de fantasía (opcional)">
             </div>
           </div>
         </div>
 
-        {# Información Tributaria #}
+        {# ── 2. Información Tributaria ── #}
         <div class="mb-4">
-          <h6 class="text-primary border-bottom pb-2 mb-3">
-            <i class="bi bi-receipt me-2"></i>Información Tributaria
-          </h6>
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <span class="badge bg-success rounded-pill px-2"><i class="bi bi-receipt"></i></span>
+            <h6 class="mb-0 fw-semibold text-success">Información Tributaria</h6>
+          </div>
           <div class="row g-3">
-            <div class="col-md-6">
-              <label for="proveedor-regimen_tributario" class="form-label text-danger fw-bold">Régimen Tributario *</label>
-              <select class="form-select" id="proveedor-regimen_tributario" name="regimen_tributario" required>
+            <div class="col-md-4">
+              <label for="proveedor-regimen_tributario" class="form-label fw-semibold small">Régimen Tributario <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm bg-white" id="proveedor-regimen_tributario" name="regimen_tributario" required>
                 <option value="">Seleccionar...</option>
                 {% for value, label in regimen_choices %}
-                  <option value="{{ value }}" {% if proveedor and proveedor.regimen_tributario == value %}selected{% elif not proveedor and value == "ORDINARIO" %}selected{% endif %}>
+                  <option value="{{ value }}"
+                    {% if proveedor and proveedor.regimen_tributario == value %}selected
+                    {% elif not proveedor and value == "ORDINARIO" %}selected{% endif %}>
                     {{ label }}
                   </option>
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-6">
-              <label for="proveedor-actividad_economica_ciiu" class="form-label">Código CIIU</label>
-              <input type="text" class="form-control" id="proveedor-actividad_economica_ciiu" name="actividad_economica_ciiu" 
-                     value="{% if proveedor %}{{ proveedor.actividad_economica_ciiu|default:'' }}{% endif %}" 
-                     maxlength="10" placeholder="Código CIIU Principal">
+            <div class="col-md-4">
+              <label for="proveedor-actividad_economica_ciiu" class="form-label fw-semibold small">Código CIIU</label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-actividad_economica_ciiu" name="actividad_economica_ciiu"
+                     value="{% if proveedor %}{{ proveedor.actividad_economica_ciiu|default:'' }}{% endif %}"
+                     maxlength="10" placeholder="Ej. 4669">
             </div>
             <div class="col-md-4">
-              <div class="form-check mt-4">
-                <input class="form-check-input" type="checkbox" id="proveedor-responsable_iva" name="responsable_iva" 
+              <label for="proveedor-cuenta_contable_label" class="form-label fw-semibold small">Cuenta Contable (Pasivo)</label>
+              <div class="position-relative">
+                <input type="text" class="form-control form-control-sm bg-white" id="proveedor-cuenta_contable_label" 
+                       value="{% if proveedor %}{{ proveedor.cuenta_contable_label|default:'' }}{% endif %}"
+                       placeholder="Buscar por código o nombre...">
+                <input type="hidden" id="proveedor-cuenta_contable_uuid" name="cuenta_contable_uuid" 
+                       value="{% if proveedor %}{{ proveedor.cuenta_contable_uuid|default:'' }}{% endif %}">
+                <div id="proveedor-cuenta-resultados" class="list-group position-absolute w-100 shadow-sm d-none" 
+                     style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+              </div>
+            </div>
+
+            {# Switches tributarios #}
+            <div class="col-md-3">
+              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+                <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
+                       id="proveedor-responsable_iva" name="responsable_iva"
                        {% if proveedor and proveedor.responsable_iva or not proveedor %}checked{% endif %}>
-                <label class="form-check-label" for="proveedor-responsable_iva">
-                  Responsable de IVA
-                </label>
+                <label class="form-check-label small fw-semibold lh-sm" for="proveedor-responsable_iva">Responsable IVA</label>
               </div>
             </div>
-            <div class="col-md-4">
-              <div class="form-check mt-4">
-                <input class="form-check-input" type="checkbox" id="proveedor-gran_contribuyente" name="gran_contribuyente" 
+            <div class="col-md-3">
+              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+                <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
+                       id="proveedor-gran_contribuyente" name="gran_contribuyente"
                        {% if proveedor and proveedor.gran_contribuyente %}checked{% endif %}>
-                <label class="form-check-label" for="proveedor-gran_contribuyente">
-                  Gran Contribuyente
-                </label>
+                <label class="form-check-label small fw-semibold lh-sm" for="proveedor-gran_contribuyente">Gran Contribuyente</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+                <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
+                       id="proveedor-autoretenedor" name="autoretenedor"
+                       {% if proveedor and proveedor.autoretenedor %}checked{% endif %}>
+                <label class="form-check-label small fw-semibold lh-sm" for="proveedor-autoretenedor">Autoretenedor</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+                <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
+                       id="proveedor-es_retenedor" name="es_retenedor"
+                       {% if proveedor and proveedor.es_retenedor %}checked{% endif %}>
+                <label class="form-check-label small fw-semibold lh-sm" for="proveedor-es_retenedor">Agente Retenedor</label>
+              </div>
+            </div>
+
+            {# Panel de Retenciones (visible solo si es_retenedor) #}
+            <div class="col-12">
+              <div id="contenedor-retenciones" class="{% if not proveedor or not proveedor.es_retenedor %}d-none{% endif %}">
+                <div class="p-3 rounded-3 border border-success-subtle bg-success-subtle">
+                  <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-percent text-success"></i>
+                    <span class="small fw-semibold text-success">Detalle de Retenciones</span>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-md-4">
+                      <div class="p-2 bg-white rounded-2 border h-100">
+                        <div class="form-check form-switch mb-2">
+                          <input class="form-check-input" type="checkbox" role="switch"
+                                 id="proveedor-aplica_retefuente" name="aplica_retefuente"
+                                 {% if proveedor and proveedor.aplica_retefuente %}checked{% endif %}>
+                          <label class="form-check-label small fw-semibold" for="proveedor-aplica_retefuente">Retefuente</label>
+                        </div>
+                        <div class="input-group input-group-sm">
+                          <input type="number" step="0.01" min="0" max="100" class="form-control"
+                                 id="proveedor-retefuente_porcentaje" name="retefuente_porcentaje"
+                                 value="{% if proveedor %}{{ proveedor.retefuente_porcentaje|default:'0' }}{% else %}0{% endif %}"
+                                 placeholder="0.00">
+                          <span class="input-group-text">%</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="p-2 bg-white rounded-2 border h-100">
+                        <div class="form-check form-switch mb-2">
+                          <input class="form-check-input" type="checkbox" role="switch"
+                                 id="proveedor-aplica_reteica" name="aplica_reteica"
+                                 {% if proveedor and proveedor.aplica_reteica %}checked{% endif %}>
+                          <label class="form-check-label small fw-semibold" for="proveedor-aplica_reteica">ReteICA</label>
+                        </div>
+                        <div class="input-group input-group-sm">
+                          <input type="number" step="0.001" min="0" max="100" class="form-control"
+                                 id="proveedor-reteica_porcentaje" name="reteica_porcentaje"
+                                 value="{% if proveedor %}{{ proveedor.reteica_porcentaje|default:'0' }}{% else %}0{% endif %}"
+                                 placeholder="0.000">
+                          <span class="input-group-text">%</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-md-4">
+                      <div class="p-2 bg-white rounded-2 border h-100">
+                        <div class="form-check form-switch mb-2">
+                          <input class="form-check-input" type="checkbox" role="switch"
+                                 id="proveedor-aplica_reteiva" name="aplica_reteiva"
+                                 {% if proveedor and proveedor.aplica_reteiva %}checked{% endif %}>
+                          <label class="form-check-label small fw-semibold" for="proveedor-aplica_reteiva">ReteIVA</label>
+                        </div>
+                        <div class="input-group input-group-sm">
+                          <input type="number" step="0.01" min="0" max="100" class="form-control"
+                                 id="proveedor-reteiva_porcentaje" name="reteiva_porcentaje"
+                                 value="{% if proveedor %}{{ proveedor.reteiva_porcentaje|default:'0' }}{% else %}0{% endif %}"
+                                 placeholder="0.00">
+                          <span class="input-group-text">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ── 3. Contacto y Ubicación ── #}
+        <div class="mb-4">
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <span class="badge bg-info rounded-pill px-2"><i class="bi bi-geo-alt"></i></span>
+            <h6 class="mb-0 fw-semibold text-info">Contacto y Ubicación</h6>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label for="proveedor-email_contacto" class="form-label fw-semibold small">Email de Contacto</label>
+              <input type="email" class="form-control form-control-sm bg-white" id="proveedor-email_contacto" name="email_contacto"
+                     value="{% if proveedor %}{{ proveedor.email_contacto|default:'' }}{% endif %}"
+                     placeholder="correo@empresa.com">
+            </div>
+            <div class="col-md-4">
+              <label for="proveedor-telefono_contacto" class="form-label fw-semibold small">Teléfono</label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-telefono_contacto" name="telefono_contacto"
+                     value="{% if proveedor %}{{ proveedor.telefono_contacto|default:'' }}{% endif %}"
+                     placeholder="+57 300 000 0000">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold small d-block">Estado</label>
+              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+                <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
+                       id="proveedor-activo" name="activo"
+                       {% if proveedor and proveedor.activo or not proveedor %}checked{% endif %}>
+                <label class="form-check-label small fw-semibold" for="proveedor-activo">Activo</label>
+              </div>
+            </div>
+
+            <div class="col-md-8">
+              <label for="proveedor-direccion" class="form-label fw-semibold small">Dirección</label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-direccion" name="direccion"
+                     value="{% if proveedor %}{{ proveedor.direccion|default:'' }}{% endif %}"
+                     placeholder="Calle, carrera, número, barrio">
+            </div>
+            <div class="col-md-4">
+              <label for="proveedor-ciudad" class="form-label fw-semibold small">Ciudad</label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-ciudad" name="ciudad"
+                     value="{% if proveedor %}{{ proveedor.ciudad|default:'' }}{% endif %}"
+                     placeholder="Ciudad o municipio">
+            </div>
+          </div>
+        </div>
+
+        {# ── 4. Información Comercial y Bancaria ── #}
+        <div class="mb-4">
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <span class="badge bg-warning text-dark rounded-pill px-2"><i class="bi bi-bank"></i></span>
+            <h6 class="mb-0 fw-semibold text-warning-emphasis">Información Comercial y Bancaria</h6>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-2">
+              <label for="proveedor-plazo_pago_dias" class="form-label fw-semibold small">Plazo de Pago</label>
+              <div class="input-group input-group-sm">
+                <input type="number" class="form-control bg-white" id="proveedor-plazo_pago_dias" name="plazo_pago_dias"
+                       value="{% if proveedor %}{{ proveedor.plazo_pago_dias|default:30 }}{% else %}30{% endif %}"
+                       min="0" placeholder="30">
+                <span class="input-group-text">días</span>
               </div>
             </div>
             <div class="col-md-4">
-              <div class="form-check mt-4">
-                <input class="form-check-input" type="checkbox" id="proveedor-autoretenedor" name="autoretenedor" 
-                       {% if proveedor and proveedor.autoretenedor %}checked{% endif %}>
-                <label class="form-check-label" for="proveedor-autoretenedor">
-                  Autoretenedor
-                </label>
-              </div>
+              <label for="proveedor-banco" class="form-label fw-semibold small">Banco</label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-banco" name="banco"
+                     value="{% if proveedor %}{{ proveedor.banco|default:'' }}{% endif %}"
+                     placeholder="Nombre del banco">
             </div>
-          </div>
-        </div>
-
-        {# Contacto y Ubicación #}
-        <div class="mb-4">
-          <h6 class="text-primary border-bottom pb-2 mb-3">
-            <i class="bi bi-geo-alt me-2"></i>Contacto y Ubicación
-          </h6>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label for="proveedor-email_contacto" class="form-label">Email</label>
-              <input type="email" class="form-control" id="proveedor-email_contacto" name="email_contacto" 
-                     value="{% if proveedor %}{{ proveedor.email_contacto|default:'' }}{% endif %}" 
-                     placeholder="Email de contacto">
-            </div>
-            <div class="col-md-6">
-              <label for="proveedor-telefono_contacto" class="form-label">Teléfono</label>
-              <input type="text" class="form-control" id="proveedor-telefono_contacto" name="telefono_contacto" 
-                     value="{% if proveedor %}{{ proveedor.telefono_contacto|default:'' }}{% endif %}" 
-                     placeholder="Teléfono de contacto">
-            </div>
-            <div class="col-md-12">
-              <label for="proveedor-direccion" class="form-label">Dirección</label>
-              <input type="text" class="form-control" id="proveedor-direccion" name="direccion" 
-                     value="{% if proveedor %}{{ proveedor.direccion|default:'' }}{% endif %}" 
-                     placeholder="Dirección">
-            </div>
-            <div class="col-md-6">
-              <label for="proveedor-ciudad" class="form-label">Ciudad</label>
-              <input type="text" class="form-control" id="proveedor-ciudad" name="ciudad" 
-                     value="{% if proveedor %}{{ proveedor.ciudad|default:'' }}{% endif %}" 
-                     placeholder="Ciudad">
-            </div>
-          </div>
-        </div>
-
-        {# Información Comercial y Bancaria #}
-        <div class="mb-4">
-          <h6 class="text-primary border-bottom pb-2 mb-3">
-            <i class="bi bi-bank me-2"></i>Información Comercial y Bancaria
-          </h6>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label for="proveedor-plazo_pago_dias" class="form-label">Plazo de Pago (días)</label>
-              <input type="number" class="form-control" id="proveedor-plazo_pago_dias" name="plazo_pago_dias" 
-                     value="{% if proveedor %}{{ proveedor.plazo_pago_dias|default:30 }}{% else %}30{% endif %}" 
-                     min="0" placeholder="Días de crédito estándar">
-            </div>
-            <div class="col-md-6">
-              <label for="proveedor-banco" class="form-label">Banco</label>
-              <input type="text" class="form-control" id="proveedor-banco" name="banco" 
-                     value="{% if proveedor %}{{ proveedor.banco|default:'' }}{% endif %}" 
-                     placeholder="Banco">
-            </div>
-            <div class="col-md-6">
-              <label for="proveedor-tipo_cuenta" class="form-label">Tipo de Cuenta</label>
-              <select class="form-select" id="proveedor-tipo_cuenta" name="tipo_cuenta">
+            <div class="col-md-3">
+              <label for="proveedor-tipo_cuenta" class="form-label fw-semibold small">Tipo de Cuenta</label>
+              <select class="form-select form-select-sm bg-white" id="proveedor-tipo_cuenta" name="tipo_cuenta">
                 <option value="">Seleccionar...</option>
                 {% for value, label in tipo_cuenta_choices %}
                   <option value="{{ value }}" {% if proveedor and proveedor.tipo_cuenta == value %}selected{% endif %}>
@@ -195,50 +299,40 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-6">
-              <label for="proveedor-numero_cuenta" class="form-label">Número de Cuenta</label>
-              <input type="text" class="form-control" id="proveedor-numero_cuenta" name="numero_cuenta" 
-                     value="{% if proveedor %}{{ proveedor.numero_cuenta|default:'' }}{% endif %}" 
-                     placeholder="Número de cuenta">
+            <div class="col-md-3">
+              <label for="proveedor-numero_cuenta" class="form-label fw-semibold small">Número de Cuenta</label>
+              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-numero_cuenta" name="numero_cuenta"
+                     value="{% if proveedor %}{{ proveedor.numero_cuenta|default:'' }}{% endif %}"
+                     placeholder="Número de cuenta bancaria">
             </div>
           </div>
         </div>
 
-        {# Estado #}
-        <div class="mb-4">
-          <h6 class="text-primary border-bottom pb-2 mb-3">
-            <i class="bi bi-toggle-on me-2"></i>Estado
-          </h6>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" id="proveedor-activo" name="activo" 
-                       {% if proveedor and proveedor.activo or not proveedor %}checked{% endif %}>
-                <label class="form-check-label" for="proveedor-activo">
-                  Activo
-                </label>
-              </div>
-            </div>
-            <div class="col-md-12">
-              <label for="proveedor-observaciones" class="form-label">Observaciones</label>
-              <textarea class="form-control" id="proveedor-observaciones" name="observaciones" rows="3" 
-                        placeholder="Observaciones adicionales">{% if proveedor %}{{ proveedor.observaciones|default:'' }}{% endif %}</textarea>
-            </div>
+        {# ── 5. Observaciones ── #}
+        <div class="mb-2">
+          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+            <span class="badge bg-secondary rounded-pill px-2"><i class="bi bi-file-text"></i></span>
+            <h6 class="mb-0 fw-semibold text-secondary">Observaciones</h6>
           </div>
+          <textarea class="form-control form-control-sm bg-white" id="proveedor-observaciones" name="observaciones" rows="3"
+                    placeholder="Notas o condiciones adicionales del proveedor">{% if proveedor %}{{ proveedor.observaciones|default:'' }}{% endif %}</textarea>
         </div>
+
       </fieldset>
-
-      {# Botones de Acción #}
-      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
-          {% if modo_detalle %}Cerrar{% else %}Cancelar{% endif %}
-        </button>
-        {% if not modo_detalle %}
-          <button type="button" class="btn btn-primary" id="btn-guardar-proveedor">
-            <i class="bi bi-check-lg me-1"></i>{% if proveedor %}Actualizar{% else %}Crear{% endif %} Proveedor
-          </button>
-        {% endif %}
-      </div>
     </form>
   </div>
+
+  <div class="offcanvas-footer border-top p-3 bg-light flex-shrink-0">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="offcanvas">
+        {% if modo_detalle %}Cerrar{% else %}Cancelar{% endif %}
+      </button>
+      {% if not modo_detalle %}
+        <button type="button" class="btn btn-sm btn-primary" id="btn-guardar-proveedor">
+          <i class="bi bi-save me-1"></i>{% if proveedor %}Actualizar{% else %}Crear{% endif %} Proveedor
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
 </div>

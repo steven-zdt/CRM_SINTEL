@@ -1,0 +1,56 @@
+{% extends "tenant/core/partials/_base_offcanvas.html" %}
+
+{% block offcanvas_title %}Nueva Resolucion DIAN{% endblock %}
+
+{% block offcanvas_body %}
+  <form id="resolucion-form" class="row g-3 needs-validation" novalidate>
+    {% csrf_token %}
+
+    <div class="mb-3">
+      <label for="numero_resolucion" class="form-label">Numero Resolucion</label>
+      <input type="text" class="form-control" id="numero_resolucion" name="numero_resolucion" value="{{ instance.numero_resolucion }}" required>
+    </div>
+
+    <div class="mb-3">
+      <label for="prefijo" class="form-label">Prefijo</label>
+      <input type="text" class="form-control" id="prefijo" name="prefijo" value="{{ instance.prefijo }}" maxlength="10" required>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label for="rango_desde" class="form-label">Rango Desde</label>
+        <input type="number" class="form-control" id="rango_desde" name="rango_desde" value="{{ instance.rango_desde }}" min="1" required>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label for="rango_hasta" class="form-label">Rango Hasta</label>
+        <input type="number" class="form-control" id="rango_hasta" name="rango_hasta" value="{{ instance.rango_hasta }}" min="1" required>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label for="fecha_resolucion" class="form-label">Fecha Emision</label>
+        <input type="date" class="form-control" id="fecha_resolucion" name="fecha_resolucion" value="{{ instance.fecha_resolucion|date:'Y-m-d' }}" required>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label for="fecha_fin" class="form-label">Fecha Fin</label>
+        <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" value="{{ instance.fecha_fin|date:'Y-m-d' }}" required>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label for="clave_tecnica" class="form-label">Clave Tecnica</label>
+      <input type="text" class="form-control" id="clave_tecnica" name="clave_tecnica" value="{{ instance.clave_tecnica }}">
+    </div>
+
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" type="checkbox" role="switch" id="vigente" name="vigente" {% if instance.vigente or not instance %}checked{% endif %}>
+      <label class="form-check-label" for="vigente">Vigente</label>
+    </div>
+
+    <div class="d-grid gap-2">
+      <button type="submit" class="btn btn-primary">Guardar Resolucion</button>
+      <button type="button" class="btn btn-outline-secondary" onclick="window.UIManager?.handleOffcanvas('#offcanvas-resolucion-editor', 'hide')">Cancelar</button>
+    </div>
+  </form>
+{% endblock %}

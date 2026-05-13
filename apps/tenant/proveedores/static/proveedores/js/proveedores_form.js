@@ -8,8 +8,16 @@
   const MOD = '[proveedores:form]';
   const API_URL = '/api/v1/proveedores/';
   const CONTAINER_ID = '#containerOffcanvasProveedor';
-  const BOOLEAN_FIELDS = ['activo', 'responsable_iva', 'gran_contribuyente', 'autoretenedor'];
-  const NUMERIC_FIELDS = ['plazo_pago_dias'];
+  const BOOLEAN_FIELDS = [
+    'activo', 'responsable_iva', 'gran_contribuyente', 'autoretenedor',
+    'es_retenedor', 'aplica_retefuente', 'aplica_reteica', 'aplica_reteiva'
+  ];
+  const NUMERIC_FIELDS = [
+    'plazo_pago_dias', 
+    'retefuente_porcentaje', 
+    'reteica_porcentaje', 
+    'reteiva_porcentaje'
+  ];
 
   /**
    * Abrir Offcanvas vía HTMX (v2.61.7 - Resiliente)
@@ -58,41 +66,16 @@
       // 2. Configurar validaciones y eventos
       configurarEventos(offcanvasEl);
 
-      // 3. Cargar datos dinámicos
-      await cargarCuentasNIIF(offcanvasEl);
+      // v3.5 - Inicializar búsqueda dinámica de Cuenta Contable
+      if (typeof Sintel.Proveedores.Utils?.setupCuentaAutocomplete === 'function') {
+          Sintel.Proveedores.Utils.setupCuentaAutocomplete({
+              inputId: 'proveedor-cuenta_contable_label',
+              hiddenId: 'proveedor-cuenta_contable_uuid',
+              resultsId: 'proveedor-cuenta-resultados'
+          });
+      }
     }
   });
-
-  /**
-   * Carga dinámica de cuentas de Pasivo desde el catálogo contable
-   */
-  async function cargarCuentasNIIF(container) {
-    const select = container.querySelector('#proveedor-codigo_contable');
-    if (!select) return;
-
-    const res = await w.http('GET', '/api/v1/contabilidad/cuentas-contables/cuentas-proveedor/');
-    if (!res.ok) return;
-
-    const cuentas = await res.json();
-    if (!Array.isArray(cuentas) || cuentas.length === 0) return;
-
-    const valorActual = select.dataset.valorSeleccionado || '';
-    
-    // Limpiar pero mantener la opción por defecto
-    select.innerHTML = '<option value="">-- Autodetectar (Régimen/Tipo) --</option>';
-
-    cuentas.forEach(c => {
-      const opt = d.createElement('option');
-      opt.value = c.codigo;
-      opt.textContent = `${c.codigo} - ${c.nombre}`;
-      if (c.codigo === valorActual) opt.selected = true;
-      select.appendChild(opt);
-    });
-
-    if (!select.value && valorActual) {
-      select.value = valorActual;
-    }
-  }
 
   function buildPayload(form) {
     const payload = {};
@@ -123,7 +106,8 @@
       }
 
       if (NUMERIC_FIELDS.includes(key)) {
-        payload[key] = parseInt(value, 10) || 0;
+        // v3.5.3: Usar parseFloat para soportar porcentajes decimales (ReteICA, etc)
+        payload[key] = parseFloat(value) || 0;
         return;
       }
 
@@ -141,12 +125,6 @@
     const form = container.querySelector('form');
     if (!form) return;
 
-    // Guardar referencia del valor actual para el select dinámico
-    const selectNIIF = form.querySelector('#proveedor-codigo_contable');
-    if (selectNIIF) {
-      const initialValue = selectNIIF.getAttribute('data-value') || '';
-      selectNIIF.dataset.valorSeleccionado = initialValue;
-    }
 
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -157,6 +135,48 @@
     if (btnGuardar) {
       btnGuardar.addEventListener('click', () => form.requestSubmit());
     }
+
+    // [v3.5.0] Lógica de Retenciones
+    const checkRetenedor = form.querySelector('#proveedor-es_retenedor');
+    const contenedorRetenciones = form.querySelector('#contenedor-retenciones');
+    
+    if (checkRetenedor && contenedorRetenciones) {
+      const toggleRetenciones = () => {
+        const isRetenedor = checkRetenedor.checked;
+        contenedorRetenciones.classList.toggle('d-none', !isRetenedor);
+        
+        if (!isRetenedor) {
+          // Limpiar todo si se apaga el switch (Zero Waste Frontend)
+          ['aplica_retefuente', 'aplica_reteica', 'aplica_reteiva'].forEach(f => {
+            const cb = form.querySelector(`#proveedor-${f}`);
+            if (cb) cb.checked = false;
+          });
+          ['retefuente_porcentaje', 'reteica_porcentaje', 'reteiva_porcentaje'].forEach(f => {
+            const inp = form.querySelector(`#proveedor-${f}`);
+            if (inp) inp.value = 0;
+          });
+        }
+      };
+
+      // v3.5.1: Control fino por campo de retención
+      ['retefuente', 'reteica', 'reteiva'].forEach(key => {
+        const cb = form.querySelector(`#proveedor-aplica_${key}`);
+        const inp = form.querySelector(`#proveedor-${key}_porcentaje`);
+        if (cb && inp) {
+          const syncInput = () => {
+            inp.disabled = !cb.checked;
+            if (!cb.checked) inp.value = 0;
+          };
+          cb.addEventListener('change', syncInput);
+          syncInput(); // Inicial
+        }
+      });
+
+      checkRetenedor.addEventListener('change', toggleRetenciones);
+      // Ejecutar inicial (para modo edición)
+      toggleRetenciones();
+    }
+
   }
 
   /**

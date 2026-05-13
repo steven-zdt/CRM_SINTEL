@@ -76,10 +76,13 @@
             categoria: parseInteger(formData.get('categoria')),
             unidad: formData.get('unidad')?.trim() || 'UND',
             descripcion: formData.get('descripcion')?.trim() || null,
-            // ⚠️ v2.61.3: precio_venta y stock_minimo deben ser números (0 si está vacío)
+            // v2.61.3: precio_venta y stock_minimo deben ser numeros (0 si esta vacio)
             precio_venta: parseDecimal(precioVentaValue, 0),
             stock_minimo: parseDecimal(stockMinimoValue, 0),
-            activo: d.querySelector('#producto-activo')?.checked !== false
+            activo: d.querySelector('#producto-activo')?.checked !== false,
+            // Dual accounting: activo de inventario + costo de ventas
+            cuenta_inventario_uuid: d.querySelector('#producto-cuenta-inventario-uuid')?.value || null,
+            cuenta_costo_uuid: d.querySelector('#producto-cuenta-costo-uuid')?.value || null
         };
 
         // ⚠️ v2.61.3: Validación básica
@@ -419,6 +422,24 @@
                 const productoId = obtenerProductoId();
                 const categoriaId = formProducto.querySelector('#producto-categoria')?.value;
                 cargarCategorias(categoriaId ? parseInt(categoriaId) : null);
+            }
+
+            // v3.5 Dual Accounting: Inicializar dos buscadores de cuenta contable
+            // Cuenta Inventario (Activo - Balance)
+            if (d.querySelector('#producto-cuenta-inventario-busqueda')) {
+                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
+                    inputSelector: '#producto-cuenta-inventario-busqueda',
+                    resultsSelector: '#producto-cuenta-inventario-resultados',
+                    uuidSelector: '#producto-cuenta-inventario-uuid'
+                });
+            }
+            // Cuenta Costo de Ventas (Resultado - Estado de Resultados)
+            if (d.querySelector('#producto-cuenta-costo-busqueda')) {
+                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
+                    inputSelector: '#producto-cuenta-costo-busqueda',
+                    resultsSelector: '#producto-cuenta-costo-resultados',
+                    uuidSelector: '#producto-cuenta-costo-uuid'
+                });
             }
         }
 

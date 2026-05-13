@@ -67,6 +67,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
     total_formateado = serializers.SerializerMethodField()
     
     # Campo adicional para detectar Nota de Crédito asociada
+    has_nc = serializers.SerializerMethodField()
     nota_credito_id = serializers.SerializerMethodField()
     nota_credito_numero = serializers.SerializerMethodField()
     
@@ -91,15 +92,31 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "total",
             "total_formateado",
             "estado",
+            "estado_pago",
+            "retefuente",
+            "reteica",
+            "reteiva",
+            "forma_pago",
+            "medio_pago_codigo",
+            "payment_due_date",
+            "cuenta_contable_uuid",
+            "has_nc",
             "nota_credito_id",
             "nota_credito_numero",
         )
         read_only_fields = (
-            "id", "numero", "fecha_emision", "fecha_vencimiento", "naturaleza", "cliente_nombre", 
+            "id", "numero", "fecha_emision", "naturaleza", "cliente_nombre",
             "emisor_nit", "emisor_razon_social", "receptor_nit", "receptor_razon_social",
-            "nota_credito_id", "nota_credito_numero", "subtotal", 
-            "impuestos", "total", "total_formateado", "estado"
+            "nota_credito_id", "nota_credito_numero", "has_nc", "subtotal",
+            "impuestos", "total", "total_formateado", "cufe"
         )
+    
+    def get_has_nc(self, obj):
+        """Retorna True si la factura tiene una Nota de Crédito asociada."""
+        try:
+            return hasattr(obj, 'nota_credito') and obj.nota_credito is not None
+        except Exception:
+            return False
     
     def get_total_formateado(self, obj):
         """Formatea el total como moneda colombiana."""
@@ -146,8 +163,20 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
             "has_application_response_xml",
             "has_pdf_file",
             "anexos_meta",
+            "cuenta_contable_uuid",
+            "cuenta_contable_label",
         )
-        read_only_fields = ("id", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta")
+        read_only_fields = ("id", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta", "cuenta_contable_label")
+    
+    cuenta_contable_label = serializers.SerializerMethodField()
+
+    def get_cuenta_contable_label(self, obj):
+        """
+        §18: cuenta_contable_uuid se resuelve en frontend via JS (GET /api/v1/contabilidad/cuentas-contables/?uuid=).
+        NO importar desde apps.tenant.contabilidad aqui (viola §18 Pull Model / Bounded Context).
+        Retorna None - el nombre se pre-carga en JS via getCuentaByUuid().
+        """
+        return None
     
     def get_has_ubl_xml(self, obj):
         """Indica si existe UBL XML en anexos."""
@@ -200,18 +229,22 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
 
 class FacturaWriteSerializer(serializers.ModelSerializer):
     """
-    Serializer de escritura: NO permite campos computados/externos.
-    
+    Serializer de escritura: Permite ingresar datos manuales que no vinieron en XML.
+
     # WARNING: IMPORTANTE: Los campos emisor_* se poblan automáticamente desde Empresa (SSoT)
     mediante el servicio crear_factura() / actualizar_factura().
+    # RETENCIONES Y FORMAS DE PAGO: Opcionales (si vienen del XML, se usan; si no, usuario ingresa manualmente).
+    # ESTADO DE PAGO: Campo editable por usuario para rastrear pagos (NO_PAGADA, PAGO_PARCIAL, PAGADA).
     """
     class Meta:
         model = Factura
         fields = (
-            "numero", "prefijo", "consecutivo", "tipo", "estado", "fecha_emision", "fecha_vencimiento",
+            "numero", "prefijo", "consecutivo", "tipo", "estado", "estado_pago", "fecha_emision", "fecha_vencimiento",
             "receptor_nit", "receptor_razon_social", "receptor_direccion", "receptor_email", "receptor_telefono",
             "moneda", "subtotal", "impuestos", "total",
+            "retefuente", "reteica", "reteiva",
             "forma_pago", "medio_pago_codigo", "payment_due_date",
+            "cuenta_contable_uuid",
         )
         # No incluir campos read-only ni campos que se calculan automáticamente
 

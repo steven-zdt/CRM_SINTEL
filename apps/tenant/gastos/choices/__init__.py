@@ -1,7 +1,7 @@
 """
 Choices para la app de gastos (TENANT_APP).
 
-WARNING: v2.40: Sistema de Documento Soporte Inmutable.
+v2.62: FLEXIBILIDAD OPERATIVA - Inmutabilidad deshabilitada.
 """
 
 from .categoria_contable import (

@@ -28,7 +28,6 @@ from .excepciones import AsientoYaExisteError
 from .resolver import ResolverCuentas
 from .validadores import (
     validar_cuadratura,
-    validar_documento_origen_existe,
     validar_no_vacio,
     validar_periodo_abierto,
 )
@@ -82,16 +81,8 @@ class Contabilizador:
             Various ContabilidadError subclasses on validation failure
         """
         from ..models import AsientoContable, PeriodoContable
-
         with transaction.atomic():
-            # 1. Validate source document exists
-            validar_documento_origen_existe(
-                transaccion.documento_origen.app_label,
-                transaccion.documento_origen.modelo,
-                transaccion.documento_origen.id,
-            )
-
-            # 2. Resolve period from transaction date
+            # 1. Resolve period from transaction date
             periodo = self._resolver_periodo(transaccion.fecha)
             validar_periodo_abierto(periodo)
 
@@ -217,7 +208,7 @@ class Contabilizador:
 
         if not periodo:
             raise ValueError(
-                f"No existe período contable para {fecha} (empresa {self.empresa_id})"
+                f"No existe periodo contable para {fecha} (empresa {self.empresa_id})"
             )
 
         return periodo
@@ -291,6 +282,7 @@ class Contabilizador:
             haber_principal = linea.monto if linea.lado == 'HABER' else Decimal('0')
 
             movimiento_principal = MovimientoContable(
+                empresa_id=self.empresa_id,
                 asiento=asiento,  # Will be set on save
                 cuenta_codigo=cuenta_codigo,
                 descripcion=linea.concepto,
@@ -317,6 +309,7 @@ class Contabilizador:
                 haber_impuesto = impuesto.valor if impuesto.lado == 'HABER' else Decimal('0')
 
                 movimiento_impuesto = MovimientoContable(
+                    empresa_id=self.empresa_id,
                     asiento=asiento,
                     cuenta_codigo=cuenta_impuesto,
                     descripcion=f"{impuesto.tipo} ({impuesto.porcentaje}%)",

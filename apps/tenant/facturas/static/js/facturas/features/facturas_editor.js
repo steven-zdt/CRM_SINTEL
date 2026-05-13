@@ -185,6 +185,12 @@
             data.total = parseFloat(data.total);
         }
 
+        // [v3.7.0] Cuenta Contable
+        const cuentaUuid = d.querySelector('#factura-cuenta_contable_uuid')?.value;
+        if (cuentaUuid) {
+            data.cuenta_contable_uuid = cuentaUuid;
+        }
+
         return data;
     }
 
@@ -305,6 +311,9 @@
             emitirFactura();
         });
 
+        // [v3.7.0] Buscador de Cuentas Contables
+        initCuentaContableSearch();
+
         // ⚠️ Listener para botón agregar ítem
         const btnAgregarItem = d.querySelector('#btn-agregar-item');
         if (btnAgregarItem) {
@@ -363,6 +372,95 @@
         console.log(`${MOD} Event listeners del editor configurados`);
     }
 
+    /**
+     * [v3.7.0] Inicializar buscador asíncrono de cuentas contables
+     */
+    function initCuentaContableSearch() {
+        const searchInput = d.querySelector('#factura-cuenta_contable_search');
+        const uuidInput = d.querySelector('#factura-cuenta_contable_uuid');
+        const suggestions = d.querySelector('#factura-cuenta-suggestions');
+
+        if (!searchInput || !uuidInput || !suggestions) return;
+
+        let debounceTimer;
+
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.trim();
+            clearTimeout(debounceTimer);
+
+            if (query.length < 2) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+
+            debounceTimer = setTimeout(async () => {
+                // ⚠️ Aislamiento Gradual: Usar facturasAPI.searchCuentas
+                const res = await w.facturasAPI.searchCuentas(query);
+                if (res.ok && res.data) {
+                    const results = Array.isArray(res.data) ? res.data : (res.data.results || []);
+                    renderSuggestions(results);
+                }
+            }, 300);
+        });
+
+        function renderSuggestions(data) {
+            suggestions.innerHTML = '';
+            if (!data || !data.length) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+
+            data.forEach(cuenta => {
+                const item = d.createElement('button');
+                item.type = 'button';
+                item.className = 'list-group-item list-group-item-action small py-2';
+                item.innerHTML = `<div><span class="fw-bold text-primary">${cuenta.codigo}</span> - ${cuenta.nombre}</div>`;
+                
+                item.addEventListener('click', () => {
+                    searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
+                    uuidInput.value = cuenta.uuid;
+                    suggestions.classList.add('d-none');
+                    // Feedback visual
+                    searchInput.classList.add('is-valid');
+                    setTimeout(() => searchInput.classList.remove('is-valid'), 2000);
+                });
+                suggestions.appendChild(item);
+            });
+            suggestions.classList.remove('d-none');
+        }
+
+        // Cerrar sugerencias al hacer click fuera
+        d.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
+
+        // Limpiar UUID si el campo de búsqueda se vacía
+        searchInput.addEventListener('change', () => {
+            if (!searchInput.value.trim()) {
+                uuidInput.value = '';
+            }
+        });
+
+        // [v3.7.0] Pre-poblar campo de texto si hay UUID inicial (modo edición)
+        // §18: resolución via HTTP al endpoint de contabilidad, no via Python import
+        const initialUuid = uuidInput.value.trim();
+        if (initialUuid && !searchInput.value.trim()) {
+            w.facturasAPI.getCuentaByUuid(initialUuid).then(response => {
+                if (response && response.ok && response.data) {
+                    const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
+                    if (results.length > 0) {
+                        const cuenta = results[0];
+                        searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
+                    }
+                }
+            }).catch(err => {
+                console.warn('[facturas.editor:cuenta_search] No se pudo pre-cargar cuenta:', err);
+            });
+        }
+    }
+
     // Inicialización principal
     function init() {
         console.log(`${MOD} Inicializando módulo de editor...`);
@@ -409,13 +507,18 @@
                 // Pequeño delay para asegurar que el DOM esté completamente renderizado
                 setTimeout(() => {
                     // ⚠️ Validación temprana: Solo inicializar si existe el formulario de edición
-                    const form = d.querySelector('#form-factura');
-                    if (form) {
+                    const formEdicion = d.querySelector('#form-factura');
+                    const formSubida = d.querySelector('#form-upload-factura');
+
+                    if (formEdicion) {
                         // Solo inicializar si estamos en modo edición (formulario existe)
                         initEditorEvents();
                         actualizarTotalesEnDOM();
+                    } else if (formSubida) {
+                        // Modo "Subir" - inicializar solo el buscador de cuentas contables
+                        initCuentaContableSearch();
                     }
-                    // Si no hay formulario, es modo "Subir" o "Lectura" - no hacer nada (comportamiento esperado)
+                    // Si no hay ningún formulario, es modo "Lectura" - no hacer nada
                 }, 50);
             }
         });

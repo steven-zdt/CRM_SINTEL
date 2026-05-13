@@ -70,6 +70,43 @@
           <label for="activo-descripcion" class="form-label">Descripción</label>
           <textarea class="form-control" id="activo-descripcion" name="descripcion" rows="2">{% if activo %}{{ activo.descripcion|default:'' }}{% endif %}</textarea>
         </div>
+
+        <!-- Integración Contable v3.5 -->
+        <div class="col-12 mt-3 pt-3 border-top">
+          <h6 class="text-primary mb-3"><i class="bi bi-calculator me-2"></i>Vinculación Contable Dual</h6>
+          
+          <div class="mb-3 position-relative">
+            <label for="activo-cuenta-activo-busqueda" class="form-label text-danger fw-bold">Cuenta Contable (Control Activo) *</label>
+            <div class="input-group shadow-sm">
+              <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+              <input type="text" 
+                     class="form-control border-start-0 ps-0" 
+                     id="activo-cuenta-activo-busqueda" 
+                     placeholder="Buscar por código o nombre (ej: 15)..."
+                     autocomplete="off"
+                     value="{% if activo %}{{ activo.cuenta_activo_label|default:'' }}{% endif %}">
+            </div>
+            <input type="hidden" name="cuenta_activo_uuid" id="activo-cuenta-activo-uuid" value="{% if activo %}{{ activo.cuenta_activo_uuid|default:'' }}{% endif %}">
+            <div id="activo-cuenta-activo-resultados" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+            <div class="form-text">Cuenta donde se registra el activo fijo (Grupo 15).</div>
+          </div>
+
+          <div class="mb-3 position-relative">
+            <label for="activo-cuenta-depreciacion-busqueda" class="form-label text-danger fw-bold">Cuenta de Depreciación (Gasto/Acumulada) *</label>
+            <div class="input-group shadow-sm">
+              <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+              <input type="text" 
+                     class="form-control border-start-0 ps-0" 
+                     id="activo-cuenta-depreciacion-busqueda" 
+                     placeholder="Buscar por código o nombre (ej: 5160)..."
+                     autocomplete="off"
+                     value="{% if activo %}{{ activo.cuenta_depreciacion_label|default:'' }}{% endif %}">
+            </div>
+            <input type="hidden" name="cuenta_depreciacion_uuid" id="activo-cuenta-depreciacion-uuid" value="{% if activo %}{{ activo.cuenta_depreciacion_uuid|default:'' }}{% endif %}">
+            <div id="activo-cuenta-depreciacion-resultados" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+            <div class="form-text">Cuenta para registrar el gasto o la depreciación acumulada.</div>
+          </div>
+        </div>
       </div>
       <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>

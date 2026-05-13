@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura, ItemFactura
+from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito
 from apps.tenant.facturas.services.crud_service import FacturaCRUDService
 
 # Importación segura para Document Ingest Pipeline Universal
@@ -134,6 +134,31 @@ class FacturaBusinessService:
             or dto.get("cufe", "")
         )
 
+        # --- VINCULACIÓN DE NOTA DE CRÉDITO (Fase 7) ---
+        if dto.get("tipo") == "NC":
+            ref_cufe = dto.get("ref_factura_cufe")
+            ref_numero = dto.get("ref_factura_numero")
+            
+            # Buscar factura original para el vínculo 1:1
+            factura_original = None
+            if ref_cufe:
+                factura_original = Factura.objects.filter(empresa=empresa_instance, cufe=ref_cufe).first()
+            
+            if not factura_original and ref_numero:
+                factura_original = Factura.objects.filter(empresa=empresa_instance, numero=ref_numero).first()
+
+            if factura_original:
+                # [VALIDACIÓN] Evitar duplicados (Idempotencia de Negocio)
+                if NotaCredito.objects.filter(factura=factura_original).exists():
+                    logger.warning(f"[facturas:nc] Intento de duplicar NC para factura {factura_original.numero}")
+                    return {"error": "Ya existe una Nota de Crédito asociada a esta factura."}, 422
+                
+                # Inyectar factura_id en el DTO para el CRUDService
+                dto["factura_id"] = factura_original.id
+                logger.info(f"[facturas:nc] Vinculando NC {dto.get('numero')} con factura {factura_original.numero}")
+            else:
+                logger.warning(f"[facturas:nc] NC {dto.get('numero')} sin factura de referencia encontrada (CUFE: {ref_cufe})")
+
         # Idempotencia por CUFE
         if cufe:
             factura_existente = Factura.objects.filter(cufe=cufe, empresa=empresa_instance).first()
@@ -208,6 +233,9 @@ class FacturaBusinessService:
             "subtotal": totales.get("subtotal") or dto.get("subtotal", 0),
             "impuestos": totales.get("impuestos") or dto.get("impuestos", 0),
             "total": totales.get("total") or dto.get("total", 0),
+            "retefuente": totales.get("retefuente") or dto.get("retefuente", 0),
+            "reteica": totales.get("reteica") or dto.get("reteica", 0),
+            "reteiva": totales.get("reteiva") or dto.get("reteiva", 0),
             # Pago
             "forma_pago": dto.get("forma_pago", ""),
             "medio_pago_codigo": dto.get("medio_pago_codigo", ""),
@@ -238,6 +266,38 @@ class FacturaBusinessService:
 
         factura = FacturaCRUDService.crear(factura_data, anexos_data)
 
+        # # WARNING: SINTEL v2.62: Persistencia delegada de Nota de Crédito
+        if tipo == Factura.TipoFactura.NC:
+            referencia_dto = dto.get("referencia", {})
+            ref_cufe = referencia_dto.get("cufe") or dto.get("ref_factura_cufe")
+            
+            # Intentar localizar la factura original para referencia informativa
+            factura_original = None
+            if ref_cufe:
+                factura_original = Factura.objects.filter(cufe=ref_cufe, empresa=empresa_instance).first()
+            
+            if not factura_original and dto.get("ref_factura_numero"):
+                factura_original = Factura.objects.filter(numero=dto.get("ref_factura_numero"), empresa=empresa_instance).first()
+
+            # [VALIDACIÓN] Idempotencia: No permitir dos NCs para la misma factura si ya existe el vínculo
+            if factura_original and NotaCredito.objects.filter(ref_factura_cufe=factura_original.cufe).exists():
+                 logger.warning(f"[facturas:nc] Intento de duplicar NC para factura {factura_original.numero}")
+                 # Opcional: Podríamos retornar error aquí si queremos ser estrictos 1:1
+            
+            # Crear registro de extensión NotaCredito vinculado al documento 'factura' (que es la NC)
+            NotaCredito.objects.create(
+                empresa=empresa_instance,
+                factura=factura, # Vínculo OneToOne con el documento NC
+                cude=cufe, 
+                motivo=dto.get("motivo") or referencia_dto.get("motivo") or "Anulación/Ajuste de factura",
+                ref_factura_numero=factura_original.numero if factura_original else (dto.get("ref_factura_numero") or ""),
+                ref_factura_cufe=factura_original.cufe if factura_original else (ref_cufe or ""),
+                retefuente=Decimal(str(totales.get("retefuente") or 0)),
+                reteica=Decimal(str(totales.get("reteica") or 0)),
+                reteiva=Decimal(str(totales.get("reteiva") or 0)),
+            )
+            logger.info(f"[facturas:nc] Nota de Crédito {factura.numero} persistida y vinculada a referencia {ref_cufe}")
+
         # Crear items
         for item in dto.get("items", []):
             ItemFactura.objects.create(
@@ -250,6 +310,12 @@ class FacturaBusinessService:
                 unidad_medida=item.get("unidad_medida", "UND"),
                 valor_unitario=item.get("valor_unitario", 0),
                 porcentaje_iva=item.get("porcentaje_iva", 0),
+                porcentaje_retefuente=item.get("porcentaje_retefuente", 0),
+                valor_retefuente=item.get("valor_retefuente", 0),
+                porcentaje_reteiva=item.get("porcentaje_reteiva", 0),
+                valor_reteiva=item.get("valor_reteiva", 0),
+                porcentaje_reteica=item.get("porcentaje_reteica", 0),
+                valor_reteica=item.get("valor_reteica", 0),
                 total=item.get("total", 0),
             )
 

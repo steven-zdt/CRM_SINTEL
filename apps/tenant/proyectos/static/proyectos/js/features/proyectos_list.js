@@ -10,7 +10,7 @@
  * - TabulatorFactory (definido en tabulator.factory.js)
  * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
  */
-(function(w, d) {
+(function (w, d) {
     'use strict';
 
     const MOD = '[proyectos.list]';
@@ -58,26 +58,27 @@
     // Definir columnas específicas del módulo
     function getColumns() {
         return [
-            {
-                title: "Código",
-                field: "codigo",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
-                },
-                width: 120
-            },
+
             {
                 title: "Nombre del Proyecto",
                 field: "nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
                     return cell.getValue() || '---';
                 },
                 minWidth: 250
             },
             {
+                title: "Centro de Costos",
+                field: "factura_costo_numero",
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
+                    return cell.getValue() || '---';
+                },
+                width: 150
+            },
+            {
                 title: "Tipo de Servicio",
                 field: "tipo_servicio_display",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
                     return cell.getValue() || '---';
                 },
                 width: 180
@@ -85,7 +86,7 @@
             {
                 title: "Cliente",
                 field: "cliente_nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
                     return cell.getValue() || '---';
                 },
                 minWidth: 200
@@ -93,7 +94,15 @@
             {
                 title: "Responsable",
                 field: "responsable_actual_nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
+                    return cell.getValue() || '---';
+                },
+                width: 180
+            },
+            {
+                title: "Proveedor",
+                field: "proveedor_nombre",
+                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
                     return cell.getValue() || '---';
                 },
                 width: 180
@@ -101,7 +110,7 @@
             {
                 title: "Fase",
                 field: "fase_actual_display",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     const value = cell.getValue() || '---';
                     const fase = cell.getRow().getData().fase_actual;
                     let badgeClass = 'bg-secondary';
@@ -117,7 +126,7 @@
             {
                 title: "Estado",
                 field: "estado_display",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     const value = cell.getValue() || '---';
                     const estado = cell.getRow().getData().estado_tarea;
                     let badgeClass = 'bg-secondary';
@@ -132,7 +141,7 @@
             {
                 title: "Fecha Inicio",
                 field: "fecha_inicio",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     const value = cell.getValue();
                     if (!value) return '---';
                     try {
@@ -147,7 +156,7 @@
             {
                 title: "Fecha Fin",
                 field: "fecha_fin_prevista",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     const value = cell.getValue();
                     if (!value) return '---';
                     try {
@@ -162,7 +171,7 @@
             {
                 title: "Valor Contrato",
                 field: "valor_contrato_proyectado",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     return formatearMoneda(cell.getValue());
                 },
                 hozAlign: "right",
@@ -171,7 +180,7 @@
             {
                 title: "Costo Total",
                 field: "costo_total",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     return formatearMoneda(cell.getValue());
                 },
                 hozAlign: "right",
@@ -180,7 +189,7 @@
             {
                 title: "Utilidad",
                 field: "utilidad_estimada",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     return formatearMoneda(cell.getValue());
                 },
                 hozAlign: "right",
@@ -189,7 +198,7 @@
             {
                 title: "Margen %",
                 field: "margen_rentabilidad",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     return formatearPorcentaje(cell.getValue());
                 },
                 hozAlign: "right",
@@ -197,10 +206,10 @@
             },
             {
                 title: "Acciones",
-                formatter: function(cell) {
+                formatter: function (cell) {
                     const rowData = cell.getRow().getData();
                     const id = rowData.id;
-                    
+
                     return `
                         <div class="btn-group btn-group-sm" role="group">
                             <button type="button" class="btn btn-outline-primary btn-edit-proyecto" data-id="${id}" title="Editar Proyecto">
@@ -276,7 +285,7 @@
             if (btnEdit) {
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 const id = btnEdit.getAttribute('data-id');
                 if (!id) {
                     console.warn(`${MOD} Botón sin data-id`);
@@ -295,15 +304,8 @@
                         swap: 'innerHTML'
                     });
 
-                    // ⚠️ v2.62.3: Abrir Offcanvas usando el orquestador central (apertura segura)
-                    const offcanvasEl = d.getElementById('offcanvas-proyecto');
-                    if (offcanvasEl && w.UIManager?.handleOffcanvas) {
-                        w.UIManager.handleOffcanvas(offcanvasEl, 'show');
-                    } else if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
-                    } else {
-                        console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);
-                    }
+                    // ⚠️ v2.62.3: La apertura se delega al htmx:afterSwap en proyectos_editor.js
+                    // Esto centraliza la lógica y evita el error de cierre automático.
                 } catch (error) {
                     console.error(`${MOD} Error al cargar Offcanvas:`, error);
                     if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
@@ -322,7 +324,7 @@
             if (btnDelete) {
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 const id = btnDelete.getAttribute('data-id');
                 if (!id) {
                     console.warn(`${MOD} Botón eliminar sin data-id`);
@@ -341,7 +343,7 @@
 
                 try {
                     const res = await w.http('DELETE', `/api/v1/proyectos/${id}/`);
-                    
+
                     if (res.ok) {
                         if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
                             w.SintelFeedback.success('Proyecto eliminado correctamente');
@@ -420,7 +422,7 @@
     if (typeof htmx !== 'undefined') {
         d.addEventListener('htmx:beforeSwap', (event) => {
             // Si se está recargando el contenedor principal, destruir instancias
-            if (event.detail.target.id === 'tab-proyectos-content' || 
+            if (event.detail.target.id === 'tab-proyectos-content' ||
                 event.detail.target.closest('#tab-proyectos-content')) {
                 if (window.SintelProyectosTables.main) {
                     try {

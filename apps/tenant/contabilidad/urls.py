@@ -37,4 +37,9 @@ urlpatterns = [
     path('periodos/gestor-offcanvas/', 
          PeriodoContableViewSet.as_view({'get': 'gestor_offcanvas'}), 
          name='periodo-gestor-offcanvas'),
+
+    # Reportes
+    path('reportes/', 
+         AsientoContableViewSet.as_view({'get': 'reporte_page'}), 
+         name='reporte-page'),
 ]

@@ -18,40 +18,52 @@ LIST_FIELDS = [
     'fecha_inicio', 'fecha_fin_estimada',
     'cliente_id', 'cliente_nombre',
     'responsable_actual_id', 'responsable_actual_nombre',
+    'proveedor_id', 'proveedor_nombre',
     'valor_contrato_proyectado', 'costo_mano_obra_real', 'costo_materiales_real',
     'utilidad_estimada', 'margen_rentabilidad',
     'porcentaje_avance', 'fecha_cierre_real',
+    'factura_costo_id', 'factura_costo_numero',
     'created_at', 'updated_at',
     'empresa_id'
 ]
 
-DETAIL_FIELDS = LIST_FIELDS + []  # En este caso son los mismos por ahora
+DETAIL_FIELDS = LIST_FIELDS + [
+    'responsable_comercial_id', 'responsable_comercial_nombre',
+    'responsable_tecnico_id', 'responsable_tecnico_nombre',
+    'responsable_operativo_id', 'responsable_operativo_nombre',
+    'responsable_administrativo_id', 'responsable_administrativo_nombre',
+    'descripcion', 'factura_ref',
+    'contrato_archivo', 'acta_inicio_archivo', 'cronograma_archivo',
+    'acta_entrega_archivo', 'informe_final_archivo',
+]
 
 def qs_list(empresa_id, search=None):
     """
-    QuerySet optimizado para listados de proyectos.
+    QuerySet optimizado para listados. Usa .only() para Zero Waste.
     """
-    qs = Proyecto.objects.filter(empresa_id=empresa_id).only(*LIST_FIELDS)
-    
+    qs = Proyecto.objects.filter(
+        empresa_id=empresa_id
+    ).select_related('factura_costo').only(*LIST_FIELDS)
+
     if search:
         qs = qs.filter(
             models.Q(nombre__icontains=search) |
             models.Q(codigo__icontains=search) |
-            models.Q(descripcion__icontains=search) |
             models.Q(cliente_nombre__icontains=search) |
             models.Q(responsable_actual_nombre__icontains=search)
         )
-    
-    return qs.distinct().order_by('-updated_at')
+
+    return qs.order_by('-updated_at')
 
 def qs_detail(empresa_id, pk):
     """
-    QuerySet optimizado para detalle de proyecto con relaciones.
+    QuerySet de detalle con relaciones prefetch. Retorna None si no existe (
+    el ViewSet lanza NotFound al recibir None).
     """
     return Proyecto.objects.filter(
         empresa_id=empresa_id,
         pk=pk
-    ).select_related('empresa').prefetch_related(
+    ).only(*DETAIL_FIELDS).select_related('factura_costo').prefetch_related(
         'equipo_trabajo',
         'pedidos',
         'pedidos__items'

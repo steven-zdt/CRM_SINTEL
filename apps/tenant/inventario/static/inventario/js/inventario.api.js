@@ -272,6 +272,26 @@
         }
         return url;
       }
+    },
+    
+    // --- INTEGRACIÓN CONTABLE v3.5 ---
+    searchCuentas: async (query) => {
+      /**
+       * ⚠️ v3.5: Busca cuentas contables filtradas para inventario.
+       * Consume el selector de contabilidad via Gateway Directo.
+       */
+      const params = {
+        search: query,
+        app_origen: 'inventario',
+        activa: 'true'
+      };
+      return w.http('GET', buildUrlWithParams('/api/v1/contabilidad/cuentas/', params));
+    },
+    getCuentaByUuid: async (uuid) => {
+      /**
+       * ⚠️ v3.5: Obtiene detalle de una cuenta por UUID.
+       */
+      return w.http('GET', `/api/v1/contabilidad/cuentas/${uuid}/`);
     }
   };
 

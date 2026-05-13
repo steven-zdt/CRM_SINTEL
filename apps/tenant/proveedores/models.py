@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 
 from apps.tenant.core.models import SintelTenantBaseModel  # auto-inserted by autocorrect
@@ -13,6 +14,9 @@ class Proveedor(SintelTenantBaseModel):
     TIPO_DOCUMENTO = [("NIT", "NIT"), ("CC", "Cédula de ciudadanía"), ("CE", "Cédula de extranjería"), ("PA", "Pasaporte")]
     REGIMEN = [("SIMPLE", "Régimen Simple"), ("ORDINARIO", "Régimen Ordinario"), ("NO_RESP", "No responsable de IVA")]
     
+    # UUID Lookup Field (AGENTS.md §14)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+
     # SSoT
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='proveedores', db_index=True, help_text='SSoT Empresa')
 
@@ -22,14 +26,25 @@ class Proveedor(SintelTenantBaseModel):
     numero_documento = models.CharField(max_length=32, help_text="Sin dígito de verificación")
     digito_verificacion = models.CharField(max_length=1, blank=True, null=True)
     razon_social = models.CharField(max_length=200, help_text="Nombre legal completo")
-    nombre_comercial = models.CharField(max_length=200, blank=True)
+    nombre_comercial = models.CharField(max_length=200, blank=True, help_text="Nombre de marca o fantasía")
 
+    
     # Tributario (Crítico para Colombia)
     regimen_tributario = models.CharField(max_length=15, choices=REGIMEN, default="ORDINARIO")
     actividad_economica_ciiu = models.CharField(max_length=10, blank=True, help_text="Código CIIU Principal")
     responsable_iva = models.BooleanField(default=True)
     gran_contribuyente = models.BooleanField(default=False)
     autoretenedor = models.BooleanField(default=False)
+
+    # Retenciones (NUEVO v3.5.0)
+    es_retenedor = models.BooleanField(default=False, verbose_name="Es Agente Retenedor")
+    aplica_retefuente = models.BooleanField(default=False, verbose_name="Aplica Retención en la Fuente")
+    retefuente_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Porcentaje Retefuente")
+    aplica_reteica = models.BooleanField(default=False, verbose_name="Aplica Retención de ICA")
+    reteica_porcentaje = models.DecimalField(max_digits=5, decimal_places=3, default=0, verbose_name="Porcentaje ReteICA")
+    aplica_reteiva = models.BooleanField(default=False, verbose_name="Aplica Retención de IVA")
+    reteiva_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Porcentaje ReteIVA")
+
 
     # Contacto y Ubicación
     email_contacto = models.EmailField(blank=True)
@@ -55,6 +70,12 @@ class Proveedor(SintelTenantBaseModel):
         null=True, 
         help_text="Codigo NIIF de subcuenta (Clase 2)",
         db_index=True
+    )
+
+    cuenta_contable_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Pasivos/Proveedores)"
     )
     
     observaciones = models.TextField(blank=True)

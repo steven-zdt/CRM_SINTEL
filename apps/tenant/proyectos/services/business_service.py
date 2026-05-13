@@ -86,32 +86,29 @@ def calcular_indicadores_financieros(proyecto):
 
 def generar_codigo_proyecto(empresa):
     """
-    Generar un código único de proyecto para la empresa.
-    Formato: PRJ-{timestamp}-{random_4digitos}
+    Genera un codigo unico y predecible. Formato: PRJ-{YYYY}-{seq:04d}.
+    El secuenciador basa el siguiente numero en el maximo existente para
+    esa empresa+anio, de forma que sea determinista. El UniqueConstraint
+    del modelo actua como red de seguridad ante colisiones concurrentes.
     """
-    import time
-    import random
-    import datetime
-    
-    # Intentar generar con timestamp y random
-    attempt = 0
-    max_attempts = 10
-    
-    from ..models import Proyecto
-    while attempt < max_attempts:
-        timestamp = int(time.time())
-        random_suffix = random.randint(1000, 9999)
-        codigo = f"PRJ-{timestamp}-{random_suffix}"
-        
-        # [v3.5] Normalizar y Verificar unicidad
-        if not Proyecto.objects.filter(empresa=empresa, codigo=codigo.strip()).exists():
-            return codigo.strip()
-        attempt += 1
-    
-    # Fallback: Usar timestamp completo con microsegundos
-    now = datetime.datetime.now()
-    codigo = f"PRJ-{now.strftime('%Y%m%d%H%M%S%f')}"
-    return codigo.strip()
+    from datetime import date
+
+    year = date.today().year
+    prefix = f'PRJ-{year}-'
+
+    codigos = Proyecto.objects.filter(
+        empresa=empresa,
+        codigo__startswith=prefix
+    ).values_list('codigo', flat=True)
+
+    numeros = []
+    for c in codigos:
+        sufijo = c[len(prefix):]
+        if sufijo.isdigit():
+            numeros.append(int(sufijo))
+
+    seq = max(numeros) + 1 if numeros else 1
+    return f'{prefix}{seq:04d}'
 
 
 # ==============================================================================
@@ -120,18 +117,22 @@ def generar_codigo_proyecto(empresa):
 
 def asignar_snapshot_cliente(proyecto, cliente_id=None, cliente_nombre=None):
     """
-    Resuelve el nombre del cliente de manera segura y lo asigna en memoria.
+    Resuelve el nombre del cliente con DSV (empresa_id) y lo asigna en memoria.
     """
     if cliente_id:
-        proyecto.cliente_id = cliente_id
-        if not cliente_nombre:
-            try:
-                from apps.tenant.clientes.models import Cliente
-                cliente = Cliente.objects.filter(id=cliente_id).first()
-                if cliente:
-                    proyecto.cliente_nombre = getattr(cliente, 'razon_social', str(cliente))
-            except ImportError:
-                pass
+        try:
+            from apps.tenant.clientes.models import Cliente
+            cliente = Cliente.objects.filter(
+                id=cliente_id, empresa_id=proyecto.empresa_id
+            ).only('razon_social').first()
+            if not cliente:
+                return
+            proyecto.cliente_id = cliente_id
+            proyecto.cliente_nombre = cliente_nombre or cliente.razon_social
+        except ImportError:
+            proyecto.cliente_id = cliente_id
+            if cliente_nombre:
+                proyecto.cliente_nombre = cliente_nombre
     elif cliente_nombre:
         proyecto.cliente_nombre = cliente_nombre
 
@@ -170,6 +171,58 @@ def asignar_snapshot_responsable(proyecto, responsable_id=None, responsable_nomb
     if responsable_nombre:
         proyecto.responsable_actual_nombre = responsable_nombre
 
+def asignar_snapshot_factura(proyecto, factura_id=None, factura_numero=None):
+    """
+    Resuelve el número de la factura de manera segura y lo asigna en memoria.
+    """
+    if not factura_id:
+        if factura_numero:
+            proyecto.factura_costo_numero = factura_numero
+        return
+
+    # SINTEL v3.5: Robustez Extrema (ID vs Instancia) - Evita TypeError si Django ya resolvió el FK
+    try:
+        from apps.tenant.facturas.models import Factura
+        
+        # Si ya es una instancia (o tiene .id), lo tratamos como tal
+        if hasattr(factura_id, 'id'):
+            proyecto.factura_costo = factura_id
+            if not factura_numero:
+                proyecto.factura_costo_numero = getattr(factura_id, 'numero', '')
+        else:
+            # Es un ID puro (int/str)
+            proyecto.factura_costo_id = factura_id
+            if not factura_numero:
+                # Usar filter().only() para Zero Waste
+                factura = Factura.objects.filter(id=factura_id).only('numero').first()
+                if factura:
+                    proyecto.factura_costo_numero = factura.numero
+    except (ImportError, ValueError, TypeError, Exception):
+        # Fallback silencioso si no se puede resolver la factura
+        if factura_numero:
+            proyecto.factura_costo_numero = factura_numero
+
+def asignar_snapshot_proveedor(proyecto, proveedor_id=None, proveedor_nombre=None):
+    """
+    Resuelve el nombre del proveedor con DSV (empresa_id) y lo asigna en memoria.
+    """
+    if proveedor_id:
+        try:
+            from apps.tenant.proveedores.models import Proveedor
+            proveedor = Proveedor.objects.filter(
+                id=proveedor_id, empresa_id=proyecto.empresa_id
+            ).only('razon_social').first()
+            if not proveedor:
+                return
+            proyecto.proveedor_id = proveedor_id
+            proyecto.proveedor_nombre = proveedor_nombre or proveedor.razon_social
+        except ImportError:
+            proyecto.proveedor_id = proveedor_id
+            if proveedor_nombre:
+                proyecto.proveedor_nombre = proveedor_nombre
+    elif proveedor_nombre:
+        proyecto.proveedor_nombre = proveedor_nombre
+
 def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable_nombre=None):
     """
     Valida y cambia la fase del proyecto.
@@ -206,10 +259,7 @@ def orchestrate_create_proyecto(empresa, data):
         data['codigo'] = generar_codigo_proyecto(empresa)
     else:
         # Validar que el código no exista ya
-        from ..models import Proyecto
         if Proyecto.objects.filter(empresa=empresa, codigo=codigo).exists():
-            # [UX] Si el usuario envió un código que ya existe, preferimos lanzar error
-            # en lugar de cambiarlo por uno aleatorio sin avisar (v3.5 Strict)
             raise ValidationError({'codigo': f'El código "{codigo}" ya está registrado para otro proyecto.'})
         data['codigo'] = codigo
     
@@ -217,12 +267,22 @@ def orchestrate_create_proyecto(empresa, data):
     cliente_nombre = data.pop('cliente_nombre', None)
     responsable_id = data.pop('responsable_actual_id', None)
     responsable_nombre = data.pop('responsable_actual_nombre', None)
+    factura_id = data.pop('factura_costo', None) or data.pop('factura_costo_id', None)
+    factura_numero = data.pop('factura_costo_numero', None)
+    proveedor_id = data.pop('proveedor_id', None)
+    proveedor_nombre = data.pop('proveedor_nombre', None)
     
     proyecto = Proyecto(empresa=empresa, **data)
     asignar_snapshot_cliente(proyecto, cliente_id, cliente_nombre)
     
     if responsable_id or responsable_nombre:
         asignar_snapshot_responsable(proyecto, responsable_id, responsable_nombre)
+
+    if factura_id or factura_numero:
+        asignar_snapshot_factura(proyecto, factura_id, factura_numero)
+
+    if proveedor_id or proveedor_nombre:
+        asignar_snapshot_proveedor(proyecto, proveedor_id, proveedor_nombre)
         
     proyecto = save_proyecto(proyecto)
     calcular_indicadores_financieros(proyecto)
@@ -238,10 +298,8 @@ def orchestrate_update_proyecto(proyecto, data):
     
     # ⚠️ Validar código único si se está actualizando
     codigo = data.get('codigo', None)
-    if codigo is not None: # Si el campo viene en el payload (aunque sea para cambiarlo)
+    if codigo is not None:
         codigo = str(codigo).strip()
-        from ..models import Proyecto
-        # Solo validar si el código cambió y ya existe en OTRO proyecto
         if codigo != proyecto.codigo and Proyecto.objects.filter(
             empresa=proyecto.empresa, codigo=codigo
         ).exclude(id=proyecto.id).exists():
@@ -258,6 +316,10 @@ def orchestrate_update_proyecto(proyecto, data):
     cliente_nombre = data.pop('cliente_nombre', None)
     responsable_id = data.pop('responsable_actual_id', None)
     responsable_nombre = data.pop('responsable_actual_nombre', None)
+    factura_id = data.pop('factura_costo', None) or data.pop('factura_costo_id', None)
+    factura_numero = data.pop('factura_costo_numero', None)
+    proveedor_id = data.pop('proveedor_id', None)
+    proveedor_nombre = data.pop('proveedor_nombre', None)
     nueva_fase = data.pop('fase_actual', None)
     
     for key, value in data.items():
@@ -271,6 +333,12 @@ def orchestrate_update_proyecto(proyecto, data):
         cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id, responsable_nombre)
     elif responsable_id is not None or responsable_nombre:
         asignar_snapshot_responsable(proyecto, responsable_id, responsable_nombre)
+        
+    if factura_id is not None or factura_numero:
+        asignar_snapshot_factura(proyecto, factura_id, factura_numero)
+        
+    if proveedor_id is not None or proveedor_nombre:
+        asignar_snapshot_proveedor(proyecto, proveedor_id, proveedor_nombre)
         
     proyecto = save_proyecto(proyecto)
     calcular_indicadores_financieros(proyecto)

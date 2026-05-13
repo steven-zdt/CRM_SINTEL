@@ -1,9 +1,6 @@
 /**
- * cotizaciones.main.js - Orquestador Principal v2.61.8
+ * cotizaciones.main.js - Orquestador Principal v2.62.0 - SINTEL FSD
  * Namespace: window.Sintel.Cotizaciones
- *
- * Inicializacion diferida via DOMUtils.onVisibleOnce + tab-activated.
- * Delega a submódulos: api, table, ui, list, editor, detalle, utils.
  */
 (function (w, d) {
   'use strict';
@@ -21,16 +18,32 @@
     if (!tabEl) return;
 
     if (!initialized) {
-      console.log(MOD + ' Inicializando modulo cotizaciones');
+      console.log(MOD + ' Inicializando modulo cotizaciones v2.62.0');
+      
+      // Inicialización de componentes CORE
       if (w.Sintel.Cotizaciones.table && typeof w.Sintel.Cotizaciones.table.init === 'function') {
         w.Sintel.Cotizaciones.table.init();
       }
       if (w.Sintel.Cotizaciones.ui && typeof w.Sintel.Cotizaciones.ui.bindEvents === 'function') {
         w.Sintel.Cotizaciones.ui.bindEvents();
       }
+
+      // Inicialización de FEATURES (Lazy-like check)
+      var features = w.Sintel.Cotizaciones.features;
+      if (features) {
+          // Si hay listado de productos en el DOM
+          if (features.productoList && d.getElementById('table-productos')) {
+              features.productoList.init('table-productos');
+          }
+          // Si hay listado de servicios en el DOM
+          if (features.servicioList && d.getElementById('table-servicios')) {
+              features.servicioList.init('table-servicios');
+          }
+      }
+
       initialized = true;
     } else {
-      // Tab re-activado: redraw tabla
+      // Tab re-activado: redraw tabla principal
       if (w.Sintel.Cotizaciones.table && typeof w.Sintel.Cotizaciones.table.redraw === 'function') {
         w.Sintel.Cotizaciones.table.redraw();
       }
@@ -54,7 +67,7 @@
     d.addEventListener('DOMContentLoaded', init);
   }
 
-  // tab-activated (Custom Event from workspace.js)
+  // Evento tab-activated (Sintel Standard)
   d.addEventListener('tab-activated', function (event) {
     if (event.detail && event.detail.tabName === 'cotizaciones') {
       init();

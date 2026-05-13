@@ -12,6 +12,7 @@ Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
 import logging
 import traceback
+from decimal import Decimal
 
 from django.utils.translation import gettext_lazy as _
 from django_filters.rest_framework import DjangoFilterBackend
@@ -32,14 +33,22 @@ from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.contabilidad.api.serializers import (
     AsientoContableDetailSerializer,
     AsientoContableListSerializer,
+    AsistenteIAInputSerializer,
     CatalogoMaestroNIIFDetailSerializer,
     CatalogoMaestroNIIFListSerializer,
+    ContabilizarManualInputSerializer,
     CuentaContableDetailSerializer,
     CuentaContableListSerializer,
+    DocumentoPendienteSerializer,
     MovimientoContableDetailSerializer,
     MovimientoContableListSerializer,
     PeriodoContableDetailSerializer,
     PeriodoContableListSerializer,
+    TipoComprobanteDetailSerializer,
+    TipoComprobanteListSerializer,
+    ReporteFinancieroInputSerializer,
+    BalancePruebaOutputSerializer,
+    EstadoResultadosOutputSerializer,
 )
 from apps.tenant.contabilidad.models import (
     AsientoContable,
@@ -47,17 +56,24 @@ from apps.tenant.contabilidad.models import (
     CuentaContable,
     MovimientoContable,
     PeriodoContable,
+    ReglaContable,
+    TipoComprobante,
 )
 from apps.tenant.contabilidad.services.selectors import (
-    qs_asiento_detail,
-    qs_asiento_list,
-    qs_cuenta_detail,
-    qs_cuenta_list,
-    qs_periodo_detail,
-    qs_periodo_list,
+    AsientoContableSelector,
+    CuentaContableSelector,
+    PeriodoContableSelector,
     get_asiento_by_identifier,
     get_cuenta_by_identifier,
     get_periodo_by_identifier,
+    qs_facturas_pendientes,
+    qs_gastos_pendientes,
+    qs_nominas_pendientes,
+    qs_inventario_pendientes,
+    get_documento_pendiente,
+    balance_prueba_selector,
+    estado_resultados_selector,
+    filtrar_cuentas_por_app_origen,
 )
 from apps.tenant.contabilidad.services.business_service import ContabilidadBusinessService
 
@@ -95,9 +111,17 @@ class CuentaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenant
     
     def get_queryset(self):
         if self.action == "list":
-            return qs_cuenta_list().order_by('codigo')
+            qs = CuentaContableSelector.get_qs_list().order_by('codigo')
+            app_origen = self.request.query_params.get('app_origen', '').strip()
+            if app_origen:
+                qs = filtrar_cuentas_por_app_origen(qs, app_origen)
+            # Soporte lookup por UUID para resolución de nombre desde apps externas (§18 HTTP pull)
+            uuid_param = self.request.query_params.get('uuid', '').strip()
+            if uuid_param:
+                qs = qs.filter(uuid=uuid_param)
+            return qs
         elif self.action in ["retrieve", "render_offcanvas_detalle", "render_offcanvas_editar"]:
-            return qs_cuenta_detail()
+            return CuentaContableSelector.get_qs_detail()
         return self.get_mutation_queryset(CuentaContable)
     
     def create(self, request, *args, **kwargs):
@@ -177,34 +201,21 @@ class CuentaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenant
             logger.error(f"Error en render_offcanvas_detalle: {e}")
             return Response({'error': str(e)}, template_name='tenant/contabilidad/partials/cuenta_offcanvas_detalle.html', status=500)
 
-    @action(detail=False, methods=['get'], renderer_classes=[JSONRenderer], url_path='cuentas_gasto')
-    def cuentas_gasto(self, request):
-        """Lista cuentas marcadas como GASTO."""
-        try:
-            resultados = self.service.obtener_cuentas_gasto(self.get_empresa_id())
-            return Response(resultados, status=status.HTTP_200_OK)
-        except Exception as e:
-            return self.handle_service_error(e)
-
     @action(detail=False, methods=['get'], url_path='cuentas-proveedor')
     def cuentas_proveedor(self, request):
         """
-        WARNING: v2.61.8: Retorna listado de cuentas Clase 2 (Pasivos) compatibles con proveedores.
-        Utilizado por el Offcanvas de Proveedores para el mapeo NIIF.
+        Retorna cuentas filtradas para proveedores (gastos/pasivos).
         """
-        empresa = self.get_empresa()
-        
-        # Filtro: Clase 2 (Pasivos) y Nivel 6 (Subcuenta)
-        # WARNING: PERFORMANCE BIBLE: Solo traer campos necesarios
-        from apps.tenant.contabilidad.models import CuentaContable
-        cuentas = list(CuentaContable.objects.filter(
-            empresa=empresa,
-            codigo__startswith='2',
-            nivel=6,
-            activa=True
-        ).only('codigo', 'nombre').values('codigo', 'nombre'))
-        
-        return Response(cuentas)
+        try:
+            qs = CuentaContableSelector.get_qs_list().order_by('codigo')
+            qs = filtrar_cuentas_por_app_origen(qs, 'gastos')
+            serializer = CuentaContableListSerializer(qs, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error en cuentas_proveedor: {e}")
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 
@@ -213,7 +224,7 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
     ViewSet para AsientoContable.
     
     WARNING: v2.40: ENFORCED MODE - POST/PATCH/PUT/DELETE solo para STAFF/ADMIN.
-    WARNING: v2.37: Usa qs_asiento_list() y qs_asiento_detail() del service.
+    WARNING: v2.37: Usa AsientoContableSelector.get_qs_list() y AsientoContableSelector.get_qs_detail() del service.
     WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
     """
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -232,16 +243,16 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
     
     def get_queryset(self):
         """
-        QuerySet optimizado usando qs_asiento_list() y qs_asiento_detail() del service.
+        QuerySet optimizado usando AsientoContableSelector.get_qs_list() y AsientoContableSelector.get_qs_detail() del service.
         
         WARNING: v2.37: Alineado con Service Layer Pattern.
         """
         if self.action == "list":
-            return qs_asiento_list().order_by('-fecha', '-numero')
+            return AsientoContableSelector.get_qs_list(self.get_empresa_id()).order_by('-fecha', '-numero')
         elif self.action == "retrieve":
-            return qs_asiento_detail()
+            return AsientoContableSelector.get_qs_detail(self.get_empresa_id())
         else:
-            return self.get_mutation_queryset(AsientoContable, 'numero', 'estado', 'fecha')
+            return self.get_mutation_queryset(AsientoContable, 'numero', 'estado', 'fecha').filter(empresa_id=self.get_empresa_id())
     
     def retrieve(self, request, *args, **kwargs):
         """Soporte para IDs numéricos y UUIDs."""
@@ -262,7 +273,7 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             
             resultado = self.service.crear_asiento(empresa_id, payload)
             
-            asiento = qs_asiento_detail().get(id=resultado['id'])
+            asiento = AsientoContableSelector.get_qs_detail().get(id=resultado['id'])
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -273,7 +284,7 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
             asiento = get_asiento_by_identifier(asiento_identifier)
             resultado = self.service.actualizar_asiento(asiento.id, request.data)
-            asiento = qs_asiento_detail().get(id=resultado['id'])
+            asiento = AsientoContableSelector.get_qs_detail().get(id=resultado['id'])
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             return Response(serializer.data)
         except Exception as e:
@@ -294,28 +305,77 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
             asiento = get_asiento_by_identifier(asiento_identifier)
             self.service.aprobar_asiento(asiento.id)
-            asiento = qs_asiento_detail().get(id=asiento.id)
+            asiento = AsientoContableSelector.get_qs_detail().get(id=asiento.id)
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             return Response(serializer.data)
         except Exception as e:
             return self.handle_service_error(e)
 
     
-    @action(detail=False, methods=['get'], url_path='balance-prueba')
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='reporte')
+    def reporte_page(self, request):
+        """
+        Endpoint HTMX/UI para cargar la página de reportes financieros.
+        
+        WARNING: v3.5: Feature-Sliced UI - Template dedicado
+        """
+        return Response({}, template_name='tenant/contabilidad/reporte_page.html')
+
+    @action(
+        methods=["GET"],
+        detail=False,
+        url_path="reporte-balance-prueba",
+        permission_classes=[IsTenantMember],
+    )
     def balance_prueba(self, request):
-        try:
-            empresa_id = self.get_empresa_id()
-            fecha_desde = request.query_params.get('fecha_desde')
-            fecha_hasta = request.query_params.get('fecha_hasta')
-            
-            balance = self.service.obtener_balance_prueba(
-                empresa_id=empresa_id,
-                fecha_desde=fecha_desde,
-                fecha_hasta=fecha_hasta
-            )
-            return Response(balance, status=status.HTTP_200_OK)
-        except Exception as e:
-            return self.handle_service_error(e)
+        """
+        Retorna el Balance de Prueba (Saldos y Movimientos) para un periodo.
+        GET /api/v1/contabilidad/asientos-contables/reporte-balance-prueba/?fecha_inicio=...&fecha_fin=...
+        """
+        serializer = ReporteFinancieroInputSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        
+        data = serializer.validated_data
+        empresa_id = self.get_empresa_id()
+        
+        # Invocación al selector
+        resultado = balance_prueba_selector(
+            empresa_id=empresa_id,
+            fecha_inicio=data['fecha_inicio'],
+            fecha_fin=data['fecha_fin']
+        )
+        
+        # Serialización de salida
+        output = BalancePruebaOutputSerializer(resultado, many=True)
+        return Response(output.data, status=status.HTTP_200_OK)
+
+    @action(
+        methods=["GET"],
+        detail=False,
+        url_path="reporte-estado-resultados",
+        permission_classes=[IsTenantMember],
+    )
+    def estado_resultados(self, request):
+        """
+        Retorna el Estado de Resultados (P&G) para un periodo.
+        GET /api/v1/contabilidad/asientos-contables/reporte-estado-resultados/?fecha_inicio=...&fecha_fin=...
+        """
+        serializer = ReporteFinancieroInputSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        
+        data = serializer.validated_data
+        empresa_id = self.get_empresa_id()
+        
+        # Invocación al selector
+        resultado = estado_resultados_selector(
+            empresa_id=empresa_id,
+            fecha_inicio=data['fecha_inicio'],
+            fecha_fin=data['fecha_fin']
+        )
+        
+        # Serialización de salida
+        output = EstadoResultadosOutputSerializer(resultado)
+        return Response(output.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
     def render_offcanvas_crear(self, request):
@@ -330,64 +390,34 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
         """
         context = {'asiento': None}
         return Response(context, template_name='tenant/contabilidad/partials/asiento_offcanvas_form.html')
-    
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/cargar-desde-documentos')
-    def render_offcanvas_cargar_desde_documentos(self, request):
-        """
-        Endpoint HTMX RESTful para cargar offcanvas de selección de documentos.
-        
-        WARNING: v2.60 Fase 3: Asistente de Selección - Lista Facturas y Gastos sin asiento
-        
-        Returns:
-            Template HTML: tenant/contabilidad/partials/asiento_offcanvas_cargar_desde_docs.html
-        """
-        context = {}
-        return Response(context, template_name='tenant/contabilidad/partials/asiento_offcanvas_cargar_desde_docs.html')
-    
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
-    def render_offcanvas_editar(self, request, **kwargs):
+    def render_offcanvas_editar(self, request, uuid=None):
         """HTMX: Carga offcanvas de edición."""
         try:
-            asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            asiento = get_asiento_by_identifier(asiento_identifier)
+            asiento = AsientoContableSelector.get_qs_detail(
+                empresa_id=self.get_empresa_id()
+            ).filter(uuid=uuid).first()
+            
+            if not asiento:
+                return Response({'error': 'Asiento no encontrado'}, status=404)
+                
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             return Response({'asiento': serializer.data}, template_name='tenant/contabilidad/partials/asiento_offcanvas_editar.html')
         except Exception as e:
             logger.error(f"Error en render_offcanvas_editar: {e}")
-            return Response({"detail": [str(e)]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    @action(detail=False, methods=['get'], url_path='documentos-sin-asiento')
-    def documentos_sin_asiento(self, request):
-        try:
-            tipo = request.query_params.get('tipo', '').lower()
-            resultado = self.service.listar_documentos_sin_asiento(tipo)
-            return Response(resultado, status=status.HTTP_200_OK)
-        except Exception as e:
-            return self.handle_service_error(e)
-    
-    @action(detail=False, methods=['post'], url_path='crear-desde-documentos')
-    def crear_desde_documentos(self, request):
-        try:
-            facturas_ids = request.data.get('facturas', [])
-            gastos_ids = request.data.get('gastos', [])
-            
-            if not facturas_ids and not gastos_ids:
-                return Response(
-                    {"error": "At least one factura_id or gasto_id is required."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            resultado = self.service.materializar_documentos(facturas_ids, gastos_ids)
-            return Response(resultado, status=status.HTTP_200_OK)
-        except Exception as e:
-            return self.handle_service_error(e)
+            return Response({'error': str(e)}, template_name='tenant/contabilidad/partials/asiento_offcanvas_editar.html', status=500)
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
-    def render_offcanvas_detalle(self, request):
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
+    def render_offcanvas_detalle(self, request, uuid=None):
         """HTMX: Carga offcanvas de detalle."""
         try:
-            asiento_id = request.query_params.get('id')
-            asiento = get_asiento_by_identifier(asiento_id)
+            asiento = AsientoContableSelector.get_qs_detail(
+                empresa_id=self.get_empresa_id()
+            ).filter(uuid=uuid).first()
+            
+            if not asiento:
+                return Response({'error': 'Asiento no encontrado'}, status=404)
+                
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             return Response({'asiento': serializer.data}, template_name='tenant/contabilidad/partials/asiento_offcanvas_detalle.html')
         except Exception as e:
@@ -531,15 +561,15 @@ class PeriodoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
     
     def get_queryset(self):
         if self.action == "list":
-            return qs_periodo_list().order_by('-periodo')
+            return PeriodoContableSelector.get_qs_list().order_by('-periodo')
         elif self.action == "retrieve":
-            return qs_periodo_detail()
+            return PeriodoContableSelector.get_qs_detail()
         return self.get_mutation_queryset(PeriodoContable, 'periodo', 'estado')
 
     def create(self, request, *args, **kwargs):
         try:
             resultado = self.service.crear_periodo(self.get_empresa_id(), request.data)
-            periodo = qs_periodo_detail().get(id=resultado['id'])
+            periodo = PeriodoContableSelector.get_qs_detail().get(id=resultado['id'])
             serializer = PeriodoContableDetailSerializer(periodo, context={'request': request})
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -550,7 +580,7 @@ class PeriodoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
             periodo = get_periodo_by_identifier(periodo_identifier)
             resultado = self.service.actualizar_periodo(periodo.id, request.data)
-            periodo = qs_periodo_detail().get(id=resultado['id'])
+            periodo = PeriodoContableSelector.get_qs_detail().get(id=resultado['id'])
             serializer = PeriodoContableDetailSerializer(periodo, context={'request': request})
             return Response(serializer.data)
         except Exception as e:
@@ -595,11 +625,349 @@ class PeriodoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             return Response({"detail": [str(e)]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class TipoComprobanteViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+    """
+    ViewSet para TipoComprobante.
+    Permite configurar plantillas de comprobantes (CC, RC, NC, etc.) con prefijos y consecutivos.
+    """
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['activa', 'codigo']
+    search_fields = ['codigo', 'nombre', 'prefijo']
+    ordering_fields = ['codigo', 'nombre', 'prefijo', 'consecutivo_actual']
+    ordering = ['codigo']
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return TipoComprobanteDetailSerializer
+        return TipoComprobanteListSerializer
+
+    def get_queryset(self):
+        if self.action == "list":
+            return TipoComprobante.objects.only(
+                'id', 'uuid', 'codigo', 'nombre', 'prefijo', 'activa'
+            ).order_by('codigo')
+        return TipoComprobante.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        try:
+            empresa_id = self.get_empresa_id()
+            payload = request.data.copy()
+            payload['empresa_id'] = empresa_id
+            
+            # TODO: Mover a Business Service si hay lógica compleja
+            comprobante = TipoComprobante.objects.create(**payload)
+            
+            serializer = TipoComprobanteDetailSerializer(comprobante, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+
+class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+    """
+    Documentos pendientes de contabilizar + endpoint de asignacion manual On-Demand.
+
+    GET  /api/v1/contabilidad/pendientes/                      -> lista unificada
+    GET  /api/v1/contabilidad/pendientes/render-offcanvas/     -> offcanvas HTMX
+    POST /api/v1/contabilidad/pendientes/contabilizar-manual/  -> genera asiento
+    """
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    pagination_class = None
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_serializer_class(self):
+        return DocumentoPendienteSerializer
+
+    def get_queryset(self):
+        return AsientoContable.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        # DSV: Aislamiento por empresa
+        if hasattr(self, 'get_empresa_id'):
+            empresa_id = self.get_empresa_id()
+        else:
+            # Fallback direct access if mixin lookup fails
+            empresa_id = request.user.tenant_profile.empresa_id if hasattr(request.user, 'tenant_profile') else None
+        
+        if not empresa_id:
+             return Response({"error": "No se encontró configuración de empresa."}, status=400)
+             
+        resultado = []
+
+        for f in qs_facturas_pendientes(empresa_id):
+            es_venta = getattr(f, 'naturaleza', '') == 'VENTA'
+            fecha = f.fecha_emision
+            if hasattr(fecha, 'date'):
+                fecha = fecha.date()
+            resultado.append({
+                'tipo_doc': 'FACTURA',
+                'app_label': 'facturas',
+                'modelo': 'Factura',
+                'documento_id': f.id,
+                'numero': f.numero,
+                'fecha': str(fecha),
+                'tercero_nit': f.receptor_nit if es_venta else f.emisor_nit,
+                'tercero_nombre': f.receptor_razon_social if es_venta else f.emisor_razon_social,
+                'subtotal': str(f.subtotal),
+                'impuestos': str(f.impuestos),
+                'total': str(f.total),
+                'estado': f.estado,
+            })
+
+        for g in qs_gastos_pendientes(empresa_id):
+            resultado.append({
+                'tipo_doc': 'GASTO',
+                'app_label': 'gastos',
+                'modelo': 'DocumentoSoporte',
+                'documento_id': g.id,
+                'numero': g.numero_documento,
+                'fecha': str(g.fecha),
+                'tercero_nit': g.proveedor.numero_documento,
+                'tercero_nombre': g.proveedor.razon_social,
+                'subtotal': str(g.subtotal),
+                'impuestos': str(g.retefuente + g.reteica),
+                'total': str(g.total),
+                'estado': 'ACTIVO',
+            })
+
+        for n in qs_nominas_pendientes(empresa_id):
+            resultado.append({
+                'tipo_doc': 'NOMINA',
+                'app_label': 'empleados',
+                'modelo': 'Devengo',
+                'documento_id': n.id,
+                'numero': f"{n.periodo_mes}",
+                'fecha': str(n.fecha_pago),
+                'tercero_nit': n.empleado.numero_documento,
+                'tercero_nombre': f"{n.empleado.primer_nombre} {n.empleado.primer_apellido}",
+                'subtotal': str(n.neto_pagar),
+                'impuestos': "0.00",
+                'total': str(n.neto_pagar),
+                'estado': 'ACTIVO',
+            })
+
+        for i in qs_inventario_pendientes(empresa_id):
+            resultado.append({
+                'tipo_doc': 'INVENTARIO',
+                'app_label': 'inventario',
+                'modelo': 'MovimientoInventario',
+                'documento_id': i.id,
+                'numero': f"{i.tipo}",
+                'fecha': str(i.created_at.date()),
+                'tercero_nit': 'N/A',
+                'tercero_nombre': f"{i.producto.nombre}",
+                'subtotal': str(i.cantidad * i.costo_unitario),
+                'impuestos': "0.00",
+                'total': str(i.cantidad * i.costo_unitario),
+                'estado': 'ACTIVO',
+            })
+
+        return Response(resultado, status=status.HTTP_200_OK)
+
+
+    @action(
+        detail=False, methods=['get'],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path='render-offcanvas',
+    )
+    def render_offcanvas_contabilizar(self, request):
+        app_label = request.query_params.get('app', '')
+        modelo = request.query_params.get('modelo', '')
+        documento_id_str = request.query_params.get('id', '')
+
+        if not all([app_label, modelo, documento_id_str]):
+            return Response(
+                {'error': 'Parametros app, modelo e id son requeridos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            documento_id = int(documento_id_str)
+        except ValueError:
+            return Response({'error': 'id debe ser entero.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        empresa_id = self.get_empresa_id()
+        doc = get_documento_pendiente(app_label, modelo, documento_id, empresa_id)
+        if not doc:
+            return Response(
+                {'error': 'Documento no encontrado o ya contabilizado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if app_label == 'facturas':
+            es_venta = getattr(doc, 'naturaleza', '') == 'VENTA'
+            fecha = doc.fecha_emision
+            if hasattr(fecha, 'date'):
+                fecha = fecha.date()
+            ctx = {
+                'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
+                'numero': doc.numero, 'fecha': fecha,
+                'subtotal': doc.subtotal, 'impuestos': doc.impuestos, 'total': doc.total,
+                'tercero_nit': doc.receptor_nit if es_venta else doc.emisor_nit,
+                'tercero_nombre': doc.receptor_razon_social if es_venta else doc.emisor_razon_social,
+            }
+        elif app_label == 'empleados':
+            ctx = {
+                'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
+                'numero': doc.periodo_mes, 'fecha': doc.fecha_pago,
+                'subtotal': doc.neto_pagar,
+                'impuestos': Decimal('0.00'),
+                'total': doc.neto_pagar,
+                'tercero_nit': doc.empleado.numero_documento,
+                'tercero_nombre': f"{doc.empleado.primer_nombre} {doc.empleado.primer_apellido}",
+            }
+        elif app_label == 'inventario':
+            ctx = {
+                'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
+                'numero': doc.tipo, 'fecha': doc.created_at.date(),
+                'subtotal': doc.cantidad * doc.costo_unitario,
+                'impuestos': Decimal('0.00'),
+                'total': doc.cantidad * doc.costo_unitario,
+                'tercero_nit': 'N/A',
+                'tercero_nombre': doc.producto.nombre,
+            }
+        else:
+            ctx = {
+                'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
+                'numero': doc.numero_documento, 'fecha': doc.fecha,
+                'subtotal': doc.subtotal,
+                'impuestos': doc.retefuente + doc.reteica,
+                'total': doc.total,
+                'tercero_nit': doc.proveedor.numero_documento,
+                'tercero_nombre': doc.proveedor.razon_social,
+            }
+
+        # Obtener tipos de comprobante activos v3.6
+        ctx['tipos_comprobante'] = TipoComprobante.objects.filter(
+            empresa_id=empresa_id, activa=True
+        ).only('id', 'codigo', 'nombre', 'prefijo', 'consecutivo_actual')
+
+        # Obtener sugerencias de cuentas basadas en reglas v3.6
+        if app_label == 'facturas':
+            tipo_tx = 'VENTA_FACTURA'
+        elif app_label == 'empleados':
+            tipo_tx = 'NOMINA_LIQUIDACION'
+        elif app_label == 'inventario':
+            # Determinar si es entrada o salida para sugerir cuenta
+            es_entrada = getattr(doc, 'tipo', '').startswith('ENTRADA')
+            tipo_tx = 'COMPRA_INVENTARIO' if es_entrada else 'SALIDA_INVENTARIO_VENTA'
+        else:
+            tipo_tx = 'COMPRA_GASTO'
+
+        reglas = ReglaContable.objects.filter(
+            empresa_id=empresa_id,
+            tipo_transaccion=tipo_tx,
+            activo=True
+        ).only('concepto', 'cuenta_codigo')
+        
+        sugerencias = []
+        for r in reglas:
+            cuenta = CuentaContable.objects.filter(empresa_id=empresa_id, codigo=r.cuenta_codigo).only('nombre').first()
+            sugerencias.append({
+                'concepto': r.concepto,
+                'cuenta_codigo': r.cuenta_codigo,
+                'cuenta_nombre': cuenta.nombre if cuenta else 'Cuenta no encontrada'
+            })
+        ctx['sugerencias_puc'] = sugerencias
+
+        return Response(
+            ctx,
+            template_name='tenant/contabilidad/partials/pendiente_offcanvas_contabilizar.html',
+        )
+
+    @action(detail=False, methods=['post'], url_path='contabilizar-manual')
+    def contabilizar_manual(self, request):
+        from decimal import Decimal as D
+        from apps.tenant.contabilidad.integracion.dtos import LineaManual, ComprobanteManualDTO
+
+        serializer = ContabilizarManualInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        empresa_id = self.get_empresa_id()
+
+        try:
+            dto = ComprobanteManualDTO(
+                empresa_id=empresa_id,
+                fecha=data['fecha'],
+                descripcion=data['descripcion'],
+                app_label=data['app_label'],
+                modelo=data['modelo'],
+                documento_id=data['documento_id'],
+                documento_numero=data['documento_numero'],
+                tipo_comprobante_id=data['tipo_comprobante_id'],
+                lineas=[
+                    LineaManual(
+                        cuenta_codigo=l['cuenta_codigo'],
+                        debe=D(str(l.get('debe', 0))),
+                        haber=D(str(l.get('haber', 0))),
+                        descripcion=l.get('descripcion', ''),
+                        tercero_nit=l.get('tercero_nit', ''),
+                        tercero_razon_social=l.get('tercero_razon_social', ''),
+                    )
+                    for l in data['lineas']
+                ],
+            )
+            resultado = self.service.contabilizar_documento_manual(empresa_id, dto)
+            return Response(resultado, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=False, methods=['post'], url_path='asistente-ia')
+    def asistente_ia(self, request):
+        """
+        POST /api/v1/contabilidad/pendientes/asistente-ia/
+
+        Recibe datos del documento pendiente y devuelve lineas de asiento
+        sugeridas por el modelo Claude (Anthropic API).
+        El frontend inyecta las lineas en el offcanvas; el contador revisa y confirma.
+        """
+        serializer = AsistenteIAInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        empresa_id = self.get_empresa_id()
+
+        ctx = {
+            'numero': data.get('numero', ''),
+            'subtotal': data['subtotal'],
+            'impuestos': data['impuestos'],
+            'total': data['total'],
+            'tercero_nit': data.get('tercero_nit', ''),
+            'tercero_nombre': data.get('tercero_nombre', ''),
+        }
+
+        try:
+            lineas = self.service.sugerir_lineas_asiento_ia(
+                empresa_id=empresa_id,
+                app_label=data['app_label'],
+                ctx=ctx,
+            )
+            return Response({'lineas': lineas}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+
 # Lista de ViewSets para registro automático en el router
 VIEWSETS = [
     (r'cuentas-contables', CuentaContableViewSet, 'cuenta-contable'),
     (r'asientos-contables', AsientoContableViewSet, 'asiento-contable'),
     (r'movimientos-contables', MovimientoContableViewSet, 'movimiento-contable'),
-    (r'periodos-contables', PeriodoContableViewSet, 'periodo-contable'),  # WARNING: v2.61
+    (r'periodos-contables', PeriodoContableViewSet, 'periodo-contable'),
     (r'catalogo-niif', CatalogoMaestroNIIFViewSet, 'catalogo-niif'),
+    (r'tipos-comprobante', TipoComprobanteViewSet, 'tipo-comprobante'),
+    (r'pendientes', DocumentosPendientesViewSet, 'pendientes'),
 ]

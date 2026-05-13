@@ -47,6 +47,26 @@
             <label class="form-check-label" for="servicio-activo">Servicio Activo</label>
           </div>
         </div>
+
+        <!-- Integración Contable v3.5 -->
+        <div class="col-12 mt-3 pt-3 border-top">
+          <h6 class="text-primary mb-3"><i class="bi bi-calculator me-2"></i>Vinculación Contable</h6>
+          <div class="mb-3 position-relative">
+            <label for="servicio-cuenta-ingreso-busqueda" class="form-label text-danger fw-bold">Cuenta de Ingreso *</label>
+            <div class="input-group shadow-sm">
+              <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+              <input type="text" 
+                     class="form-control border-start-0 ps-0" 
+                     id="servicio-cuenta-ingreso-busqueda" 
+                     placeholder="Buscar por código o nombre (ej: 413505)..."
+                     autocomplete="off"
+                     value="{% if servicio %}{{ servicio.cuenta_ingreso_label|default:'' }}{% endif %}">
+            </div>
+            <input type="hidden" name="cuenta_ingreso_uuid" id="servicio-cuenta-ingreso-uuid" value="{% if servicio %}{{ servicio.cuenta_ingreso_uuid|default:'' }}{% endif %}">
+            <div id="servicio-cuenta-ingreso-resultados" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+            <div class="form-text">Cuenta donde se registran los ingresos generados por este servicio (Grupo 41).</div>
+          </div>
+        </div>
       </div>
       <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>

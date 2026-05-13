@@ -374,182 +374,183 @@
             };
         }
 
-        if (response) {
-            // Mostrar contenedor
-            container.classList.remove('d-none');
+        try {
+            if (response) {
+                // Mostrar contenedor
+                container.classList.remove('d-none');
 
-            // Mensaje principal
-            // ⚠️ v2.60: Priorizar mensajes específicos de validación
-            let errorMessage = response.message || response.error || response.detail || 'Error al procesar el documento.';
-            
-            // ⚠️ v2.61: Manejo de errores de validación de campos específicos (formato DRF: {campo: [mensaje]})
-            // Si la respuesta tiene campos con errores (formato DRF), construir mensaje detallado
-            const camposConErrores = [];
-            if (response && typeof response === 'object') {
-                // Buscar campos que sean arrays (formato DRF: {campo: [mensaje1, mensaje2]})
-                Object.keys(response).forEach(campo => {
-                    if (Array.isArray(response[campo]) && response[campo].length > 0) {
-                        // Es un error de campo específico
-                        const mensajesCampo = response[campo].join(', ');
-                        const campoLegible = mapearCampoALegible(campo);
-                        camposConErrores.push({
-                            campo: campo,
-                            campoLegible: campoLegible,
-                            mensajes: response[campo],
-                            mensajeUnificado: mensajesCampo
-                        });
+                // Mensaje principal
+                // ⚠️ v2.60: Priorizar mensajes específicos de validación
+                let errorMessage = response.message || response.error || response.detail || 'Error al procesar el documento.';
+                
+                // ⚠️ v2.61: Manejo de errores de validación de campos específicos (formato DRF: {campo: [mensaje]})
+                // Si la respuesta tiene campos con errores (formato DRF), construir mensaje detallado
+                const camposConErrores = [];
+                if (response && typeof response === 'object') {
+                    // Buscar campos que sean arrays (formato DRF: {campo: [mensaje1, mensaje2]})
+                    Object.keys(response).forEach(campo => {
+                        if (Array.isArray(response[campo]) && response[campo].length > 0) {
+                            // Es un error de campo específico
+                            const mensajesCampo = response[campo].join(', ');
+                            const campoLegible = mapearCampoALegible(campo);
+                            camposConErrores.push({
+                                campo: campo,
+                                campoLegible: campoLegible,
+                                mensajes: response[campo],
+                                mensajeUnificado: mensajesCampo
+                            });
+                        }
+                    });
+                }
+                
+                // Si hay campos con errores, construir mensaje detallado
+                if (camposConErrores.length > 0) {
+                    const mensajesCampos = camposConErrores.map(ce => 
+                        `<strong>${ce.campoLegible}:</strong> ${ce.mensajeUnificado}`
+                    ).join('<br>');
+                    errorMessage = `⚠️ Errores de validación:<br>${mensajesCampos}`;
+                    
+                    // Agregar campos a missing_fields para mostrarlos en la lista
+                    if (!response.missing_fields || !Array.isArray(response.missing_fields)) {
+                        response.missing_fields = camposConErrores.map(ce => ce.campo);
                     }
+                }
+                
+                // ⚠️ Manejo específico para errores conocidos
+                if (response.error === "document_not_for_tenant") {
+                    // El mensaje del servidor ya contiene toda la información necesaria
+                    // ⚠️ MENSAJE ESPECÍFICO: "Este correo contiene una factura dirigida a un tercero, no se incluirá en contabilidad"
+                    errorMessage = response.message || errorMessage;
+                    
+                    // Si es contexto de ingesta por correo, agregar información adicional
+                    if (response.context === "mail_ingestion") {
+                        errorMessage = `<strong>⚠️ Factura de Terceros Detectada</strong><br>${errorMessage}`;
+                    }
+                } else if (response.error === "resolucion_no_configurada" || response.error === "resolucion_no_valida") {
+                    // ⚠️ v2.60: Manejo específico para errores de resolución DIAN (Gastos)
+                    errorMessage = response.message || errorMessage;
+                    errorMessage = `<strong>⚠️ Error de Configuración</strong><br>${errorMessage}`;
+                } else if (response.error === "rango_agotado") {
+                    // ⚠️ v2.60: Manejo específico para rango de consecutivos agotado (409 Conflict)
+                    errorMessage = response.message || errorMessage;
+                    errorMessage = `<strong>⚠️ Rango de Consecutivos Agotado</strong><br>${errorMessage}`;
+                } else if (response.error === "empresa_not_found" || response.code === "empresa_not_found") {
+                    // ⚠️ v2.60: Error de empresa no configurada (Proveedores, Clientes, etc.)
+                    errorMessage = response.detail || response.message || errorMessage;
+                    errorMessage = `<strong>⚠️ Configuración Requerida</strong><br>${errorMessage}<br><small class="text-muted">Por favor, configure la empresa del tenant antes de continuar.</small>`;
+                } else if (response.error === "asiento_no_cuadrado" || response.error === "asiento_sin_movimientos") {
+                    // ⚠️ v2.60 Fase 3: Error Injector Contable - Análisis detallado de cuadratura
+                    errorMessage = response.message || errorMessage;
+                    
+                    // Construir mensaje detallado con análisis de movimientos
+                    let detallesHtml = '';
+                    if (response.detalles) {
+                        const detalles = response.detalles;
+                        detallesHtml = '<div class="mt-3"><strong>📊 Análisis Detallado:</strong><ul class="mb-0 mt-2">';
+                        
+                        // Información básica
+                        detallesHtml += `<li><strong>Total Débito:</strong> $${parseFloat(detalles.total_debe || 0).toFixed(2)}</li>`;
+                        detallesHtml += `<li><strong>Total Crédito:</strong> $${parseFloat(detalles.total_haber || 0).toFixed(2)}</li>`;
+                        detallesHtml += `<li><strong>Diferencia:</strong> <span class="text-danger fw-bold">$${parseFloat(detalles.diferencia_absoluta || 0).toFixed(2)}</span></li>`;
+                        
+                        // Tipo de desbalance
+                        if (detalles.tipo_desbalance === 'falta_credito') {
+                            detallesHtml += `<li class="text-danger"><strong>⚠️ Falta Crédito:</strong> Agregue un movimiento de crédito por $${parseFloat(detalles.valor_faltante || 0).toFixed(2)}</li>`;
+                        } else if (detalles.tipo_desbalance === 'falta_debito') {
+                            detallesHtml += `<li class="text-danger"><strong>⚠️ Falta Débito:</strong> Agregue un movimiento de débito por $${parseFloat(detalles.valor_faltante || 0).toFixed(2)}</li>`;
+                        }
+                        
+                        // Cuentas problemáticas
+                        if (detalles.cuentas_problematicas && detalles.cuentas_problematicas.length > 0) {
+                            detallesHtml += '<li class="mt-2"><strong>🔴 Cuentas con Problemas:</strong><ul class="mb-0">';
+                            detalles.cuentas_problematicas.forEach(cuenta => {
+                                detallesHtml += `<li><strong>${cuenta.cuenta_codigo} - ${cuenta.cuenta_nombre}:</strong> ${cuenta.problema} (Débito: $${parseFloat(cuenta.debe || 0).toFixed(2)}, Crédito: $${parseFloat(cuenta.haber || 0).toFixed(2)})</li>`;
+                            });
+                            detallesHtml += '</ul></li>';
+                        }
+                        
+                        // Sugerencia
+                        if (detalles.sugerencia) {
+                            detallesHtml += `<li class="mt-2 text-info"><strong>💡 Sugerencia:</strong> ${detalles.sugerencia}</li>`;
+                        }
+                        
+                        detallesHtml += '</ul></div>';
+                    }
+                    
+                    errorMessage = `<strong>⚠️ Error de Cuadratura</strong><br>${errorMessage}${detallesHtml}`;
+                } else if (response.error === "validacion_error") {
+                    // ⚠️ v2.60: Manejo específico para errores de validación (400/422)
+                    errorMessage = response.message || errorMessage;
+                    // Si hay detalles, agregarlos al mensaje
+                    if (response.details && typeof response.details === 'object') {
+                        const detalles = Object.entries(response.details)
+                            .map(([field, msg]) => `${mapearCampoALegible(field)}: ${msg}`)
+                            .join('<br>');
+                        errorMessage = `<strong>⚠️ Error de Validación</strong><br>${errorMessage}<br><small class="text-muted">${detalles}</small>`;
+                    } else {
+                        errorMessage = `<strong>⚠️ Error de Validación</strong><br>${errorMessage}`;
+                    }
+                } else if (response.error === "authentication_error" || response.error === "auth_failed") {
+                    // ⚠️ v2.60: Manejo específico para errores de autenticación de correo
+                    // ⚠️ COMPATIBILIDAD: Maneja tanto "authentication_error" como "auth_failed"
+                    errorMessage = response.message || errorMessage;
+                    if (response.troubleshooting) {
+                        errorMessage = `<strong>🔐 Error de Autenticación de Correo</strong><br>${errorMessage}<br><br><div class="alert alert-info mt-2 mb-0"><small>${response.troubleshooting}</small></div>`;
+                    } else {
+                        errorMessage = `<strong>🔐 Error de Autenticación de Correo</strong><br>${errorMessage}`;
+                    }
+                } else if (response.error === "connection_error") {
+                    // ⚠️ v2.60: Manejo específico para errores de conexión de correo
+                    errorMessage = response.message || errorMessage;
+                    if (response.troubleshooting) {
+                        errorMessage = `<strong>🌐 Error de Conexión de Correo</strong><br>${errorMessage}<br><br><div class="alert alert-info mt-2 mb-0"><small>${response.troubleshooting}</small></div>`;
+                    } else {
+                        errorMessage = `<strong>🌐 Error de Conexión de Correo</strong><br>${errorMessage}`;
+                    }
+                } else if (response.error === "mailbox_error") {
+                    // ⚠️ v2.60: Manejo específico para errores generales de buzón
+                    errorMessage = response.message || errorMessage;
+                    if (response.troubleshooting) {
+                        errorMessage = `<strong>📧 Error de Buzón de Correo</strong><br>${errorMessage}<br><br><div class="alert alert-info mt-2 mb-0"><small>${response.troubleshooting}</small></div>`;
+                    } else {
+                        errorMessage = `<strong>📧 Error de Buzón de Correo</strong><br>${errorMessage}`;
+                    }
+                } else if (response.error === "config_not_found" || response.error === "config_error") {
+                    // ⚠️ v2.60: Manejo específico para errores de configuración de buzón
+                    errorMessage = response.message || errorMessage;
+                    errorMessage = `<strong>⚙️ Error de Configuración de Buzón</strong><br>${errorMessage}<br><br><div class="alert alert-warning mt-2 mb-0"><small>Verifique que la configuración de buzón exista y esté activa para este tenant.</small></div>`;
+                } else if (response.missing_fields && Array.isArray(response.missing_fields) && response.missing_fields.length > 0) {
+                    // Si hay campos faltantes (caso normal), agregar información adicional
+                    const camposLegibles = response.missing_fields.map(f => mapearCampoALegible(f));
+                    errorMessage = `Validación fallida: ${camposLegibles.join(', ')}`;
+                }
+                
+                // Usar innerHTML para permitir formato HTML si es necesario
+                msgDiv.innerHTML = `<strong>${errorMessage}</strong>`;
+
+                // Manejo específico de campos faltantes (caso 422 del PDF)
+                if (response.missing_fields && Array.isArray(response.missing_fields) && response.missing_fields.length > 0) {
+                    fieldsContainer.classList.remove('d-none');
+                    fieldsUl.innerHTML = response.missing_fields
+                        .map(field => {
+                            const label = mapearCampoALegible(field);
+                            return `<li class="list-group-item bg-transparent text-danger border-0 py-1">
+                                <i class="bi bi-dash-circle me-1"></i>${label}
+                            </li>`;
+                        })
+                        .join('');
+                } else {
+                    fieldsContainer.classList.add('d-none');
+                    fieldsUl.innerHTML = '';
+                }
+
+                // Log para debugging
+                console.log(`${MOD} Error mostrado:`, {
+                    status: xhr.status,
+                    message: errorMessage,
+                    missing_fields: response.missing_fields || []
                 });
             }
-            
-            // Si hay campos con errores, construir mensaje detallado
-            if (camposConErrores.length > 0) {
-                const mensajesCampos = camposConErrores.map(ce => 
-                    `<strong>${ce.campoLegible}:</strong> ${ce.mensajeUnificado}`
-                ).join('<br>');
-                errorMessage = `⚠️ Errores de validación:<br>${mensajesCampos}`;
-                
-                // Agregar campos a missing_fields para mostrarlos en la lista
-                if (!response.missing_fields || !Array.isArray(response.missing_fields)) {
-                    response.missing_fields = camposConErrores.map(ce => ce.campo);
-                }
-            }
-            
-            // ⚠️ Manejo específico para errores conocidos
-            if (response.error === "document_not_for_tenant") {
-                // El mensaje del servidor ya contiene toda la información necesaria
-                // ⚠️ MENSAJE ESPECÍFICO: "Este correo contiene una factura dirigida a un tercero, no se incluirá en contabilidad"
-                errorMessage = response.message || errorMessage;
-                
-                // Si es contexto de ingesta por correo, agregar información adicional
-                if (response.context === "mail_ingestion") {
-                    errorMessage = `<strong>⚠️ Factura de Terceros Detectada</strong><br>${errorMessage}`;
-                }
-            } else if (response.error === "resolucion_no_configurada" || response.error === "resolucion_no_valida") {
-                // ⚠️ v2.60: Manejo específico para errores de resolución DIAN (Gastos)
-                errorMessage = response.message || errorMessage;
-                errorMessage = `<strong>⚠️ Error de Configuración</strong><br>${errorMessage}`;
-            } else if (response.error === "rango_agotado") {
-                // ⚠️ v2.60: Manejo específico para rango de consecutivos agotado (409 Conflict)
-                errorMessage = response.message || errorMessage;
-                errorMessage = `<strong>⚠️ Rango de Consecutivos Agotado</strong><br>${errorMessage}`;
-            } else if (response.error === "empresa_not_found" || response.code === "empresa_not_found") {
-                // ⚠️ v2.60: Error de empresa no configurada (Proveedores, Clientes, etc.)
-                errorMessage = response.detail || response.message || errorMessage;
-                errorMessage = `<strong>⚠️ Configuración Requerida</strong><br>${errorMessage}<br><small class="text-muted">Por favor, configure la empresa del tenant antes de continuar.</small>`;
-            } else if (response.error === "asiento_no_cuadrado" || response.error === "asiento_sin_movimientos") {
-                // ⚠️ v2.60 Fase 3: Error Injector Contable - Análisis detallado de cuadratura
-                errorMessage = response.message || errorMessage;
-                
-                // Construir mensaje detallado con análisis de movimientos
-                let detallesHtml = '';
-                if (response.detalles) {
-                    const detalles = response.detalles;
-                    detallesHtml = '<div class="mt-3"><strong>📊 Análisis Detallado:</strong><ul class="mb-0 mt-2">';
-                    
-                    // Información básica
-                    detallesHtml += `<li><strong>Total Débito:</strong> $${parseFloat(detalles.total_debe || 0).toFixed(2)}</li>`;
-                    detallesHtml += `<li><strong>Total Crédito:</strong> $${parseFloat(detalles.total_haber || 0).toFixed(2)}</li>`;
-                    detallesHtml += `<li><strong>Diferencia:</strong> <span class="text-danger fw-bold">$${parseFloat(detalles.diferencia_absoluta || 0).toFixed(2)}</span></li>`;
-                    
-                    // Tipo de desbalance
-                    if (detalles.tipo_desbalance === 'falta_credito') {
-                        detallesHtml += `<li class="text-danger"><strong>⚠️ Falta Crédito:</strong> Agregue un movimiento de crédito por $${parseFloat(detalles.valor_faltante || 0).toFixed(2)}</li>`;
-                    } else if (detalles.tipo_desbalance === 'falta_debito') {
-                        detallesHtml += `<li class="text-danger"><strong>⚠️ Falta Débito:</strong> Agregue un movimiento de débito por $${parseFloat(detalles.valor_faltante || 0).toFixed(2)}</li>`;
-                    }
-                    
-                    // Cuentas problemáticas
-                    if (detalles.cuentas_problematicas && detalles.cuentas_problematicas.length > 0) {
-                        detallesHtml += '<li class="mt-2"><strong>🔴 Cuentas con Problemas:</strong><ul class="mb-0">';
-                        detalles.cuentas_problematicas.forEach(cuenta => {
-                            detallesHtml += `<li><strong>${cuenta.cuenta_codigo} - ${cuenta.cuenta_nombre}:</strong> ${cuenta.problema} (Débito: $${parseFloat(cuenta.debe || 0).toFixed(2)}, Crédito: $${parseFloat(cuenta.haber || 0).toFixed(2)})</li>`;
-                        });
-                        detallesHtml += '</ul></li>';
-                    }
-                    
-                    // Sugerencia
-                    if (detalles.sugerencia) {
-                        detallesHtml += `<li class="mt-2 text-info"><strong>💡 Sugerencia:</strong> ${detalles.sugerencia}</li>`;
-                    }
-                    
-                    detallesHtml += '</ul></div>';
-                }
-                
-                errorMessage = `<strong>⚠️ Error de Cuadratura</strong><br>${errorMessage}${detallesHtml}`;
-            } else if (response.error === "validacion_error") {
-                // ⚠️ v2.60: Manejo específico para errores de validación (400/422)
-                errorMessage = response.message || errorMessage;
-                // Si hay detalles, agregarlos al mensaje
-                if (response.details && typeof response.details === 'object') {
-                    const detalles = Object.entries(response.details)
-                        .map(([field, msg]) => `${mapearCampoALegible(field)}: ${msg}`)
-                        .join('<br>');
-                    errorMessage = `<strong>⚠️ Error de Validación</strong><br>${errorMessage}<br><small class="text-muted">${detalles}</small>`;
-                } else {
-                    errorMessage = `<strong>⚠️ Error de Validación</strong><br>${errorMessage}`;
-                }
-            } else if (response.error === "authentication_error" || response.error === "auth_failed") {
-                // ⚠️ v2.60: Manejo específico para errores de autenticación de correo
-                // ⚠️ COMPATIBILIDAD: Maneja tanto "authentication_error" como "auth_failed"
-                errorMessage = response.message || errorMessage;
-                if (response.troubleshooting) {
-                    errorMessage = `<strong>🔐 Error de Autenticación de Correo</strong><br>${errorMessage}<br><br><div class="alert alert-info mt-2 mb-0"><small>${response.troubleshooting}</small></div>`;
-                } else {
-                    errorMessage = `<strong>🔐 Error de Autenticación de Correo</strong><br>${errorMessage}`;
-                }
-            } else if (response.error === "connection_error") {
-                // ⚠️ v2.60: Manejo específico para errores de conexión de correo
-                errorMessage = response.message || errorMessage;
-                if (response.troubleshooting) {
-                    errorMessage = `<strong>🌐 Error de Conexión de Correo</strong><br>${errorMessage}<br><br><div class="alert alert-info mt-2 mb-0"><small>${response.troubleshooting}</small></div>`;
-                } else {
-                    errorMessage = `<strong>🌐 Error de Conexión de Correo</strong><br>${errorMessage}`;
-                }
-            } else if (response.error === "mailbox_error") {
-                // ⚠️ v2.60: Manejo específico para errores generales de buzón
-                errorMessage = response.message || errorMessage;
-                if (response.troubleshooting) {
-                    errorMessage = `<strong>📧 Error de Buzón de Correo</strong><br>${errorMessage}<br><br><div class="alert alert-info mt-2 mb-0"><small>${response.troubleshooting}</small></div>`;
-                } else {
-                    errorMessage = `<strong>📧 Error de Buzón de Correo</strong><br>${errorMessage}`;
-                }
-            } else if (response.error === "config_not_found" || response.error === "config_error") {
-                // ⚠️ v2.60: Manejo específico para errores de configuración de buzón
-                errorMessage = response.message || errorMessage;
-                errorMessage = `<strong>⚙️ Error de Configuración de Buzón</strong><br>${errorMessage}<br><br><div class="alert alert-warning mt-2 mb-0"><small>Verifique que la configuración de buzón exista y esté activa para este tenant.</small></div>`;
-            } else if (response.missing_fields && Array.isArray(response.missing_fields) && response.missing_fields.length > 0) {
-                // Si hay campos faltantes (caso normal), agregar información adicional
-                const camposLegibles = response.missing_fields.map(f => mapearCampoALegible(f));
-                errorMessage = `Validación fallida: ${camposLegibles.join(', ')}`;
-            }
-            
-            // Usar innerHTML para permitir formato HTML si es necesario
-            msgDiv.innerHTML = `<strong>${errorMessage}</strong>`;
-
-            // Manejo específico de campos faltantes (caso 422 del PDF)
-            if (response.missing_fields && Array.isArray(response.missing_fields) && response.missing_fields.length > 0) {
-                fieldsContainer.classList.remove('d-none');
-                fieldsUl.innerHTML = response.missing_fields
-                    .map(field => {
-                        const label = mapearCampoALegible(field);
-                        return `<li class="list-group-item bg-transparent text-danger border-0 py-1">
-                            <i class="bi bi-dash-circle me-1"></i>${label}
-                        </li>`;
-                    })
-                    .join('');
-            } else {
-                fieldsContainer.classList.add('d-none');
-                fieldsUl.innerHTML = '';
-            }
-
-            // Log para debugging
-            console.log(`${MOD} Error mostrado:`, {
-                status: xhr.status,
-                message: errorMessage,
-                missing_fields: response.missing_fields || []
-            });
-
         } catch (e) {
             console.error(`${MOD} Error parseando respuesta de error:`, e);
             // Fallback: mostrar mensaje genérico

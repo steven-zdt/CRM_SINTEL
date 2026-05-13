@@ -31,7 +31,9 @@
     get: (id) => w.http('GET', `${API_URL}${id}/`),
     create: (data) => w.http('POST', API_URL, normalizePayload(data)),
     update: (id, data) => w.http('PATCH', `${API_URL}${id}/`, normalizePayload(data)),
-    delete: (id) => w.http('DELETE', `${API_URL}${id}/`)
+    delete: (id) => w.http('DELETE', `${API_URL}${id}/`),
+    searchCuentas: (q) => w.http('GET', '/api/v1/contabilidad/cuentas/', { search: q, app_origen: 'proveedores', activa: true, nivel: 6 }),
+    getCuentaByUuid: (uuid) => w.http('GET', `/api/v1/contabilidad/cuentas/${uuid}/`)
   };
 
   w.Sintel = w.Sintel || {};

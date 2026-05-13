@@ -12,7 +12,7 @@
   'use strict';
 
   const MOD = '[cuenta.list]';
-  const TABLE_SELECTOR = '#grid-cuenta';
+  const TABLE_SELECTOR = '#grid-cuentas';
   const SEARCH_SELECTOR = '#search-cuenta';
   const API_URL = '/api/v1/contabilidad/cuentas-contables/';
   const TAB_ID = '#subtab-cuentas';
@@ -162,7 +162,7 @@
         const id = btn.dataset.id;
         if (id && typeof htmx !== 'undefined') {
           htmx.ajax('GET', `${API_URL}${id}/render-offcanvas/detalle/`, {
-            target: '#offcanvas-container-cuenta',
+            target: '#offcanvas-container-cuentas',
             swap: 'innerHTML'
           }).then(() => {
             const offcanvasEl = d.getElementById('offcanvas-cuenta-detalle');
@@ -182,7 +182,7 @@
         const id = btn.dataset.id;
         if (id && typeof htmx !== 'undefined') {
           htmx.ajax('GET', `${API_URL}${id}/render-offcanvas/editar/`, {
-            target: '#offcanvas-container-cuenta',
+            target: '#offcanvas-container-cuentas',
             swap: 'innerHTML'
           }).then(() => {
             const offcanvasEl = d.getElementById('offcanvas-cuenta-editar');
@@ -209,7 +209,7 @@
     });
 
     // Botón refrescar
-    const btnRefresh = d.querySelector('#btn-refrescar-cuenta');
+    const btnRefresh = d.querySelector('#btn-refrescar-cuentas');
     if (btnRefresh) {
       btnRefresh.addEventListener('click', () => {
         if (table && typeof table.replaceData === 'function') {

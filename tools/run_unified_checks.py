@@ -1,11 +1,18 @@
-import py_compile
 import importlib
 import json
+import os
+import py_compile
 import subprocess
 import sys
 from pathlib import Path
 
-OUT = {"py_compile": None, "auditor": None, "ruff": None}
+TARGET_APP = ""
+if len(sys.argv) > 1:
+    TARGET_APP = sys.argv[1].strip()
+else:
+    TARGET_APP = os.getenv("SINTEL_APP_NAME", "").strip()
+
+OUT = {"py_compile": None, "auditor": None, "ruff": None, "target_app": TARGET_APP or "all"}
 
 # 1) py_compile
 try:
@@ -22,7 +29,19 @@ try:
     if 'sintel_agent_unified' in sys.modules:
         importlib.reload(sys.modules['sintel_agent_unified'])
     import sintel_agent_unified as sau
-    report = sau.Tools.expert_e2e_auditor('gastos')
+    if TARGET_APP:
+        report = sau.Tools.expert_e2e_auditor(TARGET_APP)
+    else:
+        apps = sau.Tools.list_apps().get("tenant_apps", [])
+        report = {
+            "mode": "all_apps",
+            "apps_count": len(apps),
+            "apps": [
+                sau.Tools.expert_e2e_auditor(app)
+                for app in apps
+                if app not in ("api", "core")
+            ],
+        }
     OUT['auditor'] = report
 except Exception as e:
     OUT['auditor'] = {'error': str(e)}

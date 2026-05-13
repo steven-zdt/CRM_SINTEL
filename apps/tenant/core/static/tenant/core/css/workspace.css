@@ -519,3 +519,14 @@ th {
 #em_logo_remove {
   margin-top: 8px;
 }
+
+/* SINTEL v3.5: Offcanvas XL para formularios complejos */
+.offcanvas-xl {
+    width: 800px !important;
+}
+
+@media (max-width: 800px) {
+    .offcanvas-xl {
+        width: 100% !important;
+    }
+}

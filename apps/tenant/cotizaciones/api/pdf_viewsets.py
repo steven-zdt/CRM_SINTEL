@@ -1,130 +1,76 @@
 """
-ViewSet independiente para generación de PDFs de cotizaciones v2.40.
-
-# WARNING: MÓDULO INDEPENDIENTE: ViewSet completamente separado del CotizacionViewSet principal.
-- Endpoint: GET /api/v1/cotizaciones/pdf/{id}/
-- Lógica delegada a pdf_service.py
-- Respuesta: application/pdf
+ViewSet independiente para generación de PDFs de cotizaciones v2.62.0.
 """
 import logging
 
 from django.conf import settings
 from django.http import HttpResponse
 from rest_framework import status, viewsets
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.response import Response
 
-from apps.tenant.api.permissions import IsTenantMember
-from apps.tenant.cotizaciones.pdf_service import (
+from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+from apps.tenant.api.utils import resolve_tenant_empresa
+from apps.tenant.cotizaciones.models import Cotizacion
+from apps.tenant.cotizaciones.services.pdf import (
     generar_pdf_bytes,
     obtener_cotizacion_para_pdf,
     preparar_contexto_pdf,
 )
-from apps.tenant.cotizaciones.permissions import IsCotizacionesAdminOrReadOnly
-from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
 
 
 class CotizacionPDFViewSet(viewsets.ViewSet):
     """
-    ViewSet independiente para generación de PDFs de cotizaciones.
-    
-    # WARNING: v2.40: Módulo completamente independiente del CotizacionViewSet principal.
-    - Endpoint: GET /api/v1/cotizaciones/pdf/{id}/
-    - Lógica delegada a pdf_service.py
-    - Respuesta: application/pdf
+    ViewSet para generación de PDFs de cotizaciones v2.62.0.
+    Endpoint: GET /api/v1/cotizaciones/pdf/{uuid}/
     """
-    permission_classes = [IsTenantMember, IsCotizacionesAdminOrReadOnly]
-    
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+
     def retrieve(self, request, pk=None):
         """
-        Genera el PDF de la cotización.
-        
-        GET /api/v1/cotizaciones/pdf/{id}/
-        
-        # WARNING: v2.40: Generación dinámica de PDF (WeasyPrint eliminado - función deshabilitada)
-        - Agrupa ítems por seccion_modulo (1.0, 2.0, 3.0)
-        - Oculta secciones vacías
-        - Resumen económico secuencial con lógica AIU
-        - Marca de agua para cotizaciones ACEPTADAS
-        
-        Returns:
-            - 200 OK: PDF file
-            - 404 NOT FOUND: Si la cotización no existe
-            - 500 INTERNAL SERVER ERROR: Si hay error generando el PDF
+        Genera PDF de cotización.
+        GET /api/v1/cotizaciones/pdf/{uuid}/
         """
         try:
-            # # WARNING: PERFORMANCE BIBLE: Usar .only('id') para obtener empresa singleton
-            empresa = Empresa.objects.only('id').first()
+            empresa = resolve_tenant_empresa(request, self)
             if not empresa:
                 return Response(
-                    {"detail": "Empresa no encontrada"},
-                    status=status.HTTP_404_NOT_FOUND
+                    {"detail": "No se pudo determinar la empresa activa"},
+                    status=status.HTTP_403_FORBIDDEN
                 )
-            
-            # # WARNING: REPARACIÓN: Obtener cotización optimizada para PDF con refresh
-            cotizacion = obtener_cotizacion_para_pdf(empresa.id, int(pk))
-            
+
+            cotizacion = obtener_cotizacion_para_pdf(empresa.id, pk)
             if not cotizacion:
                 return Response(
                     {"detail": "Cotización no encontrada"},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            
-            # # WARNING: REPARACIÓN: Refrescar desde BD para asegurar datos actualizados
+
             try:
                 cotizacion.refresh_from_db()
-                logger.info(f"[PDF ViewSet] [OK] Cotización {cotizacion.id} refrescada desde BD")
-            except Exception as refresh_error:
-                logger.warning(f"[PDF ViewSet] # WARNING: Error refrescando cotización: {refresh_error}")
-            
-            # # WARNING: v2.40: Obtener perfil_id del request si está disponible (opcional)
-            perfil_id = request.query_params.get('perfil_id', None)
-            if perfil_id:
-                try:
-                    perfil_id = int(perfil_id)
-                except (ValueError, TypeError):
-                    perfil_id = None
-                    logger.warning(f"[PDF ViewSet] perfil_id inválido en query params: {request.query_params.get('perfil_id')}")
-            
-            # Preparar contexto para el template
-            context = preparar_contexto_pdf(cotizacion, empresa, request, perfil_id=perfil_id)
-            
-            # Generar PDF
+            except Exception as e:
+                logger.warning(f"[PDF ViewSet] Error refrescando cotización: {e}")
+
+            context = preparar_contexto_pdf(cotizacion, empresa, request)
             pdf_bytes = generar_pdf_bytes(context, request)
-            
-            # # WARNING: REPARACIÓN: Crear respuesta HTTP con el PDF y headers de no-cache
+
             response = HttpResponse(pdf_bytes, content_type='application/pdf')
-            response['Content-Disposition'] = f'inline; filename="cotizacion_{cotizacion.numero}.pdf"'
-            
-            # # WARNING: REPARACIÓN: Headers para evitar caché y asegurar PDF dinámico
+            response['Content-Disposition'] = f'inline; filename="cotizacion_{cotizacion.numero_cotizacion}.pdf"'
             response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response['Pragma'] = 'no-cache'
             response['Expires'] = '0'
-            
-            logger.info(f"[PDF ViewSet] [OK] PDF generado para cotización {cotizacion.id} (sin caché)")
-            
+
+            logger.info(f"[PDF ViewSet] PDF generado para cotización {cotizacion.uuid}")
             return response
-            
-        except NotImplementedError as e:
-            logger.error(f"[PDF ViewSet] Generación de PDF no disponible: {str(e)}")
-            return Response(
-                {
-                    "detail": "Generación de PDF no disponible",
-                    "message": "WeasyPrint ha sido eliminado del proyecto. La generación de PDF debe implementarse con una biblioteca alternativa."
-                },
-                status=status.HTTP_501_NOT_IMPLEMENTED
-            )
+
         except Exception as e:
             import traceback
-            error_trace = traceback.format_exc()
-            logger.error(f"[PDF ViewSet] Error generando PDF para cotización {pk}: {str(e)}\n{error_trace}", exc_info=True)
+            logger.error(f"[PDF ViewSet] Error generando PDF: {str(e)}", exc_info=True)
             return Response(
                 {
                     "detail": "Error al generar el PDF",
-                    "message": str(e),
-                    "trace": error_trace if settings.DEBUG else None
+                    "message": str(e) if settings.DEBUG else "Contacte al administrador",
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

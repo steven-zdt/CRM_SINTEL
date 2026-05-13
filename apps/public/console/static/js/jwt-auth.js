@@ -297,3 +297,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 });
+
+// Exponer a window para disponibilidad global (v2.62)
+window.jwtAuth = jwtAuth;
+

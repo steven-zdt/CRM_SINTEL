@@ -2,7 +2,7 @@
  * Gastos API - SSoT de URLs y endpoints
  * 
  * Namespace: window.Sintel.Gastos.API
- * Versión: v2.61.4
+ * Version: v2.62.0
  */
 (function() {
     'use strict';
@@ -11,50 +11,127 @@
     window.Sintel = window.Sintel || {};
     window.Sintel.Gastos = window.Sintel.Gastos || {};
 
+    const API_ROOT = '/api/v1/gastos/';
+    const RESOLUCION_ROOT = '/api/v1/resoluciones-dian/';
+
     /**
-     * API Endpoints para Gastos
+     * API Endpoints para Gastos (Gateway Directo)
      */
     const API = {
-        // Gastos
         gastos: {
-            list: '/api/v1/gastos/',
-            detail:(id)=>`/api/v1/gastos/${id}/`,
-            summary: '/api/v1/gastos/summary/',
-            anular:(id)=>`/api/v1/gastos/${id}/anular/`,
-            desactivar:(id)=>`/api/v1/gastos/${id}/desactivar/`
+            list: API_ROOT,
+            detail: (id) => `${API_ROOT}${id}/`,
+            anular: (id) => `${API_ROOT}${id}/anular/`,
+            create: async function(data) {
+                const response = await fetch(API_ROOT, {
+                    method: 'POST',
+                    headers: window.Sintel.Gastos.getHeaders(),
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) {
+                    try { response.data = await response.json(); } catch(e) {}
+                    throw response;
+                }
+                return await response.json();
+            },
+            update: async function(uuid, data) {
+                const response = await fetch(`${API_ROOT}${uuid}/`, {
+                    method: 'PATCH',
+                    headers: window.Sintel.Gastos.getHeaders(),
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) {
+                    try { response.data = await response.json(); } catch(e) {}
+                    throw response;
+                }
+                return await response.json();
+            },
         },
-        
-        // Resoluciones DIAN
         resoluciones: {
-            list: '/api/v1/gastos/resoluciones/',
-            detail: (id) => `/api/v1/gastos/resoluciones/${id}/`,
-            desactivar: (id) => `/api/v1/gastos/resoluciones/${id}/desactivar/`
+            list: RESOLUCION_ROOT,
+            detail: (id) => `${RESOLUCION_ROOT}${id}/`,
+            create: async function(data) {
+                const response = await fetch(RESOLUCION_ROOT, {
+                    method: 'POST',
+                    headers: window.Sintel.Gastos.getHeaders(),
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) {
+                    try { response.data = await response.json(); } catch(e) {}
+                    throw response;
+                }
+                return await response.json();
+            },
+            update: async function(uuid, data) {
+                const response = await fetch(`${RESOLUCION_ROOT}${uuid}/`, {
+                    method: 'PUT',
+                    headers: window.Sintel.Gastos.getHeaders(),
+                    body: JSON.stringify(data)
+                });
+                if (!response.ok) {
+                    try { response.data = await response.json(); } catch(e) {}
+                    throw response;
+                }
+                return await response.json();
+            },
+            activa: `${RESOLUCION_ROOT}activa/`
         },
-        
-        // Proveedores (externo)
+        contabilidad: {
+            cuentasGasto: '/api/v1/contabilidad/cuentas-contables/?tipo=GASTO&activa=true'
+        },
         proveedores: {
             list: '/api/v1/proveedores/'
         },
         
-        // Contabilidad (externo)
-        contabilidad: {
-            cuentasGasto: '/api/v1/contabilidad/cuentas-gasto/'
+        // Renderizado (HTMX / Views)
+        endpoints: {
+            renderCrear: () => `${API_ROOT}render-offcanvas/crear/`,
+            renderEditar: (id) => `${API_ROOT}render-offcanvas/editar/?uuid=${id}`,
+            renderDetalle: (id) => `${API_ROOT}render-offcanvas/detalle/?uuid=${id}`,
+            renderResolucion: (id) => id ? `${API_ROOT}render-offcanvas/resolucion/?id=${id}` : `${API_ROOT}render-offcanvas/resolucion/`
+        },
+
+        /**
+         * Acciones asincronas
+         */
+        anular: async function(uuid, motivo = "Anulacion administrativa") {
+            const url = this.gastos.anular(uuid);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: window.Sintel.Gastos.getHeaders(),
+                body: JSON.stringify({ motivo: motivo })
+            });
+            if (!response.ok) {
+                try { response.data = await response.json(); } catch(e) {}
+                throw response;
+            }
+            return await response.json();
+        },
+
+        eliminar: async function(uuid) {
+            const url = this.gastos.detail(uuid);
+            const response = await fetch(url, {
+                method: 'DELETE',
+                headers: window.Sintel.Gastos.getHeaders()
+            });
+            if (!response.ok) {
+                try { response.data = await response.json(); } catch(e) {}
+                throw response;
+            }
+            return response.status === 204 ? {success: true} : await response.json();
         }
     };
 
     /**
-     * Headers por defecto para fetch
-     */
-    const defaultHeaders = {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
-    };
-
-    /**
-     * Inyectar JWT si está disponible
+     * Headers por defecto con JWT (v2.62)
      */
     function getHeaders() {
-        const headers = { ...defaultHeaders };
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
+        };
+        
+        // window.jwtAuth expuesto globalmente en jwt-auth.js
         const token = window.jwtAuth?.getAccessToken?.();
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
@@ -62,7 +139,7 @@
         return headers;
     }
 
-    // Exportar API
+    // Exportar
     window.Sintel.Gastos.API = API;
     window.Sintel.Gastos.getHeaders = getHeaders;
 

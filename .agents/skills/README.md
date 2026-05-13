@@ -27,9 +27,18 @@ Cada skill = 1 responsabilidad = <150 líneas.
 | Test de API, DRF test | `testing/api.md` |
 | Módulo nuevo FSD completo | `workflow/fsd-module.md` |
 | Debug, error 500, traza | `workflow/debugging.md` |
+| MCP, Antigravity, reglas de agente | `workflow/antigravity-mcp.md` |
 
 ## Regla de Carga
 - **Máximo 3 skills activas a la vez**
 - Descargar la skill después de terminar la tarea
 - Las skills son READ-ONLY — describen el patrón, no lo reemplazan
 - Verificar siempre el archivo `AUDITORIA_FLUJO_*.md` de la app antes de modificar
+
+## Meta-Principio: Karpathy (siempre activo, no requiere carga)
+
+Los principios Karpathy del `AGENTS.md §21` aplican a TODA tarea sin importar qué skill esté cargada:
+1. Pensar antes de codificar — no asumir, preguntar si hay incertidumbre
+2. Simplicidad primero — código mínimo, sin abstracciones especulativas
+3. Cambios quirúrgicos — tocar solo lo necesario, no "mejorar" lo adyacente
+4. Ejecución orientada a metas — `Paso → verificar: [check]` antes de continuar

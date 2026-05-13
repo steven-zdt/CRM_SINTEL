@@ -115,10 +115,91 @@
     _categoriasCache = null;
   }
 
+  /**
+   * Configura la búsqueda autocompletada de cuentas contables.
+   * ⚠️ v3.5: Integración con Contabilidad
+   * 
+   * @param {Object} config - Configuración { inputSelector, resultsSelector, uuidSelector }
+   */
+  function setupCuentaAutocomplete(config) {
+    const input = d.querySelector(config.inputSelector);
+    const results = d.querySelector(config.resultsSelector);
+    const uuidInput = d.querySelector(config.uuidSelector);
+    
+    if (!input || !results || !uuidInput) return;
+
+    let timeout = null;
+
+    input.addEventListener('input', function() {
+      const query = this.value.trim();
+      clearTimeout(timeout);
+
+      if (query.length < 2) {
+        results.classList.add('d-none');
+        results.innerHTML = '';
+        return;
+      }
+
+      timeout = setTimeout(async () => {
+        try {
+          const res = await w.Sintel.Inventario.API.searchCuentas(query);
+          if (res.ok && res.data) {
+            const data = Array.isArray(res.data) ? res.data : (res.data.results || []);
+            renderResultados(data);
+          }
+        } catch (err) {
+          console.error(MOD, 'Error buscando cuentas:', err);
+        }
+      }, 300);
+    });
+
+    function renderResultados(cuentas) {
+      if (cuentas.length === 0) {
+        results.innerHTML = '<div class="list-group-item text-muted">No se encontraron cuentas</div>';
+        results.classList.remove('d-none');
+        return;
+      }
+
+      results.innerHTML = cuentas.map(cta => `
+        <button type="button" class="list-group-item list-group-item-action py-2" 
+                data-uuid="${cta.uuid}" data-label="${cta.codigo} - ${cta.nombre}">
+          <div class="d-flex w-100 justify-content-between">
+            <h6 class="mb-1 fw-bold">${cta.codigo}</h6>
+          </div>
+          <small class="text-muted">${cta.nombre}</small>
+        </button>
+      `).join('');
+      
+      results.classList.remove('d-none');
+
+      // Evento de clic para seleccion
+      results.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', function() {
+          input.value = this.dataset.label;
+          uuidInput.value = this.dataset.uuid;
+          results.classList.add('d-none');
+          results.innerHTML = '';
+          
+          // Disparar evento de cambio para que otros listeners lo capten
+          input.dispatchEvent(new Event('change'));
+        });
+      });
+    }
+
+    // Cerrar resultados al hacer clic fuera
+    d.addEventListener('click', function(e) {
+      if (!input.contains(e.target) && !results.contains(e.target)) {
+        results.classList.add('d-none');
+      }
+    });
+  }
+
   // Exponer en namespace
   w.Sintel.Inventario.Utils = {
     loadCategoriasSelect: loadCategoriasSelect,
+    setupCuentaAutocomplete: setupCuentaAutocomplete,
     invalidateCache: invalidateCache
   };
+
 
 })(window, document);

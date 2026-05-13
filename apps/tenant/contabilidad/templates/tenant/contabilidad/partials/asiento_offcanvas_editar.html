@@ -21,7 +21,7 @@
     {% include 'tenant/core/partials/error_handler.html' %}
     
     <form id="form-asiento-editar" novalidate>
-      <input type="hidden" id="input-id" name="id" value="{{ asiento.id }}">
+      <input type="hidden" id="input-uuid" name="uuid" value="{{ asiento.uuid }}">
       
       <div class="row g-3">
         <div class="col-12"><h6 class="text-primary border-bottom pb-2 small fw-bold">DATOS DEL ASIENTO</h6></div>
@@ -217,6 +217,9 @@
     </td>
   </tr>
 </template>
+
+{# ⚠️ v2.61: Cargar datos de movimientos para el editor JS #}
+{{ asiento.movimientos|json_script:"movimientos-data" }}
 
 {# ⚠️ v2.61: Cargar módulo JS específico para editar #}
 <script src="{% static 'contabilidad/js/asiento/features/asiento_editor.js' %}"></script>

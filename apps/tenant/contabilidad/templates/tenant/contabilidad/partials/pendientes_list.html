@@ -1,0 +1,24 @@
+{% load static %}
+{# pendientes_list.html - Lista de documentos pendientes de contabilizar (On-Demand) #}
+<div id="ui-contabilidad-pendientes" class="ui-module ui-contabilidad">
+  <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-pendientes">
+    <input id="search-pendiente" class="form-control form-control-sm"
+           type="search" placeholder="Buscar por número, tercero..." style="max-width:280px;">
+    <select id="filter-tipo-pendiente" class="form-select form-select-sm" style="max-width:160px;">
+      <option value="">Todos los tipos</option>
+      <option value="FACTURA">Facturas</option>
+      <option value="GASTO">Gastos</option>
+      <option value="NOMINA">Nomina</option>
+      <option value="INVENTARIO">Inventario</option>
+    </select>
+    <button id="btn-refrescar-pendientes" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-clockwise"></i> Refrescar
+    </button>
+    <span class="ms-auto badge bg-warning text-dark" id="badge-total-pendientes"></span>
+  </div>
+
+  <div id="feedback-pendientes" class="alert d-none mb-2" role="alert" aria-live="polite"></div>
+  <div id="grid-pendientes" style="max-width:100%; overflow-x:auto;"></div>
+</div>
+
+<div id="offcanvas-container-pendientes"></div>

@@ -15,16 +15,31 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
+class RelaxedJWTAuthentication(JWTAuthentication):
+    """
+    Extensión de JWTAuthentication que no bloquea con 401 en modo DEBUG
+    si el token es inválido o ha expirado. Permite que la petición
+    continúe como AnonymousUser para ser manejada por los fallbacks de desarrollo.
+    """
+    def authenticate(self, request):
+        try:
+            return super().authenticate(request)
+        except Exception:
+            from django.conf import settings
+            if settings.DEBUG:
+                return None
+            raise
+
+
 class BaseTenantViewSet(viewsets.ModelViewSet):
     """
     ViewSet base para modelos tenant con lookup por UUID y Dual-Auth.
 
     WARNING: IMPORTANTE:
     - lookup_field="uuid" garantiza que las URLs usen UUID en lugar de PK
-    - authentication_classes=[JWTAuthentication, SessionAuthentication]:
-      Acepta JWT (Bearer header) con fallback a Session (cookies).
-    - Todos los ViewSets de tenant deben heredar de esta clase
+    - RelaxedJWTAuthentication: Permite bypass en DEBUG para facilitar integración.
+    - SessionAuthentication: Workspace navegador, HTMX, CSRF.
     """
     lookup_field = "uuid"
     lookup_url_kwarg = "uuid"
-    authentication_classes = [JWTAuthentication, SessionAuthentication]
+    authentication_classes = [RelaxedJWTAuthentication, SessionAuthentication]

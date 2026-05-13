@@ -166,10 +166,7 @@ class ProyectoViewSet(
             self.proyecto_business_service.cambiar_fase_proyecto(
                 proyecto, nueva_fase, responsable_id, responsable_nombre
             )
-            # El negocio no guarda automáticamente en cambio de fase pura si no es por orquestador, 
-            # pero aquí el service original hacía save() y calcular_indicadores.
-            # Lo mantenemos consistente.
-            self.proyecto_crud_service.save_proyecto(proyecto)
+            # calcular_indicadores_financieros guarda internamente via crud_service
             self.proyecto_business_service.calcular_indicadores_financieros(proyecto)
             
             response_serializer = ProyectoDetailSerializer(proyecto)
@@ -199,13 +196,33 @@ class ProyectoViewSet(
         except ImportError:
             pass
         
+        empleados = []
+        try:
+            from apps.tenant.empleados.services.selectors import EmpleadoSelector
+            empleados = EmpleadoSelector.get_list(empresa_id=empresa.id).only(
+                'id', 'primer_nombre', 'primer_apellido', 'segundo_nombre', 'segundo_apellido'
+            )[:100]
+        except ImportError:
+            pass
+            
+        proveedores = []
+        try:
+            from apps.tenant.proveedores.models import Proveedor
+            proveedores = Proveedor.objects.filter(empresa_id=empresa.id, activo=True).only(
+                'id', 'razon_social', 'numero_documento'
+            ).order_by('razon_social')[:100]
+        except ImportError:
+            pass
+            
         context = {
             'proyecto': proyecto,
             'clientes': clientes,
+            'empleados': empleados,
+            'proveedores': proveedores,
             'tipos_servicio': Proyecto.TIPO_SERVICIO,
             'fases': Proyecto.FASES,
             'estados_tarea': Proyecto.ESTADO_TAREA,
         }
         
         # [v3.5] Ruta local FSD
-        return Response(context, template_name='proyectos/offcanvas_form.html')
+        return Response(context, template_name='tenant/proyectos/offcanvas_form.html')

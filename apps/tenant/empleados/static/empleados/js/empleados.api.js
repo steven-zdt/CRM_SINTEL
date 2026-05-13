@@ -42,6 +42,12 @@
             list: '/api/v1/empleados/devengos/',
             detail: (id) => `/api/v1/empleados/devengos/${id}/`,
             anular: (id) => `/api/v1/empleados/devengos/${id}/anular/`
+        },
+
+        // Contabilidad (Vínculos)
+        contabilidad: {
+            search: (query) => `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(query)}&app_origen=empleados&solo_auxiliares=true`,
+            getByUuid: (uuid) => `/api/v1/contabilidad/cuentas-contables/?uuid=${uuid}&app_origen=empleados`
         }
     };
 
@@ -65,8 +71,40 @@
         return headers;
     }
 
+    /**
+     * Wrapper para fetch con soporte JWT
+     */
+    async function request(url, options = {}) {
+        const headers = getHeaders();
+        const config = {
+            ...options,
+            headers: {
+                ...headers,
+                ...options.headers
+            }
+        };
+
+        const response = await fetch(url, config);
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            return { ok: false, status: response.status, data };
+        }
+        const data = await response.json();
+        return { ok: true, status: response.status, data };
+    }
+
     // Exportar API
     window.Sintel.Empleados.API = API;
     window.Sintel.Empleados.getHeaders = getHeaders;
+    window.Sintel.Empleados.request = request;
+
+    /**
+     * [v3.5] Obtiene el detalle de una cuenta contable por UUID
+     */
+    window.Sintel.Empleados.API.getCuentaByUuid = async (uuid) => {
+        if (!uuid) return { ok: false, data: null };
+        const url = API.contabilidad.getByUuid(uuid);
+        return await request(url);
+    };
 
 })();

@@ -95,6 +95,14 @@
       return w.http('DELETE', `${API_BASE}/${id}/`);
     },
 
+    /** GET /api/v1/facturas/lista-centro-costos/ 
+     *  Vínculo cross-app para centros de costos.
+     */
+    fetchCentrosCostos: async () => {
+      console.log(`[${MOD}] fetchCentrosCostos()`);
+      return w.http('GET', '/api/v1/facturas/lista-centro-costos/');
+    },
+
     formatCurrency: (value) => {
       if (value === null || value === undefined || value === '') return '$ 0,00';
       const num = parseFloat(value);

@@ -1,8 +1,8 @@
 ---
 name: reglas-vscode
-description: Reglas SINTEL v2.62.0 — Sincronizado con root AGENTS.md
+description: Reglas SINTEL v3.5.0 — Sincronizado con root AGENTS.md
 sync_source: ../AGENTS.md
-last_sync: 2026-05-04
+last_sync: 2026-05-09
 ---
 
 > **FUENTE CANONICA:** El archivo de reglas autoritativo es `AGENTS.md` en la raíz del proyecto.
@@ -11,7 +11,7 @@ last_sync: 2026-05-04
 
 ---
 
-# [CORE] SINTEL v2.62.0 — Reglas de Arquitectura y Estructura de Proyecto
+# [CORE] SINTEL v3.5.0 — Reglas de Arquitectura y Estructura de Proyecto
 
 Estas reglas son **ESTRICTAS, INMUTABLES Y OBLIGATORIAS** para cualquier modificación, refactorización o creación de código en este proyecto. Este archivo debe ser procesado y asimilado antes de implementar cualquier prompt o sugerencia de código.
 
@@ -206,19 +206,24 @@ permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
 3. **API Surface del Bridge:** `check_membership()`, `check_membership_exists()`, `check_admin_membership()`, `check_primary_admin()`, `get_user_role()`, `get_primary_domain()`, `verify_invitation()`
 4. **Extension:** Nueva consulta al esquema publico → agregar al bridge. PROHIBIDO crear imports directos.
 
-## [CONTAB] 18. Capa de Integracion Contable Centralizada (v3.0 — Fase 1)
+## [CONTAB] 18. Capa de Integracion Contable Centralizada (v3.5 — Modelo Pull / Extractores)
 
-**PRINCIPIO:** Todo asiento contable es generado EXCLUSIVAMENTE por el `Contabilizador`. Ninguna app crea `AsientoContable` directamente.
+**PRINCIPIO:** Todo asiento contable es generado EXCLUSIVAMENTE por el `Contabilizador`. Ninguna app puede crear `AsientoContable` ni `MovimientoContable` directamente. Las apps fuente NO conocen ni dependen de `contabilidad`.
 
-### 18.1. Paquete de Integración (`apps/tenant/contabilidad/integracion/`)
+### 18.1. Paquete de Integracion (`apps/tenant/contabilidad/integracion/`)
 
-| Módulo | Responsabilidad |
+| Modulo | Responsabilidad |
 |---|---|
 | `dtos.py` | DTOs inmutables (`@dataclass(frozen=True)`) — contrato entre apps fuente y Contabilizador |
-| `contabilizador.py` | Orquestador único — valida, resuelve cuentas, construye y persiste asientos atómicamente |
-| `resolver.py` | Mapea (`tipo_transaccion` + `concepto`) a código PUC vía `ReglaContable` por tenant |
-| `validadores.py` | Validators stateless — cuadratura, período abierto, documento origen existe |
-| `excepciones.py` | Jerarquía `ContabilidadError` y subclases |
+| `contabilizador.py` | Orquestador unico — valida, resuelve cuentas, construye y persiste asientos atomicamente |
+| `resolver.py` | Mapea (`tipo_transaccion` + `concepto`) a codigo PUC via `ReglaContable` por tenant |
+| `validadores.py` | Validators stateless — cuadratura, periodo abierto, documento origen existe |
+| `excepciones.py` | Jerarquia `ContabilidadError` y subclases |
+| `extractores/base.py` | `AbstractExtractor` — interfaz comun (ver §18.3) |
+| `extractores/gastos.py` | `ExtractorGastos` — extrae `DocumentoSoporte` pendientes |
+| `extractores/inventario.py` | `ExtractorInventario` — extrae `MovimientoInventario` pendientes |
+| `extractores/facturas.py` | `ExtractorFacturas` — extrae `Factura` ACEPTADA pendientes |
+| `extractores/nomina.py` | `ExtractorNomina` — extrae `Devengo` aprobados pendientes |
 
 ### 18.2. DTOs — Contrato Inmutable
 
@@ -236,18 +241,36 @@ ImpuestoLinea(tipo='RETEFUENTE', valor=..., lado='HABER')              # default
 
 - **`lado`**: controla columna del asiento (`'DEBE'` o `'HABER'`). OBLIGATORIO para cuadratura.
 - **Idempotencia**: `documento_origen` mapea a `AsientoContable.documento_origen_*`. Constraint UNIQUE en BD.
+- **`empresa_id`**: PROHIBIDO pasarlo dentro del DTO — lo inyecta el `Contabilizador` desde su contexto.
 
-### 18.3. Patron de Integración por App Fuente
+### 18.3. Patron de Integracion — Modelo Pull (Extractores)
+
+**Arquitectura:** `contabilidad` extrae activamente de apps fuente. Las apps fuente no conocen ni importan de `contabilidad`.
 
 ```python
-# En apps/tenant/contabilidad/services/asientos_service.py
-from apps.tenant.contabilidad.services.asientos_service import materializar_asiento_desde_gasto
-asiento = materializar_asiento_desde_gasto(gasto)  # objeto, no ID
+# En apps/tenant/contabilidad/integracion/extractores/base.py
+class AbstractExtractor(ABC):
+    def __init__(self, empresa_id: int):
+        self.empresa_id = empresa_id
+        self.contabilizador = Contabilizador(empresa_id)
+
+    @abstractmethod
+    def extraer_pendientes(self) -> list[TransaccionEconomica]: ...
+
+    def contabilizar_pendientes(self) -> dict:
+        resultados = {'contabilizados': 0, 'errores': [], 'omitidos': 0}
+        for dto in self.extraer_pendientes():
+            try:
+                self.contabilizador.contabilizar(dto)
+                resultados['contabilizados'] += 1
+            except Exception as e:
+                resultados['errores'].append({'origen': str(dto.documento_origen), 'error': str(e)})
+        return resultados
 ```
 
-Hook en service de app fuente dentro de `try/except Exception` — errores son `WARNING`, no bloquean negocio.
+**Activacion:** Desde management commands (`manage.py backfill_asientos_gastos`) o Celery. Nunca desde ViewSets ni Signals.
 
-### 18.4. Cuadratura Obligatoria
+### 18.4. Cuadratura Obligatoria (Ejemplo COMPRA_GASTO)
 
 ```
 DEBE 51xxxx Gasto              [subtotal]
@@ -259,28 +282,47 @@ TOTAL DEBE == TOTAL HABER == subtotal
 
 ### 18.5. Numero de Asiento — Formato Canonico
 
-- Nuevo: `ASI-{YYYYMMDD}-{UUID8}` — generado por `Contabilizador._construir_asiento()`.
+- Normal: `ASI-{YYYYMMDD}-{UUID8}` — generado por `Contabilizador._construir_asiento()`.
 - Reversal: `RVER-{YYYYMMDD}-{UUID8}`.
 - PROHIBIDO que el caller externo provea el numero.
 
 ### 18.6. Prohibiciones
 
-- PROHIBIDO crear `AsientoContable`/`MovimientoContable` directamente desde ViewSets o Signals.
-- PROHIBIDO hardcodear códigos PUC en apps fuente — usar `cuenta_hint` o `ReglaContable`.
+- PROHIBIDO crear `AsientoContable`/`MovimientoContable` directamente desde ViewSets, Signals o apps fuente.
+- PROHIBIDO que apps fuente importen desde `apps.tenant.contabilidad`.
+- PROHIBIDO hardcodear codigos PUC en apps fuente — usar `cuenta_hint` o `ReglaContable`.
 - PROHIBIDO usar `lado='DEBE'` para impuestos/retenciones (su natural es `'HABER'`).
-- PROHIBIDO pasar `empresa_id` dentro del DTO (lo inyecta el Contabilizador).
+- PROHIBIDO el patron Push — solo Pull (extractor de contabilidad lee app fuente).
+
+## [MEMORY] 19. Memory Bank y Estado a Largo Plazo (MEMORY.md)
+
+**REGLA OBLIGATORIA PARA TODOS LOS AGENTES Y EDITORES DE CODIGO (Claude Code, Cursor, Copilot, etc.)**
+
+1. **Lectura Inicial Obligatoria:** Al iniciar cualquier sesion, tarea o contexto nuevo, el agente DEBE leer `MEMORY.md` en la raiz del proyecto.
+2. **Proposito del Memory Bank:** `MEMORY.md` es la fuente canonica del estado actual del proyecto, ADRs recientes y progreso activo. Evita refactorizaciones ciclicas y perdida de contexto.
+3. **Mantenimiento Continuo:** Al finalizar hitos importantes o implementar cambios estructurales, el agente DEBE actualizar `MEMORY.md` proactivamente.
+4. **Inmutabilidad de ADRs:** Las decisiones listadas bajo ADRs en `MEMORY.md` no pueden alterarse sin autorizacion explicita del usuario principal.
+
+## [KARPATHY] 21. Karpathy Coding Principles (Caution over Speed)
+
+**PRINCIPIO FUNDAMENTAL:** Reducir errores comunes de LLMs mediante cautela, simplicidad y cambios quirurgicos.
+
+1. **Pensar antes de Codificar**: No asumir. Si hay incertidumbre, preguntar. Explicitar suposiciones. Si hay multiples interpretaciones, presentarlas antes de elegir una.
+2. **Simplicidad Primero**: Codigo minimo necesario. Prohibido crear abstracciones para codigo de un solo uso o agregar "flexibilidad" no solicitada. Si se puede hacer en 50 lineas en vez de 200, reescribir.
+3. **Cambios Quirurgicos**: Tocar SOLO lo estrictamente necesario. No "mejorar" codigo adyacente ni refactorizar lo que no esta roto. Empatar el estilo existente. Si se detecta codigo muerto no relacionado, reportarlo pero NO borrarlo sin permiso.
+4. **Ejecucion Basada en Objetivos**: Transformar tareas en metas verificables. Para tareas de multiples pasos, definir un plan: `1. [Paso] -> verificar: [check]`.
 
 ---
 
 ## Apendice A. Comandos de Operacion
 
-- **Instalacion:** `pip install -r requirements.txt`
-- **Docker (Desarrollo):** `docker compose up --build`
-- **Migraciones Multi-Tenant:** `docker compose exec web python manage.py migrate_schemas`
-- **Migraciones Shared:** `docker compose exec web python manage.py migrate_schemas --shared`
-- **Linter (Ruff):** `ruff check .`
-- **Formateador (Ruff):** `ruff format .`
-- **Testing:** `python manage.py test` / `python manage.py test apps.tenant.<app_name>`
-- **Compilacion Python:** `python -m py_compile archivo.py` (validación pre-PR)
-- **Seed Reglas Contables:** `python manage.py seed_reglas_contables`
-- **Backfill Asientos Gastos:** `python manage.py backfill_asientos_gastos [--dry-run] [--empresa-id N]`
+- **Levantar:** `make up` / `docker compose up --build`
+- **Migraciones tenants:** `make migrate-tenants`
+- **Migraciones shared:** `make migrate-shared`
+- **Tests:** `make test` | archivo: `make test-file FILE="path/to/test.py"`
+- **Auditoria completa:** `make audit` (ruff + bandit + django check)
+- **Lint + autofix:** `make ruff` (py3.12, line-length 100)
+- **Compilacion Python (pre-PR):** `python -m py_compile archivo.py`
+- **Seed reglas contables:** `python manage.py seed_reglas_contables`
+- **Seed catalogo NIIF:** `python manage.py poblar_catalogo_niif`
+- **Backfill asientos gastos:** `python manage.py backfill_asientos_gastos [--dry-run] [--empresa-id N]`

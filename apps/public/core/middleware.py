@@ -263,3 +263,23 @@ class RequestContextMiddleware(MiddlewareMixin):
         if hasattr(_logging_context, "schema_name"):
             delattr(_logging_context, "schema_name")
         return response
+
+
+class DebugNoCSRFMiddleware:
+    """
+    En DEBUG mode, desactiva la verificación CSRF para permitir desarrollo sin
+    tener que enviar tokens CSRF en requests DELETE, POST, PUT, PATCH.
+
+    SOLO para desarrollo. En producción (DEBUG=False), el CSRF middleware
+    funciona normalmente.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from django.conf import settings
+        if settings.DEBUG:
+            # Marcar request como si ya pasó CSRF
+            request._dont_enforce_csrf_checks = True
+        return self.get_response(request)

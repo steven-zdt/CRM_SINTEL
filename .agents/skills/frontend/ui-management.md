@@ -77,3 +77,26 @@ function initFormulario() {
 - [ ] ¿Se usa `htmx:afterSettle` para asegurar que el DOM esté listo?
 - [ ] ¿Los botones de acción limpian sus listeners previos (clonación)?
 - [ ] ¿Se usa `instance.dispose()` si ya existe una instancia de Bootstrap?
+
+## 6. Destrucción Segura de Componentes (Evitar TypeErrors)
+
+Cuando HTMX va a remover un elemento del DOM que tiene una instancia de Bootstrap (Offcanvas/Modal), es **obligatorio** destruir la instancia manualmente para evitar que Bootstrap intente acceder a propiedades de un elemento nulo durante las transiciones.
+
+### Implementación con htmx:beforeCleanupElement:
+
+```javascript
+document.body.addEventListener('htmx:beforeCleanupElement', (e) => {
+    const el = e.detail.el;
+    // Si el elemento que se va a limpiar es un offcanvas o contiene uno
+    if (el.classList.contains('offcanvas') || el.querySelector('.offcanvas')) {
+        const offcanvasEl = el.classList.contains('offcanvas') ? el : el.querySelector('.offcanvas');
+        if (window.UIManager?.destroyOffcanvas) {
+            window.UIManager.destroyOffcanvas(offcanvasEl);
+        }
+    }
+});
+```
+
+### Método UIManager.destroyOffcanvas:
+Este método debe realizar un `dispose()` de la instancia y remover backdrops de forma síncrona.
+

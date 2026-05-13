@@ -16,9 +16,24 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
 from django_tenants.utils import get_tenant_model
 
-from apps.tenant.contabilidad.models import ReglaContable, TarifaImpuesto
+from apps.tenant.contabilidad.models import ReglaContable, TarifaImpuesto, TipoComprobante
 
 Tenant = get_tenant_model()
+
+# ============================================================================
+# COMPROBANTES CONTABLES (Plantillas de documentos)
+# ============================================================================
+
+COMPROBANTES_DEFECTO = [
+    {'codigo': 'CC', 'nombre': 'Comprobante de Contabilidad', 'prefijo': 'CC'},
+    {'codigo': 'RC', 'nombre': 'Recibo de Caja', 'prefijo': 'RC'},
+    {'codigo': 'CE', 'nombre': 'Comprobante de Egreso', 'prefijo': 'CE'},
+    {'codigo': 'FV', 'nombre': 'Factura de Venta', 'prefijo': 'FV'},
+    {'codigo': 'DS', 'nombre': 'Documento Soporte', 'prefijo': 'DS'},
+    {'codigo': 'NC', 'nombre': 'Nota Crédito', 'prefijo': 'NC'},
+    {'codigo': 'ND', 'nombre': 'Nota Débito', 'prefijo': 'ND'},
+    {'codigo': 'GN', 'nombre': 'Gasto de Nómina', 'prefijo': 'GN'},
+]
 
 # ============================================================================
 # REGLAS CONTABLES (Transaction Type + Economic Concept → PUC Account)
@@ -90,6 +105,12 @@ REGLAS_DEFECTO = [
     },
     {
         'tipo_transaccion': 'COMPRA_GASTO',
+        'concepto': 'GASTO_GENERAL',
+        'cuenta_codigo': '519595',
+        'descripcion': 'Otros gastos diversos (General)'
+    },
+    {
+        'tipo_transaccion': 'COMPRA_GASTO',
         'concepto': 'IVA_DESCONTABLE',
         'cuenta_codigo': '240802',
         'descripcion': 'IVA descontable en compras'
@@ -114,29 +135,116 @@ REGLAS_DEFECTO = [
     },
     {
         'tipo_transaccion': 'COMPRA_GASTO',
-        'concepto': 'CXP',
+        'concepto': 'PASIVO_COMPRA_GASTO',
         'cuenta_codigo': '233595',
         'descripcion': 'Costos y gastos por pagar — Proveedores nacionales'
+    },
+    # COMPRA INVENTARIO
+    {
+        'tipo_transaccion': 'COMPRA_INVENTARIO',
+        'concepto': 'INVENTARIO_PRODUCTO',
+        'cuenta_codigo': '143505',
+        'descripcion': 'Inventario de mercancías'
+    },
+    {
+        'tipo_transaccion': 'COMPRA_INVENTARIO',
+        'concepto': 'PASIVO_COMPRA_INVENTARIO',
+        'cuenta_codigo': '220505',
+        'descripcion': 'Proveedores nacionales (Inventario)'
     },
     # INVENTARIO (SALIDA_INVENTARIO_VENTA)
     {
         'tipo_transaccion': 'SALIDA_INVENTARIO_VENTA',
-        'concepto': 'COSTO_VENTAS',
+        'concepto': 'COSTO_VENTA_PRODUCTO',
         'cuenta_codigo': '613501',
         'descripcion': 'Costo de ventas y prestación de servicios'
     },
     {
         'tipo_transaccion': 'SALIDA_INVENTARIO_VENTA',
-        'concepto': 'INVENTARIO',
+        'concepto': 'INVENTARIO_PRODUCTO',
         'cuenta_codigo': '143505',
         'descripcion': 'Mercancías no fabricadas — Inventario'
     },
     # BAJA INVENTARIO
     {
         'tipo_transaccion': 'BAJA_INVENTARIO',
-        'concepto': 'PERDIDA_INVENTARIO',
+        'concepto': 'GASTO_DETERIORO_INVENTARIO',
         'cuenta_codigo': '529901',
-        'descripcion': 'Pérdida en inventarios'
+        'descripcion': 'Gasto por deterioro/pérdida de inventarios'
+    },
+    {
+        'tipo_transaccion': 'BAJA_INVENTARIO',
+        'concepto': 'GASTO_CONSUMO_INTERNO',
+        'cuenta_codigo': '519595',
+        'descripcion': 'Gasto por consumo interno de inventarios'
+    },
+    {
+        'tipo_transaccion': 'BAJA_INVENTARIO',
+        'concepto': 'INVENTARIO_PRODUCTO',
+        'cuenta_codigo': '143505',
+        'descripcion': 'Salida de inventario por baja/consumo'
+    },
+    # AJUSTE INVENTARIO
+    {
+        'tipo_transaccion': 'AJUSTE_INVENTARIO',
+        'concepto': 'INVENTARIO_PRODUCTO',
+        'cuenta_codigo': '143505',
+        'descripcion': 'Entrada/Salida de inventario por ajuste'
+    },
+    {
+        'tipo_transaccion': 'AJUSTE_INVENTARIO',
+        'concepto': 'INGRESO_AJUSTE_INVENTARIO',
+        'cuenta_codigo': '425050',
+        'descripcion': 'Ingresos por ajustes de inventario (Sobrantes)'
+    },
+    {
+        'tipo_transaccion': 'AJUSTE_INVENTARIO',
+        'concepto': 'COSTO_VENTA_DEVOLUCION',
+        'cuenta_codigo': '613501',
+        'descripcion': 'Ajuste al costo por devolución'
+    },
+    {
+        'tipo_transaccion': 'AJUSTE_INVENTARIO',
+        'concepto': 'AJUSTE_CONTABLE',
+        'cuenta_codigo': '519595',
+        'descripcion': 'Ajuste contable genérico'
+    },
+    # NOTA CREDITO COMPRA (COMPRA_NOTA_CREDITO)
+    {
+        'tipo_transaccion': 'COMPRA_NOTA_CREDITO',
+        'concepto': 'DEVOLUCIONES_COMPRA',
+        'cuenta_codigo': '233595',
+        'descripcion': 'Devoluciones en compras — ajuste cuentas por pagar'
+    },
+    {
+        'tipo_transaccion': 'COMPRA_NOTA_CREDITO',
+        'concepto': 'IVA_DESCONTABLE',
+        'cuenta_codigo': '240802',
+        'descripcion': 'Ajuste IVA descontable por devolucion en compra'
+    },
+    {
+        'tipo_transaccion': 'COMPRA_NOTA_CREDITO',
+        'concepto': 'RETEFUENTE',
+        'cuenta_codigo': '236540',
+        'descripcion': 'Ajuste retencion fuente por devolucion en compra'
+    },
+    {
+        'tipo_transaccion': 'COMPRA_NOTA_CREDITO',
+        'concepto': 'RETEICA',
+        'cuenta_codigo': '236805',
+        'descripcion': 'Ajuste ReteICA por devolucion en compra'
+    },
+    {
+        'tipo_transaccion': 'COMPRA_NOTA_CREDITO',
+        'concepto': 'RETEIVA',
+        'cuenta_codigo': '236799',
+        'descripcion': 'Ajuste ReteIVA por devolucion en compra'
+    },
+    {
+        'tipo_transaccion': 'COMPRA_NOTA_CREDITO',
+        'concepto': 'PASIVO_COMPRA_GASTO',
+        'cuenta_codigo': '233595',
+        'descripcion': 'Ajuste CxP proveedor por devolucion en compra'
     },
     # NÓMINA (NOMINA_LIQUIDACION)
     {
@@ -153,6 +261,12 @@ REGLAS_DEFECTO = [
     },
     {
         'tipo_transaccion': 'NOMINA_LIQUIDACION',
+        'concepto': 'OTROS_DEVENGOS',
+        'cuenta_codigo': '510595',
+        'descripcion': 'Otros devengos del empleado'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_LIQUIDACION',
         'concepto': 'SALUD_EMPLEADO',
         'cuenta_codigo': '237005',
         'descripcion': 'Salud empleado (aporte empleado 4%)'
@@ -161,7 +275,13 @@ REGLAS_DEFECTO = [
         'tipo_transaccion': 'NOMINA_LIQUIDACION',
         'concepto': 'PENSION_EMPLEADO',
         'cuenta_codigo': '237006',
-        'descripcion': 'Pensión empleado (aporte empleado 4%)'
+        'descripcion': 'Pension empleado (aporte empleado 4%)'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_LIQUIDACION',
+        'concepto': 'PRESTAMOS_EMPLEADO',
+        'cuenta_codigo': '259595',
+        'descripcion': 'Prestamos y descuentos varios al empleado'
     },
     {
         'tipo_transaccion': 'NOMINA_LIQUIDACION',
@@ -235,6 +355,87 @@ REGLAS_DEFECTO = [
         'concepto': 'INTERESES_CESANTIAS',
         'cuenta_codigo': '252005',
         'descripcion': 'Intereses sobre cesantías por pagar (1%)'
+    },
+    # COSTO DE VENTA (INVENTARIO_COSTO_VENTA)
+    {
+        'tipo_transaccion': 'INVENTARIO_COSTO_VENTA',
+        'concepto': 'COSTO_VENTAS',
+        'cuenta_codigo': '613501',
+        'descripcion': 'Costo de ventas (mercancías no fabricadas)'
+    },
+    {
+        'tipo_transaccion': 'INVENTARIO_COSTO_VENTA',
+        'concepto': 'INVENTARIO_MERCANCIAS',
+        'cuenta_codigo': '143505',
+        'descripcion': 'Mercancías no fabricadas (salida)'
+    },
+    # AJUSTE INVENTARIO (AJUSTE_INVENTARIO)
+    {
+        'tipo_transaccion': 'AJUSTE_INVENTARIO',
+        'concepto': 'GASTO_BAJA_INVENTARIO',
+        'cuenta_codigo': '529901',
+        'descripcion': 'Gasto por deterioro/pérdida de inventarios'
+    },
+    {
+        'tipo_transaccion': 'AJUSTE_INVENTARIO',
+        'concepto': 'AJUSTE_INVENTARIO_INGRESO',
+        'cuenta_codigo': '425050',
+        'descripcion': 'Ingresos por ajustes de inventario (Sobrantes)'
+    },
+    {
+        'tipo_transaccion': 'AJUSTE_INVENTARIO',
+        'concepto': 'INVENTARIO_MERCANCIAS',
+        'cuenta_codigo': '143505',
+        'descripcion': 'Mercancías no fabricadas (ajuste)'
+    },
+    # PAGO NÓMINA (NOMINA_PAGO)
+    {
+        'tipo_transaccion': 'NOMINA_PAGO',
+        'concepto': 'NOMINA_SUELDOS',
+        'cuenta_codigo': '510506',
+        'descripcion': 'Gastos de personal — Sueldos'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_PAGO',
+        'concepto': 'NOMINA_AUXILIO_TRANSPORTE',
+        'cuenta_codigo': '510527',
+        'descripcion': 'Auxilio de transporte'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_PAGO',
+        'concepto': 'NOMINA_OTROS_DEVENGOS',
+        'cuenta_codigo': '510595',
+        'descripcion': 'Otros devengos del empleado'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_PAGO',
+        'concepto': 'NOMINA_APORTE_SALUD',
+        'cuenta_codigo': '237005',
+        'descripcion': 'Salud empleado (aporte empleado 4%)'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_PAGO',
+        'concepto': 'NOMINA_APORTE_PENSION',
+        'cuenta_codigo': '237006',
+        'descripcion': 'Pension empleado (aporte empleado 4%)'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_PAGO',
+        'concepto': 'NOMINA_PRESTAMOS',
+        'cuenta_codigo': '136595',
+        'descripcion': 'Recuperación de préstamos a empleados'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_PAGO',
+        'concepto': 'NOMINA_DESCUENTOS',
+        'cuenta_codigo': '237095',
+        'descripcion': 'Descuentos varios de nómina'
+    },
+    {
+        'tipo_transaccion': 'NOMINA_PAGO',
+        'concepto': 'PASIVO_NOMINA_POR_PAGAR',
+        'cuenta_codigo': '238030',
+        'descripcion': 'Obligaciones laborales por pagar'
     },
 ]
 
@@ -468,45 +669,57 @@ class Command(BaseCommand):
             self.stdout.write(f'\n  Processing tenant: {tenant.nombre} (ID={tenant.id})')
 
             with tenant:
-                # Ensure all migrations are applied first
-                try:
-                    if not dry_run:
-                        call_command('migrate', verbosity=0, interactive=False)
-                except Exception as e:
-                    self.stdout.write(
-                        self.style.WARNING(f'    Warning: Migration failed: {e}')
-                    )
-
                 # Get the Empresa (SSoT singleton for this tenant)
-                from apps.tenant.empresa.models import Empresa
+                from django.apps import apps
                 try:
-                    empresa = Empresa.objects.get()
-                except Empresa.DoesNotExist:
-                    self.stdout.write(
-                        self.style.ERROR(f'    ✗ No Empresa found for tenant {tenant.nombre}')
-                    )
-                    continue
+                    Empresa = apps.get_model('empresa', 'Empresa')
+                    empresa = Empresa.objects.first()
+                    if not empresa:
+                         self.stdout.write(self.style.ERROR(f'    [ERROR] No Empresa found for tenant {tenant.nombre}'))
+                         continue
                 except Exception as e:
                     self.stdout.write(
-                        self.style.WARNING(f'    ✗ Could not retrieve Empresa: {e}')
+                        self.style.WARNING(f'    [WARNING] Could not retrieve Empresa: {e}')
                     )
                     continue
 
-                # Ensure tables exist by running migrations
+                # Ensure tables exist (Basic check)
                 try:
+                    from django.db import connection
                     with connection.cursor() as cursor:
                         cursor.execute(
                             "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'contabilidad_reglacontable')"
                         )
-                        tables_exist = cursor.fetchone()[0]
-
-                    if not tables_exist:
-                        self.stdout.write(f'    Creating tables for {tenant.nombre}...')
-                        if not dry_run:
-                            call_command('migrate', 'contabilidad', verbosity=0)
-                            self.stdout.write(self.style.SUCCESS('    ✓ Tables created'))
+                        if not cursor.fetchone()[0]:
+                            self.stdout.write(self.style.WARNING('    [WARNING] Accounting tables not found. Run migrate_schemas first.'))
+                            continue
                 except Exception as e:
-                    self.stdout.write(self.style.WARNING(f'    Warning: Could not check/create tables: {e}'))
+                    self.stdout.write(self.style.WARNING(f'    Warning: Could not check tables: {e}'))
+
+                # Seed TipoComprobante v3.6
+                comprobantes_created = 0
+                for comp_dict in COMPROBANTES_DEFECTO:
+                    try:
+                        comp, created = TipoComprobante.objects.get_or_create(
+                            empresa=empresa,
+                            codigo=comp_dict['codigo'],
+                            defaults={
+                                'nombre': comp_dict['nombre'],
+                                'prefijo': comp_dict['prefijo'],
+                                'consecutivo_actual': 1,
+                                'activa': True,
+                            }
+                        )
+                        if created:
+                            comprobantes_created += 1
+                            if not dry_run:
+                                self.stdout.write(
+                                    self.style.SUCCESS(
+                                        f'    [OK] Created voucher type: {comp.codigo} ({comp.nombre})'
+                                    )
+                                )
+                    except Exception as e:
+                        self.stdout.write(self.style.ERROR(f'    Error creating voucher type: {e}'))
 
                 # Seed ReglaContable
                 reglas_created = 0
@@ -527,7 +740,7 @@ class Command(BaseCommand):
                             if not dry_run:
                                 self.stdout.write(
                                     self.style.SUCCESS(
-                                        f'    ✓ Created rule: {regla.tipo_transaccion} + {regla.concepto} → {regla.cuenta_codigo}'
+                                        f'    [OK] Created rule: {regla.tipo_transaccion} + {regla.concepto} → {regla.cuenta_codigo}'
                                     )
                                 )
                     except Exception as e:
@@ -554,7 +767,7 @@ class Command(BaseCommand):
                             if not dry_run:
                                 self.stdout.write(
                                     self.style.SUCCESS(
-                                        f'    ✓ Created rate: {tarifa.tipo} {tarifa.valor_porcentaje}%'
+                                        f'    [OK] Created rate: {tarifa.tipo} {tarifa.valor_porcentaje}%'
                                     )
                                 )
                     except Exception as e:
@@ -569,10 +782,10 @@ class Command(BaseCommand):
                 else:
                     self.stdout.write(
                         self.style.SUCCESS(
-                            f'    ✓ Created {reglas_created} rules + {tarifas_created} rates'
+                            f'    [SUCCESS] Created {reglas_created} rules + {tarifas_created} rates'
                         )
                     )
 
         self.stdout.write(
-            self.style.SUCCESS('\n✓ Seeding complete!')
+            self.style.SUCCESS('\n[SUCCESS] Seeding complete!')
         )

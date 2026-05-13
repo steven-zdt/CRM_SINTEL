@@ -1,0 +1,437 @@
+{# editor_cotizacion.html - Editor completo COT-0000 style v2.62.0 #}
+{# Usado por: CotizacionEditorTemplateView (editar) y CotizacionEditorDraftView (crear) #}
+
+<input type="hidden" id="cot-uuid" value="{{ cotizacion.uuid|default:'' }}">
+<input type="hidden" id="cot-id" value="{{ cotizacion.id|default:'' }}">
+
+{# ===== TOOLBAR ===== #}
+<div class="offcanvas-header border-bottom py-2 bg-white sticky-top">
+  <div class="d-flex align-items-center gap-2">
+    <i class="bi bi-file-text text-primary fs-5"></i>
+    <h6 class="mb-0 fw-bold">
+      {% if cotizacion %}Cotizacion {{ cotizacion.codigo_unico|default:cotizacion.numero_cotizacion }}{% else %}Nueva
+      Cotizacion{% endif %}
+    </h6>
+    {% if cotizacion %}
+    <span class="badge rounded-pill
+      {% if cotizacion.estado == 'BORRADOR' %}bg-secondary
+      {% elif cotizacion.estado == 'ENVIADA' %}bg-primary
+      {% elif cotizacion.estado == 'ACEPTADA' %}bg-success
+      {% else %}bg-danger{% endif %}" style="font-size:0.7rem;">
+      {{ cotizacion.estado }}
+    </span>
+    {% endif %}
+  </div>
+  <div class="ms-auto d-flex gap-2">
+    <a href="{% if cotizacion %}/api/v1/cotizaciones/{{ cotizacion.uuid }}/exportar-pdf/{% else %}#{% endif %}" 
+      target="_blank"
+      id="btn-pdf-cot"
+      class="btn btn-outline-danger btn-sm {% if not cotizacion %}d-none{% endif %}">
+      <i class="bi bi-file-pdf"></i> PDF
+    </a>
+    <button type="button" class="btn btn-success btn-sm fw-semibold" id="btn-guardar-cot">
+      <i class="bi bi-check2-circle"></i> Guardar
+    </button>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+</div>
+
+<div class="offcanvas-body p-0 d-flex flex-column" style="background:#f5f6fa; overflow-y:auto;">
+
+  {# ===== CABECERA COT-0000 ===== #}
+  <div class="bg-white border-bottom px-3 pt-3 pb-2">
+
+    {# -- Titulo plantilla emulando PDF -- #}
+    <div class="row g-0 align-items-center mb-3 pb-2" style="border-bottom: 3px solid #0d47a1;">
+      <div class="col">
+        <div class="fw-bold" style="font-size:1.5rem; color:#0d47a1; letter-spacing:1px; text-transform:uppercase;">
+          SINTEL
+        </div>
+        <div class="fw-semibold" style="font-size:0.75rem; color:#7a8fa3; text-transform:uppercase; letter-spacing:1px;">
+          Propuesta Economica
+        </div>
+      </div>
+      <div class="col-auto text-end">
+        <div class="fw-bold" style="font-size:0.9rem; color:#0d47a1;">{{ empresa.razon_social }}</div>
+        <div class="text-muted" style="font-size:0.65rem;">NIT: {{ empresa.nit }} | {{ empresa.direccion|default:'' }}</div>
+      </div>
+    </div>
+
+    {# -- Fila 1: No. / Cliente / Fecha / F.C -- #}
+    <div class="row g-2 mb-2">
+      <div class="col-md-3">
+        <label class="form-label form-label-sm fw-bold mb-1" style="font-size:0.65rem; color:#546e7a; text-transform:uppercase;">Cotizacion No.</label>
+        <input type="text" class="form-control form-control-sm" id="cot-numero" placeholder="(generado automaticamente)"
+          value="{{ cotizacion.codigo_unico|default:'' }}" readonly
+          style="background:#eceff1; font-weight:700; color:#0d47a1; border:1px solid #cfd8dc;">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label form-label-sm fw-semibold mb-1">
+          Cliente <span class="text-danger">*</span>
+        </label>
+        <select class="form-select form-select-sm" id="cot-cliente-select">
+          <option value="">-- Seleccione cliente --</option>
+          {% for c in clientes %}
+          <option value="{{ c.id }}" {% if cotizacion.cliente_id == c.id %}selected{% endif %}>
+            {{ c.razon_social }}
+          </option>
+          {% endfor %}
+        </select>
+        <input type="hidden" id="cot-cliente-id" value="{{ cotizacion.cliente_id|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm fw-semibold mb-1">Fecha Emision</label>
+        <input type="date" class="form-control form-control-sm" id="cot-fecha-emision"
+          value="{{ cotizacion.fecha_emision|date:'Y-m-d'|default:'' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label form-label-sm fw-semibold mb-1">Vencimiento</label>
+        <input type="date" class="form-control form-control-sm" id="cot-fecha-vencimiento"
+          value="{{ cotizacion.fecha_vencimiento|date:'Y-m-d'|default:'' }}">
+      </div>
+    </div>
+
+    {# -- Fila 2: Configuracion / Tipo / IVA / AIU -- #}
+    <div class="row g-2">
+      <div class="col-md-3">
+        <label class="form-label form-label-sm fw-semibold mb-1">Plantilla</label>
+        <select class="form-select form-select-sm" id="cot-config-select">
+          <option value="">Seleccione...</option>
+          {% for config in configuraciones %}
+          <option value="{{ config.id }}" {% if config.id == cotizacion.configuracion_id %}selected{% endif %}>
+            {{ config.nombre_configuracion }}
+          </option>
+          {% endfor %}
+        </select>
+        <input type="hidden" id="cot-config-id" value="{{ cotizacion.configuracion_id|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm fw-semibold mb-1">Tipo</label>
+        <select class="form-select form-select-sm" id="cot-tipo">
+          <option value="MIXTO" {% if cotizacion.tipo_cotizacion == 'MIXTO' %}selected{% endif %}>MIXTO</option>
+          <option value="PRODUCTOS" {% if cotizacion.tipo_cotizacion == 'PRODUCTOS' %}selected{% endif %}>PRODUCTOS
+          </option>
+          <option value="SERVICIOS" {% if cotizacion.tipo_cotizacion == 'SERVICIOS' %}selected{% endif %}>SERVICIOS
+          </option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm fw-bold mb-1" style="font-size:0.65rem; color:#546e7a; text-transform:uppercase;">IVA %</label>
+        <input type="number" class="form-control form-control-sm border-primary" id="cot-iva"
+          value="{{ cotizacion.iva_porcentaje|default:'19.00' }}" min="0" max="100" step="0.01"
+          style="background:#eceff1; font-weight:700; color:#0d47a1;">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label form-label-sm fw-bold mb-1" style="font-size:0.65rem; color:#546e7a; text-transform:uppercase;">Utilidad %</label>
+        <input type="number" class="form-control form-control-sm border-primary" id="cot-utilidad-global" value="20.00"
+          min="0" max="1000" step="0.01" style="background:#eceff1; font-weight:700; color:#0d47a1;">
+      </div>
+      <div class="col-md-3">
+        <div class="form-check form-switch mb-1">
+          <input class="form-check-input" type="checkbox" id="cot-aplicar-aiu" {% if cotizacion.porcentaje_aiu_admin or cotizacion.porcentaje_aiu_imprevistos or cotizacion.porcentaje_aiu_utilidad %}checked{% endif %}>
+          <label class="form-check-label fw-bold text-dark" for="cot-aplicar-aiu" style="font-size:0.65rem; color:#546e7a; text-transform:uppercase;">APLICAR AIU</label>
+        </div>
+        <div id="cot-aiu-fields" class="{% if not cotizacion.porcentaje_aiu_admin and not cotizacion.porcentaje_aiu_imprevistos and not cotizacion.porcentaje_aiu_utilidad %}d-none{% endif %}">
+          <div class="input-group input-group-sm">
+            <input type="number" class="form-control border-info" id="cot-aiu-admin" placeholder="A %"
+              value="{{ cotizacion.porcentaje_aiu_admin|default:'0' }}" min="0" max="100" step="0.01"
+              style="background:#eceff1; font-weight:bold; color:#0d47a1;">
+            <input type="number" class="form-control border-info" id="cot-aiu-imprevistos" placeholder="I %"
+              value="{{ cotizacion.porcentaje_aiu_imprevistos|default:'0' }}" min="0" max="100" step="0.01"
+              style="background:#eceff1; font-weight:bold; color:#0d47a1;">
+            <input type="number" class="form-control border-info" id="cot-aiu-utilidad" placeholder="U %"
+              value="{{ cotizacion.porcentaje_aiu_utilidad|default:'0' }}" min="0" max="100" step="0.01"
+              style="background:#eceff1; font-weight:bold; color:#0d47a1;">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ===== TABLA DE ITEMS ===== #}
+  <div class="px-3 pt-3 pb-2" style="overflow-x:auto; flex:1 1 auto;">
+    <table class="table table-sm table-bordered align-middle mb-0" id="cot-tabla-items"
+      style="min-width:860px; font-size:0.82rem;">
+      <colgroup>
+        <col style="width:4%"> <!-- Item -->
+        <col style="width:28%"> <!-- Descripcion -->
+        <col style="width:9%"> <!-- Marca -->
+        <col style="width:9%"> <!-- Referencia -->
+        <col style="width:5%"> <!-- Cant -->
+        <col style="width:5%"> <!-- Und -->
+        <col style="width:12%"> <!-- Costo Base -->
+        <col style="width:12%"> <!-- V. Unitario -->
+        <col style="width:12%"> <!-- Subtotal -->
+        <col style="width:4%"> <!-- Action -->
+      </colgroup>
+      <thead>
+        <tr style="background:#0d47a1;color:#fff;font-size:0.75rem;text-transform:uppercase;">
+          <th class="text-center py-2">#</th>
+          <th class="py-2">Descripcion</th>
+          <th class="py-2">Marca</th>
+          <th class="py-2">Referencia</th>
+          <th class="text-center py-2">Cant.</th>
+          <th class="text-center py-2">Und.</th>
+          <th class="text-end py-2">Costo U. Base</th>
+          <th class="text-end py-2">V. Unitario</th>
+          <th class="text-end py-2">Subtotal</th>
+          <th class="py-2"></th>
+        </tr>
+      </thead>
+
+      {# -- SECCION 1: DISPOSITIVOS -- #}
+      <tbody id="seccion-PRODUCTO" class="seccion-body">
+        <tr class="seccion-header" data-secnum="1" style="background:#0d47a1;color:#fff;font-size:0.8rem;text-transform:uppercase;">
+          <td class="fw-bold text-center">1.0</td>
+          <td colspan="8" class="fw-bold">Dispositivos y Equipos</td>
+          <td></td>
+        </tr>
+        {# filas de items se insertan aqui por JS #}
+        {# Subtotal Neto Sección #}
+        <tr id="subtotal-row-PRODUCTO">
+          <td colspan="8" class="text-end fw-semibold py-0 pe-3" style="background:#e3f2fd; font-size:0.75rem;">Subtotal
+            1.0 (Neto) $</td>
+          <td class="text-end fw-semibold py-0 pe-2" id="subtotal-PRODUCTO"
+            style="background:#e3f2fd; font-size:0.75rem;">$ 0</td>
+          <td style="background:#e3f2fd;"></td>
+        </tr>
+        {# IVA Sección #}
+        <tr id="iva-row-PRODUCTO">
+          <td colspan="8" class="text-end fw-normal py-0 pe-3"
+            style="background:#e3f2fd; font-size:0.7rem; color:#666;">IVA (19%) $</td>
+          <td class="text-end fw-normal py-0 pe-2" id="iva-PRODUCTO"
+            style="background:#e3f2fd; font-size:0.7rem; color:#666;">$ 0</td>
+          <td style="background:#e3f2fd;"></td>
+        </tr>
+        {# Total Sección #}
+        <tr id="total-row-PRODUCTO">
+          <td colspan="8" class="text-end fw-bold py-1 pe-3"
+            style="background:#eceff1; font-size:0.8rem; color:#0d47a1; text-transform:uppercase;">TOTAL SECCIÓN 1.0 $</td>
+          <td class="text-end fw-bold py-1 pe-2" id="total-PRODUCTO"
+            style="background:#eceff1; font-size:0.8rem; color:#0d47a1;">$ 0</td>
+          <td style="background:#eceff1;"></td>
+        </tr>
+        <tr class="add-item-row" id="add-row-PRODUCTO">
+          <td colspan="10" class="py-1 border-top-0" style="background:#f8f9fa;">
+            <button type="button" class="btn btn-outline-primary btn-xs py-0 px-2 btn-add-item" data-tipo="PRODUCTO"
+              style="font-size:0.75rem;">
+              <i class="bi bi-plus-circle"></i> Agregar Dispositivo
+            </button>
+          </td>
+        </tr>
+      </tbody>
+
+      {# -- SECCION 2: INFRAESTRUCTURA -- #}
+      <tbody id="seccion-MATERIAL" class="seccion-body">
+        <tr class="seccion-header" data-secnum="2" style="background:#0d47a1;color:#fff;font-size:0.8rem;text-transform:uppercase;">
+          <td class="fw-bold text-center">2.0</td>
+          <td colspan="8" class="fw-bold">Infraestructura y cableado</td>
+          <td></td>
+        </tr>
+        {# Subtotal Neto Sección #}
+        <tr id="subtotal-row-MATERIAL">
+          <td colspan="8" class="text-end fw-semibold py-0 pe-3" style="background:#e8f5e9; font-size:0.75rem;">Subtotal
+            2.0 (Neto) $</td>
+          <td class="text-end fw-semibold py-0 pe-2" id="subtotal-MATERIAL"
+            style="background:#e8f5e9; font-size:0.75rem;">$ 0</td>
+          <td style="background:#e8f5e9;"></td>
+        </tr>
+        {# IVA Sección #}
+        <tr id="iva-row-MATERIAL">
+          <td colspan="8" class="text-end fw-normal py-0 pe-3"
+            style="background:#e8f5e9; font-size:0.7rem; color:#666;">IVA (19%) $</td>
+          <td class="text-end fw-normal py-0 pe-2" id="iva-MATERIAL"
+            style="background:#e8f5e9; font-size:0.7rem; color:#666;">$ 0</td>
+          <td style="background:#e8f5e9;"></td>
+        </tr>
+        {# Total Sección #}
+        <tr id="total-row-MATERIAL">
+          <td colspan="8" class="text-end fw-bold py-1 pe-3"
+            style="background:#eceff1; font-size:0.8rem; color:#0d47a1; text-transform:uppercase;">TOTAL SECCIÓN 2.0 $</td>
+          <td class="text-end fw-bold py-1 pe-2" id="total-MATERIAL"
+            style="background:#eceff1; font-size:0.8rem; color:#0d47a1;">$ 0</td>
+          <td style="background:#eceff1;"></td>
+        </tr>
+        <tr class="add-item-row" id="add-row-MATERIAL">
+          <td colspan="10" class="py-1 border-top-0" style="background:#f8f9fa;">
+            <button type="button" class="btn btn-outline-success btn-xs py-0 px-2 btn-add-item" data-tipo="MATERIAL"
+              style="font-size:0.75rem;">
+              <i class="bi bi-plus-circle"></i> Agregar Material
+            </button>
+          </td>
+        </tr>
+      </tbody>
+
+      {# -- SECCION 3: SERVICIOS -- #}
+      <tbody id="seccion-SERVICIO" class="seccion-body">
+        <tr class="seccion-header" data-secnum="3" style="background:#0d47a1;color:#fff;font-size:0.8rem;text-transform:uppercase;">
+          <td class="fw-bold text-center">3.0</td>
+          <td colspan="8" class="fw-bold">Servicios y Mano de Obra</td>
+          <td></td>
+        </tr>
+        {# Subtotal Neto Sección #}
+        <tr id="subtotal-row-SERVICIO">
+          <td colspan="8" class="text-end fw-semibold py-0 pe-3" style="background:#fff3e0; font-size:0.75rem;">Subtotal
+            3.0 (Neto) $</td>
+          <td class="text-end fw-semibold py-0 pe-2" id="subtotal-SERVICIO"
+            style="background:#fff3e0; font-size:0.75rem;">$ 0</td>
+          <td style="background:#fff3e0;"></td>
+        </tr>
+        {# IVA Sección #}
+        <tr id="iva-row-SERVICIO">
+          <td colspan="8" class="text-end fw-normal py-0 pe-3"
+            style="background:#fff3e0; font-size:0.7rem; color:#666;">IVA (19%) $</td>
+          <td class="text-end fw-normal py-0 pe-2" id="iva-SERVICIO"
+            style="background:#fff3e0; font-size:0.7rem; color:#666;">$ 0</td>
+          <td style="background:#fff3e0;"></td>
+        </tr>
+        {# Total Sección #}
+        <tr id="total-row-SERVICIO">
+          <td colspan="8" class="text-end fw-bold py-1 pe-3"
+            style="background:#eceff1; font-size:0.8rem; color:#0d47a1; text-transform:uppercase;">TOTAL SECCIÓN 3.0 $</td>
+          <td class="text-end fw-bold py-1 pe-2" id="total-SERVICIO"
+            style="background:#eceff1; font-size:0.8rem; color:#0d47a1;">$ 0</td>
+          <td style="background:#eceff1;"></td>
+        </tr>
+        <tr class="add-item-row" id="add-row-SERVICIO">
+          <td colspan="10" class="py-1 border-top-0" style="background:#f8f9fa;">
+            <button type="button" class="btn btn-outline-warning btn-xs py-0 px-2 btn-add-item" data-tipo="SERVICIO"
+              style="font-size:0.75rem;">
+              <i class="bi bi-plus-circle"></i> Agregar Servicio
+            </button>
+          </td>
+        </tr>
+      </tbody>
+
+      {# -- SECCION: TIEMPOS DEL PROYECTO -- #}
+      <tbody id="seccion-TIEMPOS" class="seccion-body">
+        <tr class="seccion-header" style="background:#0d47a1;color:#fff;font-size:0.8rem;text-transform:uppercase;">
+          <td class="fw-bold text-center"><i class="bi bi-calendar-check"></i></td>
+          <td colspan="6" class="fw-bold">Línea de Tiempo / Cronograma de Ejecución</td>
+          <td colspan="2" class="text-end pe-2">
+            <div class="input-group input-group-sm d-inline-flex" style="width:160px; border:1px solid #fff; border-radius:3px; overflow:hidden;">
+              <span class="input-group-text py-0"
+                style="font-size:0.65rem; background:#1565c0; color:#fff; border:none; text-transform:uppercase;">Días Totales:</span>
+              <input type="number" class="form-control py-0" id="cot-dias-totales" value="5" min="1"
+                style="font-size:0.75rem; background:#fff; border:none; text-align:center; font-weight:bold; color:#0d47a1;">
+            </div>
+          </td>
+          <td></td>
+        </tr>
+        <tr class="tiempos-row">
+          <td colspan="9" class="py-3 px-3" style="background:#eceff1;">
+            <div class="d-flex align-items-center justify-content-between text-center">
+              <div class="tiempo-item flex-grow-1 border-end border-white">
+                <div class="text-muted" style="font-size:0.6rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;">Infraestructura</div>
+                <div class="fw-bold text-primary fs-5" id="tiempo-infra">2</div>
+                <div class="text-muted small">Días</div>
+              </div>
+              <div class="tiempo-item flex-grow-1 border-end border-white">
+                <div class="text-muted" style="font-size:0.6rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;">Instalación</div>
+                <div class="fw-bold text-primary fs-5" id="tiempo-instal">1</div>
+                <div class="text-muted small">Día</div>
+              </div>
+              <div class="tiempo-item flex-grow-1 border-end border-white">
+                <div class="text-muted" style="font-size:0.6rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;">Configuración</div>
+                <div class="fw-bold text-primary fs-5" id="tiempo-config">1</div>
+                <div class="text-muted small">Día</div>
+              </div>
+              <div class="tiempo-item flex-grow-1">
+                <div class="text-muted" style="font-size:0.6rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;">Pruebas Finales</div>
+                <div class="fw-bold text-primary fs-5" id="tiempo-pruebas">1</div>
+                <div class="text-muted small">Día</div>
+              </div>
+            </div>
+          </td>
+          <td style="background:#eceff1; border-left:1px solid #cfd8dc;"></td>
+        </tr>
+      </tbody>
+
+      {# -- SECCION: INDICADORES -- #}
+      <tbody id="seccion-INDICADORES" class="seccion-body">
+        <tr class="seccion-header" style="background:#0d47a1;color:#fff;font-size:0.8rem;text-transform:uppercase;">
+          <td class="fw-bold text-center"><i class="bi bi-bar-chart-line"></i></td>
+          <td colspan="8" class="fw-bold">Indicadores de Participación por Rubro</td>
+          <td></td>
+        </tr>
+        <tr class="indicador-row">
+          <td colspan="9" class="py-2 px-3" style="background:#eceff1;">
+            <div class="d-flex align-items-center justify-content-around">
+              <div class="indicador-item text-center">
+                <span class="d-block text-muted small fw-bold" style="font-size:0.6rem; text-transform:uppercase;">1.0 EQUIPOS</span>
+                <span class="fw-bold text-dark" id="indicador-valor-PRODUCTO" style="font-size:0.75rem;">$ 0</span>
+                <span class="badge bg-primary ms-2 p-1" id="indicador-pct-PRODUCTO"
+                  style="font-size:0.85rem; min-width:55px;">0%</span>
+              </div>
+              <div class="vr mx-3" style="opacity:0.2;"></div>
+              <div class="indicador-item text-center">
+                <span class="d-block text-muted small fw-bold" style="font-size:0.6rem; text-transform:uppercase;">2.0 INFRAESTRUCTURA</span>
+                <span class="fw-bold text-dark" id="indicador-valor-MATERIAL" style="font-size:0.75rem;">$ 0</span>
+                <span class="badge bg-primary ms-2 p-1" id="indicador-pct-MATERIAL"
+                  style="font-size:0.85rem; min-width:55px;">0%</span>
+              </div>
+              <div class="vr mx-3" style="opacity:0.2;"></div>
+              <div class="indicador-item text-center">
+                <span class="d-block text-muted small fw-bold" style="font-size:0.6rem; text-transform:uppercase;">3.0 SERVICIOS</span>
+                <span class="fw-bold text-dark" id="indicador-valor-SERVICIO" style="font-size:0.75rem;">$ 0</span>
+                <span class="badge bg-primary ms-2 p-1" id="indicador-pct-SERVICIO"
+                  style="font-size:0.85rem; min-width:55px;">0%</span>
+              </div>
+            </div>
+          </td>
+          <td style="background:#eceff1;"></td>
+        </tr>
+      </tbody>
+
+      {# -- SECCION 4: RESUMEN DE COSTOS -- #}
+      <tbody id="seccion-RESUMEN" class="seccion-body">
+        <tr class="seccion-header" data-secnum="4" style="background:#0d47a1;color:#fff;font-size:0.8rem;text-transform:uppercase;">
+          <td class="fw-bold text-center">4.0</td>
+          <td colspan="8" class="fw-bold">Resumen de Propuesta Economica</td>
+          <td></td>
+        </tr>
+        <tr class="resumen-row">
+          <td colspan="8" class="text-end fw-bold py-1 pe-3"
+            style="background:#eceff1; font-size:0.75rem; color:#546e7a; text-transform:uppercase;">Subtotal Neto Disp. / Mat. / Serv. $</td>
+          <td class="text-end fw-bold py-1 pe-2" id="summary-subtotal-neto"
+            style="background:#eceff1; font-size:0.75rem; color:#0d47a1;">$ 0</td>
+          <td style="background:#eceff1;"></td>
+        </tr>
+        <tr class="resumen-row">
+          <td colspan="8" class="text-end fw-bold py-2 pe-3"
+            style="background:#0d47a1; color:#fff; font-size:0.95rem; text-transform:uppercase;">Total General Propuesta $
+          </td>
+          <td class="text-end fw-bold py-2 pe-2" id="summary-total-general"
+            style="background:#0d47a1; color:#fff; font-size:1.1rem;">$ 0</td>
+          <td style="background:#0d47a1;"></td>
+        </tr>
+      </tbody>
+
+    </table>
+  </div>
+
+  {# Spacing bottom #}
+  <div class="py-4"></div>
+
+</div>
+
+{# ===== SPINNER inline ===== #}
+<div id="cot-editor-spinner" class="d-none position-fixed top-0 start-0 w-100 h-100"
+  style="background:rgba(0,0,0,.35);z-index:9999;">
+  <div class="d-flex align-items-center justify-content-center h-100">
+    <div class="spinner-border text-light" role="status">
+      <span class="visually-hidden">Cargando...</span>
+    </div>
+  </div>
+</div>
+
+{# ===== INIT JS ===== #}
+<script>
+  (function () {
+    var uuid = document.getElementById('cot-uuid')?.value || null;
+    if (window.Sintel?.Cotizaciones?.Editor) {
+      var editor = window.Sintel.Cotizaciones.Editor;
+      editor.init(uuid);
+    }
+  })();
+</script>

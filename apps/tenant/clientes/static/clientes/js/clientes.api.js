@@ -33,7 +33,18 @@
       get: (id) => w.http('GET', `${CLIENTES_BASE}/${id}/`),
       create: (payload) => w.http('POST', `${CLIENTES_BASE}/`, payload),
       update: (id, payload) => w.http('PATCH', `${CLIENTES_BASE}/${id}/`, payload),
-      delete: (id) => w.http('DELETE', `${CLIENTES_BASE}/${id}/`)
+      delete: (id) => w.http('DELETE', `${CLIENTES_BASE}/${id}/`),
+      
+      // [v3.5.0] Buscador de cuentas PUC por texto (autocompletar)
+      searchCuentas: (search = '') => {
+        const url = `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(search)}&app_origen=clientes&solo_auxiliares=true`;
+        return w.http('GET', url);
+      },
+      // [v3.6.1] Resolver nombre de cuenta por UUID — §18: consumo HTTP, no import Python
+      getCuentaByUuid: (uuid = '') => {
+        const url = `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}&app_origen=clientes`;
+        return w.http('GET', url);
+      }
     });
   }
 

@@ -119,7 +119,8 @@ class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer)
     tipo_documento_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
     regimen_tributario_display = serializers.CharField(source='get_regimen_tributario_display', read_only=True)
     tipo_cuenta_display = serializers.CharField(source='get_tipo_cuenta_display', read_only=True)
-    
+    cuenta_contable_label = serializers.SerializerMethodField()
+
     class Meta:
         model = Proveedor
         fields = DETAIL_FIELDS + (
@@ -127,13 +128,31 @@ class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer)
             "tipo_documento_display",
             "regimen_tributario_display",
             "tipo_cuenta_display",
+            "cuenta_contable_label",
         )
-        read_only_fields = ("id", "created_at", "updated_at", "empresa")
+        read_only_fields = ("id", "created_at", "updated_at", "empresa", "cuenta_contable_label")
     
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
+
+    def get_cuenta_contable_label(self, obj):
+        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
+        if not obj.cuenta_contable_uuid:
+            return None
+        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+        empresa_id = self.context.get('request').user.perfil.empresa_id
+        return CuentaContableSelector.get_label_by_uuid(obj.cuenta_contable_uuid, empresa_id)
+
+    def validate_cuenta_contable_uuid(self, value):
+        """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
+        if value:
+            from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+            empresa_id = self.context.get('request').user.perfil.empresa_id
+            if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
+                raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
+        return value
 
     def validate_codigo_contable(self, value):
         """

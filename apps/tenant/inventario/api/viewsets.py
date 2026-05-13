@@ -153,11 +153,11 @@ class CategoriaItemViewSet(BaseViewSet, inv_services.CategoriaItemServiceMixin):
     def get_queryset(self):
         empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        return inv_services.qs_categoria_list(empresa_id=empresa.id, search=search).order_by('nombre')
+        return inv_services.CategoriaItemSelector.get_list(empresa_id=empresa.id, search=search).order_by('nombre')
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.qs_categoria_detail(empresa_id=empresa.id, categoria_id=self.kwargs['pk'])
+        return inv_services.CategoriaItemSelector.get_detail(empresa_id=empresa.id, categoria_id=self.kwargs['pk'])
     
     def get_empresa(self):
         return inv_services.get_empresa_singleton()
@@ -208,14 +208,14 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
         try:
             empresa = inv_services.get_empresa_singleton()
         except ValidationError:
-            return inv_services.qs_producto_list(empresa_id=0)
+            return inv_services.ProductoSelector.get_list(empresa_id=0)
         
         search = self.request.query_params.get('search', None)
-        return inv_services.qs_producto_list(empresa_id=empresa.id, search=search).order_by('nombre')
+        return inv_services.ProductoSelector.get_list(empresa_id=empresa.id, search=search).order_by('nombre')
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.qs_producto_detail(empresa_id=empresa.id, producto_id=self.kwargs['pk'])
+        return inv_services.ProductoSelector.get_detail(empresa_id=empresa.id, producto_id=self.kwargs['pk'])
     
     def create(self, request: Request, *args, **kwargs) -> Response:
         """
@@ -277,7 +277,7 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
         from apps.tenant.inventario import services as inv_services
         
         empresa = inv_services.get_empresa_singleton()
-        qs_base = inv_services.qs_producto_list(empresa_id=empresa.id)
+        qs_base = inv_services.ProductoSelector.get_list(empresa_id=empresa.id)
         
         # WARNING: CRÍTICO: fields_map debe coincidir EXACTAMENTE con el orden de columnas en inventario.page.js
         # Columnas: 0=codigo, 1=nombre, 2=categoria_nombre, 3=stock_actual, 4=precio_venta, 5=activo, 6=Acciones (no ordenable)
@@ -428,11 +428,11 @@ class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
     def get_queryset(self):
         empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        return inv_services.qs_servicio_list(empresa_id=empresa.id, search=search).order_by('nombre')
+        return inv_services.ServicioSelector.get_list(empresa_id=empresa.id, search=search).order_by('nombre')
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.qs_servicio_detail(empresa_id=empresa.id, servicio_id=self.kwargs['pk'])
+        return inv_services.ServicioSelector.get_detail(empresa_id=empresa.id, servicio_id=self.kwargs['pk'])
     
     def destroy(self, request, *args, **kwargs):
         """
@@ -481,7 +481,7 @@ class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
         from apps.tenant.inventario import services as inv_services
         
         empresa = inv_services.get_empresa_singleton()
-        qs_base = inv_services.qs_servicio_list(empresa_id=empresa.id)
+        qs_base = inv_services.ServicioSelector.get_list(empresa_id=empresa.id)
         
         spec = DataTableSpec(
             fields_map={
@@ -514,11 +514,11 @@ class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
     def get_queryset(self):
         empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        return inv_services.qs_activo_list(empresa_id=empresa.id, search=search).order_by('nombre')
+        return inv_services.ActivoFijoSelector.get_list(empresa_id=empresa.id, search=search).order_by('nombre')
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.qs_activo_detail(empresa_id=empresa.id, activo_id=self.kwargs['pk'])
+        return inv_services.ActivoFijoSelector.get_detail(empresa_id=empresa.id, activo_id=self.kwargs['pk'])
     
     def destroy(self, request, *args, **kwargs):
         """
@@ -565,7 +565,7 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
     def get_queryset(self):
         empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        return inv_services.qs_movimiento_list(empresa.id, search=search).order_by('-created_at')
+        return inv_services.MovimientoInventarioSelector.get_list(empresa_id=empresa.id, search=search).order_by('-created_at')
     
     def list(self, request, *args, **kwargs):
         """
@@ -602,7 +602,7 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
         from apps.tenant.inventario import services as inv_services
         
         empresa = inv_services.get_empresa_singleton()
-        qs_base = inv_services.qs_movimiento_list(empresa_id=empresa.id)
+        qs_base = inv_services.MovimientoInventarioSelector.get_list(empresa_id=empresa.id)
         
         spec = DataTableSpec(
             fields_map={

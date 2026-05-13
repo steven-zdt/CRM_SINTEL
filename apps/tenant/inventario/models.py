@@ -46,6 +46,17 @@ class CategoriaItem(TimeStampedModel):
     )
     imagen = models.ImageField(upload_to='inventario/categorias/', null=True, blank=True)
     activo = models.BooleanField(default=True)
+    
+    # Mapeo Contable Base (Heredado por los items si no tienen uno propio)
+    cuenta_inventario_uuid = models.UUIDField(
+        null=True, blank=True, help_text="Cuenta PUC nivel 6 (Inventario/Activo)"
+    )
+    cuenta_costo_uuid = models.UUIDField(
+        null=True, blank=True, help_text="Cuenta PUC nivel 6 (Costo de Ventas/Depreciación)"
+    )
+    cuenta_ingreso_uuid = models.UUIDField(
+        null=True, blank=True, help_text="Cuenta PUC nivel 6 (Ingreso por Ventas)"
+    )
 
     class Meta:
         ordering = ["nombre"]
@@ -100,6 +111,16 @@ class ActivoFijo(TimeStampedModel):
     fecha_adquisicion = models.DateField(null=True, blank=True)
     costo_adquisicion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.ACTIVO)
+    cuenta_activo_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Control Activo)"
+    )
+    cuenta_depreciacion_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Depreciación Acumulada/Gasto)"
+    )
 
     class Meta:
         ordering = ["nombre"]
@@ -150,6 +171,16 @@ class Producto(TimeStampedModel):
     stock_minimo = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     
     activo = models.BooleanField(default=True)
+    cuenta_inventario_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Activo de Inventario)"
+    )
+    cuenta_costo_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Costo de Ventas)"
+    )
 
     class Meta:
         ordering = ["nombre"]
@@ -191,6 +222,11 @@ class Servicio(TimeStampedModel):
     imagen = models.ImageField(upload_to='inventario/servicios/', null=True, blank=True)
     precio_venta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     activo = models.BooleanField(default=True)
+    cuenta_ingreso_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Ingreso)"
+    )
 
     class Meta:
         ordering = ["nombre"]

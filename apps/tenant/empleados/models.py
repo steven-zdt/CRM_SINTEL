@@ -16,6 +16,7 @@ WARNING: FLUJO SECUENCIAL (Máquina de Estados):
 2. Contrato (requiere Empleado, habilita botón "Registrar Nómina")
 3. Devengo/Nómina (requiere Contrato ACTIVO, habilita botón "Historial")
 """
+import uuid
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -45,9 +46,12 @@ class Empleado(SintelTenantBaseModel):
     TIPO_DOC = [('CC', 'Cédula de Ciudadanía'), ('CE', 'Cédula de Extranjería'), ('PA', 'Pasaporte'), ('PPT', 'PPT')]
     ESTADOS = [('ACTIVO', 'Activo'), ('RETIRADO', 'Retirado')]
 
+    # UUID Lookup Field (AGENTS.md §14)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+
     # WARNING: SSoT: FK a Empresa (única FK externa)
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='empleados')
-    
+
     # Identificación y Datos Personales
     tipo_documento = models.CharField(max_length=5, choices=TIPO_DOC)
     numero_documento = models.CharField(max_length=32, db_index=True)
@@ -68,6 +72,13 @@ class Empleado(SintelTenantBaseModel):
     estado = models.CharField(max_length=12, choices=ESTADOS, default='ACTIVO')
     fecha_ingreso = models.DateField()
     fecha_retiro = models.DateField(null=True, blank=True)
+
+    # Mapeo Contable (v3.5.0)
+    cuenta_contable_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Salarios/Prestaciones por pagar)"
+    )
 
     class Meta:
         verbose_name = _('Empleado')
@@ -112,14 +123,17 @@ class Contrato(SintelTenantBaseModel):
     ]
     ESTADOS = [('ACTIVO', 'Activo'), ('INACTIVO', 'Inactivo'), ('HISTORICO', 'Histórico')]
     
+    # UUID Lookup Field (AGENTS.md §14)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+
     # WARNING: SSoT: FK directa a Empresa (requerido v2.60)
     empresa = models.ForeignKey(
-        Empresa, 
-        on_delete=models.PROTECT, 
+        Empresa,
+        on_delete=models.PROTECT,
         related_name='contratos',
         help_text='SSoT Empresa'
     )
-    
+
     # WARNING: FK a Empleado (sin limit_choices_to para permitir contratos históricos)
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='contratos')
     
@@ -212,14 +226,17 @@ class Devengo(SintelTenantBaseModel):
     - Deducciones = salud_empleado + pension_empleado + prestamos + descuentos_operativos
     - neto_pagar = Devengos - Deducciones (calculado en service layer)
     """
+    # UUID Lookup Field (AGENTS.md §14)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+
     # WARNING: SSoT: FK directa a Empresa (requerido v2.60)
     empresa = models.ForeignKey(
-        Empresa, 
-        on_delete=models.PROTECT, 
+        Empresa,
+        on_delete=models.PROTECT,
         related_name='nominas',
         help_text='SSoT Empresa'
     )
-    
+
     # FKs
     empleado = models.ForeignKey(Empleado, on_delete=models.PROTECT, related_name="nominas")
     contrato = models.ForeignKey(Contrato, on_delete=models.PROTECT, related_name="pagos_nomina")

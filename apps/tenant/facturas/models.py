@@ -29,6 +29,11 @@ class Factura(SintelTenantBaseModel):
         RECHAZADA= 'RECHAZADA',_('Rechazada')
         ANULADA  = 'ANULADA',  _('Anulada')
 
+    class EstadoPago(models.TextChoices):
+        NO_PAGADA = 'NO_PAGADA', _('No Pagada')
+        PAGO_PARCIAL = 'PAGO_PARCIAL', _('Pago Parcial')
+        PAGADA = 'PAGADA', _('Pagada')
+
     # Naturaleza frente al tenant (compra/venta)
     class Naturaleza(models.TextChoices):
         VENTA  = 'VENTA',  _('Venta (emitida por el tenant)')
@@ -54,6 +59,8 @@ class Factura(SintelTenantBaseModel):
                             default=TipoFactura.FE, verbose_name=_('Tipo'))
     estado = models.CharField(max_length=20, choices=Estado.choices,
                               default=Estado.BORRADOR, verbose_name=_('Estado'))
+    estado_pago = models.CharField(max_length=20, choices=EstadoPago.choices,
+                                   default=EstadoPago.NO_PAGADA, verbose_name=_('Estado de Pago'))
 
     # Naturaleza frente al tenant y categoría de la operación
     # # WARNING: v2.60: Se calcula automáticamente comparando NIT del emisor con NIT de la empresa del tenant (SSoT)
@@ -102,10 +109,28 @@ class Factura(SintelTenantBaseModel):
     total = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
                                 validators=[MinValueValidator(Decimal('0.00'))])
 
+    # Retenciones (v2.62: Soporte para integración contable)
+    retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                     validators=[MinValueValidator(Decimal('0.00'))],
+                                     verbose_name=_('Retención en la Fuente'))
+    reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                  validators=[MinValueValidator(Decimal('0.00'))],
+                                  verbose_name=_('ReteICA'))
+    reteiva = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                  validators=[MinValueValidator(Decimal('0.00'))],
+                                  verbose_name=_('ReteIVA'))
+
     # Formas de pago
     forma_pago = models.CharField(max_length=30, blank=True, null=True, verbose_name=_('Forma de pago'))
     medio_pago_codigo = models.CharField(max_length=10, blank=True, null=True, verbose_name=_('PaymentMeansCode'))
     payment_due_date = models.DateField(blank=True, null=True, verbose_name=_('Fecha límite de pago'))
+    
+    # Vinculación Contable (v3.7)
+    cuenta_contable_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text=_("Cuenta PUC nivel 6 (Cartera/Ingreso/Gasto)")
+    )
 
     # DIAN / QR / CUFE y autorización
     # # WARNING: v2.60: Índice único para garantizar idempotencia en guardar_factura_desde_dto()
@@ -171,6 +196,7 @@ class Factura(SintelTenantBaseModel):
     def save(self, *args, **kwargs):
         # SSoT singleton fallback for legacy creation paths/tests.
         if not self.empresa_id:
+            from apps.tenant.empresa.models import Empresa
             empresa = Empresa.objects.only('id').first()
             if empresa:
                 self.empresa = empresa
@@ -200,6 +226,16 @@ class ItemFactura(SintelTenantBaseModel):
                                          validators=[MinValueValidator(Decimal('0.00'))])
     valor_iva = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
                                     validators=[MinValueValidator(Decimal('0.00'))])
+
+    # Retenciones por ítem (Opcional, v2.62)
+    porcentaje_retefuente = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
+                                                validators=[MinValueValidator(Decimal('0.00'))])
+    valor_retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                           validators=[MinValueValidator(Decimal('0.00'))])
+    porcentaje_reteica = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
+                                             validators=[MinValueValidator(Decimal('0.00'))])
+    valor_reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                        validators=[MinValueValidator(Decimal('0.00'))])
 
     subtotal = models.DecimalField(max_digits=15, decimal_places=2,
                                    validators=[MinValueValidator(Decimal('0.00'))])
@@ -530,6 +566,17 @@ class NotaCredito(SintelTenantBaseModel):
         validators=[MinValueValidator(Decimal('0.00'))],
         verbose_name=_('Total')
     )
+
+    # Retenciones (v2.62: Reversión de retenciones en Nota Crédito)
+    retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                     validators=[MinValueValidator(Decimal('0.00'))],
+                                     verbose_name=_('Retención en la Fuente'))
+    reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                  validators=[MinValueValidator(Decimal('0.00'))],
+                                  verbose_name=_('ReteICA'))
+    reteiva = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                  validators=[MinValueValidator(Decimal('0.00'))],
+                                  verbose_name=_('ReteIVA'))
 
     # Motivo y referencia a la factura original (redundancia para consultas rápidas)
     motivo = models.TextField(

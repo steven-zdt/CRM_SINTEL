@@ -21,8 +21,10 @@ from apps.tenant.contabilidad.api.viewsets import (
     AsientoContableViewSet,
     CatalogoMaestroNIIFViewSet,
     CuentaContableViewSet,
+    DocumentosPendientesViewSet,
     MovimientoContableViewSet,
-    PeriodoContableViewSet,  # WARNING: v2.61
+    PeriodoContableViewSet,
+    TipoComprobanteViewSet,
 )
 
 # WARNING: ELIMINADO v2.61: datatables.py y métodos datatables() fueron eliminados.
@@ -40,8 +42,10 @@ router = DefaultRouter(trailing_slash=True)
 router.register(r'cuentas-contables', CuentaContableViewSet, basename='cuenta-contable')
 router.register(r'asientos-contables', AsientoContableViewSet, basename='asiento-contable')
 router.register(r'movimientos-contables', MovimientoContableViewSet, basename='movimiento-contable')
-router.register(r'periodos-contables', PeriodoContableViewSet, basename='periodo-contable')  # WARNING: v2.61
+router.register(r'periodos-contables', PeriodoContableViewSet, basename='periodo-contable')
 router.register(r'catalogo-niif', CatalogoMaestroNIIFViewSet, basename='catalogo-niif')
+router.register(r'tipos-comprobante', TipoComprobanteViewSet, basename='tipo-comprobante')
+router.register(r'pendientes', DocumentosPendientesViewSet, basename='pendientes')
 
 
 # URLs generadas por el router

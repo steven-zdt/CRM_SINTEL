@@ -1,0 +1,242 @@
+{# offcanvas_detalle_cotizacion.html - Vista de Detalle Premium v2.62.x #}
+{% load static currency_filters %}
+
+<div class="offcanvas-header bg-light border-bottom">
+    <div class="d-flex align-items-center">
+        <div class="icon-shape icon-md bg-primary-soft text-primary me-3 rounded">
+            <i class="bi bi-file-earmark-text fs-4"></i>
+        </div>
+        <div>
+            <h5 class="offcanvas-title mb-0">Cotización {{ cotizacion.numero_cotizacion }}</h5>
+            <small class="text-muted">ID: {{ cotizacion.uuid|truncatechars:13 }}</small>
+        </div>
+    </div>
+    <div class="d-flex align-items-center">
+        <span class="badge {% if cotizacion.estado == 'ACEPTADA' %}bg-success{% elif cotizacion.estado == 'BORRADOR' %}bg-secondary{% else %}bg-primary{% endif %} me-3">
+            {{ cotizacion.get_estado_display }}
+        </span>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+</div>
+
+<div class="offcanvas-body p-0">
+    <!-- 1. RESUMEN CABECERA -->
+    <div class="p-4 border-bottom bg-white">
+        <div class="row g-4">
+            <div class="col-6">
+                <label class="text-xs text-uppercase fw-bold text-muted mb-1 d-block">Cliente</label>
+                <div class="fw-semibold text-dark">{{ cotizacion.cliente.razon_social }}</div>
+                <small class="text-muted">{{ cotizacion.cliente.nit }}</small>
+            </div>
+            <div class="col-6">
+                <label class="text-xs text-uppercase fw-bold text-muted mb-1 d-block">Fecha Emisión</label>
+                <div class="fw-semibold text-dark">{{ cotizacion.fecha_emision|date:"d/m/Y" }}</div>
+                <small class="text-muted">Vence: {{ cotizacion.fecha_vencimiento|date:"d/m/Y" }}</small>
+            </div>
+            <div class="col-12">
+                <label class="text-xs text-uppercase fw-bold text-muted mb-1 d-block">Configuración Financiera</label>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-light text-dark border">AIU Admin: {{ cotizacion.porcentaje_aiu_admin }}%</span>
+                    <span class="badge bg-light text-dark border">Utilidad: {{ cotizacion.porcentaje_aiu_utilidad }}%</span>
+                    <span class="badge bg-light text-dark border">IVA: {{ cotizacion.iva_porcentaje }}%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. DESGLOSE DE MÓDULOS -->
+    <div class="p-4 bg-light">
+        <h6 class="text-uppercase fw-bold text-primary mb-3" style="font-size: 0.75rem; letter-spacing: 0.05em;">Desglose de la Propuesta</h6>
+        
+        <!-- MODULO 1: DISPOSITIVOS -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-3 border-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-cpu me-2 text-primary"></i>1.0 Dispositivos</h6>
+                    <span class="fw-bold text-primary" id="det-subtotal-1">Calculating...</span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0 align-middle" style="font-size: 0.85rem;">
+                        <thead class="bg-light text-muted">
+                            <tr>
+                                <th class="ps-3 py-2 border-0">Descripción</th>
+                                <th class="text-center py-2 border-0">Cant.</th>
+                                <th class="text-end pe-3 py-2 border-0">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in cotizacion.items.all %}
+                                {% if item.tipo_item == 'PRODUCTO' %}
+                                <tr data-tipo="PRODUCTO" data-subtotal="{{ item.subtotal_linea }}">
+                                    <td class="ps-3">{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.cantidad }}</td>
+                                    <td class="text-end pe-3 fw-medium text-dark">{{ item.subtotal_linea|currency_cop }}</td>
+                                </tr>
+                                {% endif %}
+                            {% empty %}
+                                <tr><td colspan="3" class="text-center text-muted py-3">No hay dispositivos</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODULO 2: INFRAESTRUCTURA -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-3 border-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-diagram-3 me-2 text-success"></i>2.0 Infraestructura</h6>
+                    <span class="fw-bold text-success" id="det-subtotal-2">Calculating...</span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0 align-middle" style="font-size: 0.85rem;">
+                        <thead class="bg-light text-muted">
+                            <tr>
+                                <th class="ps-3 py-2 border-0">Descripción</th>
+                                <th class="text-center py-2 border-0">Cant.</th>
+                                <th class="text-end pe-3 py-2 border-0">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in cotizacion.items.all %}
+                                {% if item.tipo_item == 'INFRAESTRUCTURA' %}
+                                <tr data-tipo="INFRAESTRUCTURA" data-subtotal="{{ item.subtotal_linea }}">
+                                    <td class="ps-3">{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.cantidad }}</td>
+                                    <td class="text-end pe-3 fw-medium text-dark">{{ item.subtotal_linea|currency_cop }}</td>
+                                </tr>
+                                {% endif %}
+                            {% empty %}
+                                <tr><td colspan="3" class="text-center text-muted py-3">No hay infraestructura</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODULO 3: SERVICIOS -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white py-3 border-0">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-gear-wide-connected me-2 text-warning"></i>3.0 Servicios</h6>
+                    <span class="fw-bold text-warning" id="det-subtotal-3">Calculating...</span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0 align-middle" style="font-size: 0.85rem;">
+                        <thead class="bg-light text-muted">
+                            <tr>
+                                <th class="ps-3 py-2 border-0">Descripción</th>
+                                <th class="text-center py-2 border-0">Cant.</th>
+                                <th class="text-end pe-3 py-2 border-0">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in cotizacion.items.all %}
+                                {% if item.tipo_item == 'SERVICIO' %}
+                                <tr data-tipo="SERVICIO" data-subtotal="{{ item.subtotal_linea }}">
+                                    <td class="ps-3">{{ item.descripcion }}</td>
+                                    <td class="text-center">{{ item.cantidad }}</td>
+                                    <td class="text-end pe-3 fw-medium text-dark">{{ item.subtotal_linea|currency_cop }}</td>
+                                </tr>
+                                {% endif %}
+                            {% empty %}
+                                <tr><td colspan="3" class="text-center text-muted py-3">No hay servicios</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. INDICADORES DE PARTICIPACIÓN -->
+    <div class="p-4 border-top">
+        <h6 class="text-uppercase fw-bold text-muted mb-3" style="font-size: 0.75rem;">Indicadores de Participación</h6>
+        <div class="bg-white p-3 rounded border">
+            <div class="row g-3" id="det-participacion-container">
+                <div class="col-4 text-center border-end">
+                    <div class="text-xs text-muted mb-1">Dispositivos</div>
+                    <div class="h5 mb-0 fw-bold" id="det-pct-1">0%</div>
+                </div>
+                <div class="col-4 text-center border-end">
+                    <div class="text-xs text-muted mb-1">Infraestructura</div>
+                    <div class="h5 mb-0 fw-bold" id="det-pct-2">0%</div>
+                </div>
+                <div class="col-4 text-center">
+                    <div class="text-xs text-muted mb-1">Servicios</div>
+                    <div class="h5 mb-0 fw-bold" id="det-pct-3">0%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. RESUMEN DE COSTOS FINAL -->
+    <div class="p-4 bg-dark text-white">
+        <div class="d-flex justify-content-between mb-2">
+            <span class="text-muted">Subtotal (Neto)</span>
+            <span class="fw-medium" id="det-final-subtotal">$ 0</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+            <span class="text-muted">IVA ({{ cotizacion.iva_porcentaje }}%)</span>
+            <span class="fw-medium" id="det-final-iva">$ 0</span>
+        </div>
+        <hr class="border-secondary my-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">TOTAL GENERAL</h5>
+            <h5 class="mb-0 fw-bold text-primary" id="det-final-total">{{ cotizacion.total_con_impuestos|currency_cop }}</h5>
+        </div>
+    </div>
+</div>
+
+<div class="offcanvas-footer p-3 bg-white border-top text-center">
+    <button class="btn btn-outline-secondary w-100" data-bs-dismiss="offcanvas">
+        Cerrar Vista Previa
+    </button>
+</div>
+
+<script>
+(function() {
+    function formatCurrency(val) {
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 0
+        }).format(val);
+    }
+
+    function calculate() {
+        let total1 = 0, total2 = 0, total3 = 0;
+        
+        document.querySelectorAll('tr[data-tipo="PRODUCTO"]').forEach(tr => total1 += parseFloat(tr.dataset.subtotal || 0));
+        document.querySelectorAll('tr[data-tipo="INFRAESTRUCTURA"]').forEach(tr => total2 += parseFloat(tr.dataset.subtotal || 0));
+        document.querySelectorAll('tr[data-tipo="SERVICIO"]').forEach(tr => total3 += parseFloat(tr.dataset.subtotal || 0));
+
+        document.getElementById('det-subtotal-1').textContent = formatCurrency(total1);
+        document.getElementById('det-subtotal-2').textContent = formatCurrency(total2);
+        document.getElementById('det-subtotal-3').textContent = formatCurrency(total3);
+
+        const totalGeneral = {{ cotizacion.total_con_impuestos|stringformat:".2f" }};
+        const subtotalNeto = total1 + total2 + total3;
+        const ivaVal = subtotalNeto * ({{ cotizacion.iva_porcentaje }} / 100);
+
+        document.getElementById('det-final-subtotal').textContent = formatCurrency(subtotalNeto);
+        document.getElementById('det-final-iva').textContent = formatCurrency(ivaVal);
+
+        if (totalGeneral > 0) {
+            document.getElementById('det-pct-1').textContent = ((total1 / totalGeneral) * 100).toFixed(1) + '%';
+            document.getElementById('det-pct-2').textContent = ((total2 / totalGeneral) * 100).toFixed(1) + '%';
+            document.getElementById('det-pct-3').textContent = ((total3 / totalGeneral) * 100).toFixed(1) + '%';
+        }
+    }
+
+    calculate();
+})();
+</script>

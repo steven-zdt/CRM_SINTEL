@@ -106,7 +106,7 @@
 
       {# Módulo Cotizaciones v3.5 - Feature-Sliced Architecture #}
       <section id="tab-cotizaciones" class="workspace-tab" style="display: none;">
-        {% include 'cotizaciones/list.html' %}
+        {% include 'tenant/cotizaciones/list.html' %}
         <div id="offcanvas-container-cotizaciones"></div>
       </section>
 
@@ -128,6 +128,16 @@
               <i class="bi bi-calendar-range me-2"></i>Periodos Contables
             </button>
           </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="contabilidad-pendientes-tab" data-bs-toggle="tab" data-bs-target="#subtab-pendientes" type="button" role="tab" aria-controls="subtab-pendientes" aria-selected="false">
+              <i class="bi bi-hourglass-split me-2"></i>Pendientes
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="contabilidad-reportes-tab" data-bs-toggle="tab" data-bs-target="#subtab-reportes" type="button" role="tab" aria-controls="subtab-reportes" aria-selected="false">
+              <i class="bi bi-graph-up-arrow me-2"></i>Reportes
+            </button>
+          </li>
         </ul>
         <div class="tab-content" id="contabilidad-tab-content">
           <div class="tab-pane fade show active" id="subtab-cuentas" role="tabpanel" aria-labelledby="contabilidad-cuentas-tab">
@@ -138,6 +148,13 @@
           </div>
           <div class="tab-pane fade" id="subtab-periodos" role="tabpanel" aria-labelledby="contabilidad-periodos-tab">
             {% include 'tenant/contabilidad/partials/list_periodos.html' %}
+          </div>
+          <div class="tab-pane fade" id="subtab-pendientes" role="tabpanel" aria-labelledby="contabilidad-pendientes-tab">
+            {% include 'tenant/contabilidad/partials/pendientes_list.html' %}
+            {% include 'tenant/contabilidad/partials/assets_pendientes.html' %}
+          </div>
+          <div class="tab-pane fade" id="subtab-reportes" role="tabpanel" aria-labelledby="contabilidad-reportes-tab">
+            {% include 'tenant/contabilidad/reporte_page.html' %}
           </div>
         </div>
         <div id="offcanvas-container-cuentas"></div>
@@ -234,7 +251,7 @@
   {% include 'tenant/contactos/assets_contactos.html' %}
   {% include 'tenant/empleados/assets_empleados.html' %}
   {% include 'tenant/gastos/assets_gastos.html' %}
-  {% include 'cotizaciones/assets_cotizaciones.html' %}
+  {% include 'tenant/cotizaciones/assets_cotizaciones.html' %}
   {% include 'tenant/dashboard/assets_dashboard.html' %}
   {% include 'tenant/proveedores/assets_proveedores.html' %}
   {# ⚠️ v2.60: Spinner global para indicadores HTMX #}
@@ -249,6 +266,7 @@
   {% include 'tenant/contabilidad/partials/assets_cuentas.html' %}
   {% include 'tenant/contabilidad/partials/assets_asientos.html' %}
   {% include 'tenant/contabilidad/partials/assets_periodos.html' %}
+  {% include 'tenant/contabilidad/partials/assets_reportes.html' %}
   {% include 'inventario/assets_inventario.html' %}
 
   {# Módulo Perfil (Mi Perfil) - FSD SSoT #}

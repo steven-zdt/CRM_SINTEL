@@ -19,7 +19,8 @@ from apps.tenant.empleados.models import Contrato, Devengo, Empleado
 # Campos estrictamente necesarios para LISTAS (Tabulator)
 EMPLEADO_LIST_FIELDS = (
     'id', 'tipo_documento', 'numero_documento', 'primer_nombre', 'primer_apellido',
-    'segundo_nombre', 'segundo_apellido', 'estado', 'fecha_ingreso', 'empresa_id'
+    'segundo_nombre', 'segundo_apellido', 'estado', 'fecha_ingreso', 'empresa_id',
+    'cuenta_contable_uuid'
 )
 
 CONTRATO_LIST_FIELDS = (
@@ -41,7 +42,7 @@ EMPLEADO_DETAIL_FIELDS = (
     'id', 'empresa', 'empresa__id', 'tipo_documento', 'numero_documento',
     'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
     'email', 'telefono', 'eps', 'afp', 'arl', 'nivel_riesgo_arl',
-    'estado', 'fecha_ingreso', 'fecha_retiro'
+    'estado', 'fecha_ingreso', 'fecha_retiro', 'cuenta_contable_uuid'
 )
 
 CONTRATO_DETAIL_FIELDS = (

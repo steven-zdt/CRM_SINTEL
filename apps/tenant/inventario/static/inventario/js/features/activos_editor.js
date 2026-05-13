@@ -48,7 +48,10 @@
             responsable: formData.get('responsable')?.trim() || '',
             fecha_adquisicion: formData.get('fecha_adquisicion') || null,
             costo_adquisicion: parseFloat(formData.get('costo_adquisicion') || '0') || 0,
-            estado: formData.get('estado') || 'ACTIVO'
+            estado: formData.get('estado') || 'ACTIVO',
+            // v3.5 Dual Accounting: cuenta activo (balance) + cuenta depreciacion (gasto)
+            cuenta_activo_uuid: d.querySelector('#activo-cuenta-activo-uuid')?.value || null,
+            cuenta_depreciacion_uuid: d.querySelector('#activo-cuenta-depreciacion-uuid')?.value || null
         };
 
         // Validación básica
@@ -253,6 +256,23 @@
                     // Si es creación, cargar categorías sin selección
                     cargarCategorias();
                 }
+            }
+
+            // v3.5 Dual Accounting: Cuenta Activo (Balance)
+            if (d.querySelector('#activo-cuenta-activo-busqueda')) {
+                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
+                    inputSelector: '#activo-cuenta-activo-busqueda',
+                    resultsSelector: '#activo-cuenta-activo-resultados',
+                    uuidSelector: '#activo-cuenta-activo-uuid'
+                });
+            }
+            // v3.5 Dual Accounting: Cuenta Depreciacion (Gasto/Acumulada)
+            if (d.querySelector('#activo-cuenta-depreciacion-busqueda')) {
+                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
+                    inputSelector: '#activo-cuenta-depreciacion-busqueda',
+                    resultsSelector: '#activo-cuenta-depreciacion-resultados',
+                    uuidSelector: '#activo-cuenta-depreciacion-uuid'
+                });
             }
         }
     }

@@ -13,6 +13,7 @@ djangorestframework>=3.16,<3.17
 djangorestframework-simplejwt[blacklist]>=5.3,<6.0  # Autenticación JWT + blacklist (recomendado)
 django-filter>=25.1
 drf-spectacular>=0.29.0,<0.30  # OpenAPI schema generation (recomendado por DRF)
+django-rest-framework-mcp>=0.1.0a4  # MCP server: expone ViewSets como herramientas MCP via HTTP
 
 # Asincronismo y Cola
 celery[redis]>=5.3,<6.0
@@ -33,6 +34,9 @@ beautifulsoup4>=4.12,<5.0  # Fallback para HTML malformado (opcional)
 
 # Generación de PDF
 xhtml2pdf>=0.2.11  # Generación de PDF desde HTML (ligero, sin dependencias de sistema)
+
+# IA — Asistente Contable
+anthropic>=0.40.0,<1.0  # Claude API para sugerencia automática de líneas de asiento
 
 # Búsqueda - OpenSearch
 opensearch-py>=2.0,<3.0  # Cliente Python oficial para OpenSearch

@@ -393,6 +393,15 @@ TOTAL DEBE == TOTAL HABER == subtotal
 - **PROHIBIDO** usar `lado='DEBE'` para impuestos/retenciones (su natural es `'HABER'`)
 - **PROHIBIDO** hardcodear códigos PUC en apps fuente — siempre usar `cuenta_hint` o `ReglaContable`
 
+## [KARPATHY] 21. Karpathy Coding Principles (Caution over Speed)
+
+**PRINCIPIO FUNDAMENTAL:** Reducir errores comunes de LLMs mediante cautela, simplicidad y cambios quirurgicos. Aplicar en CADA tarea sin excepcion.
+
+1. **Pensar antes de Codificar**: No asumir. Si hay incertidumbre, preguntar. Explicitar suposiciones. Si hay multiples interpretaciones, presentarlas antes de elegir una.
+2. **Simplicidad Primero**: Codigo minimo necesario. Prohibido crear abstracciones para codigo de un solo uso o agregar flexibilidad no solicitada. Si se puede hacer en 50 lineas en vez de 200, reescribir.
+3. **Cambios Quirurgicos**: Tocar SOLO lo estrictamente necesario. No mejorar codigo adyacente ni refactorizar lo que no esta roto. Empatar el estilo existente. Codigo muerto no relacionado: reportar, NO borrar sin permiso.
+4. **Ejecucion Basada en Objetivos**: Transformar tareas en metas verificables. Para tareas de multiples pasos: `1. [Paso] -> verificar: [check]`.
+
 ## [MEMORY] 19. Memory Bank y Estado a Largo Plazo (MEMORY.md)
 
 **REGLA OBLIGATORIA PARA TODOS LOS AGENTES Y EDITORES DE CÓDIGO (Claude Code, Cursor, Copilot, Antigravity, etc.)**

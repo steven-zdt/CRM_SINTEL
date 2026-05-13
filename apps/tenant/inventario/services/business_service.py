@@ -30,11 +30,10 @@ from apps.tenant.inventario.models import (
 )
 from apps.tenant.inventario.services.selectors import (
     MOVIMIENTO_LIST_FIELDS,
-    qs_activo_detail,
-    qs_activo_list,
-    qs_categoria_detail,
-    qs_producto_detail,
-    qs_servicio_detail,
+    ActivoFijoSelector,
+    CategoriaItemSelector,
+    ProductoSelector,
+    ServicioSelector,
 )
 
 # ==============================================================================
@@ -545,7 +544,7 @@ class CategoriaItemServiceMixin:
         """Contexto para formulario de categoria (HTMX Offcanvas)."""
         categoria = None
         if id_instancia:
-            categoria = qs_categoria_detail(empresa_id=empresa.id, categoria_id=id_instancia)
+            categoria = CategoriaItemSelector.get_detail(empresa_id=empresa.id, categoria_id=id_instancia)
         return {
             'categoria': categoria,
             'empresa': empresa,
@@ -608,7 +607,7 @@ class ProductoServiceMixin:
         """Centraliza la carga de datos para formularios HTMX de productos."""
         producto = None
         if id_instancia:
-            producto = qs_producto_detail(empresa_id=empresa.id, producto_id=id_instancia)
+            producto = ProductoSelector.get_detail(empresa_id=empresa.id, producto_id=id_instancia)
 
         categorias = (
             CategoriaItem.objects
@@ -647,7 +646,7 @@ class ServicioServiceMixin:
         """Centraliza la carga de datos para formularios HTMX de servicios."""
         servicio = None
         if id_instancia:
-            servicio = qs_servicio_detail(empresa_id=empresa.id, servicio_id=id_instancia)
+            servicio = ServicioSelector.get_detail(empresa_id=empresa.id, servicio_id=id_instancia)
 
         categorias = (
             CategoriaItem.objects
@@ -680,13 +679,13 @@ class ActivoFijoServiceMixin:
 
     def service_activo_list_all(self, empresa):
         """QuerySet optimizado para DataTables ajax directo."""
-        return qs_activo_list(empresa_id=empresa.id).order_by('nombre')
+        return ActivoFijoSelector.get_list(empresa_id=empresa.id).order_by('nombre')
 
     def service_activo_get_offcanvas_context(self, empresa, id_instancia=None):
         """Contexto para formulario de activo fijo (HTMX Offcanvas)."""
         activo = None
         if id_instancia:
-            activo = qs_activo_detail(empresa_id=empresa.id, activo_id=id_instancia)
+            activo = ActivoFijoSelector.get_detail(empresa_id=empresa.id, activo_id=id_instancia)
 
         categorias = (
             CategoriaItem.objects

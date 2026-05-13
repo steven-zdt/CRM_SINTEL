@@ -359,20 +359,58 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         default='I'
     )
     
+    # WARNING: v3.5: Integracion Contable
+    cuenta_contable_uuid = serializers.UUIDField(required=False, allow_null=True)
+
     # WARNING: v2.60: Empresa es read_only pero se asigna en perform_create
     empresa = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    # WARNING: v3.5: Integracion Contable - §18: label dinamico para UI (Pull Model)
+    cuenta_contable_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Empleado
         fields = (
             'id', 'empresa', 'tipo_documento', 'numero_documento',
             'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
-            'email', 'telefono', 
+            'email', 'telefono',
             'eps', 'afp', 'arl', 'nivel_riesgo_arl',  # WARNING: v2.95: Seguridad Social
             'estado', 'fecha_ingreso', 'fecha_retiro',
-            'nombre_completo', 'contratos'
+            'nombre_completo', 'contratos',
+            'cuenta_contable_uuid', 'cuenta_contable_label'  # WARNING: v3.5: Integracion Contable - §18
         )
-        read_only_fields = ('empresa', 'nombre_completo', 'contratos')
+        read_only_fields = ('empresa', 'nombre_completo', 'contratos', 'cuenta_contable_label')
+
+    def get_cuenta_contable_label(self, obj):
+        """
+        v3.5: Resuelve el string 'codigo - nombre' de la cuenta contable
+        usando el selector centralizado de contabilidad (Zero Trust).
+        """
+        if not obj.cuenta_contable_uuid:
+            return None
+            
+        from apps.tenant.contabilidad.services.selectors import ContabilidadSelector
+        return ContabilidadSelector.get_label_by_uuid(
+            obj.cuenta_contable_uuid, 
+            obj.empresa_id
+        )
+
+    def validate_cuenta_contable_uuid(self, value):
+        """
+        v3.5: Valida que el UUID de la cuenta contable exista y pertenezca al tenant (DSV).
+        """
+        if not value:
+            return value
+            
+        empresa = self.context.get('empresa')
+        if not empresa:
+            raise serializers.ValidationError("No se pudo determinar la empresa para validar la cuenta contable.")
+
+        from apps.tenant.contabilidad.services.selectors import ContabilidadSelector
+        if not ContabilidadSelector.exists_by_uuid(value, empresa.id):
+            raise serializers.ValidationError("La cuenta contable referenciada no existe o no pertenece a este tenant.")
+            
+        return value
 
     def validate(self, attrs):
         """

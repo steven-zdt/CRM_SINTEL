@@ -67,6 +67,21 @@ document.body.addEventListener('htmx:afterSettle', function(e) {
         });
     }
 });
+
+## Destrucción Segura (Lifecycle Cleanup)
+
+```javascript
+// Evitar TypeErrors de Bootstrap al remover elementos del DOM
+document.body.addEventListener('htmx:beforeCleanupElement', function(e) {
+    const el = e.detail.el;
+    if (el.classList.contains('offcanvas') || el.querySelector('.offcanvas')) {
+        const offcanvasEl = el.classList.contains('offcanvas') ? el : el.querySelector('.offcanvas');
+        if (window.UIManager?.destroyOffcanvas) {
+            window.UIManager.destroyOffcanvas(offcanvasEl);
+        }
+    }
+});
+```
 ```
 
 ## Endpoint Dual (JSON + HTML)

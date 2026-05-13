@@ -1,0 +1,29 @@
+{# assets_cotizaciones.html - Recursos JS/CSS para Cotizaciones v2.62.0 #}
+{% load static %}
+<link rel="stylesheet" href="{% static 'cotizaciones/css/cotizaciones.css' %}">
+
+<!-- CORE JS -->
+<script src="{% static 'cotizaciones/js/cotizaciones.module.js' %}"></script>
+<script src="{% static 'cotizaciones/js/cotizaciones.api.js' %}"></script>
+<script src="{% static 'cotizaciones/js/cotizaciones.utils.js' %}"></script>
+<script src="{% static 'cotizaciones/js/cotizaciones.table.js' %}"></script>
+<script src="{% static 'cotizaciones/js/cotizaciones.ui.js' %}"></script>
+
+<!-- FEATURE JS (FSD) -->
+<script src="{% static 'cotizaciones/js/features/cotizacion_list.js' %}"></script>
+<script src="{% static 'cotizaciones/js/features/cotizacion_editor.js' %}"></script>
+<script src="{% static 'cotizaciones/js/features/producto_list.js' %}"></script>
+<script src="{% static 'cotizaciones/js/features/producto_editor.js' %}"></script>
+<script src="{% static 'cotizaciones/js/features/servicio_list.js' %}"></script>
+<script src="{% static 'cotizaciones/js/features/servicio_editor.js' %}"></script>
+<script src="{% static 'cotizaciones/js/features/item_editor.js' %}"></script>
+<script src="{% static 'cotizaciones/js/features/configuracion_list.js' %}"></script>
+<script src="{% static 'cotizaciones/js/features/configuracion_editor.js' %}"></script>
+
+<!-- LEGACY COMPAT -->
+<script src="{% static 'cotizaciones/js/cotizaciones.list.js' %}"></script>
+<script src="{% static 'cotizaciones/js/cotizaciones.editor.js' %}"></script>
+<script src="{% static 'cotizaciones/js/cotizaciones.detalle.js' %}"></script>
+
+<!-- ORQUESTADOR -->
+<script src="{% static 'cotizaciones/js/cotizaciones.main.js' %}"></script>

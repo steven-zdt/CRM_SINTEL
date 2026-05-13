@@ -7,9 +7,23 @@ from django.utils import timezone
 
 from ..models import Cotizacion
 from .crud_service import CotizacionCRUDService
+from apps.tenant.clientes.models import Cliente
+from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
 
 logger = logging.getLogger(__name__)
 
+def _generar_pdf_sincronizado(cotizacion, empresa):
+    """Genera PDF de forma síncrona después de guardar cotización."""
+    try:
+        from .pdf_export_service import CotizacionPDFExportService
+        pdf_bytes = CotizacionPDFExportService.generar_pdf_publico(cotizacion, empresa)
+        if pdf_bytes:
+            logger.info(f"[PDF] Generado para cotización {cotizacion.uuid}")
+            return pdf_bytes
+        else:
+            logger.warning(f"[PDF] Falló generación para cotización {cotizacion.uuid}")
+    except Exception as e:
+        logger.error(f"[PDF] Error generando PDF para {cotizacion.uuid}: {str(e)}", exc_info=True)
 
 class CotizacionService:
     MONEY_Q = Decimal("0.01")
@@ -35,228 +49,197 @@ class CotizacionService:
             return default_value
         return value
 
+    @staticmethod
+    def get_configuracion_for_empresa(configuracion_input, empresa_id):
+        if isinstance(configuracion_input, ConfiguracionCotizacion):
+            if configuracion_input.empresa_id != empresa_id:
+                raise ValueError("configuracion does not belong to tenant empresa")
+            return configuracion_input
+
+        configuracion_id = int(configuracion_input)
+        configuracion = ConfiguracionCotizacion.objects.filter(id=configuracion_id, empresa_id=empresa_id).first()
+        if not configuracion:
+            raise ValueError("configuracion not found for tenant empresa")
+        return configuracion
+
+    @staticmethod
+    def get_cliente_for_empresa(cliente_input, empresa_id):
+        if not cliente_input:
+            return None
+        if isinstance(cliente_input, Cliente):
+            if cliente_input.empresa_id != empresa_id:
+                raise ValueError("cliente does not belong to tenant empresa")
+            return cliente_input
+
+        cliente_id = int(cliente_input)
+        cliente = Cliente.objects.filter(id=cliente_id, empresa_id=empresa_id).first()
+        if not cliente:
+            raise ValueError("cliente not found for tenant empresa")
+        return cliente
+
     @classmethod
     def _build_header_fields(cls, configuracion, datos):
         dias_validez = int(getattr(configuracion, "dias_validez", 15) or 15)
         fecha_emision = cls._get_payload_value(datos, "fecha_emision", timezone.now().date())
         fecha_vencimiento = fecha_emision + timedelta(days=dias_validez)
 
-        tipo_cotizacion_default = (
-            getattr(configuracion, "tipo_cotizacion_default", None)
-            or getattr(configuracion, "tipo_cotizacion", None)
-            or "MIXTO"
-        )
-        iva_default = (
-            getattr(configuracion, "iva_porcentaje_default", None)
-            or getattr(configuracion, "iva_porcentaje", None)
-            or Decimal("19.00")
-        )
-        aiu_admin_default = (
-            getattr(configuracion, "aiu_admin_default", None)
-            or getattr(configuracion, "porcentaje_aiu_admin", None)
-            or Decimal("0.00")
-        )
-        aiu_imprevistos_default = (
-            getattr(configuracion, "aiu_imprevistos_default", None)
-            or getattr(configuracion, "porcentaje_aiu_imprevistos", None)
-            or Decimal("0.00")
-        )
-        aiu_utilidad_default = (
-            getattr(configuracion, "aiu_utilidad_default", None)
-            or getattr(configuracion, "porcentaje_aiu_utilidad", None)
-            or Decimal("0.00")
-        )
-
+        tipo_default = getattr(configuracion, "tipo_cotizacion_default", "MIXTO")
+        iva_default = getattr(configuracion, "iva_porcentaje_default", Decimal("19.00"))
+        
         return {
-            "tipo_cotizacion": cls._get_payload_value(datos, "tipo_cotizacion", tipo_cotizacion_default),
+            "tipo_cotizacion": cls._get_payload_value(datos, "tipo_cotizacion", tipo_default),
             "fecha_emision": fecha_emision,
             "fecha_vencimiento": fecha_vencimiento,
-            "iva_porcentaje": cls._to_decimal(cls._get_payload_value(datos, "iva_porcentaje", iva_default), field_name="iva_porcentaje"),
-            "porcentaje_aiu_admin": cls._to_decimal(cls._get_payload_value(datos, "porcentaje_aiu_admin", aiu_admin_default), field_name="porcentaje_aiu_admin"),
-            "porcentaje_aiu_imprevistos": cls._to_decimal(cls._get_payload_value(datos, "porcentaje_aiu_imprevistos", aiu_imprevistos_default), field_name="porcentaje_aiu_imprevistos"),
-            "porcentaje_aiu_utilidad": cls._to_decimal(cls._get_payload_value(datos, "porcentaje_aiu_utilidad", aiu_utilidad_default), field_name="porcentaje_aiu_utilidad"),
-        }
-
-    @classmethod
-    def _sync_items(cls, cotizacion, items_data):
-        if items_data is None:
-            return
-
-        CotizacionCRUDService.delete_items_for_cotizacion(cotizacion)
-
-        for item_data in items_data:
-            cantidad = cls._to_decimal(item_data.get("cantidad", 0), field_name="cantidad")
-            costo = cls._to_decimal(item_data.get("costo_unitario", 0), field_name="costo_unitario")
-            utilidad = cls._to_decimal(item_data.get("porcentaje_utilidad", 0), field_name="porcentaje_utilidad")
-            calculos = cls.calcular_linea(cantidad, costo, utilidad)
-
-            CotizacionCRUDService.create_item(
-                cotizacion=cotizacion,
-                empresa=cotizacion.empresa,
-                tipo_item=item_data.get("tipo_item", "PRODUCTO"),
-                producto=item_data.get("producto"),
-                servicio=item_data.get("servicio"),
-                descripcion=item_data.get("descripcion", "Sin descripción"),
-                marca=item_data.get("marca", ""),
-                referencia=item_data.get("referencia", ""),
-                unidad=item_data.get("unidad", "UND"),
-                cantidad=cantidad,
-                costo_unitario=costo,
-                porcentaje_utilidad=utilidad,
-                precio_unitario_venta=calculos["precio_unitario"],
-                subtotal_linea=calculos["subtotal"],
-                orden=item_data.get("orden", 0),
-            )
-
-    @staticmethod
-    def calcular_linea(cantidad, costo, utilidad):
-        cantidad_dec = CotizacionService._to_decimal(cantidad, field_name="cantidad")
-        costo_dec = CotizacionService._to_decimal(costo, field_name="costo")
-        utilidad_dec = CotizacionService._to_decimal(utilidad, field_name="utilidad")
-
-        factor_utilidad = Decimal("1") + (utilidad_dec / CotizacionService.HUNDRED)
-        precio_unitario = costo_dec * factor_utilidad
-        subtotal_linea = cantidad_dec * precio_unitario
-
-        precio_unitario_q = CotizacionService._q(precio_unitario)
-        subtotal_linea_q = CotizacionService._q(subtotal_linea)
-
-        return {
-            "precio_unitario": precio_unitario_q,
-            "subtotal": subtotal_linea_q,
-            "subtotal_linea": subtotal_linea_q,
+            "iva_porcentaje": cls._to_decimal(cls._get_payload_value(datos, "iva_porcentaje", iva_default)),
+            "porcentaje_aiu_admin": cls._to_decimal(datos.get("porcentaje_aiu_admin", getattr(configuracion, "aiu_admin_default", 0))),
+            "porcentaje_aiu_imprevistos": cls._to_decimal(datos.get("porcentaje_aiu_imprevistos", getattr(configuracion, "aiu_imprevistos_default", 0))),
+            "porcentaje_aiu_utilidad": cls._to_decimal(datos.get("porcentaje_aiu_utilidad", getattr(configuracion, "aiu_utilidad_default", 0))),
+            "dias_totales": int(datos.get("dias_totales") or 1),
+            "dias_infraestructura": int(datos.get("dias_infraestructura") or 0),
+            "dias_instalacion": int(datos.get("dias_instalacion") or 0),
+            "dias_configuracion": int(datos.get("dias_configuracion") or 0),
+            "dias_pruebas": int(datos.get("dias_pruebas") or 0),
         }
 
     @classmethod
     @transaction.atomic
+    def _sync_items(cls, cotizacion, items_data):
+        """
+        Sincroniza los ítems de la cotización (crea, actualiza o elimina).
+        """
+        from .item_service import CotizacionItemBusinessService
+        
+        # Usamos ID como identificador para sincronización (CotizacionItem no tiene UUID en el modelo)
+        # 1. Mapear items existentes
+        existing_items = {item.id: item for item in cotizacion.items.all()}
+        
+        # 2. Procesar payload
+        for item_data in items_data:
+            item_id = item_data.get('id')
+            
+            # Limpiar datos para evitar conflictos
+            if 'empresa' in item_data: item_data.pop('empresa')
+            
+            if item_id and int(item_id) in existing_items:
+                # Actualizar: Extraer del mapa para que no sea eliminado luego
+                instance = existing_items.pop(int(item_id))
+                CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data, instance=instance)
+            else:
+                # Crear: Asegurar asociación con cotización actual
+                item_data['cotizacion'] = cotizacion
+                CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data)
+
+        # 3. Eliminar remanentes (los que no vinieron en el payload)
+        for instance in existing_items.values():
+            CotizacionItemBusinessService.eliminar_item(instance)
+
+    @classmethod
+    @transaction.atomic
     def crear_preforma(cls, empresa, datos):
-        if not empresa:
-            raise ValueError("empresa is required")
-
-        configuracion_input = datos.get("configuracion")
-        if not configuracion_input:
-            raise ValueError("configuracion is required")
-
-        configuracion = CotizacionCRUDService.get_configuracion_for_empresa(
-            configuracion_input,
-            empresa.id,
-        )
-        cliente = CotizacionCRUDService.get_cliente_for_empresa(datos.get("cliente"), empresa.id)
-        items_data = datos.get("items", [])
+        configuracion = cls.get_configuracion_for_empresa(datos.get("configuracion"), empresa.id)
+        cliente = cls.get_cliente_for_empresa(datos.get("cliente"), empresa.id)
 
         codigo_unico = cls.generar_codigo_unico(configuracion.id, empresa.id)
-        configuracion.refresh_from_db(fields=["ultimo_numero"])
-
-        numero_cotizacion = str(configuracion.ultimo_numero)
         header_fields = cls._build_header_fields(configuracion, datos)
+
+        items_data = datos.pop('items', [])
 
         cotizacion = CotizacionCRUDService.create_cotizacion(
             empresa=empresa,
             cliente=cliente,
             configuracion=configuracion,
-            numero_cotizacion=numero_cotizacion,
+            numero_cotizacion=str(configuracion.ultimo_numero),
             codigo_unico=codigo_unico,
             estado=Cotizacion.Estado.BORRADOR,
             **header_fields,
         )
 
-        cls._sync_items(cotizacion, items_data)
+        # Sincronizar ítems
+        if items_data:
+            cls._sync_items(cotizacion, items_data)
+
+        # Recalcular totales finales
         cls.calcular_totales(cotizacion.id)
+        cotizacion.refresh_from_db()
+
+        # Generar PDF sincronizado con datos guardados
+        _generar_pdf_sincronizado(cotizacion, empresa)
 
         return cotizacion
 
     @classmethod
-    @transaction.atomic
-    def actualizar_cotizacion(cls, instance, datos):
-        cliente = instance.cliente
-        if "cliente" in datos:
-            cliente = CotizacionCRUDService.get_cliente_for_empresa(datos.get("cliente"), instance.empresa_id)
-
-        configuracion = instance.configuracion
-        if "configuracion" in datos and datos.get("configuracion"):
-            configuracion = CotizacionCRUDService.get_configuracion_for_empresa(datos.get("configuracion"), instance.empresa_id)
-
-        merged_data = {
-            "tipo_cotizacion": instance.tipo_cotizacion,
-            "fecha_emision": instance.fecha_emision,
-            "iva_porcentaje": instance.iva_porcentaje,
-            "porcentaje_aiu_admin": instance.porcentaje_aiu_admin,
-            "porcentaje_aiu_imprevistos": instance.porcentaje_aiu_imprevistos,
-            "porcentaje_aiu_utilidad": instance.porcentaje_aiu_utilidad,
-        }
-        merged_data.update(datos)
-
-        header_fields = cls._build_header_fields(configuracion, merged_data)
-        items_data = datos.get("items")
-
-        updated = CotizacionCRUDService.update_cotizacion(
-            instance,
-            cliente=cliente,
-            configuracion=configuracion,
-            tipo_cotizacion=header_fields["tipo_cotizacion"],
-            fecha_emision=header_fields["fecha_emision"],
-            fecha_vencimiento=header_fields["fecha_vencimiento"],
-            porcentaje_aiu_admin=header_fields["porcentaje_aiu_admin"],
-            porcentaje_aiu_imprevistos=header_fields["porcentaje_aiu_imprevistos"],
-            porcentaje_aiu_utilidad=header_fields["porcentaje_aiu_utilidad"],
-            iva_porcentaje=header_fields["iva_porcentaje"],
-        )
-
-        cls._sync_items(updated, items_data)
-        cls.calcular_totales(updated.id)
-        return updated
-
-    @classmethod
     def generar_codigo_unico(cls, perfil_id, empresa_id):
-        if not transaction.get_connection().in_atomic_block:
-            raise RuntimeError("generar_codigo_unico must be called inside transaction.atomic")
+        configuracion = ConfiguracionCotizacion.objects.select_for_update().filter(id=perfil_id, empresa_id=empresa_id).first()
+        if not configuracion:
+            raise ValueError("configuracion not found")
 
-        configuracion = CotizacionCRUDService.get_configuracion_for_update(perfil_id, empresa_id)
-
-        ultimo_numero = int(configuracion.ultimo_numero or 0)
-        if ultimo_numero == 0:
-            siguiente_numero = int(configuracion.semilla_inicial or 1)
-        else:
-            siguiente_numero = ultimo_numero + 1
-
-        configuracion.ultimo_numero = siguiente_numero
+        siguiente = (configuracion.ultimo_numero or 0) + 1
+        configuracion.ultimo_numero = siguiente
         configuracion.save(update_fields=["ultimo_numero"])
 
-        numero_formateado = f"{siguiente_numero:04d}"
         prefijo = configuracion.prefijo_secuencia or ""
         sufijo = configuracion.sufijo_secuencia or ""
-        return f"{prefijo}{numero_formateado}{sufijo}"
+        return f"{prefijo}{siguiente:04d}{sufijo}"
 
     @staticmethod
     def calcular_totales(cotizacion_id):
         cotizacion = CotizacionCRUDService.get_cotizacion_for_totals(cotizacion_id)
         subtotal = CotizacionCRUDService.get_items_subtotal(cotizacion.id)
 
-        aiu_admin_pct = Decimal(str(cotizacion.porcentaje_aiu_admin or Decimal("0.00")))
-        aiu_imprevistos_pct = Decimal(str(cotizacion.porcentaje_aiu_imprevistos or Decimal("0.00")))
-        aiu_utilidad_pct = Decimal(str(cotizacion.porcentaje_aiu_utilidad or Decimal("0.00")))
-        iva_pct = Decimal(str(cotizacion.iva_porcentaje or Decimal("0.00")))
-
-        aiu_admin = subtotal * (aiu_admin_pct / CotizacionService.HUNDRED)
-        aiu_imprevistos = subtotal * (aiu_imprevistos_pct / CotizacionService.HUNDRED)
-        aiu_utilidad = subtotal * (aiu_utilidad_pct / CotizacionService.HUNDRED)
+        aiu_admin = subtotal * (Decimal(str(cotizacion.porcentaje_aiu_admin or 0)) / CotizacionService.HUNDRED)
+        aiu_imprevistos = subtotal * (Decimal(str(cotizacion.porcentaje_aiu_imprevistos or 0)) / CotizacionService.HUNDRED)
+        aiu_utilidad = subtotal * (Decimal(str(cotizacion.porcentaje_aiu_utilidad or 0)) / CotizacionService.HUNDRED)
         aiu_total = aiu_admin + aiu_imprevistos + aiu_utilidad
 
         base_iva = subtotal + aiu_total
-        iva = base_iva * (iva_pct / CotizacionService.HUNDRED)
-        total_con_impuestos = subtotal + aiu_total + iva
-
-        subtotal_q = CotizacionService._q(subtotal)
-        aiu_total_q = CotizacionService._q(aiu_total)
-        iva_q = CotizacionService._q(iva)
-        total_q = CotizacionService._q(total_con_impuestos)
-
+        iva = base_iva * (Decimal(str(cotizacion.iva_porcentaje or 0)) / CotizacionService.HUNDRED)
+        
+        total_q = CotizacionService._q(subtotal + aiu_total + iva)
         cotizacion.total_con_impuestos = total_q
         cotizacion.save(update_fields=["total_con_impuestos"])
 
-        return {
-            "subtotal": subtotal_q,
-            "aiu_total": aiu_total_q,
-            "iva": iva_q,
-            "total_con_impuestos": total_q,
-        }
+        return {"total_con_impuestos": total_q}
+
+    @classmethod
+    @transaction.atomic
+    def actualizar_cotizacion(cls, instance, datos):
+        """
+        Actualiza los campos de cabecera y los ítems de la cotización.
+        Genera PDF sincronizado con datos guardados.
+        """
+        items_data = datos.pop('items', None)
+
+        allowed_fields = [
+            'cliente', 'configuracion', 'tipo_cotizacion', 'estado',
+            'fecha_emision', 'iva_porcentaje',
+            'porcentaje_aiu_admin', 'porcentaje_aiu_imprevistos', 'porcentaje_aiu_utilidad',
+            'dias_totales', 'dias_infraestructura', 'dias_instalacion', 'dias_configuracion', 'dias_pruebas'
+        ]
+
+        update_data = {}
+        for field in allowed_fields:
+            if field in datos:
+                val = datos[field]
+                if field == 'cliente':
+                    update_data[field] = cls.get_cliente_for_empresa(val, instance.empresa_id)
+                elif field == 'configuracion':
+                    update_data[field] = cls.get_configuracion_for_empresa(val, instance.empresa_id)
+                else:
+                    update_data[field] = val
+
+        # Aplicar cambios vía CRUD a la cabecera
+        updated_instance = CotizacionCRUDService.update_cotizacion(instance, **update_data)
+
+        # Sincronizar ítems si vienen en el payload
+        if items_data is not None:
+            cls._sync_items(updated_instance, items_data)
+
+        # Recalcular totales
+        cls.calcular_totales(updated_instance.id)
+        updated_instance.refresh_from_db()
+
+        # Generar PDF sincronizado con datos guardados
+        empresa = updated_instance.empresa
+        _generar_pdf_sincronizado(updated_instance, empresa)
+
+        return updated_instance

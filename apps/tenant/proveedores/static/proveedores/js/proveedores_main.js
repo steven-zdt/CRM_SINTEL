@@ -60,17 +60,17 @@
         field: "acciones",
         formatter: function(cell) {
           const rowData = cell.getRow().getData();
-          const id = rowData.id;
+          const identifier = rowData.uuid || rowData.id;
           const isActive = rowData.activo === true;
           const deleteDisabled = isActive ? 'disabled' : '';
           const deleteClass = isActive ? 'opacity-50' : '';
           
           return `
             <div class="btn-group btn-group-sm">
-              <button type="button" class="btn btn-outline-primary btn-edit-proveedor" data-id="${id}" title="Editar">
+              <button type="button" class="btn btn-outline-primary btn-edit-proveedor" data-id="${identifier}" title="Editar">
                 <i class="bi bi-pencil"></i>
               </button>
-              <button type="button" class="btn btn-outline-danger btn-delete-proveedor ${deleteClass}" data-id="${id}" ${deleteDisabled} title="Eliminar">
+              <button type="button" class="btn btn-outline-danger btn-delete-proveedor ${deleteClass}" data-id="${identifier}" ${deleteDisabled} title="Eliminar">
                 <i class="bi bi-trash"></i>
               </button>
             </div>
@@ -146,8 +146,9 @@
         if (_eliminandoProveedor) return;
         const target = e.target || e.originalEvent?.target;
         if (target && target.closest && target.closest('button')) return;
-        const id = row.getData().id;
-        if (id) w.Sintel.Proveedores.Form?.openOffcanvas(id);
+        const rowData = row.getData();
+        const identifier = rowData.uuid || rowData.id;
+        if (identifier) w.Sintel.Proveedores.Form?.openOffcanvas(identifier);
       });
     }
   }

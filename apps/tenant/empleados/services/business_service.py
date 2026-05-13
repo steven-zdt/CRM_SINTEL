@@ -283,6 +283,7 @@ class DevengoBusinessService:
         data['auxilio_transporte'] = Decimal(calculo['auxilio_transporte'])
         data['salud_empleado'] = Decimal(calculo['salud_empleado'])
         data['pension_empleado'] = Decimal(calculo['pension_empleado'])
+        data['neto_pagar'] = Decimal(calculo['neto_pagar'])
 
         # Crear o actualizar
         if instance:

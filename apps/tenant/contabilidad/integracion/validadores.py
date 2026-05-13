@@ -24,11 +24,11 @@ def validar_cuadratura(debe: Decimal, haber: Decimal) -> None:
         haber: Sum of all credit entries
 
     Raises:
-        AsientoNoCuadradoError: If debe ≠ haber
+        AsientoNoCuadradoError: If debe != haber
     """
     if debe != haber:
         raise AsientoNoCuadradoError(
-            f"Asiento no cuadra: DEBE={debe} ≠ HABER={haber}"
+            f"Asiento no cuadra: DEBE={debe} != HABER={haber}"
         )
 
 
@@ -44,7 +44,7 @@ def validar_periodo_abierto(periodo: 'PeriodoContable') -> None:
     """
     if periodo.estado == 'CERRADO':
         raise PeriodoCerradoError(
-            f"Período {periodo.nombre} está cerrado. No se pueden crear asientos nuevos."
+            f"Periodo {periodo.nombre} esta cerrado. No se pueden crear asientos nuevos."
         )
 
 
@@ -60,36 +60,6 @@ def validar_no_vacio(debe: Decimal, haber: Decimal) -> None:
         AsientoNoCuadradoError: If entry is empty
     """
     if debe == 0 and haber == 0:
-        raise AsientoNoCuadradoError("Asiento vacío: no tiene movimientos")
+        raise AsientoNoCuadradoError("Asiento vacio: no tiene movimientos")
 
 
-def validar_documento_origen_existe(
-    documento_origen_app: str,
-    documento_origen_modelo: str,
-    documento_origen_id: int
-) -> None:
-    """
-    Verify that source document exists in origin app.
-
-    Args:
-        documento_origen_app: App label (facturas, gastos, etc.)
-        documento_origen_modelo: Model name (Factura, DocumentoSoporte, etc.)
-        documento_origen_id: PK in source app
-
-    Raises:
-        DocumentoOrigenInvalidoError: If document not found
-    """
-    from django.apps import apps
-    from .excepciones import DocumentoOrigenInvalidoError
-
-    try:
-        app_config = apps.get_app_config(documento_origen_app)
-        model = app_config.get_model(documento_origen_modelo.lower())
-        if not model.objects.filter(pk=documento_origen_id).exists():
-            raise DocumentoOrigenInvalidoError(
-                f"Documento origen no existe: {documento_origen_app}.{documento_origen_modelo}[{documento_origen_id}]"
-            )
-    except (LookupError, ValueError) as e:
-        raise DocumentoOrigenInvalidoError(
-            f"Documento origen inválido: {documento_origen_app}.{documento_origen_modelo} — {e}"
-        )

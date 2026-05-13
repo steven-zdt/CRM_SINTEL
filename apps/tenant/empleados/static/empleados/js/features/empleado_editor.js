@@ -10,20 +10,60 @@
     window.Sintel = window.Sintel || {};
     window.Sintel.Empleados = window.Sintel.Empleados || {};
 
+    const MOD = '[EmpleadoEditor]';
+    const API_URL = '/api/v1/empleados/';
+    const CONTAINER_ID = 'offcanvas-container-empleados';
+
     /**
-     * Inicializa el formulario de empleado
+     * Abrir offcanvas de empleado (Crear o Editar)
      */
-    function init(formSelector) {
-        const form = document.querySelector(formSelector);
-        if (!form) {
-            console.error('[EmpleadoEditor] Formulario no encontrado:', formSelector);
-            return;
+    async function open(id = null) {
+        let url = `${API_URL}gestor-offcanvas/?tipo=empleado`;
+        if (id) url += `&id=${id}`;
+
+        console.log(`${MOD} Cargando offcanvas: ${url}`);
+        
+        try {
+            await htmx.ajax('GET', url, {
+                target: `#${CONTAINER_ID}`,
+                swap: 'innerHTML'
+            });
+        } catch (error) {
+            console.error(`${MOD} Error:`, error);
+            window.UIManager?.notifyError('Error al cargar el formulario de empleado');
         }
+    }
 
-        // Manejar submit del formulario
-        form.addEventListener('submit', handleSubmit);
+    /**
+     * Listener para activar offcanvas tras inyección HTMX
+     */
+    function setupOffcanvasLoadListener() {
+        document.body.addEventListener('htmx:afterSettle', function(evt) {
+            const target = evt.detail.target;
+            if (!target || target.id !== CONTAINER_ID) return;
 
-        // Manejar respuesta HTMX
+            const offcanvasEl = target.querySelector('.offcanvas');
+            if (offcanvasEl && window.bootstrap) {
+                console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
+                const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                bsOffcanvas.show();
+
+                // Vincular validador al formulario
+                const form = offcanvasEl.querySelector('form');
+                if (form) {
+                    form.addEventListener('submit', handleSubmit);
+                    
+                    // Inicializar buscador de cuentas contables (v3.5.0)
+                    initCuentaContableSearch(offcanvasEl);
+                }
+            }
+        });
+    }
+
+    /**
+     * Handler global para respuestas exitosas de HTMX en empleados
+     */
+    function setupHTMXListeners() {
         document.body.addEventListener('htmx:afterRequest', handleAfterRequest);
     }
 
@@ -63,6 +103,11 @@
      * Handler para respuesta HTMX
      */
     function handleAfterRequest(evt) {
+        const target = evt.target;
+        const isEmpleadoForm = target && target.id === 'empleado-form';
+        
+        if (!isEmpleadoForm) return;
+
         const detail = evt.detail;
         
         // Verificar si es respuesta exitosa
@@ -123,9 +168,95 @@
         }
     }
 
+    /**
+     * [v3.5.0] Inicializar buscador asíncrono de cuentas contables
+     */
+    function initCuentaContableSearch(container) {
+        const searchInput = container.querySelector('#cuenta_contable_search');
+        const uuidInput = container.querySelector('#cuenta_contable_uuid');
+        const suggestions = container.querySelector('#cuenta-contable-resultados');
+
+        if (!searchInput || !uuidInput || !suggestions) return;
+
+        let debounceTimer;
+
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.trim();
+            clearTimeout(debounceTimer);
+
+            if (query.length < 2) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const api = window.Sintel.Empleados.API;
+                    const request = window.Sintel.Empleados.request;
+                    if (!api || !request) return;
+
+                    const url = api.contabilidad.search(query);
+                    const response = await request(url);
+
+                    if (response && response.ok && response.data) {
+                        const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
+                        renderSuggestions(results);
+                    }
+                } catch (err) {
+                    console.error(`${MOD} Error en búsqueda de cuentas:`, err);
+                }
+            }, 300);
+        });
+
+        function renderSuggestions(data) {
+            suggestions.innerHTML = '';
+            if (!data || !data.length) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+
+            data.forEach(cuenta => {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'list-group-item list-group-item-action small py-2';
+                item.innerHTML = `<div><span class="fw-bold text-primary">${cuenta.codigo}</span> - ${cuenta.nombre}</div>`;
+                
+                item.addEventListener('click', () => {
+                    searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
+                    uuidInput.value = cuenta.uuid;
+                    suggestions.classList.add('d-none');
+                    
+                    // Feedback visual
+                    searchInput.classList.add('is-valid');
+                    setTimeout(() => searchInput.classList.remove('is-valid'), 2000);
+                });
+                suggestions.appendChild(item);
+            });
+            suggestions.classList.remove('d-none');
+        }
+
+        // Cerrar sugerencias al hacer click fuera
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
+
+        // Limpiar UUID si el campo de búsqueda se vacía
+        searchInput.addEventListener('change', () => {
+            if (!searchInput.value.trim()) {
+                uuidInput.value = '';
+            }
+        });
+    }
+
+    // Inicializar listeners
+    setupHTMXListeners();
+    setupOffcanvasLoadListener();
+
     // Exportar módulo
     window.Sintel.Empleados.EmpleadoEditor = {
-        init,
+        open,
         clear,
         handleSubmit
     };

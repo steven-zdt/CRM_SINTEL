@@ -111,6 +111,30 @@
                 </select>
             </div>
             
+            <!-- Vinculación Contable (v3.5) -->
+            <div class="mb-3">
+                <label for="cuenta_contable_search" class="form-label text-primary fw-semibold">
+                    <i class="bi bi-journal-check me-1"></i>Cuenta Contable (Pasivo Nómina)
+                </label>
+                <div class="position-relative">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-primary-subtle"><i class="bi bi-search text-primary"></i></span>
+                        <input type="text" 
+                               class="form-control border-primary-subtle" 
+                               id="cuenta_contable_search" 
+                               value="{{ empleado.cuenta_contable_label|default:'' }}"
+                               placeholder="Buscar por código o nombre (ej: 2505)..."
+                               autocomplete="off">
+                        <input type="hidden" id="cuenta_contable_uuid" name="cuenta_contable_uuid" value="{{ empleado.cuenta_contable_uuid|default:'' }}">
+                    </div>
+                    <div id="cuenta-contable-resultados" class="list-group position-absolute w-100 shadow-sm d-none" 
+                         style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+                </div>
+                <div class="form-text small">
+                    Vincule la cuenta de salarios o pasivos laborales (Nivel 6).
+                </div>
+            </div>
+            
             <!-- Fecha de Ingreso -->
             <div class="mb-3">
                 <label for="fecha_ingreso" class="form-label">Fecha de Ingreso</label>

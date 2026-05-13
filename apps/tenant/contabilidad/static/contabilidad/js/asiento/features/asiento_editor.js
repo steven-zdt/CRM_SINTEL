@@ -84,6 +84,7 @@
 
     tbody.appendChild(clone);
     actualizarTotales();
+    return row;
   }
 
   /**
@@ -253,12 +254,12 @@
       if (mode === 'create') {
         result = await w.AsientoAPI.create(data);
       } else {
-        const id = d.querySelector('#input-id')?.value;
+        const id = d.querySelector('#input-uuid')?.value;
         if (!id) {
-          console.error(MOD, 'ID de asiento no encontrado');
+          console.error(MOD, 'UUID de asiento no encontrado');
           return;
         }
-        result = await w.AsientoAPI.update(parseInt(id), data);
+        result = await w.AsientoAPI.update(id, data);
       }
 
       // Éxito: Recargar tabla y cerrar offcanvas
@@ -354,8 +355,65 @@
     });
   }
 
+  /**
+   * Carga los movimientos iniciales desde el bloque de datos JSON (si existe)
+   */
+  async function loadInitialMovimientos() {
+    const dataEl = d.getElementById('movimientos-data');
+    if (!dataEl) return;
+
+    try {
+      const movimientos = JSON.parse(dataEl.textContent);
+      if (Array.isArray(movimientos) && movimientos.length > 0) {
+        console.log(MOD, `Cargando ${movimientos.length} movimientos existentes...`);
+        
+        // Limpiar movimientos actuales (si los hay)
+        const tbody = d.querySelector('#tbody-movimientos');
+        if (tbody) tbody.innerHTML = '';
+        
+        for (const mov of movimientos) {
+          const row = await agregarMovimiento();
+          if (row) {
+            // Poblar campos
+            const selectCuenta = row.querySelector('.select-cuenta');
+            if (selectCuenta) {
+              if (mov.cuenta) {
+                selectCuenta.value = mov.cuenta;
+              } else if (mov.cuenta_codigo && cuentasCache) {
+                // v3.5: Resolver cuenta por código si el ID es nulo (soporte para ingesta directa)
+                const cuentaEncontrada = cuentasCache.find(c => c.codigo === mov.cuenta_codigo);
+                if (cuentaEncontrada) {
+                  selectCuenta.value = cuentaEncontrada.id;
+                }
+              }
+            }
+            
+            const inputDesc = row.querySelector('.input-descripcion-mov');
+            if (inputDesc) inputDesc.value = mov.descripcion || '';
+            
+            const inputDebe = row.querySelector('.input-debe');
+            if (inputDebe) inputDebe.value = parseFloat(mov.debe || 0).toFixed(2);
+            
+            const inputHaber = row.querySelector('.input-haber');
+            if (inputHaber) inputHaber.value = parseFloat(mov.haber || 0).toFixed(2);
+
+            const inputNit = row.querySelector('.input-tercero-nit');
+            if (inputNit) inputNit.value = mov.tercero_nit || '';
+
+            const inputRazon = row.querySelector('.input-tercero-razon-social');
+            if (inputRazon) inputRazon.value = mov.tercero_razon_social || '';
+          }
+        }
+        actualizarTotales();
+      }
+    } catch (err) {
+      console.error(MOD, 'Error cargando movimientos iniciales:', err);
+    }
+  }
+
   function init() {
     attachEditorListeners();
+    loadInitialMovimientos();
   }
 
   if (d.readyState === 'loading') {

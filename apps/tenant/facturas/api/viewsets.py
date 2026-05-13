@@ -65,6 +65,7 @@ from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
 from .serializers import (
     FacturaDetailSerializer,
     FacturaListSerializer,
+    FacturaWriteSerializer,
     ImportUBLSerializer,
     ItemFacturaSerializer,
     NotaCreditoDetailSerializer,
@@ -99,11 +100,11 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
     - GET /facturas/{id}/xml/ → XML de factura (auditoría)
     - POST /facturas/upload-ubl/ → Importar factura desde XML UBL (único POST permitido)
     - DELETE /facturas/{id}/ → Eliminar factura (sin restricciones)
-    
+    - PATCH /facturas/{id}/ → Edición limitada: fecha_vencimiento, estado, retenciones, formas de pago (v2.95)
+
     Endpoints bloqueados:
     - POST /facturas/ → 405 Method Not Allowed (solo importación vía upload-ubl)
-    - PUT /facturas/{id}/ → 405 Method Not Allowed (inmutabilidad para edición)
-    - PATCH /facturas/{id}/ → 405 Method Not Allowed (inmutabilidad para edición)
+    - PUT /facturas/{id}/ → 405 Method Not Allowed (uso PATCH en su lugar)
     
     # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
     [OK] Escalable (millones de facturas)
@@ -118,8 +119,9 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
     parser_classes = [JSONParser, FormParser, MultiPartParser]  # # WARNING: v2.40: JSON (principal) + FormParser (legacy) + MultiPartParser (upload)
     renderer_classes = [JSONRenderer]  # # WARNING: v2.40: Solo JSON (no BrowsableAPIRenderer)
     
-    # # WARNING: INMUTABILIDAD: GET, DELETE y POST (solo para upload-ubl) permitidos
-    http_method_names = ['get', 'head', 'options', 'post', 'delete']
+    # # WARNING: v2.95: EDICIÓN LIMITADA - PATCH permite cambios en campos específicos (vencimiento, estado, retenciones, formas de pago)
+    # GET, DELETE y POST (solo upload-ubl) permitidos. PATCH permitido con restricciones en allowed_fields
+    http_method_names = ['get', 'head', 'options', 'post', 'patch', 'delete']
     
     # # WARNING: NO usar queryset = Factura.objects.all()
     # Se define en get_queryset() con only() para optimización
@@ -187,16 +189,20 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
     def get_serializer_class(self):
         """
         Selecciona el serializer según la acción.
-        
+
         # WARNING: v2.61.2: Acciones @action que no usan serializer retornan None.
+        # WARNING: v2.95: PATCH (partial_update) usa FacturaWriteSerializer con permisos de escritura
         """
         # # WARNING: v2.61.2: Acciones que no usan serializer (trabajan directamente con request.data)
-        if self.action in ['create-from-dto', 'materialize', 'importar-ubl', 'upload-ubl', 'upload-document', 
-                           'summary', 'xml', 'app-response', 'update-inbox-state', 'gestor-offcanvas']:
+        if self.action in ['create-from-dto', 'materialize', 'importar-ubl', 'upload-ubl', 'upload-document',
+                           'summary', 'xml', 'app-response', 'update-inbox-state', 'gestor-offcanvas',
+                           'lista-centro-costos']:
             return None
-        
+
         if self.action == "list":
             return FacturaListSerializer
+        elif self.action in ["partial_update", "update"]:
+            return FacturaWriteSerializer
         return FacturaDetailSerializer
     
     def get_serializer(self, *args, **kwargs):
@@ -229,21 +235,52 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
     
     def partial_update(self, request: Request, *args, **kwargs) -> Response:
         """
-        Bloqueado: Las facturas son inmutables.
-        
-        # WARNING: IMPORTANTE: Las facturas NO pueden ser editadas.
-        Las correcciones se realizan mediante Notas Crédito/Débito.
-        
+        Edición limitada: Solo fecha_vencimiento y estado.
+
+        # WARNING: IMPORTANTE: Solo se permiten cambios a:
+        - estado: Estado administrativo (BORRADOR, ENVIADA, ACEPTADA, RECHAZADA, ANULADA)
+        - estado_pago: Estado de pago (NO_PAGADA, PAGO_PARCIAL, PAGADA)
+        - fecha_vencimiento: Fecha de vencimiento del documento
+        - retefuente, reteica, reteiva: Campos de retenciones
+        - forma_pago, medio_pago_codigo, payment_due_date: Datos de formas de pago
+
         Returns:
-            405 Method Not Allowed
+            200 OK con factura actualizada (9 campos máximo) o 400 Bad Request si intenta otros campos
         """
-        return Response(
-            {
-                "detail": "Las facturas son documentos contables inmutables. "
-                         "Las correcciones se realizan mediante Notas Crédito/Débito."
-            },
-            status=status.HTTP_405_METHOD_NOT_ALLOWED
-        )
+        factura = self.get_object()
+
+        # Campos permitidos para edición (vencimiento, estado, estado de pago, retenciones, formas de pago y contabilidad)
+        allowed_fields = {
+            'fecha_vencimiento', 'estado', 'estado_pago', 
+            'retefuente', 'reteica', 'reteiva', 
+            'forma_pago', 'medio_pago_codigo', 'payment_due_date',
+            'cuenta_contable_uuid'
+        }
+
+        # Validar que solo intente editar campos permitidos
+        request_fields = set(request.data.keys()) if request.data else set()
+        forbidden_fields = request_fields - allowed_fields
+
+        if forbidden_fields:
+            return Response(
+                {
+                    "error": "forbidden_fields",
+                    "detail": f"No se permite editar: {', '.join(sorted(forbidden_fields))}. "
+                              f"Solo se pueden editar: {', '.join(sorted(allowed_fields))}",
+                    "forbidden": list(forbidden_fields)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Aplicar cambios permitidos
+        for field in allowed_fields:
+            if field in request.data:
+                setattr(factura, field, request.data[field])
+
+        factura.save(update_fields=list(request_fields & allowed_fields))
+
+        serializer = self.get_serializer(factura)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
     def create(self, request: Request, *args, **kwargs) -> Response:
         """
@@ -435,6 +472,25 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
                 {"error": "error_calculando_resumen", "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=False, methods=['get'], url_path='lista-centro-costos')
+    def lista_centro_costos(self, request):
+        """
+        Endpoint ligero para selección de centros de costo en Proyectos.
+        
+        # WARNING: v3.5 Zero Waste:
+        - Usa selector optimizado qs_centros_costo()
+        - Retorna solo ID, Número y Receptor
+        - Filtrado automático por tenant mediante perfil
+        """
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+        perfil = get_or_create_profile(request.user)
+        
+        qs = FacturaSelectors.qs_centros_costo().filter(empresa_id=perfil.empresa_id)
+        
+        # Serialización ligera para máxima velocidad
+        data = list(qs.values('id', 'numero', 'receptor_razon_social'))
+        return Response(data)
     
     @action(detail=False, methods=["post"], url_path="upload-ubl", parser_classes=[MultiPartParser, FormParser])
     def upload_ubl(self, request: Request) -> Response:

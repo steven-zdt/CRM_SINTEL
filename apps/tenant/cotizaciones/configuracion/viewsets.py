@@ -1,9 +1,5 @@
 """
-ViewSets para Configuración de Cotizaciones v2.60.
-
-# WARNING: v2.60: CRUD completo de perfiles de configuración.
-Permite gestionar múltiples perfiles por empresa.
-# WARNING: Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
+ViewSets para Configuración de Cotizaciones v2.62.0 - SINTEL FSD
 """
 import logging
 
@@ -22,20 +18,14 @@ from .serializers import (
     ConfiguracionCotizacionDetailSerializer,
     ConfiguracionCotizacionListSerializer,
 )
+from .services import ConfiguracionServiceMixin
 
 logger = logging.getLogger(__name__)
 
 
-class ConfiguracionCotizacionViewSet(BaseTenantViewSet):
+class ConfiguracionCotizacionViewSet(ConfiguracionServiceMixin, BaseTenantViewSet):
     """
-    ViewSet para Perfiles de Configuración de Cotizaciones v2.60.
-    
-    # WARNING: Tabulator Factory v2.40:
-    - Endpoint: GET /api/v1/cotizaciones/configuracion/ con StandardResultsSetPagination
-    - CRUD completo de perfiles de configuración
-    - Múltiples perfiles por empresa permitidos
-    
-    # WARNING: IMPORTANTE: Usa 'id' como lookup_field porque ConfiguracionCotizacion no tiene UUID
+    ViewSet para Perfiles de Configuración de Cotizaciones v2.62.0.
     """
     # # WARNING: CRÍTICO: DRF necesita un queryset definido para generar las rutas del router
     # Usamos .none() como base porque el filtrado real se hace en get_queryset()
@@ -47,42 +37,18 @@ class ConfiguracionCotizacionViewSet(BaseTenantViewSet):
     renderer_classes = [JSONRenderer]
     pagination_class = StandardResultsSetPagination
 
-    def _resolve_empresa(self, request):
-        empresa = getattr(request, 'empresa', None)
-        if empresa:
-            return empresa
-
-        tenant = getattr(request, 'tenant', None)
-        empresa = getattr(tenant, 'empresa', None)
-        if empresa:
-            return empresa
-
-        from apps.tenant.empresa.models import Empresa
-        return Empresa.objects.only('id').first()
 
     def get_queryset(self):
-        """
-        Filtrado por empresa del tenant actual (singleton).
+        """Filtrado por empresa del tenant actual (Zero Waste)."""
+        queryset = self.get_qs_list()
         
-        # WARNING: SSoT v2.60: La empresa se obtiene del tenant, no del usuario.
-        """
-        empresa = self._resolve_empresa(self.request)
-        if not empresa:
-            return ConfiguracionCotizacion.objects.none()
-        
-        queryset = ConfiguracionCotizacion.objects.filter(empresa=empresa)
-        
-        # # WARNING: Filtro: Solo plantillas activas
         solo_activos = self.request.query_params.get('solo_activos', None)
         if solo_activos == 'true':
             queryset = queryset.filter(es_activo=True)
         
-        # # WARNING: Tabulator Factory: Soporte para búsqueda
         search = self.request.query_params.get('search', None)
         if search:
-            queryset = queryset.filter(
-                nombre_configuracion__icontains=search
-            )
+            queryset = queryset.filter(nombre_configuracion__icontains=search)
         
         return queryset.order_by('-es_activo', 'nombre_configuracion')
 
@@ -102,19 +68,8 @@ class ConfiguracionCotizacionViewSet(BaseTenantViewSet):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             
-            # # WARNING: SSoT v2.60: Validación de empresa antes de crear
-            from rest_framework.exceptions import ValidationError
-
-            empresa = self._resolve_empresa(request)
-            if not empresa:
-                raise ValidationError({
-                    "detail": "No se encontró la empresa del tenant. Por favor, configure la empresa primero."
-                })
-            
-            # # WARNING: SSoT: El serializer ya tiene 'empresa' en read_only_fields
-            # pero aseguramos que se inyecte desde el tenant
-            instance = serializer.save(empresa=empresa)
-            logger.info(f"Perfil de configuración creado: {instance.nombre_configuracion} (Empresa: {empresa.id})")
+            instance = self.service_crear_configuracion(serializer)
+            logger.info(f"Perfil de configuración creado: {instance.nombre_configuracion}")
             
             output_serializer = self.get_serializer(instance)
             headers = self.get_success_headers(output_serializer.data)
@@ -155,19 +110,31 @@ class ConfiguracionCotizacionViewSet(BaseTenantViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        except Exception as e:
-            logger.error(f"[ConfiguracionCotizacionViewSet] Error inesperado en create: {str(e)}", exc_info=True)
             return Response(
                 {"error": "Ocurrió un error inesperado al crear la configuración.", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    def perform_create(self, serializer):
-        """
-        # WARNING: SSoT v2.60: Este método ya no se usa porque sobrescribimos create().
-        Se mantiene para compatibilidad pero no hace nada.
-        """
-        pass
+    def update(self, request, *args, **kwargs):
+        """Actualización de configuración vía Service Layer."""
+        try:
+            partial = kwargs.get('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            
+            updated_instance = self.service_actualizar_configuracion(instance, serializer)
+            logger.info(f"Perfil de configuración actualizado: {updated_instance.nombre_configuracion}")
+            
+            return Response(self.get_serializer(updated_instance).data)
+            
+        except Exception as e:
+            logger.error(f"[ConfiguracionCotizacionViewSet] Error en update: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "Error al actualizar configuración", "detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 
     @action(detail=True, methods=['post'], url_path='activar')
     def activar(self, request, pk=None):

@@ -2,7 +2,9 @@
 {# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
 {# ⚠️ v2.60: Migrado a HTMX + Offcanvas con Zero Trust #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-proyecto" aria-labelledby="offcanvas-proyecto-label">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-proyecto" aria-labelledby="offcanvas-proyecto-label" 
+     data-bs-backdrop="static" data-bs-keyboard="false"
+     style="width: 850px !important; max-width: 95vw;">
   <div class="offcanvas-header border-bottom">
     <h5 class="offcanvas-title" id="offcanvas-proyecto-label">
       <i class="bi bi-kanban me-2"></i>
@@ -17,6 +19,36 @@
     <form id="form-proyecto" method="POST" onsubmit="return false;">
       <input type="hidden" id="proyecto-id" name="id" value="{% if proyecto %}{{ proyecto.id }}{% endif %}">
       
+      {# Centro de Costos #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-tag me-2"></i>Centro de Costos (Factura)
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-9">
+            <label for="proyecto-factura-costo" class="form-label fw-bold text-dark">Vincular Factura (Centro de Costos)</label>
+            <select class="form-select border-primary" id="proyecto-factura-costo" name="factura_costo" 
+                    data-initial-value="{% if proyecto.factura_costo_id %}{{ proyecto.factura_costo_id }}{% endif %}">
+              <option value="">Cargando facturas...</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="proyecto-factura-costo-id" class="form-label text-muted">ID Factura</label>
+            <input type="number" class="form-control bg-light" id="proyecto-factura-costo-id" name="factura_costo_id" 
+                   value="{% if proyecto %}{{ proyecto.factura_costo_id }}{% endif %}" readonly>
+          </div>
+          <div class="col-md-12">
+            <label for="proyecto-factura-costo-numero" class="form-label">Número de Factura / CC (Snapshot Histórico)</label>
+            <input type="text" class="form-control" id="proyecto-factura-costo-numero" name="factura_costo_numero" 
+                   value="{% if proyecto %}{{ proyecto.factura_costo_numero }}{% endif %}" 
+                   placeholder="Número de factura o centro de costos">
+            <div class="form-text text-muted">
+              <i class="bi bi-info-circle me-1"></i>Este valor se guarda como snapshot histórico. Puede modificarlo manualmente si es necesario.
+            </div>
+          </div>
+        </div>
+      </div>
+
       {# Datos Básicos #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
@@ -77,41 +109,74 @@
           <i class="bi bi-link-45deg me-2"></i>Referencias Externas (Snapshots)
         </h6>
         <div class="row g-3">
-          <div class="col-md-12">
-            <label for="proyecto-cliente-select" class="form-label">Cliente</label>
+          <div class="col-md-9">
+            <label for="proyecto-cliente-select" class="form-label">Vincular Cliente</label>
             <select class="form-select" id="proyecto-cliente-select" name="cliente_id">
-              <option value="">Seleccionar cliente...</option>
+              <option value="">Seleccionar cliente existente...</option>
               {% for cliente in clientes %}
                 <option value="{{ cliente.id }}" {% if proyecto and proyecto.cliente_id == cliente.id %}selected{% endif %}>
                   {{ cliente.razon_social }} ({{ cliente.numero_documento }})
                 </option>
               {% endfor %}
             </select>
-            <div class="form-text">O deje vacío y complete manualmente abajo</div>
           </div>
           <div class="col-md-3">
-            <label for="proyecto-cliente-id" class="form-label">ID Cliente (Opcional)</label>
-            <input type="number" class="form-control" id="proyecto-cliente-id" name="cliente_id" 
-                   value="{% if proyecto %}{{ proyecto.cliente_id }}{% endif %}" 
-                   placeholder="ID">
+            <label for="proyecto-cliente-id" class="form-label text-muted">ID Cliente</label>
+            <input type="number" class="form-control bg-light" id="proyecto-cliente-id" name="cliente_id" 
+                   value="{% if proyecto %}{{ proyecto.cliente_id }}{% endif %}" readonly>
           </div>
-          <div class="col-md-9">
-            <label for="proyecto-cliente-nombre" class="form-label">Nombre del Cliente</label>
+          <div class="col-md-12">
+            <label for="proyecto-cliente-nombre" class="form-label">Nombre / Razón Social (Snapshot)</label>
             <input type="text" class="form-control" id="proyecto-cliente-nombre" name="cliente_nombre" 
                    value="{% if proyecto %}{{ proyecto.cliente_nombre }}{% endif %}" 
-                   placeholder="Nombre completo o Razón Social">
-          </div>
-          <div class="col-md-3">
-            <label for="proyecto-responsable-id" class="form-label">ID Responsable</label>
-            <input type="number" class="form-control" id="proyecto-responsable-id" name="responsable_actual_id" 
-                   value="{% if proyecto %}{{ proyecto.responsable_actual_id }}{% endif %}" 
-                   placeholder="ID">
+                   placeholder="Nombre completo o Razón Social para el registro histórico">
           </div>
           <div class="col-md-9">
-            <label for="proyecto-responsable-nombre" class="form-label">Nombre del Responsable Actual</label>
+            <label for="proyecto-responsable-select" class="form-label">Responsable (Nómina)</label>
+            <select class="form-select" id="proyecto-responsable-select" name="responsable_actual_id">
+              <option value="">Buscar responsable...</option>
+              {% for empleado in empleados %}
+                <option value="{{ empleado.id }}" {% if proyecto and proyecto.responsable_actual_id == empleado.id %}selected{% endif %}>
+                  {{ empleado.primer_nombre }} {{ empleado.primer_apellido }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="proyecto-responsable-id" class="form-label text-muted">ID Responsable</label>
+            <input type="number" class="form-control bg-light" id="proyecto-responsable-id" name="responsable_actual_id" 
+                   value="{% if proyecto %}{{ proyecto.responsable_actual_id }}{% endif %}" readonly title="Identificador interno del responsable">
+          </div>
+          <div class="col-md-12">
+            <label for="proyecto-responsable-nombre" class="form-label">Responsable (Snapshot Histórico)</label>
             <input type="text" class="form-control" id="proyecto-responsable-nombre" name="responsable_actual_nombre" 
                    value="{% if proyecto %}{{ proyecto.responsable_actual_nombre }}{% endif %}" 
-                   placeholder="Nombre del empleado a cargo">
+                   placeholder="Nombre del responsable para el registro histórico"
+                   title="Este nombre se guardará como snapshot para preservar el historial si el empleado cambia">
+          </div>
+
+          <div class="col-md-9">
+            <label for="proyecto-proveedor-select" class="form-label">Proveedor (Snapshot)</label>
+            <select class="form-select" id="proyecto-proveedor-select" name="proveedor_id">
+              <option value="">Buscar proveedor...</option>
+              {% for proveedor in proveedores %}
+                <option value="{{ proveedor.id }}" {% if proyecto and proyecto.proveedor_id == proveedor.id %}selected{% endif %}>
+                  {{ proveedor.razon_social }} ({{ proveedor.numero_documento }})
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="proyecto-proveedor-id" class="form-label text-muted">ID Proveedor</label>
+            <input type="number" class="form-control bg-light" id="proyecto-proveedor-id" name="proveedor_id" 
+                   value="{% if proyecto %}{{ proyecto.proveedor_id }}{% endif %}" readonly title="Identificador interno del proveedor">
+          </div>
+          <div class="col-md-12">
+            <label for="proyecto-proveedor-nombre" class="form-label">Nombre Proveedor (Snapshot Histórico)</label>
+            <input type="text" class="form-control" id="proyecto-proveedor-nombre" name="proveedor_nombre" 
+                   value="{% if proyecto %}{{ proyecto.proveedor_nombre }}{% endif %}" 
+                   placeholder="Nombre del proveedor para el registro histórico"
+                   title="Este nombre se guardará como snapshot para preservar el historial si el proveedor cambia">
           </div>
         </div>
       </div>

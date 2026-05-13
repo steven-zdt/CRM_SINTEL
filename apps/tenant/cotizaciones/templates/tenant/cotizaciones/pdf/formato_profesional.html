@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Cotización {{ cotizacion.codigo_unico|default:cotizacion.numero_cotizacion|default:"S/N" }}</title>
+    <style>
+        /* ⚠️ xhtml2pdf: CSS compatible - Solo propiedades básicas soportadas */
+        @page {
+            size: letter;
+            margin: 1.0cm;
+            margin-top: 3.2cm;
+
+            @frame header {
+                -pdf-frame-content: header_content;
+                top: 0.5cm;
+                margin-left: 1.0cm;
+                margin-right: 1.0cm;
+                height: 2.6cm;
+            }
+
+            @frame footer {
+                -pdf-frame-content: footer_content;
+                bottom: 0.8cm;
+                margin-left: 1.0cm;
+                margin-right: 1.0cm;
+                height: 1.2cm;
+            }
+        }
+
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 8.5pt;
+            color: #2c3e50;
+            line-height: 1.5;
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        /* Header Profesional */
+        #header_content {
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .header-table {
+            width: 100%;
+            border-bottom: 3px solid #0d47a1;
+            margin: 0;
+            padding: 0;
+            border-collapse: collapse;
+        }
+
+        .header-table td {
+            padding: 6px 0;
+            vertical-align: middle;
+            border: none;
+        }
+
+        .brand-name {
+            color: #0d47a1;
+            font-size: 24pt;
+            font-weight: bold;
+            margin: 0;
+            padding: 0;
+            line-height: 1;
+            text-transform: uppercase;
+        }
+
+        .doc-type {
+            color: #7a8fa3;
+            font-size: 9pt;
+            text-transform: uppercase;
+            margin-top: 3px;
+            font-weight: bold;
+        }
+
+        .company-info {
+            text-align: right;
+            font-size: 7.5pt;
+            color: #546e7a;
+            line-height: 1.6;
+        }
+
+        .company-name {
+            font-weight: 700;
+            color: #0d47a1;
+            font-size: 10pt;
+            margin-bottom: 2px;
+        }
+
+        /* Bloque de Información General */
+        .info-grid {
+            width: 100%;
+            margin-top: 12px;
+            margin-bottom: 14px;
+        }
+
+        .info-grid td {
+            padding: 7px 12px;
+            background-color: #eceff1;
+            border: 1px solid #cfd8dc;
+            font-size: 8.5pt;
+        }
+
+        .info-label {
+            font-weight: 700;
+            color: #37474f;
+            width: 11%;
+            background-color: #b0bec5;
+            text-transform: uppercase;
+            font-size: 7.5pt;
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            color: #1a1a1a;
+            width: 39%;
+            font-weight: normal;
+        }
+
+        /* Secciones */
+        .section-header {
+            background-color: #0d47a1;
+            color: #ffffff;
+            padding: 8px 12px;
+            font-weight: bold;
+            font-size: 9.5pt;
+            margin-top: 14px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            border-left: 4px solid #1565c0;
+        }
+
+        /* Tablas de Items */
+        .items-table {
+            width: 100%;
+        }
+
+        .items-table th {
+            border-bottom: 2px solid #0d47a1;
+            background-color: #cfd8dc;
+            color: #0d47a1;
+            padding: 7px 8px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 7.5pt;
+            text-transform: uppercase;
+        }
+
+        .items-table td {
+            padding: 7px 8px;
+            border-bottom: 1px solid #e3f2fd;
+            vertical-align: top;
+            font-size: 8.5pt;
+        }
+
+        .items-table tr.odd {
+            background-color: #fafbfc;
+        }
+
+        .items-table tr.even {
+            background-color: #eceff1;
+        }
+
+        /* Resumen Financiero */
+        .totals-container {
+            width: 100%;
+            margin-top: 16px;
+            clear: both;
+            display: block;
+        }
+
+        .totals-table {
+            width: 320px;
+            margin-left: auto;
+            margin-right: 0;
+            border-collapse: collapse;
+            border: 2px solid #cfd8dc;
+        }
+
+        .totals-table td {
+            padding: 7px 14px;
+            border-bottom: 1px solid #eceff1;
+        }
+
+        .totals-table .label {
+            text-align: right;
+            color: #546e7a;
+            font-size: 8.5pt;
+            width: 200px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .totals-table .value {
+            text-align: right;
+            font-weight: 700;
+            width: 120px;
+            padding-right: 10px;
+            color: #0d47a1;
+            font-size: 9pt;
+        }
+
+        .totals-table tr.subtotal td {
+            background-color: #fafbfc;
+        }
+
+        .totals-table tr.aiu-row td {
+            background-color: #eceff1;
+        }
+
+        .totals-table .grand-total {
+            background-color: #0d47a1;
+            color: #ffffff;
+            padding: 10px 14px;
+            font-size: 11.5pt;
+            font-weight: bold;
+            border-top: 2px solid #0d47a1;
+        }
+
+        /* Cronograma */
+        .schedule-table {
+            width: 100%;
+            margin: 12px 0;
+        }
+
+        .schedule-table td {
+            border: 2px solid #cfd8dc;
+            padding: 12px 10px;
+            text-align: center;
+            background-color: #eceff1;
+            line-height: 1.3;
+        }
+
+        .schedule-icon {
+            font-size: 16pt;
+            color: #0d47a1;
+            margin-bottom: 6px;
+            display: block;
+            font-weight: bold;
+        }
+
+        .schedule-label {
+            font-size: 7pt;
+            color: #546e7a;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            display: block;
+            font-weight: bold;
+        }
+
+        .schedule-days {
+            font-weight: bold;
+            font-size: 11pt;
+            color: #0d47a1;
+            display: block;
+        }
+
+        /* Footer */
+        #footer_content {
+            text-align: center;
+            font-size: 7pt;
+            color: #7a8fa3;
+            border-top: 2px solid #0d47a1;
+            padding-top: 6px;
+            margin-top: 0;
+            line-height: 1.5;
+            font-weight: normal;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .fw-bold {
+            font-weight: 700;
+        }
+
+        .accent {
+            color: #0d47a1;
+            font-weight: 700;
+        }
+
+        .header-divider {
+            border-top: 3px solid #0d47a1;
+            margin: 12px 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header de 2 Filas persistente -->
+    <div id="header_content">
+        <table class="header-table">
+            <!-- Fila 1: Marca y Razón Social -->
+            <tr>
+                <td width="60%" style="vertical-align: middle;">
+                    <div class="brand-name">SINTEL</div>
+                </td>
+                <td width="40%" class="company-info" style="vertical-align: middle;">
+                    <div class="company-name" style="font-size: 10pt;">{{ empresa.razon_social }}</div>
+                </td>
+            </tr>
+            <!-- Fila 2: Tipo de Documento e Información de Contacto -->
+            <tr>
+                <td style="padding-top: 2px; border-top: 1px solid #eee;">
+                    <div class="doc-type" style="display: inline-block;">Propuesta Económica</div>
+                    <span style="font-size: 9pt; color: #1a237e; font-weight: bold; margin-left: 10px;">
+                        REF: {{ cotizacion.codigo_unico|default:cotizacion.numero_cotizacion|default:"N/A" }}
+                    </span>
+                </td>
+                <td class="company-info" style="padding-top: 2px; border-top: 1px solid #eee; font-size: 7.5pt;">
+                    NIT: {{ empresa.nit }}{% if empresa.digito_verificacion %}-{{ empresa.digito_verificacion }}{% endif %} | {{ empresa.direccion|default:"" }} | {{ empresa.telefono|default:"" }}
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Info Grid -->
+    <table class="info-grid">
+        <tr>
+            <td class="info-label">CLIENTE</td>
+            <td class="info-value fw-bold">{{ cotizacion.cliente.razon_social|upper }}</td>
+            <td class="info-label">FECHA EMISIÓN</td>
+            <td class="info-value">{{ cotizacion.fecha_emision|date:"d/m/Y" }}</td>
+        </tr>
+        <tr>
+            <td class="info-label">NIT/CC</td>
+            <td class="info-value">{{ cotizacion.cliente.numero_documento }}</td>
+            <td class="info-label">VALIDEZ HASTA</td>
+            <td class="info-value fw-bold accent">{{ cotizacion.fecha_vencimiento|date:"d/m/Y" }}</td>
+        </tr>
+    </table>
+
+    <!-- Sección 1: PRODUCTOS -->
+    {% if seccion_1 %}
+    <div class="section-header">1. DISPOSITIVOS Y EQUIPOS</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th width="5%" class="text-center">#</th>
+                <th width="45%">DESCRIPCIÓN</th>
+                <th width="15%">MARCA / REF</th>
+                <th width="8%" class="text-center">CANT</th>
+                <th width="12%" class="text-right">UNITARIO</th>
+                <th width="15%" class="text-right">SUBTOTAL</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_1 %}
+            <tr class="{% cycle 'odd' 'even' %}">
+                <td class="text-center accent fw-bold">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td style="font-size: 7.5pt; color: #666;">
+                    {{ item.marca|default:"" }}<br>{{ item.referencia|default:"" }}
+                </td>
+                <td class="text-center">{{ item.cantidad|floatformat:0 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0 }}</td>
+                <td class="text-right fw-bold">${{ item.subtotal_linea|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Sección 2: MATERIALES -->
+    {% if seccion_2 %}
+    <div class="section-header">2. INFRAESTRUCTURA Y CABLEADO</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th width="5%" class="text-center">#</th>
+                <th width="45%">DESCRIPCIÓN</th>
+                <th width="15%">MARCA / REF</th>
+                <th width="8%" class="text-center">CANT</th>
+                <th width="12%" class="text-right">UNITARIO</th>
+                <th width="15%" class="text-right">SUBTOTAL</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_2 %}
+            <tr class="{% cycle 'odd' 'even' %}">
+                <td class="text-center accent fw-bold">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td style="font-size: 7.5pt; color: #666;">
+                    {{ item.marca|default:"" }}<br>{{ item.referencia|default:"" }}
+                </td>
+                <td class="text-center">{{ item.cantidad|floatformat:0 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0 }}</td>
+                <td class="text-right fw-bold">${{ item.subtotal_linea|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Sección 3: SERVICIOS -->
+    {% if seccion_3 %}
+    <div class="section-header">3. SERVICIOS Y MANO DE OBRA</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th width="5%" class="text-center">#</th>
+                <th width="60%">DESCRIPCIÓN</th>
+                <th width="8%" class="text-center">CANT</th>
+                <th width="12%" class="text-right">UNITARIO</th>
+                <th width="15%" class="text-right">SUBTOTAL</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in seccion_3 %}
+            <tr class="{% cycle 'odd' 'even' %}">
+                <td class="text-center accent fw-bold">{{ forloop.counter }}</td>
+                <td>{{ item.descripcion|default:"-" }}</td>
+                <td class="text-center">{{ item.cantidad|floatformat:0 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0 }}</td>
+                <td class="text-right fw-bold">${{ item.subtotal_linea|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Cronograma -->
+    {% if dias_totales > 0 %}
+    <div class="section-header">LÍNEA DE TIEMPO / CRONOGRAMA DE EJECUCIÓN</div>
+    <table class="schedule-table">
+        <tr>
+            <td width="25%">
+                <div class="schedule-icon">◈</div>
+                <div class="schedule-label">Infraestructura</div>
+                <div class="schedule-days">{{ dias_infraestructura }} {{ dias_infraestructura|pluralize:"Día,Días" }}
+                </div>
+            </td>
+            <td width="25%">
+                <div class="schedule-icon">◈</div>
+                <div class="schedule-label">Instalación</div>
+                <div class="schedule-days">{{ dias_instalacion }} {{ dias_instalacion|pluralize:"Día,Días" }}</div>
+            </td>
+            <td width="25%">
+                <div class="schedule-icon">◈</div>
+                <div class="schedule-label">Configuración</div>
+                <div class="schedule-days">{{ dias_configuracion }} {{ dias_configuracion|pluralize:"Día,Días" }}</div>
+            </td>
+            <td width="25%">
+                <div class="schedule-icon">◈</div>
+                <div class="schedule-label">Pruebas Finales</div>
+                <div class="schedule-days">{{ dias_pruebas }} {{ dias_pruebas|pluralize:"Día,Días" }}</div>
+            </td>
+        </tr>
+    </table>
+    <div
+        style="text-align: right; font-size: 9.5pt; margin-top: 10px; margin-right: 12px; padding: 8px 12px; border: 2px solid #0d47a1; background-color: #eceff1;">
+        <strong class="accent" style="font-size: 10pt;">DURACIÓN TOTAL: {{ dias_totales }} {{
+            dias_totales|pluralize:"Día,Días" }} HÁBILES</strong>
+    </div>
+    {% endif %}
+
+    <!-- Resumen Financiero -->
+    <div class="totals-container">
+        <table class="totals-table">
+            <tr class="subtotal">
+                <td class="label">SUBTOTAL NETO</td>
+                <td class="value">${{ subtotal_items|floatformat:0 }}</td>
+            </tr>
+            {% if aplicar_aiu %}
+            <tr class="aiu-row">
+                <td class="label">+ ADMINISTRACIÓN ({{ aiu_admin_porcentaje|floatformat:1 }}%)</td>
+                <td class="value">${{ valor_administracion|floatformat:0 }}</td>
+            </tr>
+            <tr class="aiu-row">
+                <td class="label">+ IMPREVISTOS ({{ aiu_imprevistos_porcentaje|floatformat:1 }}%)</td>
+                <td class="value">${{ valor_imprevistos|floatformat:0 }}</td>
+            </tr>
+            <tr class="aiu-row">
+                <td class="label">+ UTILIDAD ({{ aiu_utilidad_porcentaje|floatformat:1 }}%)</td>
+                <td class="value">${{ valor_utilidad|floatformat:0 }}</td>
+            </tr>
+            <tr class="aiu-row">
+                <td class="label">+ IVA ({{ iva_porcentaje|floatformat:1 }}%)</td>
+                <td class="value">${{ iva_valor|floatformat:0 }}</td>
+            </tr>
+            {% else %}
+            <tr class="aiu-row">
+                <td class="label">+ IVA ({{ iva_porcentaje|floatformat:1 }}%)</td>
+                <td class="value">${{ iva_valor|floatformat:0 }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+                <td class="label grand-total">TOTAL PROPUESTA</td>
+                <td class="value grand-total">${{ total_neto|floatformat:0 }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Footer Content (xhtml2pdf logic) -->
+    <div id="footer_content">
+        SINTEL - Tecnología e Infraestructura IT | Propuesta generada el {{ "now"|date:"d/m/Y" }}<br>
+        Esta cotización tiene una validez de {{ cotizacion.configuracion.dias_validez|default:15 }} días calendario.
+    </div>
+
+</body>
+
+</html>

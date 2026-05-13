@@ -9,6 +9,7 @@ WARNING: NORMATIVA: Cumple con "Norma General de Exposición de Datos (Proyecto 
 
 Referencia: https://www.django-rest-framework.org/api-guide/serializers/
 """
+from decimal import Decimal
 from rest_framework import serializers
 
 from apps.tenant.contabilidad.models import (
@@ -19,6 +20,7 @@ from apps.tenant.contabilidad.models import (
     CuentaContable,
     MovimientoContable,
     PeriodoContable,
+    TipoComprobante,
 )
 from apps.tenant.contabilidad.services.selectors import (
     ASIENTO_DETAIL_FIELDS,
@@ -94,8 +96,8 @@ class MovimientoContableDetailSerializer(serializers.ModelSerializer):
     
     WARNING: NORMATIVA: Incluye campos de terceros y tributarios según normativa colombiana.
     """
-    cuenta_nombre = serializers.CharField(source='cuenta.nombre', read_only=True)
-    cuenta_codigo = serializers.CharField(source='cuenta.codigo', read_only=True)
+    cuenta_nombre = serializers.SerializerMethodField()
+    cuenta_codigo = serializers.CharField(required=False, allow_null=True)
     
     # WARNING: NORMATIVA: Campos de terceros (opcionales inicialmente para compatibilidad)
     tipo_tercero = serializers.ChoiceField(
@@ -145,6 +147,11 @@ class MovimientoContableDetailSerializer(serializers.ModelSerializer):
         read_only=True
     )
     
+    def get_cuenta_nombre(self, obj):
+        if obj.cuenta:
+            return obj.cuenta.nombre
+        return obj.cuenta_codigo or "Cuenta no especificada"
+
     class Meta:
         model = MovimientoContable
         fields = (
@@ -213,6 +220,26 @@ class AsientoContableListDTSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'total_debe', 'total_haber', 'created_at']
 
 
+# ═══════════════════════════════════════════════════════════════
+# TIPOS DE COMPROBANTE - Serializers (v3.5)
+# ═══════════════════════════════════════════════════════════════
+
+class TipoComprobanteListSerializer(serializers.ModelSerializer):
+    """Serializer mínimo para listado de tipos de comprobante."""
+    class Meta:
+        model = TipoComprobante
+        fields = ('id', 'uuid', 'codigo', 'nombre', 'prefijo', 'activa')
+        read_only_fields = ('id', 'uuid')
+
+
+class TipoComprobanteDetailSerializer(serializers.ModelSerializer):
+    """Serializer completo para detalle de tipo de comprobante."""
+    class Meta:
+        model = TipoComprobante
+        fields = ('id', 'uuid', 'codigo', 'nombre', 'prefijo', 'consecutivo_actual', 'activa', 'created_at')
+        read_only_fields = ('id', 'uuid', 'created_at')
+
+
 class AsientoContableDetailSerializer(serializers.ModelSerializer):
     """
     Serializer completo para detalle de asiento contable.
@@ -221,28 +248,15 @@ class AsientoContableDetailSerializer(serializers.ModelSerializer):
     WARNING: NORMATIVA: Incluye campos de comprobante para trazabilidad.
     WARNING: IMPORTANTE: django-tenants maneja automáticamente el aislamiento por esquema.
     """
+    tipo_comprobante_ref_detalle = TipoComprobanteListSerializer(source='tipo_comprobante_ref', read_only=True)
     movimientos = MovimientoContableDetailSerializer(many=True, read_only=True)
-    
-    # WARNING: NORMATIVA: Campos de comprobante (opcionales inicialmente para compatibilidad)
-    tipo_comprobante = serializers.ChoiceField(
-        choices=TIPO_COMPROBANTE_CHOICES,
-        required=False,
-        allow_null=True,
-        allow_blank=True
-    )
-    numero_comprobante = serializers.CharField(
-        max_length=50,
-        required=False,
-        allow_null=True,
-        allow_blank=True
-    )
     
     class Meta:
         model = AsientoContable
         fields = tuple(ASIENTO_DETAIL_FIELDS) + (
             'movimientos',
-            'tipo_comprobante',
-            'numero_comprobante'
+            'tipo_comprobante_ref',
+            'tipo_comprobante_ref_detalle',
         )
         read_only_fields = ['id', 'total_debe', 'total_haber', 'created_at', 'updated_at']
     
@@ -352,16 +366,132 @@ class CatalogoMaestroNIIFDetailSerializer(serializers.ModelSerializer):
 class CatalogoMaestroNIIFNestedSerializer(serializers.ModelSerializer):
     """
     Serializer anidado para mostrar información del catálogo en CuentaContable.
-    
+
     WARNING: v2.61: Usado en CuentaContableDetailSerializer para mostrar la referencia NIIF.
     """
     tipo_cuenta = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = CatalogoMaestroNIIF
         fields = ('id', 'codigo', 'nombre', 'nivel', 'naturaleza', 'tipo_cuenta')
         read_only_fields = fields
-    
+
     def get_tipo_cuenta(self, obj):
         """Retorna el tipo de cuenta basado en el primer dígito del código."""
         return obj.get_tipo_cuenta()
+
+
+# ============================================================================
+# SERIALIZERS FLUJO MANUAL ON-DEMAND
+# ============================================================================
+
+class DocumentoPendienteSerializer(serializers.Serializer):
+    """Representacion unificada de Factura o DocumentoSoporte pendiente de contabilizar."""
+    tipo_doc = serializers.CharField()
+    app_label = serializers.CharField()
+    modelo = serializers.CharField()
+    documento_id = serializers.IntegerField()
+    numero = serializers.CharField()
+    fecha = serializers.DateField()
+    tercero_nit = serializers.CharField()
+    tercero_nombre = serializers.CharField()
+    subtotal = serializers.DecimalField(max_digits=15, decimal_places=2)
+    impuestos = serializers.DecimalField(max_digits=15, decimal_places=2)
+    total = serializers.DecimalField(max_digits=15, decimal_places=2)
+    estado = serializers.CharField()
+
+
+class LineaManualInputSerializer(serializers.Serializer):
+    """Una linea del asiento manual: cuenta PUC + montos DEBE/HABER."""
+    cuenta_codigo = serializers.CharField(max_length=20)
+    debe = serializers.DecimalField(
+        max_digits=15, decimal_places=2, default=Decimal('0'), min_value=Decimal('0')
+    )
+    haber = serializers.DecimalField(
+        max_digits=15, decimal_places=2, default=Decimal('0'), min_value=Decimal('0')
+    )
+    descripcion = serializers.CharField(max_length=255, allow_blank=True, required=False, default='')
+    tercero_nit = serializers.CharField(max_length=32, allow_blank=True, required=False, default='')
+    tercero_razon_social = serializers.CharField(
+        max_length=200, allow_blank=True, required=False, default=''
+    )
+
+    def validate(self, data):
+        if data.get('debe', Decimal('0')) == Decimal('0') and data.get('haber', Decimal('0')) == Decimal('0'):
+            raise serializers.ValidationError('Cada linea debe tener debe > 0 o haber > 0.')
+        if data.get('debe', Decimal('0')) > Decimal('0') and data.get('haber', Decimal('0')) > Decimal('0'):
+            raise serializers.ValidationError('Una linea no puede tener debe Y haber simultaneamente.')
+        return data
+
+
+class ContabilizarManualInputSerializer(serializers.Serializer):
+    """Payload del POST /contabilizar-manual/."""
+    app_label = serializers.ChoiceField(choices=['facturas', 'gastos', 'empleados', 'inventario'])
+    modelo = serializers.ChoiceField(choices=['Factura', 'DocumentoSoporte', 'Devengo', 'MovimientoInventario'])
+    documento_id = serializers.IntegerField(min_value=1)
+    documento_numero = serializers.CharField(max_length=50)
+    tipo_comprobante_id = serializers.IntegerField(required=True)
+    fecha = serializers.DateField()
+    descripcion = serializers.CharField(max_length=500)
+    lineas = LineaManualInputSerializer(many=True)
+
+    def validate_lineas(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError('El asiento debe tener al menos 2 lineas.')
+        return value
+
+
+# ============================================================================
+# ASISTENTE IA
+# ============================================================================
+
+class AsistenteIAInputSerializer(serializers.Serializer):
+    """Payload del POST /asistente-ia/ — datos del documento para sugerir lineas."""
+    app_label = serializers.ChoiceField(choices=['facturas', 'gastos', 'empleados', 'inventario'])
+    modelo = serializers.ChoiceField(choices=['Factura', 'DocumentoSoporte', 'Devengo', 'MovimientoInventario'])
+    documento_id = serializers.IntegerField(min_value=1)
+    numero = serializers.CharField(max_length=50, allow_blank=True, default='')
+    subtotal = serializers.DecimalField(max_digits=15, decimal_places=2)
+    impuestos = serializers.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0'))
+    total = serializers.DecimalField(max_digits=15, decimal_places=2)
+    tercero_nit = serializers.CharField(max_length=30, allow_blank=True, default='')
+    tercero_nombre = serializers.CharField(max_length=200, allow_blank=True, default='')
+
+
+# ============================================================================
+# REPORTES
+# ============================================================================
+
+class ReporteFinancieroInputSerializer(serializers.Serializer):
+    """Parámetros para generar reportes (Balance, P&G)."""
+    fecha_inicio = serializers.DateField(required=True)
+    fecha_fin = serializers.DateField(required=True)
+
+    def validate(self, data):
+        if data['fecha_inicio'] > data['fecha_fin']:
+            raise serializers.ValidationError("La fecha de inicio no puede ser mayor a la fecha fin.")
+        return data
+
+class BalancePruebaOutputSerializer(serializers.Serializer):
+    """Estructura de una fila del Balance de Prueba."""
+    codigo = serializers.CharField()
+    nombre = serializers.CharField()
+    nivel = serializers.IntegerField()
+    saldo_anterior = serializers.DecimalField(max_digits=15, decimal_places=2)
+    debito = serializers.DecimalField(max_digits=15, decimal_places=2)
+    credito = serializers.DecimalField(max_digits=15, decimal_places=2)
+    nuevo_saldo = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+class EstadoResultadosDetalleSerializer(serializers.Serializer):
+    """Fila de detalle para ingresos, gastos o costos."""
+    codigo = serializers.CharField()
+    nombre = serializers.CharField()
+    valor = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+class EstadoResultadosOutputSerializer(serializers.Serializer):
+    """Estructura completa del Estado de Resultados."""
+    ingresos = EstadoResultadosDetalleSerializer(many=True)
+    gastos = EstadoResultadosDetalleSerializer(many=True)
+    costos = EstadoResultadosDetalleSerializer(many=True)
+    totales = serializers.DictField()
+

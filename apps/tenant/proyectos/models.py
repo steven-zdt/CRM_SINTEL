@@ -76,6 +76,20 @@ class Proyecto(SintelTenantBaseModel):
         help_text=_("Número o Código de la factura asociada")
     )
     
+    factura_costo = models.ForeignKey(
+        'facturas.Factura',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='proyectos_asociados',
+        verbose_name=_('Factura (Centro de Costos)'),
+        help_text=_('Factura que actúa como centro de costos para este proyecto')
+    )
+    factura_costo_numero = models.CharField(
+        _('Número Factura (Snapshot)'), max_length=50, blank=True, 
+        help_text=_("Snapshot del número de la factura para evitar FK en listados")
+    )
+    
     valor_contrato_proyectado = models.DecimalField(_('Valor Contrato Proyectado'), max_digits=15, decimal_places=2, default=0)
 
     # --- RESPONSABLES (WORKFLOW - Referencias Desacopladas) ---
@@ -93,6 +107,16 @@ class Proyecto(SintelTenantBaseModel):
     
     responsable_actual_id = models.IntegerField(null=True, blank=True, help_text=_("ID referencial del responsable actual"))
     responsable_actual_nombre = models.CharField(max_length=150, blank=True, help_text=_('Snapshot responsable actual'))
+
+    # --- PROVEEDOR (Snapshot - Zero-Coupling) ---
+    proveedor_id = models.IntegerField(
+        _('ID Proveedor'), null=True, blank=True, 
+        help_text=_("ID referencial del sistema de proveedores (Soft Reference)")
+    )
+    proveedor_nombre = models.CharField(
+        _('Nombre Proveedor'), max_length=200, blank=True, 
+        help_text=_("Snapshot del nombre del proveedor para evitar FK")
+    )
 
     # --- DOCUMENTACIÓN ---
     contrato_archivo = models.FileField(upload_to='proyectos/contratos/', null=True, blank=True)
@@ -134,6 +158,7 @@ class Proyecto(SintelTenantBaseModel):
             models.Index(fields=["empresa", "fase_actual"]),
             models.Index(fields=["empresa", "cliente_id"]),
             models.Index(fields=["responsable_actual_id"]),
+            models.Index(fields=["proveedor_id"]),
         ]
 
     def __str__(self):
@@ -262,9 +287,15 @@ class ItemPedido(SintelTenantBaseModel):
     precio_unitario = models.DecimalField(_('Precio Unitario'), max_digits=15, decimal_places=2, default=0)
 
     class Meta:
-        verbose_name = _("Ítem de Pedido")
-        verbose_name_plural = _("Ítems de Pedido")
-        unique_together = ('pedido', 'material_ref')
+        verbose_name = _("Item de Pedido")
+        verbose_name_plural = _("Items de Pedido")
+        constraints = [
+            models.UniqueConstraint(
+                fields=['pedido', 'material_ref'],
+                condition=models.Q(material_ref__gt=''),
+                name='uniq_itempedido_pedido_material_ref'
+            )
+        ]
         indexes = [
             models.Index(fields=["pedido"]),
             models.Index(fields=["material_ref"]),

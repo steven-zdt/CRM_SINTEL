@@ -21,6 +21,8 @@ class ClienteBusinessService:
         Orchestrates creation or update of a client and their contacts.
         If cliente_instance is provided, updates directly without upsert logic.
         """
+        data = self._sanitize_retenciones(data)
+        
         if cliente_instance:
             cliente = self.crud.update_cliente(cliente_instance, data)
         else:
@@ -89,6 +91,30 @@ class ClienteBusinessService:
         to_delete = existing_ids - submitted_ids
         if to_delete:
             ContactoCliente.objects.filter(id__in=to_delete, empresa_id=empresa_id).delete()
+
+    def _sanitize_retenciones(self, payload: dict) -> dict:
+        """
+        Zero Trust: Limpia flags y porcentajes de retención si el cliente no es retenedor.
+        """
+        es_retenedor = payload.get("es_retenedor", False)
+        
+        if not es_retenedor:
+            payload["aplica_retefuente"] = False
+            payload["retefuente_porcentaje"] = 0
+            payload["aplica_reteica"] = False
+            payload["reteica_porcentaje"] = 0
+            payload["aplica_reteiva"] = False
+            payload["reteiva_porcentaje"] = 0
+        else:
+            # Sanitización fina: si la flag individual es False, el porcentaje debe ser 0
+            if not payload.get("aplica_retefuente", False):
+                payload["retefuente_porcentaje"] = 0
+            if not payload.get("aplica_reteica", False):
+                payload["reteica_porcentaje"] = 0
+            if not payload.get("aplica_reteiva", False):
+                payload["reteiva_porcentaje"] = 0
+                
+        return payload
 
     def _clean_payload(self, data: dict) -> dict:
         """Removes metadata fields before DB save."""

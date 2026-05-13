@@ -1,68 +1,39 @@
 """
 CRUD Service para Gastos - Persistencia transaccional pura.
 
-WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
+WARNING: SINTEL v2.62.0: Arquitectura Service Layer Modular.
 - Este archivo contiene SOLO operaciones de persistencia (Create, Read, Update, Delete).
-- Sin lógica de negocio, solo acceso a datos con @transaction.atomic.
+- Sin logica de negocio, solo acceso a datos con @transaction.atomic.
 - Todas las funciones son @staticmethod.
 """
 import logging
 from decimal import Decimal
+from typing import Any, Dict, Optional
 
-from django.db import transaction
+from django.db import transaction, models
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.gastos.models import Gasto, ResolucionDIAN, DocumentoSoporte, ItemGasto
+from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
+
 
 logger = logging.getLogger(__name__)
-
-
-class GastoCRUDService:
-    """Operaciones CRUD puras para Gasto."""
-
-    @staticmethod
-    @transaction.atomic
-    def crear_gasto(data: dict, empresa, documento_soporte=None) -> Gasto:
-        """Crea un nuevo gasto."""
-        gasto = Gasto.objects.create(
-            empresa=empresa,
-            documento_soporte=documento_soporte,
-            **data
-        )
-        logger.info(f"[GastoCRUD] Creado gasto ID={gasto.id}")
-        return gasto
-
-    @staticmethod
-    @transaction.atomic
-    def anular_gasto(gasto: Gasto) -> Gasto:
-        """Marca un gasto como anulado vía su documento soporte."""
-        if not gasto.documento_soporte:
-            raise ValidationError("El gasto no tiene documento soporte asociado")
-
-        # Anular documento soporte (inmutabilidad contable)
-        gasto.documento_soporte.anulado = True
-        gasto.documento_soporte.save(update_fields=['anulado'])
-
-        logger.info(f"[GastoCRUD] Anulado gasto ID={gasto.id}")
-        return gasto
-
-    @staticmethod
-    @transaction.atomic
-    def desactivar_gasto(gasto: Gasto) -> Gasto:
-        """Desactiva un gasto (soft delete)."""
-        gasto.activo = False
-        gasto.save(update_fields=['activo'])
-        logger.info(f"[GastoCRUD] Desactivado gasto ID={gasto.id}")
-        return gasto
 
 
 class ResolucionCRUDService:
     """Operaciones CRUD puras para ResolucionDIAN."""
 
     @staticmethod
+    def _invalidar_cache_vigente(empresa_id: int) -> None:
+        """Invalida cache de resolucion vigente para una empresa."""
+        from django.core.cache import cache
+
+        cache.delete(f"resolucion_vigente_{empresa_id}")
+
+    @staticmethod
     @transaction.atomic
     def crear_resolucion(data: dict, empresa) -> ResolucionDIAN:
-        """Crea una nueva resolución DIAN."""
+        """Crea una nueva resolucion DIAN."""
         # Validar unicidad de numero_resolucion por empresa
         numero = data.get('numero_resolucion')
         if ResolucionDIAN.objects.filter(
@@ -70,26 +41,31 @@ class ResolucionCRUDService:
             numero_resolucion=numero
         ).exists():
             raise ValidationError(
-                f"Ya existe una resolución con número {numero} para esta empresa"
+                f"Ya existe una resolucion con numero {numero} para esta empresa"
             )
 
-        resolucion = ResolucionDIAN.objects.create(empresa=empresa, **data)
-        logger.info(f"[ResolucionCRUD] Creada resolución ID={resolucion.id}")
+        resolucion = ResolucionDIAN(**data)
+        resolucion.empresa = empresa
+        resolucion.full_clean()
+        resolucion.save()
+        ResolucionCRUDService._invalidar_cache_vigente(empresa.id)
+        
+        logger.info(f"[ResolucionCRUD] Creada resolucion ID={resolucion.id}")
         return resolucion
 
     @staticmethod
     @transaction.atomic
     def desactivar_resolucion(resolucion: ResolucionDIAN) -> ResolucionDIAN:
-        """Desactiva una resolución (marca como no vigente)."""
+        """Desactiva una resolucion (marca como no vigente)."""
         resolucion.vigente = False
         resolucion.save(update_fields=['vigente'])
-        logger.info(f"[ResolucionCRUD] Desactivada resolución ID={resolucion.id}")
+        ResolucionCRUDService._invalidar_cache_vigente(resolucion.empresa_id)
+        logger.info(f"[ResolucionCRUD] Desactivada resolucion ID={resolucion.id}")
         return resolucion
 
     @staticmethod
     def puede_eliminar(resolucion: ResolucionDIAN) -> bool:
-        """Verifica si una resolución puede ser eliminada."""
-        # No se puede eliminar si tiene documentos asociados
+        """Verifica si una resolucion puede ser eliminada."""
         return not DocumentoSoporte.objects.filter(
             resolucion_dian=resolucion
         ).exists()
@@ -97,15 +73,17 @@ class ResolucionCRUDService:
     @staticmethod
     @transaction.atomic
     def eliminar_resolucion(resolucion: ResolucionDIAN):
-        """Elimina una resolución."""
+        """Elimina una resolucion."""
         if not ResolucionCRUDService.puede_eliminar(resolucion):
             raise ValidationError(
-                "No se puede eliminar la resolución porque tiene documentos asociados"
+                "No se puede eliminar la resolucion porque tiene documentos asociados"
             )
 
         resolucion_id = resolucion.id
+        empresa_id = resolucion.empresa_id
         resolucion.delete()
-        logger.info(f"[ResolucionCRUD] Eliminada resolución ID={resolucion_id}")
+        ResolucionCRUDService._invalidar_cache_vigente(empresa_id)
+        logger.info(f"[ResolucionCRUD] Eliminada resolucion ID={resolucion_id}")
 
 
 class DocumentoCRUDService:
@@ -115,15 +93,18 @@ class DocumentoCRUDService:
     @transaction.atomic
     def crear_documento(data: dict, empresa, resolucion) -> DocumentoSoporte:
         """Crea un nuevo documento soporte con consecutivo."""
-        # Obtener siguiente consecutivo de forma atómica
+        # Obtener siguiente consecutivo de forma atomica
         consecutivo = DocumentoCRUDService._obtener_siguiente_consecutivo(resolucion)
 
-        documento = DocumentoSoporte.objects.create(
+        documento = DocumentoSoporte(
             empresa=empresa,
             resolucion_dian=resolucion,
             consecutivo=consecutivo,
             **data
         )
+        documento.full_clean()
+        documento.save()
+        
         logger.info(
             f"[DocumentoCRUD] Creado documento ID={documento.id}, "
             f"consecutivo={consecutivo}"
@@ -131,8 +112,41 @@ class DocumentoCRUDService:
         return documento
 
     @staticmethod
+    @transaction.atomic
+    def anular_documento(documento: DocumentoSoporte, motivo: str = None, usuario: Any = None) -> DocumentoSoporte:
+        """Marca un documento como anulado."""
+        fecha_anulacion = timezone.now()
+        DocumentoSoporte.objects.filter(pk=documento.pk).update(
+            anulado=True,
+            fecha_anulacion=fecha_anulacion,
+            motivo_anulacion=motivo,
+            usuario_anulacion=usuario,
+            activo=False
+        )
+        logger.info(f"[DocumentoCRUD] Anulado documento ID={documento.id}")
+        documento.refresh_from_db()
+        return documento
+
+    @staticmethod
+    @transaction.atomic
+    def desactivar_documento(documento: DocumentoSoporte) -> DocumentoSoporte:
+        """Desactiva un documento (soft delete)."""
+        DocumentoSoporte.objects.filter(pk=documento.pk).update(activo=False)
+        logger.info(f"[DocumentoCRUD] Desactivado documento ID={documento.id}")
+        documento.refresh_from_db()
+        return documento
+
+    @staticmethod
+    @transaction.atomic
+    def eliminar_documento(documento: DocumentoSoporte):
+        """Elimina físicamente un documento."""
+        doc_id = documento.id
+        documento.delete()
+        logger.info(f"[DocumentoCRUD] Eliminado físicamente documento ID={doc_id}")
+
+    @staticmethod
     def _obtener_siguiente_consecutivo(resolucion: ResolucionDIAN) -> int:
-        """Calcula el siguiente consecutivo atómicamente."""
+        """Calcula el siguiente consecutivo atomicamente."""
         # Lock para evitar race conditions
         res_locked = ResolucionDIAN.objects.select_for_update().get(pk=resolucion.pk)
 
@@ -144,10 +158,10 @@ class DocumentoCRUDService:
 
         if nuevo > res_locked.rango_hasta:
             raise ValidationError(
-                f"Rango de resolución {res_locked.numero_resolucion} agotado"
+                f"Rango de resolucion {res_locked.numero_resolucion} agotado"
             )
 
-        # Verificar que no exista (doble verificación)
+        # Verificar que no exista (doble verificacion)
         existe = DocumentoSoporte.objects.filter(
             resolucion_dian=res_locked,
             consecutivo=nuevo
@@ -155,47 +169,7 @@ class DocumentoCRUDService:
 
         if existe:
             raise ValidationError(
-                f"El consecutivo {nuevo} ya existe para esta resolución"
+                f"El consecutivo {nuevo} ya existe para esta resolucion"
             )
 
         return nuevo
-
-    @staticmethod
-    @transaction.atomic
-    def anular_documento(documento: DocumentoSoporte) -> DocumentoSoporte:
-        """Marca un documento como anulado (inmutabilidad contable)."""
-        if documento.anulado:
-            raise ValidationError("El documento ya está anulado")
-
-        documento.anulado = True
-        documento.save(update_fields=['anulado'])
-        logger.info(f"[DocumentoCRUD] Anulado documento ID={documento.id}")
-        return documento
-
-
-class ItemGastoCRUDService:
-    """Operaciones CRUD puras para ItemGasto."""
-
-    @staticmethod
-    @transaction.atomic
-    def crear_item(data: dict, empresa, gasto=None, documento=None) -> ItemGasto:
-        """Crea un ítem de gasto."""
-        item = ItemGasto.objects.create(
-            empresa=empresa,
-            gasto=gasto,
-            documento_soporte=documento,
-            **data
-        )
-        logger.info(f"[ItemCRUD] Creado ítem ID={item.id}")
-        return item
-
-    @staticmethod
-    @transaction.atomic
-    def eliminar_items_por_gasto(gasto: Gasto):
-        """Elimina todos los ítems asociados a un gasto."""
-        count = ItemGasto.objects.filter(gasto=gasto).delete()[0]
-        logger.info(f"[ItemCRUD] Eliminados {count} ítems del gasto {gasto.id}")
-
-
-# Import necesario para _obtener_siguiente_consecutivo
-from django.db import models

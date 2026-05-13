@@ -21,9 +21,9 @@ from apps.tenant.contabilidad.api.serializers import (
     AsientoContableListSerializer,
     CuentaContableListSerializer,
 )
-from apps.tenant.contabilidad.services.services import (
-    qs_asiento_list,
-    qs_cuenta_list,
+from apps.tenant.contabilidad.services.selectors import (
+    AsientoContableSelector,
+    CuentaContableSelector,
 )
 
 
@@ -38,7 +38,7 @@ def cuentas_contables_dt(request: Request):
     
     WARNING: v2.37: Usa CUENTA_LIST_FIELDS y qs_cuenta_list() del service.
     """
-    base_qs = qs_cuenta_list()
+    base_qs = CuentaContableSelector.get_qs_list()
     
     spec = DataTableSpec(
         fields_map={
@@ -70,7 +70,7 @@ def asientos_contables_dt(request: Request):
     
     WARNING: v2.37: Usa ASIENTO_LIST_FIELDS y qs_asiento_list() del service.
     """
-    base_qs = qs_asiento_list()
+    base_qs = AsientoContableSelector.get_qs_list()
     
     def extra_filter(req, qs):
         data = req.data if hasattr(req, 'data') else {}

@@ -133,6 +133,9 @@ async function waitForTabulatorFactory() {
 ## Reglas
 - Siempre usar `TabulatorFactory.create()` — nunca `new Tabulator()` directamente
 - `replaceData()` para recargar, no destruir/recrear
-- `cellClick` en columna Acciones — no `rowClick` genérico (conflicto con botones)
+- **[CRITICAL]** Definir `cellClick` dentro de la columna de Acciones — evitar usar `cellClick` global en la configuración de la tabla si hay botones específicos.
+- Usar delegación de eventos con `data-action` y `e.target.closest('[data-action]')` para manejar CRUD.
+- Estilizar botones con `btn-group` y `btn-outline-*` para consistencia visual (SINTEL Standard).
 - Verificar que el container `#grid-X` exista antes de inicializar
 - La tabla espera respuesta DRF paginada: `{ count, next, previous, results: [] }`
+

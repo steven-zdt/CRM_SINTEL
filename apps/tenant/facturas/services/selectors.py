@@ -26,16 +26,24 @@ LIST_FIELDS = (
     "numero",
     "naturaleza",
     "estado",
+    "estado_pago",
     "fecha_emision",
     "fecha_vencimiento",
     "moneda",
     "subtotal",
     "impuestos",
     "total",
+    "retefuente",
+    "reteica",
+    "reteiva",
+    "forma_pago",
+    "medio_pago_codigo",
+    "payment_due_date",
     "emisor_nit",
     "emisor_razon_social",
     "receptor_nit",
     "receptor_razon_social",
+    "cuenta_contable_uuid",
     "cufe",
     "qr_url",
 )
@@ -63,6 +71,13 @@ DETAIL_FIELDS = (
     "subtotal",
     "impuestos",
     "total",
+    "retefuente",
+    "reteica",
+    "reteiva",
+    "forma_pago",
+    "medio_pago_codigo",
+    "payment_due_date",
+    "cuenta_contable_uuid",
     "cufe",
     "qr_url",
     "created_at",
@@ -101,6 +116,14 @@ class FacturaSelectors:
         QuerySet optimizado para detalle.
         """
         return Factura.objects.select_related("nota_credito", "anexos").only(*DETAIL_FIELDS)
+
+    @staticmethod
+    def qs_centros_costo():
+        """
+        QuerySet ligero para selección de centros de costo (v3.5 Zero Waste).
+        Retorna los campos mínimos necesarios para el dropdown.
+        """
+        return Factura.objects.only("id", "numero", "receptor_razon_social").order_by("-fecha_emision", "-id")
 
     @staticmethod
     def get_summary(empresa_id: int | None = None) -> dict[str, Any]:

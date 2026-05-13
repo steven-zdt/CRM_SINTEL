@@ -64,6 +64,7 @@ SHARED_APPS = [
     "rest_framework_simplejwt.token_blacklist",  # Blacklist de refresh tokens
     "django_filters",  # Filtrado para APIs públicas
     "drf_spectacular",  # OpenAPI schema generation para APIs públicas
+    "djangorestframework_mcp",  # MCP server: expone ViewSets como herramientas via /mcp/
     "corsheaders",  # CORS para subdominios dinámicos (sintel.com)
     
     # Django contrib apps (necesarias para admin y funcionalidad base)
@@ -88,6 +89,7 @@ TENANT_APPS = [
     "rest_framework",  # DRF para APIs privadas de cada tenant
     "django_filters",  # Filtrado para APIs privadas de cada tenant
     "drf_spectacular",  # OpenAPI schema generation para APIs privadas de cada tenant
+    "djangorestframework_mcp",  # MCP server: expone ViewSets como herramientas via /mcp/
     
     # WARNING: APPS PRIVADAS: Aplicaciones de negocio por tenant
     # Estas apps SOLO existen en esquemas de tenant, NUNCA en public
@@ -189,6 +191,7 @@ MIDDLEWARE = [
     'apps.public.core.middleware.CSRFTrustedOriginMiddleware',  # OK: DESARROLLO: Permite dominios arbitrarios en CSRF_TRUSTED_ORIGINS
     'apps.public.core.middleware.HTTPSRedirectMiddleware',  # OK: DESARROLLO: Redirige HTTPS -> HTTP en DEBUG
     'django.middleware.common.CommonMiddleware',
+    'apps.public.core.middleware.DebugNoCSRFMiddleware',  # OK: DESARROLLO: Desactiva CSRF en DEBUG mode
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',  # OK: CRÍTICO: Proporciona request.user (requerido para require_tenant_membership)
     'apps.public.tenants.authz.require_tenant_membership',  # OK: SEGURIDAD: Valida membresía del tenant para usuarios autenticados (factory funcional)
@@ -629,6 +632,23 @@ REST_FRAMEWORK = {
     'DATETIME_FORMAT': '%Y-%m-%dT%H:%M:%S',
     'DATE_FORMAT': '%Y-%m-%d',
     'TIME_FORMAT': '%H:%M:%S',
+}
+
+# ============================================================================
+# django-rest-framework-mcp: Configuracion del servidor MCP HTTP
+# ============================================================================
+# Expone los ViewSets decorados con @mcp_viewset() como herramientas MCP en /mcp/
+# Docs: https://github.com/zacharypodbela/django-rest-framework-mcp
+# El endpoint /mcp/ es compatible con mcp-remote para STDIO transport
+DJANGORESTFRAMEWORK_MCP = {
+    # RETURN_200_FOR_ERRORS: requerido para compatibilidad con mcp-remote
+    # mcp-remote no maneja correctamente HTTP 401/403 (asume OAuth en 401)
+    # Con True, retorna HTTP 200 pero preserva el error en el body JSON-RPC
+    'RETURN_200_FOR_ERRORS': True,
+    # Preservar autenticacion JWT/Session de cada ViewSet (BaseTenantViewSet)
+    # El agente debe enviar: Authorization: Bearer <jwt_token>
+    'BYPASS_VIEWSET_AUTHENTICATION': False,
+    'BYPASS_VIEWSET_PERMISSIONS': False,
 }
 
 # drf-spectacular (OpenAPI Schema)

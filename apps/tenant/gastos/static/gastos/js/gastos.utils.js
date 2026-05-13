@@ -18,6 +18,7 @@
   // Caches en memoria: { data: [], timestamp: number }
   var _proveedoresCache = null;
   var _cuentasCache = null;
+  var _resolucionesCache = null;
 
   /**
    * Obtiene proveedores desde el API con cache de 5 minutos.
@@ -73,6 +74,29 @@
     return cuentas;
   }
 
+  async function fetchResoluciones() {
+    if (_resolucionesCache && (Date.now() - _resolucionesCache.timestamp < CACHE_TTL_MS)) {
+      return _resolucionesCache.data;
+    }
+
+    var resoluciones = [];
+    try {
+      var url = w.Sintel.Gastos.API.resoluciones.list;
+      var headers = w.Sintel.Gastos.getHeaders();
+      var res = await fetch(url, { headers: headers });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var json = await res.json();
+      resoluciones = json.results || json;
+      if (!Array.isArray(resoluciones)) resoluciones = [];
+    } catch (err) {
+      console.error(MOD, 'Error al cargar resoluciones:', err);
+      return [];
+    }
+
+    _resolucionesCache = { data: resoluciones, timestamp: Date.now() };
+    return resoluciones;
+  }
+
   /**
    * Carga proveedores en un <select> del DOM.
    * @param {string} selectSelector - Selector CSS del <select>
@@ -97,7 +121,9 @@
     proveedores.forEach(function(p) {
       var opt = d.createElement('option');
       opt.value = p.uuid || p.id;
-      opt.textContent = p.nombre + ' (' + p.numero_documento + ')';
+      opt.dataset.nombre = p.razon_social || p.nombre || p.nombre_comercial || '';
+      opt.dataset.numeroDocumento = p.numero_documento || p.nit || '';
+      opt.textContent = opt.dataset.nombre + ' (' + opt.dataset.numeroDocumento + ')';
       if (selectedValue && opt.value === selectedValue) {
         opt.selected = true;
       }
@@ -128,9 +154,36 @@
 
     cuentas.forEach(function(c) {
       var opt = d.createElement('option');
-      opt.value = c.uuid;
+      opt.value = c.codigo || c.uuid;
+      opt.dataset.codigo = c.codigo || '';
       opt.textContent = '[' + c.codigo + '] ' + c.nombre;
       if (selectedValue && opt.value === selectedValue) {
+        opt.selected = true;
+      }
+      select.appendChild(opt);
+    });
+  }
+
+  async function loadResolucionesSelect(selectSelector, selectedValue, placeholderText) {
+    selectedValue = selectedValue || null;
+    placeholderText = placeholderText || 'Seleccione...';
+
+    var select = d.querySelector(selectSelector);
+    if (!select) return;
+
+    var resoluciones = await fetchResoluciones();
+
+    select.innerHTML = '';
+    var ph = d.createElement('option');
+    ph.value = '';
+    ph.textContent = placeholderText;
+    select.appendChild(ph);
+
+    resoluciones.forEach(function(r) {
+      var opt = d.createElement('option');
+      opt.value = r.id;
+      opt.textContent = (r.prefijo || '') + ' ' + r.rango_desde + '-' + r.rango_hasta + (r.vigente ? ' (vigente)' : '');
+      if (selectedValue && String(opt.value) === String(selectedValue)) {
         opt.selected = true;
       }
       select.appendChild(opt);
@@ -145,11 +198,13 @@
   function invalidateCache(which) {
     if (!which || which === 'proveedores') _proveedoresCache = null;
     if (!which || which === 'cuentas') _cuentasCache = null;
+    if (!which || which === 'resoluciones') _resolucionesCache = null;
   }
 
   w.Sintel.Gastos.Utils = {
     loadProveedoresSelect: loadProveedoresSelect,
     loadCuentasSelect: loadCuentasSelect,
+    loadResolucionesSelect: loadResolucionesSelect,
     invalidateCache: invalidateCache
   };
 
