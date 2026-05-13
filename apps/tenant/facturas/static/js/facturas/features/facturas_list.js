@@ -458,9 +458,11 @@
                     return;
                 }
 
+                // Guardar HTML original antes del try para usar en finally
+                const originalHTML = btnEdit.innerHTML;
+
                 try {
                     // Loading state
-                    const originalHTML = btnEdit.innerHTML;
                     btnEdit.disabled = true;
                     btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
