@@ -45,3 +45,11 @@ class FacturaServiceMixin:
     def service_obtener_xml(self, factura, tipo):
         """Retorna el XML de un anexo."""
         return FacturaBusinessService.obtener_xml(factura, tipo)
+
+    def service_obtener_retenciones_cliente(self, cliente_nit, empresa_id):
+        """Obtiene retenciones desde Cliente."""
+        return FacturaBusinessService.obtener_retenciones_desde_cliente(cliente_nit, empresa_id)
+
+    def service_obtener_retenciones_proveedor(self, proveedor_nit, empresa_id):
+        """Obtiene retenciones desde Proveedor."""
+        return FacturaBusinessService.obtener_retenciones_desde_proveedor(proveedor_nit, empresa_id)

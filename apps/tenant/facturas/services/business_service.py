@@ -64,10 +64,116 @@ class FacturaBusinessService:
         """
         nit_dto = FacturaBusinessService.normalize_document_number(emisor_nit)
         nit_tenant = FacturaBusinessService.normalize_document_number(empresa_nit)
-        
+
         if nit_dto and nit_tenant and nit_dto == nit_tenant:
             return Factura.Naturaleza.VENTA
         return Factura.Naturaleza.COMPRA
+
+    @staticmethod
+    def obtener_retenciones_desde_cliente(cliente_nit: str | None, empresa_id: int | None = None) -> dict[str, Any]:
+        """
+        Extrae retenciones desde Cliente (para facturas VENTA).
+        Retorna dict con aplica_retefuente, retefuente_porcentaje, etc.
+        """
+        if not cliente_nit or not empresa_id:
+            return {
+                "aplica_retefuente": False,
+                "retefuente_porcentaje": Decimal('0.00'),
+                "aplica_reteica": False,
+                "reteica_porcentaje": Decimal('0.00'),
+                "aplica_reteiva": False,
+                "reteiva_porcentaje": Decimal('0.00'),
+            }
+
+        try:
+            from apps.tenant.clientes.models import Cliente
+            cliente_nit_normalized = FacturaBusinessService.normalize_document_number(cliente_nit)
+            cliente = Cliente.objects.filter(
+                empresa_id=empresa_id,
+                numero_documento=cliente_nit_normalized
+            ).first()
+
+            if not cliente:
+                return {
+                    "aplica_retefuente": False,
+                    "retefuente_porcentaje": Decimal('0.00'),
+                    "aplica_reteica": False,
+                    "reteica_porcentaje": Decimal('0.00'),
+                    "aplica_reteiva": False,
+                    "reteiva_porcentaje": Decimal('0.00'),
+                }
+
+            return {
+                "aplica_retefuente": cliente.aplica_retefuente,
+                "retefuente_porcentaje": cliente.retefuente_porcentaje,
+                "aplica_reteica": cliente.aplica_reteica,
+                "reteica_porcentaje": cliente.reteica_porcentaje,
+                "aplica_reteiva": cliente.aplica_reteiva,
+                "reteiva_porcentaje": cliente.reteiva_porcentaje,
+            }
+        except Exception as e:
+            logger.warning(f"Error extrayendo retenciones de cliente {cliente_nit}: {e}")
+            return {
+                "aplica_retefuente": False,
+                "retefuente_porcentaje": Decimal('0.00'),
+                "aplica_reteica": False,
+                "reteica_porcentaje": Decimal('0.00'),
+                "aplica_reteiva": False,
+                "reteiva_porcentaje": Decimal('0.00'),
+            }
+
+    @staticmethod
+    def obtener_retenciones_desde_proveedor(proveedor_nit: str | None, empresa_id: int | None = None) -> dict[str, Any]:
+        """
+        Extrae retenciones desde Proveedor (para facturas COMPRA).
+        Retorna dict con aplica_retefuente, retefuente_porcentaje, etc.
+        """
+        if not proveedor_nit or not empresa_id:
+            return {
+                "aplica_retefuente": False,
+                "retefuente_porcentaje": Decimal('0.00'),
+                "aplica_reteica": False,
+                "reteica_porcentaje": Decimal('0.00'),
+                "aplica_reteiva": False,
+                "reteiva_porcentaje": Decimal('0.00'),
+            }
+
+        try:
+            from apps.tenant.proveedores.models import Proveedor
+            proveedor_nit_normalized = FacturaBusinessService.normalize_document_number(proveedor_nit)
+            proveedor = Proveedor.objects.filter(
+                empresa_id=empresa_id,
+                numero_documento=proveedor_nit_normalized
+            ).first()
+
+            if not proveedor:
+                return {
+                    "aplica_retefuente": False,
+                    "retefuente_porcentaje": Decimal('0.00'),
+                    "aplica_reteica": False,
+                    "reteica_porcentaje": Decimal('0.00'),
+                    "aplica_reteiva": False,
+                    "reteiva_porcentaje": Decimal('0.00'),
+                }
+
+            return {
+                "aplica_retefuente": proveedor.aplica_retefuente,
+                "retefuente_porcentaje": proveedor.retefuente_porcentaje,
+                "aplica_reteica": proveedor.aplica_reteica,
+                "reteica_porcentaje": proveedor.reteica_porcentaje,
+                "aplica_reteiva": proveedor.aplica_reteiva,
+                "reteiva_porcentaje": proveedor.reteiva_porcentaje,
+            }
+        except Exception as e:
+            logger.warning(f"Error extrayendo retenciones de proveedor {proveedor_nit}: {e}")
+            return {
+                "aplica_retefuente": False,
+                "retefuente_porcentaje": Decimal('0.00'),
+                "aplica_reteica": False,
+                "reteica_porcentaje": Decimal('0.00'),
+                "aplica_reteiva": False,
+                "reteiva_porcentaje": Decimal('0.00'),
+            }
 
     @staticmethod
     def guardar_desde_dto(

@@ -27,6 +27,7 @@ LIST_FIELDS = (
     "naturaleza",
     "estado",
     "estado_pago",
+    "dian_validation_desc",
     "fecha_emision",
     "fecha_vencimiento",
     "moneda",

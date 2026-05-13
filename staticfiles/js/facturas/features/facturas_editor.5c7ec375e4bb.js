@@ -513,7 +513,7 @@
                         initEditorEvents();
                         actualizarTotalesEnDOM();
                     }
-                    // Si no hay formulario, es modo "Subir" o "Lectura" - no hacer nada (comportamiento esperado)
+                    // Modo "Subir" (form-upload-factura) o "Lectura": no requieren inicialización
                 }, 50);
             }
         });

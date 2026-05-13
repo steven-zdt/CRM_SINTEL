@@ -93,6 +93,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "total_formateado",
             "estado",
             "estado_pago",
+            "dian_validation_desc",
             "retefuente",
             "reteica",
             "reteiva",

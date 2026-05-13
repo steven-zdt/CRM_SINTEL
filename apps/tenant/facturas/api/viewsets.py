@@ -1285,6 +1285,59 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=False, methods=['get'], url_path='obtener-retenciones')
+    def obtener_retenciones(self, request: Request) -> Response:
+        """
+        Obtiene retenciones aplicables desde Cliente (VENTA) o Proveedor (COMPRA).
+
+        Query params:
+        - nit: NIT del cliente o proveedor
+        - naturaleza: VENTA o COMPRA
+
+        Returns:
+            {
+                "aplica_retefuente": bool,
+                "retefuente_porcentaje": Decimal,
+                "aplica_reteica": bool,
+                "reteica_porcentaje": Decimal,
+                "aplica_reteiva": bool,
+                "reteiva_porcentaje": Decimal,
+            }
+        """
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+
+        nit = request.query_params.get('nit')
+        naturaleza = request.query_params.get('naturaleza', 'VENTA')
+
+        if not nit:
+            return Response({
+                "error": "missing_nit",
+                "message": "Parámetro 'nit' es obligatorio"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            perfil = get_or_create_profile(request.user)
+            empresa_id = perfil.empresa_id
+
+            if naturaleza == 'VENTA':
+                retenciones = self.service_obtener_retenciones_cliente(nit, empresa_id)
+            else:
+                retenciones = self.service_obtener_retenciones_proveedor(nit, empresa_id)
+
+            # Convertir Decimal a string para JSON
+            result = {
+                k: str(v) if isinstance(v, Decimal) else v
+                for k, v in retenciones.items()
+            }
+
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception("Error obteniendo retenciones")
+            return Response({
+                "error": "internal_error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):
         """

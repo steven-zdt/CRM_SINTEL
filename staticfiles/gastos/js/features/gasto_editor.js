@@ -167,9 +167,12 @@
     }
 
     /**
-     * Recolección Zero Trust de datos.
+     * Recolección Zero Trust de datos (v3.7.1 - Integración Contable §18).
+     * Contrapartida orquestada por app contabilidad.
      */
     function collectData(form) {
+        const gastoUuidVal = form.querySelector('#cuenta_gasto_uuid')?.value;
+
         return {
             descripcion: form.querySelector('#descripcion')?.value,
             documento_soporte: {
@@ -182,7 +185,8 @@
                 subtotal: parseFloat(form.querySelector('#subtotal')?.value) || 0,
                 retefuente_porcentaje: parseFloat(form.querySelector('#retefuente_porcentaje')?.value) || 0,
                 reteica_porcentaje: parseFloat(form.querySelector('#reteica_porcentaje')?.value) || 0,
-                total: parseFloat(form.querySelector('#total')?.value) || 0
+                total: parseFloat(form.querySelector('#total')?.value) || 0,
+                cuenta_gasto_uuid: gastoUuidVal || null
             }
         };
     }
