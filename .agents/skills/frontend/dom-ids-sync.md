@@ -77,40 +77,26 @@ document.addEventListener('click', (e) => {
 
 ## 5. Prevención de Condiciones de Carrera (HTMX Swap)
 
-**Raíz de Bug Histórico:** Intentar instanciar y activar componentes de la UI (ej. `bootstrap.Offcanvas(...).show()`) inmediatamente después de llamar a `htmx.ajax()`, antes de que HTMX termine de inyectar el nuevo HTML en el DOM. Esto genera un fallo de renderizado o que el componente no se muestre ("silenciosamente").
-
-**Acción Obligatoria:** 
-NUNCA actives un Offcanvas o Modal de manera síncrona justo debajo de la llamada a `htmx.ajax`. 
-DEBES delegar la activación escuchando el evento `htmx:afterSettle` a nivel del contenedor o del `document.body`.
+**Regla:** NUNCA actives un Offcanvas síncronamente tras `htmx.ajax`. Usa `htmx:afterSettle`.
 
 ```javascript
-// MALA PRÁCTICA (Condición de carrera)
+// MALA PRÁCTICA
 async function openOffcanvas() {
     await htmx.ajax('GET', url, { target: '#container' });
-    // ❌ ERROR: El DOM podría no estar procesado completamente aquí
-    bootstrap.Offcanvas.getOrCreateInstance(document.querySelector('.offcanvas')).show();
+    bootstrap.Offcanvas.getOrCreateInstance(document.querySelector('.offcanvas')).show(); // ❌ DOM no listo
 }
 
-// BUENA PRÁCTICA (SINTEL Standard - Resiliente)
+// BUENA PRÁCTICA
 async function openOffcanvas() {
-    // Solo hacemos la petición, sin activar la UI aquí
     return htmx.ajax('GET', url, { target: '#container', swap: 'innerHTML' });
 }
 
-// Listener centralizado en el módulo (fuera de la función openOffcanvas):
 document.body.addEventListener('htmx:afterSettle', (e) => {
-    const target = e.detail.target;
-    // Verificamos que el swap ocurrió en nuestro contenedor
-    if (target && target.id === 'container') {
-        const offcanvasEl = target.querySelector('.offcanvas');
-        if (offcanvasEl) {
-            // ✅ SEGURO: El DOM ya ha sido inyectado y procesado
-            if (window.UIManager?.handleOffcanvas) {
-                window.UIManager.handleOffcanvas(offcanvasEl, 'show');
-            } else {
-                bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
-            }
-        }
+    if (e.detail.target?.id === 'container') {
+        const el = e.detail.target.querySelector('.offcanvas');
+        if (el) window.UIManager.handleOffcanvas(el, 'show'); // ✅
     }
 });
 ```
+
+Ver gestión completa del ciclo de vida en [ui-management.md](ui-management.md).

@@ -1,6 +1,7 @@
 /**
- * proveedores_main.js - Orquestador del Módulo Proveedores v2.61
+ * proveedores_main.js - Orquestador del Módulo Proveedores v3.7
  * Feature-Sliced Architecture: Responsable de la Grilla y Eventos de Lista.
+ * v3.7: Boton Nuevo delegado a HTMX declarativo (hx-get). JS solo maneja editar/eliminar.
  */
 (function (w, d) {
   'use strict';
@@ -112,16 +113,8 @@
     console.log(`${MOD} Inicializando delegación de eventos global...`);
     
     d.addEventListener('click', function(e) {
-      // 1. Botón "Nuevo" (Resiliencia total: múltiples IDs y clases)
-      const btnNuevo = e.target.closest('#btn-nuevo-proveedor, #btnNuevoProveedor, .btn-nuevo-proveedor');
-      if (btnNuevo) {
-        console.log(`${MOD} Click en "Nuevo" detectado via delegación`);
-        e.preventDefault();
-        w.Sintel.Proveedores.Form?.openOffcanvas(null);
-        return;
-      }
-
-      // 2. Acciones de Tabla (Editar/Eliminar)
+      // Acciones de Tabla (Editar/Eliminar)
+      // NOTA: Boton "Nuevo" es HTMX declarativo (hx-get en [data-create-button]) — no requiere JS.
       const btnAction = e.target.closest('.btn-edit-proveedor, .btn-delete-proveedor');
       if (btnAction) {
         e.stopPropagation();

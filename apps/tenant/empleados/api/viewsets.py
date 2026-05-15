@@ -126,23 +126,24 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     def create(self, request, *args, **kwargs):
         """
         WARNING: v2.40: Sobrescribir create para manejar errores de empresa no encontrada y validaciones.
+        v3.7.4: Mejorado manejo de errores de validación para JSON limpio.
         """
         try:
             # Validar datos del serializer primero
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            
+
             # Ejecutar perform_create que asigna empresa
             self.perform_create(serializer)
-            
+
             # WARNING: Paso 4: Retornar respuesta con was_updated para listeners JS
             response_data = serializer.data
             response_data['was_updated'] = False
             response_data['message'] = 'Empleado creado correctamente'
-            
+
             headers = self.get_success_headers(response_data)
             return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
-            
+
         except ValueError as e:
             logger.error(f"[EmpleadoViewSet] Error en create (ValueError): {str(e)}", exc_info=True)
             return Response(
@@ -150,9 +151,11 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         except serializers.ValidationError as e:
-            logger.error(f"[EmpleadoViewSet] Error de validación en create: {str(e)}", exc_info=True)
+            logger.error(f"[EmpleadoViewSet] Error de validación en create: {e.detail}", exc_info=True)
+            # v3.7.4: Asegurarse de que detail sea JSON limpio, no string de Python
+            detail_data = e.detail if isinstance(e.detail, dict) else str(e.detail)
             return Response(
-                {"error": "Error de validación", "detail": str(e.detail) if hasattr(e, 'detail') else str(e)},
+                {"error": "Error de validación", "detail": detail_data},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except IntegrityError as e:

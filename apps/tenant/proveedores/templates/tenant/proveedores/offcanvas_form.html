@@ -1,11 +1,84 @@
-{# offcanvas_form.html - Offcanvas del módulo Proveedores v3.6 #}
-{# v3.6: Layout premium - estructura HTML corregida, distribucion optimizada #}
+{# offcanvas_form.html - Offcanvas del módulo Proveedores v3.7 #}
+{# Feature-Sliced: Template modular para crear / editar / detalle #}
+{# Estándar visual: alineado con offcanvas_crear_cliente.html v2.62 #}
 
-<div class="offcanvas offcanvas-end offcanvas-xl bg-white d-flex flex-column" tabindex="-1" id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label">
+{# CSS scoped: solo afecta #offcanvas-proveedor, no interfiere con otros estilos #}
+<style>
+  #offcanvas-proveedor {
+    width: 720px !important;
+  }
+  #offcanvas-proveedor .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-proveedor .section-divider {
+    margin-bottom: 1.75rem;
+  }
+  #offcanvas-proveedor .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.01em;
+  }
+  #offcanvas-proveedor .form-control,
+  #offcanvas-proveedor .form-select {
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #offcanvas-proveedor .form-control:focus,
+  #offcanvas-proveedor .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,.12);
+  }
+  #offcanvas-proveedor .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  #offcanvas-proveedor .section-title.s-primary   { color: #0d6efd; border-color: #cfe2ff; }
+  #offcanvas-proveedor .section-title.s-success   { color: #198754; border-color: #d1e7dd; }
+  #offcanvas-proveedor .section-title.s-info      { color: #0dcaf0; border-color: #cff4fc; }
+  #offcanvas-proveedor .section-title.s-warning   { color: #dc8500; border-color: #fff3cd; }
+  #offcanvas-proveedor .section-title.s-secondary { color: #6c757d; border-color: #e9ecef; }
+  #offcanvas-proveedor .switch-card {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 6px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    height: 100%;
+  }
+  #offcanvas-proveedor .retencion-panel {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  #offcanvas-proveedor .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+    flex-shrink: 0;
+  }
+</style>
 
-  <div class="offcanvas-header border-bottom bg-light px-4">
+<div class="offcanvas offcanvas-end d-flex flex-column" tabindex="-1"
+     id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
     <h5 class="offcanvas-title fw-semibold" id="offcanvas-proveedor-label">
-      <i class="bi bi-building me-2 text-primary"></i>
+      <i class="bi bi-building-fill text-primary me-2"></i>
       <span id="offcanvas-proveedor-titulo">
         {% if modo_detalle %}Detalle de Proveedor{% elif proveedor %}Editar Proveedor{% else %}Nuevo Proveedor{% endif %}
       </span>
@@ -13,24 +86,26 @@
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
 
-  <div class="offcanvas-body px-4 py-3 flex-grow-1 overflow-y-auto">
+  <div class="offcanvas-body flex-grow-1 overflow-y-auto">
     <div id="form-proveedor-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
 
     <form id="form-proveedor" method="POST" onsubmit="return false;">
-      <input type="hidden" id="proveedor-id" name="id" value="{% if proveedor %}{{ proveedor.uuid }}{% endif %}">
+      <input type="hidden" id="proveedor-id" name="id"
+             value="{% if proveedor %}{{ proveedor.uuid }}{% endif %}">
 
       <fieldset {% if modo_detalle %}disabled{% endif %}>
 
-        {# ── 1. Identificación Legal ── #}
-        <div class="mb-4">
-          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-            <span class="badge bg-primary rounded-pill px-2"><i class="bi bi-card-text"></i></span>
-            <h6 class="mb-0 fw-semibold text-primary">Identificación Legal</h6>
-          </div>
+        {# ── 1. Identificación Legal ─────────────────────────────────── #}
+        <div class="section-divider">
+          <p class="section-title s-primary">
+            <i class="bi bi-card-text"></i>Identificación Legal
+          </p>
           <div class="row g-3">
-            <div class="col-md-3">
-              <label for="proveedor-tipo_persona" class="form-label fw-semibold small">Tipo Persona <span class="text-danger">*</span></label>
-              <select class="form-select form-select-sm bg-white" id="proveedor-tipo_persona" name="tipo_persona" required>
+            <div class="col-6">
+              <label for="proveedor-tipo_persona" class="form-label">
+                Tipo Persona <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="proveedor-tipo_persona" name="tipo_persona" required>
                 <option value="">Seleccionar...</option>
                 {% for value, label in tipo_persona_choices %}
                   <option value="{{ value }}"
@@ -41,9 +116,11 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-3">
-              <label for="proveedor-tipo_documento" class="form-label fw-semibold small">Tipo Documento <span class="text-danger">*</span></label>
-              <select class="form-select form-select-sm bg-white" id="proveedor-tipo_documento" name="tipo_documento" required>
+            <div class="col-6">
+              <label for="proveedor-tipo_documento" class="form-label">
+                Tipo Documento <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="proveedor-tipo_documento" name="tipo_documento" required>
                 <option value="">Seleccionar...</option>
                 {% for value, label in tipo_documento_choices %}
                   <option value="{{ value }}"
@@ -54,44 +131,49 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-4">
-              <label for="proveedor-numero_documento" class="form-label fw-semibold small">Número Documento <span class="text-danger">*</span></label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-numero_documento" name="numero_documento"
+            <div class="col-5">
+              <label for="proveedor-numero_documento" class="form-label">
+                Número Documento <span class="text-danger">*</span>
+              </label>
+              <input type="text" class="form-control" id="proveedor-numero_documento" name="numero_documento"
                      value="{% if proveedor %}{{ proveedor.numero_documento }}{% endif %}"
                      placeholder="Sin dígito de verificación" required>
             </div>
-            <div class="col-md-2">
-              <label for="proveedor-digito_verificacion" class="form-label fw-semibold small">Díg. Verif.</label>
-              <input type="text" class="form-control form-control-sm bg-white text-center" id="proveedor-digito_verificacion" name="digito_verificacion"
+            <div class="col-2">
+              <label for="proveedor-digito_verificacion" class="form-label">Díg. Verif.</label>
+              <input type="text" class="form-control text-center" id="proveedor-digito_verificacion"
+                     name="digito_verificacion"
                      value="{% if proveedor %}{{ proveedor.digito_verificacion|default:'' }}{% endif %}"
                      maxlength="1" placeholder="-">
             </div>
-
-            <div class="col-md-7">
-              <label for="proveedor-razon_social" class="form-label fw-semibold small">Razón Social <span class="text-danger">*</span></label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-razon_social" name="razon_social"
+            <div class="col-5">
+              <label for="proveedor-razon_social" class="form-label">
+                Razón Social <span class="text-danger">*</span>
+              </label>
+              <input type="text" class="form-control" id="proveedor-razon_social" name="razon_social"
                      value="{% if proveedor %}{{ proveedor.razon_social }}{% endif %}"
                      placeholder="Nombre legal completo" required>
             </div>
-            <div class="col-md-5">
-              <label for="proveedor-nombre_comercial" class="form-label fw-semibold small">Nombre Comercial</label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-nombre_comercial" name="nombre_comercial"
+            <div class="col-12">
+              <label for="proveedor-nombre_comercial" class="form-label">Nombre Comercial</label>
+              <input type="text" class="form-control" id="proveedor-nombre_comercial" name="nombre_comercial"
                      value="{% if proveedor %}{{ proveedor.nombre_comercial|default:'' }}{% endif %}"
                      placeholder="Nombre de fantasía (opcional)">
             </div>
           </div>
         </div>
 
-        {# ── 2. Información Tributaria ── #}
-        <div class="mb-4">
-          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-            <span class="badge bg-success rounded-pill px-2"><i class="bi bi-receipt"></i></span>
-            <h6 class="mb-0 fw-semibold text-success">Información Tributaria</h6>
-          </div>
+        {# ── 2. Información Tributaria ────────────────────────────────── #}
+        <div class="section-divider">
+          <p class="section-title s-success">
+            <i class="bi bi-receipt"></i>Información Tributaria
+          </p>
           <div class="row g-3">
-            <div class="col-md-4">
-              <label for="proveedor-regimen_tributario" class="form-label fw-semibold small">Régimen Tributario <span class="text-danger">*</span></label>
-              <select class="form-select form-select-sm bg-white" id="proveedor-regimen_tributario" name="regimen_tributario" required>
+            <div class="col-6">
+              <label for="proveedor-regimen_tributario" class="form-label">
+                Régimen Tributario <span class="text-danger">*</span>
+              </label>
+              <select class="form-select" id="proveedor-regimen_tributario" name="regimen_tributario" required>
                 <option value="">Seleccionar...</option>
                 {% for value, label in regimen_choices %}
                   <option value="{{ value }}"
@@ -102,70 +184,71 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-4">
-              <label for="proveedor-actividad_economica_ciiu" class="form-label fw-semibold small">Código CIIU</label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-actividad_economica_ciiu" name="actividad_economica_ciiu"
+            <div class="col-6">
+              <label for="proveedor-actividad_economica_ciiu" class="form-label">Código CIIU</label>
+              <input type="text" class="form-control" id="proveedor-actividad_economica_ciiu"
+                     name="actividad_economica_ciiu"
                      value="{% if proveedor %}{{ proveedor.actividad_economica_ciiu|default:'' }}{% endif %}"
                      maxlength="10" placeholder="Ej. 4669">
             </div>
-            <div class="col-md-4">
-              <label for="proveedor-cuenta_contable_label" class="form-label fw-semibold small">Cuenta Contable (Pasivo)</label>
+            <div class="col-12">
+              <label for="proveedor-cuenta_contable_label" class="form-label">Cuenta Contable (Pasivo)</label>
               <div class="position-relative">
-                <input type="text" class="form-control form-control-sm bg-white" id="proveedor-cuenta_contable_label" 
+                <input type="text" class="form-control" id="proveedor-cuenta_contable_label"
                        value="{% if proveedor %}{{ proveedor.cuenta_contable_label|default:'' }}{% endif %}"
                        placeholder="Buscar por código o nombre...">
-                <input type="hidden" id="proveedor-cuenta_contable_uuid" name="cuenta_contable_uuid" 
+                <input type="hidden" id="proveedor-cuenta_contable_uuid" name="cuenta_contable_uuid"
                        value="{% if proveedor %}{{ proveedor.cuenta_contable_uuid|default:'' }}{% endif %}">
-                <div id="proveedor-cuenta-resultados" class="list-group position-absolute w-100 shadow-sm d-none" 
+                <div id="proveedor-cuenta-resultados" class="list-group position-absolute w-100 shadow-sm d-none"
                      style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
               </div>
             </div>
 
-            {# Switches tributarios #}
-            <div class="col-md-3">
-              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+            {# Switches tributarios — 2 por fila #}
+            <div class="col-6">
+              <div class="switch-card">
                 <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
                        id="proveedor-responsable_iva" name="responsable_iva"
                        {% if proveedor and proveedor.responsable_iva or not proveedor %}checked{% endif %}>
-                <label class="form-check-label small fw-semibold lh-sm" for="proveedor-responsable_iva">Responsable IVA</label>
+                <label class="form-check-label small fw-semibold" for="proveedor-responsable_iva">Responsable IVA</label>
               </div>
             </div>
-            <div class="col-md-3">
-              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+            <div class="col-6">
+              <div class="switch-card">
                 <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
                        id="proveedor-gran_contribuyente" name="gran_contribuyente"
                        {% if proveedor and proveedor.gran_contribuyente %}checked{% endif %}>
-                <label class="form-check-label small fw-semibold lh-sm" for="proveedor-gran_contribuyente">Gran Contribuyente</label>
+                <label class="form-check-label small fw-semibold" for="proveedor-gran_contribuyente">Gran Contribuyente</label>
               </div>
             </div>
-            <div class="col-md-3">
-              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+            <div class="col-6">
+              <div class="switch-card">
                 <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
                        id="proveedor-autoretenedor" name="autoretenedor"
                        {% if proveedor and proveedor.autoretenedor %}checked{% endif %}>
-                <label class="form-check-label small fw-semibold lh-sm" for="proveedor-autoretenedor">Autoretenedor</label>
+                <label class="form-check-label small fw-semibold" for="proveedor-autoretenedor">Autoretenedor</label>
               </div>
             </div>
-            <div class="col-md-3">
-              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
+            <div class="col-6">
+              <div class="switch-card">
                 <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
                        id="proveedor-es_retenedor" name="es_retenedor"
                        {% if proveedor and proveedor.es_retenedor %}checked{% endif %}>
-                <label class="form-check-label small fw-semibold lh-sm" for="proveedor-es_retenedor">Agente Retenedor</label>
+                <label class="form-check-label small fw-semibold" for="proveedor-es_retenedor">Agente Retenedor</label>
               </div>
             </div>
 
             {# Panel de Retenciones (visible solo si es_retenedor) #}
             <div class="col-12">
-              <div id="contenedor-retenciones" class="{% if not proveedor or not proveedor.es_retenedor %}d-none{% endif %}">
-                <div class="p-3 rounded-3 border border-success-subtle bg-success-subtle">
-                  <div class="d-flex align-items-center gap-2 mb-3">
-                    <i class="bi bi-percent text-success"></i>
-                    <span class="small fw-semibold text-success">Detalle de Retenciones</span>
-                  </div>
-                  <div class="row g-2">
-                    <div class="col-md-4">
-                      <div class="p-2 bg-white rounded-2 border h-100">
+              <div id="contenedor-retenciones"
+                   class="{% if not proveedor or not proveedor.es_retenedor %}d-none{% endif %}">
+                <div class="retencion-panel">
+                  <p class="small fw-semibold text-success mb-3">
+                    <i class="bi bi-percent me-1"></i>Detalle de Retenciones
+                  </p>
+                  <div class="row g-3">
+                    <div class="col-4">
+                      <div class="p-2 bg-white rounded border">
                         <div class="form-check form-switch mb-2">
                           <input class="form-check-input" type="checkbox" role="switch"
                                  id="proveedor-aplica_retefuente" name="aplica_retefuente"
@@ -181,8 +264,8 @@
                         </div>
                       </div>
                     </div>
-                    <div class="col-md-4">
-                      <div class="p-2 bg-white rounded-2 border h-100">
+                    <div class="col-4">
+                      <div class="p-2 bg-white rounded border">
                         <div class="form-check form-switch mb-2">
                           <input class="form-check-input" type="checkbox" role="switch"
                                  id="proveedor-aplica_reteica" name="aplica_reteica"
@@ -198,8 +281,8 @@
                         </div>
                       </div>
                     </div>
-                    <div class="col-md-4">
-                      <div class="p-2 bg-white rounded-2 border h-100">
+                    <div class="col-4">
+                      <div class="p-2 bg-white rounded border">
                         <div class="form-check form-switch mb-2">
                           <input class="form-check-input" type="checkbox" role="switch"
                                  id="proveedor-aplica_reteiva" name="aplica_reteiva"
@@ -222,99 +305,96 @@
           </div>
         </div>
 
-        {# ── 3. Contacto y Ubicación ── #}
-        <div class="mb-4">
-          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-            <span class="badge bg-info rounded-pill px-2"><i class="bi bi-geo-alt"></i></span>
-            <h6 class="mb-0 fw-semibold text-info">Contacto y Ubicación</h6>
-          </div>
+        {# ── 3. Contacto y Ubicación ──────────────────────────────────── #}
+        <div class="section-divider">
+          <p class="section-title s-info">
+            <i class="bi bi-geo-alt"></i>Contacto y Ubicación
+          </p>
           <div class="row g-3">
-            <div class="col-md-5">
-              <label for="proveedor-email_contacto" class="form-label fw-semibold small">Email de Contacto</label>
-              <input type="email" class="form-control form-control-sm bg-white" id="proveedor-email_contacto" name="email_contacto"
+            <div class="col-6">
+              <label for="proveedor-email_contacto" class="form-label">Email de Contacto</label>
+              <input type="email" class="form-control" id="proveedor-email_contacto" name="email_contacto"
                      value="{% if proveedor %}{{ proveedor.email_contacto|default:'' }}{% endif %}"
                      placeholder="correo@empresa.com">
             </div>
-            <div class="col-md-4">
-              <label for="proveedor-telefono_contacto" class="form-label fw-semibold small">Teléfono</label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-telefono_contacto" name="telefono_contacto"
+            <div class="col-6">
+              <label for="proveedor-telefono_contacto" class="form-label">Teléfono</label>
+              <input type="text" class="form-control" id="proveedor-telefono_contacto" name="telefono_contacto"
                      value="{% if proveedor %}{{ proveedor.telefono_contacto|default:'' }}{% endif %}"
                      placeholder="+57 300 000 0000">
             </div>
-            <div class="col-md-3">
-              <label class="form-label fw-semibold small d-block">Estado</label>
-              <div class="form-check form-switch d-flex align-items-center gap-2 p-2 rounded-2 bg-light border h-100">
-                <input class="form-check-input flex-shrink-0 mt-0" type="checkbox" role="switch"
-                       id="proveedor-activo" name="activo"
-                       {% if proveedor and proveedor.activo or not proveedor %}checked{% endif %}>
-                <label class="form-check-label small fw-semibold" for="proveedor-activo">Activo</label>
-              </div>
-            </div>
-
-            <div class="col-md-8">
-              <label for="proveedor-direccion" class="form-label fw-semibold small">Dirección</label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-direccion" name="direccion"
+            <div class="col-8">
+              <label for="proveedor-direccion" class="form-label">Dirección</label>
+              <input type="text" class="form-control" id="proveedor-direccion" name="direccion"
                      value="{% if proveedor %}{{ proveedor.direccion|default:'' }}{% endif %}"
                      placeholder="Calle, carrera, número, barrio">
             </div>
-            <div class="col-md-4">
-              <label for="proveedor-ciudad" class="form-label fw-semibold small">Ciudad</label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-ciudad" name="ciudad"
+            <div class="col-4">
+              <label for="proveedor-ciudad" class="form-label">Ciudad</label>
+              <input type="text" class="form-control" id="proveedor-ciudad" name="ciudad"
                      value="{% if proveedor %}{{ proveedor.ciudad|default:'' }}{% endif %}"
                      placeholder="Ciudad o municipio">
+            </div>
+            <div class="col-12 pt-1">
+              <label class="form-label d-block">Estado</label>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       id="proveedor-activo" name="activo"
+                       {% if proveedor and proveedor.activo or not proveedor %}checked{% endif %}>
+                <label class="form-check-label small fw-medium" for="proveedor-activo">Activo</label>
+              </div>
             </div>
           </div>
         </div>
 
-        {# ── 4. Información Comercial y Bancaria ── #}
-        <div class="mb-4">
-          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-            <span class="badge bg-warning text-dark rounded-pill px-2"><i class="bi bi-bank"></i></span>
-            <h6 class="mb-0 fw-semibold text-warning-emphasis">Información Comercial y Bancaria</h6>
-          </div>
+        {# ── 4. Información Comercial y Bancaria ──────────────────────── #}
+        <div class="section-divider">
+          <p class="section-title s-warning">
+            <i class="bi bi-bank"></i>Información Comercial y Bancaria
+          </p>
           <div class="row g-3">
-            <div class="col-md-2">
-              <label for="proveedor-plazo_pago_dias" class="form-label fw-semibold small">Plazo de Pago</label>
-              <div class="input-group input-group-sm">
-                <input type="number" class="form-control bg-white" id="proveedor-plazo_pago_dias" name="plazo_pago_dias"
+            <div class="col-3">
+              <label for="proveedor-plazo_pago_dias" class="form-label">Plazo de Pago</label>
+              <div class="input-group">
+                <input type="number" class="form-control" id="proveedor-plazo_pago_dias" name="plazo_pago_dias"
                        value="{% if proveedor %}{{ proveedor.plazo_pago_dias|default:30 }}{% else %}30{% endif %}"
                        min="0" placeholder="30">
                 <span class="input-group-text">días</span>
               </div>
             </div>
-            <div class="col-md-4">
-              <label for="proveedor-banco" class="form-label fw-semibold small">Banco</label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-banco" name="banco"
+            <div class="col-5">
+              <label for="proveedor-banco" class="form-label">Banco</label>
+              <input type="text" class="form-control" id="proveedor-banco" name="banco"
                      value="{% if proveedor %}{{ proveedor.banco|default:'' }}{% endif %}"
                      placeholder="Nombre del banco">
             </div>
-            <div class="col-md-3">
-              <label for="proveedor-tipo_cuenta" class="form-label fw-semibold small">Tipo de Cuenta</label>
-              <select class="form-select form-select-sm bg-white" id="proveedor-tipo_cuenta" name="tipo_cuenta">
+            <div class="col-4">
+              <label for="proveedor-tipo_cuenta" class="form-label">Tipo de Cuenta</label>
+              <select class="form-select" id="proveedor-tipo_cuenta" name="tipo_cuenta">
                 <option value="">Seleccionar...</option>
                 {% for value, label in tipo_cuenta_choices %}
-                  <option value="{{ value }}" {% if proveedor and proveedor.tipo_cuenta == value %}selected{% endif %}>
+                  <option value="{{ value }}"
+                    {% if proveedor and proveedor.tipo_cuenta == value %}selected{% endif %}>
                     {{ label }}
                   </option>
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-3">
-              <label for="proveedor-numero_cuenta" class="form-label fw-semibold small">Número de Cuenta</label>
-              <input type="text" class="form-control form-control-sm bg-white" id="proveedor-numero_cuenta" name="numero_cuenta"
+            <div class="col-12">
+              <label for="proveedor-numero_cuenta" class="form-label">Número de Cuenta</label>
+              <input type="text" class="form-control" id="proveedor-numero_cuenta" name="numero_cuenta"
                      value="{% if proveedor %}{{ proveedor.numero_cuenta|default:'' }}{% endif %}"
                      placeholder="Número de cuenta bancaria">
             </div>
           </div>
         </div>
 
-        {# ── 5. Observaciones ── #}
+        {# ── 5. Observaciones ─────────────────────────────────────────── #}
         <div class="mb-2">
-          <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
-            <span class="badge bg-secondary rounded-pill px-2"><i class="bi bi-file-text"></i></span>
-            <h6 class="mb-0 fw-semibold text-secondary">Observaciones</h6>
-          </div>
-          <textarea class="form-control form-control-sm bg-white" id="proveedor-observaciones" name="observaciones" rows="3"
+          <p class="section-title s-secondary">
+            <i class="bi bi-file-text"></i>Observaciones
+          </p>
+          <textarea class="form-control" id="proveedor-observaciones" name="observaciones" rows="3"
                     placeholder="Notas o condiciones adicionales del proveedor">{% if proveedor %}{{ proveedor.observaciones|default:'' }}{% endif %}</textarea>
         </div>
 
@@ -322,13 +402,13 @@
     </form>
   </div>
 
-  <div class="offcanvas-footer border-top p-3 bg-light flex-shrink-0">
+  <div class="offcanvas-footer">
     <div class="d-flex justify-content-end gap-2">
-      <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="offcanvas">
+      <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">
         {% if modo_detalle %}Cerrar{% else %}Cancelar{% endif %}
       </button>
       {% if not modo_detalle %}
-        <button type="button" class="btn btn-sm btn-primary" id="btn-guardar-proveedor">
+        <button type="button" class="btn btn-primary btn-sm px-4" id="btn-guardar-proveedor">
           <i class="bi bi-save me-1"></i>{% if proveedor %}Actualizar{% else %}Crear{% endif %} Proveedor
         </button>
       {% endif %}

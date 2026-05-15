@@ -45,7 +45,8 @@ class ExtractorGastos(AbstractExtractor):
             'reteica', 'reteica_porcentaje', 'total', 'consecutivo',
             'resolucion_dian__prefijo',
             'observaciones', 'proveedor__numero_documento', 'proveedor__razon_social',
-            'proveedor_id', 'categoria_contable',
+            'proveedor__cuenta_contable_uuid',
+            'proveedor_id', 'categoria_contable', 'cuenta_gasto_uuid',
         )
 
         return [self._mapear_a_dto(doc) for doc in documentos]
@@ -64,36 +65,35 @@ class ExtractorGastos(AbstractExtractor):
 
         # Build lines
         lineas = []
-        
-        # 1. Main expense line (DEBIT)
-        concepto_gasto = doc.categoria_contable or "GASTO_GENERAL"
+
+        # 1. Main expense line (DEBIT) — cuenta_gasto_uuid como hint si esta configurado
+        concepto_gasto = doc.categoria_contable or 'GASTO_GENERAL'
+        cuenta_gasto_hint = str(doc.cuenta_gasto_uuid) if doc.cuenta_gasto_uuid else None
         lineas.append(LineaTransaccion(
             concepto=concepto_gasto,
             monto=doc.subtotal,
-            lado='DEBE'
+            lado='DEBE',
+            cuenta_hint=cuenta_gasto_hint,
         ))
 
-        # 2. Retentions (CREDIT)
-        if doc.retefuente and doc.retefuente > 0:
-            lineas.append(LineaTransaccion(
-                concepto="RETEFUENTE",
-                monto=doc.retefuente,
-                lado='HABER'
-            ))
-            
-        if doc.reteica and doc.reteica > 0:
-            lineas.append(LineaTransaccion(
-                concepto="RETEICA",
-                monto=doc.reteica,
-                lado='HABER'
-            ))
+        # 2. Retentions (CREDIT) — leer desde campo DEPRECATED que aun existe en DB
+        retefuente = doc.retefuente or Decimal('0')
+        reteica = doc.reteica or Decimal('0')
+        if retefuente > 0:
+            lineas.append(LineaTransaccion(concepto='RETEFUENTE', monto=retefuente, lado='HABER'))
+        if reteica > 0:
+            lineas.append(LineaTransaccion(concepto='RETEICA', monto=reteica, lado='HABER'))
 
-        # 3. Balancing line (CREDIT to Pasivo/Cuentas por Pagar)
-        # Total = Subtotal - Retefuente - Reteica
+        # 3. Balancing line (CREDIT) — cuenta_contable_uuid del Proveedor como hint
+        cuenta_proveedor_hint = (
+            str(doc.proveedor.cuenta_contable_uuid)
+            if doc.proveedor.cuenta_contable_uuid else None
+        )
         lineas.append(LineaTransaccion(
-            concepto="PASIVO_COMPRA_GASTO",
+            concepto='PASIVO_COMPRA_GASTO',
             monto=doc.total,
-            lado='HABER'
+            lado='HABER',
+            cuenta_hint=cuenta_proveedor_hint,
         ))
 
         return TransaccionEconomica(

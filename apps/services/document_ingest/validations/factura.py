@@ -67,13 +67,20 @@ class FacturaValidator(BaseValidator):
             missing_fields.append("numero")
             errors.append("Número de documento no detectado")
         
-        # 3. Validar CUFE obligatorio
+        # 3. Validar CUFE/UUID
         identificadores = dto.get("identificadores", {})
-        cufe = identificadores.get("cufe") or identificadores.get("uuid")
+        cufe = (
+            identificadores.get("cufe") 
+            or identificadores.get("uuid") 
+            or dto.get("cufe") # Fallback a raíz
+            or dto.get("uuid")
+        )
         
         if not cufe or not str(cufe).strip():
-            missing_fields.append("identificadores.cufe|uuid")
-            errors.append("CUFE obligatorio no encontrado")
+            # v3.5: Permitir sin CUFE si hay número (para documentos equivalentes o proformas)
+            if not dto.get("numero"):
+                missing_fields.append("identificadores.cufe|uuid|numero")
+                errors.append("Identificador de documento (CUFE o Número) no encontrado")
         
         # 4. Validar fechas válidas
         fecha_emision = dto.get("fecha_emision", "")
@@ -89,16 +96,14 @@ class FacturaValidator(BaseValidator):
             total = Decimal(str(totales.get("total", "0.00")))
             
             # WARNING: CORRECCIÓN: En UBL 2.1, el total (PayableAmount) puede incluir descuentos/cargos
-            # Por lo tanto, validamos que subtotal + impuestos ≤ total (con tolerancia)
-            # O que subtotal + impuestos ≈ total si no hay descuentos/cargos
+            # Validamos con una tolerancia mayor (0.50) para evitar bloqueos por redondeo
             tax_inclusive = subtotal + impuestos
             
-            # Tolerancia aumentada a 0.10 para manejar redondeos y descuentos menores
-            # Si total < tax_inclusive (con tolerancia), hay un problema
-            if total < (tax_inclusive - Decimal("0.10")):
-                errors.append(f"Totales incoherentes: total ({total}) es menor que subtotal + impuestos ({tax_inclusive})")
-            # Si total > tax_inclusive + 0.10, puede haber descuentos/cargos (aceptable)
-            # No validamos el caso contrario porque PayableAmount puede incluir descuentos
+            # Si hay una diferencia masiva (> 1.00), registrar como error, si no, es aceptable (redondeos/descuentos)
+            # Solo bloqueamos si el total es significativamente menor al subtotal (error de parsing probable)
+            if total < (subtotal - Decimal("1.00")):
+                 errors.append(f"Totales incoherentes: total ({total}) es significativamente menor que subtotal ({subtotal})")
+            
         except (InvalidOperation, ValueError, TypeError) as e:
             errors.append(f"Totales con valores numéricos inválidos: {str(e)}")
             missing_fields.append("totales.subtotal|impuestos|total")

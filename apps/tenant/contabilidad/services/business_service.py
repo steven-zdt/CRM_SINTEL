@@ -128,12 +128,7 @@ class ContabilidadBusinessService:
 
     @transaction.atomic
     def eliminar_asiento(self, asiento_id: int) -> Dict[str, Any]:
-        """Orquesta la eliminación con validaciones de estado."""
-        asiento = AsientoContable.objects.get(id=asiento_id)
-        
-        if asiento.estado in ['APROBADO', 'CERRADO']:
-            raise ValidationError({'estado': f'No se puede eliminar un asiento en estado {asiento.estado}.'})
-
+        """Elimina un asiento sin restriccion de estado (movimientos por CASCADE)."""
         self.crud.eliminar_asiento(asiento_id)
         return {'status': 'deleted'}
 

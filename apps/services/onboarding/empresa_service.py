@@ -778,26 +778,24 @@ def crear_empresa(
     # WARNING: CRÍTICO: Usar create_user_service para generar username único y hashear password
     user = User.objects.only("id", "email", "is_active", "password", "username").filter(email=email_admin).first()
     if not user:
-        # Generar password temporal si no se proporciona (el usuario deberá cambiarlo en el primer login)
-        from django.contrib.auth.models import User as BaseUser
-        temp_password = BaseUser.objects.make_random_password()
-        
         try:
-            user = create_user_service(
+            from apps.public.accounts.api.services.user_service import _generate_unique_username
+            new_user = User(
                 email=email_admin,
-                password=temp_password,  # Password temporal, el usuario deberá cambiarlo
+                username=_generate_unique_username(email_admin),
                 is_staff=True,
                 is_active=True,
             )
+            new_user.set_unusable_password()
+            new_user.save()
+            user = new_user
             user_created = True
-            logger.info("OK: Usuario admin creado en public: %s (username=%s, password temporal)", email_admin, user.username)
+            logger.info("OK: Usuario admin creado en public: %s (password unusable - activacion por email)", email_admin)
         except IntegrityError as e:
-            # Si hay conflicto de unicidad, intentar obtener el usuario existente
-            logger.warning("WARNING:  Conflicto de unicidad al crear usuario %s, intentando obtener existente...", email_admin)
             user = User.objects.only("id", "email", "is_active", "password", "username").filter(email=email_admin).first()
             if not user:
                 raise ValueError(f"No se pudo crear ni obtener el usuario {email_admin}: {str(e)}") from e
-            logger.info("OK: Usuario obtenido después de conflicto: %s", email_admin)
+            logger.info("OK: Usuario obtenido despues de conflicto: %s", email_admin)
             user_created = False
 
     # 2. Crear tenant + dominio + membership owner usando el servicio central

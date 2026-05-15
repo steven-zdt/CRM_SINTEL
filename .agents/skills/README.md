@@ -28,6 +28,7 @@ Cada skill = 1 responsabilidad = <150 líneas.
 | Módulo nuevo FSD completo | `workflow/fsd-module.md` |
 | Debug, error 500, traza | `workflow/debugging.md` |
 | MCP, Antigravity, reglas de agente | `workflow/antigravity-mcp.md` |
+| Docker, healthcheck, entrypoint, startup | `workflow/docker-services.md` |
 
 ## Regla de Carga
 - **Máximo 3 skills activas a la vez**

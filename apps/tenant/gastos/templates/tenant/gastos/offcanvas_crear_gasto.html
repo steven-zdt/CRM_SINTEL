@@ -1,28 +1,76 @@
 {# offcanvas_crear_gasto.html - Offcanvas para CREAR gasto v2.62 #}
-{# ⚠️ Feature-Sliced: Template modular solo para creación #}
+{# Feature-Sliced: Template modular solo para creación #}
+{# HTMX: Auto-inicialización del offcanvas #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-gasto-crear" 
+{# CSS scoped: solo afecta este offcanvas, no interfiere con otros estilos #}
+<style>
+  #offcanvas-gasto-crear {
+    width: 680px !important;
+  }
+  #offcanvas-gasto-crear .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-gasto-crear .section-divider {
+    margin-bottom: 1.75rem;
+  }
+  #offcanvas-gasto-crear .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.01em;
+  }
+  #offcanvas-gasto-crear .form-control,
+  #offcanvas-gasto-crear .form-select {
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #offcanvas-gasto-crear .form-control:focus,
+  #offcanvas-gasto-crear .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,.12);
+  }
+  #offcanvas-gasto-crear .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #0d6efd;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  #offcanvas-gasto-crear .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-gasto-crear"
      aria-labelledby="offcanvas-gasto-crear-label">
-    <div class="offcanvas-header border-bottom">
-        <h5 class="offcanvas-title" id="offcanvas-gasto-crear-label">
-            <i class="bi bi-plus-circle me-2"></i>Nuevo Gasto
+    <div class="offcanvas-header border-bottom py-3 px-4">
+        <h5 class="offcanvas-title fw-semibold" id="offcanvas-gasto-crear-label">
+            <i class="bi bi-plus-circle text-primary me-2"></i>Nuevo Gasto
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
     </div>
-    
+
     <div class="offcanvas-body">
-        {# Contenedores de feedback #}
+        {# Contenedor de errores para Error Boundary Pattern #}
         <div id="form-gasto-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
-        <div id="gasto-feedback" class="alert d-none" role="alert"></div>
+        <div id="gasto-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
 
         <form id="gasto-form" data-mode="create">
             {% csrf_token %}
-            
-            {# Sección: Origen y Resolución #}
-            <div class="mb-4">
-                <h6 class="text-primary border-bottom pb-2 mb-3">
-                    <i class="bi bi-file-earmark-text me-2"></i>Origen y Resolución
-                </h6>
+
+            {# ── Sección: Origen y Resolución ───────────────────────────── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-file-earmark-text me-1"></i>Origen y Resolución
+                </p>
                 <div class="row g-3">
                     <div class="col-12">
                         <label for="resolucion" class="form-label">Resolución DIAN *</label>
@@ -36,25 +84,27 @@
                     </div>
                     <div class="col-md-6">
                         <label for="numero_documento_proveedor" class="form-label">Doc. Soporte Ext. *</label>
-                        <input type="text" class="form-control" id="numero_documento_proveedor" 
+                        <input type="text" class="form-control" id="numero_documento_proveedor"
                                name="numero_documento_proveedor" placeholder="Ej: FAC-123" required>
                     </div>
                 </div>
             </div>
 
-            {# Sección: Proveedor #}
-            <div class="mb-4">
-                <h6 class="text-primary border-bottom pb-2 mb-3">
-                    <i class="bi bi-person-badge me-2"></i>Información del Proveedor
-                </h6>
-                <div class="col-12 mb-3">
-                    <label for="proveedor_uuid" class="form-label">Proveedor *</label>
-                    <select class="form-select" id="proveedor_uuid" name="proveedor_uuid" required>
-                        <option value="">Seleccione...</option>
-                    </select>
+            {# ── Sección: Proveedor ────────────────────────────────────── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-person-badge me-1"></i>Información del Proveedor
+                </p>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label for="proveedor_uuid" class="form-label">Proveedor *</label>
+                        <select class="form-select" id="proveedor_uuid" name="proveedor_uuid" required>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
                 </div>
-                
-                <div class="row bg-light p-3 mx-0 rounded border g-2 small">
+
+                <div class="row bg-light p-3 mx-0 rounded border g-2 small mt-2">
                     <div class="col-md-6">
                         <span class="text-muted d-block">NIT/Documento</span>
                         <strong id="vendedor_nit_display">N/A</strong>
@@ -70,90 +120,203 @@
                 </div>
             </div>
 
-            {# Sección: Valores Financieros #}
-            <div class="mb-4">
-                <h6 class="text-primary border-bottom pb-2 mb-3">
-                    <i class="bi bi-currency-dollar me-2"></i>Valores y Retenciones
-                </h6>
+            {# ── Sección: Valores Financieros ──────────────────────────── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-currency-dollar me-1"></i>Valores Financieros
+                </p>
                 <div class="row g-3">
+
+                    {# --- Preset de monto (Base Gravable) --- #}
                     <div class="col-12">
-                        <label for="subtotal" class="form-label">Subtotal (Base Gravable) *</label>
+                        <label for="subtotal_preset" class="form-label">Base Gravable (Subtotal) *</label>
+                        <select class="form-select" id="subtotal_preset">
+                            <option value="">-- Seleccione un monto --</option>
+                            <option value="50000">$50,000</option>
+                            <option value="100000">$100,000</option>
+                            <option value="200000">$200,000</option>
+                            <option value="300000">$300,000</option>
+                            <option value="500000">$500,000</option>
+                            <option value="750000">$750,000</option>
+                            <option value="1000000">$1,000,000</option>
+                            <option value="2000000">$2,000,000</option>
+                            <option value="3000000">$3,000,000</option>
+                            <option value="5000000">$5,000,000</option>
+                            <option value="10000000">$10,000,000</option>
+                            <option value="custom">Otro monto...</option>
+                        </select>
+                    </div>
+
+                    {# --- Input personalizado (visible solo cuando value="custom") --- #}
+                    <div class="col-12 d-none" id="subtotal_custom_wrapper">
+                        <label for="subtotal_custom" class="form-label">Monto personalizado *</label>
                         <div class="input-group">
                             <span class="input-group-text">$</span>
-                            <input type="number" class="form-control" id="subtotal" name="subtotal" 
-                                   step="0.01" min="0.01" required>
+                            <input type="number" class="form-control" id="subtotal_custom"
+                                   step="0.01" min="0.01" placeholder="Ej: 450000">
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <label for="retefuente_porcentaje" class="form-label">ReteFuente</label>
-                        <select class="form-select" id="retefuente_porcentaje" name="retefuente_porcentaje">
-                            <option value="0.00">0%</option>
-                            <option value="0.04">4%</option>
-                            <option value="0.06">6%</option>
-                            <option value="0.10">10%</option>
-                            <option value="0.11">11%</option>
-                        </select>
+
+                    {# --- Input hidden que recibe el valor real (enviado al backend) --- #}
+                    <input type="hidden" id="subtotal" name="subtotal" value="0">
+
+                    {# --- Retenciones aplicadas (Selects) --- #}
+                    <div class="col-12">
+                        <label class="form-label">Retenciones aplicadas</label>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="retefuente_select" class="form-label small">Retefuente</label>
+                                <select class="form-select form-select-sm" id="retefuente_select">
+                                    <option value="0.00">0% - Sin Retefuente</option>
+                                    <option value="0.04">4% - Servicios (Declarantes)</option>
+                                    <option value="0.06">6% - Servicios (No Declarantes)</option>
+                                    <option value="0.10">10% - Honorarios y Consultoria (No declarante)</option>
+                                    <option value="0.11">11% - Honorarios y Consultoria (Declarante)</option>
+                                </select>
+                                <div class="mt-2 p-2 bg-light rounded">
+                                    <div class="d-flex justify-content-between">
+                                        <small class="text-muted">Monto estimado:</small>
+                                        <span class="badge bg-secondary" id="retefuente_pct_badge">0%</span>
+                                    </div>
+                                    <strong id="retefuente_display" class="d-block mt-1">$0.00</strong>
+                                </div>
+                                <input type="hidden" id="retefuente_porcentaje" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="reteica_select" class="form-label small">ReteICA</label>
+                                <select class="form-select form-select-sm" id="reteica_select">
+                                    <option value="0.00">0% - Exento</option>
+                                    <option value="0.0069">0.69%</option>
+                                    <option value="0.00966">0.966%</option>
+                                    <option value="0.01104">1.104%</option>
+                                </select>
+                                <div class="mt-2 p-2 bg-light rounded">
+                                    <div class="d-flex justify-content-between">
+                                        <small class="text-muted">Monto estimado:</small>
+                                        <span class="badge bg-secondary" id="reteica_pct_badge">0%</span>
+                                    </div>
+                                    <strong id="reteica_display" class="d-block mt-1">$0.00</strong>
+                                </div>
+                                <input type="hidden" id="reteica_porcentaje" value="0">
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <label for="reteica_porcentaje" class="form-label">ReteICA</label>
-                        <select class="form-select" id="reteica_porcentaje" name="reteica_porcentaje">
-                            <option value="0.00">0%</option>
-                            <option value="0.0069">0.69%</option>
-                            <option value="0.00966">0.966%</option>
-                            <option value="0.01104">1.104%</option>
-                        </select>
+
+                    {# --- Total Retenciones --- #}
+                    <div class="col-12">
+                        <div class="p-3 bg-warning bg-opacity-10 rounded border border-warning">
+                            <small class="text-muted d-block">Total Retenciones:</small>
+                            <strong id="total_retenciones_display" class="fs-5">$0.00</strong>
+                        </div>
                     </div>
+
+                    {# --- Total Neto (readonly visual) --- #}
                     <div class="col-12">
                         <div class="card bg-primary text-white border-0">
                             <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
-                                <span>Total Neto Estimado:</span>
+                                <span class="small">Total Neto Estimado:</span>
                                 <h4 class="mb-0" id="total_display">$0.00</h4>
                                 <input type="hidden" id="total" name="total" value="0">
                             </div>
                         </div>
-                        <div id="calculo-preview" class="form-text mt-1 text-end small"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            {# ── Sección: Clasificación ───────────────────────────────── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-tag me-1"></i>Clasificación
+                </p>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label for="categoria_contable" class="form-label">Categoría Contable</label>
+                        <select class="form-select" id="categoria_contable" name="categoria_contable">
+                            <option value="">Seleccione categoría...</option>
+                            <option value="ARRENDAMIENTOS">Arrendamientos</option>
+                            <option value="SERVICIOS_PUBLICOS">Servicios Públicos</option>
+                            <option value="PAPELERIA_UTILES">Papelería y Útiles</option>
+                            <option value="MANTENIMIENTO_REPARACIONES">Mantenimiento y Reparaciones</option>
+                            <option value="EQUIPOS_HERRAMIENTAS">Equipos y Herramientas</option>
+                            <option value="LICENCIAS_SOFTWARE">Licencias y Software</option>
+                            <option value="HOSTING_DOMINIO">Hosting y Dominios</option>
+                            <option value="TRANSPORTE_FLETES">Transporte y Fletes</option>
+                            <option value="COMBUSTIBLE">Combustible</option>
+                            <option value="VIATICOS">Viáticos</option>
+                            <option value="PUBLICIDAD_MARKETING">Publicidad y Marketing</option>
+                            <option value="SEGUROS">Seguros</option>
+                            <option value="IMPUESTOS_TASAS">Impuestos, Tasas y Contribuciones</option>
+                            <option value="HONORARIOS">Honorarios</option>
+                            <option value="SERVICIOS_PROFESIONALES">Servicios Profesionales</option>
+                            <option value="ASEO_CAFETERIA">Aseo y Cafetería</option>
+                            <option value="VIGILANCIA_SEGURIDAD">Vigilancia y Seguridad</option>
+                            <option value="CAPACITACION">Capacitación</option>
+                            <option value="GASTOS_FINANCIEROS">Gastos Financieros</option>
+                            <option value="COMISIONES_BANCARIAS">Comisiones Bancarias</option>
+                            <option value="SUSCRIPCIONES">Suscripciones</option>
+                            <option value="ELEMENTOS_PROTECCION">Elementos de Protección</option>
+                            <option value="MATERIALES_INSUMOS">Materiales e Insumos</option>
+                            <option value="ADECUACIONES_INSTALACIONES">Adecuaciones e Instalaciones</option>
+                            <option value="COMUNICACIONES">Comunicaciones</option>
+                            <option value="ENERGIA">Energía</option>
+                            <option value="LIMPEZA_ASEO">Limpieza y Aseo</option>
+                            <option value="TECNOLOGIA_INFORMATICA">Tecnología e Informática</option>
+                            <option value="GASTOS_LEGALES">Gastos Legales</option>
+                            <option value="TRIBUTARIOS">Gastos Tributarios</option>
+                            <option value="OTROS">Otros Gastos</option>
+                        </select>
                     </div>
                 </div>
             </div>
 
-            {# Sección: Detalles Adicionales #}
-            <div class="mb-4">
-                <h6 class="text-primary border-bottom pb-2 mb-3">
-                    <i class="bi bi-chat-left-text me-2"></i>Detalles y Observaciones
-                </h6>
-                <div class="mb-3">
-                    <label for="descripcion" class="form-label">Descripción del Gasto</label>
-                    <textarea class="form-control" id="descripcion" name="descripcion"
-                              rows="2" placeholder="Breve descripción del servicio o producto"></textarea>
-                </div>
-                <div class="mb-3">
-                    <label for="observaciones" class="form-label">Observaciones Internas</label>
-                    <textarea class="form-control" id="observaciones" name="observaciones"
-                              rows="2" placeholder="Notas adicionales para contabilidad"></textarea>
+            {# ── Sección: Detalles y Observaciones ────────────────────── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-chat-left-text me-1"></i>Detalles y Observaciones
+                </p>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label for="descripcion" class="form-label">Descripción del Gasto</label>
+                        <textarea class="form-control" id="descripcion" name="descripcion"
+                                  rows="2" placeholder="Breve descripción del servicio o producto"></textarea>
+                    </div>
+                    <div class="col-12">
+                        <label for="observaciones" class="form-label">Observaciones Internas</label>
+                        <textarea class="form-control" id="observaciones" name="observaciones"
+                                  rows="2" placeholder="Notas adicionales para contabilidad"></textarea>
+                    </div>
                 </div>
             </div>
 
-            {# Sección: Integración Contable (v3.7.1) - §18 Pull Model #}
-            <div class="mb-4">
-                <h6 class="text-success border-bottom pb-2 mb-3">
-                    <i class="bi bi-calculator me-2"></i>Integración Contable
-                </h6>
-                <div class="mb-3">
-                    <label for="cuenta_gasto_uuid" class="form-label">Cuenta de Gasto/Egreso</label>
-                    <input type="hidden" id="cuenta_gasto_uuid" name="cuenta_gasto_uuid">
-                    <input type="text" class="form-control" id="cuenta_gasto_display"
-                           placeholder="Ej: 5105 - Gastos de Personal" readonly>
-                    <small class="form-text text-muted d-block mt-1">Contabilidad determinará la contrapartida automáticamente</small>
+            {# ── Sección: Integración Contable (v3.7.1) - §18 Pull Model ── #}
+            <div class="mb-2">
+                <p class="section-title">
+                    <i class="bi bi-calculator me-1"></i>Integración Contable
+                </p>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label for="cuenta_gasto_search" class="form-label">Cuenta PUC Nivel 6 (Gasto/Costo)</label>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="cuenta_gasto_search"
+                                   placeholder="Buscar cuenta nivel 6 (ej: 5105)..." autocomplete="off">
+                            <input type="hidden" id="cuenta_gasto_uuid" name="cuenta_gasto_uuid">
+                            <div id="cuenta-gasto-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050;">
+                                {# Sugerencias dinámicas #}
+                            </div>
+                        </div>
+                        <small class="text-muted">Vincule este gasto a una cuenta de control contable para automatizar el ciclo de egresos.</small>
+                    </div>
                 </div>
             </div>
         </form>
     </div>
 
-    <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="offcanvas-footer">
         <div class="d-flex justify-content-end gap-2">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
-            <button type="submit" class="btn btn-primary" id="btn-guardar-gasto" form="gasto-form">
-                <i class="bi bi-plus-lg me-1"></i>Crear Gasto
+            <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm px-4" id="btn-guardar-gasto" form="gasto-form">
+                <i class="bi bi-plus-circle me-1"></i>Crear Gasto
             </button>
         </div>
     </div>

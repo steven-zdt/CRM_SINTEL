@@ -6,6 +6,7 @@ Modelos de facturación por tenant.
 SSoT histórico: snapshots de emisor/receptor al momento de emisión.
 """
 
+import uuid
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator
@@ -46,6 +47,14 @@ class Factura(SintelTenantBaseModel):
         MIXTO    = 'MIXTO',    _('Mixto')
 
     # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
+
+    # Identificador único (v3.7.1: requerido para API lookup)
+    uuid = models.UUIDField(
+        default=uuid.uuid4, editable=False, unique=True, db_index=True,
+        verbose_name=_('UUID'),
+        help_text=_('Identificador único universal (usado en API URLs)'),
+        null=False, blank=False
+    )
 
     # Información básica
     numero = models.CharField(
@@ -109,16 +118,7 @@ class Factura(SintelTenantBaseModel):
     total = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
                                 validators=[MinValueValidator(Decimal('0.00'))])
 
-    # Retenciones (v2.62: Soporte para integración contable)
-    retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
-                                     validators=[MinValueValidator(Decimal('0.00'))],
-                                     verbose_name=_('Retención en la Fuente'))
-    reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
-                                  validators=[MinValueValidator(Decimal('0.00'))],
-                                  verbose_name=_('ReteICA'))
-    reteiva = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
-                                  validators=[MinValueValidator(Decimal('0.00'))],
-                                  verbose_name=_('ReteIVA'))
+    # Retenciones (v3.7.1: DEPRECATED - Movidas a Contabilidad.Retencion)
 
     # Formas de pago
     forma_pago = models.CharField(max_length=30, blank=True, null=True, verbose_name=_('Forma de pago'))
@@ -189,6 +189,60 @@ class Factura(SintelTenantBaseModel):
         """Verifica si la factura tiene una nota crédito asociada."""
         return hasattr(self, "nota_credito")
 
+    @property
+    def total_retencion_fuente(self) -> Decimal:
+        """Lee RETEFUENTE desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        if not self.pk:
+            return Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEFUENTE',
+                documento_origen_app='facturas',
+                documento_origen_modelo='Factura',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def total_reteica(self) -> Decimal:
+        """Lee RETEICA desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        if not self.pk:
+            return Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEICA',
+                documento_origen_app='facturas',
+                documento_origen_modelo='Factura',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def total_reteiva(self) -> Decimal:
+        """Lee RETEIVA desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        if not self.pk:
+            return Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEIVA',
+                documento_origen_app='facturas',
+                documento_origen_modelo='Factura',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return Decimal('0.00')
+
     def __str__(self):
         cufe_str = f" | {self.cufe}" if self.cufe else ""
         return f"{self.numero}{cufe_str}"
@@ -227,19 +281,31 @@ class ItemFactura(SintelTenantBaseModel):
     valor_iva = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
                                     validators=[MinValueValidator(Decimal('0.00'))])
 
-    # Retenciones por ítem (Opcional, v2.62)
+    # Retenciones por ítem (v3.7.1: DEPRECATED - Movidas a Contabilidad.Retencion)
     porcentaje_retefuente = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
-                                                validators=[MinValueValidator(Decimal('0.00'))])
+                                                validators=[MinValueValidator(Decimal('0.00'))],
+                                                null=True, blank=True, editable=False,
+                                                verbose_name=_('% Retención Fuente [DEPRECATED v3.7.1]'))
     valor_retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
-                                           validators=[MinValueValidator(Decimal('0.00'))])
+                                           validators=[MinValueValidator(Decimal('0.00'))],
+                                           null=True, blank=True, editable=False,
+                                           verbose_name=_('Valor Retención Fuente [DEPRECATED v3.7.1]'))
     porcentaje_reteiva = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
-                                             validators=[MinValueValidator(Decimal('0.00'))])
+                                             validators=[MinValueValidator(Decimal('0.00'))],
+                                             null=True, blank=True, editable=False,
+                                             verbose_name=_('% ReteIVA [DEPRECATED v3.7.1]'))
     valor_reteiva = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
-                                        validators=[MinValueValidator(Decimal('0.00'))])
+                                        validators=[MinValueValidator(Decimal('0.00'))],
+                                        null=True, blank=True, editable=False,
+                                        verbose_name=_('Valor ReteIVA [DEPRECATED v3.7.1]'))
     porcentaje_reteica = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
-                                             validators=[MinValueValidator(Decimal('0.00'))])
+                                             validators=[MinValueValidator(Decimal('0.00'))],
+                                             null=True, blank=True, editable=False,
+                                             verbose_name=_('% ReteICA [DEPRECATED v3.7.1]'))
     valor_reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
-                                        validators=[MinValueValidator(Decimal('0.00'))])
+                                        validators=[MinValueValidator(Decimal('0.00'))],
+                                        null=True, blank=True, editable=False,
+                                        verbose_name=_('Valor ReteICA [DEPRECATED v3.7.1]'))
 
     subtotal = models.DecimalField(max_digits=15, decimal_places=2,
                                    validators=[MinValueValidator(Decimal('0.00'))])
@@ -263,7 +329,7 @@ class ItemFactura(SintelTenantBaseModel):
         # # WARNING: v2.40: Auto-asignar empresa desde factura si no está asignada
         if not self.empresa_id and self.factura_id:
             self.empresa = self.factura.empresa
-        
+
         self.subtotal = (self.cantidad or Decimal('0.00')) * (self.valor_unitario or Decimal('0.00'))
         self.valor_iva = (self.subtotal or Decimal('0.00')) * ((self.porcentaje_iva or Decimal('0.00')) / Decimal('100.00'))
         self.total = (self.subtotal or Decimal('0.00')) + (self.valor_iva or Decimal('0.00'))
@@ -271,6 +337,60 @@ class ItemFactura(SintelTenantBaseModel):
         if self.unidad_medida and self.unidad_medida.upper() in {'ZZ'}:
             self.es_servicio = True
         super().save(*args, **kwargs)
+
+    @property
+    def total_retefuente_item(self) -> Decimal:
+        """[v3.7.1 Backward Compat] Suma total de Retencion(tipo='RETEFUENTE') para este item."""
+        if not self.pk:
+            return self.valor_retefuente or Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEFUENTE',
+                documento_origen_app='facturas',
+                documento_origen_modelo='ItemFactura',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return self.valor_retefuente or Decimal('0.00')
+
+    @property
+    def total_reteiva_item(self) -> Decimal:
+        """[v3.7.1 Backward Compat] Suma total de Retencion(tipo='RETEIVA') para este item."""
+        if not self.pk:
+            return self.valor_reteiva or Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEIVA',
+                documento_origen_app='facturas',
+                documento_origen_modelo='ItemFactura',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return self.valor_reteiva or Decimal('0.00')
+
+    @property
+    def total_reteica_item(self) -> Decimal:
+        """[v3.7.1 Backward Compat] Suma total de Retencion(tipo='RETEICA') para este item."""
+        if not self.pk:
+            return self.valor_reteica or Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEICA',
+                documento_origen_app='facturas',
+                documento_origen_modelo='ItemFactura',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return self.valor_reteica or Decimal('0.00')
 
 
 # --- DEPRECADO: Configuración de ingesta por correo (por tenant) ---

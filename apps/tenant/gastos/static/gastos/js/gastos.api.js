@@ -29,8 +29,17 @@
                     body: JSON.stringify(data)
                 });
                 if (!response.ok) {
-                    try { response.data = await response.json(); } catch(e) {}
-                    throw response;
+                    let errorData = {};
+                    try {
+                        errorData = await response.json();
+                    } catch(e) {
+                        errorData = { detail: `HTTP ${response.status}` };
+                    }
+                    const error = new Error('Gasto creation failed');
+                    error.status = response.status;
+                    error.data = errorData;
+                    console.error('[API] Gasto create error:', errorData);
+                    throw error;
                 }
                 return await response.json();
             },
@@ -41,8 +50,17 @@
                     body: JSON.stringify(data)
                 });
                 if (!response.ok) {
-                    try { response.data = await response.json(); } catch(e) {}
-                    throw response;
+                    let errorData = {};
+                    try {
+                        errorData = await response.json();
+                    } catch(e) {
+                        errorData = { detail: `HTTP ${response.status}` };
+                    }
+                    const error = new Error('Gasto update failed');
+                    error.status = response.status;
+                    error.data = errorData;
+                    console.error('[API] Gasto update error:', errorData);
+                    throw error;
                 }
                 return await response.json();
             },
@@ -77,7 +95,15 @@
             activa: `${RESOLUCION_ROOT}activa/`
         },
         contabilidad: {
-            cuentasGasto: '/api/v1/contabilidad/cuentas-contables/?tipo=GASTO&activa=true'
+            searchCuentas: (q) => `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(q)}&app_origen=gastos&activa=true&tipo=GASTO`,
+            getCuentaByUuid: (uuid) => `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}&app_origen=gastos`,
+            obtenerRetenciones: async function(nit) {
+                const response = await fetch(`/api/v1/contabilidad/retenciones/obtener-por-tercero/?nit=${encodeURIComponent(nit)}&tipo_tercero=PROVEEDOR&naturaleza=COMPRA`, {
+                    headers: window.Sintel.Gastos.getHeaders()
+                });
+                if (!response.ok) return null;
+                return await response.json();
+            }
         },
         proveedores: {
             list: '/api/v1/proveedores/'

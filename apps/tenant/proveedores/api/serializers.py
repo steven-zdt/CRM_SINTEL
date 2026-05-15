@@ -23,6 +23,21 @@ class NormalizationMixin:
     WARNING: v2.60: Mixin para normalización de datos de entrada (Zero Trust).
     Sanitiza strings y valida tipos de datos antes de persistir.
     """
+    def _get_empresa_id(self):
+        """WARNING: Zero Trust: Resuelve el ID de empresa de forma segura."""
+        # 1. Intentar desde contexto (SSoT para ViewSets)
+        empresa_id = self.context.get('empresa_id')
+        if empresa_id:
+            return empresa_id
+            
+        # 2. Fallback: Empresa Singleton del Tenant
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only('id').first()
+        if empresa:
+            return empresa.id
+        
+        raise serializers.ValidationError("No se pudo identificar la configuración de Empresa para este tenant.")
+
     def normalize_data(self, attrs):
         """
         Normaliza datos de entrada:
@@ -142,14 +157,14 @@ class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer)
         if not obj.cuenta_contable_uuid:
             return None
         from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self.context.get('request').user.perfil.empresa_id
+        empresa_id = self._get_empresa_id()
         return CuentaContableSelector.get_label_by_uuid(obj.cuenta_contable_uuid, empresa_id)
 
     def validate_cuenta_contable_uuid(self, value):
         """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
         if value:
             from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self.context.get('request').user.perfil.empresa_id
+            empresa_id = self._get_empresa_id()
             if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
                 raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value

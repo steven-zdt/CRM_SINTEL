@@ -79,39 +79,7 @@
       </div>
     </div>
 
-    {# Sección: Retenciones (v3.5.0) #}
-    <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-            <i class="bi bi-percent me-2"></i>Retenciones
-        </h6>
-        <div class="row g-3">
-            <div class="col-md-12 mb-2">
-                <label class="form-label fw-bold">Es Agente Retenedor:</label>
-                <span class="ms-2">{% if cliente.es_retenedor %}✅ Sí{% else %}❌ No{% endif %}</span>
-            </div>
-            
-            {% if cliente.es_retenedor %}
-            <div class="col-md-4">
-                <div class="p-2 border rounded-3 bg-light">
-                    <label class="form-label small fw-bold d-block">Retefuente</label>
-                    <span class="small">{% if cliente.aplica_retefuente %}✅ {{ cliente.retefuente_porcentaje }}%{% else %}❌ No aplica{% endif %}</span>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-2 border rounded-3 bg-light">
-                    <label class="form-label small fw-bold d-block">ReteICA</label>
-                    <span class="small">{% if cliente.aplica_reteica %}✅ {{ cliente.reteica_porcentaje }}%{% else %}❌ No aplica{% endif %}</span>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="p-2 border rounded-3 bg-light">
-                    <label class="form-label small fw-bold d-block">ReteIVA</label>
-                    <span class="small">{% if cliente.aplica_reteiva %}✅ {{ cliente.reteiva_porcentaje }}%{% else %}❌ No aplica{% endif %}</span>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
+
 
     {# Sección: Personas de Contacto (Solo lectura) #}
     <div class="mb-4">

@@ -13,7 +13,8 @@ import base64
 import logging
 from decimal import Decimal
 
-from django.db import IntegrityError, connection
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, connection, transaction
 from django.db.models import ProtectedError, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
@@ -24,6 +25,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
@@ -60,7 +62,8 @@ from django.conf import settings
 # # WARNING: DEPRECATED v2.40: DataTableSpec y DataTableServer eliminados - usar StandardResultsSetPagination
 from django.http import HttpResponse
 
-from apps.tenant.facturas.services import FacturaSelectors, FacturaServiceMixin
+from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.facturas.services import FacturaSelectors, FacturaServiceMixin, FacturaBusinessService
 from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
 from .serializers import (
     FacturaDetailSerializer,
@@ -82,7 +85,8 @@ def mini_error(message: str, code: str, status_code: int) -> Response:
     return Response({"error": code, "message": message}, status=status_code)
 
 
-class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
+class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
+
     """
     FACTURAS MODULE — CONTROL CONTABLE
     
@@ -118,7 +122,7 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
     pagination_class = StandardResultsSetPagination
     parser_classes = [JSONParser, FormParser, MultiPartParser]  # # WARNING: v2.40: JSON (principal) + FormParser (legacy) + MultiPartParser (upload)
     renderer_classes = [JSONRenderer]  # # WARNING: v2.40: Solo JSON (no BrowsableAPIRenderer)
-    
+
     # # WARNING: v2.95: EDICIÓN LIMITADA - PATCH permite cambios en campos específicos (vencimiento, estado, retenciones, formas de pago)
     # GET, DELETE y POST (solo upload-ubl) permitidos. PATCH permitido con restricciones en allowed_fields
     http_method_names = ['get', 'head', 'options', 'post', 'patch', 'delete']
@@ -169,6 +173,8 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
             qs = self.get_qs_detail().filter(empresa_id=empresa_id)
         elif self.action == "destroy":
             qs = Factura.objects.filter(empresa_id=empresa_id).only('id', 'estado', 'empresa_id')
+        elif self.action in ("partial_update", "update"):
+            qs = Factura.objects.filter(empresa_id=empresa_id)
         else:
             qs = self.get_qs_list(search=search).filter(empresa_id=empresa_id)
 
@@ -235,52 +241,41 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
     
     def partial_update(self, request: Request, *args, **kwargs) -> Response:
         """
-        Edición limitada: Solo fecha_vencimiento y estado.
+        Edición limitada: Solo campos permitidos via Service Layer.
 
-        # WARNING: IMPORTANTE: Solo se permiten cambios a:
-        - estado: Estado administrativo (BORRADOR, ENVIADA, ACEPTADA, RECHAZADA, ANULADA)
-        - estado_pago: Estado de pago (NO_PAGADA, PAGO_PARCIAL, PAGADA)
-        - fecha_vencimiento: Fecha de vencimiento del documento
-        - retefuente, reteica, reteiva: Campos de retenciones
-        - forma_pago, medio_pago_codigo, payment_due_date: Datos de formas de pago
-
-        Returns:
-            200 OK con factura actualizada (9 campos máximo) o 400 Bad Request si intenta otros campos
+        # WARNING: SINTEL v3.5: Delegación a BusinessService para DSV y Sanitización.
         """
         factura = self.get_object()
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+        empresa_id = get_or_create_profile(request.user).empresa_id
 
-        # Campos permitidos para edición (vencimiento, estado, estado de pago, retenciones, formas de pago y contabilidad)
-        allowed_fields = {
-            'fecha_vencimiento', 'estado', 'estado_pago', 
-            'retefuente', 'reteica', 'reteiva', 
-            'forma_pago', 'medio_pago_codigo', 'payment_due_date',
-            'cuenta_contable_uuid'
-        }
+        try:
+            with transaction.atomic():
+                factura = FacturaBusinessService.actualizar_factura_limitado(
+                    factura=factura,
+                    data=request.data,
+                    empresa_id=empresa_id
+                )
 
-        # Validar que solo intente editar campos permitidos
-        request_fields = set(request.data.keys()) if request.data else set()
-        forbidden_fields = request_fields - allowed_fields
+            serializer = self.get_serializer(factura)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
-        if forbidden_fields:
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except DjangoValidationError as e:
+            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
+            return Response({"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, IntegrityError, ProtectedError) as e:
             return Response(
-                {
-                    "error": "forbidden_fields",
-                    "detail": f"No se permite editar: {', '.join(sorted(forbidden_fields))}. "
-                              f"Solo se pueden editar: {', '.join(sorted(allowed_fields))}",
-                    "forbidden": list(forbidden_fields)
-                },
+                {"error": "update_failed", "detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Aplicar cambios permitidos
-        for field in allowed_fields:
-            if field in request.data:
-                setattr(factura, field, request.data[field])
-
-        factura.save(update_fields=list(request_fields & allowed_fields))
-
-        serializer = self.get_serializer(factura)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            log_up.error(f"[facturas:partial_update] Unexpected error: {str(e)}", extra={"factura_id": factura.id})
+            return Response(
+                {"error": "internal_error", "detail": "Ocurrió un error inesperado al actualizar la factura."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def create(self, request: Request, *args, **kwargs) -> Response:
         """
@@ -1440,7 +1435,6 @@ class FacturaViewSet(FacturaServiceMixin, viewsets.ReadOnlyModelViewSet):
                         'receptor_nit', 'receptor_razon_social', 'receptor_direccion', 'receptor_email', 'receptor_telefono',
                         'moneda', 'categoria', 'forma_pago', 'medio_pago_codigo', 'payment_due_date',
                         'subtotal', 'impuestos', 'total',
-                        'retefuente', 'reteica', 'reteiva',
                         'cuenta_contable_uuid',
                         'cufe', 'qr_url',
                         'anexos__pdf_file', 'anexos__ubl_xml', 'anexos__application_response_xml',

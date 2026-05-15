@@ -184,6 +184,7 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     ds_anulado = serializers.BooleanField(source='anulado', read_only=True)
     ds_numero_documento_proveedor = serializers.CharField(source='numero_documento_proveedor', read_only=True)
     cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, read_only=True)
+    cuenta_gasto_label = serializers.SerializerMethodField()
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
 
@@ -198,6 +199,15 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             return obj.numero_documento
         except Exception:
             return str(obj.consecutivo)
+
+    def get_cuenta_gasto_label(self, obj):
+        if not obj.cuenta_gasto_uuid:
+            return None
+        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+        return CuentaContableSelector.get_label_by_uuid(
+            empresa_id=obj.empresa_id,
+            uuid=obj.cuenta_gasto_uuid
+        )
 
     class Meta:
         model = DocumentoSoporte
@@ -216,6 +226,7 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             'ds_anulado',
             'ds_numero_documento_proveedor',
             'cuenta_gasto_uuid',
+            'cuenta_gasto_label',
         )
         read_only_fields = fields
 
@@ -234,6 +245,7 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     updated_at = serializers.DateTimeField(read_only=True)
     prefijo = serializers.CharField(source='resolucion_dian.prefijo', read_only=True)
     cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, required=False)
+    cuenta_gasto_label = serializers.SerializerMethodField()
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
 
@@ -258,24 +270,33 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'descripcion',
             'observaciones',
             'subtotal',
-            'retefuente_porcentaje',
-            'retefuente',
-            'reteica_porcentaje',
-            'reteica',
+            'total_retefuente',       # [NEW v3.7.1] Pull Model
+            'total_reteica',          # [NEW v3.7.1] Pull Model
+            'total_reteiva',          # [NEW v3.7.1] Pull Model
             'total',
             'adjunto',
             'activo',
             'anulado',
             'fecha_anulacion',
             'cuenta_gasto_uuid',
+            'cuenta_gasto_label',
             'created_at',
             'updated_at',
         )
         read_only_fields = (
             'id', 'empresa', 'resolucion_dian', 'prefijo', 'consecutivo', 
             'vendedor_nit', 'vendedor_nombre', 'vendedor_direccion', 'vendedor_telefono',
-            'subtotal', 'retefuente_porcentaje', 'retefuente', 'reteica_porcentaje', 'reteica', 'total', 
+            'subtotal', 'total_retefuente', 'total_reteica', 'total_reteiva', 'total', 
             'activo', 'anulado', 'fecha_anulacion', 'created_at', 'updated_at'
+        )
+
+    def get_cuenta_gasto_label(self, obj):
+        if not obj.cuenta_gasto_uuid:
+            return None
+        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+        return CuentaContableSelector.get_label_by_uuid(
+            empresa_id=obj.empresa_id,
+            uuid=obj.cuenta_gasto_uuid
         )
     
     def to_representation(self, instance):

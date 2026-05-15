@@ -36,6 +36,8 @@ from apps.tenant.contabilidad.api.serializers import (
     AsistenteIAInputSerializer,
     CatalogoMaestroNIIFDetailSerializer,
     CatalogoMaestroNIIFListSerializer,
+    ConfiguracionRetencionesDetailSerializer,
+    ConfiguracionRetencionesListSerializer,
     ContabilizarManualInputSerializer,
     CuentaContableDetailSerializer,
     CuentaContableListSerializer,
@@ -44,6 +46,8 @@ from apps.tenant.contabilidad.api.serializers import (
     MovimientoContableListSerializer,
     PeriodoContableDetailSerializer,
     PeriodoContableListSerializer,
+    RetencionDetailSerializer,
+    RetencionListSerializer,
     TipoComprobanteDetailSerializer,
     TipoComprobanteListSerializer,
     ReporteFinancieroInputSerializer,
@@ -53,10 +57,12 @@ from apps.tenant.contabilidad.api.serializers import (
 from apps.tenant.contabilidad.models import (
     AsientoContable,
     CatalogoMaestroNIIF,
+    ConfiguracionRetenciones,
     CuentaContable,
     MovimientoContable,
     PeriodoContable,
     ReglaContable,
+    Retencion,
     TipoComprobante,
 )
 from apps.tenant.contabilidad.services.selectors import (
@@ -112,13 +118,27 @@ class CuentaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenant
     def get_queryset(self):
         if self.action == "list":
             qs = CuentaContableSelector.get_qs_list().order_by('codigo')
+
+            # Filtro por app de origen (restringe a prefijos PUC relevantes)
             app_origen = self.request.query_params.get('app_origen', '').strip()
             if app_origen:
                 qs = filtrar_cuentas_por_app_origen(qs, app_origen)
-            # Soporte lookup por UUID para resolución de nombre desde apps externas (§18 HTTP pull)
+
+            # Filtro por prefijo de código (ej. codigo_prefix=15 para activos, 51 para gastos)
+            codigo_prefix = self.request.query_params.get('codigo_prefix', '').strip()
+            if codigo_prefix:
+                qs = qs.filter(codigo__startswith=codigo_prefix)
+
+            # solo_auxiliares=true → solo nivel 6 (unico nivel que recibe movimientos contables)
+            solo_auxiliares = self.request.query_params.get('solo_auxiliares', '').lower() == 'true'
+            if solo_auxiliares:
+                qs = qs.filter(nivel=6)
+
+            # Soporte lookup por UUID para resolucion de nombre desde apps externas (§18 HTTP pull)
             uuid_param = self.request.query_params.get('uuid', '').strip()
             if uuid_param:
                 qs = qs.filter(uuid=uuid_param)
+
             return qs
         elif self.action in ["retrieve", "render_offcanvas_detalle", "render_offcanvas_editar"]:
             return CuentaContableSelector.get_qs_detail()
@@ -291,13 +311,19 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             return self.handle_service_error(e)
 
     def destroy(self, request, *args, **kwargs):
-        try:
-            asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            asiento = get_asiento_by_identifier(asiento_identifier)
-            self.service.eliminar_asiento(asiento.id)
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Exception as e:
-            return self.handle_service_error(e)
+        identifier = str(kwargs.get('uuid') or kwargs.get('pk') or '')
+        if not identifier:
+            return Response({'error': 'missing_id', 'message': 'UUID requerido'}, status=status.HTTP_400_BAD_REQUEST)
+        deleted, _ = AsientoContable.objects.filter(uuid=identifier).delete()
+        if not deleted:
+            # Fallback: intentar por PK entero
+            try:
+                deleted, _ = AsientoContable.objects.filter(pk=int(identifier)).delete()
+            except (ValueError, TypeError):
+                pass
+        if not deleted:
+            return Response({'error': 'not_found', 'message': f'Asiento {identifier} no existe'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['post'], url_path='aprobar')
     def aprobar(self, request, **kwargs):
@@ -961,6 +987,176 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
             return self.handle_service_error(e)
 
 
+class ConfiguracionRetencionesViewSet(SintelDSVMixin, BaseTenantViewSet):
+    """
+    ViewSet para ConfiguracionRetenciones (v3.7.1).
+    Gestiona configuración de tasas de retención por tercero.
+    """
+    queryset = ConfiguracionRetenciones.objects.none()
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['tipo_tercero', 'tipo_retencion', 'naturaleza', 'activa']
+    search_fields = ['nit_tercero', 'tipo_tercero']
+    ordering_fields = ['tipo_tercero', 'nit_tercero', 'tipo_retencion']
+    ordering = ['tipo_tercero', 'nit_tercero']
+
+    def get_queryset(self):
+        """Retorna queryset optimizado para ConfiguracionRetenciones."""
+        return ConfiguracionRetenciones.objects.select_related('cuenta_retencion').only(
+            'id', 'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'porcentaje_por_defecto', 'activa', 'naturaleza', 'created_at',
+            'cuenta_retencion__uuid', 'cuenta_retencion__codigo', 'cuenta_retencion__nombre'
+        )
+
+    def get_serializer_class(self):
+        """Selecciona serializer según acción."""
+        if self.action == 'retrieve':
+            return ConfiguracionRetencionesDetailSerializer
+        return ConfiguracionRetencionesListSerializer
+
+
+class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
+    """
+    ViewSet para Retencion (v3.7.1).
+    Gestiona registros de retenciones aplicadas a documentos.
+
+    Pull Model: Las retenciones se vinculan a documentos en otras apps
+    vía (documento_origen_app, documento_origen_modelo, documento_origen_id).
+    """
+    queryset = Retencion.objects.none()
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = [
+        'tipo', 'reversada', 'documento_origen_app', 'documento_origen_modelo'
+    ]
+    search_fields = ['uuid', 'documento_origen_app', 'documento_origen_modelo']
+    ordering_fields = ['tipo', 'monto', 'fecha_creacion']
+    ordering = ['-fecha_creacion']
+    lookup_field = 'uuid'
+
+    def get_queryset(self):
+        """Retorna queryset optimizado para Retencion."""
+        return Retencion.objects.select_related(
+            'configuracion', 'asiento_contable'
+        ).only(
+            'id', 'uuid', 'tipo', 'porcentaje', 'base', 'monto',
+            'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id',
+            'reversada', 'fecha_creacion',
+            'configuracion__uuid', 'configuracion__tipo_tercero',
+            'asiento_contable__uuid', 'asiento_contable__numero_asiento'
+        )
+
+    def get_serializer_class(self):
+        """Selecciona serializer según acción."""
+        if self.action == 'retrieve':
+            return RetencionDetailSerializer
+        return RetencionListSerializer
+
+    @action(detail=False, methods=['get'], url_path='obtener-por-tercero')
+    def obtener_por_tercero(self, request):
+        """
+        GET /api/v1/contabilidad/retenciones/obtener-por-tercero/?nit=&tipo_tercero=&naturaleza=
+
+        Obtiene configuración de retenciones para un tercero específico.
+        Soporta fallback a defaults si no existe configuración específica.
+
+        Query params:
+        - nit: NIT del tercero (normalizado)
+        - tipo_tercero: CLIENTE, PROVEEDOR, EMPLEADO
+        - naturaleza: VENTA, COMPRA (default: VENTA)
+
+        Returns:
+            {
+                'aplica_retefuente': bool,
+                'retefuente_porcentaje': Decimal,
+                'aplica_reteica': bool,
+                'reteica_porcentaje': Decimal,
+                'aplica_reteiva': bool,
+                'reteiva_porcentaje': Decimal,
+            }
+        """
+        from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+
+        nit = request.query_params.get('nit')
+        tipo_tercero = request.query_params.get('tipo_tercero', 'CLIENTE')
+        naturaleza = request.query_params.get('naturaleza', 'VENTA')
+
+        if not nit:
+            return Response(
+                {'error': 'missing_nit', 'message': 'Parámetro nit es obligatorio'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            retenciones = RetencionesService.obtener_retenciones_desde_tercero(
+                nit=nit,
+                tipo_tercero=tipo_tercero,
+                naturaleza=naturaleza,
+            )
+
+            # Convertir Decimal a string para JSON
+            result = {
+                k: str(v) if isinstance(v, Decimal) else v
+                for k, v in retenciones.items()
+            }
+
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception('Error obteniendo retenciones')
+            return Response(
+                {'error': 'internal_error', 'message': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], url_path='obtener-por-documento')
+    def obtener_por_documento(self, request):
+        """
+        GET /api/v1/contabilidad/retenciones/obtener-por-documento/?app=&modelo=&id=
+
+        Obtiene todas las retenciones de un documento específico.
+
+        Query params:
+        - app: documento_origen_app (ej: facturas)
+        - modelo: documento_origen_modelo (ej: Factura, ItemFactura)
+        - id: documento_origen_id (ID del documento)
+
+        Returns:
+            [
+                {uuid, tipo, porcentaje, monto, ...},
+                ...
+            ]
+        """
+        from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+
+        app = request.query_params.get('app')
+        modelo = request.query_params.get('modelo')
+        doc_id = request.query_params.get('id')
+
+        if not all([app, modelo, doc_id]):
+            return Response(
+                {'error': 'missing_params', 'message': 'Parámetros app, modelo, id son obligatorios'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            retenciones = RetencionesService.listar_retenciones_por_documento(
+                documento_origen_app=app,
+                documento_origen_modelo=modelo,
+                documento_origen_id=int(doc_id),
+            )
+
+            serializer = RetencionListSerializer(retenciones, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception('Error listando retenciones')
+            return Response(
+                {'error': 'internal_error', 'message': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 # Lista de ViewSets para registro automático en el router
 VIEWSETS = [
     (r'cuentas-contables', CuentaContableViewSet, 'cuenta-contable'),
@@ -970,4 +1166,6 @@ VIEWSETS = [
     (r'catalogo-niif', CatalogoMaestroNIIFViewSet, 'catalogo-niif'),
     (r'tipos-comprobante', TipoComprobanteViewSet, 'tipo-comprobante'),
     (r'pendientes', DocumentosPendientesViewSet, 'pendientes'),
+    (r'retenciones', RetencionViewSet, 'retencion'),
+    (r'configuraciones-retenciones', ConfiguracionRetencionesViewSet, 'configuracion-retencion'),
 ]

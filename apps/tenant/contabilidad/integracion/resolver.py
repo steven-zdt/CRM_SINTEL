@@ -7,6 +7,7 @@ actual PUC account codes based on ConfiguracionContable rules and tenant setting
 This replaces the hardcoded MAPEO_CUENTAS dictionary with a database-driven lookup.
 """
 
+import re
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
@@ -15,6 +16,12 @@ from .excepciones import ReglaContableNoDefinidaError, TarifaNoVigenteError
 if TYPE_CHECKING:
     from datetime import date
     from ..models import ReglaContable, TarifaImpuesto
+
+# Matches RFC 4122 UUID format (version-agnostic)
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
 
 
 class ResolverCuentas:
@@ -63,7 +70,20 @@ class ResolverCuentas:
             ReglaContableNoDefinidaError: If no rule found
         """
         if cuenta_hint:
-            return cuenta_hint
+            hint_str = str(cuenta_hint)
+            if _UUID_RE.match(hint_str):
+                # cuenta_hint es UUID de CuentaContable — resolver a codigo PUC
+                from ..models import CuentaContable
+                row = CuentaContable.objects.filter(
+                    empresa_id=self.empresa_id,
+                    uuid=hint_str,
+                ).values('codigo').first()
+                if row:
+                    return row['codigo']
+                # UUID valido pero no encontrado en este tenant — caer a ReglaContable
+            else:
+                # Codigo PUC directo (ej: '130505') — usar sin lookup adicional
+                return hint_str
 
         from ..models import ReglaContable
 

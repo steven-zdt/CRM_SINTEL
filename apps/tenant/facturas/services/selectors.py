@@ -23,6 +23,7 @@ from apps.tenant.facturas.models import Factura, FacturaAnexos
 # --- Campos optimizados para alineación Serializers ↔ UI ---
 LIST_FIELDS = (
     "id",
+    "uuid",
     "numero",
     "naturaleza",
     "estado",
@@ -34,9 +35,6 @@ LIST_FIELDS = (
     "subtotal",
     "impuestos",
     "total",
-    "retefuente",
-    "reteica",
-    "reteiva",
     "forma_pago",
     "medio_pago_codigo",
     "payment_due_date",
@@ -51,6 +49,7 @@ LIST_FIELDS = (
 
 DETAIL_FIELDS = (
     "id",
+    "uuid",
     "numero",
     "prefijo",
     "consecutivo",
@@ -72,9 +71,6 @@ DETAIL_FIELDS = (
     "subtotal",
     "impuestos",
     "total",
-    "retefuente",
-    "reteica",
-    "reteiva",
     "forma_pago",
     "medio_pago_codigo",
     "payment_due_date",
@@ -129,46 +125,60 @@ class FacturaSelectors:
     @staticmethod
     def get_summary(empresa_id: int | None = None) -> dict[str, Any]:
         """
-        Calcula resumen neto de facturación.
+        Calcula resumen neto de facturación (Facturas - Notas Crédito).
+        
+        # WARNING: v3.7.1: Se corrige lógica para incluir facturas con NC 
+        y restar el total de la NC para obtener el valor neto real.
         """
-        base_filter = Q(nota_credito__isnull=True)
+        from apps.tenant.facturas.models import NotaCredito
+        
+        base_filter = Q()
         if empresa_id:
             base_filter &= Q(empresa_id=empresa_id)
         
-        ventas_qs = Factura.objects.filter(
-            base_filter,
-            naturaleza=Factura.Naturaleza.VENTA
-        ).aggregate(
-            subtotal_neto=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
-            impuestos_neto=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
-            total_neto=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00')),
-            cantidad=Count('id')
+        # 1. Agregación de Facturas (Bruto)
+        ventas_f = Factura.objects.filter(base_filter, naturaleza=Factura.Naturaleza.VENTA).aggregate(
+            sub=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
+            imp=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
+            tot=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00')),
+            qty=Count('id')
         )
         
-        compras_qs = Factura.objects.filter(
-            base_filter,
-            naturaleza=Factura.Naturaleza.COMPRA
-        ).aggregate(
-            subtotal_neto=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
-            impuestos_neto=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
-            total_neto=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00')),
-            cantidad=Count('id')
+        compras_f = Factura.objects.filter(base_filter, naturaleza=Factura.Naturaleza.COMPRA).aggregate(
+            sub=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
+            imp=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
+            tot=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00')),
+            qty=Count('id')
+        )
+
+        # 2. Agregación de Notas Crédito (Reversiones)
+        ventas_nc = NotaCredito.objects.filter(base_filter, factura__naturaleza=Factura.Naturaleza.VENTA).aggregate(
+            sub=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
+            imp=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
+            tot=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00'))
         )
         
+        compras_nc = NotaCredito.objects.filter(base_filter, factura__naturaleza=Factura.Naturaleza.COMPRA).aggregate(
+            sub=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
+            imp=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
+            tot=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00'))
+        )
+
         return {
             "ventas": {
-                "subtotal_neto": ventas_qs["subtotal_neto"],
-                "impuestos_neto": ventas_qs["impuestos_neto"],
-                "total_neto": ventas_qs["total_neto"],
-                "cantidad": ventas_qs["cantidad"]
+                "subtotal_neto": ventas_f["sub"] - ventas_nc["sub"],
+                "impuestos_neto": ventas_f["imp"] - ventas_nc["imp"],
+                "total_neto": ventas_f["tot"] - ventas_nc["tot"],
+                "cantidad": ventas_f["qty"]
             },
             "compras": {
-                "subtotal_neto": compras_qs["subtotal_neto"],
-                "impuestos_neto": compras_qs["impuestos_neto"],
-                "total_neto": compras_qs["total_neto"],
-                "cantidad": compras_qs["cantidad"]
+                "subtotal_neto": compras_f["sub"] - compras_nc["sub"],
+                "impuestos_neto": compras_f["imp"] - compras_nc["imp"],
+                "total_neto": compras_f["tot"] - compras_nc["tot"],
+                "cantidad": compras_f["qty"]
             }
         }
+
 
     @staticmethod
     def obtener_anexo_xml(factura: Factura, tipo: str) -> tuple[HttpResponse | dict[str, Any], int]:

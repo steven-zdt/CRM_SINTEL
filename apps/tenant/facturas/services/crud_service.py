@@ -87,3 +87,22 @@ class FacturaCRUDService:
         # Items se eliminan por CASCADE en el modelo
         factura.delete()
         logger.info(f"Factura {factura.numero} eliminada exitosamente.")
+
+    @staticmethod
+    @transaction.atomic
+    def actualizar(factura: Factura, update_data: dict[str, Any]) -> Factura:
+        """
+        Actualiza campos específicos de una factura.
+        
+        # WARNING: SINTEL v3.5: Persistencia transaccional.
+        """
+        for field, value in update_data.items():
+            setattr(factura, field, value)
+        
+        # SINTEL v3.5: Forzar timestamp de actualización
+        if hasattr(factura, 'updated_at'):
+            factura.save(update_fields=list(update_data.keys()) + ['updated_at'])
+        else:
+            factura.save(update_fields=list(update_data.keys()))
+            
+        return factura

@@ -258,20 +258,22 @@
                 }
             }
 
-            // v3.5 Dual Accounting: Cuenta Activo (Balance)
+            // v3.5 Dual Accounting: Cuenta Activo (Balance) — Código 15 (Activos Fijos)
             if (d.querySelector('#activo-cuenta-activo-busqueda')) {
                 w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
                     inputSelector: '#activo-cuenta-activo-busqueda',
                     resultsSelector: '#activo-cuenta-activo-resultados',
-                    uuidSelector: '#activo-cuenta-activo-uuid'
+                    uuidSelector: '#activo-cuenta-activo-uuid',
+                    codigoPrefix: '15'
                 });
             }
-            // v3.5 Dual Accounting: Cuenta Depreciacion (Gasto/Acumulada)
+            // v3.5 Dual Accounting: Cuenta Depreciacion (Gasto/Acumulada) — Código 51 (Gastos)
             if (d.querySelector('#activo-cuenta-depreciacion-busqueda')) {
                 w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
                     inputSelector: '#activo-cuenta-depreciacion-busqueda',
                     resultsSelector: '#activo-cuenta-depreciacion-resultados',
-                    uuidSelector: '#activo-cuenta-depreciacion-uuid'
+                    uuidSelector: '#activo-cuenta-depreciacion-uuid',
+                    codigoPrefix: '51'
                 });
             }
         }

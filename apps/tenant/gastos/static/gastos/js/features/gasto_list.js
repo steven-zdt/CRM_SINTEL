@@ -11,11 +11,23 @@
         table: null,
         tableId: "#grid-gastos",
 
-        init: function() {
+        init: function(retryCount = 0) {
             const container = document.querySelector(this.tableId);
             if (this.table || !container) return;
 
             console.log("[GastoList] Inicializando tabla v2.62...");
+
+            // Verificar si TabulatorFactory está disponible
+            if (!window.TabulatorFactory) {
+                if (retryCount < 5) {
+                    console.warn("[GastoList] TabulatorFactory no disponible, reintentando en 500ms...");
+                    setTimeout(() => this.init(retryCount + 1), 500);
+                } else {
+                    console.error("[GastoList] TabulatorFactory nunca estuvo disponible después de 5 intentos");
+                    window.UIManager?.notifyError("Error al cargar la tabla de gastos");
+                }
+                return;
+            }
 
             // Mostrar grid y ocultar spinner
             container.style.display = 'block';
@@ -25,13 +37,21 @@
             try {
                 const apiUrl = window.Sintel.Gastos.API?.gastos?.list || '/api/v1/gastos/';
                 const columns = this.getColumnas();
-                
+
+                console.log("[GastoList] Creando tabla con API:", apiUrl);
                 this.table = window.TabulatorFactory.create(this.tableId, apiUrl, columns, {
                     initialSort: [{ field: "ds_fecha", dir: "desc" }],
                     placeholder: "No se encontraron gastos registrados"
                 });
+
+                if (!this.table) {
+                    console.warn("[GastoList] TabulatorFactory.create retornó null, reintentando...");
+                    this.table = null; // Limpiar
+                    setTimeout(() => this.init(0), 1000);
+                }
             } catch (error) {
                 console.error("[GastoList] Error al inicializar Tabulator:", error);
+                window.UIManager?.notifyError("Error al inicializar tabla de gastos");
             }
         },
 
@@ -183,35 +203,57 @@
             }
         },
 
-        loadAndShowOffcanvas: async function(url, offcanvasId) {
+        loadAndShowOffcanvas: async function(url) {
             const container = document.querySelector("#offcanvas-container-gastos");
-            if (!container) return;
+            if (!container) {
+                console.error("[GastoList] Contenedor offcanvas no encontrado");
+                return;
+            }
 
             try {
                 const response = await fetch(url, {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 });
                 const html = await response.text();
-                container.innerHTML = html;
-                
-                const offcanvasEl = container.querySelector('.offcanvas');
-                if (offcanvasEl) {
-                    if (offcanvasId) offcanvasEl.id = offcanvasId;
-                    
-                    // IMPORTANTE: Primero mostrar para asegurar que Bootstrap lo registre
-                    window.UIManager?.handleOffcanvas(offcanvasEl, 'show');
-                    
-                    // Notificar al editor para inicializar el formulario si existe
-                    const formGasto = offcanvasEl.querySelector('#gasto-form');
-                    if (formGasto) {
-                        document.body.dispatchEvent(new CustomEvent('gasto-editor-init', { detail: { form: formGasto } }));
-                    }
-                    
-                    const formRes = offcanvasEl.querySelector('#resolucion-form');
-                    if (formRes) {
-                        document.body.dispatchEvent(new CustomEvent('resolucion-editor-init', { detail: { form: formRes } }));
-                    }
+
+                // Limpiar cualquier offcanvas anterior
+                const existingOffcanvas = container.querySelector('.offcanvas');
+                if (existingOffcanvas && window.bootstrap?.Offcanvas) {
+                    const instance = window.bootstrap.Offcanvas.getInstance(existingOffcanvas);
+                    if (instance) instance.hide();
                 }
+
+                container.innerHTML = html;
+
+                // Esperar a que el DOM se actualice
+                setTimeout(() => {
+                    const offcanvasEl = container.querySelector('.offcanvas');
+                    if (!offcanvasEl) {
+                        console.error("[GastoList] Offcanvas no encontrado en el contenedor después de inyectar HTML");
+                        return;
+                    }
+
+                    try {
+                        // Crear instancia de Bootstrap Offcanvas
+                        const offcanvas = new window.bootstrap.Offcanvas(offcanvasEl);
+                        offcanvas.show();
+
+                        // Notificar al editor para inicializar el formulario si existe
+                        const formGasto = offcanvasEl.querySelector('#gasto-form');
+                        if (formGasto) {
+                            document.body.dispatchEvent(new CustomEvent('gasto-editor-init', { detail: { form: formGasto } }));
+                        }
+
+                        const formRes = offcanvasEl.querySelector('#resolucion-form');
+                        if (formRes) {
+                            document.body.dispatchEvent(new CustomEvent('resolucion-editor-init', { detail: { form: formRes } }));
+                        }
+                    } catch (bootstrapError) {
+                        console.error("[GastoList] Error al inicializar Bootstrap Offcanvas:", bootstrapError);
+                        window.UIManager?.notifyError("Error al abrir el formulario");
+                    }
+                }, 10);
+
             } catch (error) {
                 console.error("[GastoList] Error cargando offcanvas:", error);
                 window.UIManager?.notifyError("No se pudo cargar el formulario");
@@ -226,12 +268,23 @@
         table: null,
         tableId: "#grid-resoluciones",
 
-        init: function() {
+        init: function(retryCount = 0) {
             const container = document.querySelector(this.tableId);
             if (this.table || !container) return;
 
             console.log('[ResolucionList] Inicializando tabla de resoluciones v2.62...');
-            
+
+            // Verificar si TabulatorFactory está disponible
+            if (!window.TabulatorFactory) {
+                if (retryCount < 5) {
+                    console.warn("[ResolucionList] TabulatorFactory no disponible, reintentando en 500ms...");
+                    setTimeout(() => this.init(retryCount + 1), 500);
+                } else {
+                    console.error("[ResolucionList] TabulatorFactory nunca estuvo disponible después de 5 intentos");
+                }
+                return;
+            }
+
             try {
                 // Mostrar grid y ocultar spinner
                 container.style.display = 'block';
@@ -340,9 +393,15 @@
     window.Sintel.Gastos.List = GastoList; // Legacy alias
 
     // --- Orquestación de Eventos ---
-    
+
     // 1. Inicialización para carga inicial (si existe)
     function setup() {
+        console.log('[GastoList] Setup iniciado');
+        console.log('[GastoList] window.TabulatorFactory disponible:', !!window.TabulatorFactory);
+        console.log('[GastoList] window.Sintel.Gastos.API disponible:', !!window.Sintel?.Gastos?.API);
+        console.log('[GastoList] Contenedor #grid-gastos existe:', !!document.querySelector('#grid-gastos'));
+        console.log('[GastoList] Contenedor #grid-resoluciones existe:', !!document.querySelector('#grid-resoluciones'));
+
         GastoList.init();
         ResolucionList.init();
     }
@@ -353,26 +412,42 @@
         setup();
     }
 
-    // 2. Manejo Centralizado de Offcanvas vía HTMX (v2.62.3 compatible)
-    // Escucha cuando HTMX inyecta contenido en el contenedor de offcanvas de gastos
+    // 2. Manejo de Offcanvas vía HTMX
     document.body.addEventListener('htmx:afterSettle', (evt) => {
         const target = evt.detail.target;
         if (target && target.id === 'offcanvas-container-gastos') {
-            const offcanvasEl = target.querySelector('.offcanvas');
-            if (offcanvasEl && window.UIManager?.handleOffcanvas) {
-                console.log('[GastoList] Detectado offcanvas vía HTMX, abriendo:', offcanvasEl.id);
-                window.UIManager.handleOffcanvas(offcanvasEl, 'show');
-            }
+            setTimeout(() => {
+                const offcanvasEl = target.querySelector('.offcanvas');
+                if (offcanvasEl && window.bootstrap?.Offcanvas) {
+                    try {
+                        const offcanvas = new window.bootstrap.Offcanvas(offcanvasEl);
+                        offcanvas.show();
+                        console.log('[GastoList] Offcanvas abierto vía HTMX:', offcanvasEl.id);
+
+                        // Inicializar editor si existe
+                        const formGasto = offcanvasEl.querySelector('#gasto-form');
+                        if (formGasto) {
+                            document.body.dispatchEvent(new CustomEvent('gasto-editor-init', { detail: { form: formGasto } }));
+                        }
+                    } catch (error) {
+                        console.error('[GastoList] Error abriendo offcanvas HTMX:', error);
+                    }
+                }
+            }, 10);
         }
     });
 
-    // ⚠️ v2.62.4: Prevención de TypeError en Bootstrap (Scroll Lock)
-    // Limpia cualquier instancia de offcanvas antes de que HTMX remueva el elemento del DOM
     document.body.addEventListener('htmx:beforeCleanupElement', (evt) => {
-        const el = evt.detail.elt;
-        if (el && el.classList.contains('offcanvas')) {
-            console.log('[GastoList] Limpiando instancia offcanvas vía UIManager antes de swap:', el.id);
-            window.UIManager?.destroyOffcanvas(el);
+        const el = evt?.detail?.elt;
+        if (el && el.classList && el.classList.contains('offcanvas')) {
+            try {
+                if (window.bootstrap?.Offcanvas) {
+                    const instance = window.bootstrap.Offcanvas.getInstance(el);
+                    if (instance) instance.hide();
+                }
+            } catch (e) {
+                console.warn('[GastoList] Error limpiando offcanvas:', e);
+            }
         }
     });
 

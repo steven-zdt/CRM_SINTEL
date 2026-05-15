@@ -49,7 +49,8 @@ class ExtractorNomina(AbstractExtractor):
             'salario_base', 'auxilio_transporte', 'otros_devengos',
             'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
             'neto_pagar',
-            'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido'
+            'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido',
+            'empleado__cuenta_contable_uuid',
         )
 
         return [self._mapear_a_dto(r) for r in registros]
@@ -119,11 +120,16 @@ class ExtractorNomina(AbstractExtractor):
                 lado='HABER'
             ))
 
-        # 3. Neto a Pagar (HABER - Pasivo)
+        # 3. Neto a Pagar (HABER - Pasivo) — cuenta_contable_uuid del empleado como hint
+        cuenta_empleado_hint = (
+            str(nomina.empleado.cuenta_contable_uuid)
+            if nomina.empleado.cuenta_contable_uuid else None
+        )
         lineas.append(LineaTransaccion(
-            concepto="PASIVO_NOMINA_POR_PAGAR",
+            concepto='PASIVO_NOMINA_POR_PAGAR',
             monto=nomina.neto_pagar,
-            lado='HABER'
+            lado='HABER',
+            cuenta_hint=cuenta_empleado_hint,
         ))
 
         return TransaccionEconomica(

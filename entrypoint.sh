@@ -29,17 +29,6 @@ wait_for_db() {
             echo "✅ PostgreSQL disponible."
             return 0
         fi
-        
-        # Si psql no está disponible, intentar con nc como fallback
-        if ! command -v psql >/dev/null 2>&1; then
-            if command -v nc >/dev/null 2>&1; then
-                if nc -z "$DB_HOST" "$DB_PORT" >/dev/null 2>&1; then
-                    echo "✅ PostgreSQL disponible (verificado con nc)."
-                    return 0
-                fi
-            fi
-        fi
-        
         echo "   Base de datos no disponible, esperando... (intento $i/60)"
         sleep 1
     done
@@ -97,6 +86,10 @@ if [ "$ARGS_STR" = "python manage.py runserver 0.0.0.0:8000" ] || \
     python manage.py create_public_tenant --domain "${PUBLIC_PRIMARY_DOMAIN}" || exit 1
     python manage.py ensure_public_domains --primary "${PUBLIC_PRIMARY_DOMAIN}" || exit 1
     echo "✅ Tenant público y dominios garantizados"
+
+    echo "👤 Garantizando superusuario admin..."
+    python manage.py ensure_admin || echo "⚠️  ensure_admin tuvo advertencias (no fatal)"
+    echo "✅ Superusuario dev garantizado (user: sintel_dev / pass: admin123)"
 
     echo "📦 Recolectando archivos estáticos..."
     python manage.py collectstatic --noinput --clear 2>&1 | tail -5 || echo "⚠️  collectstatic tuvo advertencias (no fatal)"

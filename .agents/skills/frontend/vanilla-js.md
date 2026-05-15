@@ -62,23 +62,6 @@ try {
 
 ## 4. Reglas Estrictas de Eliminación (UI)
 
-Las reglas de negocio que restringen eliminaciones (ej. "No se puede eliminar un cliente activo") deben reflejarse estrictamente en la interfaz **sin automatizar la resolución** por el usuario.
+Ver patrón completo en [crud-fsd.md § C. Eliminar (Bloqueo Estricto)](crud-fsd.md).
 
-**[CRITICAL HOTFIX]**: Nunca implementes "auto-inactivación" o flujos de dos pasos automáticos (PATCH inactivo + DELETE) al presionar el botón de eliminar. 
-Si el registro está activo y la regla prohíbe su eliminación, **bloquea la acción en JS**, muestra un error claro y obliga al usuario a inactivarlo **manualmente** mediante el formulario de edición.
-
-```javascript
-// FORMA CORRECTA
-async function deleteRegistro(rowData) {
-    const isActive = rowData.activo === true || rowData.activo === 'true';
-    
-    if (isActive) {
-        showError(`El registro está activo. Debe inactivarlo manualmente editando su registro antes de poder eliminarlo.`);
-        return; // BLOQUEO STRICTO
-    }
-
-    if (!confirm('¿Está seguro de eliminar este registro de forma permanente?')) return;
-    
-    // Procede con DELETE...
-}
-```
+Regla: si `activo === true`, bloquear DELETE y mostrar error — nunca auto-inactivar.

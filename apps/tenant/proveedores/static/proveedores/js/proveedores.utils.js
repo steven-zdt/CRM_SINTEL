@@ -8,11 +8,16 @@
 
     const proveedoresUtils = {
         /**
-         * Configura el autocompletado de cuentas contables.
+         * Configura el autocompletado de cuentas contables con sincronización en cascada.
          * @param {Object} config - Configuración de elementos del DOM.
+         * @param {string} config.inputId - ID del input de búsqueda
+         * @param {string} config.resultsId - ID del div de resultados
+         * @param {string} config.hiddenId - ID del input oculto UUID
+         * @param {Array<string>} config.cascadeTriggers - IDs de campos que disparan recarga (tipo_persona, regimen_tributario, etc)
+         * @param {Function} config.onSelect - Callback opcional al seleccionar
          */
         setupCuentaAutocomplete: function (config) {
-            const { inputId, resultsId, hiddenId, onSelect } = config;
+            const { inputId, resultsId, hiddenId, cascadeTriggers, onSelect } = config;
             const input = document.getElementById(inputId);
             const results = document.getElementById(resultsId);
             const hidden = document.getElementById(hiddenId);
@@ -21,21 +26,24 @@
 
             let debounceTimer;
 
-            input.addEventListener('input', function () {
-                clearTimeout(debounceTimer);
-                const q = this.value.trim();
-
+            const performSearch = async (q) => {
                 if (q.length < 2) {
                     results.classList.add('d-none');
                     return;
                 }
 
-                debounceTimer = setTimeout(async () => {
-                    const response = await w.Sintel.Proveedores.API.searchCuentas(q);
-                    if (response.ok && response.data) {
-                        renderResults(response.data);
-                    }
-                }, 300);
+                const response = await w.Sintel.Proveedores.API.searchCuentas(q);
+                if (response.ok && response.data) {
+                    const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
+                    renderResults(data);
+                }
+            };
+
+            input.addEventListener('input', function () {
+                clearTimeout(debounceTimer);
+                const q = this.value.trim();
+
+                debounceTimer = setTimeout(() => performSearch(q), 300);
             });
 
             function renderResults(data) {
@@ -68,6 +76,21 @@
                     results.classList.add('d-none');
                 }
             });
+
+            // Actualización en cascada: cuando cambian campos asociados, recarga opciones
+            if (cascadeTriggers && Array.isArray(cascadeTriggers)) {
+                cascadeTriggers.forEach(fieldId => {
+                    const field = document.getElementById(fieldId);
+                    if (field) {
+                        field.addEventListener('change', function () {
+                            // Limpiar búsqueda anterior y resultados
+                            input.value = '';
+                            hidden.value = '';
+                            results.classList.add('d-none');
+                        });
+                    }
+                });
+            }
         }
     };
 

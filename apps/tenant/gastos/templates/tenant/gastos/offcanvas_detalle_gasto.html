@@ -46,10 +46,23 @@
             </div>
         </div>
 
-        {# Sección: Proveedor #}
+        {# Sección: Integración Contable (v3.7.1) #}
+        <div class="mb-4">
+            <h6 class="text-success border-bottom pb-2 mb-3">
+                <i class="bi bi-calculator me-2"></i>Integración Contable
+            </h6>
+            <div class="row g-3">
+                <div class="col-12">
+                    <span class="text-muted d-block small">Cuenta de Gasto/Costo</span>
+                    <strong id="cuenta_gasto_label_display">{{ instance.cuenta_gasto_label|default:'No vinculada' }}</strong>
+                </div>
+            </div>
+        </div>
+
+        {# Sección: Información del Proveedor #}
         <div class="mb-4">
             <h6 class="text-primary border-bottom pb-2 mb-3">
-                <i class="bi bi-person-badge me-2"></i>Proveedor
+                <i class="bi bi-person-badge me-2"></i>Información del Proveedor
             </h6>
             <div class="row g-3">
                 <div class="col-12">
@@ -83,12 +96,12 @@
                         <span>${{ instance.subtotal }}</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2 text-danger">
-                        <span class="text-muted">ReteFuente ({{ instance.retefuente_porcentaje|floatformat:0 }}%):</span>
-                        <span>- ${{ instance.retefuente }}</span>
+                        <span class="text-muted">ReteFuente:</span>
+                        <span>- ${{ instance.retefuente_calculada }}</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2 text-danger">
-                        <span class="text-muted">ReteICA ({{ instance.reteica_porcentaje|floatformat:4 }}%):</span>
-                        <span>- ${{ instance.reteica }}</span>
+                        <span class="text-muted">ReteICA:</span>
+                        <span>- ${{ instance.reteica_calculada }}</span>
                     </div>
                     <hr>
                     <div class="d-flex justify-content-between align-items-center">

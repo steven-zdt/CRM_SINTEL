@@ -46,6 +46,7 @@ Use Flash mode for quick, high-frequency work where the user needs the answer mo
 
 Response contract:
 
+0. **Define the success check first** — the exact command or observable that confirms the fix worked. Do not act without one.
 1. Start with the result or next concrete action.
 2. Keep only the key evidence: file paths, commands, statuses, or official URLs.
 3. Use 2 to 6 bullets only when bullets make the answer easier to scan.
@@ -63,6 +64,8 @@ Response contract:
 
 ## Finish
 
-1. Summarize changed behavior, not every edited line.
-2. Report exact validation commands and outcomes.
-3. Update `MEMORY.md` after structural fixes or significant bugs.
+1. Run the success check defined at step 0. If it passes → report `RESUELTO: <evidencia>` and **STOP**.
+2. If check fails → different approach, never the same fix again. After 2 failures → escalate and STOP.
+3. Summarize changed behavior, not every edited line.
+4. Report exact validation commands and outcomes.
+5. Update `MEMORY.md` after structural fixes or significant bugs.

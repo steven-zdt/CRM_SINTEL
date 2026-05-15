@@ -81,9 +81,38 @@ def get_serializer_context(self):
     return context
 ```
 
+## REGLA CRITICA — Nunca `request.user.perfil` en serializers
+
+```python
+# PROHIBIDO — AttributeError si user no tiene TenantProfile
+empresa_id = self.context.get('request').user.perfil.empresa_id
+
+# CORRECTO — Helper seguro en NormalizationMixin
+def _get_empresa_id(self):
+    empresa_id = self.context.get('empresa_id')       # inyectado por ViewSet
+    if empresa_id:
+        return empresa_id
+    empresa = Empresa.objects.only('id').first()       # fallback singleton
+    if empresa:
+        return empresa.id
+    raise serializers.ValidationError("No se encontro configuracion de Empresa.")
+```
+
+**Por qué falla:** `perfil` es una relación OneToOne inversa. Si el `User` autenticado no tiene un `TenantProfile`, Django lanza `RelatedObjectDoesNotExist` (subclase de `AttributeError`). Esto ocurre en GET list antes de cualquier guard de permisos.
+
+**Inyectar desde ViewSet:**
+```python
+def get_serializer_context(self):
+    context = super().get_serializer_context()
+    empresa = self.get_empresa()
+    if empresa:
+        context['empresa_id'] = empresa.id
+    return context
+```
+
 ## Reglas
 - Serializer `List` = solo read, `fields = read_only_fields = (...)`, Zero Waste
 - Serializer `Detail` = create/update, con validaciones
-- `empresa_id` del context — nunca del request directamente en el serializer
+- `empresa_id` via `_get_empresa_id()` helper — NUNCA `request.user.perfil` en serializer
 - `NormalizationMixin` antes de `ModelSerializer` en MRO
 - Campos FK: retornar ID en inputs, objeto anidado en outputs (SerializerMethodField)

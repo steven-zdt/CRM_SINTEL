@@ -110,16 +110,15 @@ class CreateTenantOnboardingAPIView(APIView):
         data = request.data or {}
         company_name = data.get("company_name")
         admin_email = data.get("admin_email")
-        admin_password = data.get("admin_password")
         schema_name = data.get("schema_name")
 
-        if not company_name or not admin_email or not admin_password:
-            return Response({"detail": "company_name, admin_email y admin_password son requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+        if not company_name or not admin_email:
+            return Response({"detail": "company_name y admin_email son requeridos"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             from apps.public.tenants.services.onboarding import create_onboarding_ott
 
-            result = create_onboarding_ott(company_name, admin_email, admin_password, schema_name)
+            result = create_onboarding_ott(company_name, admin_email, schema_name)
             return Response({"success": True, "redirect_url": result["redirect_url"], "ott": result["ott"]}, status=status.HTTP_201_CREATED)
         except Exception as exc:
             logger.error("Error creating onboarding tenant: %s", exc, exc_info=True)

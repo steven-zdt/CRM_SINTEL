@@ -495,3 +495,108 @@ class EstadoResultadosOutputSerializer(serializers.Serializer):
     costos = EstadoResultadosDetalleSerializer(many=True)
     totales = serializers.DictField()
 
+
+# ============================================================================
+# RETENCIONES (v3.7.1)
+# ============================================================================
+
+class ConfiguracionRetencionesListSerializer(serializers.ModelSerializer):
+    """
+    Serializer mínimo para listado de configuraciones de retenciones.
+    """
+    clase_meta = None
+
+    class Meta:
+        from apps.tenant.contabilidad.models import ConfiguracionRetenciones
+        model = ConfiguracionRetenciones
+        fields = [
+            'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'porcentaje_por_defecto', 'activa', 'naturaleza', 'created_at'
+        ]
+        read_only_fields = ['uuid', 'created_at']
+
+
+class ConfiguracionRetencionesDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo para detalle de configuración de retenciones.
+    """
+    cuenta_retencion_data = serializers.SerializerMethodField()
+
+    class Meta:
+        from apps.tenant.contabilidad.models import ConfiguracionRetenciones
+        model = ConfiguracionRetenciones
+        fields = [
+            'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'porcentaje_por_defecto', 'cuenta_retencion', 'cuenta_retencion_data',
+            'activa', 'naturaleza', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['uuid', 'created_at', 'updated_at']
+
+    def get_cuenta_retencion_data(self, obj):
+        """Retorna datos de cuenta contable asociada."""
+        if obj.cuenta_retencion:
+            return {
+                'uuid': str(obj.cuenta_retencion.uuid),
+                'codigo': obj.cuenta_retencion.codigo,
+                'nombre': obj.cuenta_retencion.nombre,
+            }
+        return None
+
+
+class RetencionListSerializer(serializers.ModelSerializer):
+    """
+    Serializer mínimo para listado de retenciones.
+    """
+    class Meta:
+        from apps.tenant.contabilidad.models import Retencion
+        model = Retencion
+        fields = [
+            'uuid', 'tipo', 'porcentaje', 'monto', 'documento_origen_app',
+            'documento_origen_modelo', 'documento_origen_id', 'reversada',
+            'fecha_creacion'
+        ]
+        read_only_fields = ['uuid', 'fecha_creacion']
+
+
+class RetencionDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo para detalle de retención.
+    """
+    configuracion_data = serializers.SerializerMethodField()
+    asiento_data = serializers.SerializerMethodField()
+
+    class Meta:
+        from apps.tenant.contabilidad.models import Retencion
+        model = Retencion
+        fields = [
+            'uuid', 'tipo', 'porcentaje', 'base', 'monto',
+            'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id',
+            'asiento_contable', 'asiento_data',
+            'configuracion', 'configuracion_data',
+            'aplicada_por_cliente', 'aplicada_por_proveedor',
+            'reversada', 'retencion_reversada_por',
+            'fecha_creacion', 'notas'
+        ]
+        read_only_fields = ['uuid', 'fecha_creacion']
+
+    def get_configuracion_data(self, obj):
+        """Retorna datos de configuración asociada."""
+        if obj.configuracion:
+            return {
+                'uuid': str(obj.configuracion.uuid),
+                'tipo_tercero': obj.configuracion.tipo_tercero,
+                'nit_tercero': obj.configuracion.nit_tercero,
+                'porcentaje': str(obj.configuracion.porcentaje_por_defecto),
+            }
+        return None
+
+    def get_asiento_data(self, obj):
+        """Retorna datos de asiento contable asociado."""
+        if obj.asiento_contable:
+            return {
+                'uuid': str(obj.asiento_contable.uuid),
+                'numero_asiento': obj.asiento_contable.numero_asiento,
+                'fecha': obj.asiento_contable.fecha.isoformat(),
+            }
+        return None
+

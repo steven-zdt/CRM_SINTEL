@@ -52,7 +52,22 @@
                 const form = offcanvasEl.querySelector('form');
                 if (form) {
                     form.addEventListener('submit', handleSubmit);
-                    
+
+                    // ── Listeners para botones de guardar ────────────────────
+                    const btnGuardar = offcanvasEl.querySelector('[id="btn-guardar-empleado"]');
+                    const btnCrear = offcanvasEl.querySelector('[id="btn-crear-empleado"]');
+
+                    if (btnGuardar) {
+                        btnGuardar.addEventListener('click', () => {
+                            form.dispatchEvent(new Event('submit'));
+                        });
+                    }
+                    if (btnCrear) {
+                        btnCrear.addEventListener('click', () => {
+                            form.dispatchEvent(new Event('submit'));
+                        });
+                    }
+
                     // Inicializar buscador de cuentas contables (v3.5.0)
                     initCuentaContableSearch(offcanvasEl);
                 }
@@ -71,14 +86,13 @@
      * Handler para submit del formulario
      */
     function handleSubmit(e) {
-        // Aplicar DOM Shield: remover atributos name de campos visibles
-        // y capturar valores desde inputs hidden
+        e.preventDefault();
         const form = e.target;
-        
+
         // Validar campos requeridos
         const requiredFields = form.querySelectorAll('[required]');
         let isValid = true;
-        
+
         requiredFields.forEach(field => {
             if (!field.value.trim()) {
                 isValid = false;
@@ -89,14 +103,165 @@
         });
 
         if (!isValid) {
-            e.preventDefault();
             if (window.UIManager) {
                 window.UIManager.notifyError('Por favor complete todos los campos requeridos');
             }
             return false;
         }
 
-        return true;
+        // Recolectar datos del formulario
+        submitEmpleado(form);
+        return false;
+    }
+
+    /**
+     * Enviar formulario de empleado (crear o editar)
+     */
+    async function submitEmpleado(form) {
+        // Determinar si es crear o editar
+        const offcanvas = form.closest('.offcanvas');
+        const empleadoUuid = offcanvas?.dataset.empleadoUuid;
+
+        // Recolectar todos los campos del formulario
+        const data = {
+            // ── Identificación ──
+            tipo_documento: form.querySelector('[name="tipo_documento"]')?.value || '',
+            numero_documento: form.querySelector('[name="numero_documento"]')?.value || '',
+            primer_nombre: form.querySelector('[name="primer_nombre"]')?.value || '',
+            segundo_nombre: form.querySelector('[name="segundo_nombre"]')?.value || null,
+            primer_apellido: form.querySelector('[name="primer_apellido"]')?.value || '',
+            segundo_apellido: form.querySelector('[name="segundo_apellido"]')?.value || null,
+
+            // ── Contacto ──
+            email: form.querySelector('[name="email"]')?.value || '',
+            telefono: form.querySelector('[name="telefono"]')?.value || null,
+
+            // ── Seguridad Social (REQUERIDOS) ──
+            eps: form.querySelector('[name="eps"]')?.value || '',
+            afp: form.querySelector('[name="afp"]')?.value || '',
+            arl: form.querySelector('[name="arl"]')?.value || '',
+            nivel_riesgo_arl: form.querySelector('[name="nivel_riesgo_arl"]')?.value || 'I',
+
+            // ── Información Laboral ──
+            fecha_ingreso: form.querySelector('[name="fecha_ingreso"]')?.value || '',
+            estado: form.querySelector('[name="estado"]')?.value || 'ACTIVO',
+            fecha_retiro: form.querySelector('[name="fecha_retiro"]')?.value || null,
+        };
+
+        // ── Contabilidad (Opcional) ──
+        const cuentaUuid = form.querySelector('[name="cuenta_contable_uuid"]')?.value;
+        if (cuentaUuid && cuentaUuid.trim()) {
+            data.cuenta_contable_uuid = cuentaUuid;
+        }
+
+        const submitBtn = form.querySelector('[id="btn-guardar-empleado"]') ||
+                          form.querySelector('[id="btn-crear-empleado"]');
+
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
+        }
+
+        try {
+            let response;
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]')?.value || ''
+            };
+
+            if (empleadoUuid) {
+                // PATCH: Editar empleado
+                response = await fetch(`${API_URL}${empleadoUuid}/`, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify(data)
+                });
+            } else {
+                // POST: Crear empleado
+                response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(data)
+                });
+            }
+
+            if (response.ok) {
+                const result = await response.json();
+
+                // Cerrar offcanvas
+                const offcanvasEl = form.closest('.offcanvas');
+                if (offcanvasEl && window.bootstrap) {
+                    const bsOffcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
+                    if (bsOffcanvas) bsOffcanvas.hide();
+                }
+
+                // Notificar éxito
+                const message = result.message || (empleadoUuid ? 'Empleado actualizado correctamente' : 'Empleado creado correctamente');
+                if (window.UIManager) {
+                    window.UIManager.notifySuccess(message);
+                }
+
+                // Recargar tabla
+                if (window.Sintel.Empleados.EmpleadoList) {
+                    window.Sintel.Empleados.EmpleadoList.reload();
+                }
+            } else {
+                const errorData = await response.json();
+                let errorMsg = 'Error al guardar el empleado';
+
+                console.error(`${MOD} Error response:`, errorData);
+
+                // Parsear errores de validación
+                if (typeof errorData === 'object' && errorData !== null) {
+                    // Intenta con 'detail' si es string (mensaje del servidor)
+                    if (typeof errorData.detail === 'string' && errorData.detail) {
+                        errorMsg = errorData.detail
+                            // Limpiar formato de Python dict
+                            .replace(/'/g, '"')
+                            .replace(/ErrorDetail\(string=/g, '')
+                            .replace(/, code='[^']*'\)/g, '')
+                            .replace(/[\[\]{}]/g, '')
+                            .trim();
+                    }
+                    // Si no, intenta parsear como objeto
+                    else if (typeof errorData.detail === 'object') {
+                        const fieldErrors = Object.entries(errorData.detail)
+                            .map(([field, msgs]) => {
+                                const message = Array.isArray(msgs) ? msgs[0] : msgs;
+                                return `${field}: ${message}`;
+                            })
+                            .join('\n');
+                        if (fieldErrors) errorMsg = fieldErrors;
+                    }
+                    // Fallback a 'error' o 'message'
+                    else if (errorData.error) {
+                        errorMsg = errorData.error;
+                    } else if (errorData.message) {
+                        errorMsg = errorData.message;
+                    }
+                    // Última opción: JSON stringify
+                    else {
+                        errorMsg = JSON.stringify(errorData);
+                    }
+                }
+
+                if (window.UIManager) {
+                    window.UIManager.notifyError(`Error: ${errorMsg}`);
+                }
+            }
+        } catch (error) {
+            console.error(`${MOD} Error en submitEmpleado:`, error);
+            if (window.UIManager) {
+                window.UIManager.notifyError('Error inesperado al guardar el empleado');
+            }
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = empleadoUuid ?
+                    '<i class="bi bi-check-lg me-1"></i>Actualizar Empleado' :
+                    '<i class="bi bi-plus-circle me-1"></i>Crear Empleado';
+            }
+        }
     }
 
     /**
@@ -172,9 +337,9 @@
      * [v3.5.0] Inicializar buscador asíncrono de cuentas contables
      */
     function initCuentaContableSearch(container) {
-        const searchInput = container.querySelector('#cuenta_contable_search');
-        const uuidInput = container.querySelector('#cuenta_contable_uuid');
-        const suggestions = container.querySelector('#cuenta-contable-resultados');
+        const searchInput = container.querySelector('#empleado-cuenta_contable_label');
+        const uuidInput = container.querySelector('#empleado-cuenta_contable_uuid');
+        const suggestions = container.querySelector('#empleado-cuenta-resultados');
 
         if (!searchInput || !uuidInput || !suggestions) return;
 

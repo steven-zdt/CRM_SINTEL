@@ -100,10 +100,10 @@
      */
     delete: async function(id) {
       if (!id) throw new Error('ID de asiento requerido');
-      
       const response = await w.http('DELETE', `${API_BASE}${id}/`);
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+        const msg = response.data?.message || response.data?.detail || response.data?.error || `HTTP ${response.status}`;
+        throw new Error(msg);
       }
     },
 

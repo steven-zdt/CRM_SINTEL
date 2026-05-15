@@ -406,6 +406,178 @@ TOTAL DEBE == TOTAL HABER == subtotal
 - PROHIBIDO usar `lado='DEBE'` para impuestos/retenciones (su natural es `'HABER'`).
 - PROHIBIDO el patrón Push (app fuente llama función de contabilidad) — solo Pull (extractor de contabilidad lee app fuente).
 
+### 18.7. [CRITICAL] APP_ORIGEN_PREFIJOS — Single Source of Truth (SSoT) para Códigos PUC
+
+**REGLA MANDATORIA:** Todos los códigos PUC (Plan de Cuentas) de vinculación contable para **TODAS las apps de negocio** (facturas, clientes, gastos, empleados, inventario, proveedores) DEBEN **ÚNICAMENTE** obtenerse desde:
+
+```
+apps/tenant/contabilidad/services/selectors.py:APP_ORIGEN_PREFIJOS
+```
+
+#### 18.7.1. Estructura Centralizada
+
+```python
+# SSoT — Single Source of Truth
+APP_ORIGEN_PREFIJOS: dict = {
+    'facturas': ['130505', '130510', '1305', '135515', ..., '4175', '418', ...],
+    'clientes': ['1305', '130505', '4135', '413505', '413510', '1375'],
+    'gastos': ['233505', '233550', ..., '51', '6'],
+    'empleados': ['5105', '5110', ..., '51', '25', '2370', ...],
+    'inventario': ['143505', '143510', '1435', '613505', '6135', '4135', '51', '15'],
+    'proveedores': ['2205', '220501', '2335', '233505', '2365', '236505-540', '2805', '280505'],
+}
+
+def filtrar_cuentas_por_app_origen(qs, app_origen: str):
+    """Aplica filtro de seguridad por app — permite solo prefijos autorizados."""
+    prefijos = APP_ORIGEN_PREFIJOS.get(app_origen, [])
+    # ...
+```
+
+#### 18.7.2. Cómo Acceder a los Prefijos (Patrones Autorizados)
+
+**PATRÓN 1: ViewSet — Búsqueda de Cuentas (Frontend → API)**
+
+```python
+# En contabilidad/api/viewsets.py:CuentaContableViewSet
+
+def get_queryset(self):
+    qs = CuentaContableSelector.get_qs_list()
+    
+    # Frontend envía: ?app_origen=inventario&codigo_prefix=51
+    app_origen = self.request.query_params.get('app_origen', '').strip()
+    if app_origen:
+        qs = filtrar_cuentas_por_app_origen(qs, app_origen)  # ← Usa SSoT
+    
+    codigo_prefix = self.request.query_params.get('codigo_prefix', '').strip()
+    if codigo_prefix:
+        qs = qs.filter(codigo__startswith=codigo_prefix)
+    
+    return qs
+```
+
+**PATRÓN 2: Frontend JavaScript — Búsqueda Autocomplete**
+
+```javascript
+// En inventario.api.js
+searchCuentas: async (query, options = {}) => {
+  const params = {
+    search: query,
+    app_origen: 'inventario',  // ← Declara su app_origen
+    activa: 'true'
+  };
+  if (options.codigoPrefix) {
+    params.codigo_prefix = options.codigoPrefix;
+  }
+  return w.http('GET', '/api/v1/contabilidad/cuentas-contables/', params);
+}
+```
+
+El backend resuelve automáticamente qué prefijos son válidos (`APP_ORIGEN_PREFIJOS['inventario']`).
+
+**PATRÓN 3: Backend Service — Extracción de Cuentas**
+
+```python
+# En gastos/services/business_service.py o integracion/extractores/gastos.py
+
+from apps.tenant.contabilidad.services.selectors import (
+    APP_ORIGEN_PREFIJOS,
+    filtrar_cuentas_por_app_origen,
+    CuentaContableSelector
+)
+
+# Obtener cuentas permitidas para gastos
+prefijos_gastos = APP_ORIGEN_PREFIJOS['gastos']  # ← Lee desde SSoT
+qs = CuentaContableSelector.get_qs_list()
+qs = filtrar_cuentas_por_app_origen(qs, 'gastos')
+
+# Ahora qs contiene SOLO cuentas con prefijos autorizados para gastos
+for cuenta in qs:
+    print(f"{cuenta.codigo} - {cuenta.nombre}")
+```
+
+#### 18.7.3. Prohibiciones Estrictas
+
+**❌ PROHIBIDO — Hardcoding de Prefijos:**
+
+```python
+# ❌ INCORRECTO — Hardcoded prefixes scattered in code
+GASTOS_PREFIJOS = ['51', '52', '53']  # En gastos/models.py
+FACTURAS_PREFIJOS = ['4135', '4175']   # En facturas/api/viewsets.py
+
+def buscar_cuentas(app):
+    if app == 'gastos':
+        return CuentaContable.objects.filter(codigo__in=GASTOS_PREFIJOS)
+```
+
+**✅ CORRECTO — Centralizado en APP_ORIGEN_PREFIJOS:**
+
+```python
+# ✅ CORRECTO — Single source of truth
+from apps.tenant.contabilidad.services.selectors import (
+    APP_ORIGEN_PREFIJOS,
+    filtrar_cuentas_por_app_origen
+)
+
+def buscar_cuentas(app_origen):
+    qs = CuentaContable.objects.all()
+    return filtrar_cuentas_por_app_origen(qs, app_origen)
+```
+
+**❌ PROHIBIDO — Hardcodear en Fixtures o Data Seeds:**
+
+```python
+# ❌ INCORRECTO — Seeds con prefijos hardcoded
+factories.CuentaFactory(codigo='5100', nombre='Gastos')
+factories.CuentaFactory(codigo='5105', nombre='Sueldos')
+```
+
+**✅ CORRECTO — Validar contra SSoT:**
+
+```python
+# ✅ CORRECTO — Código validado contra APP_ORIGEN_PREFIJOS
+prefijos_permitidos = APP_ORIGEN_PREFIJOS['empleados']
+assert any(codigo.startswith(p) for p in prefijos_permitidos), \
+    f"Código {codigo} no está permitido para empleados"
+```
+
+#### 18.7.4. Actualización de Prefijos (Proceso Obligatorio)
+
+Cuando se agreguen nuevos códigos PUC para una app:
+
+1. **Identificar:** ¿Qué app de negocio necesita el nuevo código? (ej: inventario necesita depreciación → '51')
+2. **Centralizar:** Agregar el código ÚNICAMENTE a `APP_ORIGEN_PREFIJOS[<app>]` en `selectors.py`
+3. **Documentar:** Describir en comentario inline por qué ese app necesita ese código
+4. **Validar:** Verificar que el nuevo prefijo no conflictúe con otra app
+5. **Testear:** Probar búsqueda desde frontend para verificar que aparecen resultados
+
+**NO hacer:**
+- ❌ Crear tabla `AppPrefixes` nueva
+- ❌ Agregar campo en modelo `CuentaContable` para prefijos por app
+- ❌ Distribuir prefijos en múltiples archivos
+
+#### 18.7.5. Auditoría Periódica
+
+**Verificación automática:** Ejecutar anualmente (o al agregar apps nuevas):
+
+```bash
+# Script: tools/audit_app_origen_prefijos.py
+# Verifica que NO haya hardcoded prefijos en otras apps
+grep -r "PREFIJOS\|codigo__in\|codigo__startswith" \
+  --include="*.py" \
+  apps/tenant/{facturas,clientes,gastos,empleados,inventario,proveedores} \
+  | grep -v "contabilidad/services/selectors.py"
+```
+
+Si encuentra matches → error, requiere migración a `APP_ORIGEN_PREFIJOS`.
+
+#### 18.7.6. Suma
+
+- **Donde viven:** `apps/tenant/contabilidad/services/selectors.py:APP_ORIGEN_PREFIJOS`
+- **Cómo se accede:** `from apps.tenant.contabilidad.services.selectors import APP_ORIGEN_PREFIJOS, filtrar_cuentas_por_app_origen`
+- **No se duplican:** Prohibido hardcoding en otras apps
+- **Se validan:** Mediante `filtrar_cuentas_por_app_origen()` en backend
+- **Mejoras futuras:** Migrar a Django admin si se requiere UI de gestión sin código
+
 ## [AI-AGENTS] 20. Arquitectura de Agentes IA Especializados (Asistente Contable)
 
 ### 20.1. Principio de Diseño
@@ -522,6 +694,19 @@ Si la clave no está configurada, el endpoint devuelve `HTTP 400` con mensaje de
 - **Levantar servicios:** `make up` (web:8000, db:5432, redis:6379, celery)
 - **Detener:** `make down` | **Logs:** `make logs` | **Shell:** `make shell`
 - **Directo:** `docker compose up --build`
+- **REGLA CRITICA — Healthcheck PostgreSQL:** El healthcheck del servicio `db` DEBE usar `psql -c 'SELECT 1'`, NUNCA `pg_isready`. `pg_isready` solo verifica TCP y produce falso-positivo durante la inicialización del DB. Ver `skills/workflow/docker-services.md`.
+- **REGLA CRITICA — Admin dev:** `ensure_admin` crea automáticamente `sintel_dev` / `admin123` en cada `make up`. Username reservado para dev — NO colisiona con usuarios de tenant. `ensure_admin` NUNCA sobreescribe contraseñas de usuarios existentes. NO usar `createsuperuser`. Para limpiar BD: `make down` (incluye `-v`).
+
+### Serializers — Obtener empresa_id (REGLA CRITICA)
+- **PROHIBIDO en serializers:** `self.context.get('request').user.perfil.empresa_id` — lanza `AttributeError: 'User' object has no attribute 'perfil'` cuando el user no tiene `TenantProfile` asociado. Afecta GET list/detail porque el serializer se ejecuta antes de cualquier guard de perfil.
+- **Patrón correcto:** Agregar `_get_empresa_id()` a `NormalizationMixin` con dos niveles: (1) `self.context.get('empresa_id')` si el ViewSet lo inyecta, (2) fallback `Empresa.objects.only('id').first()`. Ver `serializers.py` de inventario como referencia.
+- **Patrón en ViewSet:** Inyectar `empresa_id` en `get_serializer_context()` para que el serializer no necesite acceder al `request.user` directamente.
+
+### Onboarding de Tenants Privados (Contraseñas)
+- **REGLA ABSOLUTA:** Las contraseñas de owners de tenants privados (`home.sintel.com`, etc.) se crean SIEMPRE y SOLO por el propio usuario a través del email de activación. NUNCA de forma automática.
+- **Flujo único autorizado:** `crear_tenant_con_owner()` → `set_unusable_password()` → email con token → `/activate?token=` → `process_activation()` → `user.set_password(password_elegido_por_owner)`.
+- **Prohibido en onboarding:** `set_password(...)`, `make_random_password()`, `create_user_service(password=...)`. Solo `set_unusable_password()`.
+- **`ensure_admin`** es para el superusuario Django Admin dev (`sintel_dev`) únicamente. NUNCA se usa en el flujo de tenant.
 
 ### Migraciones Multi-Tenant
 - **Tenants:** `make migrate-tenants` / `docker compose exec web python manage.py migrate_schemas`
@@ -671,3 +856,94 @@ document.addEventListener('sintel:cliente:created', (e) => {
 
 - Toda PR que modifique archivos `.js` o templates DEBE verificar que no hay `<script src>` cross-app ni llamadas a `window.Sintel.<OtraApp>` desde fuera de esa app.
 - Un agente que detecte una violacion DEBE reportarla al usuario antes de continuar, sin propagarla.
+
+## [TESTING] 24. Patrones Obligatorios para Tests Multi-Tenant
+
+**Post-mortem: Bug 2026-05-15** — Tests de permisos CRUD fallaban con `AssertionError: 405 != 201/200` para el usuario `admin_user` incluso en DEBUG. Causa: usuarios creados en esquema incorrecto, rol `STAFF` inexistente, sin `TenantProfile` en el tenant.
+
+### 24.1. Regla de Tres Esquemas
+
+| Modelo | Esquema | Como crearlo en tests |
+|--------|---------|----------------------|
+| `User` (AUTH_USER_MODEL) | **public** | `with schema_context(get_public_schema_name()): User.objects.create_user(...)` |
+| `TenantMembership` | **public** | `with schema_context(get_public_schema_name()): TenantMembership.objects.create(...)` |
+| `TenantProfile` | **tenant activo** | `TenantProfile.objects.create(...)` (sin schema_context, ya estamos en tenant) |
+| `Empresa`, `CategoriaItem`, etc. | **tenant activo** | `Empresa.objects.create(...)` directamente |
+
+**[PROHIBIDO]** Crear `User` o `TenantMembership` sin el `schema_context` del esquema public en tests de tenant. Esto causa que `request.user.is_authenticated == False` en runtime, bloqueando `_check_enforced_mode` con un falso `405`.
+
+### 24.2. SSoT de Roles (solo estos 3 existen)
+
+```
+ADMIN     → TenantProfile.rol='ADMIN'     → Lectura + Escritura + Admin
+OPERADOR  → TenantProfile.rol='OPERADOR'  → Lectura + Escritura limitada
+VISOR     → TenantProfile.rol='VISOR'     → Solo lectura
+```
+
+**[PROHIBIDO]** Usar `rol='STAFF'`, `rol='USER'` o cualquier otro rol en `TenantMembership` o `TenantProfile`. No existen en `RolTenant` (`apps/tenant/perfil/models.py`) y causan fallos silenciosos de permisos.
+
+### 24.3. setUp Canónico para Tests de Permisos
+
+```python
+from django_tenants.utils import get_public_schema_name, schema_context
+from django.contrib.auth import get_user_model
+from rest_framework.test import APIClient
+from tests.tenant.base_test import SintelTenantTestCase
+
+User = get_user_model()
+
+class TestMiModeloCRUD(SintelTenantTestCase):
+
+    def setUp(self):
+        super().setUp()
+
+        # 1. Empresa singleton (requerida por get_empresa_singleton() y _get_empresa_id())
+        self.empresa = Empresa.objects.create(
+            razon_social="Test", nit="900000001", singleton_key=1
+        )
+
+        # 2. Usuarios en esquema PUBLIC
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            self.admin_user = User.objects.create_user(
+                username="admin@test.com", email="admin@test.com", is_active=True
+            )
+            self.visor_user = User.objects.create_user(
+                username="visor@test.com", email="visor@test.com", is_active=True
+            )
+
+        # 3. TenantProfile en esquema TENANT (conexion ya activa desde super().setUp())
+        from apps.tenant.perfil.models import TenantProfile
+        TenantProfile.objects.create(user=self.admin_user, empresa=self.empresa, rol='ADMIN')
+        TenantProfile.objects.create(user=self.visor_user, empresa=self.empresa, rol='VISOR')
+
+        # 4. TenantMembership en esquema PUBLIC
+        with schema_context(public_schema):
+            from apps.public.tenants.models import TenantMembership
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.admin_user, rol='ADMIN', is_active=True
+            )
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.visor_user, rol='VISOR', is_active=True
+            )
+
+        # 5. Clientes API — UNO POR ROL (no reutilizar self.api_client)
+        domain = self.domain.domain
+        self.admin_client = APIClient(HTTP_HOST=domain)
+        self.admin_client.force_authenticate(user=self.admin_user)
+        self.visor_client = APIClient(HTTP_HOST=domain)
+        self.visor_client.force_authenticate(user=self.visor_user)
+```
+
+### 24.4. Arquitectura de _check_enforced_mode
+
+`BaseViewSet._check_enforced_mode(request)` implementa la siguiente logica en inventario:
+
+```
+¿request.user autenticado?  → No  → 405 (fallo silencioso si usuario mal creado)
+¿metodo SAFE (GET)?         → Si  → Permitido para todos
+¿IsTenantAdmin OK?          → Si  → Permitido (en DEBUG siempre True)
+                            → No  → 405 "Solo ADMIN puede crear/editar/eliminar"
+```
+
+**Referencia completa:** `apps/tenant/inventario/.agent/docs/TESTING_MULTI_TENANT_PATTERNS.md`

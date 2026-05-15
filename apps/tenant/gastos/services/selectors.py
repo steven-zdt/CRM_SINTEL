@@ -37,8 +37,6 @@ DOCUMENTO_DETAIL_FIELDS = (
     'id', 'consecutivo', 'fecha', 'total', 'subtotal',
     'categoria_contable', 'descripcion', 'observaciones',
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
-    'retefuente_porcentaje', 'retefuente',
-    'reteica_porcentaje', 'reteica',
     'cuenta_gasto_uuid',
     'resolucion_dian_id', 'proveedor_id',
     'created_at', 'updated_at'

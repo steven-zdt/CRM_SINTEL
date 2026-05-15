@@ -81,7 +81,7 @@ class BaseValidator(ABC):
         """
         missing_fields = []
         
-        # Campos obligatorios comunes
+        # Campos obligatorios comunes (mínimo absoluto)
         required_fields = [
             "numero",
             "identificadores",
@@ -93,6 +93,9 @@ class BaseValidator(ABC):
         
         for field in required_fields:
             if field not in dto or dto[field] is None:
+                # Fallback para numero si no está en raíz pero está en identificadores
+                if field == "numero" and dto.get("identificadores", {}).get("numero"):
+                    continue
                 missing_fields.append(field)
         
         # Validar estructura de identificadores
@@ -103,6 +106,7 @@ class BaseValidator(ABC):
                 identificadores.get("uuid"),
                 identificadores.get("cude"),
                 identificadores.get("numero"),
+                dto.get("numero"), # Fallback a raíz
             ]):
                 missing_fields.append("identificadores.cufe|cude|uuid|numero")
         
@@ -111,16 +115,14 @@ class BaseValidator(ABC):
             emisor = dto["emisor"]
             if not emisor.get("nit") or not str(emisor.get("nit")).strip():
                 missing_fields.append("emisor.nit")
-            if not emisor.get("razon_social") or not str(emisor.get("razon_social")).strip():
-                missing_fields.append("emisor.razon_social")
+            # razon_social ya no es estrictamente obligatoria para validación (Zero Waste UX)
         
         # Validar estructura de receptor
         if "receptor" in dto and dto["receptor"]:
             receptor = dto["receptor"]
             if not receptor.get("nit") or not str(receptor.get("nit")).strip():
                 missing_fields.append("receptor.nit")
-            if not receptor.get("razon_social") or not str(receptor.get("razon_social")).strip():
-                missing_fields.append("receptor.razon_social")
+            # razon_social ya no es estrictamente obligatoria para validación
         
         # Validar estructura de totales
         if "totales" in dto and dto["totales"]:

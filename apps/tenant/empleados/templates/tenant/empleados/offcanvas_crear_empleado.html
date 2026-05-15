@@ -1,153 +1,227 @@
-{# offcanvas_crear_empleado.html - Formulario de creación de Empleado v2.61 #}
-{% load static %}
+{# offcanvas_crear_empleado.html - Offcanvas para CREAR empleado v2.62 #}
+{# Feature-Sliced: Template modular solo para creación #}
+{# Estilos alineados con clientes/proveedores v2.62 #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="empleadoOffcanvas" aria-labelledby="empleadoOffcanvasLabel">
-    <div class="offcanvas-header border-bottom bg-light">
-        <h5 class="offcanvas-title" id="empleadoOffcanvasLabel">
-            <i class="bi bi-person-plus me-2"></i>Nuevo Empleado
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+{# CSS scoped: solo afecta este offcanvas, no interfiere con otros estilos #}
+<style>
+  #offcanvas-empleado {
+    width: 720px !important;
+  }
+  #offcanvas-empleado .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-empleado .section-divider {
+    margin-bottom: 1.75rem;
+  }
+  #offcanvas-empleado .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.01em;
+  }
+  #offcanvas-empleado .form-control,
+  #offcanvas-empleado .form-select {
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #offcanvas-empleado .form-control:focus,
+  #offcanvas-empleado .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,.12);
+  }
+  #offcanvas-empleado .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  #offcanvas-empleado .section-title.s-primary   { color: #0d6efd; border-color: #cfe2ff; }
+  #offcanvas-empleado .section-title.s-success   { color: #198754; border-color: #d1e7dd; }
+  #offcanvas-empleado .section-title.s-info      { color: #0dcaf0; border-color: #cff4fc; }
+  #offcanvas-empleado .section-title.s-warning   { color: #dc8500; border-color: #fff3cd; }
+  #offcanvas-empleado .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+    flex-shrink: 0;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end d-flex flex-column" tabindex="-1" id="offcanvas-empleado" aria-labelledby="offcanvas-empleado-label">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-empleado-label">
+      <i class="bi bi-person-plus-fill text-primary me-2"></i>Nuevo Empleado
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body flex-grow-1 overflow-y-auto">
+    <div id="form-empleado-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="empleado-form" method="POST" onsubmit="return false;">
+
+      {# ── 1. Identificación ──────────────────────────────────────── #}
+      <div class="section-divider">
+        <p class="section-title s-primary">
+          <i class="bi bi-card-text"></i>Identificación
+        </p>
+        <div class="row g-3">
+          <div class="col-6">
+            <label for="empleado-tipo_documento" class="form-label">Tipo Documento *</label>
+            <select class="form-select" id="empleado-tipo_documento" name="tipo_documento" required>
+              <option value="">Seleccionar...</option>
+              <option value="CC">Cédula de Ciudadanía</option>
+              <option value="CE">Cédula de Extranjería</option>
+              <option value="PA">Pasaporte</option>
+              <option value="PPT">PPT</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label for="empleado-numero_documento" class="form-label">Número Documento *</label>
+            <input type="text" class="form-control" id="empleado-numero_documento" name="numero_documento"
+                   required placeholder="Ej: 1054862354">
+          </div>
+          <div class="col-6">
+            <label for="empleado-primer_nombre" class="form-label">Primer Nombre *</label>
+            <input type="text" class="form-control" id="empleado-primer_nombre" name="primer_nombre"
+                   required placeholder="Nombre">
+          </div>
+          <div class="col-6">
+            <label for="empleado-segundo_nombre" class="form-label">Segundo Nombre</label>
+            <input type="text" class="form-control" id="empleado-segundo_nombre" name="segundo_nombre"
+                   placeholder="Opcional">
+          </div>
+          <div class="col-6">
+            <label for="empleado-primer_apellido" class="form-label">Primer Apellido *</label>
+            <input type="text" class="form-control" id="empleado-primer_apellido" name="primer_apellido"
+                   required placeholder="Apellido">
+          </div>
+          <div class="col-6">
+            <label for="empleado-segundo_apellido" class="form-label">Segundo Apellido</label>
+            <input type="text" class="form-control" id="empleado-segundo_apellido" name="segundo_apellido"
+                   placeholder="Opcional">
+          </div>
+        </div>
+      </div>
+
+      {# ── 2. Contacto ────────────────────────────────────────── #}
+      <div class="section-divider">
+        <p class="section-title s-info">
+          <i class="bi bi-telephone"></i>Contacto
+        </p>
+        <div class="row g-3">
+          <div class="col-6">
+            <label for="empleado-email" class="form-label">Email *</label>
+            <input type="email" class="form-control" id="empleado-email" name="email"
+                   required placeholder="correo@empresa.com">
+          </div>
+          <div class="col-6">
+            <label for="empleado-telefono" class="form-label">Teléfono</label>
+            <input type="text" class="form-control" id="empleado-telefono" name="telefono"
+                   placeholder="Número teléfono">
+          </div>
+        </div>
+      </div>
+
+      {# ── 3. Seguridad Social y Riesgos ──────────────────────── #}
+      <div class="section-divider">
+        <p class="section-title s-warning">
+          <i class="bi bi-shield-check"></i>Seguridad Social
+        </p>
+        <div class="row g-3">
+          <div class="col-4">
+            <label for="empleado-eps" class="form-label">EPS *</label>
+            <select class="form-select" id="empleado-eps" name="eps" required>
+              <option value="">Seleccionar...</option>
+              {% for code, name in EPS_CHOICES %}
+                <option value="{{ code }}">{{ name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-4">
+            <label for="empleado-afp" class="form-label">Fondo de Pensión *</label>
+            <select class="form-select" id="empleado-afp" name="afp" required>
+              <option value="">Seleccionar...</option>
+              {% for code, name in AFP_CHOICES %}
+                <option value="{{ code }}">{{ name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-4">
+            <label for="empleado-arl" class="form-label">ARL *</label>
+            <select class="form-select" id="empleado-arl" name="arl" required>
+              <option value="">Seleccionar...</option>
+              {% for code, name in ARL_CHOICES %}
+                <option value="{{ code }}">{{ name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label for="empleado-nivel_riesgo_arl" class="form-label">Nivel de Riesgo ARL *</label>
+            <select class="form-select" id="empleado-nivel_riesgo_arl" name="nivel_riesgo_arl" required>
+              {% for code, name in RIESGO_ARL_CHOICES %}
+                <option value="{{ code }}" {% if code == 'I' %}selected{% endif %}>{{ name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {# ── 4. Vinculación Contable (v3.5) ───────────────────── #}
+      <div class="section-divider">
+        <p class="section-title s-success">
+          <i class="bi bi-journal-check"></i>Vinculación Contable
+        </p>
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="empleado-cuenta_contable_label" class="form-label">Cuenta Contable (Pasivo Nómina)</label>
+            <div class="position-relative">
+              <input type="text" class="form-control" id="empleado-cuenta_contable_label"
+                     value=""
+                     placeholder="Buscar por código o nombre (ej: 2505)...">
+              <input type="hidden" id="empleado-cuenta_contable_uuid" name="cuenta_contable_uuid"
+                     value="">
+              <div id="empleado-cuenta-resultados" class="list-group position-absolute w-100 shadow-sm d-none"
+                   style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+            </div>
+            <small class="text-muted">Cuenta donde se registrarán los pasivos y salarios.</small>
+          </div>
+        </div>
+      </div>
+
+      {# ── 5. Fecha de Ingreso ───────────────────────────────── #}
+      <div class="mb-2">
+        <p class="section-title s-primary">
+          <i class="bi bi-calendar-event"></i>Ingreso
+        </p>
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="empleado-fecha_ingreso" class="form-label">Fecha de Ingreso *</label>
+            <input type="date" class="form-control" id="empleado-fecha_ingreso" name="fecha_ingreso" required>
+          </div>
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <div class="offcanvas-footer">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm px-4" id="btn-guardar-empleado">
+        <i class="bi bi-save me-1"></i>Guardar Empleado
+      </button>
     </div>
-    <div class="offcanvas-body">
-        <div id="form-empleado-feedback" class="alert d-none mb-3" role="alert"></div>
+  </div>
 
-        <form id="empleado-form" hx-post="/api/v1/empleados/"
-              hx-swap="none"
-              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-              hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[empleados.crear]', {errorContainerSelector: '#form-empleado-feedback'})">
-            {% csrf_token %}
-            
-            <!-- Tipo de Documento -->
-            <div class="mb-3">
-                <label for="tipo_documento" class="form-label">Tipo de Documento</label>
-                <select class="form-select" id="tipo_documento" name="tipo_documento" required>
-                    <option value="CC">Cédula de Ciudadanía</option>
-                    <option value="CE">Cédula de Extranjería</option>
-                    <option value="PA">Pasaporte</option>
-                    <option value="PPT">PPT</option>
-                </select>
-            </div>
-            
-            <!-- Número de Documento -->
-            <div class="mb-3">
-                <label for="numero_documento" class="form-label">Número de Documento</label>
-                <input type="text" class="form-control" id="numero_documento" name="numero_documento" required>
-            </div>
-            
-            <!-- Nombres -->
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="primer_nombre" class="form-label">Primer Nombre</label>
-                    <input type="text" class="form-control" id="primer_nombre" name="primer_nombre" required>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label for="segundo_nombre" class="form-label">Segundo Nombre</label>
-                    <input type="text" class="form-control" id="segundo_nombre" name="segundo_nombre">
-                </div>
-            </div>
-            
-            <!-- Apellidos -->
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="primer_apellido" class="form-label">Primer Apellido</label>
-                    <input type="text" class="form-control" id="primer_apellido" name="primer_apellido" required>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label for="segundo_apellido" class="form-label">Segundo Apellido</label>
-                    <input type="text" class="form-control" id="segundo_apellido" name="segundo_apellido">
-                </div>
-            </div>
-            
-            <!-- Email -->
-            <div class="mb-3">
-                <label for="email" class="form-label">Email</label>
-                <input type="email" class="form-control" id="email" name="email" required>
-            </div>
-            
-            <!-- Teléfono -->
-            <div class="mb-3">
-                <label for="telefono" class="form-label">Teléfono</label>
-                <input type="text" class="form-control" id="telefono" name="telefono">
-            </div>
-            
-            <!-- Seguridad Social -->
-            <div class="row">
-                <div class="col-md-4 mb-3">
-                    <label for="eps" class="form-label">EPS</label>
-                    <select class="form-select" id="eps" name="eps" required>
-                        <option value="">Seleccione...</option>
-                        {% for code, name in EPS_CHOICES %}
-                            <option value="{{ code }}">{{ name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label for="afp" class="form-label">Fondo de Pensión</label>
-                    <select class="form-select" id="afp" name="afp" required>
-                        <option value="">Seleccione...</option>
-                        {% for code, name in AFP_CHOICES %}
-                            <option value="{{ code }}">{{ name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label for="arl" class="form-label">ARL</label>
-                    <select class="form-select" id="arl" name="arl" required>
-                        <option value="">Seleccione...</option>
-                        {% for code, name in ARL_CHOICES %}
-                            <option value="{{ code }}">{{ name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <!-- Nivel de Riesgo ARL -->
-            <div class="mb-3">
-                <label for="nivel_riesgo_arl" class="form-label">Nivel de Riesgo ARL</label>
-                <select class="form-select" id="nivel_riesgo_arl" name="nivel_riesgo_arl" required>
-                    {% for code, name in RIESGO_ARL_CHOICES %}
-                        <option value="{{ code }}" {% if code == 'I' %}selected{% endif %}>{{ name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            
-            <!-- Vinculación Contable (v3.5) -->
-            <div class="mb-3">
-                <label for="cuenta_contable_search" class="form-label text-primary fw-semibold">
-                    <i class="bi bi-journal-check me-1"></i>Cuenta Contable (Pasivo Nómina)
-                </label>
-                <div class="position-relative">
-                    <div class="input-group">
-                        <span class="input-group-text bg-white border-primary-subtle"><i class="bi bi-search text-primary"></i></span>
-                        <input type="text" 
-                               class="form-control border-primary-subtle" 
-                               id="cuenta_contable_search" 
-                               placeholder="Buscar por código o nombre (ej: 2505)..."
-                               autocomplete="off">
-                        <input type="hidden" id="cuenta_contable_uuid" name="cuenta_contable_uuid">
-                    </div>
-                    <div id="cuenta-contable-resultados" class="list-group position-absolute w-100 shadow-sm d-none" 
-                         style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
-                </div>
-                <div class="form-text small">
-                    Vincule la cuenta de salarios o pasivos laborales (Nivel 6).
-                </div>
-            </div>
-            
-            <!-- Fecha de Ingreso -->
-            <div class="mb-3">
-                <label for="fecha_ingreso" class="form-label">Fecha de Ingreso</label>
-                <input type="date" class="form-control" id="fecha_ingreso" name="fecha_ingreso" required>
-            </div>
-            
-            <div class="offcanvas-footer border-top bg-light p-3 mt-4 mx-n3 mb-n3">
-                <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-person-plus me-1"></i>Guardar Empleado
-                    </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
-                </div>
-            </div>
-        </form>
-    </div>
 </div>

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Before any change:** read `AGENTS.md` (root) and the app's `AUDITORIA_FLUJO_COMPLETO.md` if it exists. Read `MEMORY.md` for current project state and active ADRs.
+> **Before any change:** read `AGENTS.md` (root) and the app's `AUDITORIA_FLUJO_COMPLETO.md` if it exists. Read `MEMORY.md` for current project state and active ADRs. Check `docs/ADR-*.md` for architectural decisions (e.g., **ADR-001-retention-pull-model.md** for Retencion Pull Model).
 
 ---
 
@@ -111,6 +111,8 @@ from apps.public.tenants.models import TenantMembership            # BLOCKED
 
 Never create `AsientoContable` or `MovimientoContable` directly from source apps. Contabilidad uses a **Pull Model**: extractors inside `contabilidad/integracion/extractores/` read source apps — source apps never import from `contabilidad`.
 
+#### Asientos (General Ledger)
+
 Trigger extraction via management command or Celery task:
 ```bash
 python manage.py backfill_asientos_gastos [--dry-run] [--empresa-id N]
@@ -123,6 +125,172 @@ from apps.tenant.contabilidad.integracion.dtos import TransaccionEconomica
 contabilizador = Contabilizador(empresa_id)
 asiento = contabilizador.contabilizar(dto)  # TransaccionEconomica DTO
 ```
+
+#### Retenciones (Tax Withholdings) — v3.7.1+
+
+**Contabilidad owns Retencion model** (see **ADR-001**). Never store retention amounts in source apps (Facturas, Gastos, etc.). Use Pull Model:
+
+**From Source Apps (Facturas, Gastos):**
+```python
+# Delegate to Contabilidad API
+from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+
+# 1. Get retention config for a client/vendor
+retenciones = RetencionesService.obtener_retenciones_desde_tercero(
+    nit='123456789',
+    tipo_tercero='CLIENTE',  # or 'PROVEEDOR'
+    naturaleza='VENTA',      # or 'COMPRA'
+)
+# Returns dict: {'aplica_retefuente': True, 'retefuente_porcentaje': Decimal('2.50'), ...}
+
+# 2. Create retention records (auto-generated when you call this)
+retencion = RetencionesService.crear_retencion(
+    empresa=empresa,
+    tipo='RETEFUENTE',          # or 'RETEICA', 'RETEIVA'
+    porcentaje=Decimal('2.50'),
+    monto=Decimal('125.00'),
+    documento_origen_app='facturas',
+    documento_origen_modelo='Factura',
+    documento_origen_id=factura.id,
+)
+
+# 3. Query existing retentions for a document
+retenciones = RetencionesService.listar_retenciones_por_documento(
+    documento_origen_app='facturas',
+    documento_origen_modelo='Factura',
+    documento_origen_id=factura.id,
+)
+```
+
+**Backward Compatibility (v3.7.1 only):**
+```python
+# Old code still works via @property (reads Retencion table)
+factura.total_retencion_fuente        # Returns Decimal('125.00') via @property
+factura.retefuente                    # DEPRECATED — marked editable=False
+
+# Serializers auto-compute from @property, so API unchanged
+# {
+#   "id": 1,
+#   "retefuente": "125.00",      # Reads from Retencion records
+#   "reteica": "0.00",
+#   ...
+# }
+```
+
+**API Endpoints:**
+- `GET /api/v1/contabilidad/retenciones/obtener-por-tercero/?nit=&tipo_tercero=&naturaleza=`
+- `GET /api/v1/contabilidad/retenciones/obtener-por-documento/?app=&modelo=&id=`
+- `GET /api/v1/contabilidad/retenciones/` (list with filters)
+- `POST /api/v1/contabilidad/retenciones/` (create)
+
+**Deprecation Timeline:**
+- **v3.7.1 (NOW):** Fields marked `editable=False`, use RetencionesService
+- **v3.8.x (2026-06/07):** Users upgrade, @property methods read from Retencion
+- **v3.9.0 (2026-08):** Fields removed (see FASE_10_CLEANUP_PLAN.md)
+
+#### Selectores de Retenciones en Gastos — v3.7.3+
+
+**New Feature (v3.7.3):** User selects retention type (Retefuente, ReteICA) via dropdown in "Nuevo Gasto" / "Editar Gasto" forms. Amounts calculated automatically.
+
+**Architecture:**
+- **SSoT (Single Source of Truth):** `DocumentoSoporte.RETEFUENTE_CHOICES` and `RETEICA_CHOICES` in `apps/tenant/gastos/models.py`
+- **Frontend:** Options replicated in both templates (for rendering, not persistence)
+  - `apps/tenant/gastos/templates/tenant/gastos/offcanvas_crear_gasto.html` (lines ~154-170)
+  - `apps/tenant/gastos/templates/tenant/gastos/offcanvas_editar_gasto.html` (lines ~144-160)
+- **JavaScript:** Listeners on `#retefuente_select` and `#reteica_select`, store value in hidden inputs (`#retefuente_porcentaje`, `#reteica_porcentaje`)
+
+**Critical Rule — Keep CHOICES Synchronized:**
+```
+If you modify RETEFUENTE_CHOICES or RETEICA_CHOICES in models.py,
+you MUST update the <option> elements in BOTH templates to match exactly.
+
+models.py:
+    ('0.11', '11% - Honorarios y Consultoria (Declarante)')
+    ↓
+offcanvas_crear_gasto.html:
+    <option value="0.11">11% - Honorarios y Consultoria (Declarante)</option>
+    ↓
+offcanvas_editar_gasto.html:
+    <option value="0.11">11% - Honorarios y Consultoria (Declarante)</option>
+```
+
+**How It Works:**
+1. User selects Retefuente type from dropdown (value = percentage like `0.11`)
+2. JavaScript listener updates hidden input `#retefuente_porcentaje` = `0.11`
+3. `calcularTotales()` runs: `monto = subtotal × porcentaje / 100`
+4. Display updates (readonly): `#retefuente_display` → `$55,000`
+5. On save: backend receives `subtotal`, `total`, and creates `Retencion` records via Pull Model
+
+**For Full Details & Maintenance Guide:** See `RETENCIONES_SELECTORES_GUIDE.md` (root) and memory file `retenciones_selectores_v373.md`.
+
+#### Editar Empleado — Guardar Cambios (v3.7.4)
+
+**Fixed (v3.7.4):** Editar Empleado now saves changes correctly. Previously, the form button had no listener and form had `onsubmit="return false;"` blocking submission.
+
+**How It Works:**
+1. User opens edit form → `offcanvas-empleado` has `data-empleado-uuid`
+2. User modifies fields and clicks "Actualizar Empleado"
+3. JavaScript `submitEmpleado()` function:
+   - Validates required fields
+   - Collects form data
+   - Sends PATCH request to `/api/v1/empleados/{uuid}/` with CSRF token
+   - On success: closes offcanvas, shows notification, reloads table
+   - On error: shows error message, allows retry
+4. Backend processes PATCH and returns updated employee
+
+**For Guarantee & Testing Guide:** See `EMPLEADO_EDIT_FIX_GUARANTEE.md` (root) with:
+- Complete testing checklist
+- Troubleshooting guide
+- Files modified and what changed
+- Technical stack explanation
+
+#### PUC Code Linking — APP_ORIGEN_PREFIJOS (Single Source of Truth)
+
+**Critical Rule:** All accounting code prefixes (Plan de Cuentas) for **ALL business apps** must come ONLY from:
+```
+apps/tenant/contabilidad/services/selectors.py:APP_ORIGEN_PREFIJOS
+```
+
+**Why:** Contabilidad owns the Chart of Accounts. Other apps read from it (Pull Model). Never hardcode prefixes in source apps.
+
+**Correct Usage — Backend:**
+```python
+from apps.tenant.contabilidad.services.selectors import (
+    APP_ORIGEN_PREFIJOS,
+    filtrar_cuentas_por_app_origen
+)
+
+# Get prefixes for an app
+prefijos = APP_ORIGEN_PREFIJOS['inventario']  # ['143505', '143510', ..., '51', '15']
+
+# Filter cuentas by app origin (automatic at ViewSet level)
+qs = filtrar_cuentas_por_app_origen(queryset, 'gastos')  # Only '233505', '2365', '51', '6', etc.
+```
+
+**Correct Usage — Frontend:**
+```javascript
+// inventario.api.js
+searchCuentas: async (query, options = {}) => {
+  const params = {
+    search: query,
+    app_origen: 'inventario',  // Backend resolves allowed prefixes
+    codigo_prefix: options.codigoPrefix  // e.g., '51' for depreciation
+  };
+  return w.http('GET', '/api/v1/contabilidad/cuentas-contables/', params);
+}
+```
+
+**Forbidden — Never Hardcode:**
+```python
+# ❌ WRONG — Scattered hardcoded prefixes
+GASTOS_PREFIJOS = ['51', '52', '53']  # In gastos/models.py
+FACTURAS_PREFIJOS = ['4135', '4175']   # In facturas/api/viewsets.py
+
+# ✅ RIGHT — Always centralized
+from apps.tenant.contabilidad.services.selectors import APP_ORIGEN_PREFIJOS
+```
+
+See **AGENTS.md § 18.7** for full governance rules, audit procedures, and update workflow.
 
 ### Frontend
 

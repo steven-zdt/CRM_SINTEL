@@ -7,16 +7,19 @@
 
   const MOD = '[proveedores:form]';
   const API_URL = '/api/v1/proveedores/';
-  const CONTAINER_ID = '#containerOffcanvasProveedor';
+  const CONTAINER_ID = '#offcanvas-container-proveedores';
   const BOOLEAN_FIELDS = [
     'activo', 'responsable_iva', 'gran_contribuyente', 'autoretenedor',
     'es_retenedor', 'aplica_retefuente', 'aplica_reteica', 'aplica_reteiva'
   ];
   const NUMERIC_FIELDS = [
-    'plazo_pago_dias', 
-    'retefuente_porcentaje', 
-    'reteica_porcentaje', 
+    'plazo_pago_dias',
+    'retefuente_porcentaje',
+    'reteica_porcentaje',
     'reteiva_porcentaje'
+  ];
+  const NULLABLE_FIELDS = [
+    'cuenta_contable_uuid'
   ];
 
   /**
@@ -50,7 +53,7 @@
    */
   d.body.addEventListener('htmx:afterSettle', async (e) => {
     const target = e.detail.target;
-    if (target && target.id === CONTAINER_ID.substring(1)) {
+    if (target && ('#' + target.id) === CONTAINER_ID) {
       const offcanvasEl = target.querySelector('.offcanvas');
       if (!offcanvasEl) return;
 
@@ -66,12 +69,21 @@
       // 2. Configurar validaciones y eventos
       configurarEventos(offcanvasEl);
 
-      // v3.5 - Inicializar búsqueda dinámica de Cuenta Contable
+      // v3.5+ - Inicializar búsqueda dinámica de Cuenta Contable con actualización en cascada
       if (typeof Sintel.Proveedores.Utils?.setupCuentaAutocomplete === 'function') {
           Sintel.Proveedores.Utils.setupCuentaAutocomplete({
               inputId: 'proveedor-cuenta_contable_label',
               hiddenId: 'proveedor-cuenta_contable_uuid',
-              resultsId: 'proveedor-cuenta-resultados'
+              resultsId: 'proveedor-cuenta-resultados',
+              cascadeTriggers: [
+                  'proveedor-tipo_persona',       // Tipo persona (NATURAL/JURIDICA)
+                  'proveedor-tipo_documento',     // Tipo documento (NIT/CC/CE)
+                  'proveedor-regimen_tributario', // Régimen tributario (ORDINARIO/SIMPLIFICADO)
+                  'proveedor-responsable_iva',    // Estado fiscal: responsable de IVA
+                  'proveedor-gran_contribuyente', // Estado fiscal: gran contribuyente
+                  'proveedor-autoretenedor',      // Estado fiscal: autoretenedor
+                  'proveedor-es_retenedor'        // Estado fiscal: agente retenedor
+              ]
           });
       }
     }
@@ -99,6 +111,8 @@
           payload[key] = false;
         } else if (NUMERIC_FIELDS.includes(key)) {
           payload[key] = 0;
+        } else if (NULLABLE_FIELDS.includes(key)) {
+          payload[key] = null;
         } else {
           payload[key] = '';
         }

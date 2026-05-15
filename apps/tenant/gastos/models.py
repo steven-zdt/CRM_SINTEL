@@ -160,8 +160,8 @@ class DocumentoSoporte(SintelTenantBaseModel):
         ('0.11', '11% - Honorarios y Consultoria (Declarante)'),
     ]
     
-    retefuente_porcentaje = models.CharField(max_length=10, choices=RETEFUENTE_CHOICES, default='0.00')
-    retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
+    retefuente_porcentaje = models.CharField(max_length=10, choices=RETEFUENTE_CHOICES, default='0.00', verbose_name=_('% Retefuente [DEPRECATED v3.7.1]'), editable=False)
+    retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name=_('Monto Retefuente [DEPRECATED v3.7.1]'), editable=False)
     
     RETEICA_CHOICES = [
         ('0.00', '0% - Exento'),
@@ -172,8 +172,8 @@ class DocumentoSoporte(SintelTenantBaseModel):
         ('0.01104', '1.104%'),
     ]
     
-    reteica_porcentaje = models.CharField(max_length=10, choices=RETEICA_CHOICES, default='0.00')
-    reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
+    reteica_porcentaje = models.CharField(max_length=10, choices=RETEICA_CHOICES, default='0.00', verbose_name=_('% ReteICA [DEPRECATED v3.7.1]'), editable=False)
+    reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name=_('Monto ReteICA [DEPRECATED v3.7.1]'), editable=False)
     total = models.DecimalField(max_digits=15, decimal_places=2)
     
   
@@ -230,10 +230,6 @@ class DocumentoSoporte(SintelTenantBaseModel):
         if self.resolucion_dian and self.consecutivo:
             if not (self.resolucion_dian.rango_desde <= self.consecutivo <= self.resolucion_dian.rango_hasta):
                 raise ValidationError({'consecutivo': f'El consecutivo {self.consecutivo} esta fuera de rango.'})
-        if self.consecutivo and self.subtotal is not None:
-            total_calculado = self.subtotal - (self.retefuente or 0) - (self.reteica or 0)
-            if abs(self.total - total_calculado) > Decimal('0.01'):
-                raise ValidationError({'total': _(f'Inconsistencia monetaria. Esperado: {total_calculado}, Recibido: {self.total}')})
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -251,6 +247,60 @@ class DocumentoSoporte(SintelTenantBaseModel):
     def numero_documento(self): 
         """Retorna el numero completo usando la funcion de la resolucion."""
         return self.resolucion_dian.formar_consecutivo(self.consecutivo)
+
+    @property
+    def total_retefuente(self) -> Decimal:
+        """Lee RETEFUENTE desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        if not self.pk:
+            return self.retefuente or Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEFUENTE',
+                documento_origen_app='gastos',
+                documento_origen_modelo='DocumentoSoporte',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return self.retefuente or Decimal('0.00')
+
+    @property
+    def total_reteica(self) -> Decimal:
+        """Lee RETEICA desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        if not self.pk:
+            return self.reteica or Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEICA',
+                documento_origen_app='gastos',
+                documento_origen_modelo='DocumentoSoporte',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return self.reteica or Decimal('0.00')
+
+    @property
+    def total_reteiva(self) -> Decimal:
+        """Lee RETEIVA desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        if not self.pk:
+            return Decimal('0.00')
+        try:
+            from apps.tenant.contabilidad.models import Retencion
+            total = Retencion.objects.filter(
+                tipo='RETEIVA',
+                documento_origen_app='gastos',
+                documento_origen_modelo='DocumentoSoporte',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return Decimal('0.00')
     @property
     def vendedor_nombre(self): return self.proveedor.razon_social
     @property
@@ -261,16 +311,89 @@ class DocumentoSoporte(SintelTenantBaseModel):
     def vendedor_telefono(self): return self.proveedor.telefono_contacto
 
     @property
-    def subtotal_cop(self): return f"${self.subtotal:,.0f}".replace(',', '.') if self.subtotal else "$0"
-    @property
-    def retefuente_cop(self): return f"${self.retefuente:,.0f}".replace(',', '.') if self.retefuente else "$0"
-    @property
-    def reteica_cop(self): return f"${self.reteica:,.0f}".replace(',', '.') if self.reteica else "$0"
-    @property
     def total_cop(self): return f"${self.total:,.0f}".replace(',', '.') if self.total else "$0"
+
+    @property
+    def total_retenciones(self) -> Decimal:
+        """Suma total de todas las retenciones asociadas en Contabilidad."""
+        if not self.pk: return Decimal('0.00')
+        try:
+            from django.apps import apps
+            Retencion = apps.get_model('contabilidad', 'Retencion')
+            total = Retencion.objects.filter(
+                empresa=self.empresa,
+                documento_origen_app='gastos',
+                documento_origen_modelo='DocumentoSoporte',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(total))
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def retefuente_calculada(self) -> Decimal:
+        """Retorna el monto de Retefuente desde Contabilidad."""
+        if not self.pk: return self.retefuente or Decimal('0.00')
+        try:
+            from django.apps import apps
+            Retencion = apps.get_model('contabilidad', 'Retencion')
+            monto = Retencion.objects.filter(
+                tipo='RETEFUENTE',
+                documento_origen_app='gastos',
+                documento_origen_modelo='DocumentoSoporte',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(monto))
+        except Exception:
+            return self.retefuente or Decimal('0.00')
+
+    @property
+    def reteica_calculada(self) -> Decimal:
+        """Retorna el monto de ReteICA desde Contabilidad."""
+        if not self.pk: return self.reteica or Decimal('0.00')
+        try:
+            from django.apps import apps
+            Retencion = apps.get_model('contabilidad', 'Retencion')
+            monto = Retencion.objects.filter(
+                tipo='RETEICA',
+                documento_origen_app='gastos',
+                documento_origen_modelo='DocumentoSoporte',
+                documento_origen_id=self.id,
+                reversada=False
+            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
+            return Decimal(str(monto))
+        except Exception:
+            return self.reteica or Decimal('0.00')
+
+    @property
+    def subtotal_cop(self): return f"${self.subtotal:,.0f}".replace(',', '.') if self.subtotal else "$0"
+    
+    @property
+    def retefuente_cop(self): 
+        val = self.retefuente_calculada
+        return f"${val:,.0f}".replace(',', '.') if val else "$0"
+    
+    @property
+    def reteica_cop(self): 
+        val = self.reteica_calculada
+        return f"${val:,.0f}".replace(',', '.') if val else "$0"
+    
     @property
     def total_retenciones_cop(self):
-        total_ret = (self.retefuente or 0) + (self.reteica or 0)
-        return f"${total_ret:,.0f}".replace(',', '.')
+        val = self.total_retenciones
+        return f"${val:,.0f}".replace(',', '.') if val else "$0"
+
+    @property
+    def cuenta_gasto_label(self):
+        """Resuelve el label de la cuenta contable de gasto (SSoT v3.5.0)."""
+        if not self.cuenta_gasto_uuid:
+            return None
+        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+        return CuentaContableSelector.get_label_by_uuid(
+            empresa_id=self.empresa_id,
+            uuid=self.cuenta_gasto_uuid
+        )
 
 

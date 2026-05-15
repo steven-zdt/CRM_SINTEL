@@ -12,6 +12,7 @@ Reglas SINTEL v3.5:
 
 import logging
 import re
+from decimal import Decimal
 from typing import Any
 
 from django.conf import settings
@@ -72,10 +73,12 @@ class FacturaBusinessService:
     @staticmethod
     def obtener_retenciones_desde_cliente(cliente_nit: str | None, empresa_id: int | None = None) -> dict[str, Any]:
         """
-        Extrae retenciones desde Cliente (para facturas VENTA).
-        Retorna dict con aplica_retefuente, retefuente_porcentaje, etc.
+        [v3.7.1 ENDPOINT PUENTE] Extrae retenciones desde Contabilidad API (Pull Model).
+
+        Delega a GET /api/v1/contabilidad/retenciones/obtener-por-tercero/
+        para mantener SSoT en la app Contabilidad en lugar de leer directo desde Cliente.
         """
-        if not cliente_nit or not empresa_id:
+        if not cliente_nit:
             return {
                 "aplica_retefuente": False,
                 "retefuente_porcentaje": Decimal('0.00'),
@@ -86,30 +89,22 @@ class FacturaBusinessService:
             }
 
         try:
-            from apps.tenant.clientes.models import Cliente
-            cliente_nit_normalized = FacturaBusinessService.normalize_document_number(cliente_nit)
-            cliente = Cliente.objects.filter(
-                empresa_id=empresa_id,
-                numero_documento=cliente_nit_normalized
-            ).first()
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
 
-            if not cliente:
-                return {
-                    "aplica_retefuente": False,
-                    "retefuente_porcentaje": Decimal('0.00'),
-                    "aplica_reteica": False,
-                    "reteica_porcentaje": Decimal('0.00'),
-                    "aplica_reteiva": False,
-                    "reteiva_porcentaje": Decimal('0.00'),
-                }
+            cliente_nit_normalized = FacturaBusinessService.normalize_document_number(cliente_nit)
+            retenciones = RetencionesService.obtener_retenciones_desde_tercero(
+                nit=cliente_nit_normalized,
+                tipo_tercero='CLIENTE',
+                naturaleza='VENTA',
+            )
 
             return {
-                "aplica_retefuente": cliente.aplica_retefuente,
-                "retefuente_porcentaje": cliente.retefuente_porcentaje,
-                "aplica_reteica": cliente.aplica_reteica,
-                "reteica_porcentaje": cliente.reteica_porcentaje,
-                "aplica_reteiva": cliente.aplica_reteiva,
-                "reteiva_porcentaje": cliente.reteiva_porcentaje,
+                "aplica_retefuente": retenciones.get('aplica_retefuente', False),
+                "retefuente_porcentaje": retenciones.get('retefuente_porcentaje', Decimal('0.00')),
+                "aplica_reteica": retenciones.get('aplica_reteica', False),
+                "reteica_porcentaje": retenciones.get('reteica_porcentaje', Decimal('0.00')),
+                "aplica_reteiva": retenciones.get('aplica_reteiva', False),
+                "reteiva_porcentaje": retenciones.get('reteiva_porcentaje', Decimal('0.00')),
             }
         except Exception as e:
             logger.warning(f"Error extrayendo retenciones de cliente {cliente_nit}: {e}")
@@ -125,12 +120,12 @@ class FacturaBusinessService:
     @staticmethod
     def obtener_retenciones_desde_proveedor(proveedor_nit: str | None, empresa_id: int | None = None) -> dict[str, Any]:
         """
-        [DEPRECATED v3.7.1] Extrae retenciones desde Proveedor.
+        [v3.7.1 ENDPOINT PUENTE — DEPRECATED] Extrae retenciones desde Contabilidad API.
 
         Nota: Para facturas COMPRA, las retenciones ya están en el XML — este método
         NO se usa. Se mantiene para compatibilidad futura si se requiere.
         """
-        if not proveedor_nit or not empresa_id:
+        if not proveedor_nit:
             return {
                 "aplica_retefuente": False,
                 "retefuente_porcentaje": Decimal('0.00'),
@@ -141,30 +136,22 @@ class FacturaBusinessService:
             }
 
         try:
-            from apps.tenant.proveedores.models import Proveedor
-            proveedor_nit_normalized = FacturaBusinessService.normalize_document_number(proveedor_nit)
-            proveedor = Proveedor.objects.filter(
-                empresa_id=empresa_id,
-                numero_documento=proveedor_nit_normalized
-            ).first()
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
 
-            if not proveedor:
-                return {
-                    "aplica_retefuente": False,
-                    "retefuente_porcentaje": Decimal('0.00'),
-                    "aplica_reteica": False,
-                    "reteica_porcentaje": Decimal('0.00'),
-                    "aplica_reteiva": False,
-                    "reteiva_porcentaje": Decimal('0.00'),
-                }
+            proveedor_nit_normalized = FacturaBusinessService.normalize_document_number(proveedor_nit)
+            retenciones = RetencionesService.obtener_retenciones_desde_tercero(
+                nit=proveedor_nit_normalized,
+                tipo_tercero='PROVEEDOR',
+                naturaleza='COMPRA',
+            )
 
             return {
-                "aplica_retefuente": proveedor.aplica_retefuente,
-                "retefuente_porcentaje": proveedor.retefuente_porcentaje,
-                "aplica_reteica": proveedor.aplica_reteica,
-                "reteica_porcentaje": proveedor.reteica_porcentaje,
-                "aplica_reteiva": proveedor.aplica_reteiva,
-                "reteiva_porcentaje": proveedor.reteiva_porcentaje,
+                "aplica_retefuente": retenciones.get('aplica_retefuente', False),
+                "retefuente_porcentaje": retenciones.get('retefuente_porcentaje', Decimal('0.00')),
+                "aplica_reteica": retenciones.get('aplica_reteica', False),
+                "reteica_porcentaje": retenciones.get('reteica_porcentaje', Decimal('0.00')),
+                "aplica_reteiva": retenciones.get('aplica_reteiva', False),
+                "reteiva_porcentaje": retenciones.get('reteiva_porcentaje', Decimal('0.00')),
             }
         except Exception as e:
             logger.warning(f"Error extrayendo retenciones de proveedor {proveedor_nit}: {e}")
@@ -341,9 +328,6 @@ class FacturaBusinessService:
             "subtotal": totales.get("subtotal") or dto.get("subtotal", 0),
             "impuestos": totales.get("impuestos") or dto.get("impuestos", 0),
             "total": totales.get("total") or dto.get("total", 0),
-            "retefuente": totales.get("retefuente") or dto.get("retefuente", 0),
-            "reteica": totales.get("reteica") or dto.get("reteica", 0),
-            "reteiva": totales.get("reteiva") or dto.get("reteiva", 0),
             # Pago
             "forma_pago": dto.get("forma_pago", ""),
             "medio_pago_codigo": dto.get("medio_pago_codigo", ""),
@@ -373,6 +357,21 @@ class FacturaBusinessService:
         }
 
         factura = FacturaCRUDService.crear(factura_data, anexos_data)
+
+        # v3.7.1: Persistir retenciones en Contabilidad.Retencion (Pull Model)
+        from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+        for tipo, clave in [('RETEFUENTE', 'retefuente'), ('RETEICA', 'reteica'), ('RETEIVA', 'reteiva')]:
+            monto_raw = totales.get(clave) or dto.get(clave, 0)
+            monto = Decimal(str(monto_raw)) if monto_raw else Decimal('0')
+            if monto > Decimal('0'):
+                RetencionesService.crear_retencion(
+                    empresa=empresa_instance,
+                    tipo=tipo,
+                    monto=monto,
+                    documento_origen_app='facturas',
+                    documento_origen_modelo='Factura',
+                    documento_origen_id=factura.id,
+                )
 
         # # WARNING: SINTEL v2.62: Persistencia delegada de Nota de Crédito
         if tipo == Factura.TipoFactura.NC:
@@ -506,6 +505,44 @@ class FacturaBusinessService:
         """Retorna el XML de un anexo (vía Selectors)."""
         from apps.tenant.facturas.services.selectors import FacturaSelectors
         return FacturaSelectors.obtener_anexo_xml(factura, tipo)
+
+    @staticmethod
+    def actualizar_factura_limitado(factura: Factura, data: dict[str, Any], empresa_id: int) -> Factura:
+        """
+        Actualización parcial segura de factura (Limited Edit).
+        
+        # WARNING: SINTEL v3.5: DSV para cuenta_contable_uuid.
+        # WARNING: Sanitización: Convierte "" a None para UUIDs.
+        """
+        allowed_fields = {
+            'fecha_vencimiento', 'estado', 'estado_pago',
+            'forma_pago', 'medio_pago_codigo', 'payment_due_date',
+            'cuenta_contable_uuid'
+        }
+        
+        update_data = {}
+        
+        for field in allowed_fields:
+            if field in data:
+                val = data[field]
+                
+                # Sanitización de UUIDs vacíos (evita 500 error en Model.save)
+                if field == 'cuenta_contable_uuid' and val == "":
+                    val = None
+                
+                # Double Semantic Verification (DSV)
+                if field == 'cuenta_contable_uuid' and val:
+                    from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+                    if not CuentaContableSelector.exists_by_uuid(val, empresa_id):
+                        from rest_framework.exceptions import ValidationError
+                        raise ValidationError({"cuenta_contable_uuid": "La cuenta contable no existe o no pertenece a la empresa."})
+                
+                update_data[field] = val
+        
+        if not update_data:
+            return factura
+
+        return FacturaCRUDService.actualizar(factura, update_data)
 
 class FacturaService:
     """

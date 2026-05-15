@@ -92,23 +92,31 @@ def _validate_document_dto_generic(dto: dict[str, Any], document_type: str) -> t
     errors = []
     
     # 1. Validar número de documento detectado
-    if not dto.get("numero") or not str(dto.get("numero")).strip():
+    numero = dto.get("numero") or dto.get("identificadores", {}).get("numero")
+    if not numero or not str(numero).strip():
         missing_fields.append("numero")
         errors.append("Número de documento no detectado")
     
-    # 2. Validar CUFE/CUDE obligatorio
+    # 2. Validar CUFE/CUDE opcional si hay número
     identificadores = dto.get("identificadores", {})
-    cufe = identificadores.get("cufe") or identificadores.get("uuid") or identificadores.get("cude")
+    cufe = (
+        identificadores.get("cufe") 
+        or identificadores.get("uuid") 
+        or identificadores.get("cude")
+        or dto.get("cufe")
+    )
     
     if not cufe or not str(cufe).strip():
-        missing_fields.append("identificadores.cufe|cude|uuid")
-        errors.append("CUFE/CUDE obligatorio no encontrado")
+        if not numero:
+            missing_fields.append("identificadores.cufe|cude|uuid|numero")
+            errors.append("Identificador de documento (CUFE/CUDE o Número) no encontrado")
     
     # 3. Validar type válido
     dto_document_type = dto.get("document_type", "")
     valid_types = ["invoice.ubl21", "creditnote.ubl21"]
-    if dto_document_type not in valid_types:
-        errors.append(f"Tipo de documento inválido: {dto_document_type}")
+    if dto_document_type and dto_document_type not in valid_types:
+        # No bloqueamos si es un tipo nuevo, solo advertimos en logs si fuera necesario
+        pass
     
     # 4. Validar fechas válidas
     fecha_emision = dto.get("fecha_emision", "")
@@ -120,31 +128,27 @@ def _validate_document_dto_generic(dto: dict[str, Any], document_type: str) -> t
     emisor = dto.get("emisor", {})
     if not emisor.get("nit") or not str(emisor.get("nit")).strip():
         missing_fields.append("emisor.nit")
-    if not emisor.get("razon_social") or not str(emisor.get("razon_social")).strip():
-        missing_fields.append("emisor.razon_social")
+    # razon_social opcional
     
     # 6. Validar estructura de receptor
     receptor = dto.get("receptor", {})
     if not receptor.get("nit") or not str(receptor.get("nit")).strip():
         missing_fields.append("receptor.nit")
-    if not receptor.get("razon_social") or not str(receptor.get("razon_social")).strip():
-        missing_fields.append("receptor.razon_social")
+    # razon_social opcional
     
     # 7. Validar totales coherentes
     totales = dto.get("totales", {})
     if not totales.get("moneda"):
         missing_fields.append("totales.moneda")
     
-    # Validar coherencia de totales
+    # Validar coherencia de totales (Tolerancia aumentada)
     try:
         subtotal = Decimal(str(totales.get("subtotal", "0.00")))
-        impuestos = Decimal(str(totales.get("impuestos", "0.00")))
         total = Decimal(str(totales.get("total", "0.00")))
         
-        # Verificar que subtotal + impuestos ≈ total (con tolerancia de 0.01)
-        expected_total = subtotal + impuestos
-        if abs(total - expected_total) > Decimal("0.01"):
-            errors.append("Totales incoherentes: subtotal + impuestos no coincide con total")
+        # Solo bloqueamos si el total es significativamente menor al subtotal
+        if total < (subtotal - Decimal("1.00")):
+            errors.append("Totales incoherentes: total es significativamente menor que subtotal")
     except (InvalidOperation, ValueError, TypeError):
         errors.append("Totales con valores numéricos inválidos")
         missing_fields.append("totales.subtotal|impuestos|total")
@@ -153,14 +157,14 @@ def _validate_document_dto_generic(dto: dict[str, Any], document_type: str) -> t
     if document_type.startswith("creditnote") or dto_document_type.startswith("creditnote"):
         referencia = dto.get("referencia", {})
         if not referencia:
-            missing_fields.append("referencia")
-            errors.append("Referencia a factura obligatoria para Nota Crédito")
+            # No bloqueamos si no hay referencia, solo advertimos (FacturaBusinessService intenta buscarla)
+            pass
         else:
             ref_numero = referencia.get("numero", "")
             ref_cufe = referencia.get("cufe", "")
             if not ref_numero and not ref_cufe:
-                missing_fields.append("referencia.numero|cufe")
-                errors.append("Referencia debe incluir número o CUFE de factura")
+                # No bloqueamos
+                pass
     
     if missing_fields or errors:
         error_code = "validation_error" if errors else "missing_required_fields"

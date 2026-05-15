@@ -31,6 +31,21 @@ class NormalizationMixin:
     WARNING: v2.60: Mixin para normalización de datos de entrada (Zero Trust).
     Sanitiza strings y valida tipos de datos antes de persistir.
     """
+    def _get_empresa_id(self):
+        """WARNING: Zero Trust: Resuelve el ID de empresa de forma segura."""
+        # 1. Intentar desde contexto (SSoT para ViewSets)
+        empresa_id = self.context.get('empresa_id')
+        if empresa_id:
+            return empresa_id
+            
+        # 2. Fallback: Empresa Singleton del Tenant
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.only('id').first()
+        if empresa:
+            return empresa.id
+        
+        raise serializers.ValidationError("No se pudo identificar la configuración de Empresa para este tenant.")
+
     def normalize_data(self, attrs):
         """
         Normaliza datos de entrada:
@@ -68,22 +83,47 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
     Campos alineados con CATEGORIA_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
+    cuenta_inventario_label = serializers.SerializerMethodField()
+    cuenta_costo_label = serializers.SerializerMethodField()
+    cuenta_ingreso_label = serializers.SerializerMethodField()
+
     class Meta:
         model = CategoriaItem
-        fields = ['id', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo', 'created_at', 'updated_at', 'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'cuenta_ingreso_uuid']
-        read_only_fields = ['id', 'created_at', 'updated_at', 'empresa']
+        fields = [
+            'id', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo', 
+            'created_at', 'updated_at', 
+            'cuenta_inventario_uuid', 'cuenta_inventario_label',
+            'cuenta_costo_uuid', 'cuenta_costo_label',
+            'cuenta_ingreso_uuid', 'cuenta_ingreso_label'
+        ]
+        read_only_fields = [
+            'id', 'created_at', 'updated_at', 'empresa',
+            'cuenta_inventario_label', 'cuenta_costo_label', 'cuenta_ingreso_label'
+        ]
+    
+    def get_cuenta_inventario_label(self, obj):
+        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
+        return self.get_cuenta_label(obj.cuenta_inventario_uuid)
+
+    def get_cuenta_costo_label(self, obj):
+        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
+        return self.get_cuenta_label(obj.cuenta_costo_uuid)
+
+    def get_cuenta_ingreso_label(self, obj):
+        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
+        return self.get_cuenta_label(obj.cuenta_ingreso_uuid)
     
     def get_cuenta_label(self, uuid_value):
         if not uuid_value:
             return None
         from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self.context.get('request').user.perfil.empresa_id
+        empresa_id = self._get_empresa_id()
         return CuentaContableSelector.get_label_by_uuid(uuid_value, empresa_id)
 
     def validate_cuenta_uuid(self, value):
         if value:
             from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self.context.get('request').user.perfil.empresa_id
+            empresa_id = self._get_empresa_id()
             if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
                 raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
@@ -114,12 +154,10 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
         nombre_clean = value.strip()
         
         # SINTEL v2.60: Obtener empresa del tenant actual (SSoT)
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ValidationError("No se encontró configuración de Empresa para este tenant.")
+        empresa_id = self._get_empresa_id()
             
         qs = CategoriaItem.objects.filter(
-            empresa_id=empresa.id,
+            empresa_id=empresa_id,
             nombre__iexact=nombre_clean
         )
         
@@ -187,6 +225,8 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
+    cuenta_inventario_label = serializers.SerializerMethodField()
+    cuenta_costo_label = serializers.SerializerMethodField()
 
     class Meta:
 
@@ -215,7 +255,7 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         if not obj.cuenta_inventario_uuid:
             return None
         from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self.context.get('request').user.perfil.empresa_id
+        empresa_id = self._get_empresa_id()
         return CuentaContableSelector.get_label_by_uuid(obj.cuenta_inventario_uuid, empresa_id)
 
     def get_cuenta_costo_label(self, obj):
@@ -223,14 +263,14 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         if not obj.cuenta_costo_uuid:
             return None
         from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self.context.get('request').user.perfil.empresa_id
+        empresa_id = self._get_empresa_id()
         return CuentaContableSelector.get_label_by_uuid(obj.cuenta_costo_uuid, empresa_id)
 
     def validate_cuenta_inventario_uuid(self, value):
         """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
         if value:
             from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self.context.get('request').user.perfil.empresa_id
+            empresa_id = self._get_empresa_id()
             if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
                 raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
@@ -239,7 +279,7 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
         if value:
             from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self.context.get('request').user.perfil.empresa_id
+            empresa_id = self._get_empresa_id()
             if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
                 raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
@@ -252,13 +292,10 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         if value is None:
             return value  # Permitir None (categoría opcional)
 
-        # WARNING: Zero Trust: Obtener empresa del tenant actual
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ValidationError("No se encontró configuración de Empresa para este tenant.")
+        empresa_id = self._get_empresa_id()
 
         # Validar que la categoría pertenezca al tenant
-        if not CategoriaItem.objects.filter(pk=value.id, empresa_id=empresa.id).exists():
+        if not CategoriaItem.objects.filter(pk=value.id, empresa_id=empresa_id).exists():
             raise ValidationError(f"La categoría con ID {value.id} no pertenece a este tenant.")
 
         # Validar que la categoría sea aplicable a productos
@@ -326,14 +363,14 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         if not obj.cuenta_ingreso_uuid:
             return None
         from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self.context.get('request').user.perfil.empresa_id
+        empresa_id = self._get_empresa_id()
         return CuentaContableSelector.get_label_by_uuid(obj.cuenta_ingreso_uuid, empresa_id)
 
     def validate_cuenta_ingreso_uuid(self, value):
         """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
         if value:
             from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self.context.get('request').user.perfil.empresa_id
+            empresa_id = self._get_empresa_id()
             if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
                 raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
@@ -346,13 +383,9 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         if value is None:
             return value  # Permitir None (categoría opcional)
 
-        # WARNING: Zero Trust: Obtener empresa del tenant actual
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ValidationError("No se encontró configuración de Empresa para este tenant.")
+        empresa_id = self._get_empresa_id()
 
-        # Validar que la categoría pertenezca al tenant
-        if not CategoriaItem.objects.filter(pk=value.id, empresa_id=empresa.id).exists():
+        if not CategoriaItem.objects.filter(pk=value.id, empresa_id=empresa_id).exists():
             raise ValidationError(f"La categoría con ID {value.id} no pertenece a este tenant.")
 
         # Validar que la categoría sea aplicable a servicios
@@ -420,14 +453,14 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
         if not obj.cuenta_activo_uuid:
             return None
         from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self.context.get('request').user.perfil.empresa_id
+        empresa_id = self._get_empresa_id()
         return CuentaContableSelector.get_label_by_uuid(obj.cuenta_activo_uuid, empresa_id)
 
     def validate_cuenta_activo_uuid(self, value):
         """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
         if value:
             from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self.context.get('request').user.perfil.empresa_id
+            empresa_id = self._get_empresa_id()
             if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
                 raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
@@ -437,14 +470,14 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
         if not obj.cuenta_depreciacion_uuid:
             return None
         from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self.context.get('request').user.perfil.empresa_id
+        empresa_id = self._get_empresa_id()
         return CuentaContableSelector.get_label_by_uuid(obj.cuenta_depreciacion_uuid, empresa_id)
 
     def validate_cuenta_depreciacion_uuid(self, value):
         """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
         if value:
             from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self.context.get('request').user.perfil.empresa_id
+            empresa_id = self._get_empresa_id()
             if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
                 raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
@@ -457,13 +490,9 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
         if value is None:
             return value  # Permitir None (categoría opcional)
 
-        # WARNING: Zero Trust: Obtener empresa del tenant actual
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ValidationError("No se encontró configuración de Empresa para este tenant.")
+        empresa_id = self._get_empresa_id()
 
-        # Validar que la categoría pertenezca al tenant
-        if not CategoriaItem.objects.filter(pk=value.id, empresa_id=empresa.id).exists():
+        if not CategoriaItem.objects.filter(pk=value.id, empresa_id=empresa_id).exists():
             raise ValidationError(f"La categoría con ID {value.id} no pertenece a este tenant.")
 
         # Validar que la categoría sea aplicable a activos
@@ -530,13 +559,10 @@ class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.Model
         if value is None:
             raise ValidationError("El producto es requerido.")
         
-        # WARNING: Zero Trust: Obtener empresa del tenant actual
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ValidationError("No se encontró configuración de Empresa para este tenant.")
+        empresa_id = self._get_empresa_id()
         
         # Validar que el producto pertenezca al tenant
-        if not Producto.objects.filter(pk=value.id, empresa_id=empresa.id).exists():
+        if not Producto.objects.filter(pk=value.id, empresa_id=empresa_id).exists():
             raise ValidationError(f"El producto con ID {value.id} no pertenece a este tenant.")
         
         return value
@@ -575,13 +601,10 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
         if value is None:
             raise ValidationError("El servicio es requerido.")
         
-        # WARNING: Zero Trust: Obtener empresa del tenant actual
-        empresa = Empresa.objects.only('id').first()
-        if not empresa:
-            raise ValidationError("No se encontró configuración de Empresa para este tenant.")
+        empresa_id = self._get_empresa_id()
         
         # Validar que el servicio pertenezca al tenant
-        if not Servicio.objects.filter(pk=value.id, empresa_id=empresa.id).exists():
+        if not Servicio.objects.filter(pk=value.id, empresa_id=empresa_id).exists():
             raise ValidationError(f"El servicio con ID {value.id} no pertenece a este tenant.")
         
         return value

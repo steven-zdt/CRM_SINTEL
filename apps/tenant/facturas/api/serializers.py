@@ -76,6 +76,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
         # # WARNING: v2.60: Campos optimizados para Tabulator con campos aplanados
         fields = (
             "id",
+            "uuid",
             "numero",
             "naturaleza",
             "fecha_emision",
@@ -94,9 +95,6 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "estado",
             "estado_pago",
             "dian_validation_desc",
-            "retefuente",
-            "reteica",
-            "reteiva",
             "forma_pago",
             "medio_pago_codigo",
             "payment_due_date",
@@ -106,10 +104,10 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "nota_credito_numero",
         )
         read_only_fields = (
-            "id", "numero", "fecha_emision", "naturaleza", "cliente_nombre",
+            "id", "uuid", "numero", "fecha_emision", "naturaleza", "cliente_nombre",
             "emisor_nit", "emisor_razon_social", "receptor_nit", "receptor_razon_social",
             "nota_credito_id", "nota_credito_numero", "has_nc", "subtotal",
-            "impuestos", "total", "total_formateado", "cufe"
+            "impuestos", "total", "total_formateado", "cufe",
         )
     
     def get_has_nc(self, obj):
@@ -167,7 +165,7 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
             "cuenta_contable_uuid",
             "cuenta_contable_label",
         )
-        read_only_fields = ("id", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta", "cuenta_contable_label")
+        read_only_fields = ("id", "uuid", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta", "cuenta_contable_label")
     
     cuenta_contable_label = serializers.SerializerMethodField()
 
@@ -243,11 +241,19 @@ class FacturaWriteSerializer(serializers.ModelSerializer):
             "numero", "prefijo", "consecutivo", "tipo", "estado", "estado_pago", "fecha_emision", "fecha_vencimiento",
             "receptor_nit", "receptor_razon_social", "receptor_direccion", "receptor_email", "receptor_telefono",
             "moneda", "subtotal", "impuestos", "total",
-            "retefuente", "reteica", "reteiva",
             "forma_pago", "medio_pago_codigo", "payment_due_date",
             "cuenta_contable_uuid",
         )
-        # No incluir campos read-only ni campos que se calculan automáticamente
+        read_only_fields = ("subtotal", "impuestos", "total")
+
+    def validate_cuenta_contable_uuid(self, value):
+        """
+        # WARNING: SINTEL v3.5: Sanitización de UUID.
+        Convierte "" a None para evitar errores de tipo en la base de datos.
+        """
+        if value == "":
+            return None
+        return value
 
 
 class FacturaReadDTOSerializer(serializers.Serializer):

@@ -93,8 +93,8 @@ APP_ORIGEN_PREFIJOS: dict = {
         '135515', '135517', '135518', '1355',
         # Ingresos operacionales
         '413505', '413510', '4135',
-        # Devoluciones en ventas
-        '4175',
+        # Devoluciones y descuentos en ventas
+        '4175', '418',
         # IVA generado
         '240805',
         # Retenciones por pagar (aplicadas por el cliente)
@@ -104,6 +104,10 @@ APP_ORIGEN_PREFIJOS: dict = {
     'clientes': [
         # Activo — Cartera clientes (Cuenta Control)
         '1305', '130505',
+        # Ingresos por ventas (para vincular facturas a clientes)
+        '4135', '413505', '413510',
+        # Retenciones por cobrar (retefuente, reteica, reteiva)
+        '1375',
     ],
     'gastos': [
         # Pasivo — Cuentas por pagar proveedores
@@ -118,12 +122,36 @@ APP_ORIGEN_PREFIJOS: dict = {
         '513505', '513520', '513525', '513530', '513535',
         '514510', '514525', '519525', '519530',
         '5110', '5115', '5120', '5130', '5135', '5140', '5145', '5150', '5155', '5195', '5199',
+        # Gastos generales (Clase 5 — Gastos)
+        '51',
+        # Costos de venta (si hay compra de inventario)
+        '6',
     ],
     'empleados': [
-        # Gastos de personal
-        '510506', '510527', '510530', '510533', '510536', '510539', '510568', '510570', '5105',
-        # Pasivo — Aportes y retenciones de nomina
-        '2505', '2370', '2380', # Salarios, Retenciones y aportes, Acreedores varios
+        # Gastos de personal — Clase 5 nomina
+        '5105',  # Sueldos y salarios
+        '5110',  # Horas extras y recargos
+        '5115',  # Comisiones
+        '5120',  # Auxilios (transporte, alimentacion)
+        '5125',  # Prestaciones sociales directas
+        '5130',  # Aportes sobre nomina (EPS, AFP, ARL, parafiscales)
+        '5140',  # Gastos de personal (bonificaciones)
+        '510506', '510527', '510530', '510533', '510536', '510539', '510568', '510570',
+        # Gastos generales de personal (prefijo genérico)
+        '51',
+        # Pasivo — Nomina por pagar (cuenta mas usada en PyMEs colombianas)
+        '2335',  # Costos y gastos por pagar — nomina por pagar
+        '233505', '233550', '233595',
+        # Pasivo — Obligaciones laborales (clase 25 completa)
+        '25',    # Cubre 2505 salarios, 2510 cesantias, 2515 intereses ces.,
+                 # 2520 prima, 2525 vacaciones, 2530 prestaciones extralegales,
+                 # 2540 pensiones, 2550 aportes EPS/AFP/ARL empleado
+        # Pasivo — Retenciones de nomina
+        '2370',  # Retenciones en la fuente (retefuente salarios)
+        '2375',  # Cuotas sindicales
+        '2380',  # Acreedores varios (prestamos empleados)
+        # Pasivo — Seguridad social por pagar
+        '2590',  # Otros pasivos laborales
     ],
     'inventario': [
         # Activo — Inventarios
@@ -132,8 +160,8 @@ APP_ORIGEN_PREFIJOS: dict = {
         '613505', '613510', '6135',
         # Ingresos (contraparte de salida inventario)
         '413505', '413510', '4135',
-        # Gastos bajas / deterioro
-        '5199',
+        # Gastos de personal / depreciación
+        '51',
         # Propiedades, Planta y Equipo (Activos Fijos)
         '15',
     ],
@@ -142,6 +170,11 @@ APP_ORIGEN_PREFIJOS: dict = {
         '2205', '220501', '220505',
         # Pasivo — Cuentas por pagar
         '2335', '233505', '233550', '233595',
+        # Pasivo — Retenciones practicadas (retefuente, reteica, reteiva)
+        '2365', '236505', '236510', '236515', '236525', '236540',
+        '236805', '2368',
+        # Pasivo — Anticipos recibidos de clientes
+        '2805', '280505',
     ],
 }
 
@@ -261,34 +294,40 @@ class ContabilidadSelector(CuentaContableSelector):
     pass
 
 def get_asiento_by_identifier(identifier: Any, empresa_id: Optional[int] = None) -> AsientoContable:
-    """Obtiene un asiento por ID numérico o UUID."""
+    """Obtiene un asiento por ID numerico o UUID."""
     qs = AsientoContableSelector.get_qs_detail(empresa_id)
     try:
         return qs.get(id=int(identifier))
     except (ValueError, TypeError):
+        pass
+    try:
         return qs.get(uuid=identifier)
     except AsientoContable.DoesNotExist:
-        raise ValidationError({"detail": [f"Asiento contable no encontrado con identificador: {identifier}"]})
+        raise ValidationError({"detail": [f"Asiento contable no encontrado: {identifier}"]})
 
 def get_cuenta_by_identifier(identifier: Any, empresa_id: Optional[int] = None) -> CuentaContable:
-    """Obtiene una cuenta por ID numérico o UUID."""
+    """Obtiene una cuenta por ID numerico o UUID."""
     qs = CuentaContableSelector.get_qs_detail(empresa_id)
     try:
         return qs.get(id=int(identifier))
     except (ValueError, TypeError):
+        pass
+    try:
         return qs.get(uuid=identifier)
     except CuentaContable.DoesNotExist:
-        raise ValidationError({"detail": [f"Cuenta contable no encontrada con identificador: {identifier}"]})
+        raise ValidationError({"detail": [f"Cuenta contable no encontrada: {identifier}"]})
 
 def get_periodo_by_identifier(identifier: Any, empresa_id: Optional[int] = None) -> PeriodoContable:
-    """Obtiene un periodo por ID numérico o UUID."""
+    """Obtiene un periodo por ID numerico o UUID."""
     qs = PeriodoContableSelector.get_qs_detail(empresa_id)
     try:
         return qs.get(id=int(identifier))
     except (ValueError, TypeError):
+        pass
+    try:
         return qs.get(uuid=identifier)
     except PeriodoContable.DoesNotExist:
-        raise ValidationError({"detail": [f"Periodo contable no encontrado con identificador: {identifier}"]})
+        raise ValidationError({"detail": [f"Periodo contable no encontrado: {identifier}"]})
 
 def get_tipo_comprobante_by_identifier(identifier: Any, empresa_id: Optional[int] = None) -> TipoComprobante:
     """Obtiene un tipo de comprobante por ID numérico o UUID."""

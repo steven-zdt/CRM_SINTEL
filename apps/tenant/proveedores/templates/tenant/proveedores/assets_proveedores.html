@@ -1,9 +1,11 @@
 {% load static %}
-{# assets_proveedores.html - Assets del módulo Proveedores v2.40 #}
-{# ⚠️ v2.40: Orden de carga crítico para TabulatorFactory #}
+{# assets_proveedores.html - Assets del módulo Proveedores v3.7 #}
+{# Orden de carga crítico: API primero (requerido por features) #}
 
-{# 2. Módulo Proveedores v3.5 - Feature-Sliced Architecture #}
+{# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'proveedores/js/proveedores.api.js' %}"></script>
+
+{# BLOQUE 2: Features - Módulos Feature-Sliced Architecture #}
 <script src="{% static 'proveedores/js/proveedores.utils.js' %}"></script>
 <script src="{% static 'proveedores/js/proveedores_form.js' %}"></script>
 <script src="{% static 'proveedores/js/proveedores_main.js' %}"></script>

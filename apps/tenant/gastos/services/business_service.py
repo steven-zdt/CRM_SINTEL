@@ -20,23 +20,7 @@ class GastoBusinessService:
     SSoT para calculos, validaciones y orquestacion de procesos.
     """
 
-    @staticmethod
-    def calcular_retenciones(subtotal: Decimal, retefuente_porcentaje: str, reteica_porcentaje: str) -> Dict[str, Decimal]:
-        """Calcula valores de retenciones basados en el subtotal (v2.40)."""
-        # Convertir a Decimal para calculo exacto
-        pct_fuente = Decimal(str(retefuente_porcentaje or '0.00'))
-        pct_ica = Decimal(str(reteica_porcentaje or '0.00'))
-
-        # Calculo: Redondeo a 2 decimales para pesos colombianos
-        retefuente = (subtotal * pct_fuente).quantize(Decimal('0.01'))
-        reteica = (subtotal * pct_ica).quantize(Decimal('0.01'))
-        total = (subtotal - retefuente - reteica).quantize(Decimal('0.01'))
-
-        return {
-            'retefuente': retefuente,
-            'reteica': reteica,
-            'total': total
-        }
+    # [REMOVED v3.7.1] calcular_retenciones moved to contabilidad.RetencionesService
 
     @staticmethod
     @transaction.atomic
@@ -115,133 +99,128 @@ class GastoBusinessService:
             logger.error(f"Error en eliminar_gasto: {e}", exc_info=True)
             return False, {"detail": f"Error al procesar borrado: {str(e)}"}, 500
 
-    @staticmethod
-    def calcular_y_validar_totales(data: Dict[str, Any], resolucion: Any = None) -> Dict[str, Any]:
-        """
-        Realiza calculos de retenciones y valida el total.
-        v2.62: Tolerancia unificada a 0.01. Asegura tipos Decimal.
-        """
-        subtotal = Decimal(str(data.get('subtotal', 0)))
-        retefuente_pct = data.get('retefuente_porcentaje', '0.00')
-        reteica_pct = data.get('reteica_porcentaje', '0.00')
-        total_enviado = data.get('total')
-
-        retenciones = GastoBusinessService.calcular_retenciones(subtotal, retefuente_pct, reteica_pct)
-        
-        if total_enviado is not None:
-            d_total_enviado = Decimal(str(total_enviado))
-            diferencia = abs(d_total_enviado - retenciones['total'])
-            if diferencia > Decimal('0.01'):
-                raise ValidationError({
-                    'total': f"Inconsistencia en el total. Esperado: {retenciones['total']}, Recibido: {d_total_enviado}"
-                })
-
-        return {
-            'subtotal': subtotal,
-            'retefuente': retenciones['retefuente'],
-            'reteica': retenciones['reteica'],
-            'total': retenciones['total']
-        }
+    # [REMOVED v3.7.1] calcular_y_validar_totales deprecated. Retentions are Pull Model.
 
     @staticmethod
     @transaction.atomic
     def procesar_gasto(empresa: Any, data: Dict[str, Any]) -> Tuple[bool, Any, int]:
         """
-        Orquesta la creacion de un DocumentoSoporte (Gasto v2.62).
-        Realiza Double Semantic Verification (DSV) para prevenir IDOR.
+        Orquesta la creacion de un DocumentoSoporte (Gasto v3.7.1).
+        Realiza Double Semantic Verification (DSV) e integra con Contabilidad (Pull Model).
         """
         logger.info(f"[GastoBusinessService:procesar_gasto] Iniciando proceso para empresa={empresa.id}")
         try:
-            # En v2.62, el payload puede venir anidado en 'documento_soporte' o plano.
-            if 'documento_soporte' in data:
-                ds_data = data.pop('documento_soporte')
-                # Mezclar campos extra (descripcion, observaciones, categoria_contable, etc)
-                for key, value in data.items():
-                    if key not in ds_data:
-                        ds_data[key] = value
-            else:
-                ds_data = data
-
-            logger.debug(f"[GastoBusinessService:procesar_gasto] Data normalizada: {ds_data}")
-
-            # Normalizar porcentajes para evitar errores de validacion de choices (v2.62.1)
-            for pct_field in ['retefuente_porcentaje', 'reteica_porcentaje']:
-                val = ds_data.get(pct_field)
-                if val is not None:
-                    try:
-                        d_val = Decimal(str(val))
-                        if d_val == Decimal('0'):
-                            ds_data[pct_field] = '0.00'
-                        else:
-                            # Asegurar que sea string para el CharField
-                            ds_data[pct_field] = str(val)
-                    except Exception:
-                        pass
-
-            resolucion_id = ds_data.pop('resolucion', None)
+            # Normalización de datos
+            ds_data = data.get('documento_soporte', data) if 'documento_soporte' in data else data
             
-            if not resolucion_id:
-                return False, {
-                    "error": "resolucion_requerida", 
-                    "message": "Debe especificar una resolucion DIAN."
-                }, 400
+            # SINTEL v3.7.1 - Asegurar que descripcion se capture (si viene afuera o adentro)
+            if 'descripcion' in data and 'descripcion' not in ds_data:
+                ds_data['descripcion'] = data['descripcion']
+            
+            # Limpieza de campos obsoletos (v3.7.1)
+            for legacy_field in ['retefuente_porcentaje', 'reteica_porcentaje', 'retefuente', 'reteica']:
+                ds_data.pop(legacy_field, None)
 
-            # DSV: Verificar que la resolucion pertenezca a la empresa
+            # Handle both field names for backward compatibility
+            resolucion_id = ds_data.pop('resolucion_dian', None) or ds_data.pop('resolucion', None)
+            if not resolucion_id:
+                return False, {"error": "resolucion_requerida", "message": "Debe especificar una resolucion DIAN."}, 400
+
+            # DSV: Resolución
             resolucion = ResolucionDIAN.objects.filter(id=resolucion_id, empresa=empresa).first()
             if not resolucion:
-                logger.warning(f"[SECURITY:IDOR] Intento de uso de resolucion {resolucion_id} por empresa {empresa.id}")
-                return False, {
-                    "error": "resolucion_invalida", 
-                    "message": "La resolucion especificada no es valida o no pertenece a su empresa."
-                }, 404
+                return False, {"error": "resolucion_invalida", "message": "La resolucion no es valida."}, 404
 
-            # DSV: Verificar que el proveedor pertenezca a la empresa
+            # DSV: Proveedor (SINTEL v3.7.1 - Resiliencia ID/UUID)
             proveedor_id = ds_data.get('proveedor')
-            if not proveedor_id:
-                return False, {
-                    "error": "proveedor_requerido",
-                    "message": "Debe especificar un proveedor."
-                }, 400
-            
             from apps.tenant.proveedores.models import Proveedor
-            proveedor = Proveedor.objects.filter(id=proveedor_id, empresa=empresa).first()
+            import uuid as uuid_lib
+
+            proveedor = None
+            if proveedor_id:
+                # 1. Intentar como UUID
+                is_uuid = False
+                try:
+                    if isinstance(proveedor_id, str) and len(proveedor_id) >= 32:
+                        uuid_lib.UUID(str(proveedor_id))
+                        is_uuid = True
+                except (ValueError, TypeError):
+                    pass
+
+                if is_uuid:
+                    proveedor = Proveedor.objects.filter(uuid=proveedor_id, empresa=empresa).first()
+                else:
+                    # 2. Fallback a ID numerico
+                    try:
+                        proveedor = Proveedor.objects.filter(id=int(proveedor_id), empresa=empresa).first()
+                    except (ValueError, TypeError, ValueError):
+                        pass
+
             if not proveedor:
-                logger.warning(f"[SECURITY:IDOR] Intento de uso de proveedor {proveedor_id} por empresa {empresa.id}")
-                return False, {
-                    "error": "proveedor_invalido",
-                    "message": "El proveedor especificado no es valido o no pertenece a su empresa."
-                }, 404
+                return False, {"error": "proveedor_invalido", "message": f"El proveedor '{proveedor_id}' no es valido o no pertenece a su empresa."}, 404
             
-            # Asignar objeto proveedor para persistencia
             ds_data['proveedor'] = proveedor
 
-            # 1. Validar cumplimiento DIAN (Vigencia de fecha)
+            # 1. Validar DIAN
             fecha_doc = ds_data.get('fecha')
             if not resolucion.esta_dentro_de_fecha(fecha_doc):
-                return False, {
-                    "error": "resolucion_vencida",
-                    "message": f"La fecha {fecha_doc} esta fuera del rango de vigencia de la resolucion ({resolucion.fecha_inicio} a {resolucion.fecha_fin})."
-                }, 400
+                return False, {"error": "resolucion_vencida", "message": "Fecha fuera de rango de resolucion."}, 400
 
-            # 2. Preparar datos de DocumentoSoporte con calculos de negocio
-            calculos = GastoBusinessService.calcular_y_validar_totales(ds_data, resolucion)
-            ds_data.update(calculos)
+            # 2. Preparar Totales (v3.7.1 Pull Model)
+            subtotal = Decimal(str(ds_data.get('subtotal', 0)))
+            ds_data['subtotal'] = subtotal
             
-            # 3. Persistencia Atomica via CRUD
+            # [SSoT] Obtener retenciones configuradas para el proveedor
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+            config_ret = RetencionesService.obtener_retenciones_desde_tercero(
+                nit=proveedor.numero_documento,
+                tipo_tercero='PROVEEDOR',
+                naturaleza='COMPRA'
+            )
+            
+            # Calcular retenciones iniciales para determinar el TOTAL neto
+            monto_retefuente = RetencionesService.calcular_monto_retencion('RETEFUENTE', config_ret['retefuente_porcentaje'], subtotal)
+            monto_reteica = RetencionesService.calcular_monto_retencion('RETEICA', config_ret['reteica_porcentaje'], subtotal)
+            monto_reteiva = RetencionesService.calcular_monto_retencion('RETEIVA', config_ret['reteiva_porcentaje'], subtotal)
+            
+            total_neto = (subtotal - monto_retefuente - monto_reteica - monto_reteiva).quantize(Decimal('0.01'))
+            ds_data['total'] = total_neto
+
+            # 3. Persistencia via CRUD
             from apps.tenant.gastos.services.crud_service import DocumentoCRUDService
             documento = DocumentoCRUDService.crear_documento(ds_data, empresa, resolucion)
             
-            logger.info(f"[GastoBusinessService:procesar_gasto] Exito! ID={documento.id}")
+            # 4. Registrar Retenciones en Contabilidad (v3.7.1)
+            for tipo in ['RETEFUENTE', 'RETEICA', 'RETEIVA']:
+                pct = config_ret.get(f'{tipo.lower()}_porcentaje', Decimal('0.00'))
+                if pct > 0:
+                    RetencionesService.crear_retencion(
+                        tipo=tipo,
+                        porcentaje=pct,
+                        base=subtotal,
+                        documento_origen_app='gastos',
+                        documento_origen_modelo='DocumentoSoporte',
+                        documento_origen_id=documento.id,
+                        notas=f"Auto-generada desde Gasto #{documento.consecutivo}"
+                    )
+            
+            logger.info(f"[GastoBusinessService:procesar_gasto] Exito! ID={documento.id}, Total Neto={total_neto}")
             return True, documento, 201
             
         except ValidationError as e:
-            logger.warning(f"[GastoBusinessService:procesar_gasto] Error de validacion: {e.detail}")
-            return False, e.detail, 400
+            # Error de DRF
+            logger.warning(f"[GastoBusinessService:procesar_gasto] Error de validacion API: {e.detail}")
+            return False, {"error": "validacion_api", "message": e.detail}, 400
+            
         except DjangoValidationError as e:
-            logger.warning(f"[GastoBusinessService:procesar_gasto] Error de validacion Django: {e}")
-            return False, {"error": "validacion", "message": str(e)}, 400
+            # Error de Modelo (full_clean)
+            error_dict = e.message_dict if hasattr(e, 'message_dict') else {"non_field_errors": str(e)}
+            logger.warning(f"[GastoBusinessService:procesar_gasto] Error de validacion Django: {error_dict}")
+            logger.warning(f"[GastoBusinessService:procesar_gasto] Documento data al fallar: {ds_data}")
+            return False, {"error": "validacion", "message": error_dict}, 400
+            
         except Exception as e:
-            logger.error(f"Error en procesar_gasto: {e}", exc_info=True)
+            logger.error(f"[GastoBusinessService:procesar_gasto] Error critico: {str(e)}", exc_info=True)
             return False, {"error": "error_interno", "message": str(e)}, 500
 
 

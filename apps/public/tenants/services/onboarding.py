@@ -37,20 +37,20 @@ def _get_redis_client() -> redis.Redis:
     return redis.from_url(getattr(settings, "REDIS_URL", "redis://redis:6379/0"))
 
 
-def create_onboarding_ott(company_name: str, admin_email: str, admin_password: str, schema_name: str | None = None, ttl_seconds: int = DEFAULT_OTT_TTL_SECONDS) -> dict[str, Any]:
+def create_onboarding_ott(company_name: str, admin_email: str, schema_name: str | None = None, ttl_seconds: int = DEFAULT_OTT_TTL_SECONDS) -> dict[str, Any]:
     """Crea tenant + admin user (si no existe) y devuelve una URL con OTT.
 
     Retorna dict con keys: `ott`, `redirect_url` (absolute tenant URL with ott query param),
     `schema_name`.
     """
-    # 1. Crear o obtener usuario admin en public
-    admin_user, created = User.objects.get_or_create(email=admin_email, defaults={"username": admin_email, "is_active": True})
+    admin_user, created = User.objects.get_or_create(
+        email=admin_email,
+        defaults={"username": admin_email, "is_active": True},
+    )
     if created:
-        admin_user.set_password(admin_password)
-        admin_user.is_active = True
+        admin_user.set_unusable_password()
         admin_user.save()
     else:
-        # Si el usuario existe, asegurarse activo
         if not admin_user.is_active:
             admin_user.is_active = True
             admin_user.save()

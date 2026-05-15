@@ -118,14 +118,14 @@
   /**
    * Configura la búsqueda autocompletada de cuentas contables.
    * ⚠️ v3.5: Integración con Contabilidad
-   * 
-   * @param {Object} config - Configuración { inputSelector, resultsSelector, uuidSelector }
+   *
+   * @param {Object} config - Configuración { inputSelector, resultsSelector, uuidSelector, codigoPrefix: '15'|'51' }
    */
   function setupCuentaAutocomplete(config) {
     const input = d.querySelector(config.inputSelector);
     const results = d.querySelector(config.resultsSelector);
     const uuidInput = d.querySelector(config.uuidSelector);
-    
+
     if (!input || !results || !uuidInput) return;
 
     let timeout = null;
@@ -142,7 +142,11 @@
 
       timeout = setTimeout(async () => {
         try {
-          const res = await w.Sintel.Inventario.API.searchCuentas(query);
+          const searchOptions = {};
+          if (config.codigoPrefix) {
+            searchOptions.codigoPrefix = config.codigoPrefix;
+          }
+          const res = await w.Sintel.Inventario.API.searchCuentas(query, searchOptions);
           if (res.ok && res.data) {
             const data = Array.isArray(res.data) ? res.data : (res.data.results || []);
             renderResultados(data);

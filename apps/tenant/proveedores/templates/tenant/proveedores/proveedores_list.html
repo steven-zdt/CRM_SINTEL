@@ -1,17 +1,62 @@
-<div class="card shadow-sm">
-  <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-      <h5 class="mb-0 text-secondary"><i class="bi bi-truck me-2"></i>Directorio de Proveedores</h5>
-      <div>
-          <div class="input-group input-group-sm d-inline-flex w-auto me-2">
-              <input type="text" id="search-proveedor" class="form-control" placeholder="Buscar proveedor...">
-              <button class="btn btn-outline-secondary" type="button"><i class="bi bi-search"></i></button>
-          </div>
-          <button class="btn btn-primary btn-sm" id="btn-nuevo-proveedor">
-              <i class="bi bi-plus-lg me-1"></i>Nuevo
+{# proveedores_list.html - Directorio de Proveedores v3.7 #}
+{# ZERO JS IN HTML: All logic in proveedores_main.js #}
+{# HTMX: Offcanvas injection via hx-get → render-offcanvas/crear|editar|detalle #}
+
+<div class="card shadow-sm" data-module="proveedores">
+  <div class="card-header bg-white py-3 px-3">
+    <div class="d-flex justify-content-between align-items-center">
+      <h6 class="mb-0 text-secondary fw-semibold">
+        <i class="bi bi-truck me-2"></i>Directorio de Proveedores
+      </h6>
+
+      <div class="d-flex align-items-center gap-2">
+        {# Buscador inline — idéntico al patrón clientes #}
+        <div class="input-group input-group-sm w-auto">
+          <input type="text"
+                 id="search-proveedor"
+                 class="form-control"
+                 placeholder="Buscar proveedor..."
+                 data-module="proveedores"
+                 data-search-input>
+          <button class="btn btn-outline-secondary" type="button"
+                  data-action="search" data-module="proveedores" title="Buscar">
+            <i class="bi bi-search"></i>
           </button>
+        </div>
+
+        {# Botón Nuevo — HTMX Gateway Directo, igual que clientes #}
+        <button class="btn btn-primary btn-sm"
+                hx-get="/api/v1/proveedores/render-offcanvas/crear/"
+                hx-target="#offcanvas-container-proveedores"
+                hx-swap="innerHTML"
+                data-module="proveedores"
+                data-create-button>
+          <i class="bi bi-plus-lg me-1"></i>Nuevo Proveedor
+        </button>
       </div>
+    </div>
   </div>
+
   <div class="card-body p-0">
-      <div id="grid-proveedores"></div>
+
+    {# Spinner — mismo patrón data-spinner que clientes #}
+    <div data-spinner="proveedores" class="text-center py-5" style="display: none;">
+      <div class="spinner-border" role="status">
+        <span class="visually-hidden">Cargando...</span>
+      </div>
+      <p class="mt-2 text-muted">Inicializando tabla de proveedores...</p>
+    </div>
+
+    {# Grid Tabulator — mismo patrón data-grid que clientes #}
+    <div id="grid-proveedores" data-grid="proveedores" style="display: none;"></div>
+
+    {# Empty State — mismo patrón data-empty-state que clientes #}
+    <div data-empty-state="proveedores" class="text-center py-5" style="display: none;">
+      <p class="text-muted"><i class="bi bi-inbox"></i> No hay proveedores registrados</p>
+    </div>
+
   </div>
 </div>
+
+{# OFFCANVAS CONTAINER (HTMX Injection) — equivalente a offcanvas-container-clientes #}
+<div id="offcanvas-container-proveedores"></div>

@@ -176,9 +176,6 @@
                 field: "dian_validation_desc",
                 formatter: function(cell) {
                     const rowData = cell.getRow().getData();
-                    // Mostrar dian_validation_desc si está disponible (estado DIAN desde XML)
-                    // Si no, mostrar estado de la base de datos
-                    const estadoDian = cell.getValue() || rowData.estado;
                     const estadoPago = determinarEstadoPago(rowData);
 
                     // Si hay descripción DIAN, mostrarla
@@ -219,33 +216,7 @@
                 hozAlign: "right",
                 width: 120
             },
-            {
-                title: "Ret. Fuente",
-                field: "retefuente",
-                formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
-                },
-                hozAlign: "right",
-                width: 110
-            },
-            {
-                title: "ReteICA",
-                field: "reteica",
-                formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
-                },
-                hozAlign: "right",
-                width: 100
-            },
-            {
-                title: "ReteIVA",
-                field: "reteiva",
-                formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
-                },
-                hozAlign: "right",
-                width: 100
-            },
+
             {
                 title: "Forma de Pago",
                 field: "forma_pago",
@@ -267,7 +238,7 @@
                 title: "Acciones",
                 formatter: function(cell) {
                     const rowData = cell.getRow().getData();
-                    const id = rowData.id;
+                    const id = rowData.uuid; // ⚠️ v2.95: Usar UUID para lookup field (SINTEL v3.5)
 
                     return `
                         <div class="btn-group btn-group-sm" role="group">
@@ -341,93 +312,55 @@
                 });
             }
             
-            // ⚠️ v2.61.2: Configurar evento rowClick para modo solo lectura
-            // ⚠️ _eliminandoFactura está en scope de módulo (compartido con initListEvents)
+            // Configurar rowClick: abre detalle al hacer clic en la fila (no en botones)
             if (typeof table.on === 'function') {
                 table.on('rowClick', async (e, row) => {
-                    // ⚠️ v2.61.2: Prevenir rowClick si se está eliminando una factura
-                    if (_eliminandoFactura) {
-                        console.log(`${MOD} rowClick ignorado: eliminación en proceso`);
-                        return;
-                    }
-                    
+                    if (_eliminandoFactura) return;
+
                     const rowData = row.getData();
-                    const id = rowData.id;
-                    
+                    const id = rowData.uuid; // ⚠️ v2.95: Usar UUID para lookup field (SINTEL v3.5)
                     if (!id) return;
 
-                    // Evitar abrir si se hizo click en un botón
-                    const target = e.target || e.originalEvent?.target;
-                    if (target && target.closest && target.closest('button')) {
-                        return;
-                    }
+                    // Ignorar si el click fue dentro del área de botones de acción.
+                    // composedPath() devuelve la ruta real del evento (más fiable que e.target
+                    // en Tabulator, que puede apuntar al elemento de fila en vez del clickeado).
+                    const path = e.composedPath ? e.composedPath() : (e.path || []);
+                    const enBotones = path.some(el =>
+                        el.tagName === 'BUTTON' ||
+                        (el.classList && el.classList.contains('btn-group'))
+                    );
+                    if (enBotones) return;
 
-                    // ⚠️ v2.61.2: Simular click en botón "Ver" para usar el flujo de solo lectura
-                    const btnView = d.querySelector(`.btn-view-factura[data-id="${id}"]`);
-                    if (btnView) {
-                        btnView.click();
-                    } else {
-                        // Fallback: usar el mismo flujo que el botón Ver
-                        try {
-                            const offcanvasContainer = d.getElementById('offcanvas-container-facturas');
-                            if (!offcanvasContainer) {
-                                console.warn(`${MOD} Contenedor #offcanvas-container-facturas no encontrado`);
-                                return;
+                    // Abrir vista de detalle directamente (sin btnView.click() para evitar cascada)
+                    try {
+                        const offcanvasContainer = d.getElementById('offcanvas-container-facturas');
+                        if (!offcanvasContainer) return;
+
+                        await htmx.ajax('GET', `/api/v1/facturas/gestor-offcanvas/?uuid=${id}&simple=true&readonly=true`, {
+                            target: '#offcanvas-container-facturas',
+                            swap: 'innerHTML'
+                        });
+
+                        await new Promise(resolve => setTimeout(resolve, 100));
+
+                        let offcanvasEl = d.getElementById('offcanvas-ver-factura');
+                        if (!offcanvasEl) {
+                            offcanvasEl = d.getElementById('offcanvas-factura');
+                            if (offcanvasEl) {
+                                offcanvasEl.id = 'offcanvas-ver-factura';
+                                offcanvasEl.setAttribute('aria-labelledby', 'offcanvas-ver-factura-label');
                             }
-
-                            // ⚠️ HTMX: Cargar template de solo lectura
-                            await htmx.ajax('GET', `/api/v1/facturas/gestor-offcanvas/?id=${id}&simple=true&readonly=true`, {
-                                target: '#offcanvas-container-facturas',
-                                swap: 'innerHTML'
-                            });
-
-                            // ⚠️ Safeguard: Esperar un momento para que el DOM se actualice
-                            await new Promise(resolve => setTimeout(resolve, 100));
-
-                            // ⚠️ v2.61.2: Buscar el offcanvas correcto
-                            let offcanvasEl = d.getElementById('offcanvas-ver-factura');
-                            if (!offcanvasEl) {
-                                offcanvasEl = d.getElementById('offcanvas-factura');
-                                if (offcanvasEl) {
-                                    offcanvasEl.id = 'offcanvas-ver-factura';
-                                    offcanvasEl.setAttribute('aria-labelledby', 'offcanvas-ver-factura-label');
-                                }
-                            }
-
-                            if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                                const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                                
-                                // ⚠️ v2.61.2: Cargar datos de la factura usando verDetalleFactura
-                                // Intentar múltiples formas de acceso al módulo
-                                if (w.VerDetalleFactura && typeof w.VerDetalleFactura.ver === 'function') {
-                                    await w.VerDetalleFactura.ver(id);
-                                } else if (typeof window.VerDetalleFactura !== 'undefined' && typeof window.VerDetalleFactura.ver === 'function') {
-                                    await window.VerDetalleFactura.ver(id);
-                                } else if (typeof window.verDetalleFactura === 'function') {
-                                    await window.verDetalleFactura(id);
-                                } else {
-                                    console.warn(`${MOD} Función verDetalleFactura no disponible. Módulos disponibles:`, {
-                                        VerDetalleFactura: typeof w.VerDetalleFactura,
-                                        windowVerDetalleFactura: typeof window.VerDetalleFactura,
-                                        verDetalleFactura: typeof window.verDetalleFactura
-                                    });
-                                    // [WARNING] Fallback: Intentar cargar datos directamente
-                                    try {
-                                        const response = await w.http('GET', `/api/v1/facturas/${id}/`);
-                                        if (response.ok && response.data) {
-                                            console.log(`${MOD} Datos cargados directamente desde API (fallback)`);
-                                        }
-                                    } catch (error) {
-                                        console.error(`${MOD} Error en fallback de carga de datos:`, error);
-                                    }
-                                }
-                                
-                                // Mostrar offcanvas después de cargar datos
-                                offcanvasInstance.show();
-                            }
-                        } catch (error) {
-                            console.error(`${MOD} Error al cargar Offcanvas desde fila:`, error);
                         }
+
+                        if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+                            const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+                            if (w.VerDetalleFactura?.ver) {
+                                await w.VerDetalleFactura.ver(id);
+                            }
+                            offcanvasInstance.show();
+                        }
+                    } catch (error) {
+                        console.error(`${MOD} Error al abrir detalle desde fila:`, error);
                     }
                 });
             }
@@ -535,24 +468,7 @@
                                                 <input type="date" class="form-control" id="vencimiento-${id}" name="fecha_vencimiento" value="${factura.fecha_vencimiento || ''}">
                                             </div>
 
-                                            <!-- Retenciones -->
-                                            <hr class="my-3">
-                                            <h6 class="text-muted mb-2"><i class="bi bi-percent me-2"></i>Retenciones</h6>
 
-                                            <div class="row g-2 mb-3">
-                                                <div class="col-6">
-                                                    <label class="form-label small">Retención Fuente</label>
-                                                    <input type="number" class="form-control form-control-sm" id="retefuente-${id}" name="retefuente" placeholder="0.00" step="0.01" min="0" value="${factura.retefuente || '0'}">
-                                                </div>
-                                                <div class="col-6">
-                                                    <label class="form-label small">ReteICA</label>
-                                                    <input type="number" class="form-control form-control-sm" id="reteica-${id}" name="reteica" placeholder="0.00" step="0.01" min="0" value="${factura.reteica || '0'}">
-                                                </div>
-                                                <div class="col-6">
-                                                    <label class="form-label small">ReteIVA</label>
-                                                    <input type="number" class="form-control form-control-sm" id="reteiva-${id}" name="reteiva" placeholder="0.00" step="0.01" min="0" value="${factura.reteiva || '0'}">
-                                                </div>
-                                            </div>
 
                                             <!-- Formas de Pago -->
                                             <hr class="my-3">
@@ -572,6 +488,26 @@
                                                     <label class="form-label small">Fecha Límite Pago</label>
                                                     <input type="date" class="form-control form-control-sm" id="payment-date-${id}" name="payment_due_date" value="${factura.payment_due_date || ''}">
                                                 </div>
+                                            </div>
+
+                                            <!-- Vinculacion Contable -->
+                                            <hr class="my-3">
+                                            <h6 class="text-muted mb-2"><i class="bi bi-book me-2"></i>Vinculacion Contable</h6>
+                                            <div class="mb-3 position-relative">
+                                                <label class="form-label small">Cuenta PUC nivel 6 (Cartera / Ingreso / Gasto)</label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                                                    <input type="text" class="form-control" id="cuenta-search-${id}"
+                                                           placeholder="Buscar por codigo o nombre (ej: 1305...)">
+                                                </div>
+                                                <input type="hidden" id="cuenta-uuid-${id}" name="cuenta_contable_uuid"
+                                                       value="${factura.cuenta_contable_uuid || ''}">
+                                                <div id="cuenta-suggestions-${id}"
+                                                     class="list-group position-absolute d-none shadow"
+                                                     style="z-index:1060;max-height:160px;overflow-y:auto;width:100%;top:100%;left:0;"></div>
+                                                <small class="text-muted mt-1 d-block">
+                                                    <i class="bi bi-info-circle me-1"></i>Vincule a una cuenta de control para automatizar contabilizacion.
+                                                </small>
                                             </div>
                                         </form>
                                     </div>
@@ -595,6 +531,71 @@
                     const modal = new bootstrap.Modal(document.getElementById(`modal-editar-factura-${id}`));
                     modal.show();
 
+                    // Inicializar buscador de cuenta contable
+                    const cuentaSearchInput = document.getElementById(`cuenta-search-${id}`);
+                    const cuentaUuidInput = document.getElementById(`cuenta-uuid-${id}`);
+                    const cuentaSuggestions = document.getElementById(`cuenta-suggestions-${id}`);
+
+                    if (cuentaSearchInput && cuentaUuidInput && cuentaSuggestions) {
+                        // Pre-cargar nombre si ya tiene UUID asignado (§18 HTTP Pull)
+                        const existingUuid = cuentaUuidInput.value.trim();
+                        if (existingUuid && w.facturasAPI && typeof w.facturasAPI.getCuentaByUuid === 'function') {
+                            w.facturasAPI.getCuentaByUuid(existingUuid).then(res => {
+                                if (res && res.ok && res.data) {
+                                    const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
+                                    if (items.length > 0) {
+                                        cuentaSearchInput.value = `${items[0].codigo} - ${items[0].nombre}`;
+                                    }
+                                }
+                            }).catch(() => {});
+                        }
+
+                        // Buscador con debounce
+                        let cuentaTimer;
+                        cuentaSearchInput.addEventListener('input', () => {
+                            const q = cuentaSearchInput.value.trim();
+                            clearTimeout(cuentaTimer);
+                            if (q.length < 2) { cuentaSuggestions.classList.add('d-none'); return; }
+                            cuentaTimer = setTimeout(async () => {
+                                if (!w.facturasAPI || typeof w.facturasAPI.searchCuentas !== 'function') return;
+                                const res = await w.facturasAPI.searchCuentas(q);
+                                if (!res || !res.ok) return;
+                                const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
+                                cuentaSuggestions.innerHTML = '';
+                                if (!items.length) { cuentaSuggestions.classList.add('d-none'); return; }
+                                items.forEach(c => {
+                                    const btn = document.createElement('button');
+                                    btn.type = 'button';
+                                    btn.className = 'list-group-item list-group-item-action small py-2';
+                                    btn.innerHTML = `<span class="fw-bold text-primary">${c.codigo}</span> - ${c.nombre}`;
+                                    btn.addEventListener('click', () => {
+                                        cuentaSearchInput.value = `${c.codigo} - ${c.nombre}`;
+                                        cuentaUuidInput.value = c.uuid;
+                                        cuentaSearchInput.classList.add('is-valid');
+                                        setTimeout(() => cuentaSearchInput.classList.remove('is-valid'), 1500);
+                                        cuentaSuggestions.classList.add('d-none');
+                                    });
+                                    cuentaSuggestions.appendChild(btn);
+                                });
+                                cuentaSuggestions.classList.remove('d-none');
+                            }, 300);
+                        });
+
+                        // Cerrar sugerencias al hacer click fuera
+                        document.addEventListener('click', function closeCuentaSugg(e) {
+                            if (!cuentaSearchInput.contains(e.target) && !cuentaSuggestions.contains(e.target)) {
+                                cuentaSuggestions.classList.add('d-none');
+                            }
+                        }, { once: false });
+
+                        // Limpiar UUID si el campo queda vacio
+                        cuentaSearchInput.addEventListener('change', () => {
+                            if (!cuentaSearchInput.value.trim()) {
+                                cuentaUuidInput.value = '';
+                            }
+                        });
+                    }
+
                     // Manejador para guardar cambios
                     const btnGuardar = document.querySelector(`.btn-guardar-edicion[data-id="${id}"]`);
                     if (btnGuardar) {
@@ -603,10 +604,16 @@
                             const formData = new FormData(form);
                             const payload = Object.fromEntries(formData);
 
-                            // Convertir números
-                            payload.retefuente = parseFloat(payload.retefuente) || 0;
-                            payload.reteica = parseFloat(payload.reteica) || 0;
-                            payload.reteiva = parseFloat(payload.reteiva) || 0;
+                            // Campos fecha y UUID vacíos -> null (DRF rechaza "" en DateField)
+                            const DATE_FIELDS = ['fecha_vencimiento', 'payment_due_date'];
+                            DATE_FIELDS.forEach(f => {
+                                if (f in payload && !payload[f]) payload[f] = null;
+                            });
+                            if ('cuenta_contable_uuid' in payload && !payload.cuenta_contable_uuid) {
+                                payload.cuenta_contable_uuid = null;
+                            }
+
+
 
                             btnGuardar.disabled = true;
                             btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Guardando...';
@@ -685,7 +692,7 @@
 
                     // ⚠️ HTMX: Cargar template de solo lectura desde el servidor
                     // Usar el endpoint gestor-offcanvas pero con modo solo lectura
-                    await htmx.ajax('GET', `/api/v1/facturas/gestor-offcanvas/?id=${id}&simple=true&readonly=true`, {
+                    await htmx.ajax('GET', `/api/v1/facturas/gestor-offcanvas/?uuid=${id}&simple=true&readonly=true`, {
                         target: '#offcanvas-container-facturas',
                         swap: 'innerHTML'
                     });
