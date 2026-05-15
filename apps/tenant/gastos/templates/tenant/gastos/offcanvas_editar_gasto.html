@@ -131,38 +131,15 @@
                 </p>
                 <div class="row g-3">
 
-                    {# --- Preset de monto (Base Gravable) --- #}
+                    {# --- Input editable de monto (Base Gravable) --- #}
                     <div class="col-12">
-                        <label for="subtotal_preset" class="form-label">Base Gravable (Subtotal) *</label>
-                        <select class="form-select" id="subtotal_preset">
-                            <option value="">-- Seleccione un monto --</option>
-                            <option value="50000">$50,000</option>
-                            <option value="100000">$100,000</option>
-                            <option value="200000">$200,000</option>
-                            <option value="300000">$300,000</option>
-                            <option value="500000">$500,000</option>
-                            <option value="750000">$750,000</option>
-                            <option value="1000000">$1,000,000</option>
-                            <option value="2000000">$2,000,000</option>
-                            <option value="3000000">$3,000,000</option>
-                            <option value="5000000">$5,000,000</option>
-                            <option value="10000000">$10,000,000</option>
-                            <option value="custom">Otro monto...</option>
-                        </select>
-                    </div>
-
-                    {# --- Input personalizado (visible solo cuando value="custom") --- #}
-                    <div class="col-12 d-none" id="subtotal_custom_wrapper">
-                        <label for="subtotal_custom" class="form-label">Monto personalizado *</label>
+                        <label for="subtotal" class="form-label">Base Gravable (Subtotal) *</label>
                         <div class="input-group">
                             <span class="input-group-text">$</span>
-                            <input type="number" class="form-control" id="subtotal_custom"
-                                   step="0.01" min="0.01" placeholder="Ej: 450000">
+                            <input type="number" class="form-control" id="subtotal" name="subtotal"
+                                   step="0.01" min="0.01" required placeholder="Ej: 500000">
                         </div>
                     </div>
-
-                    {# --- Input hidden que recibe el valor real (enviado al backend) --- #}
-                    <input type="hidden" id="subtotal" name="subtotal" value="0">
 
                     {# --- Retenciones aplicadas (Selects) --- #}
                     <div class="col-12">

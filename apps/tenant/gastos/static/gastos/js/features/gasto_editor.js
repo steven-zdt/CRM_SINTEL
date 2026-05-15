@@ -41,28 +41,11 @@
         // Inicializar buscador de cuentas (v3.7.1)
         initCuentaSearch(form);
 
-        // ── Eventos para Valores Financieros (Preset de monto) ────────────────
-        const presetSel = form.querySelector('#subtotal_preset');
-        const customWrapper = form.querySelector('#subtotal_custom_wrapper');
-        const subtotalHidden = form.querySelector('#subtotal');
-        const customInput = form.querySelector('#subtotal_custom');
+        // ── Eventos para Valores Financieros (Input editable) ────────────────
+        const subtotalInput = form.querySelector('#subtotal');
 
-        if (presetSel) {
-            presetSel.addEventListener('change', function () {
-                if (this.value === 'custom') {
-                    customWrapper?.classList.remove('d-none');
-                    subtotalHidden.value = customInput?.value || '0';
-                } else {
-                    customWrapper?.classList.add('d-none');
-                    subtotalHidden.value = this.value || '0';
-                }
-                calcularTotales(form);
-            });
-        }
-
-        if (customInput) {
-            customInput.addEventListener('input', function () {
-                subtotalHidden.value = this.value || '0';
+        if (subtotalInput) {
+            subtotalInput.addEventListener('input', function () {
                 calcularTotales(form);
             });
         }
@@ -97,18 +80,10 @@
         form.addEventListener('submit', handleSubmit);
 
         // ── Precargar valores en Edit mode ────────────────────────────────────
-        const subtotalVal = parseFloat(subtotalHidden?.value) || 0;
-
-        // Preseleccionar preset o activar "Otro monto..."
-        if (subtotalVal > 0 && presetSel) {
-            const matchingOption = [...presetSel.options].find(o => parseFloat(o.value) === subtotalVal);
-            if (matchingOption) {
-                presetSel.value = matchingOption.value;
-                customWrapper?.classList.add('d-none');
-            } else {
-                presetSel.value = 'custom';
-                customWrapper?.classList.remove('d-none');
-                if (customInput) customInput.value = subtotalVal;
+        if (subtotalInput) {
+            const subtotalVal = parseFloat(subtotalInput.value) || 0;
+            if (subtotalVal > 0) {
+                subtotalInput.value = subtotalVal;
             }
         }
 
