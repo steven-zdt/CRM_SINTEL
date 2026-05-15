@@ -53,6 +53,7 @@ from apps.tenant.contabilidad.api.serializers import (
     ReporteFinancieroInputSerializer,
     BalancePruebaOutputSerializer,
     EstadoResultadosOutputSerializer,
+    LibroDiarioSerializer,
 )
 from apps.tenant.contabilidad.models import (
     AsientoContable,
@@ -80,6 +81,7 @@ from apps.tenant.contabilidad.services.selectors import (
     balance_prueba_selector,
     estado_resultados_selector,
     filtrar_cuentas_por_app_origen,
+    get_libro_diario_periodo,
 )
 from apps.tenant.contabilidad.services.business_service import ContabilidadBusinessService
 
@@ -1157,6 +1159,31 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
             )
 
 
+class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.ViewSet):
+    """
+    ViewSet para la Vista Unificada del Libro Diario Contable.
+    Consolida documentos de todas las apps de negocio con su estado contable.
+    GET /api/v1/contabilidad/libro-diario/?fecha_inicio=2026-05-01&fecha_fin=2026-05-31
+    """
+    permission_classes = [IsTenantMember]
+
+    def list(self, request, *args, **kwargs):
+        serializer_input = ReporteFinancieroInputSerializer(data=request.query_params)
+        serializer_input.is_valid(raise_exception=True)
+
+        data = serializer_input.validated_data
+        empresa_id = self.get_empresa_id()
+
+        resultado = get_libro_diario_periodo(
+            empresa_id=empresa_id,
+            fecha_inicio=data['fecha_inicio'],
+            fecha_fin=data['fecha_fin']
+        )
+
+        serializer_output = LibroDiarioSerializer(resultado, many=True)
+        return Response(serializer_output.data, status=status.HTTP_200_OK)
+
+
 # Lista de ViewSets para registro automático en el router
 VIEWSETS = [
     (r'cuentas-contables', CuentaContableViewSet, 'cuenta-contable'),
@@ -1168,4 +1195,5 @@ VIEWSETS = [
     (r'pendientes', DocumentosPendientesViewSet, 'pendientes'),
     (r'retenciones', RetencionViewSet, 'retencion'),
     (r'configuraciones-retenciones', ConfiguracionRetencionesViewSet, 'configuracion-retencion'),
+    (r'libro-diario', LibroDiarioViewSet, 'libro-diario'),
 ]

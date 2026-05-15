@@ -4,7 +4,9 @@ from decimal import Decimal
 import logging
 
 from apps.tenant.empleados.models import Devengo
-from .base import AbstractExtractor
+from .base import AbstractExtractor, DocumentoEnriquecido, CuentaAsignada, MovimientoResumen
+from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+from datetime import date
 from ..dtos import (
     TransaccionEconomica,
     TipoTransaccion,
@@ -145,3 +147,73 @@ class ExtractorNomina(AbstractExtractor):
                 numero=f"{nomina.periodo_mes}-{nomina.id}"
             )
         )
+
+    def get_documentos_enriquecidos(self, empresa_id: int, fecha_inicio: date, fecha_fin: date) -> List[DocumentoEnriquecido]:
+        from apps.tenant.contabilidad.models import AsientoContable
+        
+        # 1. Obtener devengos del periodo
+        registros = Devengo.objects.filter(
+            empresa_id=empresa_id,
+            fecha_pago__range=(fecha_inicio, fecha_fin)
+        ).select_related('empleado').order_by('fecha_pago', 'id')
+        
+        # 2. Mapear asientos
+        asientos = {
+            (a.documento_origen_modelo, a.documento_origen_id): a 
+            for a in AsientoContable.objects.filter(
+                empresa_id=empresa_id,
+                documento_origen_app='empleados',
+                documento_origen_modelo='Devengo',
+                documento_origen_id__in=[r.id for r in registros]
+            ).prefetch_related('movimientos', 'movimientos__cuenta')
+        }
+        
+        res = []
+        for r in registros:
+            asiento = asientos.get(('Devengo', r.id))
+            
+            cuentas_asignadas = []
+            if r.empleado.cuenta_contable_uuid:
+                cod, nom = CuentaContableSelector.resolve_label_by_uuid(r.empleado.cuenta_contable_uuid, empresa_id)
+                cuentas_asignadas.append(CuentaAsignada(
+                    concepto='Pasivo Nómina (Haber)',
+                    uuid=str(r.empleado.cuenta_contable_uuid),
+                    codigo_puc=cod,
+                    nombre=nom,
+                    monto=r.neto_pagar
+                ))
+
+            dto = DocumentoEnriquecido(
+                app_label='empleados',
+                app_display='Nómina',
+                modelo='Devengo',
+                documento_id=r.id,
+                numero=f"NOM-{r.periodo_mes}-{r.id}",
+                fecha=r.fecha_pago,
+                tipo_comprobante='CN', # Nómina
+                tipo_comprobante_display='Comprobante de Nómina',
+                tercero_nit=r.empleado.numero_documento,
+                tercero_nombre=f"{r.empleado.primer_nombre} {r.empleado.primer_apellido}",
+                subtotal=r.neto_pagar,
+                impuestos=Decimal('0'),
+                total=r.neto_pagar,
+                cuentas_asignadas=cuentas_asignadas
+            )
+            
+            if asiento:
+                dto.estado_contable = 'CONTABILIZADO'
+                dto.asiento_uuid = str(asiento.uuid)
+                dto.asiento_numero = asiento.numero
+                dto.movimientos = [
+                    MovimientoResumen(
+                        cuenta_codigo=m.cuenta.codigo if m.cuenta else 'SIN_CUENTA',
+                        cuenta_nombre=m.cuenta.nombre if m.cuenta else 'Sin Cuenta',
+                        debe=m.debe,
+                        haber=m.haber
+                    ) for m in asiento.movimientos.all()
+                ]
+                dto.cuadra = (asiento.total_debe == asiento.total_haber)
+                
+            res.append(dto)
+            
+        return res

@@ -4,7 +4,9 @@ from decimal import Decimal
 import logging
 
 from apps.tenant.facturas.models import Factura, NotaCredito
-from .base import AbstractExtractor
+from .base import AbstractExtractor, DocumentoEnriquecido, CuentaAsignada, MovimientoResumen
+from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+from datetime import date
 from ..dtos import (
     TransaccionEconomica,
     TipoTransaccion,
@@ -244,3 +246,123 @@ class ExtractorFacturas(AbstractExtractor):
                 numero=nota.numero,
             ),
         )
+
+    def get_documentos_enriquecidos(self, empresa_id: int, fecha_inicio: date, fecha_fin: date) -> List[DocumentoEnriquecido]:
+        from apps.tenant.contabilidad.models import AsientoContable
+        
+        # 1. Obtener Facturas y Notas
+        facturas = Factura.objects.filter(
+            empresa_id=empresa_id,
+            fecha_emision__date__range=(fecha_inicio, fecha_fin)
+        ).order_by('fecha_emision', 'id')
+        
+        notas = NotaCredito.objects.filter(
+            empresa_id=empresa_id,
+            fecha_emision__date__range=(fecha_inicio, fecha_fin)
+        ).select_related('factura').order_by('fecha_emision', 'id')
+        
+        # 2. Batch load NITS for account resolution
+        venta_nits = {f.receptor_nit for f in facturas if f.naturaleza == 'VENTA'}
+        compra_nits = {f.emisor_nit for f in facturas if f.naturaleza != 'VENTA'}
+        cliente_cuentas = self._cargar_cuentas_terceros('clientes', 'Cliente', venta_nits)
+        proveedor_cuentas = self._cargar_cuentas_terceros('proveedores', 'Proveedor', compra_nits)
+        
+        # 3. Mapear asientos
+        asientos = {
+            (a.documento_origen_modelo, a.documento_origen_id): a 
+            for a in AsientoContable.objects.filter(
+                empresa_id=empresa_id,
+                documento_origen_app='facturas',
+                documento_origen_id__in=[f.id for f in facturas] + [n.id for n in notas]
+            ).prefetch_related('movimientos', 'movimientos__cuenta')
+        }
+        
+        res = []
+        
+        # Mapear Facturas
+        for f in facturas:
+            asiento = asientos.get(('Factura', f.id))
+            es_venta = f.naturaleza == 'VENTA'
+            
+            cuentas_asignadas = []
+            if f.cuenta_contable_uuid:
+                cod, nom = CuentaContableSelector.resolve_label_by_uuid(f.cuenta_contable_uuid, empresa_id)
+                cuentas_asignadas.append(CuentaAsignada(
+                    concepto='Ingreso/Gasto (Principal)',
+                    uuid=str(f.cuenta_contable_uuid),
+                    codigo_puc=cod,
+                    nombre=nom,
+                    monto=f.subtotal
+                ))
+            
+            tercero_nit = f.receptor_nit if es_venta else f.emisor_nit
+            tercero_cuenta_uuid = cliente_cuentas.get(tercero_nit) if es_venta else proveedor_cuentas.get(tercero_nit)
+            if tercero_cuenta_uuid:
+                cod, nom = CuentaContableSelector.resolve_label_by_uuid(tercero_cuenta_uuid, empresa_id)
+                cuentas_asignadas.append(CuentaAsignada(
+                    concepto='Cartera/Pasivo Tercero',
+                    uuid=str(tercero_cuenta_uuid),
+                    codigo_puc=cod,
+                    nombre=nom,
+                    monto=f.total
+                ))
+
+            dto = DocumentoEnriquecido(
+                app_label='facturas',
+                app_display='Ventas/Compras',
+                modelo='Factura',
+                documento_id=f.id,
+                numero=f.numero,
+                fecha=f.fecha_emision.date() if hasattr(f.fecha_emision, 'date') else f.fecha_emision,
+                tipo_comprobante='CI' if es_venta else 'CE',
+                tipo_comprobante_display='Factura de Venta' if es_venta else 'Factura de Compra',
+                tercero_nit=tercero_nit,
+                tercero_nombre=f.receptor_razon_social if es_venta else f.emisor_razon_social,
+                subtotal=f.subtotal,
+                impuestos=f.impuestos,
+                total=f.total,
+                cuentas_asignadas=cuentas_asignadas
+            )
+            self._completar_estado_asiento(dto, asiento)
+            res.append(dto)
+            
+        # Mapear Notas
+        for n in notas:
+            asiento = asientos.get(('NotaCredito', n.id))
+            es_venta = n.factura.naturaleza == 'VENTA'
+            
+            dto = DocumentoEnriquecido(
+                app_label='facturas',
+                app_display='Ventas/Compras',
+                modelo='NotaCredito',
+                documento_id=n.id,
+                numero=n.numero,
+                fecha=n.fecha_emision.date() if hasattr(n.fecha_emision, 'date') else n.fecha_emision,
+                tipo_comprobante='NC',
+                tipo_comprobante_display='Nota Crédito',
+                tercero_nit=n.factura.receptor_nit if es_venta else n.factura.emisor_nit,
+                tercero_nombre=n.factura.receptor_razon_social if es_venta else n.factura.emisor_razon_social,
+                subtotal=n.subtotal,
+                impuestos=n.impuestos,
+                total=n.total,
+                cuentas_asignadas=[]
+            )
+            self._completar_estado_asiento(dto, asiento)
+            res.append(dto)
+            
+        return res
+
+    def _completar_estado_asiento(self, dto: DocumentoEnriquecido, asiento):
+        if asiento:
+            dto.estado_contable = 'CONTABILIZADO'
+            dto.asiento_uuid = str(asiento.uuid)
+            dto.asiento_numero = asiento.numero
+            dto.movimientos = [
+                MovimientoResumen(
+                    cuenta_codigo=m.cuenta.codigo if m.cuenta else 'SIN_CUENTA',
+                    cuenta_nombre=m.cuenta.nombre if m.cuenta else 'Sin Cuenta',
+                    debe=m.debe,
+                    haber=m.haber
+                ) for m in asiento.movimientos.all()
+            ]
+            dto.cuadra = (asiento.total_debe == asiento.total_haber)

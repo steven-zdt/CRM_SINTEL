@@ -6,6 +6,7 @@ Selectors para la app contabilidad (v3.5).
 - Definición de LIST_FIELDS y DETAIL_FIELDS para alineación con Serializers.
 - Zero Waste: Uso estricto de only(), select_related() y prefetch_related().
 """
+from datetime import date
 from decimal import Decimal
 from typing import Any, List, Optional, Tuple
 
@@ -240,6 +241,22 @@ class CuentaContableSelector:
         except Exception:
             pass
         return ""
+
+    @staticmethod
+    def resolve_label_by_uuid(uuid: Any, empresa_id: int) -> Tuple[str, str]:
+        """Retorna tupla (codigo, nombre) para uso en DTOs de integracion."""
+        if not uuid:
+            return "", ""
+        try:
+            cuenta = CuentaContable.objects.filter(
+                uuid=uuid, 
+                empresa_id=empresa_id
+            ).only('codigo', 'nombre').first()
+            if cuenta:
+                return cuenta.codigo, cuenta.nombre
+        except Exception:
+            pass
+        return "", ""
 
 class AsientoContableSelector:
     @staticmethod
@@ -726,3 +743,37 @@ def estado_resultados_selector(empresa_id: int, fecha_inicio: Any, fecha_fin: An
             'utilidad_neta': utilidad_neta
         }
     }
+
+
+# ============================================================================
+# LIBRO DIARIO UNIFICADO (v3.7.1)
+# ============================================================================
+
+def get_libro_diario_periodo(empresa_id: int, fecha_inicio: date, fecha_fin: date):
+    """
+    Consolida documentos de todas las apps de negocio para el Libro Diario.
+    Arquitectura Pull: Interroga a cada extractor por su 'DocumentoEnriquecido'.
+    Orden cronológico estricto según Art. 48 Código de Comercio.
+    """
+    from ..integracion.extractores.facturas import ExtractorFacturas
+    from ..integracion.extractores.gastos import ExtractorGastos
+    from ..integracion.extractores.nomina import ExtractorNomina
+
+    extractores = [
+        ExtractorFacturas(empresa_id),
+        ExtractorGastos(empresa_id),
+        ExtractorNomina(empresa_id),
+    ]
+
+    libro_diario = []
+    for ext in extractores:
+        try:
+            documentos = ext.get_documentos_enriquecidos(empresa_id, fecha_inicio, fecha_fin)
+            libro_diario.extend(documentos)
+        except Exception as e:
+            # En producción usar logger.error
+            import logging
+            logging.getLogger(__name__).error(f"Error en extractor {ext.__class__.__name__}: {str(e)}")
+
+    # Orden cronológico (Art. 48 Código de Comercio) + Numero para desempate
+    return sorted(libro_diario, key=lambda x: (x.fecha, x.numero))

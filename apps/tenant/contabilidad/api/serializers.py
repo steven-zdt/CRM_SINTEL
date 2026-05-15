@@ -600,3 +600,52 @@ class RetencionDetailSerializer(serializers.ModelSerializer):
             }
         return None
 
+# ============================================================================
+# LIBRO DIARIO UNIFICADO (v3.7.1)
+# ============================================================================
+
+class CuentaAsignadaSerializer(serializers.Serializer):
+    """Cuenta PUC ya asignada en el documento de origen (antes de contabilizar)."""
+    concepto = serializers.CharField(read_only=True)
+    uuid = serializers.CharField(read_only=True)
+    codigo_puc = serializers.CharField(read_only=True)
+    nombre = serializers.CharField(read_only=True)
+    monto = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+
+
+class MovimientoResumenSerializer(serializers.Serializer):
+    """Resumen de un movimiento contable real (materializado en el asiento)."""
+    cuenta_codigo = serializers.CharField(read_only=True)
+    cuenta_nombre = serializers.CharField(read_only=True)
+    debe = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    haber = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+
+
+class LibroDiarioSerializer(serializers.Serializer):
+    """
+    Serializer unificado para el Libro Diario (Codigo de Comercio Art. 48).
+    Consolida documentos de Facturas, Gastos y Nomina con su estado contable.
+    Campos alineados con DocumentoEnriquecido DTO en extractores/base.py.
+    """
+    fecha = serializers.DateField(read_only=True)
+    tipo_comprobante = serializers.CharField(read_only=True)
+    tipo_comprobante_display = serializers.CharField(read_only=True)
+    numero = serializers.CharField(read_only=True)
+    tercero_nit = serializers.CharField(read_only=True)
+    tercero_nombre = serializers.CharField(read_only=True)
+    subtotal = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    impuestos = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    total = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    estado_contable = serializers.CharField(read_only=True)
+    cuadra = serializers.BooleanField(read_only=True)
+    asiento_uuid = serializers.CharField(read_only=True, allow_null=True)
+    asiento_numero = serializers.CharField(read_only=True, allow_null=True)
+    app_label = serializers.CharField(read_only=True)
+    app_display = serializers.CharField(read_only=True)
+    modelo = serializers.CharField(read_only=True)
+    documento_id = serializers.IntegerField(read_only=True)
+
+    # Cuentas PUC ya asignadas en el documento (antes de contabilizar)
+    cuentas_asignadas = CuentaAsignadaSerializer(many=True, read_only=True)
+    # Movimientos reales del asiento (solo si estado_contable = CONTABILIZADO)
+    movimientos = MovimientoResumenSerializer(many=True, read_only=True)
