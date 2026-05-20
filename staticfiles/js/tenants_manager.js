@@ -18,7 +18,7 @@
     
     // Verificación de hostname: la consola solo debe cargarse en el dominio público
     const hostname = window.location.hostname;
-    const isPublicHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'sintel.com';
+    const isPublicHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'sintel.com' || hostname === '192.168.2.15';
     
     if (!isPublicHost) {
         // Hard stop: abortar si se carga en un dominio de tenant

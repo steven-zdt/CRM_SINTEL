@@ -62,11 +62,12 @@
     </main>
 
     <!-- JavaScript -->
-    <script src="{% static 'js/console.js' %}"></script>
-    <!-- JWT Auth Helper -->
+    <!-- JWT Auth Helper (DEBE cargar PRIMERO - lo usa console.js) -->
     <script src="{% static 'js/jwt-auth.js' %}"></script>
     <!-- Cliente HTTP unificado v3.4 -->
     <script src="{% static 'js/http.js' %}"></script>
+    <!-- Consola principal (depende de jwt-auth.js) -->
+    <script src="{% static 'js/console.js' %}"></script>
     
     <!-- HTMX CSRF Global Hook (para formularios HTML tradicionales) -->
     {% if csrf_token %}
