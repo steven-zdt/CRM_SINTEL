@@ -253,3 +253,73 @@ class MovimientoContableViewSetTests(TenantAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         response_data = response.json()
         self.assertEqual(response_data['descripcion'], 'Nuevo movimiento')
+
+
+class LibroDiarioViewSetTests(TenantAPITestCase):
+    """Tests para LibroDiarioViewSet (Libro Diario - Código de Comercio Art. 48)."""
+
+    def setUp(self):
+        """Configuración inicial."""
+        super().setUp()
+        self.empresa = Empresa.objects.first()
+        if not self.empresa:
+            self.empresa = Empresa.objects.create(
+                razon_social='Empresa Test',
+                nit='123456789',
+                dv='0',
+                direccion='Calle Test'
+            )
+
+    def test_libro_diario_with_period_parameter(self):
+        """Test: GET /api/v1/contabilidad/libro-diario/?periodo=2026-05"""
+        response = self.tget('/api/v1/contabilidad/libro-diario/?periodo=2026-05')
+        self.assertJSONResponse(response, status.HTTP_200_OK)
+        data = response.json()
+
+        # Validar estructura de respuesta
+        self.assertIn('periodo', data)
+        self.assertIn('fecha_inicio', data)
+        self.assertIn('fecha_fin', data)
+        self.assertIn('documentos', data)
+        self.assertIn('resumen', data)
+
+        # Validar periodo
+        self.assertEqual(data['periodo'], '2026-05')
+
+        # Validar resumen
+        resumen = data['resumen']
+        self.assertIn('total_documentos', resumen)
+        self.assertIn('contabilizados', resumen)
+        self.assertIn('pendientes', resumen)
+        self.assertIn('total_debe', resumen)
+        self.assertIn('total_haber', resumen)
+        self.assertIn('cuadra', resumen)
+        self.assertIn('por_tipo_comprobante', resumen)
+
+        # Validar documentos (lista vacía si no hay docs en el período)
+        self.assertIsInstance(data['documentos'], list)
+
+    def test_libro_diario_with_date_range(self):
+        """Test: GET /api/v1/contabilidad/libro-diario/?fecha_inicio=2026-05-01&fecha_fin=2026-05-31"""
+        response = self.tget('/api/v1/contabilidad/libro-diario/?fecha_inicio=2026-05-01&fecha_fin=2026-05-31')
+        self.assertJSONResponse(response, status.HTTP_200_OK)
+        data = response.json()
+
+        # Validar estructura
+        self.assertIn('documentos', data)
+        self.assertIn('resumen', data)
+
+        # Validar fechas
+        self.assertEqual(data['fecha_inicio'], '2026-05-01')
+        self.assertEqual(data['fecha_fin'], '2026-05-31')
+
+    def test_libro_diario_default_current_month(self):
+        """Test: GET /api/v1/contabilidad/libro-diario/ usa mes actual por defecto"""
+        response = self.tget('/api/v1/contabilidad/libro-diario/')
+        self.assertJSONResponse(response, status.HTTP_200_OK)
+        data = response.json()
+
+        # Validar que devuelve estructura completa
+        self.assertIn('periodo', data)
+        self.assertIn('documentos', data)
+        self.assertIn('resumen', data)

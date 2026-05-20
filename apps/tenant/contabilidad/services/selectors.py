@@ -290,6 +290,19 @@ class PeriodoContableSelector:
             qs = qs.filter(empresa_id=empresa_id)
         return qs
 
+
+def qs_periodos_disponibles(empresa_id: int):
+    """
+    Retorna los periodos contables abiertos utilizables para contabilización.
+    Optimizado (Zero-Waste).
+    """
+    return (
+        PeriodoContable.objects.filter(empresa_id=empresa_id, estado='ABIERTO')
+        .only('uuid', 'periodo', 'fecha_inicio', 'fecha_fin')
+        .order_by('-periodo')
+    )
+
+
 class TipoComprobanteSelector:
     @staticmethod
     def get_qs_list(empresa_id: Optional[int] = None):
@@ -749,15 +762,21 @@ def estado_resultados_selector(empresa_id: int, fecha_inicio: Any, fecha_fin: An
 # LIBRO DIARIO UNIFICADO (v3.7.1)
 # ============================================================================
 
-def get_libro_diario_periodo(empresa_id: int, fecha_inicio: date, fecha_fin: date):
+def get_libro_diario_periodo(empresa_id: int, fecha_inicio: date, fecha_fin: date) -> dict:
     """
     Consolida documentos de todas las apps de negocio para el Libro Diario.
     Arquitectura Pull: Interroga a cada extractor por su 'DocumentoEnriquecido'.
     Orden cronológico estricto según Art. 48 Código de Comercio.
+
+    Retorna dict con:
+    - periodo: YYYY-MM
+    - documentos: lista de DocumentoEnriquecido.to_dict()
+    - resumen: totales, cuadratura y clasificación normativa
     """
     from ..integracion.extractores.facturas import ExtractorFacturas
     from ..integracion.extractores.gastos import ExtractorGastos
     from ..integracion.extractores.nomina import ExtractorNomina
+    import logging
 
     extractores = [
         ExtractorFacturas(empresa_id),
@@ -771,9 +790,60 @@ def get_libro_diario_periodo(empresa_id: int, fecha_inicio: date, fecha_fin: dat
             documentos = ext.get_documentos_enriquecidos(empresa_id, fecha_inicio, fecha_fin)
             libro_diario.extend(documentos)
         except Exception as e:
-            # En producción usar logger.error
-            import logging
-            logging.getLogger(__name__).error(f"Error en extractor {ext.__class__.__name__}: {str(e)}")
+            logging.getLogger(__name__).error(f"[LibroDiario] Error en {ext.__class__.__name__}: {str(e)}")
 
-    # Orden cronológico (Art. 48 Código de Comercio) + Numero para desempate
-    return sorted(libro_diario, key=lambda x: (x.fecha, x.numero))
+    # Orden cronológico (Art. 48 Código de Comercio)
+    documentos_ordenados = sorted(libro_diario, key=lambda x: (x.fecha, x.numero))
+
+    # Clasificar por estado contable
+    contabilizados = [d for d in documentos_ordenados if d.estado_contable == 'CONTABILIZADO']
+    pendientes = [d for d in documentos_ordenados if d.estado_contable == 'PENDIENTE']
+
+    # Calcular totales del período (solo documentos contabilizados)
+    total_debe = Decimal('0')
+    total_haber = Decimal('0')
+    for d in contabilizados:
+        for mov in d.movimientos:
+            total_debe += mov.debe
+            total_haber += mov.haber
+
+    # Clasificación normativa de comprobantes
+    clasificacion = {
+        'CI': 0,  # Comprobante de Ingreso
+        'CE': 0,  # Comprobante de Egreso
+        'CN': 0,  # Comprobante de Nómina
+        'CD': 0,  # Comprobante de Diario
+        'NC': 0,  # Nota de Crédito
+        'CA': 0,  # Comprobante de Ajuste
+    }
+    for d in contabilizados:
+        tipo = d.tipo_comprobante
+        if tipo in clasificacion:
+            clasificacion[tipo] += 1
+
+    # Resumen del período
+    resumen = {
+        'total_documentos': len(documentos_ordenados),
+        'contabilizados': len(contabilizados),
+        'pendientes': len(pendientes),
+        'total_debe': str(total_debe),
+        'total_haber': str(total_haber),
+        'diferencia': str(abs(total_debe - total_haber)),
+        'cuadra': abs(total_debe - total_haber) < Decimal('0.01'),
+        'por_tipo_comprobante': {
+            'CI': clasificacion['CI'],
+            'CE': clasificacion['CE'],
+            'CN': clasificacion['CN'],
+            'CD': clasificacion['CD'],
+            'NC': clasificacion['NC'],
+            'CA': clasificacion['CA'],
+        }
+    }
+
+    return {
+        'periodo': fecha_inicio.strftime('%Y-%m'),
+        'fecha_inicio': str(fecha_inicio),
+        'fecha_fin': str(fecha_fin),
+        'documentos': [d.to_dict() for d in documentos_ordenados],
+        'resumen': resumen,
+    }

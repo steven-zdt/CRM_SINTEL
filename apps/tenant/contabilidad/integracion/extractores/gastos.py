@@ -1,6 +1,7 @@
 # apps/tenant/contabilidad/integracion/extractores/gastos.py
 from typing import List
 from decimal import Decimal
+from datetime import date
 
 from apps.tenant.gastos.models import DocumentoSoporte
 from .base import AbstractExtractor, DocumentoEnriquecido, CuentaAsignada, MovimientoResumen

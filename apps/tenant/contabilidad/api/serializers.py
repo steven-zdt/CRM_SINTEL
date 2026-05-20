@@ -431,6 +431,7 @@ class ContabilizarManualInputSerializer(serializers.Serializer):
     documento_id = serializers.IntegerField(min_value=1)
     documento_numero = serializers.CharField(max_length=50)
     tipo_comprobante_id = serializers.IntegerField(required=True)
+    periodo_uuid = serializers.UUIDField(required=True)
     fecha = serializers.DateField()
     descripcion = serializers.CharField(max_length=500)
     lineas = LineaManualInputSerializer(many=True)
@@ -510,10 +511,10 @@ class ConfiguracionRetencionesListSerializer(serializers.ModelSerializer):
         from apps.tenant.contabilidad.models import ConfiguracionRetenciones
         model = ConfiguracionRetenciones
         fields = [
-            'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'id', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
             'porcentaje_por_defecto', 'activa', 'naturaleza', 'created_at'
         ]
-        read_only_fields = ['uuid', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 
 class ConfiguracionRetencionesDetailSerializer(serializers.ModelSerializer):
@@ -526,11 +527,11 @@ class ConfiguracionRetencionesDetailSerializer(serializers.ModelSerializer):
         from apps.tenant.contabilidad.models import ConfiguracionRetenciones
         model = ConfiguracionRetenciones
         fields = [
-            'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'id', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
             'porcentaje_por_defecto', 'cuenta_retencion', 'cuenta_retencion_data',
             'activa', 'naturaleza', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['uuid', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_cuenta_retencion_data(self, obj):
         """Retorna datos de cuenta contable asociada."""
@@ -575,7 +576,7 @@ class RetencionDetailSerializer(serializers.ModelSerializer):
             'configuracion', 'configuracion_data',
             'aplicada_por_cliente', 'aplicada_por_proveedor',
             'reversada', 'retencion_reversada_por',
-            'fecha_creacion', 'notas'
+            'fecha_creacion', 'notes' if hasattr(Retencion, 'notes') else 'notas'
         ]
         read_only_fields = ['uuid', 'fecha_creacion']
 
@@ -583,7 +584,7 @@ class RetencionDetailSerializer(serializers.ModelSerializer):
         """Retorna datos de configuración asociada."""
         if obj.configuracion:
             return {
-                'uuid': str(obj.configuracion.uuid),
+                'id': obj.configuracion.id,
                 'tipo_tercero': obj.configuracion.tipo_tercero,
                 'nit_tercero': obj.configuracion.nit_tercero,
                 'porcentaje': str(obj.configuracion.porcentaje_por_defecto),
@@ -621,12 +622,8 @@ class MovimientoResumenSerializer(serializers.Serializer):
     haber = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
 
 
-class LibroDiarioSerializer(serializers.Serializer):
-    """
-    Serializer unificado para el Libro Diario (Codigo de Comercio Art. 48).
-    Consolida documentos de Facturas, Gastos y Nomina con su estado contable.
-    Campos alineados con DocumentoEnriquecido DTO en extractores/base.py.
-    """
+class DocumentoEnriquecidoSerializer(serializers.Serializer):
+    """Serializer para un documento individual en el Libro Diario."""
     fecha = serializers.DateField(read_only=True)
     tipo_comprobante = serializers.CharField(read_only=True)
     tipo_comprobante_display = serializers.CharField(read_only=True)
@@ -644,8 +641,30 @@ class LibroDiarioSerializer(serializers.Serializer):
     app_display = serializers.CharField(read_only=True)
     modelo = serializers.CharField(read_only=True)
     documento_id = serializers.IntegerField(read_only=True)
-
-    # Cuentas PUC ya asignadas en el documento (antes de contabilizar)
     cuentas_asignadas = CuentaAsignadaSerializer(many=True, read_only=True)
-    # Movimientos reales del asiento (solo si estado_contable = CONTABILIZADO)
     movimientos = MovimientoResumenSerializer(many=True, read_only=True)
+
+
+class ResumenLibroDiarioSerializer(serializers.Serializer):
+    """Resumen de totales y clasificación del período."""
+    total_documentos = serializers.IntegerField(read_only=True)
+    contabilizados = serializers.IntegerField(read_only=True)
+    pendientes = serializers.IntegerField(read_only=True)
+    total_debe = serializers.CharField(read_only=True)
+    total_haber = serializers.CharField(read_only=True)
+    diferencia = serializers.CharField(read_only=True)
+    cuadra = serializers.BooleanField(read_only=True)
+    por_tipo_comprobante = serializers.DictField(read_only=True)
+
+
+class LibroDiarioSerializer(serializers.Serializer):
+    """
+    Serializer para la respuesta completa del Libro Diario.
+    Código de Comercio Art. 48: registro cronológico de transacciones.
+    Incluye documentos pendientes + contabilizados con cuentas PUC resueltas y resumen del período.
+    """
+    periodo = serializers.CharField(read_only=True)
+    fecha_inicio = serializers.CharField(read_only=True)
+    fecha_fin = serializers.CharField(read_only=True)
+    documentos = DocumentoEnriquecidoSerializer(many=True, read_only=True)
+    resumen = ResumenLibroDiarioSerializer(read_only=True)
