@@ -86,6 +86,9 @@ class FacturaListSerializer(serializers.ModelSerializer):
     has_nc = serializers.SerializerMethodField()
     nota_credito_id = serializers.SerializerMethodField()
     nota_credito_numero = serializers.SerializerMethodField()
+
+    # Campo para mostrar Cotización vinculada (v3.10.1)
+    cotizacion_vinculada_info = serializers.SerializerMethodField()
     
     class Meta:
         model = Factura
@@ -116,6 +119,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "payment_due_date",
             "cuenta_contable_uuid",
             "cotizacion_uuid",
+            "cotizacion_vinculada_info",
             "has_nc",
             "nota_credito_id",
             "nota_credito_numero",
@@ -154,6 +158,25 @@ class FacturaListSerializer(serializers.ModelSerializer):
             nota_credito = obj.nota_credito
             return nota_credito.numero if nota_credito else None
         except NotaCredito.DoesNotExist:
+            return None
+
+    def get_cotizacion_vinculada_info(self, obj):
+        """Resuelve datos de Cotización vinculada (v3.10.1)."""
+        if not obj.cotizacion_uuid:
+            return None
+        try:
+            from apps.tenant.facturas.services import FacturaInterAppAPI
+            cotizacion = FacturaInterAppAPI.resolve_cotizacion(factura_id=obj.id)
+            if cotizacion:
+                return {
+                    'label': cotizacion.get('numero_cotizacion', 'Cotización'),
+                    'numero_cotizacion': cotizacion.get('numero_cotizacion'),
+                    'codigo_unico': cotizacion.get('codigo_unico'),
+                }
+            return None
+        except Exception as e:
+            import logging
+            logging.warning(f"Error resolviendo cotizacion para factura {obj.id}: {e}")
             return None
 
 
