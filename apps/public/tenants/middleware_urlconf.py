@@ -51,6 +51,7 @@ class TenantSecurityAndURLConfMiddleware:
             "testserver",  # Django test client host
             "186.117.247.166",  # Servidor IP
             "186.117.247.167",  # Servidor IP adicional
+            "192.168.2.15",  # Red local - Consola pública
         ]
     )
 

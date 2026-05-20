@@ -12,7 +12,7 @@
 (function() {
     'use strict';
     const hostname = window.location.hostname;
-    const isPublicHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'sintel.com' || hostname === 'home.sintel.com' || hostname === '192.168.2.15';
+    const isPublicHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'sintel.com' || hostname === '192.168.2.15';
     
     if (!isPublicHost) {
         // Hard stop: abortar si se carga en un dominio de tenant
