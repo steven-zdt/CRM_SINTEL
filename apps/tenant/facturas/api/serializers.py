@@ -119,6 +119,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "payment_due_date",
             "cuenta_contable_uuid",
             "cotizacion_uuid",
+            "cotizacion_numero",
             "cotizacion_vinculada_info",
             "has_nc",
             "nota_credito_id",
@@ -128,7 +129,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "id", "uuid", "numero", "fecha_emision", "naturaleza", "cliente_nombre",
             "emisor_nit", "emisor_razon_social", "receptor_nit", "receptor_razon_social",
             "nota_credito_id", "nota_credito_numero", "has_nc", "subtotal",
-            "impuestos", "total", "total_formateado", "cufe",
+            "impuestos", "total", "total_formateado", "cufe", "cotizacion_numero",
         )
     
     def get_has_nc(self, obj):
@@ -161,23 +162,14 @@ class FacturaListSerializer(serializers.ModelSerializer):
             return None
 
     def get_cotizacion_vinculada_info(self, obj):
-        """Resuelve datos de Cotización vinculada (v3.10.1)."""
+        """Retorna info de cotización desde snapshot (v3.10.1 Zero Waste)."""
         if not obj.cotizacion_uuid:
             return None
-        try:
-            from apps.tenant.facturas.services import FacturaInterAppAPI
-            cotizacion = FacturaInterAppAPI.resolve_cotizacion(factura_id=obj.id)
-            if cotizacion:
-                return {
-                    'label': cotizacion.get('numero_cotizacion', 'Cotización'),
-                    'numero_cotizacion': cotizacion.get('numero_cotizacion'),
-                    'codigo_unico': cotizacion.get('codigo_unico'),
-                }
-            return None
-        except Exception as e:
-            import logging
-            logging.warning(f"Error resolviendo cotizacion para factura {obj.id}: {e}")
-            return None
+        return {
+            'uuid': str(obj.cotizacion_uuid),
+            'label': obj.cotizacion_numero or str(obj.cotizacion_uuid)[:8],
+            'numero_cotizacion': obj.cotizacion_numero,
+        }
 
 
 class FacturaDetailSerializer(serializers.ModelSerializer):
@@ -206,7 +198,7 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
             "cuenta_contable_label",
             "cotizacion_uuid",
         )
-        read_only_fields = ("id", "uuid", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta", "cuenta_contable_label", "cotizacion_uuid")
+        read_only_fields = ("id", "uuid", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta", "cuenta_contable_label", "cotizacion_uuid", "cotizacion_numero")
     
     cuenta_contable_label = serializers.SerializerMethodField()
 

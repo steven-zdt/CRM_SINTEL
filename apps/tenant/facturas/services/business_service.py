@@ -553,6 +553,20 @@ class FacturaBusinessService:
                         "cuenta_contable_uuid": "La cuenta contable no existe o no pertenece a la empresa."
                     })
 
+            # DSV para cotizacion + auto-sync snapshot (v3.10.1)
+            if field == 'cotizacion_uuid' and val:
+                from apps.tenant.facturas.services.selectors import CotizacionBridge
+                if not CotizacionBridge.exists_by_uuid(val, empresa_id):
+                    raise ValidationError({
+                        "cotizacion_uuid": "La cotización no existe o no pertenece a la empresa."
+                    })
+                # Auto-sync snapshot: obtener numero y guardarlo
+                cot = CotizacionBridge.obtener_cotizacion_por_uuid(val, empresa_id)
+                update_data['cotizacion_numero'] = cot.get('numero_cotizacion') if cot else None
+            elif field == 'cotizacion_uuid' and not val:
+                # Desvincular: limpiar snapshot también
+                update_data['cotizacion_numero'] = None
+
             update_data[field] = val
 
         if not update_data:

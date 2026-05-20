@@ -43,6 +43,8 @@ LIST_FIELDS = (
     "receptor_nit",
     "receptor_razon_social",
     "cuenta_contable_uuid",
+    "cotizacion_uuid",
+    "cotizacion_numero",
     "cufe",
     "qr_url",
 )
@@ -75,6 +77,8 @@ DETAIL_FIELDS = (
     "medio_pago_codigo",
     "payment_due_date",
     "cuenta_contable_uuid",
+    "cotizacion_uuid",
+    "cotizacion_numero",
     "cufe",
     "qr_url",
     "created_at",
