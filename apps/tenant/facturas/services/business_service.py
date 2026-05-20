@@ -562,6 +562,79 @@ class FacturaBusinessService:
 
 
 
+class FacturaInterAppAPI:
+    """
+    [v3.10.0] ABIERTO PARA APPS DE NEGOCIO.
+
+    Contrato de acceso sin restriccion empresa_id para lectura.
+    Usada por: Contabilidad, Proyectos, Gastos, Empleados, Proveedores, etc.
+
+    Reglas:
+    - LECTURA sin filtro empresa_id (permite acceso a todas las facturas del tenant)
+    - ESCRITURA: usar FacturaBusinessService + empresa_id (DSV obligatorio)
+    - Llamadas desde servicios internos SOLO — no exponible como API HTTP
+    """
+
+    @staticmethod
+    def list_all(search: str | None = None, order_by: str = '-fecha_emision'):
+        """
+        [ABIERTO] QuerySet de TODAS las facturas sin filtro empresa_id.
+        Llamable desde apps de negocio para integracion.
+
+        Params:
+          search: filtro por numero/cufe/receptor/emisor
+          order_by: campo de ordenamiento (default -fecha_emision)
+
+        Returns:
+          Django QuerySet — compatible con iteracion, agregacion, etc.
+        """
+        from apps.tenant.facturas.services.selectors import FacturaSelectors
+        qs = FacturaSelectors.qs_list(empresa_id=None, search=search)
+        if order_by:
+            qs = qs.order_by(order_by)
+        return qs
+
+    @staticmethod
+    def get_by_id(factura_id: int | None = None, factura_uuid: str | None = None):
+        """
+        [ABIERTO] Obtiene una factura por id o uuid sin validar empresa_id.
+        Llamable desde apps de negocio.
+        """
+        try:
+            if factura_uuid:
+                return Factura.objects.get(uuid=factura_uuid)
+            elif factura_id:
+                return Factura.objects.get(id=factura_id)
+        except Factura.DoesNotExist:
+            return None
+        return None
+
+    @staticmethod
+    def summary_all() -> dict:
+        """
+        [ABIERTO] Resumen financiero consolidado (TODAS las empresas).
+        Usa agregacion django, no filtra empresa_id.
+        """
+        from apps.tenant.facturas.services.selectors import FacturaSelectors
+        return FacturaSelectors.get_summary(empresa_id=None)
+
+    @staticmethod
+    def get_by_cufe(cufe: str):
+        """[ABIERTO] Busca factura por CUFE."""
+        try:
+            return Factura.objects.get(cufe=cufe)
+        except Factura.DoesNotExist:
+            return None
+
+    @staticmethod
+    def get_by_numero(numero: str):
+        """[ABIERTO] Busca factura por número."""
+        try:
+            return Factura.objects.get(numero=numero)
+        except Factura.DoesNotExist:
+            return None
+
+
 class FacturaService:
     """
     Facade de alto nivel para integraciones externas (Celery, management commands).
@@ -574,7 +647,7 @@ class FacturaService:
         Procesamiento de factura XML UBL 2.1 desde Celery Task o integracion externa.
         """
         return FacturaBusinessService.importar_documento(
-            xml_content, 
+            xml_content,
             empresa_id=empresa_id,
             usuario_id=usuario_id
         )

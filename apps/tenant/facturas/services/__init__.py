@@ -1,4 +1,4 @@
-from .business_service import FacturaBusinessService
+from .business_service import FacturaBusinessService, FacturaInterAppAPI
 from .crud_service import FacturaCRUDService
 from .selectors import FacturaSelectors
 
@@ -9,5 +9,6 @@ from .selectors import LIST_FIELDS, DETAIL_FIELDS
 from .business_service import FacturaService
 from .api_mixins import FacturaServiceMixin
 
-# Exporting new SSoT Constants from Selectors for Serializers/API
-from .selectors import LIST_FIELDS, DETAIL_FIELDS
+# [v3.10.0] Inter-App API — acceso sin restriccion empresa_id para apps de negocio
+# Uso: from apps.tenant.facturas.services import FacturaInterAppAPI
+# API abierto para lectura — ver clase en business_service.py §FacturaInterAppAPI
