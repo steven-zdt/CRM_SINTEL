@@ -191,8 +191,11 @@
             data.cuenta_contable_uuid = cuentaUuid;
         }
 
-        // La cotización se guarda por endpoint dedicado para mantener edición limitada.
-        delete data.cotizacion_uuid;
+        // Cotización (v3.10.1): incluir en PATCH estándar (editable en MANUAL_EDITABLE_FIELDS)
+        const cotizacionUuid = getCotizacionUuidFromEditor();
+        if (cotizacionUuid !== undefined) {
+            data.cotizacion_uuid = cotizacionUuid;
+        }
 
         return data;
     }

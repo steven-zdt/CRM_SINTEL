@@ -222,12 +222,12 @@
             <div class="col-md-12">
               <label for="factura-cotizacion_uuid" class="form-label fw-bold text-primary">Cotización asociada</label>
               <select class="form-select" id="factura-cotizacion_uuid" name="cotizacion_uuid"
-                      data-current="{% if factura and factura.cotizacion %}{{ factura.cotizacion.uuid }}{% endif %}"
-                      data-current-label="{% if factura and factura.cotizacion %}{{ factura.cotizacion.codigo_unico|default:factura.cotizacion.numero_cotizacion }}{% endif %}">
+                      data-current="{% if factura and factura.cotizacion_uuid %}{{ factura.cotizacion_uuid }}{% endif %}"
+                      data-current-label="{% if factura and factura.cotizacion_numero %}{{ factura.cotizacion_numero }}{% endif %}">
                 <option value="">Sin cotización vinculada</option>
-                {% if factura and factura.cotizacion %}
-                  <option value="{{ factura.cotizacion.uuid }}" selected>
-                    {{ factura.cotizacion.codigo_unico|default:factura.cotizacion.numero_cotizacion }}
+                {% if factura and factura.cotizacion_uuid %}
+                  <option value="{{ factura.cotizacion_uuid }}" selected>
+                    {{ factura.cotizacion_numero|default:"Cotización vinculada" }}
                   </option>
                 {% endif %}
               </select>
