@@ -562,7 +562,8 @@ class FacturaBusinessService:
                     })
                 # Auto-sync snapshot: obtener numero y guardarlo
                 cot = CotizacionBridge.obtener_cotizacion_por_uuid(val, empresa_id)
-                update_data['cotizacion_numero'] = cot.get('numero_cotizacion') if cot else None
+                if cot:
+                    update_data['cotizacion_numero'] = cot.get('numero_cotizacion')
             elif field == 'cotizacion_uuid' and not val:
                 # Desvincular: limpiar snapshot también
                 update_data['cotizacion_numero'] = None
