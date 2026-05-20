@@ -23,12 +23,14 @@ from apps.public.tenants.models import Client, Domain
 from apps.shared.datatable import DataTableServer, DataTableSpec
 
 from .serializers import (
+    ConsoleUserDetailSerializer,
     ConsoleUserListSerializer,
     TenantDomainSerializer,
     TenantListSerializer,
 )
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class TenantsDataTableView(APIView):
@@ -124,46 +126,124 @@ class TenantDomainsDataTableView(APIView):
 
 class UsersDataTableView(APIView):
     """
-    Endpoint DataTables para listado de usuarios globales.
+    Endpoint CRUD para usuarios globales.
 
-    POST /api/admin/v1/console/dt/users/
+    POST /api/admin/v1/console/dt/users/ → Listar (DataTables)
+    GET /api/admin/v1/console/dt/users/{id}/ → Obtener usuario
+    POST /api/admin/v1/console/dt/users/ (con data) → Crear usuario
+    PATCH /api/admin/v1/console/dt/users/{id}/ → Actualizar usuario
+    DELETE /api/admin/v1/console/dt/users/{id}/ → Eliminar usuario
 
     Requiere: IsAdminUser
     Autenticación: SessionAuthentication (cookies de sesión)
-    Contrato: DataTables estándar (draw, recordsTotal, recordsFiltered, data)
     """
 
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
 
+    def get(self, request, user_id=None, *args, **kwargs):
+        """GET /api/admin/v1/console/dt/users/{id}/ - Obtener usuario específico"""
+        if not user_id:
+            return Response({"error": "user_id requerido"}, status=400)
+
+        try:
+            user = User.objects.get(pk=user_id)
+            serializer = ConsoleUserDetailSerializer(user)
+            return Response(serializer.data)
+        except User.DoesNotExist:
+            return Response({"error": "Usuario no encontrado"}, status=404)
+
     def post(self, request, *args, **kwargs):
-        base_qs = User.objects.only(
-            "id",
-            "email",
-            "first_name",
-            "last_name",
-            "is_active",
-            "is_staff",
-            "date_joined",
-            "telefono",
-        )
+        """POST /api/admin/v1/console/dt/users/ - Listar o Crear"""
+        # Si es DataTables request (tiene draw, start, length)
+        if "draw" in request.data:
+            base_qs = User.objects.only(
+                "id",
+                "email",
+                "first_name",
+                "last_name",
+                "is_active",
+                "is_staff",
+                "date_joined",
+                "telefono",
+            )
 
-        spec = DataTableSpec(
-            fields_map={
-                0: "id",
-                1: "email",
-                2: "first_name",
-                3: "last_name",
-                4: "is_active",
-                5: "is_staff",
-                6: "date_joined",
-            },
-            search_fields=["email", "first_name", "last_name"],
-            base_qs=base_qs,
-            serializer=ConsoleUserListSerializer,
-        )
+            spec = DataTableSpec(
+                fields_map={
+                    0: "id",
+                    1: "email",
+                    2: "first_name",
+                    3: "last_name",
+                    4: "is_active",
+                    5: "is_staff",
+                    6: "date_joined",
+                },
+                search_fields=["email", "first_name", "last_name"],
+                base_qs=base_qs,
+                serializer=ConsoleUserListSerializer,
+            )
+            return DataTableServer(spec).handle(request)
 
-        return DataTableServer(spec).handle(request)
+        # Si es crear usuario
+        serializer = ConsoleUserDetailSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+
+    def patch(self, request, user_id=None, *args, **kwargs):
+        """PATCH /api/admin/v1/console/dt/users/{id}/ - Actualizar usuario"""
+        if not user_id:
+            return Response({"error": "user_id requerido"}, status=400)
+
+        try:
+            user = User.objects.get(pk=user_id)
+            serializer = ConsoleUserDetailSerializer(user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=400)
+        except User.DoesNotExist:
+            return Response({"error": "Usuario no encontrado"}, status=404)
+
+    def delete(self, request, user_id=None, *args, **kwargs):
+        """DELETE /api/admin/v1/console/dt/users/{id}/ - Eliminar usuario"""
+        if not user_id:
+            return Response({"error": "user_id requerido"}, status=400)
+
+        try:
+            user = User.objects.get(pk=user_id)
+            email = user.email
+
+            # Clean up tenant profiles and use raw delete to bypass cascade check
+            try:
+                from django.db import connections
+                from django_tenants.utils import get_tenant_model
+
+                Tenant = get_tenant_model()
+                for tenant in Tenant.objects.all():
+                    try:
+                        with connections[tenant.schema_name].cursor() as cursor:
+                            cursor.execute(
+                                'DELETE FROM perfil_tenantprofile WHERE user_id = %s',
+                                [user_id]
+                            )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Delete using raw SQL to bypass Django's cascade checks
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute('DELETE FROM accounts_user WHERE id = %s', [user_id])
+
+            return Response({"mensaje": f"Usuario {email} eliminado correctamente"})
+        except User.DoesNotExist:
+            return Response({"error": "Usuario no encontrado"}, status=404)
+        except Exception as e:
+            logger.exception(f"Error eliminando usuario {user_id}: {e}")
+            return Response({"error": f"Error al eliminar usuario: {str(e)}"}, status=400)
 
 
 class ConsoleHealthView(APIView):

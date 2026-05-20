@@ -54,3 +54,48 @@ class ConsoleUserListSerializer(serializers.ModelSerializer):
             "date_joined",
             "telefono",
         )
+
+
+class ConsoleUserDetailSerializer(serializers.ModelSerializer):
+    """Serializer completo para CRUD de usuarios en la consola."""
+
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "date_joined",
+            "last_login",
+            "telefono",
+            "password",
+        )
+        extra_kwargs = {
+            "password": {"write_only": True, "required": False},
+            "last_login": {"read_only": True},
+            "date_joined": {"read_only": True},
+            "id": {"read_only": True},
+        }
+
+    def create(self, validated_data):
+        """Crear usuario con contraseña hasheada."""
+        password = validated_data.pop("password", None)
+        user = User.objects.create_user(**validated_data)
+        if password:
+            user.set_password(password)
+            user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        """Actualizar usuario, hasheando contraseña si se proporciona."""
+        password = validated_data.pop("password", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance

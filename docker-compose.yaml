@@ -55,8 +55,8 @@ services:
     <<: *app-base
     container_name: crm_sintel-web-1
     ports:
-      - "80:8000"    # Puerto 80 del host -> Puerto 8000 del contenedor
-      - "8000:8000"  # Puerto 8000 del host -> Puerto 8000 del contenedor (compatibilidad)
+      - "0.0.0.0:80:8000"    # Exponer en TODAS las interfaces (0.0.0.0) en puerto 80
+      - "0.0.0.0:8000:8000"  # También en puerto 8000 para compatibilidad
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings
       - SERVICE_ROLE=web
