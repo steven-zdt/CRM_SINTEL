@@ -87,6 +87,35 @@ summary = FacturaInterAppAPI.summary_all()
 
 ---
 
+## Resolución de Cotizaciones Vinculadas (v3.10.1)
+
+Las Facturas pueden vincularse a Cotizaciones via `cotizacion_uuid`. Para resolver la Cotizacion:
+
+```python
+from apps.tenant.facturas.services import FacturaInterAppAPI
+
+# Opción 1: Desde Factura
+factura = FacturaInterAppAPI.get_by_id(factura_uuid='550e8400-...')
+if factura.cotizacion_uuid:
+    cotizacion = FacturaInterAppAPI.resolve_cotizacion(factura_uuid=factura.uuid)
+    # cotizacion = {
+    #     'uuid': '...',
+    #     'numero_cotizacion': 'COT-001',
+    #     'estado': 'ACEPTADA',
+    #     'total_con_impuestos': Decimal('1000000.00'),
+    #     'cliente_razon_social': 'Empresa ABC',
+    #     'fecha_emision': '2026-05-20T...',
+    #     'fecha_vencimiento': '2026-06-20T...'
+    # }
+
+# Opción 2: Directo por ID
+cotizacion = FacturaInterAppAPI.resolve_cotizacion(factura_id=123)
+```
+
+**SSoT:** Importa desde `apps.tenant.cotizaciones.services.selectors.CotizacionSelector`.
+
+---
+
 ## Ejemplos de Integración
 
 ### Contabilidad — Buscar facturas para contabilizar
@@ -134,6 +163,23 @@ class DashboardService:
     @staticmethod
     def resumen_financiero():
         return FacturaInterAppAPI.summary_all()
+    
+    @staticmethod
+    def factura_con_cotizacion(factura_uuid):
+        factura = FacturaInterAppAPI.get_by_id(factura_uuid=factura_uuid)
+        if not factura:
+            return None
+        
+        cotizacion = FacturaInterAppAPI.resolve_cotizacion(factura_uuid=factura_uuid)
+        
+        return {
+            'factura': {
+                'numero': factura.numero,
+                'total': float(factura.total),
+                'estado': factura.estado,
+            },
+            'cotizacion': cotizacion  # Datos consolidados
+        }
 ```
 
 ---
