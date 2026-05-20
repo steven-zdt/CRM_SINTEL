@@ -634,6 +634,33 @@ class FacturaInterAppAPI:
         except Factura.DoesNotExist:
             return None
 
+    @staticmethod
+    def resolve_cotizacion(factura_uuid: str | None = None, factura_id: int | None = None) -> dict | None:
+        """
+        [ABIERTO] Resuelve Cotizacion vinculada a una Factura.
+        Importa desde servicio Cotizaciones usando CotizacionBridge.
+
+        Params:
+          factura_uuid o factura_id: identifica la factura
+
+        Returns:
+          dict con datos de Cotizacion o None
+        """
+        factura = None
+        if factura_uuid:
+            factura = FacturaInterAppAPI.get_by_id(factura_uuid=factura_uuid)
+        elif factura_id:
+            factura = FacturaInterAppAPI.get_by_id(factura_id=factura_id)
+
+        if not factura or not factura.cotizacion_uuid:
+            return None
+
+        from apps.tenant.facturas.services.selectors import CotizacionBridge
+        return CotizacionBridge.obtener_cotizacion_por_uuid(
+            cotizacion_uuid=str(factura.cotizacion_uuid),
+            empresa_id=None  # Sin empresa_id para acceso abierto
+        )
+
 
 class FacturaService:
     """

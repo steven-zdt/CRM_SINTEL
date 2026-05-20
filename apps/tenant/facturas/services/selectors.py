@@ -234,6 +234,60 @@ class FacturaSelectors:
             return response, 200
 
 
+class CotizacionBridge:
+    """
+    Selector dinamico para resolver Cotizaciones vinculadas a Facturas.
+    Integración con apps.tenant.cotizaciones sin acoplamiento circular.
+    """
+    @staticmethod
+    def obtener_cotizacion_por_uuid(cotizacion_uuid: str, empresa_id: int | None = None) -> dict | None:
+        """
+        Resuelve Cotizacion a partir de uuid vinculado en Factura.
+        Usa CotizacionSelector.get_detail_by_uuid() del servicio cotizaciones.
+
+        Params:
+          cotizacion_uuid: UUID de la cotizacion (viene de Factura.cotizacion_uuid)
+          empresa_id: opcional, filtra por empresa si se proporciona
+
+        Returns:
+          dict con datos de Cotizacion o None si no existe
+        """
+        if not cotizacion_uuid:
+            return None
+
+        try:
+            from apps.tenant.cotizaciones.services.selectors import CotizacionSelector
+
+            # Si tenemos empresa_id, usarlo para validación DSV
+            if empresa_id:
+                cotizacion = CotizacionSelector.get_detail_by_uuid(
+                    uuid=cotizacion_uuid,
+                    empresa_id=empresa_id
+                ).first()
+            else:
+                # Sin empresa_id, acceso abierto (inter-app)
+                from apps.tenant.cotizaciones.models import Cotizacion
+                cotizacion = Cotizacion.objects.filter(uuid=cotizacion_uuid).first()
+
+            if not cotizacion:
+                return None
+
+            return {
+                'uuid': str(cotizacion.uuid),
+                'numero_cotizacion': cotizacion.numero_cotizacion,
+                'estado': cotizacion.estado,
+                'fecha_emision': cotizacion.fecha_emision.isoformat() if cotizacion.fecha_emision else None,
+                'fecha_vencimiento': cotizacion.fecha_vencimiento.isoformat() if cotizacion.fecha_vencimiento else None,
+                'total_con_impuestos': float(cotizacion.total_con_impuestos) if cotizacion.total_con_impuestos else 0.0,
+                'cliente_razon_social': cotizacion.cliente.razon_social if cotizacion.cliente else None,
+            }
+        except Exception as e:
+            from logging import getLogger
+            logger = getLogger(__name__)
+            logger.warning(f"Error resolviendo cotizacion {cotizacion_uuid}: {e}")
+            return None
+
+
 class InventarioItemBridge:
     """
     Selector dinamico para resolver items de inventario (Productos/Servicios)
