@@ -1,7 +1,7 @@
 # Auditoría Flujo Completo — Módulo Facturas
 
-**Versión auditada:** v3.7.5  
-**Fecha:** 2026-05-19  
+**Versión auditada:** v3.10.0  
+**Fecha:** 2026-05-20  
 **Estado:** ✅ OPERATIVO (0 CRÍTICOS)  
 **Auditor:** Claude Code (claude-sonnet-4-6)  
 **Ubicación:** `apps/tenant/facturas/`
@@ -22,6 +22,7 @@
 | 8 | **Edición Controlada** — Modal centralizado para los 8 `MANUAL_EDITABLE_FIELDS`; campos XML siempre readonly | ✅ (v2.98) |
 | 9 | **Pull Model Retenciones** — `@property` lee desde `Contabilidad.Retencion`; Factura no almacena retenciones | ✅ (v3.7.1) |
 | 10 | **UUID Lookup** — `lookup_field = 'uuid'` via `BaseTenantViewSet` | ✅ (mig 0011/0015) |
+| 11 | **Inter-App API** — `FacturaInterAppAPI` abierto para lectura sin empresa_id (Contabilidad, Proyectos, Gastos, etc.) | ✅ (v3.10.0) |
 
 ---
 
@@ -659,3 +660,105 @@ DETAIL_FIELDS = (31 campos) # Para offcanvas detalle
     ↓
 [facturas_editor.js] → cierra modal → table.replaceData()
 ```
+
+---
+
+## 14. Inter-App API (v3.10.0) — Acceso sin empresa_id
+
+**[NEW v3.10.0]** Apps de negocio (Contabilidad, Proyectos, Gastos, Empleados, Proveedores, Clientes) pueden acceder a **TODOS** los datos de Facturas sin restricción empresa_id.
+
+### API Abierto
+
+```python
+from apps.tenant.facturas.services import FacturaInterAppAPI
+
+# Lectura sin restricción empresa_id
+qs = FacturaInterAppAPI.list_all()                  # QuerySet de TODAS las facturas
+qs = FacturaInterAppAPI.list_all(search='123')      # Con búsqueda
+factura = FacturaInterAppAPI.get_by_id(factura_id=123)
+factura = FacturaInterAppAPI.get_by_id(factura_uuid='550e8400-e29b-...')
+factura = FacturaInterAppAPI.get_by_cufe('430078...')
+factura = FacturaInterAppAPI.get_by_numero('PV001-00000001')
+summary = FacturaInterAppAPI.summary_all()          # {ventas: {...}, compras: {...}}
+```
+
+### Casos de Uso
+
+| App | Caso de Uso | Método |
+|-----|------------|--------|
+| **Contabilidad** | Extraer facturas para contabilizar (Pull Model) | `list_all()` + `.filter(naturaleza='COMPRA')` |
+| **Proyectos** | Vincular facturas a proyectos (sin restricción empresa) | `get_by_id(factura_uuid=...)` |
+| **Dashboard** | Resumen consolidado multi-empresa | `summary_all()` |
+| **Gastos** | Buscar facturas asociadas por CUFE | `get_by_cufe(...)` |
+| **Core (Orchestration)** | Integraciones internas | `list_all()` |
+
+### Reglas de Seguridad
+
+**✅ Permitido:**
+- Lectura desde servicios internos (Service Layer)
+- Pasar QuerySet a otras funciones de servicios
+- `.only()` / `.defer()` para optimización
+- `.filter()`, `.aggregate()`, `.count()` en servicios
+
+**❌ Prohibido:**
+- **NUNCA desde API HTTP ViewSet** — usar `FacturaSelectors.qs_list(empresa_id=<user's>)` en su lugar
+- **NUNCA en serializers** — mantener DSV a nivel ViewSet
+- **Exposición directa a cliente sin filtro** — riesgo de fuga de datos
+
+### Flujo HTTP vs Inter-App
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ HTTP Request (Frontend → Backend) — RESTRICCIÓN OBLIGATORIA    │
+├─────────────────────────────────────────────────────────────────┤
+│ GET /api/v1/facturas/                                           │
+│   ↓ [FacturaViewSet.list()]                                     │
+│   empresa_id = request.user.tenant_profile.empresa_id            │
+│   qs = FacturaSelectors.qs_list(empresa_id=empresa_id)           │
+│   ↓ Filtra por empresa_id del usuario (protección IDOR)         │
+│   Response: Solo facturas de su empresa                         │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ Inter-App Service Call — SIN RESTRICCIÓN (legítimo)            │
+├─────────────────────────────────────────────────────────────────┤
+│ from apps.tenant.facturas.services import FacturaInterAppAPI    │
+│   ↓                                                              │
+│ qs = FacturaInterAppAPI.list_all()  # empresa_id=None           │
+│   ↓ Sin filtro — acceso a TODAS las facturas                    │
+│   Resultado: Datos consolidados (contabilidad, dashboards)      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Escrituras — DSV Obligatorio
+
+FacturaInterAppAPI es **SOLO lectura**. Para crear/actualizar:
+
+```python
+# ❌ INCORRECTO — FacturaInterAppAPI no tiene write methods
+FacturaInterAppAPI.crear(...)  # NO EXISTE
+
+# ✅ CORRECTO — Usar FacturaBusinessService con DSV
+from apps.tenant.facturas.services import FacturaBusinessService
+
+FacturaBusinessService.actualizar_factura_limitado(
+    factura=factura_instance,
+    data={...},
+    empresa_id=empresa_id  # DSV obligatorio — valida propiedad
+)
+```
+
+### Backward Compatibility
+
+✅ Métodos anteriores siguen funcionando:
+- `FacturaSelectors.qs_list(empresa_id=None)` — sigue abierto, pero menos explícito
+- Imports directo desde `models.py` — permitidos pero deprecated
+- Todas las propiedades `@property` funcionan igual
+
+**Recomendación:** Refactorizar imports antiguos a usar `FacturaInterAppAPI` para mayor claridad de intención.
+
+### Referencias Documentales
+
+- Documentación completa: [INTER_APP_API_v3100.md](./INTER_APP_API_v3100.md)
+- Implementación: `apps/tenant/facturas/services/business_service.py:§FacturaInterAppAPI`
+- Exports: `apps/tenant/facturas/services/__init__.py`
