@@ -33,14 +33,35 @@ def tenant(django_db_setup, django_db_blocker):
 
 
 @pytest.fixture
-def admin_user(django_user_model):
-    return django_user_model.objects.create_user(
-        username='proveedores-admin',
-        email='proveedores-admin@example.com',
-        password='secret123',
-        is_staff=True,
-        is_superuser=True,
+def admin_user(django_user_model, tenant):
+    from apps.public.tenants.models import TenantMembership
+    from apps.tenant.perfil.models import TenantProfile
+    
+    user = django_user_model.objects.filter(email='proveedores-admin@example.com').first()
+    if not user:
+        user = django_user_model.objects.create_superuser(
+            username='proveedores-admin',
+            email='proveedores-admin@example.com',
+            password='secret123',
+            is_staff=True,
+            is_superuser=True,
+        )
+    
+    TenantMembership.objects.get_or_create(
+        client=tenant,
+        user=user,
+        defaults={'is_active': True, 'rol': 'ADMIN'}
     )
+    
+    with schema_context(tenant.schema_name):
+        empresa = _get_or_create_empresa()
+        TenantProfile.objects.get_or_create(
+            user=user,
+            empresa=empresa,
+            defaults={'rol': 'ADMIN'}
+        )
+        
+    return user
 
 
 def _get_or_create_empresa():
@@ -50,7 +71,9 @@ def _get_or_create_empresa():
     return Empresa.objects.create(
         razon_social='EMPRESA TEST PROVEEDORES S.A.S.',
         nit='901234567',
+        direccion='Calle Falsa 123',
     )
+
 
 
 @pytest.mark.django_db

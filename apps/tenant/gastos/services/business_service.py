@@ -195,6 +195,7 @@ class GastoBusinessService:
                 pct = config_ret.get(f'{tipo.lower()}_porcentaje', Decimal('0.00'))
                 if pct > 0:
                     RetencionesService.crear_retencion(
+                        empresa=empresa,
                         tipo=tipo,
                         porcentaje=pct,
                         base=subtotal,

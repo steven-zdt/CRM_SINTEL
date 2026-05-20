@@ -208,14 +208,14 @@
                 title: "Acciones",
                 formatter: function (cell) {
                     const rowData = cell.getRow().getData();
-                    const id = rowData.id;
+                    const uuid = rowData.uuid;
 
                     return `
                         <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-edit-proyecto" data-id="${id}" title="Editar Proyecto">
+                            <button type="button" class="btn btn-outline-primary btn-edit-proyecto" data-uuid="${uuid}" title="Editar Proyecto">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-proyecto" data-id="${id}" title="Eliminar Proyecto">
+                            <button type="button" class="btn btn-outline-danger btn-delete-proyecto" data-uuid="${uuid}" title="Eliminar Proyecto">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
@@ -286,20 +286,20 @@
                 e.preventDefault();
                 e.stopPropagation();
 
-                const id = btnEdit.getAttribute('data-id');
-                if (!id) {
-                    console.warn(`${MOD} Botón sin data-id`);
+                const uuid = btnEdit.getAttribute('data-uuid');
+                if (!uuid) {
+                    console.warn(`${MOD} Botón sin data-uuid`);
                     return;
                 }
 
-                // ⚠️ Loading state
+                // Loading state
                 const originalHTML = btnEdit.innerHTML;
                 btnEdit.disabled = true;
                 btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
                 try {
-                    // ⚠️ HTMX: Cargar Offcanvas desde el servidor
-                    await htmx.ajax('GET', `/api/v1/proyectos/gestor-offcanvas/?id=${id}`, {
+                    // HTMX: Cargar Offcanvas desde el servidor usando uuid
+                    await htmx.ajax('GET', `/api/v1/proyectos/gestor-offcanvas/?uuid=${uuid}`, {
                         target: '#offcanvas-container-proyectos',
                         swap: 'innerHTML'
                     });
@@ -325,9 +325,9 @@
                 e.preventDefault();
                 e.stopPropagation();
 
-                const id = btnDelete.getAttribute('data-id');
-                if (!id) {
-                    console.warn(`${MOD} Botón eliminar sin data-id`);
+                const uuid = btnDelete.getAttribute('data-uuid');
+                if (!uuid) {
+                    console.warn(`${MOD} Botón eliminar sin data-uuid`);
                     return;
                 }
 
@@ -336,13 +336,13 @@
                     return;
                 }
 
-                // ⚠️ Loading state
+                // Loading state
                 const originalHTML = btnDelete.innerHTML;
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
                 try {
-                    const res = await w.http('DELETE', `/api/v1/proyectos/${id}/`);
+                    const res = await w.http('DELETE', `/api/v1/proyectos/${uuid}/`);
 
                     if (res.ok) {
                         if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {

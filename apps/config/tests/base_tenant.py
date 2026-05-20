@@ -86,6 +86,26 @@ class TenantAPITestCase(TenantTestCase):
                 # Si falla por cualquier razón, continuar (tests pueden ajustar permisos manualmente)
                 pass
         
+        # Crear TenantProfile para el usuario en el esquema tenant
+        with schema_context(self.tenant.schema_name):
+            try:
+                from apps.tenant.perfil.models import TenantProfile
+                from apps.tenant.empresa.models import Empresa
+                empresa = Empresa.objects.first()
+                if not empresa:
+                    empresa = Empresa.objects.create(
+                        razon_social='Empresa Test Base',
+                        nit='999999999',
+                        dv='9',
+                        direccion='Calle Base 123'
+                    )
+                TenantProfile.objects.update_or_create(
+                    user=self.user,
+                    defaults={'empresa': empresa, 'rol': 'ADMIN', 'cargo': 'Administrador Test'}
+                )
+            except Exception:
+                pass
+
         # Autenticar como usuario en el tenant (session) y preparar JWT
         self.client.force_login(self.user)
         try:

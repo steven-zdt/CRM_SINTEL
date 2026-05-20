@@ -81,6 +81,11 @@ DETAIL_FIELDS = (
     "updated_at",
 )
 
+NOTA_CREDITO_ONLY_FIELDS = (
+    "nota_credito__id",
+    "nota_credito__numero",
+)
+
 ANEXO_KEYS = {"ubl_xml", "application_response_xml"}
 MAX_INLINE_BYTES = 2_000_000  # 2MB
 
@@ -91,12 +96,17 @@ class FacturaSelectors:
     """
 
     @staticmethod
-    def qs_list(search: str | None = None):
+    def qs_list(empresa_id: int | None = None, search: str | None = None):
         """
         QuerySet optimizado para listado (v3.5 Zero Waste).
+        empresa_id aplicado aqui (SSoT Anti-IDOR).
         """
-        qs = Factura.objects.select_related("nota_credito").only(*LIST_FIELDS)
-        
+        qs = Factura.objects.select_related("nota_credito").only(
+            *LIST_FIELDS,
+            *NOTA_CREDITO_ONLY_FIELDS,
+        )
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
         if search:
             qs = qs.filter(
                 Q(numero__icontains=search) |
@@ -104,23 +114,32 @@ class FacturaSelectors:
                 Q(receptor_razon_social__icontains=search) |
                 Q(emisor_razon_social__icontains=search)
             )
-        
         return qs.order_by("-fecha_emision", "-id")
 
     @staticmethod
-    def qs_detail():
+    def qs_detail(empresa_id: int | None = None):
         """
         QuerySet optimizado para detalle.
+        empresa_id aplicado aqui (SSoT Anti-IDOR).
         """
-        return Factura.objects.select_related("nota_credito", "anexos").only(*DETAIL_FIELDS)
+        qs = Factura.objects.select_related("nota_credito", "anexos").only(
+            *DETAIL_FIELDS,
+            *NOTA_CREDITO_ONLY_FIELDS,
+        )
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs
 
     @staticmethod
-    def qs_centros_costo():
+    def qs_centros_costo(empresa_id: int | None = None):
         """
         QuerySet ligero para selección de centros de costo (v3.5 Zero Waste).
         Retorna los campos mínimos necesarios para el dropdown.
         """
-        return Factura.objects.only("id", "numero", "receptor_razon_social").order_by("-fecha_emision", "-id")
+        qs = Factura.objects.only("id", "uuid", "numero", "receptor_razon_social")
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        return qs.order_by("-fecha_emision", "-id")
 
     @staticmethod
     def get_summary(empresa_id: int | None = None) -> dict[str, Any]:
@@ -213,3 +232,93 @@ class FacturaSelectors:
             response = HttpResponse(xml_bytes, content_type="application/xml")
             response["X-Content-Type-Options"] = "nosniff"
             return response, 200
+
+
+class InventarioItemBridge:
+    """
+    Selector dinamico para resolver items de inventario (Productos/Servicios)
+    desde el modulo de facturacion sin acoplamiento circular.
+    """
+    @staticmethod
+    def buscar_catalogo(empresa_id: int, search: str = "") -> list[dict[str, Any]]:
+        """
+        Busca productos y servicios en el catalogo de inventario.
+        Usa .only() para rendimiento maximo y union manual para evitar N+1.
+        """
+        from apps.tenant.inventario.models import Producto, Servicio
+
+        # Busqueda de Productos
+        prod_qs = Producto.objects.filter(empresa_id=empresa_id)
+        if search:
+            prod_qs = prod_qs.filter(
+                Q(codigo__icontains=search) | Q(nombre__icontains=search)
+            )
+        productos = prod_qs.only('uuid', 'codigo', 'nombre', 'precio_venta').order_by('nombre')[:50]
+
+        # Busqueda de Servicios
+        serv_qs = Servicio.objects.filter(empresa_id=empresa_id)
+        if search:
+            serv_qs = serv_qs.filter(
+                Q(codigo__icontains=search) | Q(nombre__icontains=search)
+            )
+        servicios = serv_qs.only('uuid', 'codigo', 'nombre', 'precio_venta').order_by('nombre')[:50]
+
+        catalogo = []
+        for p in productos:
+            catalogo.append({
+                'uuid': str(p.uuid),
+                'codigo': p.codigo,
+                'nombre': p.nombre,
+                'precio_venta': float(p.precio_venta) if p.precio_venta else 0.0,
+                'tipo': 'PRODUCTO'
+            })
+        for s in servicios:
+            catalogo.append({
+                'uuid': str(s.uuid),
+                'codigo': s.codigo,
+                'nombre': s.nombre,
+                'precio_venta': float(s.precio_venta) if s.precio_venta else 0.0,
+                'tipo': 'SERVICIO'
+            })
+
+        # Ordenar catalogo final por nombre
+        catalogo.sort(key=lambda x: x['nombre'])
+        return catalogo
+
+    @staticmethod
+    def resolver_item(empresa_id: int, item_uuid: Any, item_tipo: str) -> dict[str, Any] | None:
+        """
+        Resuelve un item especifico de inventario (Producto o Servicio) por su UUID.
+        """
+        from apps.tenant.inventario.models import Producto, Servicio
+
+        if item_tipo == 'PRODUCTO':
+            try:
+                p = Producto.objects.only('uuid', 'codigo', 'nombre', 'precio_venta').get(
+                    empresa_id=empresa_id, uuid=item_uuid
+                )
+                return {
+                    'uuid': str(p.uuid),
+                    'codigo': p.codigo,
+                    'nombre': p.nombre,
+                    'precio_venta': float(p.precio_venta) if p.precio_venta else 0.0,
+                    'tipo': 'PRODUCTO'
+                }
+            except Producto.DoesNotExist:
+                return None
+        elif item_tipo == 'SERVICIO':
+            try:
+                s = Servicio.objects.only('uuid', 'codigo', 'nombre', 'precio_venta').get(
+                    empresa_id=empresa_id, uuid=item_uuid
+                )
+                return {
+                    'uuid': str(s.uuid),
+                    'codigo': s.codigo,
+                    'nombre': s.nombre,
+                    'precio_venta': float(s.precio_venta) if s.precio_venta else 0.0,
+                    'tipo': 'SERVICIO'
+                }
+            except Servicio.DoesNotExist:
+                return None
+        return None
+

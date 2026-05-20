@@ -39,7 +39,7 @@ class TestContactoClienteStructure:
 
         from django.conf import settings
         
-        base_template_dir = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'core' / 'templates' / 'tenant' / 'core' / 'partials' / 'contactos'
+        base_template_dir = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'templates' / 'tenant' / 'contactos'
         
         required_templates = [
             'offcanvas_crear_contacto_cliente.html',
@@ -59,7 +59,7 @@ class TestContactoClienteStructure:
 
         from django.conf import settings
         
-        base_js_dir = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'core' / 'static' / 'core' / 'js' / 'contactos'
+        base_js_dir = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'static' / 'clientes' / 'js' / 'contactos'
         
         required_modules = [
             'contacto_cliente_api.js',
@@ -126,7 +126,7 @@ class TestContactoClienteStructure:
 
         from django.conf import settings
         
-        assets_template = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'core' / 'templates' / 'tenant' / 'core' / 'partials' / 'contactos' / 'assets_contactos.html'
+        assets_template = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'templates' / 'tenant' / 'contactos' / 'assets_contactos.html'
         
         assert assets_template.exists(), "assets_contactos.html not found"
         
@@ -152,7 +152,7 @@ class TestContactoClienteStructure:
 
         from django.conf import settings
         
-        clientes_list_template = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'core' / 'templates' / 'tenant' / 'core' / 'partials' / 'clientes' / 'clientes_list.html'
+        clientes_list_template = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'templates' / 'tenant' / 'clientes' / 'clientes_list.html'
         
         assert clientes_list_template.exists(), "clientes_list.html not found"
         
@@ -191,7 +191,7 @@ class TestContactoClienteIntegration(DjangoTestCase):
 
         from django.conf import settings
         
-        main_js = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'core' / 'static' / 'core' / 'js' / 'contactos' / 'contacto_cliente_main.js'
+        main_js = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'static' / 'clientes' / 'js' / 'contactos' / 'contacto_cliente_main.js'
         
         if main_js.exists():
             content = main_js.read_text()
@@ -206,8 +206,8 @@ class TestContactoClienteIntegration(DjangoTestCase):
         
         # These should NOT exist (violates FSD)
         forbidden_files = [
-            Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'core' / 'templates' / 'tenant' / 'core' / 'partials' / 'contactos' / 'modals_contacto.html',
-            Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'core' / 'templates' / 'tenant' / 'core' / 'partials' / 'contactos' / 'modals.html'
+            Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'templates' / 'tenant' / 'contactos' / 'modals_contacto.html',
+            Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'templates' / 'tenant' / 'contactos' / 'modals.html'
         ]
         
         for forbidden_file in forbidden_files:

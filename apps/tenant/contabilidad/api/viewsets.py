@@ -82,6 +82,7 @@ from apps.tenant.contabilidad.services.selectors import (
     estado_resultados_selector,
     filtrar_cuentas_por_app_origen,
     get_libro_diario_periodo,
+    qs_periodos_disponibles,
 )
 from apps.tenant.contabilidad.services.business_service import ContabilidadBusinessService
 
@@ -119,7 +120,7 @@ class CuentaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenant
     
     def get_queryset(self):
         if self.action == "list":
-            qs = CuentaContableSelector.get_qs_list().order_by('codigo')
+            qs = CuentaContableSelector.get_qs_list(self.get_empresa_id()).order_by('codigo')
 
             # Filtro por app de origen (restringe a prefijos PUC relevantes)
             app_origen = self.request.query_params.get('app_origen', '').strip()
@@ -223,13 +224,28 @@ class CuentaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenant
             logger.error(f"Error en render_offcanvas_detalle: {e}")
             return Response({'error': str(e)}, template_name='tenant/contabilidad/partials/cuenta_offcanvas_detalle.html', status=500)
 
+    @action(detail=False, methods=['post'], url_path='sincronizar')
+    def sincronizar(self, request):
+        """
+        POST /api/v1/contabilidad/cuentas-contables/sincronizar/
+        Crea en CuentaContable todas las entradas del CatalogoMaestroNIIF
+        que aun no existen para la empresa. Idempotente.
+        Requiere que el catalogo este poblado (make poblar-catalogo).
+        """
+        try:
+            empresa_id = self.get_empresa_id()
+            resultado = self.service.sincronizar_cuentas_plan(empresa_id)
+            return Response(resultado, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
     @action(detail=False, methods=['get'], url_path='cuentas-proveedor')
     def cuentas_proveedor(self, request):
         """
         Retorna cuentas filtradas para proveedores (gastos/pasivos).
         """
         try:
-            qs = CuentaContableSelector.get_qs_list().order_by('codigo')
+            qs = CuentaContableSelector.get_qs_list(self.get_empresa_id()).order_by('codigo')
             qs = filtrar_cuentas_por_app_origen(qs, 'gastos')
             serializer = CuentaContableListSerializer(qs, many=True)
             return Response(serializer.data)
@@ -280,7 +296,7 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
         """Soporte para IDs numéricos y UUIDs."""
         try:
             asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            asiento = get_asiento_by_identifier(asiento_identifier)
+            asiento = get_asiento_by_identifier(asiento_identifier, empresa_id=self.get_empresa_id())
             serializer = self.get_serializer(asiento)
             return Response(serializer.data)
         except Exception as e:
@@ -295,7 +311,7 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             
             resultado = self.service.crear_asiento(empresa_id, payload)
             
-            asiento = AsientoContableSelector.get_qs_detail().get(id=resultado['id'])
+            asiento = AsientoContableSelector.get_qs_detail(empresa_id).get(id=resultado['id'])
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -304,9 +320,9 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
     def update(self, request, *args, **kwargs):
         try:
             asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            asiento = get_asiento_by_identifier(asiento_identifier)
+            asiento = get_asiento_by_identifier(asiento_identifier, empresa_id=self.get_empresa_id())
             resultado = self.service.actualizar_asiento(asiento.id, request.data)
-            asiento = AsientoContableSelector.get_qs_detail().get(id=resultado['id'])
+            asiento = AsientoContableSelector.get_qs_detail(self.get_empresa_id()).get(id=resultado['id'])
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             return Response(serializer.data)
         except Exception as e:
@@ -316,11 +332,12 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
         identifier = str(kwargs.get('uuid') or kwargs.get('pk') or '')
         if not identifier:
             return Response({'error': 'missing_id', 'message': 'UUID requerido'}, status=status.HTTP_400_BAD_REQUEST)
-        deleted, _ = AsientoContable.objects.filter(uuid=identifier).delete()
+        empresa_id = self.get_empresa_id()
+        deleted, _ = AsientoContable.objects.filter(uuid=identifier, empresa_id=empresa_id).delete()
         if not deleted:
             # Fallback: intentar por PK entero
             try:
-                deleted, _ = AsientoContable.objects.filter(pk=int(identifier)).delete()
+                deleted, _ = AsientoContable.objects.filter(pk=int(identifier), empresa_id=empresa_id).delete()
             except (ValueError, TypeError):
                 pass
         if not deleted:
@@ -331,9 +348,9 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
     def aprobar(self, request, **kwargs):
         try:
             asiento_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            asiento = get_asiento_by_identifier(asiento_identifier)
+            asiento = get_asiento_by_identifier(asiento_identifier, empresa_id=self.get_empresa_id())
             self.service.aprobar_asiento(asiento.id)
-            asiento = AsientoContableSelector.get_qs_detail().get(id=asiento.id)
+            asiento = AsientoContableSelector.get_qs_detail(self.get_empresa_id()).get(id=asiento.id)
             serializer = AsientoContableDetailSerializer(asiento, context={'request': request})
             return Response(serializer.data)
         except Exception as e:
@@ -588,10 +605,11 @@ class PeriodoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
         return PeriodoContableListSerializer
     
     def get_queryset(self):
+        empresa_id = self.get_empresa_id()
         if self.action == "list":
-            return PeriodoContableSelector.get_qs_list().order_by('-periodo')
+            return PeriodoContableSelector.get_qs_list(empresa_id).order_by('-periodo')
         elif self.action == "retrieve":
-            return PeriodoContableSelector.get_qs_detail()
+            return PeriodoContableSelector.get_qs_detail(empresa_id)
         return self.get_mutation_queryset(PeriodoContable, 'periodo', 'estado')
 
     def create(self, request, *args, **kwargs):
@@ -620,6 +638,19 @@ class PeriodoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             periodo = get_periodo_by_identifier(periodo_identifier)
             self.service.eliminar_periodo(periodo.id)
             return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=['post'], url_path='cerrar')
+    def cerrar(self, request, **kwargs):
+        """POST /periodos-contables/{uuid}/cerrar/ — Cierra un periodo ABIERTO."""
+        try:
+            periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
+            periodo = get_periodo_by_identifier(periodo_identifier)
+            resultado = self.service.cerrar_periodo(periodo.id, request.data)
+            periodo_obj = PeriodoContableSelector.get_qs_detail().get(id=resultado['id'])
+            serializer = PeriodoContableDetailSerializer(periodo_obj, context={'request': request})
+            return Response(serializer.data)
         except Exception as e:
             return self.handle_service_error(e)
 
@@ -881,6 +912,10 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
             empresa_id=empresa_id, activa=True
         ).only('id', 'codigo', 'nombre', 'prefijo', 'consecutivo_actual')
 
+        # Obtener periodos contables abiertos utilizables para contabilización v3.8
+        ctx['periodos_disponibles'] = qs_periodos_disponibles(empresa_id)
+
+
         # Obtener sugerencias de cuentas basadas en reglas v3.6
         if app_label == 'facturas':
             tipo_tx = 'VENTA_FACTURA'
@@ -936,6 +971,7 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 documento_id=data['documento_id'],
                 documento_numero=data['documento_numero'],
                 tipo_comprobante_id=data['tipo_comprobante_id'],
+                periodo_uuid=str(data['periodo_uuid']),
                 lineas=[
                     LineaManual(
                         cuenta_codigo=l['cuenta_codigo'],
@@ -1002,11 +1038,13 @@ class ConfiguracionRetencionesViewSet(SintelDSVMixin, BaseTenantViewSet):
     search_fields = ['nit_tercero', 'tipo_tercero']
     ordering_fields = ['tipo_tercero', 'nit_tercero', 'tipo_retencion']
     ordering = ['tipo_tercero', 'nit_tercero']
+    lookup_field = 'id'
+    lookup_url_kwarg = 'id'
 
     def get_queryset(self):
         """Retorna queryset optimizado para ConfiguracionRetenciones."""
         return ConfiguracionRetenciones.objects.select_related('cuenta_retencion').only(
-            'id', 'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'id', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
             'porcentaje_por_defecto', 'activa', 'naturaleza', 'created_at',
             'cuenta_retencion__uuid', 'cuenta_retencion__codigo', 'cuenta_retencion__nombre'
         )
@@ -1046,7 +1084,7 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
             'id', 'uuid', 'tipo', 'porcentaje', 'base', 'monto',
             'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id',
             'reversada', 'fecha_creacion',
-            'configuracion__uuid', 'configuracion__tipo_tercero',
+            'configuracion__id', 'configuracion__tipo_tercero',
             'asiento_contable__uuid', 'asiento_contable__numero_asiento'
         )
 
@@ -1161,27 +1199,54 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
 
 class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.ViewSet):
     """
-    ViewSet para la Vista Unificada del Libro Diario Contable.
-    Consolida documentos de todas las apps de negocio con su estado contable.
+    Libro Diario Contable — Vista Unificada Raw + Procesado (Normatividad PYMES Colombia).
+
+    Código de Comercio Art. 48: Registro cronológico de todas las transacciones.
+    Devuelve documentos pendientes + contabilizados con cuentas PUC resueltas.
+
+    GET /api/v1/contabilidad/libro-diario/?periodo=2026-05
     GET /api/v1/contabilidad/libro-diario/?fecha_inicio=2026-05-01&fecha_fin=2026-05-31
     """
     permission_classes = [IsTenantMember]
 
     def list(self, request, *args, **kwargs):
-        serializer_input = ReporteFinancieroInputSerializer(data=request.query_params)
-        serializer_input.is_valid(raise_exception=True)
+        from datetime import date as date_type
+        import calendar
 
-        data = serializer_input.validated_data
         empresa_id = self.get_empresa_id()
+        periodo_param = request.query_params.get('periodo', '').strip()
+        fecha_inicio_str = request.query_params.get('fecha_inicio', '').strip()
+        fecha_fin_str = request.query_params.get('fecha_fin', '').strip()
 
-        resultado = get_libro_diario_periodo(
-            empresa_id=empresa_id,
-            fecha_inicio=data['fecha_inicio'],
-            fecha_fin=data['fecha_fin']
-        )
+        fecha_inicio = fecha_fin = None
 
-        serializer_output = LibroDiarioSerializer(resultado, many=True)
-        return Response(serializer_output.data, status=status.HTTP_200_OK)
+        if periodo_param:
+            try:
+                año, mes = map(int, periodo_param.split('-'))
+                fecha_inicio = date_type(año, mes, 1)
+                fecha_fin = date_type(año, mes, calendar.monthrange(año, mes)[1])
+            except (ValueError, IndexError):
+                return Response(
+                    {'detail': 'Formato de periodo invalido. Use YYYY-MM.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        elif fecha_inicio_str and fecha_fin_str:
+            try:
+                fecha_inicio = date_type.fromisoformat(fecha_inicio_str)
+                fecha_fin = date_type.fromisoformat(fecha_fin_str)
+            except ValueError:
+                return Response(
+                    {'detail': 'Formato de fecha invalido. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            hoy = date_type.today()
+            fecha_inicio = date_type(hoy.year, hoy.month, 1)
+            fecha_fin = hoy
+
+        resultado = get_libro_diario_periodo(empresa_id, fecha_inicio, fecha_fin)
+        serializer = LibroDiarioSerializer(resultado)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 # Lista de ViewSets para registro automático en el router

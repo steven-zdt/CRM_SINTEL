@@ -50,7 +50,7 @@
     row.setAttribute('data-movimiento-index', movimientoIndex);
     row.querySelector('.movimiento-orden').textContent = movimientoIndex;
 
-    // Cargar cuentas en el select
+    // Cargar cuentas en el select legacy o preparar buscador PUC.
     const selectCuenta = row.querySelector('.select-cuenta');
     if (selectCuenta) {
       const cuentas = await loadCuentas();
@@ -61,6 +61,7 @@
         selectCuenta.appendChild(option);
       });
     }
+    initPucSearch(row);
 
     // Event listener para eliminar movimiento
     const btnEliminar = row.querySelector('.btn-eliminar-movimiento');
@@ -85,6 +86,67 @@
     tbody.appendChild(clone);
     actualizarTotales();
     return row;
+  }
+
+  function initPucSearch(row) {
+    const searchInput = row.querySelector('.input-puc-search');
+    const hiddenCuentaId = row.querySelector('.input-cuenta-id');
+    const results = row.querySelector('.puc-search-results');
+    if (!searchInput || !hiddenCuentaId || !results) return;
+
+    let timer = null;
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.trim();
+      hiddenCuentaId.value = '';
+      clearTimeout(timer);
+      if (query.length < 2) {
+        results.classList.add('d-none');
+        results.innerHTML = '';
+        return;
+      }
+      timer = setTimeout(async () => {
+        try {
+          const cuentas = w.CuentaAPI && typeof w.CuentaAPI.searchAuxiliares === 'function'
+            ? await w.CuentaAPI.searchAuxiliares(query)
+            : await loadCuentas();
+          const filtradas = (cuentas || []).filter(c => {
+            const txt = `${c.codigo || ''} ${c.nombre || ''}`.toLowerCase();
+            return txt.includes(query.toLowerCase());
+          }).slice(0, 12);
+          renderPucResults(filtradas, searchInput, hiddenCuentaId, results);
+        } catch (err) {
+          console.error(MOD, 'Error buscando cuentas PUC:', err);
+          results.classList.add('d-none');
+        }
+      }, 250);
+    });
+
+    searchInput.addEventListener('blur', () => {
+      setTimeout(() => results.classList.add('d-none'), 180);
+    });
+  }
+
+  function renderPucResults(cuentas, searchInput, hiddenCuentaId, results) {
+    results.innerHTML = '';
+    if (!cuentas.length) {
+      results.innerHTML = '<div class="list-group-item small text-muted">Sin cuentas auxiliares nivel 6</div>';
+      results.classList.remove('d-none');
+      return;
+    }
+    cuentas.forEach(cuenta => {
+      const btn = d.createElement('button');
+      btn.type = 'button';
+      btn.className = 'list-group-item list-group-item-action small py-2';
+      btn.innerHTML = `<span class="fw-bold text-primary">${cuenta.codigo}</span> - ${cuenta.nombre}`;
+      btn.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
+        hiddenCuentaId.value = cuenta.id;
+        results.classList.add('d-none');
+      });
+      results.appendChild(btn);
+    });
+    results.classList.remove('d-none');
   }
 
   /**
@@ -187,7 +249,7 @@
       fecha: d.querySelector('#input-fecha')?.value || null,
       estado: d.querySelector('#select-estado')?.value || 'BORRADOR',
       descripcion: d.querySelector('#input-descripcion')?.value?.trim() || '',
-      tipo_comprobante: d.querySelector('#select-tipo-comprobante')?.value || null,
+      tipo_comprobante_id: d.querySelector('#select-tipo-comprobante')?.value || null,
       numero_comprobante: d.querySelector('#input-numero-comprobante')?.value?.trim() || null
     };
 
@@ -196,7 +258,9 @@
     const tbody = d.querySelector('#tbody-movimientos');
     if (tbody) {
       tbody.querySelectorAll('tr').forEach(row => {
-        const cuentaId = row.querySelector('.select-cuenta')?.value;
+        const cuentaId = row.querySelector('.input-cuenta-id')?.value || row.querySelector('.select-cuenta')?.value;
+        const cuentaText = row.querySelector('.input-puc-search')?.value || '';
+        const cuentaCodigo = cuentaText.split('-')[0]?.trim() || '';
         const descripcion = row.querySelector('.input-descripcion-mov')?.value || '';
         const debe = parseFloat(row.querySelector('.input-debe')?.value || 0);
         const haber = parseFloat(row.querySelector('.input-haber')?.value || 0);
@@ -207,6 +271,8 @@
         if (cuentaId && (debe > 0 || haber > 0)) {
           movimientos.push({
             cuenta: parseInt(cuentaId),
+            cuenta_id: parseInt(cuentaId),
+            cuenta_codigo: cuentaCodigo || null,
             descripcion: descripcion ? descripcion.trim() : '',
             debe: parseFloat(debe.toFixed(2)),
             haber: parseFloat(haber.toFixed(2)),
@@ -363,6 +429,7 @@
     if (!dataEl) return;
 
     try {
+      await loadCuentas();
       const movimientos = JSON.parse(dataEl.textContent);
       if (Array.isArray(movimientos) && movimientos.length > 0) {
         console.log(MOD, `Cargando ${movimientos.length} movimientos existentes...`);
@@ -376,6 +443,8 @@
           if (row) {
             // Poblar campos
             const selectCuenta = row.querySelector('.select-cuenta');
+            const searchCuenta = row.querySelector('.input-puc-search');
+            const hiddenCuenta = row.querySelector('.input-cuenta-id');
             if (selectCuenta) {
               if (mov.cuenta) {
                 selectCuenta.value = mov.cuenta;
@@ -385,6 +454,19 @@
                 if (cuentaEncontrada) {
                   selectCuenta.value = cuentaEncontrada.id;
                 }
+              }
+            }
+            if (searchCuenta && hiddenCuenta) {
+              const cuentaId = mov.cuenta || null;
+              const cuentaCodigo = mov.cuenta_codigo || '';
+              const cuentaEncontrada = cuentasCache && cuentaCodigo
+                ? cuentasCache.find(c => c.codigo === cuentaCodigo)
+                : (cuentasCache || []).find(c => String(c.id) === String(cuentaId));
+              if (cuentaEncontrada) {
+                hiddenCuenta.value = cuentaEncontrada.id;
+                searchCuenta.value = `${cuentaEncontrada.codigo} - ${cuentaEncontrada.nombre}`;
+              } else if (cuentaCodigo) {
+                searchCuenta.value = cuentaCodigo;
               }
             }
             
@@ -413,7 +495,30 @@
 
   function init() {
     attachEditorListeners();
+    loadTiposComprobante();
     loadInitialMovimientos();
+  }
+
+  async function loadTiposComprobante() {
+    const select = d.querySelector('#select-tipo-comprobante');
+    if (!select || select.dataset.loaded === 'true' || !w.TipoComprobanteAPI) return;
+
+    const current = select.dataset.current || select.value || '';
+    try {
+      const res = await w.TipoComprobanteAPI.list({ activa: true });
+      const items = Array.isArray(res) ? res : (res.results || []);
+      select.innerHTML = '<option value="">Seleccione tipo...</option>';
+      items.forEach(tipo => {
+        const option = d.createElement('option');
+        option.value = tipo.id;
+        option.textContent = `${tipo.codigo} - ${tipo.nombre}`;
+        option.selected = String(tipo.id) === String(current);
+        select.appendChild(option);
+      });
+      select.dataset.loaded = 'true';
+    } catch (err) {
+      console.warn(MOD, 'No se pudieron cargar tipos de comprobante:', err);
+    }
   }
 
   if (d.readyState === 'loading') {

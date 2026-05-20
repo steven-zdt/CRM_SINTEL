@@ -5,9 +5,9 @@ from ..models import CotizacionItem
 
 logger = logging.getLogger(__name__)
 
-ITEM_LIST_FIELDS = ('id', 'empresa_id', 'cotizacion_id', 'tipo_item', 'producto_id', 
-                    'servicio_id', 'descripcion', 'marca', 'referencia', 'unidad', 
-                    'cantidad', 'costo_unitario', 'porcentaje_utilidad', 
+ITEM_LIST_FIELDS = ('id', 'uuid', 'empresa_id', 'cotizacion_id', 'tipo_item', 'producto_id',
+                    'servicio_id', 'descripcion', 'marca', 'referencia', 'unidad',
+                    'cantidad', 'costo_unitario', 'porcentaje_utilidad',
                     'precio_unitario_venta', 'subtotal_linea', 'orden')
 
 class CotizacionItemSelector:
@@ -23,10 +23,13 @@ class CotizacionItemSelector:
         return CotizacionItem.objects.filter(**filters).only(*ITEM_LIST_FIELDS).order_by('orden')
 
     @staticmethod
-    def get_detail(empresa_id, pk):
+    def get_detail(empresa_id, uuid=None, pk=None):
+        if uuid:
+            return CotizacionItem.objects.filter(
+                empresa_id=empresa_id, uuid=uuid
+            ).only(*ITEM_LIST_FIELDS).first()
         return CotizacionItem.objects.filter(
-            empresa_id=empresa_id, 
-            pk=pk
+            empresa_id=empresa_id, pk=pk
         ).only(*ITEM_LIST_FIELDS).first()
 
 class CotizacionItemCRUDService:
@@ -80,6 +83,7 @@ class CotizacionItemBusinessService:
         
         # Limpieza de datos antes de persistir
         data.pop('id', None)
+        data.pop('uuid', None)
         
         if instance:
             # Asegurar que no cambiamos la cotizacion del item

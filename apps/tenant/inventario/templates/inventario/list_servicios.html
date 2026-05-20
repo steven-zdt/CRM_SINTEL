@@ -8,18 +8,18 @@
             <span class="badge bg-light text-dark border">Intangibles</span>
         </div>
         <div class="btn-group shadow-sm">
-            <button type="button" class="btn btn-primary" id="btn-nuevo-servicio" 
-                    hx-get="/api/v1/inventario/servicios/gestor-offcanvas/" 
-                    hx-target="#offcanvas-container-servicios" 
+            <button type="button" class="btn btn-primary" id="btn-nuevo-servicio"
+                    hx-get="/api/v1/inventario/servicios/gestor-offcanvas/"
+                    hx-target="#offcanvas-container-servicios"
                     hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-servicios'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                    hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-inventario-servicio'); }">
                 <i class="bi bi-plus-lg me-1"></i> Nuevo Servicio
             </button>
-            <button type="button" class="btn btn-success" id="btn-registrar-historial" 
-                    hx-get="/api/v1/inventario/servicios/historial-offcanvas/" 
-                    hx-target="#offcanvas-container-historial-servicio" 
+            <button type="button" class="btn btn-success" id="btn-registrar-historial"
+                    hx-get="/api/v1/inventario/servicios/historial-offcanvas/"
+                    hx-target="#offcanvas-container-historial-servicio"
                     hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-historial-servicio'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                    hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-historial-servicio'); }">
                 <i class="bi bi-clock-history me-1"></i> Registrar Historial
             </button>
             <button type="button" class="btn btn-outline-secondary" 
@@ -35,3 +35,5 @@
     
     <div id="grid-servicios" class="flex-grow-1"></div>
 </div>
+
+{# Contenedores definidos en list_inventario.html — NO duplicar aqui #}

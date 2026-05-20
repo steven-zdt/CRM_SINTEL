@@ -190,6 +190,21 @@
   }
 
   /**
+   * Vincula o desvincula una cotización opcional a una factura.
+   * @param {string} facturaUuid - UUID de la factura
+   * @param {string|null} cotizacionUuid - UUID de la cotización o null para desvincular
+   * @returns {Promise<{ok: boolean, status: number, data: any}>}
+   */
+  async function vincularCotizacion(facturaUuid, cotizacionUuid = null) {
+    if (!facturaUuid) {
+      throw new Error('facturaUuid es requerido');
+    }
+    return await window.http('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cotizacion/`, {
+      cotizacion_uuid: cotizacionUuid || null,
+    });
+  }
+
+  /**
    * Elimina una factura (alias de deleteFactura para compatibilidad)
    * ⚠️ v2.61.1: DEPRECATED - Usar deleteFactura() en su lugar
    * @param {number} facturaId - ID de la factura
@@ -278,6 +293,7 @@
       uploadDocumento,
       getBatchUploadStatus,  // ⚠️ v2.61.2: Nueva función para consultar estado de batch upload
       getDocumentXML,
+      vincularCotizacion,
       deleteDocument,
       deleteFactura,
       createFacturaFromDTO,

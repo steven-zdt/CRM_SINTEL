@@ -183,6 +183,7 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',  # OK: WhiteNoise para servir staticfiles en producción
     'corsheaders.middleware.CorsMiddleware',  # OK: CORS: Debe ir ANTES de CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',  # OK: CRÍTICO: Debe ejecutarse antes de ForceNoPortMiddleware
+    'apps.public.core.middleware.ValidateALLOWED_HOSTSMiddleware',  # OK: SEGURIDAD: Valida Host header contra ALLOWED_HOSTS (ANTES de Django URL resolution)
     'apps.public.core.middleware.ForceNoPortMiddleware',  # OK: ESTÁNDAR: Normaliza HTTP_HOST eliminando puerto (ANTES de TenantMainMiddleware)
     'django_tenants.middleware.main.TenantMainMiddleware',  # OK: CRÍTICO: Identifica tenant usando HTTP_HOST normalizado y selecciona URLConf (ROOT_URLCONF o TENANT_URLCONF)
     'apps.tenant.core.middleware.SintelExceptionMiddleware',  # OK: v2.40: Manejo centralizado de excepciones (DESPUÉS de TenantMainMiddleware para tener contexto del esquema)

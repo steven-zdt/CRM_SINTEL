@@ -5,6 +5,7 @@ import logging
 
 from rest_framework import serializers
 
+from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.clientes.models import Cliente
 from ..configuracion.models import ConfiguracionCotizacion
 from ..models import Cotizacion, CotizacionItem, Producto, Servicio
@@ -15,28 +16,30 @@ logger = logging.getLogger(__name__)
 class ProductoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Producto
-        fields = ['id', 'codigo', 'nombre', 'marca', 'referencia', 'unidad', 'precio_venta', 'activo', 'created_at']
-        read_only_fields = ['created_at']
+        fields = ['id', 'uuid', 'codigo', 'nombre', 'marca', 'referencia', 'unidad', 'precio_venta', 'activo', 'created_at']
+        read_only_fields = ['uuid', 'created_at']
 
 
 class ServicioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Servicio
-        fields = ['id', 'nombre', 'precio_venta', 'activo', 'created_at']
-        read_only_fields = ['created_at']
+        fields = ['id', 'uuid', 'nombre', 'precio_venta', 'activo', 'created_at']
+        read_only_fields = ['uuid', 'created_at']
 
 
 class CotizacionItemNestedSerializer(serializers.ModelSerializer):
     """Items embebidos en CotizacionSerializer. Sin campo cotizacion — lo asigna el servicio."""
+    id = serializers.IntegerField(required=False, allow_null=True)
+
     class Meta:
         model = CotizacionItem
         fields = [
-            'id', 'tipo_item',
+            'id', 'uuid', 'tipo_item',
             'descripcion', 'marca', 'referencia', 'unidad',
             'cantidad', 'costo_unitario', 'porcentaje_utilidad',
             'precio_unitario_venta', 'subtotal_linea', 'orden',
         ]
-        read_only_fields = ['precio_unitario_venta', 'subtotal_linea']
+        read_only_fields = ['uuid', 'precio_unitario_venta', 'subtotal_linea']
 
 
 class CotizacionItemSerializer(serializers.ModelSerializer):
@@ -44,12 +47,12 @@ class CotizacionItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CotizacionItem
         fields = [
-            'id', 'cotizacion', 'tipo_item',
+            'id', 'uuid', 'cotizacion', 'tipo_item',
             'descripcion', 'marca', 'referencia', 'unidad',
             'cantidad', 'costo_unitario', 'porcentaje_utilidad',
             'precio_unitario_venta', 'subtotal_linea', 'orden',
         ]
-        read_only_fields = ['precio_unitario_venta', 'subtotal_linea']
+        read_only_fields = ['uuid', 'precio_unitario_venta', 'subtotal_linea']
 
 
 class CotizacionListSerializer(serializers.ModelSerializer):
@@ -73,8 +76,8 @@ class CotizacionSerializer(serializers.ModelSerializer):
     cliente_nombre = serializers.ReadOnlyField(source='cliente.nombre_comercial')
     configuracion_nombre = serializers.ReadOnlyField(source='configuracion.nombre_configuracion')
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
-    cliente = serializers.PrimaryKeyRelatedField(queryset=Cliente.objects.all())
-    configuracion = serializers.PrimaryKeyRelatedField(queryset=ConfiguracionCotizacion.objects.all())
+    cliente = serializers.PrimaryKeyRelatedField(queryset=Cliente.objects.none())
+    configuracion = serializers.PrimaryKeyRelatedField(queryset=ConfiguracionCotizacion.objects.none())
 
     class Meta:
         model = Cotizacion
@@ -97,8 +100,10 @@ class CotizacionSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context.get('request')
-        if request and hasattr(request, 'tenant'):
-            empresa_id = getattr(request.tenant, 'empresa_id', None)
-            if empresa_id:
-                self.fields['cliente'].queryset = Cliente.objects.filter(empresa_id=empresa_id)
-                self.fields['configuracion'].queryset = ConfiguracionCotizacion.objects.filter(empresa_id=empresa_id)
+        if not request:
+            return
+        empresa = resolve_tenant_empresa(request)
+        if not empresa:
+            return
+        self.fields['cliente'].queryset = Cliente.objects.filter(empresa_id=empresa.id, activo=True)
+        self.fields['configuracion'].queryset = ConfiguracionCotizacion.objects.filter(empresa_id=empresa.id)

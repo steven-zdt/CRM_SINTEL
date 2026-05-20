@@ -15,8 +15,9 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from django.db.models import Q
+from django.utils import timezone
 
-from apps.tenant.contabilidad.models import AsientoContable, CatalogoMaestroNIIF, CuentaContable, MovimientoContable
+from apps.tenant.contabilidad.models import AsientoContable, CatalogoMaestroNIIF, CuentaContable, MovimientoContable, TipoComprobante
 from apps.tenant.contabilidad.services.selectors import verificar_periodo_cerrado
 from apps.tenant.contabilidad.services.crud_service import ContabilidadCRUDService
 
@@ -35,7 +36,95 @@ class ContabilidadBusinessService:
 
     def _obtener_cuenta_por_codigo(self, empresa_id: int, codigo: str) -> Optional[CuentaContable]:
         """Busca una cuenta por su código exacto."""
-        return CuentaContable.objects.filter(empresa_id=empresa_id, codigo=codigo, activa=True).first()
+        return CuentaContable.objects.filter(
+            empresa_id=empresa_id,
+            codigo=codigo,
+            activa=True,
+        ).only('id', 'codigo', 'nombre', 'nivel', 'empresa_id').first()
+
+    _DIGITO_TIPO = {
+        '1': 'ACTIVO', '2': 'PASIVO', '3': 'PATRIMONIO',
+        '4': 'INGRESO', '5': 'GASTO', '6': 'GASTO',
+    }
+
+    def _obtener_o_crear_cuenta(self, empresa_id: int, codigo: str) -> CuentaContable:
+        """
+        Obtiene CuentaContable por codigo; si no existe la crea automaticamente:
+        1. Desde CatalogoMaestroNIIF si esta disponible (nombre y nivel correctos)
+        2. Infiriendo propiedades desde la estructura del codigo PUC Colombia
+        Esto permite usar cualquier codigo PUC valido sin requerir carga previa del plan.
+        """
+        cuenta = CuentaContable.objects.filter(
+            empresa_id=empresa_id, codigo=codigo, activa=True,
+        ).only('id', 'codigo', 'nivel').first()
+        if cuenta:
+            return cuenta
+
+        catalogo = CatalogoMaestroNIIF.objects.filter(codigo=codigo).first()
+        if catalogo:
+            nombre = catalogo.nombre
+            nivel = catalogo.nivel
+        else:
+            nombre = f'Cuenta {codigo}'
+            nivel = len(codigo)
+
+        tipo = self._DIGITO_TIPO.get(codigo[0] if codigo else '', 'GASTO')
+
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.filter(id=empresa_id).first()
+        if not empresa:
+            raise ValidationError({'lineas': f'Empresa id={empresa_id} no encontrada.'})
+
+        cuenta, _ = CuentaContable.objects.get_or_create(
+            empresa_id=empresa_id,
+            codigo=codigo,
+            defaults={'empresa': empresa, 'nombre': nombre, 'tipo': tipo, 'nivel': nivel, 'activa': True},
+        )
+        return cuenta
+
+    def _normalizar_movimientos(self, empresa_id: int, movimientos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Normaliza movimientos de UI/API a cuenta_id + cuenta_codigo y aplica DSV.
+        Acepta cuenta_id, cuenta o cuenta_codigo como entrada.
+        """
+        normalizados = []
+        for idx, mov in enumerate(movimientos, start=1):
+            cuenta_id = mov.get('cuenta_id') or mov.get('cuenta')
+            cuenta_codigo = str(mov.get('cuenta_codigo') or '').strip()
+
+            qs = CuentaContable.objects.filter(empresa_id=empresa_id, activa=True)
+            if cuenta_id:
+                cuenta = qs.filter(id=cuenta_id).only('id', 'codigo', 'nombre', 'nivel', 'empresa_id').first()
+            elif cuenta_codigo:
+                cuenta = qs.filter(codigo=cuenta_codigo).only('id', 'codigo', 'nombre', 'nivel', 'empresa_id').first()
+            else:
+                raise ValidationError({'movimientos': f'La linea {idx} no tiene cuenta contable asignada.'})
+
+            if not cuenta:
+                raise ValidationError({'movimientos': f'La cuenta de la linea {idx} no existe o no pertenece a la empresa activa.'})
+            if cuenta.nivel != 6:
+                raise ValidationError({'movimientos': f'La cuenta {cuenta.codigo} no es auxiliar nivel 6.'})
+
+            debe = Decimal(str(mov.get('debe', 0) or 0))
+            haber = Decimal(str(mov.get('haber', 0) or 0))
+            if debe == Decimal('0') and haber == Decimal('0'):
+                raise ValidationError({'movimientos': f'La linea {idx} debe tener debito o credito mayor a cero.'})
+            if debe > Decimal('0') and haber > Decimal('0'):
+                raise ValidationError({'movimientos': f'La linea {idx} no puede tener debito y credito simultaneamente.'})
+
+            normalizados.append({
+                **mov,
+                'cuenta_id': cuenta.id,
+                'cuenta_codigo': cuenta.codigo,
+                'debe': debe,
+                'haber': haber,
+            })
+        return normalizados
+
+    def _generar_numero_asiento(self, prefijo: str = 'ASI') -> str:
+        """Genera un número canónico para asientos manuales/API."""
+        import uuid as _uuid
+        return f"{prefijo}-{timezone.now().strftime('%Y%m%d')}-{str(_uuid.uuid4())[:8].upper()}"
 
     # ============================================================================
     # VALIDACIONES DE DOMINIO
@@ -93,11 +182,13 @@ class ContabilidadBusinessService:
         movimientos = payload.get('movimientos', [])
         estado = payload.get('estado', 'BORRADOR')
         fecha = payload.get('fecha')
+        if not payload.get('numero'):
+            payload['numero'] = self._generar_numero_asiento()
 
         # 1. Validaciones semánticas
+        movimientos = self._normalizar_movimientos(empresa_id, movimientos)
         self._validar_periodo(fecha, empresa_id)
         self._validar_cuadratura(movimientos, estado)
-        self._validar_cuentas_auxiliares(movimientos)
 
         # 2. Persistencia vía CRUD
         asiento = self.crud.crear_asiento(empresa_id, payload, movimientos)
@@ -118,8 +209,8 @@ class ContabilidadBusinessService:
             self._validar_periodo(payload['fecha'], asiento.empresa_id)
         
         if 'movimientos' in payload:
+            payload['movimientos'] = self._normalizar_movimientos(asiento.empresa_id, payload['movimientos'])
             self._validar_cuadratura(payload['movimientos'], payload.get('estado', asiento.estado))
-            self._validar_cuentas_auxiliares(payload['movimientos'])
 
         # 3. Persistencia vía CRUD
         asiento = self.crud.actualizar_asiento(asiento_id, payload, payload.get('movimientos'))
@@ -218,9 +309,23 @@ class ContabilidadBusinessService:
         periodo = PeriodoContable.objects.get(id=periodo_id)
         if periodo.estado == 'CERRADO':
             raise ValidationError({'detail': 'No se puede eliminar un periodo cerrado.'})
-            
+
         periodo.delete()
         return {'status': 'deleted'}
+
+    @transaction.atomic
+    def cerrar_periodo(self, periodo_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Cierra un periodo ABIERTO. Una vez cerrado no se puede reabrir."""
+        from apps.tenant.contabilidad.models import PeriodoContable
+        periodo = PeriodoContable.objects.get(id=periodo_id)
+        if periodo.estado == 'CERRADO':
+            raise ValidationError({'detail': 'El periodo ya esta cerrado.'})
+        data = {'estado': 'CERRADO'}
+        observaciones = payload.get('observaciones', '')
+        if observaciones:
+            data['observaciones'] = observaciones
+        periodo = self.crud.actualizar_periodo(periodo_id, data)
+        return {'id': periodo.id, 'uuid': str(periodo.uuid), 'status': 'cerrado'}
 
     # ============================================================================
     # FLUJO MANUAL ON-DEMAND (contabilizacion desde la UI)
@@ -247,28 +352,33 @@ class ContabilidadBusinessService:
                 'documento': f'El documento {dto.documento_numero} ya fue contabilizado.'
             })
 
-        # 2. Periodo abierto
+        # 2. Periodo abierto y correspondencia de fecha
+        periodo = PeriodoContable.objects.filter(
+            empresa_id=empresa_id,
+            uuid=dto.periodo_uuid
+        ).first()
+
+        if not periodo:
+            raise ValidationError({
+                'periodo': 'El periodo contable seleccionado no existe.'
+            })
+
+        if periodo.estado != 'ABIERTO':
+            raise ValidationError({
+                'periodo': f'El periodo contable {periodo.periodo} no esta abierto.'
+            })
+
+        if not (periodo.fecha_inicio <= dto.fecha <= periodo.fecha_fin):
+            raise ValidationError({
+                'fecha': f'La fecha del documento ({dto.fecha}) no corresponde al periodo contable seleccionado {periodo.periodo} ({periodo.fecha_inicio} a {periodo.fecha_fin}).'
+            })
+
         self._validar_periodo(dto.fecha, empresa_id)
 
-        # 3. Resolver cuenta_codigo -> cuenta_id y validar nivel 6
+        # 3. Resolver cuenta_codigo -> cuenta_id (auto-crea desde catalogo si no existe)
         movimientos = []
         for linea in dto.lineas:
-            cuenta = CuentaContable.objects.filter(
-                empresa_id=empresa_id,
-                codigo=linea.cuenta_codigo,
-                activa=True,
-            ).only('id', 'codigo', 'nivel').first()
-            if not cuenta:
-                raise ValidationError({
-                    'lineas': f'Cuenta {linea.cuenta_codigo} no existe o esta inactiva.'
-                })
-            if cuenta.nivel != 6:
-                raise ValidationError({
-                    'lineas': (
-                        f'La cuenta {linea.cuenta_codigo} es de nivel {cuenta.nivel}. '
-                        'Solo se permiten registros en cuentas auxiliares (nivel 6).'
-                    )
-                })
+            cuenta = self._obtener_o_crear_cuenta(empresa_id, linea.cuenta_codigo)
             movimientos.append({
                 'cuenta_id': cuenta.id,
                 'cuenta_codigo': cuenta.codigo,
@@ -301,6 +411,7 @@ class ContabilidadBusinessService:
             data={
                 'numero': numero,
                 'tipo_comprobante_id': tipo_comprobante.id,
+                'periodo_contable_id': periodo.id,
                 'fecha': dto.fecha,
                 'descripcion': dto.descripcion,
                 'estado': 'APROBADO',
@@ -312,6 +423,52 @@ class ContabilidadBusinessService:
             movimientos=movimientos,
         )
         return {'id': asiento.id, 'uuid': str(asiento.uuid), 'numero': asiento.numero}
+
+    @transaction.atomic
+    def sincronizar_cuentas_plan(self, empresa_id: int) -> Dict[str, Any]:
+        """
+        Crea en CuentaContable todas las entradas del CatalogoMaestroNIIF
+        que aun no existen para la empresa. Idempotente — no duplica registros.
+        Usado por la accion POST /cuentas-contables/sincronizar/.
+        """
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.filter(id=empresa_id).first()
+        if not empresa:
+            raise ValidationError({'detail': 'Empresa no encontrada.'})
+
+        codigos_existentes = set(
+            CuentaContable.objects.filter(empresa_id=empresa_id).values_list('codigo', flat=True)
+        )
+
+        catalogo = list(
+            CatalogoMaestroNIIF.objects.filter(activa=True)
+            .values('codigo', 'nombre', 'nivel')
+            .order_by('codigo')
+        )
+
+        a_crear = []
+        for entry in catalogo:
+            if entry['codigo'] in codigos_existentes:
+                continue
+            tipo = self._DIGITO_TIPO.get(entry['codigo'][0] if entry['codigo'] else '', 'GASTO')
+            a_crear.append(CuentaContable(
+                empresa=empresa,
+                empresa_id=empresa_id,
+                codigo=entry['codigo'],
+                nombre=entry['nombre'],
+                tipo=tipo,
+                nivel=entry['nivel'],
+                activa=True,
+            ))
+
+        if a_crear:
+            CuentaContable.objects.bulk_create(a_crear, ignore_conflicts=True)
+
+        return {
+            'creadas': len(a_crear),
+            'total_catalogo': len(catalogo),
+            'total_plan': CuentaContable.objects.filter(empresa_id=empresa_id).count(),
+        }
 
     # ============================================================================
     # CATÁLOGO MAESTRO NIIF

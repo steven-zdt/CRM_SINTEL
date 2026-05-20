@@ -11,7 +11,7 @@
   <div class="offcanvas-body">
     <div id="form-activo-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
     <form id="form-activo" method="POST" onsubmit="return false;">
-      <input type="hidden" id="activo-id" name="id" value="{% if activo %}{{ activo.id }}{% endif %}">
+      <input type="hidden" id="activo-id" name="id" value="{% if activo %}{{ activo.uuid }}{% endif %}">
       <div class="row g-3">
         <div class="col-md-6">
           <label for="activo-codigo" class="form-label text-danger fw-bold">Código *</label>

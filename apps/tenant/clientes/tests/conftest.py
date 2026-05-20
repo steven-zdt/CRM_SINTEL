@@ -66,6 +66,12 @@ def tenant(db):
     if 'clientes_cliente' not in tables:
         call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, 'tenant_clientes', '--noinput', verbosity=0)
 
+    with schema_context(tenant_obj.schema_name):
+        tables = set(connection.introspection.table_names())
+
+    if 'perfil_tenantprofile' not in tables:
+        call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, 'perfil', '--noinput', verbosity=0)
+
     # Ensure singleton Empresa exists with valid current model fields.
     with schema_context(tenant_obj.schema_name):
         empresa = Empresa.objects.only('id').first()
@@ -110,3 +116,39 @@ def tenant_with_empresa(tenant):
         'tenant': tenant,
         'empresa': empresa
     }
+
+
+@pytest.fixture
+def admin_user(db, tenant):
+    """Fixture que crea un usuario administrador con membresia y perfil en el tenant."""
+    from django.contrib.auth import get_user_model
+    from apps.public.tenants.models import TenantMembership
+    from apps.tenant.perfil.models import TenantProfile
+    
+    User = get_user_model()
+    # Check if user already exists
+    user = User.objects.filter(email="admin@test.local").first()
+    if not user:
+        user = User.objects.create_superuser(
+            username="admin_test",
+            email="admin@test.local",
+            password="admin123"
+        )
+    
+    # Ensure TenantMembership exists
+    TenantMembership.objects.get_or_create(
+        client=tenant,
+        user=user,
+        defaults={'is_active': True, 'rol': 'ADMIN'}
+    )
+    
+    # Ensure TenantProfile exists
+    with schema_context(tenant.schema_name):
+        empresa = Empresa.objects.first()
+        TenantProfile.objects.get_or_create(
+            user=user,
+            empresa=empresa,
+            defaults={'rol': 'ADMIN'}
+        )
+        
+    return user

@@ -17,7 +17,7 @@ from apps.tenant.empresa.models import Empresa
 
 
 @pytest.mark.django_db
-def test_clientes_crud_completo(client, django_user_model, tenant):
+def test_clientes_crud_completo(client, admin_user, tenant):
     """
     Test funcional completo de CRUD de clientes.
     
@@ -28,16 +28,9 @@ def test_clientes_crud_completo(client, django_user_model, tenant):
     4. UPDATE: Actualizar un cliente existente
     5. DELETE: Eliminar un cliente
     6. LIST después de DELETE: Verificar que el cliente fue eliminado
+    7. LIST final: verificar que el cliente persiste y está inactivo
     """
-    # Setup: Crear usuario y membresía
-    user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    TenantMembership.objects.create(
-        client=tenant,
-        user=user,
-        is_active=True,
-        rol="ADMIN"
-    )
-    client.force_login(user)
+    client.force_login(admin_user)
     
     # Datos de prueba
     cliente_data = {
@@ -75,6 +68,7 @@ def test_clientes_crud_completo(client, django_user_model, tenant):
         assert created["razon_social"] == cliente_data["razon_social"]
         assert created["numero_documento"] == cliente_data["numero_documento"]
         cliente_id = created["id"]
+        cliente_uuid = created["uuid"]
         
         # Verificar que el cliente fue creado en la BD
         cliente_db = Cliente.objects.get(id=cliente_id)
@@ -83,7 +77,7 @@ def test_clientes_crud_completo(client, django_user_model, tenant):
         
         # 3. READ: Obtener detalle del cliente
         resp = client.get(
-            f"/api/v1/clientes/{cliente_id}/",
+            f"/api/v1/clientes/{cliente_uuid}/",
             HTTP_HOST=f"{tenant.schema_name}.sintel.com"
         )
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.content}"
@@ -105,7 +99,7 @@ def test_clientes_crud_completo(client, django_user_model, tenant):
             "observaciones": "Cliente actualizado en test"
         }
         resp = client.patch(
-            f"/api/v1/clientes/{cliente_id}/",
+            f"/api/v1/clientes/{cliente_uuid}/",
             data=update_data,
             content_type="application/json",
             HTTP_HOST=f"{tenant.schema_name}.sintel.com"
@@ -146,7 +140,7 @@ def test_clientes_crud_completo(client, django_user_model, tenant):
 
 
 @pytest.mark.django_db
-def test_clientes_create_validaciones(client, django_user_model, tenant):
+def test_clientes_create_validaciones(client, admin_user, tenant):
     """
     Test de validaciones al crear clientes.
     
@@ -155,14 +149,7 @@ def test_clientes_create_validaciones(client, django_user_model, tenant):
     - Unicidad de documento
     - Valores válidos para campos con choices
     """
-    user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    TenantMembership.objects.create(
-        client=tenant,
-        user=user,
-        is_active=True,
-        rol="ADMIN"
-    )
-    client.force_login(user)
+    client.force_login(admin_user)
     
     with schema_context(tenant.schema_name):
         # Test: Campos requeridos faltantes
@@ -205,18 +192,11 @@ def test_clientes_create_validaciones(client, django_user_model, tenant):
 
 
 @pytest.mark.django_db
-def test_clientes_list_filtros_y_ordenamiento(client, django_user_model, tenant):
+def test_clientes_list_filtros_y_ordenamiento(client, admin_user, tenant):
     """
     Test de filtros y ordenamiento en listado de clientes.
     """
-    user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    TenantMembership.objects.create(
-        client=tenant,
-        user=user,
-        is_active=True,
-        rol="ADMIN"
-    )
-    client.force_login(user)
+    client.force_login(admin_user)
     
     with schema_context(tenant.schema_name):
         empresa = Empresa.objects.first()

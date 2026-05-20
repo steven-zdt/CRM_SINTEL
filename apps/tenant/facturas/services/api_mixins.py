@@ -16,13 +16,13 @@ class FacturaServiceMixin:
     """
 
     # --- Acceso a Selectors (v3.5 Zero Waste) ---
-    def get_qs_list(self, search=None):
-        """Retorna QuerySet optimizado para listados."""
-        return FacturaSelectors.qs_list(search=search)
+    def get_qs_list(self, empresa_id=None, search=None):
+        """Retorna QuerySet optimizado para listados (empresa_id aplicado en selector)."""
+        return FacturaSelectors.qs_list(empresa_id=empresa_id, search=search)
 
-    def get_qs_detail(self):
-        """Retorna QuerySet optimizado para detalle."""
-        return FacturaSelectors.qs_detail()
+    def get_qs_detail(self, empresa_id=None):
+        """Retorna QuerySet optimizado para detalle (empresa_id aplicado en selector)."""
+        return FacturaSelectors.qs_detail(empresa_id=empresa_id)
 
     def get_summary(self, empresa_id):
         """Retorna resumen financiero."""
@@ -53,3 +53,5 @@ class FacturaServiceMixin:
     def service_obtener_retenciones_proveedor(self, proveedor_nit, empresa_id):
         """Obtiene retenciones desde Proveedor."""
         return FacturaBusinessService.obtener_retenciones_desde_proveedor(proveedor_nit, empresa_id)
+
+

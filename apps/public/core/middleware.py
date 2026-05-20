@@ -4,10 +4,76 @@ Middleware para manejar redirecciones HTTPS -> HTTP en desarrollo y headers de s
 
 import logging
 import uuid
+import fnmatch
 
 from django.conf import settings
-from django.http import HttpResponsePermanentRedirect
+from django.http import HttpResponsePermanentRedirect, HttpResponseBadRequest
 from django.utils.deprecation import MiddlewareMixin
+
+logger = logging.getLogger(__name__)
+security_logger = logging.getLogger("security.tenants")
+
+
+class ValidateALLOWED_HOSTSMiddleware:
+    """
+    Valida ALLOWED_HOSTS EXPLÍCITAMENTE sin pasar por request.get_host().
+
+    Si el Host header no coincide con ALLOWED_HOSTS, retorna 400 Bad Request inmediatamente.
+    Esto previene que bots/exploradores lleguen a Django URL resolution y generen logs 404 confusos.
+
+    POSICIÓN: Debe ser UNO DE LOS PRIMEROS middleware (después de SessionMiddleware).
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self.allowed_hosts = set(settings.ALLOWED_HOSTS)
+        # Compilar patterns para matching (Django permite wildcards)
+        self.allowed_patterns = [h for h in self.allowed_hosts if '*' in h]
+        self.allowed_exact = [h for h in self.allowed_hosts if '*' not in h]
+
+    def _host_matches(self, host):
+        """Verifica si host coincide con ALLOWED_HOSTS (con soporte para wildcards)."""
+        # Remover puerto si está presente
+        host_only = host.split(":")[0] if ":" in host else host
+
+        # Chequeo exacto
+        if host_only in self.allowed_exact:
+            return True
+
+        # Chequeo con patterns (ej: *.sintel.com)
+        for pattern in self.allowed_patterns:
+            if fnmatch.fnmatch(host_only, pattern):
+                return True
+
+        return False
+
+    def __call__(self, request):
+        """Valida Host header antes de dejar que llegue a Django."""
+        http_host = request.META.get("HTTP_HOST", "")
+
+        if not http_host:
+            # Sin Host header: rechazar
+            security_logger.warning(
+                f"🚨 BLOCKED: No Host header | Path: {request.path} | IP: {self._get_client_ip(request)}"
+            )
+            return HttpResponseBadRequest("Invalid request: missing Host header")
+
+        # Validar contra ALLOWED_HOSTS
+        if not self._host_matches(http_host):
+            security_logger.warning(
+                f"🚨 BLOCKED: Invalid Host header '{http_host}' not in ALLOWED_HOSTS | "
+                f"Path: {request.path} | IP: {self._get_client_ip(request)}"
+            )
+            return HttpResponseBadRequest("Invalid Host header")
+
+        return self.get_response(request)
+
+    def _get_client_ip(self, request):
+        """Obtiene IP del cliente para logging."""
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+        if x_forwarded_for:
+            return x_forwarded_for.split(",")[0]
+        return request.META.get("REMOTE_ADDR", "unknown")
 
 
 class ForceNoPortMiddleware:
@@ -34,13 +100,17 @@ class ForceNoPortMiddleware:
         Ejemplo:
         - Entrada: HTTP_HOST = "cliente.localhost:8000"
         - Salida: HTTP_HOST = "cliente.localhost"
+
+        NOTA: Accedemos directamente a META['HTTP_HOST'] para evitar que Django valide
+        ALLOWED_HOSTS prematuramente. La validación ocurrirá en TenantSecurityAndURLConfMiddleware.
         """
-        # Obtener el host actual (puede incluir puerto)
-        host = request.get_host()
+        # Obtener el host actual del META (puede incluir puerto)
+        # NO usar request.get_host() porque activa validación ALLOWED_HOSTS prematuramente
+        host = request.META.get("HTTP_HOST", "")
 
         # Separar dominio del puerto (split por ':')
         # Si hay puerto, tomar solo la parte del dominio
-        if ":" in host:
+        if host and ":" in host:
             domain_only = host.split(":")[0]
             # Sobrescribir HTTP_HOST en request.META
             request.META["HTTP_HOST"] = domain_only
@@ -92,7 +162,9 @@ class HTTPSRedirectMiddleware:
             # El navegador mostrará una advertencia, pero no bloqueará la funcionalidad
             if "Cross-Origin-Opener-Policy" not in response:
                 # Solo establecer si el origen es localhost o 127.0.0.1
-                host = request.get_host().split(":")[0]
+                # Acceder directamente a META para evitar validación ALLOWED_HOSTS prematura
+                http_host = request.META.get("HTTP_HOST", "")
+                host = http_host.split(":")[0] if http_host else ""
                 if host in ["localhost", "127.0.0.1"]:
                     response["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
                 # Para otros dominios en desarrollo, no establecer el header para evitar advertencias
@@ -150,7 +222,9 @@ class CSRFTrustedOriginMiddleware:
             else:
                 # Si no hay HTTP_ORIGIN, construir desde HTTP_HOST
                 # (ForceNoPortMiddleware ya eliminó el puerto, pero podemos inferirlo)
-                host = request.get_host()  # Ya sin puerto por ForceNoPortMiddleware
+                # Acceder directamente a META para evitar validación ALLOWED_HOSTS prematura
+                http_host = request.META.get("HTTP_HOST", "")
+                host = http_host.split(":")[0] if http_host else ""
                 scheme = "https" if request.is_secure() else "http"
 
                 # Agregar sin puerto

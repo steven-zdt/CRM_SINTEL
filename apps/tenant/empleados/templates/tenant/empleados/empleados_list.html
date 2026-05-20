@@ -182,8 +182,13 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p>Esta seguro de que desea eliminar este registro?</p>
-        <p class="text-danger"><strong>Esta accion no se puede deshacer.</strong></p>
+        <p class="mb-2">Esta a punto de eliminar permanentemente a un empleado.</p>
+        <p class="text-danger mb-1"><strong>Esta accion eliminara en cascada:</strong></p>
+        <ul class="text-danger small mb-3">
+          <li>Todos sus contratos</li>
+          <li>Todos sus registros de nomina</li>
+        </ul>
+        <p class="text-danger fw-bold mb-0">Esta accion no se puede deshacer.</p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>

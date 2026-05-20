@@ -1,8 +1,8 @@
 """
-API Mixins para Empleados - Inyección de servicios en ViewSets.
+API Mixins para Empleados - Inyeccion de servicios en ViewSets.
 
 WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
-- Este archivo contiene mixins específicos para cada modelo.
+- Este archivo contiene mixins especificos para cada modelo.
 - Inyectan acceso estandarizado a Selectors, CRUDService y BusinessService.
 - Usan get_empresa_id() de SintelDSVMixin para Zero Trust.
 """
@@ -29,6 +29,8 @@ class EmpleadoServiceMixin:
 
     # Instancias de servicios (pueden ser sobrescritas en subclasses)
     selector_class = EmpleadoSelector
+    contrato_selector = ContratoSelector
+    devengo_selector = DevengoSelector
     business_service_class = EmpleadoBusinessService
     summary_selector_class = NominaSummarySelector
 
@@ -41,7 +43,7 @@ class EmpleadoServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'pk')
+        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'uuid')
         return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
     def service_crear_empleado(self, serializer):
@@ -57,11 +59,12 @@ class EmpleadoServiceMixin:
         )
 
     def service_eliminar_empleado_retirado(self, empleado):
-        """Elimina empleado retirado usando business service."""
-        return self.business_service_class.eliminar_empleado_retirado(empleado)
+        """Elimina empleado retirado usando business service. Pasa empresa_id para DSV."""
+        empresa_id = self.get_empresa_id()
+        return self.business_service_class.eliminar_empleado_retirado(empleado, empresa_id=empresa_id)
 
     def service_get_nomina_summary(self, request):
-        """Obtiene resumen de nómina usando selector."""
+        """Obtiene resumen de nomina usando selector."""
         empresa_id = self.get_empresa_id()
         if not empresa_id:
             return None
@@ -97,11 +100,19 @@ class ContratoServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'pk')
+        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'uuid')
         return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
+    def get_empleado_by_id(self, empleado_id):
+        """Obtiene empleado por PK recibido en payload validando tenant."""
+        return EmpleadoSelector.get_by_id(self.get_empresa_id(), empleado_id)
+
+    def get_contrato_activo_for_empleado(self, empleado_id):
+        """Obtiene contrato activo por empleado validando tenant."""
+        return self.selector_class.get_activo_for_empleado(self.get_empresa_id(), empleado_id)
+
     def service_gestionar_contrato(self, empleado, data, contrato_existente=None):
-        """Gestiona creación/actualización de contrato."""
+        """Gestiona creacion/actualizacion de contrato."""
         return self.business_service_class.gestionar_contrato(empleado, data, contrato_existente)
 
     def service_preparar_datos_contrato(self, data):
@@ -112,7 +123,7 @@ class ContratoServiceMixin:
 class DevengoServiceMixin:
     """
     Service mixin para Devengo ViewSet.
-    Inyecta acceso a Selectors, BusinessService y cálculos de nómina.
+    Inyecta acceso a Selectors, BusinessService y calculos de nomina.
     """
 
     selector_class = DevengoSelector
@@ -142,17 +153,17 @@ class DevengoServiceMixin:
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self.get_empresa_id()
-        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'pk')
+        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'uuid')
         return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
     def get_historial_qs(self, empleado_id: int):
-        """Retorna queryset de historial de nóminas de un empleado."""
+        """Retorna queryset de historial de nominas de un empleado."""
         empresa_id = self.get_empresa_id()
         search = self.request.query_params.get('search') if hasattr(self, 'request') else None
         return self.selector_class.get_historial(empleado_id, empresa_id, search=search)
 
     def service_procesar_devengo(self, serializer, instance=None):
-        """Procesa creación/actualización de devengo con validaciones y cálculos."""
+        """Procesa creacion/actualizacion de devengo con validaciones y calculos."""
         from apps.tenant.empleados.models import Empleado
 
         empresa_id = self.get_empresa_id()
@@ -180,7 +191,7 @@ class DevengoServiceMixin:
         return self.business_service_class.eliminar_devengo(devengo, empresa_id)
 
     def service_validar_limite_dias(self, payload=None, *args, **kwargs):
-        """Valida límite de días en un mes. Soporta payload o argumentos directos."""
+        """Valida limite de dias en un mes. Soporta payload o argumentos directos."""
         empresa_id = self.get_empresa_id()
         
         if payload:
@@ -213,9 +224,25 @@ class DevengoServiceMixin:
         )
 
     def service_calcular_nomina(self, contrato, dias_laborados, **kwargs):
-        """Calcula nómina usando servicio de cálculo."""
+        """Calcula nomina usando servicio de calculo."""
         return self.calculation_service_class.calcular_liquidacion(
             contrato=contrato,
             dias_laborados=dias_laborados,
             **kwargs
+        )
+
+    def get_contrato_by_id(self, contrato_id):
+        """Obtiene contrato por PK recibido en payload validando tenant."""
+        return ContratoSelector.get_by_id(self.get_empresa_id(), contrato_id)
+
+    def get_ultima_nomina_for_empleado(self, empleado_id):
+        """Obtiene la ultima nomina de un empleado validando tenant."""
+        return self.selector_class.get_ultima_for_empleado(self.get_empresa_id(), empleado_id)
+
+    def exists_devengo_for_periodo(self, empleado_id, periodo_mes):
+        """Valida existencia de nomina vigente en un periodo."""
+        return self.selector_class.exists_for_periodo(
+            self.get_empresa_id(),
+            empleado_id,
+            periodo_mes,
         )

@@ -196,42 +196,27 @@
       getColumns(),
       {
         searchInputSelector: SEARCH_SELECTOR,
-        paginationSize: 10
+        paginationSize: 10,
+        // Pasar filtro estado al servidor — client-side setFilter() no funciona
+        // con paginacion remota porque filtra solo la pagina cargada.
+        ajaxParams: function() {
+          const estado = d.querySelector(FILTER_ESTADO_SELECTOR)?.value || '';
+          return estado ? { estado } : {};
+        }
       }
     );
-
-    // Aplicar filtros iniciales
-    applyFilters();
 
     return table;
   }
 
   /**
-   * Aplica filtros de estado y cuadratura
+   * Recarga la tabla con los filtros actuales como parametros de API.
+   * Usa replaceData() para re-ejecutar ajaxURLGenerator con los valores
+   * actuales del dropdown, enviandolos al servidor como query params.
    */
   function applyFilters() {
-    if (!table) return;
-
-    const estadoFilter = d.querySelector(FILTER_ESTADO_SELECTOR)?.value || '';
-    const cuadraturaFilter = d.querySelector(FILTER_CUADRATURA_SELECTOR)?.value || '';
-
-    let filters = [];
-    
-    if (estadoFilter) {
-      filters.push({ field: 'estado', type: '=', value: estadoFilter });
-    }
-    
-    if (cuadraturaFilter === 'cuadrado') {
-      filters.push({ field: 'cuadratura', type: '=', value: true });
-    } else if (cuadraturaFilter === 'no_cuadrado') {
-      filters.push({ field: 'cuadratura', type: '=', value: false });
-    }
-
-    if (filters.length > 0) {
-      table.setFilter(filters);
-    } else {
-      table.clearFilter();
-    }
+    if (!table || typeof table.replaceData !== 'function') return;
+    table.replaceData();
   }
 
   /**

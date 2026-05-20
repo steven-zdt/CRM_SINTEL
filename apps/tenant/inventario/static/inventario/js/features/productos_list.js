@@ -20,6 +20,16 @@
     'use strict';
 
     const MOD = '[productos.list]';
+
+    // Abre un offcanvas de forma segura, limpiando backdrops huerfanos primero.
+    function mostrarOffcanvasSeguro(el) {
+        if (!el || !w.bootstrap?.Offcanvas) return;
+        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        d.body.classList.remove('overflow-hidden', 'modal-open');
+        var prev = bootstrap.Offcanvas.getInstance(el);
+        if (prev) prev.dispose();
+        new bootstrap.Offcanvas(el).show();
+    }
     const GRID_ID = '#grid-productos';
     const SEARCH_ID = '#search-producto';
     const API_URL = '/api/v1/inventario/productos/'; // ⚠️ v2.61.3: Core API Facade para CRUD
@@ -178,7 +188,9 @@
                 width: 180,
                 headerSort: false,
                 resizable: false,
-                hozAlign: "center"
+                hozAlign: "center",
+                responsive: 0,
+                frozen: true
             }
         ];
     }
@@ -385,8 +397,7 @@
 
                     const offcanvasEl = d.getElementById('offcanvas-inventario');
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
+                        mostrarOffcanvasSeguro(offcanvasEl);
                     }
                 } catch (error) {
                     console.error(`${MOD} Error al cargar Offcanvas:`, error);
@@ -573,8 +584,7 @@
 
                     const offcanvasEl = d.getElementById('offcanvas-inventario');
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
+                        mostrarOffcanvasSeguro(offcanvasEl);
                     }
                 } catch (error) {
                     console.error(`${MOD} Error al cargar Offcanvas desde rowClick:`, error);

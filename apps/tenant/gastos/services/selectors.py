@@ -20,13 +20,14 @@ from apps.tenant.gastos.models import ResolucionDIAN, DocumentoSoporte
 # No GASTO_LIST_FIELDS needed, unified in DOCUMENTO
 
 RESOLUCION_LIST_FIELDS = (
-    'id', 'numero_resolucion', 'prefijo', 'vigente',
-    'rango_desde', 'rango_hasta', 'fecha_inicio', 'fecha_fin',
+    'id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
+    'rango_desde', 'rango_hasta', 'fecha_resolucion',
+    'fecha_inicio', 'fecha_fin', 'consecutivo',
     'empresa_id'
 )
 
 DOCUMENTO_LIST_FIELDS = (
-    'id', 'consecutivo',
+    'id', 'uuid', 'consecutivo', 'subtotal',
     'fecha', 'total', 'categoria_contable', 'descripcion',
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
     'cuenta_gasto_uuid'
@@ -34,7 +35,7 @@ DOCUMENTO_LIST_FIELDS = (
 
 # Campos completos para DETALLE (formularios de edicion)
 DOCUMENTO_DETAIL_FIELDS = (
-    'id', 'consecutivo', 'fecha', 'total', 'subtotal',
+    'id', 'uuid', 'consecutivo', 'fecha', 'total', 'subtotal',
     'categoria_contable', 'descripcion', 'observaciones',
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
     'cuenta_gasto_uuid',
@@ -43,7 +44,7 @@ DOCUMENTO_DETAIL_FIELDS = (
 )
 
 RESOLUCION_DETAIL_FIELDS = (
-    'id', 'numero_resolucion', 'prefijo', 'vigente',
+    'id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
     'rango_desde', 'rango_hasta', 'fecha_resolucion',
     'fecha_inicio', 'fecha_fin', 'clave_tecnica',
     'empresa_id', 'created_at', 'updated_at'
@@ -81,14 +82,14 @@ class ResolucionSelector:
         return qs.order_by('-vigente', '-fecha_resolucion')
 
     @staticmethod
-    def get_detail(empresa_id: int, resolucion_id: int = None):
+    def get_detail(empresa_id: int, resolucion_uuid=None):
         """QuerySet optimizado para DETALLE de ResolucionDIAN."""
         qs = ResolucionDIAN.objects.filter(
             empresa_id=empresa_id
         ).only(*RESOLUCION_DETAIL_FIELDS)
 
-        if resolucion_id:
-            return qs.filter(pk=resolucion_id)
+        if resolucion_uuid:
+            return qs.filter(uuid=resolucion_uuid)
         return qs
 
     @staticmethod
@@ -146,15 +147,18 @@ class DocumentoSelector:
         return qs.order_by('-fecha', '-consecutivo')
 
     @staticmethod
-    def get_detail(empresa_id: int, documento_id: int):
+    def get_detail(empresa_id: int, documento_uuid=None):
         """QuerySet optimizado para DETALLE de DocumentoSoporte."""
-        return DocumentoSoporte.objects.filter(
-            empresa_id=empresa_id, pk=documento_id
+        qs = DocumentoSoporte.objects.filter(
+            empresa_id=empresa_id
         ).select_related(
             'resolucion_dian',
             'proveedor',
             'usuario_anulacion'
         )
+        if documento_uuid:
+            return qs.filter(uuid=documento_uuid)
+        return qs
 
     @staticmethod
     def get_summary(empresa_id: int):
@@ -172,13 +176,13 @@ class DocumentoSelector:
 
         from decimal import Decimal
         totales = qs_mes.aggregate(
-            total_gastado=Sum('total') or Decimal('0.00'),
+            total_gastado=Sum('total'),
             count_documentos=Count('id')
         )
 
         return {
-            "total_gastos_mes": str(totales['total_gastado']),
-            "documentos_emitidos": totales['count_documentos'],
+            "total_gastos_mes": str(totales['total_gastado'] or Decimal('0.00')),
+            "documentos_emitidos": totales['count_documentos'] or 0,
             "periodo_actual": mes_actual
         }
 

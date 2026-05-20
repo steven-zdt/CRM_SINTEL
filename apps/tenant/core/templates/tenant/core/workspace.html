@@ -119,11 +119,6 @@
             </button>
           </li>
           <li class="nav-item" role="presentation">
-            <button class="nav-link" id="contabilidad-asientos-tab" data-bs-toggle="tab" data-bs-target="#subtab-asientos" type="button" role="tab" aria-controls="subtab-asientos" aria-selected="false">
-              <i class="bi bi-journal-text me-2"></i>Asientos Contables
-            </button>
-          </li>
-          <li class="nav-item" role="presentation">
             <button class="nav-link" id="contabilidad-periodos-tab" data-bs-toggle="tab" data-bs-target="#subtab-periodos" type="button" role="tab" aria-controls="subtab-periodos" aria-selected="false">
               <i class="bi bi-calendar-range me-2"></i>Periodos Contables
             </button>
@@ -131,6 +126,16 @@
           <li class="nav-item" role="presentation">
             <button class="nav-link" id="contabilidad-pendientes-tab" data-bs-toggle="tab" data-bs-target="#subtab-pendientes" type="button" role="tab" aria-controls="subtab-pendientes" aria-selected="false">
               <i class="bi bi-hourglass-split me-2"></i>Pendientes
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="contabilidad-asientos-tab" data-bs-toggle="tab" data-bs-target="#subtab-asientos" type="button" role="tab" aria-controls="subtab-asientos" aria-selected="false">
+              <i class="bi bi-journal-text me-2"></i>Asientos Contables
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="contabilidad-libro-tab" data-bs-toggle="tab" data-bs-target="#subtab-libro-diario" type="button" role="tab" aria-controls="subtab-libro-diario" aria-selected="false">
+              <i class="bi bi-journal-bookmark me-2"></i>Libro Diario
             </button>
           </li>
           <li class="nav-item" role="presentation">
@@ -143,15 +148,18 @@
           <div class="tab-pane fade show active" id="subtab-cuentas" role="tabpanel" aria-labelledby="contabilidad-cuentas-tab">
             {% include 'tenant/contabilidad/partials/list_cuentas.html' %}
           </div>
-          <div class="tab-pane fade" id="subtab-asientos" role="tabpanel" aria-labelledby="contabilidad-asientos-tab">
-            {% include 'tenant/contabilidad/partials/list_asientos.html' %}
-          </div>
           <div class="tab-pane fade" id="subtab-periodos" role="tabpanel" aria-labelledby="contabilidad-periodos-tab">
             {% include 'tenant/contabilidad/partials/list_periodos.html' %}
           </div>
           <div class="tab-pane fade" id="subtab-pendientes" role="tabpanel" aria-labelledby="contabilidad-pendientes-tab">
             {% include 'tenant/contabilidad/partials/pendientes_list.html' %}
             {% include 'tenant/contabilidad/partials/assets_pendientes.html' %}
+          </div>
+          <div class="tab-pane fade" id="subtab-asientos" role="tabpanel" aria-labelledby="contabilidad-asientos-tab">
+            {% include 'tenant/contabilidad/partials/list_asientos.html' %}
+          </div>
+          <div class="tab-pane fade" id="subtab-libro-diario" role="tabpanel" aria-labelledby="contabilidad-libro-tab">
+            {% include 'tenant/contabilidad/partials/list_libro_diario.html' %}
           </div>
           <div class="tab-pane fade" id="subtab-reportes" role="tabpanel" aria-labelledby="contabilidad-reportes-tab">
             {% include 'tenant/contabilidad/reporte_page.html' %}

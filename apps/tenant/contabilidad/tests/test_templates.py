@@ -15,7 +15,10 @@ class ContabilidadTemplateTests(TenantAPITestCase):
     def setUp(self):
         """Configuración inicial."""
         super().setUp()
+        from apps.tenant.empresa.models import Empresa
+        self.empresa = Empresa.objects.first()
         self.asiento = AsientoContable.objects.create(
+            empresa=self.empresa,
             numero='AS-001',
             fecha='2024-01-15',
             descripcion='Test',
@@ -32,6 +35,7 @@ class ContabilidadTemplateTests(TenantAPITestCase):
         """Test: El endpoint aprobar/ no renderiza templates."""
         # Crear cuenta y movimientos balanceados para poder aprobar
         cuenta = CuentaContable.objects.create(
+            empresa=self.empresa,
             codigo='110505',
             nombre='Caja',
             tipo='ACTIVO',
@@ -39,6 +43,7 @@ class ContabilidadTemplateTests(TenantAPITestCase):
         )
         from apps.tenant.contabilidad.models import MovimientoContable
         MovimientoContable.objects.create(
+            empresa=self.empresa,
             asiento=self.asiento,
             cuenta=cuenta,
             debe=Decimal('100000.00'),
@@ -47,6 +52,7 @@ class ContabilidadTemplateTests(TenantAPITestCase):
             orden=1,
         )
         MovimientoContable.objects.create(
+            empresa=self.empresa,
             asiento=self.asiento,
             cuenta=cuenta,
             debe=Decimal('0.00'),

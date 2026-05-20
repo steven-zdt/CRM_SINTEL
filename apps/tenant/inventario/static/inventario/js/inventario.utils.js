@@ -94,13 +94,14 @@
         })
       : categorias;
 
-    var selId = selectedId ? parseInt(selectedId, 10) : null;
+    // Normalizar selectedId como string para comparacion UUID-safe
+    var selId = selectedId ? String(selectedId) : null;
 
     filtered.forEach(function(cat) {
       var option = d.createElement('option');
-      option.value = cat.id;
+      option.value = cat.id;  // cat.id es UUID (del serializer)
       option.textContent = cat.nombre;
-      if (selId && cat.id === selId) {
+      if (selId && String(cat.id) === selId) {
         option.selected = true;
       }
       select.appendChild(option);

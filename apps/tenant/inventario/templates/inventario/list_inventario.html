@@ -74,10 +74,28 @@
   
 </div>
 
-{# ⚠️ v3.5: Contenedores HTMX para recibir el HTML de los Offcanvas #}
+{# Contenedores HTMX — fuente unica de verdad; los sub-templates NO deben duplicarlos #}
 <div id="offcanvas-container-inventario"></div>
 <div id="offcanvas-container-servicios"></div>
 <div id="offcanvas-container-historial-servicio"></div>
 <div id="offcanvas-container-categorias"></div>
 <div id="offcanvas-container-activos"></div>
 <div id="offcanvas-container-movimientos"></div>
+
+<script>
+(function() {
+    // sintelAbrirOffcanvas — helper global contra backdrops huerfanos (v3.9.0)
+    // Limpia TODOS los backdrops del body antes de mostrar, evitando pantalla negra
+    // en el segundo intento de apertura de cualquier offcanvas HTMX del modulo.
+    window.sintelAbrirOffcanvas = function(id) {
+        document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        document.body.classList.remove('overflow-hidden', 'modal-open');
+        var el = document.getElementById(id);
+        if (el && window.bootstrap && window.bootstrap.Offcanvas) {
+            var prev = bootstrap.Offcanvas.getInstance(el);
+            if (prev) prev.dispose();
+            new bootstrap.Offcanvas(el).show();
+        }
+    };
+})();
+</script>

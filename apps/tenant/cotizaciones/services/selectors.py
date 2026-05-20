@@ -17,10 +17,12 @@ LIST_FK_FIELDS = (
 )
 
 DETAIL_FIELDS = (
-    "id", "uuid", "numero_cotizacion", "codigo_unico", "fecha_emision", 
-    "fecha_vencimiento", "estado", "tipo_cotizacion", "iva_porcentaje", 
-    "porcentaje_aiu_admin", "porcentaje_aiu_imprevistos", "porcentaje_aiu_utilidad", 
+    "id", "uuid", "numero_cotizacion", "codigo_unico", "fecha_emision",
+    "fecha_vencimiento", "estado", "tipo_cotizacion", "iva_porcentaje",
+    "porcentaje_aiu_admin", "porcentaje_aiu_imprevistos", "porcentaje_aiu_utilidad",
     "total_con_impuestos", "empresa_id", "created_at", "updated_at",
+    "dias_totales", "dias_infraestructura", "dias_instalacion", "dias_configuracion", "dias_pruebas",
+    "cliente_id", "configuracion_id",
 )
 
 DETAIL_FK_FIELDS = (
@@ -48,17 +50,15 @@ class CotizacionSelector:
         return qs.order_by('-created_at')
 
     @staticmethod
-    def get_detail(cotizacion_id, empresa_id):
-        qs = Cotizacion.objects.filter(
+    def get_detail(_cotizacion_id, empresa_id):
+        """Returns base queryset filtered by empresa_id (DRF get_object applies uuid filter)."""
+        return Cotizacion.objects.filter(
             empresa_id=empresa_id
         ).select_related(
             'cliente', 'configuracion'
         ).prefetch_related('items').only(
             *DETAIL_FIELDS, *DETAIL_FK_FIELDS
         )
-        if cotizacion_id is None:
-            return qs
-        return qs.filter(id=cotizacion_id).first()
 
     @staticmethod
     def get_detail_by_uuid(uuid, empresa_id):

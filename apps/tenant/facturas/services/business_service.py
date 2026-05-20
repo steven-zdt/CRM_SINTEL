@@ -20,7 +20,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito
+from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito, MANUAL_EDITABLE_FIELDS, XML_IMMUTABLE_FIELDS
 from apps.tenant.facturas.services.crud_service import FacturaCRUDService
 
 # Importación segura para Document Ingest Pipeline Universal
@@ -256,10 +256,13 @@ class FacturaBusinessService:
 
         # Idempotencia por CUFE
         if cufe:
-            factura_existente = Factura.objects.filter(cufe=cufe, empresa=empresa_instance).first()
+            factura_existente = Factura.objects.filter(
+                cufe=cufe, empresa=empresa_instance
+            ).only('id', 'uuid', 'numero', 'naturaleza', 'cufe').first()
             if factura_existente:
                 return {
                     "id": factura_existente.id,
+                    "uuid": str(factura_existente.uuid),
                     "numero": factura_existente.numero,
                     "naturaleza": factura_existente.naturaleza,
                     "cufe": factura_existente.cufe,
@@ -432,6 +435,7 @@ class FacturaBusinessService:
 
         return {
             "id": factura.id,
+            "uuid": str(factura.uuid),
             "numero": factura.numero,
             "naturaleza": factura.naturaleza,
             "cufe": factura.cufe,
@@ -509,40 +513,54 @@ class FacturaBusinessService:
     @staticmethod
     def actualizar_factura_limitado(factura: Factura, data: dict[str, Any], empresa_id: int) -> Factura:
         """
-        Actualización parcial segura de factura (Limited Edit).
-        
-        # WARNING: SINTEL v3.5: DSV para cuenta_contable_uuid.
-        # WARNING: Sanitización: Convierte "" a None para UUIDs.
+        Actualizacion parcial segura de factura (Limited Edit).
+
+        - DSV: rechaza si factura no pertenece a empresa_id.
+        - Rechaza con 400 cualquier campo XML inmutable.
+        - Sanitiza "" a None para fechas y UUID.
+        - Usa MANUAL_EDITABLE_FIELDS (SSoT en models.py).
         """
-        allowed_fields = {
-            'fecha_vencimiento', 'estado', 'estado_pago',
-            'forma_pago', 'medio_pago_codigo', 'payment_due_date',
-            'cuenta_contable_uuid'
-        }
-        
+        from rest_framework.exceptions import ValidationError
+
+        # DSV: verificar propiedad del tenant
+        if factura.empresa_id != empresa_id:
+            raise ValidationError({"detail": "La factura no pertenece a la empresa activa."})
+
+        # Rechazar campos XML inmutables con 400 explicito
+        attempted_xml = XML_IMMUTABLE_FIELDS & set(data.keys())
+        if attempted_xml:
+            raise ValidationError({
+                field: f"Campo inmutable: '{field}' proviene del XML y no puede modificarse."
+                for field in attempted_xml
+            })
+
         update_data = {}
-        
-        for field in allowed_fields:
-            if field in data:
-                val = data[field]
-                
-                # Sanitización de UUIDs vacíos (evita 500 error en Model.save)
-                if field == 'cuenta_contable_uuid' and val == "":
-                    val = None
-                
-                # Double Semantic Verification (DSV)
-                if field == 'cuenta_contable_uuid' and val:
-                    from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-                    if not CuentaContableSelector.exists_by_uuid(val, empresa_id):
-                        from rest_framework.exceptions import ValidationError
-                        raise ValidationError({"cuenta_contable_uuid": "La cuenta contable no existe o no pertenece a la empresa."})
-                
-                update_data[field] = val
-        
+
+        for field in MANUAL_EDITABLE_FIELDS:
+            if field not in data:
+                continue
+            val = data[field]
+
+            # Sanitizar "" -> None para fechas y UUID
+            if field in {'fecha_vencimiento', 'payment_due_date', 'cuenta_contable_uuid'} and val == "":
+                val = None
+
+            # DSV para cuenta contable
+            if field == 'cuenta_contable_uuid' and val:
+                from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
+                if not CuentaContableSelector.exists_by_uuid(val, empresa_id):
+                    raise ValidationError({
+                        "cuenta_contable_uuid": "La cuenta contable no existe o no pertenece a la empresa."
+                    })
+
+            update_data[field] = val
+
         if not update_data:
             return factura
 
         return FacturaCRUDService.actualizar(factura, update_data)
+
+
 
 class FacturaService:
     """

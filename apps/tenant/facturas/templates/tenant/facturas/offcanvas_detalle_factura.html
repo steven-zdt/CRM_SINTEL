@@ -98,6 +98,29 @@
                 <label class="form-label text-muted small">CUFE:</label>
                 <p id="view_cufe" class="form-control-plaintext border-bottom mb-0 font-monospace small text-break">-</p>
             </div>
+
+            {# Cotización vinculada #}
+            <div class="col-12 mt-3">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-link-45deg me-2"></i>Cotización vinculada
+                </h6>
+                <div id="view_cotizacion_vinculada_container" data-factura-uuid="">
+                    <div id="view_cotizacion_vinculada_empty" class="d-flex gap-2 align-items-center">
+                        <select id="view_cotizacion_vinculada_select" class="form-select form-select-sm">
+                            <option value="">Vincular Cotización (Opcional)</option>
+                        </select>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btn_vincular_cotizacion_factura">
+                            <i class="bi bi-link-45deg me-1"></i>Vincular
+                        </button>
+                    </div>
+                    <div id="view_cotizacion_vinculada_card" class="d-none align-items-center justify-content-between border rounded p-2">
+                        <span class="badge text-bg-light border" id="view_cotizacion_vinculada_label">-</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn_desvincular_cotizacion_factura" title="Desvincular cotización">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
             
             {# Items de la Factura #}
             <div class="col-12 mt-3">

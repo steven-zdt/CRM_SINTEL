@@ -153,4 +153,5 @@ class ComprobanteManualDTO:
     documento_id: int           # PK en la app origen
     documento_numero: str       # Numero legible (FV-001, DS-001, etc.)
     tipo_comprobante_id: int    # ID del TipoComprobante (CC, RC, etc.)
+    periodo_uuid: str           # UUID del PeriodoContable seleccionado
     lineas: list                # List[LineaManual]

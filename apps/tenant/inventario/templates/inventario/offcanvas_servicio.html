@@ -1,26 +1,31 @@
-{# offcanvas_servicio.html - Offcanvas Servicios v3.5 - Nucleus #}
+{# offcanvas_servicio.html - Offcanvas Servicios v3.9.2 (Sincronizado con Producto) #}
 {% load static %}
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-servicios" aria-labelledby="offcanvas-servicios-label" style="width: 90%; max-width: 700px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-inventario-servicio" aria-labelledby="offcanvas-inventario-servicio-label" style="width: 90%; max-width: 700px;">
   <div class="offcanvas-header border-bottom bg-light">
-    <h5 class="offcanvas-title" id="offcanvas-servicios-label">
-      <i class="bi bi-gear me-2"></i>
-      <span id="offcanvas-servicios-titulo">{% if servicio %}Editar Servicio{% else %}Nuevo Servicio{% endif %}</span>
+    <h5 class="offcanvas-title" id="offcanvas-inventario-servicio-label">
+      <i class="bi bi-tools me-2"></i>
+      <span id="offcanvas-inventario-servicio-titulo">{% if servicio %}Editar Servicio{% else %}Nuevo Servicio{% endif %}</span>
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
   <div class="offcanvas-body">
-    <div id="form-servicio-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <div id="form-inventario-servicio-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    {% include 'tenant/core/partials/error_handler.html' %}
+
     <form id="form-servicio" method="POST" onsubmit="return false;">
-      <input type="hidden" id="servicio-id" name="id" value="{% if servicio %}{{ servicio.id }}{% endif %}">
+      <input type="hidden" id="servicio-id" name="id" value="{% if servicio %}{{ servicio.uuid }}{% endif %}">
+
       <div class="row g-3">
+        <!-- Información Básica -->
         <div class="col-md-6">
-          <label for="servicio-codigo" class="form-label text-danger fw-bold">Código *</label>
-          <input type="text" class="form-control" id="servicio-codigo" name="codigo" value="{% if servicio %}{{ servicio.codigo }}{% endif %}" required>
+          <label for="servicio-codigo" class="form-label text-danger fw-bold">Código (SKU) *</label>
+          <input type="text" class="form-control" id="servicio-codigo" name="codigo" placeholder="Ej: SRV-001" value="{% if servicio %}{{ servicio.codigo }}{% endif %}" required>
         </div>
         <div class="col-md-6">
           <label for="servicio-nombre" class="form-label text-danger fw-bold">Nombre *</label>
-          <input type="text" class="form-control" id="servicio-nombre" name="nombre" value="{% if servicio %}{{ servicio.nombre }}{% endif %}" required>
+          <input type="text" class="form-control" id="servicio-nombre" name="nombre" placeholder="Ej: Consultoría" value="{% if servicio %}{{ servicio.nombre }}{% endif %}" required>
         </div>
+
         <div class="col-md-6">
           <label for="servicio-categoria" class="form-label">Categoría</label>
           <select class="form-select" id="servicio-categoria" name="categoria">
@@ -30,47 +35,60 @@
             {% endfor %}
           </select>
         </div>
+
         <div class="col-md-6">
           <label for="servicio-precio-venta" class="form-label text-danger fw-bold">Precio de Venta *</label>
           <div class="input-group">
             <span class="input-group-text">$</span>
-            <input type="number" class="form-control" id="servicio-precio-venta" name="precio_venta" step="0.01" value="{% if servicio %}{{ servicio.precio_venta|stringformat:'.2f' }}{% else %}0.00{% endif %}" required>
-          </div>
-        </div>
-        <div class="col-12">
-          <label for="servicio-descripcion" class="form-label">Descripción</label>
-          <textarea class="form-control" id="servicio-descripcion" name="descripcion" rows="3">{% if servicio %}{{ servicio.descripcion }}{% endif %}</textarea>
-        </div>
-        <div class="col-12">
-          <div class="form-check form-switch mt-2">
-            <input class="form-check-input" type="checkbox" id="servicio-activo" name="activo" {% if not servicio or servicio.activo %}checked{% endif %}>
-            <label class="form-check-label" for="servicio-activo">Servicio Activo</label>
+            <input type="number" class="form-control" id="servicio-precio-venta" name="precio_venta" step="0.01" placeholder="0.00" value="{% if servicio %}{{ servicio.precio_venta|stringformat:'.2f' }}{% else %}0.00{% endif %}" required>
           </div>
         </div>
 
-        <!-- Integración Contable v3.5 -->
-        <div class="col-12 mt-3 pt-3 border-top">
-          <h6 class="text-primary mb-3"><i class="bi bi-calculator me-2"></i>Vinculación Contable</h6>
+        <div class="col-12">
+          <label for="servicio-descripcion" class="form-label">Descripción</label>
+          <textarea class="form-control" id="servicio-descripcion" name="descripcion" rows="2" placeholder="Detalle del servicio...">{% if servicio %}{{ servicio.descripcion }}{% endif %}</textarea>
+        </div>
+
+        <div class="col-12">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="servicio-activo" name="activo" {% if not servicio or servicio.activo %}checked{% endif %}>
+            <label class="form-check-label" for="servicio-activo"><span class="fw-bold">Servicio Activo</span></label>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div class="col-12 mt-3 pt-3 border-top"></div>
+
+        <!-- Vinculación Contable (v3.5+) -->
+        <div class="col-12">
+          <h6 class="text-primary mb-3"><i class="bi bi-calculator me-2"></i>Vinculación Contable (Opcional)</h6>
+
           <div class="mb-3 position-relative">
             <label for="servicio-cuenta-ingreso-busqueda" class="form-label text-danger fw-bold">Cuenta de Ingreso *</label>
             <div class="input-group shadow-sm">
               <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-              <input type="text" 
-                     class="form-control border-start-0 ps-0" 
-                     id="servicio-cuenta-ingreso-busqueda" 
-                     placeholder="Buscar por código o nombre (ej: 413505)..."
+              <input type="text"
+                     class="form-control border-start-0 ps-0"
+                     id="servicio-cuenta-ingreso-busqueda"
+                     placeholder="Buscar código o nombre (ej: 413505)..."
                      autocomplete="off"
                      value="{% if servicio %}{{ servicio.cuenta_ingreso_label|default:'' }}{% endif %}">
             </div>
             <input type="hidden" name="cuenta_ingreso_uuid" id="servicio-cuenta-ingreso-uuid" value="{% if servicio %}{{ servicio.cuenta_ingreso_uuid|default:'' }}{% endif %}">
             <div id="servicio-cuenta-ingreso-resultados" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
-            <div class="form-text">Cuenta donde se registran los ingresos generados por este servicio (Grupo 41).</div>
+            <small class="form-text text-muted d-block mt-1">Cuenta PUC donde se registran ingresos del servicio (Grupo 41)</small>
           </div>
         </div>
       </div>
-      <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
-        <button type="button" class="btn btn-primary" id="btn-guardar-servicio">{% if servicio %}Actualizar{% else %}Crear{% endif %} Servicio</button>
+
+      <!-- Botones de Acción -->
+      <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+          <i class="bi bi-x-circle me-1"></i>Cancelar
+        </button>
+        <button type="button" class="btn btn-primary" id="btn-guardar-servicio">
+          <i class="bi bi-check-circle me-1"></i>{% if servicio %}Actualizar{% else %}Crear{% endif %} Servicio
+        </button>
       </div>
     </form>
   </div>

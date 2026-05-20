@@ -11,6 +11,8 @@ ARQUITECTURA V2.40 (Zero-Coupling con otras apps de negocio):
 -------------------------------------------------------------------
 """
 
+import uuid as uuid_module
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -45,6 +47,14 @@ class Proyecto(SintelTenantBaseModel):
         ('DETENIDO', _('Detenido / Bloqueado')),
         ('COMPLETADO', _('Fase Finalizada')),
     ]
+
+    # UUID Lookup Field (AGENTS.md §14 — expone UUID en URLs, no pk secuencial)
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
 
     # --- SSoT (Vínculo Estricto Obligatorio v2.40) ---
     empresa = models.ForeignKey(

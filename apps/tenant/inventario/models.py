@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -36,6 +38,7 @@ class CategoriaItem(TimeStampedModel):
         help_text="Empresa propietaria de esta categoría."
     )
 
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     nombre = models.CharField(max_length=100, db_index=True)
     descripcion = models.TextField(blank=True, null=True)
     aplicacion = models.CharField(
@@ -92,6 +95,7 @@ class ActivoFijo(TimeStampedModel):
         related_name="activos_fijos"
     )
     
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     categoria = models.ForeignKey(
         CategoriaItem,
         on_delete=models.SET_NULL,
@@ -100,7 +104,7 @@ class ActivoFijo(TimeStampedModel):
         limit_choices_to={'aplicacion__in': [CategoriaItem.Aplicacion.ACTIVO, CategoriaItem.Aplicacion.TODO]},
         related_name="activos"
     )
-    codigo = models.CharField(max_length=64, unique=True, help_text="Placa, Serial o Identificador único.")
+    codigo = models.CharField(max_length=64, help_text="Placa, Serial o Identificador unico.")
     nombre = models.CharField(max_length=200, db_index=True)
     marca = models.CharField(max_length=100, blank=True, null=True)
     modelo = models.CharField(max_length=100, blank=True, null=True)
@@ -130,6 +134,13 @@ class ActivoFijo(TimeStampedModel):
             models.Index(fields=["codigo"]),
             models.Index(fields=["empresa"])
         ]
+        constraints = [
+            models.UniqueConstraint(
+                Lower('codigo'),
+                'empresa',
+                name='unique_activo_codigo_per_empresa'
+            )
+        ]
 
     def __str__(self):
         return f"[{self.codigo}] {self.nombre}"
@@ -147,16 +158,17 @@ class Producto(TimeStampedModel):
         help_text="Empresa propietaria del producto."
     )
 
-    codigo = models.CharField(max_length=64, unique=True, help_text="SKU único")
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    codigo = models.CharField(max_length=64, help_text="SKU unico")
     nombre = models.CharField(max_length=200, db_index=True)
     categoria = models.ForeignKey(
         CategoriaItem,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="productos",
         null=True,
         blank=True,
         limit_choices_to={'aplicacion__in': [CategoriaItem.Aplicacion.PRODUCTO, CategoriaItem.Aplicacion.TODO]},
-        help_text="Categoría del producto. Puede quedar sin categoría si se elimina la categoría asociada."
+        help_text="Categoria del producto. Puede quedar sin categoria si se elimina la categoria asociada."
     )
     descripcion = models.TextField(blank=True, null=True)
     unidad = models.CharField(max_length=16, default="UND")
@@ -190,6 +202,13 @@ class Producto(TimeStampedModel):
             models.Index(fields=["codigo"]),
             models.Index(fields=["empresa", "nombre"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                Lower('codigo'),
+                'empresa',
+                name='unique_producto_codigo_per_empresa'
+            )
+        ]
 
     def __str__(self):
         return f"{self.nombre} (Disp: {self.stock_actual})"
@@ -207,16 +226,17 @@ class Servicio(TimeStampedModel):
         help_text="Empresa que presta el servicio."
     )
 
-    codigo = models.CharField(max_length=64, unique=True)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    codigo = models.CharField(max_length=64)
     nombre = models.CharField(max_length=200, db_index=True)
     categoria = models.ForeignKey(
         CategoriaItem,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
         related_name="servicios",
         null=True,
         blank=True,
         limit_choices_to={'aplicacion__in': [CategoriaItem.Aplicacion.SERVICIO, CategoriaItem.Aplicacion.TODO]},
-        help_text="Categoría del servicio. Puede quedar sin categoría si se elimina la categoría asociada."
+        help_text="Categoria del servicio. Puede quedar sin categoria si se elimina la categoria asociada."
     )
     descripcion = models.TextField(blank=True, null=True)
     imagen = models.ImageField(upload_to='inventario/servicios/', null=True, blank=True)
@@ -233,6 +253,13 @@ class Servicio(TimeStampedModel):
         verbose_name = "Servicio"
         verbose_name_plural = "Servicios"
         indexes = [models.Index(fields=["empresa", "nombre"])]
+        constraints = [
+            models.UniqueConstraint(
+                Lower('codigo'),
+                'empresa',
+                name='unique_servicio_codigo_per_empresa'
+            )
+        ]
 
     def __str__(self):
         return f"[SRV] {self.nombre}"
@@ -246,13 +273,18 @@ class MovimientoInventario(TimeStampedModel):
         # ENTRADAS
         ENTRADA_COMPRA = "ENTRADA_COMPRA", _("Compra")
         ENTRADA_AJUSTE = "ENTRADA_AJUSTE", _("Ajuste (+)")
-        ENTRADA_DEVOLUCION = "ENTRADA_DEVOLUCION", _("Devolución Cliente")
+        ENTRADA_DEVOLUCION = "ENTRADA_DEVOLUCION", _("Devolucion Cliente")
         # SALIDAS
         SALIDA_VENTA = "SALIDA_VENTA", _("Venta")
         SALIDA_BAJA = "SALIDA_BAJA", _("Baja / Deterioro")
         SALIDA_CONSUMO = "SALIDA_CONSUMO", _("Consumo Interno")
+        # ACTIVOS
+        ASIGNACION_RESPONSABLE = "ASIGNACION_RESPONSABLE", _("Asignacion de Responsable")
+        TRASLADO_MANTENIMIENTO = "TRASLADO_MANTENIMIENTO", _("Traslado a Mantenimiento")
+        RETORNO_MANTENIMIENTO = "RETORNO_MANTENIMIENTO", _("Retorno de Mantenimiento")
+        SALIDA_BAJA_ACTIVO = "SALIDA_BAJA_ACTIVO", _("Baja de Activo")
 
-    # VINCULACIÓN EMPRESA (SSoT)
+    # VINCULACION EMPRESA (SSoT)
     empresa = models.ForeignKey(
         Empresa,
         on_delete=models.PROTECT,
@@ -260,16 +292,37 @@ class MovimientoInventario(TimeStampedModel):
         help_text="Empresa a la que pertenece el movimiento."
     )
 
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     producto = models.ForeignKey(
         Producto, 
         on_delete=models.CASCADE, 
         related_name="movimientos",
+        null=True,
+        blank=True,
         help_text="Producto del movimiento. Si se elimina el producto, se eliminan todos sus movimientos."
     )
-    tipo = models.CharField(max_length=20, choices=TipoMovimiento.choices)
+    activo_fijo = models.ForeignKey(
+        ActivoFijo,
+        on_delete=models.CASCADE,
+        related_name="movimientos",
+        null=True,
+        blank=True,
+        help_text="Activo fijo del movimiento."
+    )
+    tipo = models.CharField(max_length=30, choices=TipoMovimiento.choices)
     cantidad = models.DecimalField(max_digits=14, decimal_places=3)
     costo_unitario = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-    
+
+    # VINCULACIÓN FACTURA (v3.9.2+) — Soft Reference (no FK)
+    factura_uuid = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text="UUID de la factura asociada. Referencia soft, sin FK."
+    )
+    factura_numero = models.CharField(
+        max_length=50, null=True, blank=True,
+        help_text="Snapshot del número de factura al momento del movimiento."
+    )
+
     # TRAZABILIDAD EXTERNA
     origen_referencia = models.CharField(max_length=100, blank=True, null=True)
     cliente_referencia = models.CharField(max_length=200, blank=True, null=True)
@@ -282,10 +335,21 @@ class MovimientoInventario(TimeStampedModel):
         indexes = [
             models.Index(fields=["empresa", "created_at"]),
             models.Index(fields=["producto", "created_at"]),
+            models.Index(fields=["activo_fijo", "created_at"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(producto__isnull=False, activo_fijo__isnull=True) |
+                    models.Q(producto__isnull=True, activo_fijo__isnull=False)
+                ),
+                name="exactly_one_product_or_asset"
+            )
         ]
 
     def __str__(self):
-        return f"{self.tipo} | {self.producto.codigo}"
+        item_code = self.producto.codigo if self.producto else (self.activo_fijo.codigo if self.activo_fijo else "N/A")
+        return f"{self.tipo} | {item_code}"
 
 
 # ==============================================================================
@@ -300,6 +364,7 @@ class HistorialServicio(TimeStampedModel):
         help_text="Empresa que registra la transacción."
     )
 
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     servicio = models.ForeignKey(
         Servicio,
         on_delete=models.CASCADE,

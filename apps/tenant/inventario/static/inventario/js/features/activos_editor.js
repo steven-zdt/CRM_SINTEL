@@ -40,7 +40,7 @@
         const payload = {
             codigo: formData.get('codigo')?.trim() || '',
             nombre: formData.get('nombre')?.trim() || '',
-            categoria: formData.get('categoria') ? parseInt(formData.get('categoria'), 10) : null,
+            categoria: formData.get('categoria') || null,
             marca: formData.get('marca')?.trim() || '',
             modelo: formData.get('modelo')?.trim() || '',
             descripcion: formData.get('descripcion')?.trim() || '',

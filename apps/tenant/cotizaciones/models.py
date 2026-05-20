@@ -15,6 +15,7 @@ def _cotizacion_anexo_upload_path(instance, filename):
     return f"cotizaciones/anexos/{filename}"
 
 class Producto(SintelTenantBaseModel):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
     codigo = models.CharField(max_length=50, blank=True)
     nombre = models.CharField(max_length=255)
     marca = models.CharField(max_length=100, blank=True)
@@ -26,6 +27,7 @@ class Producto(SintelTenantBaseModel):
     class Meta: db_table = 'tenant_cotizaciones_producto'
 
 class Servicio(SintelTenantBaseModel):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
     nombre = models.CharField(max_length=255)
     precio_venta = models.DecimalField(max_digits=15, decimal_places=2)
     activo = models.BooleanField(default=True)
@@ -94,6 +96,8 @@ class Cotizacion(SintelTenantBaseModel):
         ]
 
 class CotizacionItem(SintelTenantBaseModel):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+
     class TipoItem(models.TextChoices):
         PRODUCTO = 'PRODUCTO', _('Equipo')
         MATERIAL = 'MATERIAL', _('Material')

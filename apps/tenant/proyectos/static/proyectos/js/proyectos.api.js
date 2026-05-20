@@ -37,11 +37,11 @@
       return w.http('GET', url);
     },
 
-    /** GET /api/v1/proyectos/{id}/ */
-    get: async (id) => {
-      console.log(`[${MOD}] get(${id})`);
-      if (!id) return { ok: false, status: 400, data: { detail: 'ID requerido' } };
-      return w.http('GET', `${API_BASE}/${id}/`);
+    /** GET /api/v1/proyectos/{uuid}/ */
+    get: async (uuid) => {
+      console.log(`[${MOD}] get(${uuid})`);
+      if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+      return w.http('GET', `${API_BASE}/${uuid}/`);
     },
 
     /** POST /api/v1/proyectos/ */
@@ -50,49 +50,49 @@
       return w.http('POST', `${API_BASE}/`, data);
     },
 
-    /** PUT /api/v1/proyectos/{id}/ */
-    update: async (id, data) => {
-      console.log(`[${MOD}] update(${id})`, data);
-      if (!id) return { ok: false, status: 400, data: { detail: 'ID requerido' } };
-      return w.http('PUT', `${API_BASE}/${id}/`, data);
+    /** PUT /api/v1/proyectos/{uuid}/ */
+    update: async (uuid, data) => {
+      console.log(`[${MOD}] update(${uuid})`, data);
+      if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+      return w.http('PUT', `${API_BASE}/${uuid}/`, data);
     },
 
-    /** POST /api/v1/proyectos/{id}/avanzar-fase/ */
-    avanzarFase: async (id, fase, responsableId = null, responsableNombre = null) => {
-      console.log(`[${MOD}] avanzarFase(${id}, ${fase})`);
-      if (!id || !fase) return { ok: false, status: 400, data: { detail: 'ID y fase requeridos' } };
-      
+    /** POST /api/v1/proyectos/{uuid}/avanzar-fase/ */
+    avanzarFase: async (uuid, fase, responsableId = null, responsableNombre = null) => {
+      console.log(`[${MOD}] avanzarFase(${uuid}, ${fase})`);
+      if (!uuid || !fase) return { ok: false, status: 400, data: { detail: 'UUID y fase requeridos' } };
+
       const payload = { fase };
       if (responsableId) payload.responsable_id = responsableId;
       if (responsableNombre) payload.responsable_nombre = responsableNombre;
-      
-      return w.http('POST', `${API_BASE}/${id}/avanzar-fase/`, payload);
+
+      return w.http('POST', `${API_BASE}/${uuid}/avanzar-fase/`, payload);
     },
 
-    /** PATCH /api/v1/proyectos/{id}/ 
-     * ⚠️ Dispara el recálculo financiero (P&L) en services.py sin alterar datos reales
+    /** PATCH /api/v1/proyectos/{uuid}/
+     * Dispara el recalculo financiero (P&L) en services.py sin alterar datos reales.
      */
-    syncCostos: async (id) => {
-      console.log(`[${MOD}] syncCostos(${id})`);
-      if (!id) return { ok: false, status: 400, data: { detail: 'ID requerido' } };
-      
-      const result = await w.http('GET', `${API_BASE}/${id}/`);
+    syncCostos: async (uuid) => {
+      console.log(`[${MOD}] syncCostos(${uuid})`);
+      if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+
+      const result = await w.http('GET', `${API_BASE}/${uuid}/`);
       if (!result.ok) {
-        console.error(`[${MOD}] syncCostos() falló al obtener el proyecto:`, result);
+        console.error(`[${MOD}] syncCostos() fallo al obtener el proyecto:`, result);
         return result;
       }
 
       const proyecto = result.data;
-      return w.http('PATCH', `${API_BASE}/${id}/`, { 
+      return w.http('PATCH', `${API_BASE}/${uuid}/`, {
         porcentaje_avance: proyecto.porcentaje_avance || 0
       });
     },
 
-    /** DELETE /api/v1/proyectos/{id}/ (Hard Delete manejado en services.py) */
-    delete: async (id) => {
-      console.log(`[${MOD}] delete(${id})`);
-      if (!id) return { ok: false, status: 400, data: { detail: 'ID requerido' } };
-      return w.http('DELETE', `${API_BASE}/${id}/`);
+    /** DELETE /api/v1/proyectos/{uuid}/ (Hard Delete manejado en services.py) */
+    delete: async (uuid) => {
+      console.log(`[${MOD}] delete(${uuid})`);
+      if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+      return w.http('DELETE', `${API_BASE}/${uuid}/`);
     },
 
     /** GET /api/v1/facturas/lista-centro-costos/ 

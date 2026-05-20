@@ -30,6 +30,19 @@ class ProveedorServiceMixin:
     business_service_class = ProveedorBusinessService
     crud_service_class = ProveedorCRUDService
 
+    @property
+    def proveedor_selector(self):
+        return self.selector_class()
+
+    @property
+    def proveedor_service(self):
+        return self.business_service_class()
+
+    @property
+    def proveedor_crud(self):
+        return self.crud_service_class()
+
+
     def get_qs_list(self):
         """Retorna queryset de lista usando selector."""
         empresa_id = self.get_empresa_id()

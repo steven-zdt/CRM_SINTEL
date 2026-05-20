@@ -105,33 +105,45 @@ class CotizacionService:
     @transaction.atomic
     def _sync_items(cls, cotizacion, items_data):
         """
-        Sincroniza los ítems de la cotización (crea, actualiza o elimina).
+        Sincroniza los items de la cotizacion (crea, actualiza o elimina).
+        Matching: preferencia por uuid (si viene en payload), fallback a id.
         """
         from .item_service import CotizacionItemBusinessService
-        
-        # Usamos ID como identificador para sincronización (CotizacionItem no tiene UUID en el modelo)
-        # 1. Mapear items existentes
-        existing_items = {item.id: item for item in cotizacion.items.all()}
-        
+
+        # 1. Mapear items existentes por uuid y por id
+        existing_by_uuid = {}
+        existing_by_id = {}
+        for item in cotizacion.items.all():
+            existing_by_uuid[str(item.uuid)] = item
+            existing_by_id[item.id] = item
+
+        matched_pks = set()
+
         # 2. Procesar payload
         for item_data in items_data:
+            item_data.pop('empresa', None)
+
+            item_uuid = str(item_data.get('uuid') or '')
             item_id = item_data.get('id')
-            
-            # Limpiar datos para evitar conflictos
-            if 'empresa' in item_data: item_data.pop('empresa')
-            
-            if item_id and int(item_id) in existing_items:
-                # Actualizar: Extraer del mapa para que no sea eliminado luego
-                instance = existing_items.pop(int(item_id))
+
+            instance = None
+            if item_uuid and item_uuid in existing_by_uuid:
+                instance = existing_by_uuid[item_uuid]
+            elif item_id and int(item_id) in existing_by_id:
+                instance = existing_by_id[int(item_id)]
+
+            if instance:
+                matched_pks.add(instance.pk)
                 CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data, instance=instance)
             else:
-                # Crear: Asegurar asociación con cotización actual
                 item_data['cotizacion'] = cotizacion
-                CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data)
+                new_item = CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data)
+                matched_pks.add(new_item.pk)
 
-        # 3. Eliminar remanentes (los que no vinieron en el payload)
-        for instance in existing_items.values():
-            CotizacionItemBusinessService.eliminar_item(instance)
+        # 3. Eliminar remanentes (items que no vinieron en el payload)
+        for item in list(existing_by_id.values()):
+            if item.pk not in matched_pks:
+                CotizacionItemBusinessService.eliminar_item(item)
 
     @classmethod
     @transaction.atomic

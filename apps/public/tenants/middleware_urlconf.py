@@ -49,8 +49,6 @@ class TenantSecurityAndURLConfMiddleware:
             "127.0.0.1",  # Desarrollo local (IP)
             "0.0.0.0",  # Desarrollo local (bind all)
             "testserver",  # Django test client host
-            "186.117.247.166",  # Servidor IP
-            "186.117.247.167",  # Servidor IP adicional
             "192.168.2.15",  # Red local - Consola pública
         ]
     )
@@ -80,12 +78,8 @@ class TenantSecurityAndURLConfMiddleware:
             f"Allowed public domains: {sorted(self.ALLOWED_PUBLIC_DOMAINS)}"
         )
         # Rutas que pertenecen exclusivamente a tenants (no deben resolverse desde el public host)
-        self.TENANT_ONLY_PATH_PREFIXES = (
-            "/api/v1/empresas/",
-            "/api/v1/empleados/",
-            "/api/v1/gastos/",
-            "/api/v1/facturas/",
-        )
+        # Simplificado a un único prefijo que cubre TODAS las APIs de tenant
+        self.TENANT_ONLY_PATH_PREFIXES = ("/api/v1/",)
 
     def _normalize_host(self, request):
         """

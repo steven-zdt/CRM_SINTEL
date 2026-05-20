@@ -62,6 +62,41 @@
             // ⚠️ v2.61: Deshabilitar redimensionamiento automático de columnas
             resizeColumns: false,
             placeholder: "Sin registros encontrados",
+            locale: "es",
+            langs: {
+                "es": {
+                    "data": {
+                        "loading": "Cargando",
+                        "error": "Error"
+                    },
+                    "groups": {
+                        "item": "ítem",
+                        "items": "ítems"
+                    },
+                    "pagination": {
+                        "page_size": "Filas por página",
+                        "page_title": "Mostrar página",
+                        "first": "Primera",
+                        "first_title": "Primera página",
+                        "last": "Última",
+                        "last_title": "Última página",
+                        "prev": "Anterior",
+                        "prev_title": "Página anterior",
+                        "next": "Siguiente",
+                        "next_title": "Página siguiente",
+                        "all": "Todos",
+                        "counter": {
+                            "showing": "Mostrando",
+                            "of": "de",
+                            "rows": "filas",
+                            "pages": "páginas"
+                        }
+                    },
+                    "headerFilters": {
+                        "default": "Filtrar..."
+                    }
+                }
+            },
             pagination: true,
             paginationMode: "remote", // Server-Side siempre
             paginationSize: pageSize, // Default: 10
@@ -538,9 +573,15 @@
          * @param {string} fallback - Valor por defecto si está vacío
          * @returns {string} Valor o fallback
          */
-        valueOrFallback: function(cell, fallback = '-') {
+        valueOrFallback: function(cell, formatterParams) {
             const value = cell.getValue();
-            return value || fallback;
+            const fallback = (formatterParams && typeof formatterParams.fallback === 'string')
+                ? formatterParams.fallback
+                : '-';
+            if (value === null || value === undefined || value === '') {
+                return '<span class="text-muted">' + fallback + '</span>';
+            }
+            return String(value);
         }
     };
 

@@ -1,3 +1,4 @@
+import logging
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
@@ -5,12 +6,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
+from rest_framework.exceptions import NotFound
 
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
 from apps.tenant.api.utils import render_template_safe, resolve_tenant_empresa
 from apps.tenant.empresa.models import Empresa
-from .mixins import ProveedorServiceMixin
+from apps.tenant.proveedores.services.api_mixins import ProveedorServiceMixin
 from apps.tenant.proveedores.api.serializers import (
     ProveedorDetailSerializer,
     ProveedorListSerializer,
@@ -18,10 +20,14 @@ from apps.tenant.proveedores.api.serializers import (
 from apps.tenant.proveedores.models import Proveedor
 from apps.config.api.pagination import StandardResultsSetPagination
 
+logger = logging.getLogger(__name__)
+
 class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Proveedores v3.5 - Refactorizado a Service Layer (DSV Mixins).
     """
+    lookup_field = 'uuid'
+    lookup_url_kwarg = 'uuid'
     queryset = Proveedor.objects.none()
     serializer_class = ProveedorDetailSerializer
     pagination_class = StandardResultsSetPagination
@@ -33,6 +39,17 @@ class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
         if self.action == 'list':
             return ProveedorListSerializer
         return ProveedorDetailSerializer
+
+    def get_serializer_context(self):
+        """Inyecta la empresa en el contexto del serializer para validaciones."""
+        context = super().get_serializer_context()
+        try:
+            empresa = self.get_empresa()
+            if empresa:
+                context['empresa_id'] = empresa.id
+        except Exception:
+            pass
+        return context
     
     def get_queryset(self):
         """Zero Trust - Filtra siempre por la empresa del tenant."""
@@ -60,43 +77,47 @@ class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
 
     def get_object(self):
         """
-        Sobrescribe get_object para soportar lookup por uuid (v3.5 SSoT).
-        Mantiene compatibilidad con PK si el uuid no es un UUID válido.
+        [SSoT] Double Semantic Verification (DSV)
+        Validates that the object exists AND belongs to the tenant by UUID (with PK fallback).
         """
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
         lookup_value = self.kwargs.get(lookup_url_kwarg)
+        empresa = self.get_empresa()
 
+        if not empresa:
+            raise NotFound("Empresa no detectada en el contexto del tenant.")
         if not lookup_value:
-            raise Http404("ID no proporcionado")
+            raise NotFound("ID no proporcionado.")
 
-        # 1. Intentar por UUID si el valor parece uno (len > 10)
-        if len(str(lookup_value)) > 10:
-            obj = self.get_queryset().filter(uuid=lookup_value).first()
+        # 1. Intentar por UUID si el valor parece uno (len > 10 o contiene guiones)
+        if len(str(lookup_value)) > 10 or '-' in str(lookup_value):
+            obj = Proveedor.objects.filter(uuid=lookup_value, empresa_id=empresa.id).first()
             if obj:
                 return obj
         
         # 2. Fallback a PK (si es numérico)
         if str(lookup_value).isdigit():
-            obj = self.get_queryset().filter(pk=lookup_value).first()
+            obj = Proveedor.objects.filter(pk=lookup_value, empresa_id=empresa.id).first()
             if obj:
                 return obj
-                
-        raise Http404("Proveedor no encontrado")
+
+        logger.warning(f"[proveedores:DSV] IDOR Intent or Missing Record: Lookup {lookup_value} for Empresa {empresa.id}")
+        raise NotFound("Proveedor no encontrado en su organizacion.")
     
     def retrieve(self, request, *args, **kwargs):
         """Obtiene detalle de un proveedor."""
         proveedor = self.get_object()
-        serializer = ProveedorDetailSerializer(proveedor)
+        serializer = ProveedorDetailSerializer(proveedor, context=self.get_serializer_context())
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
         """Crea un proveedor delegando al Business Service."""
         empresa = self.get_empresa()
-        serializer = ProveedorDetailSerializer(data=request.data)
+        serializer = ProveedorDetailSerializer(data=request.data, context=self.get_serializer_context())
         if serializer.is_valid():
             proveedor = self.proveedor_service.crear_proveedor(empresa.id, serializer.validated_data)
             return Response(
-                ProveedorDetailSerializer(proveedor).data, 
+                ProveedorDetailSerializer(proveedor, context=self.get_serializer_context()).data, 
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -104,19 +125,19 @@ class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
     def update(self, request, *args, **kwargs):
         """Actualiza un proveedor delegando al Business Service."""
         proveedor = self.get_object()
-        serializer = ProveedorDetailSerializer(proveedor, data=request.data, partial=False)
+        serializer = ProveedorDetailSerializer(proveedor, data=request.data, partial=False, context=self.get_serializer_context())
         if serializer.is_valid():
             proveedor = self.proveedor_service.actualizar_proveedor(proveedor, serializer.validated_data)
-            return Response(ProveedorDetailSerializer(proveedor).data)
+            return Response(ProveedorDetailSerializer(proveedor, context=self.get_serializer_context()).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def partial_update(self, request, *args, **kwargs):
         """Actualización parcial delegando al Business Service."""
         proveedor = self.get_object()
-        serializer = ProveedorDetailSerializer(proveedor, data=request.data, partial=True)
+        serializer = ProveedorDetailSerializer(proveedor, data=request.data, partial=True, context=self.get_serializer_context())
         if serializer.is_valid():
             proveedor = self.proveedor_service.actualizar_proveedor(proveedor, serializer.validated_data)
-            return Response(ProveedorDetailSerializer(proveedor).data)
+            return Response(ProveedorDetailSerializer(proveedor, context=self.get_serializer_context()).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def destroy(self, request, *args, **kwargs):

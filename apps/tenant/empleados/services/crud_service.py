@@ -3,7 +3,7 @@ CRUD Service para Empleados - Persistencia transaccional pura.
 
 WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 - Este archivo contiene SOLO operaciones de persistencia (Create, Read, Update, Delete).
-- Sin lógica de negocio, solo acceso a datos con @transaction.atomic.
+- Sin logica de negocio, solo acceso a datos con @transaction.atomic.
 - Todas las funciones son @staticmethod.
 """
 import logging
@@ -43,16 +43,26 @@ class EmpleadoCRUDService:
     def eliminar_empleado(empleado: Empleado) -> dict:
         """Elimina un empleado y retorna conteo de dependencias eliminadas."""
         empleado_id = empleado.id
+        empresa_id = empleado.empresa_id
+
+        devengos_qs = Devengo.objects.filter(
+            empresa_id=empresa_id,
+            empleado_id=empleado_id,
+        ).only('id')
+        contratos_qs = Contrato.objects.filter(
+            empresa_id=empresa_id,
+            empleado_id=empleado_id,
+        ).only('id')
 
         # Contar dependencias antes de eliminar
-        contratos_count = empleado.contratos.count()
-        devengos_count = empleado.nominas.count()
+        contratos_count = contratos_qs.count()
+        devengos_count = devengos_qs.count()
 
         # Eliminar dependencias
         if devengos_count > 0:
-            empleado.nominas.all().delete()
+            devengos_qs.delete()
         if contratos_count > 0:
-            empleado.contratos.all().delete()
+            contratos_qs.delete()
 
         empleado.delete()
 
@@ -124,12 +134,12 @@ class ContratoCRUDService:
 
 
 class DevengoCRUDService:
-    """Operaciones CRUD puras para Devengo (Nómina)."""
+    """Operaciones CRUD puras para Devengo (Nomina)."""
 
     @staticmethod
     @transaction.atomic
     def crear_devengo(empleado: Empleado, data: dict) -> Devengo:
-        """Crea un nuevo registro de nómina."""
+        """Crea un nuevo registro de nomina."""
         # Asignar empresa desde empleado si no viene en data
         if 'empresa' not in data:
             data['empresa'] = empleado.empresa
@@ -141,7 +151,7 @@ class DevengoCRUDService:
     @staticmethod
     @transaction.atomic
     def actualizar_devengo(devengo: Devengo, data: dict) -> Devengo:
-        """Actualiza un registro de nómina existente."""
+        """Actualiza un registro de nomina existente."""
         for key, value in data.items():
             setattr(devengo, key, value)
         devengo.save()
@@ -153,7 +163,7 @@ class DevengoCRUDService:
     def anular_devengo(devengo: Devengo) -> Devengo:
         """Marca un devengo como anulado (inmutabilidad contable)."""
         if devengo.anulado:
-            raise ValueError("El desprendible ya está anulado.")
+            raise ValueError("El desprendible ya esta anulado.")
 
         devengo.anulado = True
         devengo.save(update_fields=['anulado'])
@@ -172,14 +182,14 @@ class DevengoCRUDService:
     @staticmethod
     @transaction.atomic
     def actualizar_prestamo_contrato(contrato: Contrato, monto_diferencia: Decimal):
-        """Actualiza el saldo de préstamo en un contrato."""
+        """Actualiza el saldo de prestamo en un contrato."""
         contrato.refresh_from_db()
         prestamo_actual = Decimal(str(contrato.prestamos_empresa or 0))
         nuevo_prestamo = max(Decimal('0'), prestamo_actual - monto_diferencia)
         contrato.prestamos_empresa = nuevo_prestamo
         contrato.save(update_fields=['prestamos_empresa'])
         logger.info(
-            f"[DevengoCRUD] Préstamo actualizado: contrato {contrato.id}, "
+            f"[DevengoCRUD] Prestamo actualizado: contrato {contrato.id}, "
             f"diferencia={monto_diferencia}, nuevo_saldo={nuevo_prestamo}"
         )
         return contrato

@@ -37,3 +37,27 @@ class ContactoClienteServiceMixin:
     @property
     def service(self):
         return ContactoClienteService()
+
+
+def crear_cliente(empresa, data):
+    """
+    Deprecated backward-compatibility function for testing.
+    Uses ClienteBusinessService to create or update a client.
+    """
+    from apps.tenant.clientes.models import Cliente
+    from apps.tenant.clientes.services.business_service import ClienteBusinessService
+
+    tipo_doc = data.get("tipo_documento")
+    num_doc = data.get("numero_documento")
+
+    existing = Cliente.objects.filter(
+        empresa_id=empresa.id,
+        tipo_documento=tipo_doc,
+        numero_documento=num_doc
+    ).exists()
+
+    creado = not existing
+    service = ClienteBusinessService()
+    cliente, _ = service.registrar_cliente_completo(empresa.id, data)
+    return cliente, creado
+

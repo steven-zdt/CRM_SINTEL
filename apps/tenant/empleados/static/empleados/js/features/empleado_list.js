@@ -10,8 +10,9 @@
     window.Sintel = window.Sintel || {};
     window.Sintel.Empleados = window.Sintel.Empleados || {};
 
-    // ID del empleado a eliminar (para el modal)
+    // UUID del empleado a eliminar (para el modal)
     let empleadoIdEliminar = null;
+    let empleadoNombreEliminar = null;
 
     /**
      * Handler con event delegation para acciones de la celda
@@ -25,19 +26,25 @@
         
         switch (action) {
             case 'editar':           editar(id);         break;
-            case 'crear-contrato':   
-            case 'editar-contrato':  
+            case 'crear-contrato':
+            case 'editar-contrato':
                 if (window.Sintel.Empleados.ContratoEditor) {
                     window.Sintel.Empleados.ContratoEditor.openContratoOffcanvas(id);
                 }
                 break;
             case 'registrar-nomina': registrarNomina(id);   break;
-            case 'historial':        
+            case 'historial':
                 if (window.Sintel.Empleados.NominaHistorial) {
                     window.Sintel.Empleados.NominaHistorial.openHistorial(id);
                 }
                 break;
-            case 'eliminar':         confirmarEliminar(id);  break;
+            case 'eliminar': {
+                const rowData = cell.getRow().getData();
+                const nombre = `${rowData.primer_nombre || ''} ${rowData.primer_apellido || ''}`.trim();
+                const doc = rowData.numero_documento || '';
+                confirmarEliminar(id, nombre, doc);
+                break;
+            }
         }
     }
 
@@ -68,19 +75,20 @@
                 formatter: (cell) => {
                     const data = cell.getRow().getData();
                     const id = data.id;
+                    const uuid = data.uuid;
                     const tieneContrato = data.tiene_contrato_activo;
                     const esRetirado = data.estado === 'RETIRADO';
 
                     let html = '<div class="btn-group btn-group-sm">';
-                    html += `<button data-action="editar" data-id="${id}" class="btn btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></button>`;
+                    html += `<button data-action="editar" data-id="${uuid}" class="btn btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></button>`;
                     if (!esRetirado) {
                         html += `<button data-action="${tieneContrato ? 'editar-contrato' : 'crear-contrato'}" data-id="${id}" class="btn btn-outline-success" title="Contrato"><i class="bi bi-file-text"></i></button>`;
                         if (tieneContrato) {
-                            html += `<button data-action="registrar-nomina" data-id="${id}" class="btn btn-outline-info" title="Nómina"><i class="bi bi-cash-coin"></i></button>`;
+                            html += `<button data-action="registrar-nomina" data-id="${id}" class="btn btn-outline-info" title="Nomina"><i class="bi bi-cash-coin"></i></button>`;
                             html += `<button data-action="historial" data-id="${id}" class="btn btn-outline-secondary" title="Historial"><i class="bi bi-clock-history"></i></button>`;
                         }
                     } else {
-                        html += `<button data-action="eliminar" data-id="${id}" class="btn btn-outline-danger" title="Eliminar"><i class="bi bi-trash"></i></button>`;
+                        html += `<button data-action="eliminar" data-id="${uuid}" class="btn btn-outline-danger" title="Eliminar permanentemente"><i class="bi bi-trash"></i></button>`;
                     }
                     html += '</div>';
                     return html;
@@ -204,10 +212,33 @@
     }
 
     /**
-     * Mostrar modal de confirmacion para eliminar
+     * Mostrar modal de confirmacion para eliminar.
+     * @param {string} uuid  - UUID del empleado (lookup field del backend)
+     * @param {string} nombre - Nombre completo del empleado
+     * @param {string} doc   - Numero de documento
      */
-    function confirmarEliminar(id) {
-        empleadoIdEliminar = id;
+    function confirmarEliminar(uuid, nombre, doc) {
+        empleadoIdEliminar = uuid;
+        empleadoNombreEliminar = nombre;
+
+        // Actualizar cuerpo del modal con datos del empleado
+        const modalBody = document.querySelector('#confirmarEliminarModal .modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = `
+                <p class="mb-2">Esta a punto de eliminar permanentemente al empleado:</p>
+                <div class="alert alert-warning py-2 mb-3">
+                    <strong>${nombre || 'Empleado'}</strong>
+                    ${doc ? `<span class="text-muted ms-2">Doc: ${doc}</span>` : ''}
+                </div>
+                <p class="text-danger mb-1"><strong>Esta accion eliminara en cascada:</strong></p>
+                <ul class="text-danger small mb-3">
+                    <li>Todos sus contratos</li>
+                    <li>Todos sus registros de nomina</li>
+                </ul>
+                <p class="text-danger fw-bold mb-0">Esta accion no se puede deshacer.</p>
+            `;
+        }
+
         const modalElement = document.getElementById('confirmarEliminarModal');
         if (modalElement) {
             const modal = new bootstrap.Modal(modalElement);

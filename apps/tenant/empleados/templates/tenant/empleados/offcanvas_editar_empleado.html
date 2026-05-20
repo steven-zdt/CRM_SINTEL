@@ -184,10 +184,15 @@
         <div class="row g-3">
           <div class="col-12">
             <label for="empleado-cuenta_contable_label" class="form-label">Cuenta Contable (Pasivo Nómina)</label>
-            <div class="position-relative">
+            <div class="position-relative" data-cuenta-contable-picker>
               <input type="text" class="form-control" id="empleado-cuenta_contable_label"
                      value="{{ empleado.cuenta_contable_label|default:'' }}"
-                     placeholder="Buscar por código o nombre (ej: 2505)...">
+                     placeholder="Buscar por codigo o nombre (ej: 2505, salarios, nomina)...">
+              <select class="form-select mt-2" id="empleado-cuenta_contable_select" aria-label="Resultados de cuentas contables">
+                <option value="{{ empleado.cuenta_contable_uuid|default:'' }}">
+                  {% if empleado.cuenta_contable_label %}{{ empleado.cuenta_contable_label }}{% else %}Busque una cuenta para seleccionarla...{% endif %}
+                </option>
+              </select>
               <input type="hidden" id="empleado-cuenta_contable_uuid" name="cuenta_contable_uuid"
                      value="{{ empleado.cuenta_contable_uuid|default:'' }}">
               <div id="empleado-cuenta-resultados" class="list-group position-absolute w-100 shadow-sm d-none"

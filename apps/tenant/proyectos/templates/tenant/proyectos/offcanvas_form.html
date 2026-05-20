@@ -1,118 +1,224 @@
-{# offcanvas_form.html - Offcanvas del módulo Proyectos v2.60 #}
-{# ⚠️ API-First: Sin datos server-side, solo estructura HTML #}
-{# ⚠️ v2.60: Migrado a HTMX + Offcanvas con Zero Trust #}
-
+{# offcanvas_form.html - Sequential Timeline Wizard v3.5.1 #}
+{% load static %}
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-proyecto" aria-labelledby="offcanvas-proyecto-label" 
      data-bs-backdrop="static" data-bs-keyboard="false"
      style="width: 850px !important; max-width: 95vw;">
+  <style>
+    /* Scoped Premium Styles for the Timeline Stepper Wizard */
+    #offcanvas-proyecto .stepper-wrapper {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: relative;
+        margin-bottom: 2rem;
+        padding: 0 1rem;
+    }
+    #offcanvas-proyecto .stepper-progress-line {
+        position: absolute;
+        top: 24px;
+        left: 3rem;
+        right: 3rem;
+        height: 4px;
+        background-color: #e9ecef;
+        z-index: 1;
+    }
+    #offcanvas-proyecto .stepper-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #0d6efd 0%, #0dcaf0 100%);
+        width: 0%;
+        transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #offcanvas-proyecto .step-node {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        z-index: 2;
+        cursor: pointer;
+        flex: 1;
+        text-align: center;
+    }
+    #offcanvas-proyecto .step-circle {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background-color: #fff;
+        border: 3px solid #dee2e6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #6c757d;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    #offcanvas-proyecto .step-node.active .step-circle {
+        border-color: #0d6efd;
+        color: #0d6efd;
+        background-color: #f0f5ff;
+        box-shadow: 0 0 0 5px rgba(13, 110, 253, 0.2);
+        transform: scale(1.1);
+    }
+    #offcanvas-proyecto .step-node.completed .step-circle {
+        border-color: #198754;
+        color: #fff;
+        background-color: #198754;
+    }
+    #offcanvas-proyecto .step-node.locked .step-circle {
+        border-color: #e9ecef;
+        color: #adb5bd;
+        background-color: #f8f9fa;
+        cursor: not-allowed;
+    }
+    #offcanvas-proyecto .step-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-top: 0.5rem;
+        color: #6c757d;
+        transition: color 0.3s ease;
+    }
+    #offcanvas-proyecto .step-node.active .step-label {
+        color: #0d6efd;
+        font-weight: 700;
+    }
+    #offcanvas-proyecto .step-node.completed .step-label {
+        color: #198754;
+    }
+    
+    /* Step Panes */
+    #offcanvas-proyecto .step-pane {
+        display: none;
+        animation: slideIn 0.35s ease-out forwards;
+    }
+    #offcanvas-proyecto .step-pane.active {
+        display: block;
+    }
+    @keyframes slideIn {
+        from { opacity: 0; transform: translateY(15px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Locked overlay */
+    #offcanvas-proyecto .locked-overlay {
+        border-radius: 12px;
+        padding: 3rem 2rem;
+        text-align: center;
+        border: 2px dashed #dee2e6;
+        background: rgba(248, 249, 250, 0.85);
+        backdrop-filter: blur(4px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    }
+    #offcanvas-proyecto .locked-icon {
+        font-size: 3.5rem;
+        color: #a8aeb4;
+        margin-bottom: 1.5rem;
+    }
+    
+    /* Financial premium cards */
+    #offcanvas-proyecto .finance-card {
+        border-radius: 10px;
+        border: none;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    #offcanvas-proyecto .finance-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    }
+    
+    /* Slider Custom Bubble */
+    #offcanvas-proyecto .range-bubble {
+        background-color: #0d6efd;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+  </style>
+
   <div class="offcanvas-header border-bottom">
     <h5 class="offcanvas-title" id="offcanvas-proyecto-label">
-      <i class="bi bi-kanban me-2"></i>
+      <i class="bi bi-kanban me-2 text-primary"></i>
       <span id="offcanvas-proyecto-titulo">{% if proyecto %}Editar Proyecto{% else %}Nuevo Proyecto{% endif %}</span>
     </h5>
+    <span class="badge bg-secondary ms-3" id="proyecto-badge-fase-actual">Borrador</span>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
-  <div class="offcanvas-body">
-    {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern #}
-    <div id="form-proyecto-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
-    
-    <form id="form-proyecto" method="POST" onsubmit="return false;">
-      <input type="hidden" id="proyecto-id" name="id" value="{% if proyecto %}{{ proyecto.id }}{% endif %}">
-      
-      {# Centro de Costos #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-tag me-2"></i>Centro de Costos (Factura)
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-9">
-            <label for="proyecto-factura-costo" class="form-label fw-bold text-dark">Vincular Factura (Centro de Costos)</label>
-            <select class="form-select border-primary" id="proyecto-factura-costo" name="factura_costo" 
-                    data-initial-value="{% if proyecto.factura_costo_id %}{{ proyecto.factura_costo_id }}{% endif %}">
-              <option value="">Cargando facturas...</option>
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label for="proyecto-factura-costo-id" class="form-label text-muted">ID Factura</label>
-            <input type="number" class="form-control bg-light" id="proyecto-factura-costo-id" name="factura_costo_id" 
-                   value="{% if proyecto %}{{ proyecto.factura_costo_id }}{% endif %}" readonly>
-          </div>
-          <div class="col-md-12">
-            <label for="proyecto-factura-costo-numero" class="form-label">Número de Factura / CC (Snapshot Histórico)</label>
-            <input type="text" class="form-control" id="proyecto-factura-costo-numero" name="factura_costo_numero" 
-                   value="{% if proyecto %}{{ proyecto.factura_costo_numero }}{% endif %}" 
-                   placeholder="Número de factura o centro de costos">
-            <div class="form-text text-muted">
-              <i class="bi bi-info-circle me-1"></i>Este valor se guarda como snapshot histórico. Puede modificarlo manualmente si es necesario.
-            </div>
-          </div>
-        </div>
+  
+  <div class="offcanvas-body d-flex flex-column h-100">
+    <!-- Stepper Header -->
+    <div class="stepper-wrapper mb-4">
+      <div class="stepper-progress-line">
+        <div class="stepper-progress-bar" id="wizard-progress-bar"></div>
       </div>
+      <div class="step-node active" data-step="0">
+        <div class="step-circle"><i class="bi bi-file-earmark-text"></i></div>
+        <div class="step-label">0. Borrador</div>
+      </div>
+      <div class="step-node locked" data-step="1" id="node-step-1">
+        <div class="step-circle"><i class="bi bi-play-fill"></i></div>
+        <div class="step-label">1. Inicio</div>
+      </div>
+      <div class="step-node locked" data-step="2" id="node-step-2">
+        <div class="step-circle"><i class="bi bi-pencil-square"></i></div>
+        <div class="step-label">2. Planeación</div>
+      </div>
+      <div class="step-node locked" data-step="3" id="node-step-3">
+        <div class="step-circle"><i class="bi bi-gear-fill"></i></div>
+        <div class="step-label">3. Ejecución</div>
+      </div>
+      <div class="step-node locked" data-step="4" id="node-step-4">
+        <div class="step-circle"><i class="bi bi-check2-all"></i></div>
+        <div class="step-label">4. Cierre</div>
+      </div>
+    </div>
 
-      {# Datos Básicos #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-info-circle me-2"></i>Datos Básicos
-        </h6>
+    {# ⚠️ feedback visual para errores #}
+    <div id="form-proyecto-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="form-proyecto" method="POST" enctype="multipart/form-data" class="flex-grow-1 overflow-auto pe-2" onsubmit="return false;">
+      <input type="hidden" id="proyecto-uuid" name="uuid" value="{% if proyecto %}{{ proyecto.uuid }}{% endif %}">
+      
+      <!-- STEP 0: Borrador / Oportunidad -->
+      <div class="step-pane active" id="pane-step-0">
+        <h5 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-info-circle me-2"></i>Fase 0: Borrador / Oportunidad
+        </h5>
+        
         <div class="row g-3">
-          <div class="col-md-3">
-            <label for="proyecto-codigo" class="form-label">Código</label>
-            <input type="text" class="form-control" id="proyecto-codigo" name="codigo" 
-                   value="{% if proyecto %}{{ proyecto.codigo }}{% endif %}" 
-                   placeholder="Ej. PRJ-2026-001">
-          </div>
-          <div class="col-md-5">
-            <label for="proyecto-nombre" class="form-label text-danger fw-bold">Nombre del Proyecto *</label>
-            <input type="text" class="form-control" id="proyecto-nombre" name="nombre" 
-                   value="{% if proyecto %}{{ proyecto.nombre }}{% endif %}" 
-                   required>
-          </div>
           <div class="col-md-4">
-            <label for="proyecto-tipo" class="form-label">Tipo de Servicio</label>
+            <label for="proyecto-codigo" class="form-label fw-bold">Código del Proyecto</label>
+            <input type="text" class="form-control bg-light" id="proyecto-codigo" name="codigo" 
+                   value="{% if proyecto %}{{ proyecto.codigo }}{% endif %}" readonly placeholder="PRJ-YYYY-XXXX">
+            <div class="form-text text-muted">Generado automáticamente al guardar.</div>
+          </div>
+          <div class="col-md-8">
+            <label for="proyecto-nombre" class="form-label text-danger fw-bold">Nombre del Proyecto *</label>
+            <input type="text" class="form-control border-primary" id="proyecto-nombre" name="nombre" 
+                   value="{% if proyecto %}{{ proyecto.nombre }}{% endif %}" required placeholder="Ej. Implementación ERP Sintel">
+          </div>
+          <div class="col-md-6">
+            <label for="proyecto-tipo" class="form-label fw-bold">Tipo de Servicio</label>
             <select class="form-select" id="proyecto-tipo" name="tipo_servicio">
               {% for value, label in tipos_servicio %}
                 <option value="{{ value }}" {% if proyecto and proyecto.tipo_servicio == value %}selected{% endif %}>{{ label }}</option>
               {% endfor %}
             </select>
           </div>
-        </div>
-      </div>
-
-      {# Estado y Workflow #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-diagram-3 me-2"></i>Estado y Fase
-        </h6>
-        <div class="row g-3">
           <div class="col-md-6">
-            <label for="proyecto-fase" class="form-label">Fase Actual</label>
-            <select class="form-select" id="proyecto-fase" name="fase_actual">
-              {% for value, label in fases %}
-                <option value="{{ value }}" {% if proyecto and proyecto.fase_actual == value %}selected{% elif not proyecto and value == 'BORRADOR' %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label for="proyecto-estado" class="form-label">Estado de Tarea</label>
+            <label for="proyecto-estado" class="form-label fw-bold">Estado de Tarea</label>
             <select class="form-select" id="proyecto-estado" name="estado_tarea">
               {% for value, label in estados_tarea %}
                 <option value="{{ value }}" {% if proyecto and proyecto.estado_tarea == value %}selected{% elif not proyecto and value == 'PENDIENTE' %}selected{% endif %}>{{ label }}</option>
               {% endfor %}
             </select>
           </div>
-        </div>
-      </div>
-
-      {# Relaciones Desacopladas (Snapshots) #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-link-45deg me-2"></i>Referencias Externas (Snapshots)
-        </h6>
-        <div class="row g-3">
+          
           <div class="col-md-9">
-            <label for="proyecto-cliente-select" class="form-label">Vincular Cliente</label>
-            <select class="form-select" id="proyecto-cliente-select" name="cliente_id">
-              <option value="">Seleccionar cliente existente...</option>
+            <label for="proyecto-cliente-select" class="form-label fw-bold">Vincular Cliente</label>
+            <select class="form-select" id="proyecto-cliente-select">
+              <option value="">-- Seleccionar cliente existente --</option>
               {% for cliente in clientes %}
                 <option value="{{ cliente.id }}" {% if proyecto and proyecto.cliente_id == cliente.id %}selected{% endif %}>
                   {{ cliente.razon_social }} ({{ cliente.numero_documento }})
@@ -126,108 +232,419 @@
                    value="{% if proyecto %}{{ proyecto.cliente_id }}{% endif %}" readonly>
           </div>
           <div class="col-md-12">
-            <label for="proyecto-cliente-nombre" class="form-label">Nombre / Razón Social (Snapshot)</label>
+            <label for="proyecto-cliente-nombre" class="form-label">Nombre / Razón Social (Snapshot Histórico)</label>
             <input type="text" class="form-control" id="proyecto-cliente-nombre" name="cliente_nombre" 
                    value="{% if proyecto %}{{ proyecto.cliente_nombre }}{% endif %}" 
-                   placeholder="Nombre completo o Razón Social para el registro histórico">
+                   placeholder="Razón social snapshot">
           </div>
-          <div class="col-md-9">
-            <label for="proyecto-responsable-select" class="form-label">Responsable (Nómina)</label>
-            <select class="form-select" id="proyecto-responsable-select" name="responsable_actual_id">
-              <option value="">Buscar responsable...</option>
-              {% for empleado in empleados %}
-                <option value="{{ empleado.id }}" {% if proyecto and proyecto.responsable_actual_id == empleado.id %}selected{% endif %}>
-                  {{ empleado.primer_nombre }} {{ empleado.primer_apellido }}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label for="proyecto-responsable-id" class="form-label text-muted">ID Responsable</label>
-            <input type="number" class="form-control bg-light" id="proyecto-responsable-id" name="responsable_actual_id" 
-                   value="{% if proyecto %}{{ proyecto.responsable_actual_id }}{% endif %}" readonly title="Identificador interno del responsable">
-          </div>
-          <div class="col-md-12">
-            <label for="proyecto-responsable-nombre" class="form-label">Responsable (Snapshot Histórico)</label>
-            <input type="text" class="form-control" id="proyecto-responsable-nombre" name="responsable_actual_nombre" 
-                   value="{% if proyecto %}{{ proyecto.responsable_actual_nombre }}{% endif %}" 
-                   placeholder="Nombre del responsable para el registro histórico"
-                   title="Este nombre se guardará como snapshot para preservar el historial si el empleado cambia">
-          </div>
-
-          <div class="col-md-9">
-            <label for="proyecto-proveedor-select" class="form-label">Proveedor (Snapshot)</label>
-            <select class="form-select" id="proyecto-proveedor-select" name="proveedor_id">
-              <option value="">Buscar proveedor...</option>
-              {% for proveedor in proveedores %}
-                <option value="{{ proveedor.id }}" {% if proyecto and proyecto.proveedor_id == proveedor.id %}selected{% endif %}>
-                  {{ proveedor.razon_social }} ({{ proveedor.numero_documento }})
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label for="proyecto-proveedor-id" class="form-label text-muted">ID Proveedor</label>
-            <input type="number" class="form-control bg-light" id="proyecto-proveedor-id" name="proveedor_id" 
-                   value="{% if proyecto %}{{ proyecto.proveedor_id }}{% endif %}" readonly title="Identificador interno del proveedor">
-          </div>
-          <div class="col-md-12">
-            <label for="proyecto-proveedor-nombre" class="form-label">Nombre Proveedor (Snapshot Histórico)</label>
-            <input type="text" class="form-control" id="proyecto-proveedor-nombre" name="proveedor_nombre" 
-                   value="{% if proyecto %}{{ proyecto.proveedor_nombre }}{% endif %}" 
-                   placeholder="Nombre del proveedor para el registro histórico"
-                   title="Este nombre se guardará como snapshot para preservar el historial si el proveedor cambia">
+          
+          <div class="col-12">
+            <label for="proyecto-descripcion" class="form-label fw-bold">Descripción General</label>
+            <textarea class="form-control" id="proyecto-descripcion" name="descripcion" rows="4" 
+                      placeholder="Detalles, alcances u observaciones iniciales del proyecto...">{% if proyecto %}{{ proyecto.descripcion }}{% endif %}</textarea>
           </div>
         </div>
       </div>
 
-      {# Información Financiera y Fechas #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-cash-coin me-2"></i>Financiero y Fechas
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label for="proyecto-valor" class="form-label">Valor Contrato Proyectado</label>
-            <div class="input-group">
-              <span class="input-group-text">$</span>
-              <input type="number" step="0.01" min="0" class="form-control" id="proyecto-valor" name="valor_contrato_proyectado" 
-                     value="{% if proyecto %}{{ proyecto.valor_contrato_proyectado }}{% else %}0{% endif %}" 
-                     placeholder="0.00">
+      <!-- STEP 1: Inicio (Comercial y Legal) -->
+      <div class="step-pane" id="pane-step-1">
+        <div class="locked-container d-none" id="locked-step-1">
+          <div class="locked-overlay">
+            <div class="locked-icon"><i class="bi bi-lock-fill text-danger"></i></div>
+            <h4>Fase 1 Bloqueada</h4>
+            <p class="text-muted mb-4">Esta fase requiere avanzar el proyecto formalmente a la Fase de Inicio.</p>
+            <button type="button" class="btn btn-primary btn-avanzar-fase-action" data-target-fase="INICIO">
+              <i class="bi bi-check2-circle me-1"></i>Avanzar a Fase de Inicio
+            </button>
+          </div>
+        </div>
+        
+        <div class="unlocked-content" id="unlocked-step-1">
+          <h5 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-play-fill me-2"></i>Fase 1: Inicio (Comercial y Legal)
+          </h5>
+          
+          <div class="row g-3">
+            <div class="col-md-9">
+              <label for="proyecto-responsable-comercial-select" class="form-label fw-bold">Responsable Comercial (Nómina)</label>
+              <select class="form-select border-primary" id="proyecto-responsable-comercial-select">
+                <option value="">-- Seleccionar Responsable --</option>
+                {% for empleado in empleados %}
+                  <option value="{{ empleado.id }}" {% if proyecto and proyecto.responsable_comercial_id == empleado.id %}selected{% endif %}>
+                    {{ empleado.primer_nombre }} {{ empleado.primer_apellido }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="proyecto-responsable-comercial-id" class="form-label text-muted">ID Resp.</label>
+              <input type="number" class="form-control bg-light" id="proyecto-responsable-comercial-id" name="responsable_comercial_id" 
+                     value="{% if proyecto %}{{ proyecto.responsable_comercial_id }}{% endif %}" readonly>
+            </div>
+            <div class="col-md-12">
+              <label for="proyecto-responsable-comercial-nombre" class="form-label">Nombre Responsable Comercial (Snapshot)</label>
+              <input type="text" class="form-control" id="proyecto-responsable-comercial-nombre" name="responsable_comercial_nombre" 
+                     value="{% if proyecto %}{{ proyecto.responsable_comercial_nombre }}{% endif %}" readonly>
+            </div>
+            
+            <div class="col-md-12 mt-4">
+              <label for="proyecto-contrato-archivo" class="form-label fw-bold">Documento / Archivo del Contrato</label>
+              
+              <!-- Download link badge if existing -->
+              <div id="contrato-archivo-existing" class="mb-3 p-2 bg-light border rounded d-none">
+                <span class="badge bg-success p-2">
+                  <i class="bi bi-file-earmark-check me-1"></i>Contrato cargado
+                </span>
+                <a href="#" id="contrato-archivo-download" target="_blank" class="btn btn-sm btn-outline-primary ms-3">
+                  <i class="bi bi-download me-1"></i>Descargar Contrato Existente
+                </a>
+              </div>
+              
+              <input type="file" class="form-control" id="proyecto-contrato-archivo" name="contrato_archivo">
+              <div class="form-text text-muted">Formatos permitidos: PDF, DOCX, ZIP. Máx. 10MB.</div>
             </div>
           </div>
-          <div class="col-md-4">
-            <label for="proyecto-fecha-inicio" class="form-label">Fecha de Inicio</label>
-            <input type="date" class="form-control" id="proyecto-fecha-inicio" name="fecha_inicio" 
-                   value="{% if proyecto and proyecto.fecha_inicio %}{{ proyecto.fecha_inicio|date:'Y-m-d' }}{% endif %}">
+        </div>
+      </div>
+
+      <!-- STEP 2: Planeación (Diseño y Técnica) -->
+      <div class="step-pane" id="pane-step-2">
+        <div class="locked-container d-none" id="locked-step-2">
+          <div class="locked-overlay">
+            <div class="locked-icon"><i class="bi bi-lock-fill text-danger"></i></div>
+            <h4>Fase 2 Bloqueada</h4>
+            <p class="text-muted mb-4">Esta fase requiere avanzar el proyecto formalmente a la Fase de Planeación.</p>
+            <button type="button" class="btn btn-primary btn-avanzar-fase-action" data-target-fase="PLANEACION">
+              <i class="bi bi-check2-circle me-1"></i>Avanzar a Fase de Planeación
+            </button>
           </div>
-          <div class="col-md-4">
-            <label for="proyecto-fecha-fin" class="form-label">Fecha Fin Estimada</label>
-            <input type="date" class="form-control" id="proyecto-fecha-fin" name="fecha_fin_estimada" 
-                   value="{% if proyecto and proyecto.fecha_fin_estimada %}{{ proyecto.fecha_fin_estimada|date:'Y-m-d' }}{% endif %}">
+        </div>
+        
+        <div class="unlocked-content" id="unlocked-step-2">
+          <h5 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-pencil-square me-2"></i>Fase 2: Planeación (Diseño y Técnica)
+          </h5>
+          
+          <div class="row g-3">
+            <div class="col-md-9">
+              <label for="proyecto-responsable-tecnico-select" class="form-label fw-bold">Responsable Técnico (Nómina)</label>
+              <select class="form-select border-primary" id="proyecto-responsable-tecnico-select">
+                <option value="">-- Seleccionar Responsable --</option>
+                {% for empleado in empleados %}
+                  <option value="{{ empleado.id }}" {% if proyecto and proyecto.responsable_tecnico_id == empleado.id %}selected{% endif %}>
+                    {{ empleado.primer_nombre }} {{ empleado.primer_apellido }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="proyecto-responsable-tecnico-id" class="form-label text-muted">ID Resp.</label>
+              <input type="number" class="form-control bg-light" id="proyecto-responsable-tecnico-id" name="responsable_tecnico_id" 
+                     value="{% if proyecto %}{{ proyecto.responsable_tecnico_id }}{% endif %}" readonly>
+            </div>
+            <div class="col-md-12">
+              <label for="proyecto-responsable-tecnico-nombre" class="form-label">Nombre Responsable Técnico (Snapshot)</label>
+              <input type="text" class="form-control" id="proyecto-responsable-tecnico-nombre" name="responsable_tecnico_nombre" 
+                     value="{% if proyecto %}{{ proyecto.responsable_tecnico_nombre }}{% endif %}" readonly>
+            </div>
+            
+            <div class="col-md-6 mt-3">
+              <label for="proyecto-fecha-inicio" class="form-label fw-bold">Fecha de Inicio Real</label>
+              <input type="date" class="form-control" id="proyecto-fecha-inicio" name="fecha_inicio" 
+                     value="{% if proyecto and proyecto.fecha_inicio %}{{ proyecto.fecha_inicio|date:'Y-m-d' }}{% endif %}">
+            </div>
+            <div class="col-md-6 mt-3">
+              <label for="proyecto-fecha-fin" class="form-label fw-bold">Fecha Fin Estimada</label>
+              <input type="date" class="form-control" id="proyecto-fecha-fin" name="fecha_fin_estimada" 
+                     value="{% if proyecto and proyecto.fecha_fin_estimada %}{{ proyecto.fecha_fin_estimada|date:'Y-m-d' }}{% endif %}">
+            </div>
+            
+            <div class="col-md-12 mt-3">
+              <label for="proyecto-valor" class="form-label fw-bold">Valor Total Contrato Proyectado</label>
+              <div class="input-group">
+                <span class="input-group-text bg-light">$</span>
+                <input type="number" step="0.01" min="0" class="form-control text-end fw-bold" id="proyecto-valor" name="valor_contrato_proyectado" 
+                       value="{% if proyecto %}{{ proyecto.valor_contrato_proyectado }}{% else %}0{% endif %}">
+              </div>
+            </div>
+            
+            <div class="col-md-6 mt-4">
+              <label for="proyecto-acta-inicio-archivo" class="form-label fw-bold">Acta de Inicio Firmada</label>
+              
+              <div id="acta-inicio-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
+                <span class="badge bg-success p-2"><i class="bi bi-file-earmark-check me-1"></i>Acta cargada</span>
+                <a href="#" id="acta-inicio-archivo-download" target="_blank" class="btn btn-sm btn-outline-primary ms-2"><i class="bi bi-download"></i></a>
+              </div>
+              
+              <input type="file" class="form-control" id="proyecto-acta-inicio-archivo" name="acta_inicio_archivo">
+            </div>
+            <div class="col-md-6 mt-4">
+              <label for="proyecto-cronograma-archivo" class="form-label fw-bold">Cronograma / Plan de Trabajo</label>
+              
+              <div id="cronograma-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
+                <span class="badge bg-success p-2"><i class="bi bi-file-earmark-check me-1"></i>Cronograma</span>
+                <a href="#" id="cronograma-archivo-download" target="_blank" class="btn btn-sm btn-outline-primary ms-2"><i class="bi bi-download"></i></a>
+              </div>
+              
+              <input type="file" class="form-control" id="proyecto-cronograma-archivo" name="cronograma_archivo">
+            </div>
           </div>
         </div>
       </div>
 
-      {# Descripción #}
-      <div class="mb-4">
-        <div class="row g-3">
-          <div class="col-12">
-            <label for="proyecto-descripcion" class="form-label">Descripción General</label>
-            <textarea class="form-control" id="proyecto-descripcion" name="descripcion" rows="3" 
-                      placeholder="Detalles u observaciones del proyecto...">{% if proyecto %}{{ proyecto.descripcion }}{% endif %}</textarea>
+      <!-- STEP 3: Ejecución (Operativa) -->
+      <div class="step-pane" id="pane-step-3">
+        <div class="locked-container d-none" id="locked-step-3">
+          <div class="locked-overlay">
+            <div class="locked-icon"><i class="bi bi-lock-fill text-danger"></i></div>
+            <h4>Fase 3 Bloqueada</h4>
+            <p class="text-muted mb-4">Esta fase requiere avanzar el proyecto formalmente a la Fase de Ejecución.</p>
+            <button type="button" class="btn btn-primary btn-avanzar-fase-action" data-target-fase="EJECUCION">
+              <i class="bi bi-check2-circle me-1"></i>Avanzar a Fase de Ejecución
+            </button>
+          </div>
+        </div>
+        
+        <div class="unlocked-content" id="unlocked-step-3">
+          <h5 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-gear-fill me-2"></i>Fase 3: Ejecución (Operativa)
+          </h5>
+          
+          <div class="row g-3">
+            <div class="col-md-9">
+              <label for="proyecto-responsable-operativo-select" class="form-label fw-bold">Responsable Operativo (Nómina)</label>
+              <select class="form-select border-primary" id="proyecto-responsable-operativo-select">
+                <option value="">-- Seleccionar Responsable --</option>
+                {% for empleado in empleados %}
+                  <option value="{{ empleado.id }}" {% if proyecto and proyecto.responsable_operativo_id == empleado.id %}selected{% endif %}>
+                    {{ empleado.primer_nombre }} {{ empleado.primer_apellido }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="proyecto-responsable-operativo-id" class="form-label text-muted">ID Resp.</label>
+              <input type="number" class="form-control bg-light" id="proyecto-responsable-operativo-id" name="responsable_operativo_id" 
+                     value="{% if proyecto %}{{ proyecto.responsable_operativo_id }}{% endif %}" readonly>
+            </div>
+            <div class="col-md-12">
+              <label for="proyecto-responsable-operativo-nombre" class="form-label">Nombre Responsable Operativo (Snapshot)</label>
+              <input type="text" class="form-control" id="proyecto-responsable-operativo-nombre" name="responsable_operativo_nombre" 
+                     value="{% if proyecto %}{{ proyecto.responsable_operativo_nombre }}{% endif %}" readonly>
+            </div>
+            
+            <!-- Equipo de trabajo asignado -->
+            <div class="col-md-12 mt-4">
+              <h6 class="border-bottom pb-2 mb-2 text-dark">
+                <i class="bi bi-people me-2"></i>Equipo de Trabajo Asignado
+              </h6>
+              <div id="equipo-trabajo-list" class="list-group">
+                <!-- Se poblará dinámicamente -->
+                <div class="text-center text-muted py-3 bg-light rounded border border-dashed">
+                  Cargando equipo de trabajo...
+                </div>
+              </div>
+            </div>
+            
+            <!-- Pedidos y materiales -->
+            <div class="col-md-12 mt-4">
+              <h6 class="border-bottom pb-2 mb-2 text-dark">
+                <i class="bi bi-cart4 me-2"></i>Solicitudes de Materiales / Pedidos
+              </h6>
+              <div id="pedidos-list" class="list-group">
+                <!-- Se poblará dinámicamente -->
+                <div class="text-center text-muted py-3 bg-light rounded border border-dashed">
+                  Cargando pedidos de materiales...
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {# Botones de Acción #}
-      <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
-          <i class="bi bi-x-circle me-1"></i>Cancelar
-        </button>
-        <button type="submit" class="btn btn-primary" id="btn-guardar-proyecto">
-          <i class="bi bi-check-circle me-1"></i>Guardar Proyecto
-        </button>
+      <!-- STEP 4: Cierre (Administrativa y Financiera) -->
+      <div class="step-pane" id="pane-step-4">
+        <div class="locked-container d-none" id="locked-step-4">
+          <div class="locked-overlay">
+            <div class="locked-icon"><i class="bi bi-lock-fill text-danger"></i></div>
+            <h4>Fase 4 Bloqueada</h4>
+            <p class="text-muted mb-4">Esta fase requiere avanzar el proyecto formalmente a la Fase de Cierre.</p>
+            <button type="button" class="btn btn-primary btn-avanzar-fase-action" data-target-fase="CIERRE">
+              <i class="bi bi-check2-circle me-1"></i>Avanzar a Fase de Cierre
+            </button>
+          </div>
+        </div>
+        
+        <div class="unlocked-content" id="unlocked-step-4">
+          <h5 class="text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-check2-all me-2"></i>Fase 4: Cierre (Administrativa y Financiera)
+          </h5>
+          
+          <div class="row g-3">
+            <div class="col-md-9">
+              <label for="proyecto-responsable-administrativo-select" class="form-label fw-bold">Responsable Administrativo (Nómina)</label>
+              <select class="form-select border-primary" id="proyecto-responsable-administrativo-select">
+                <option value="">-- Seleccionar Responsable --</option>
+                {% for empleado in empleados %}
+                  <option value="{{ empleado.id }}" {% if proyecto and proyecto.responsable_administrativo_id == empleado.id %}selected{% endif %}>
+                    {{ empleado.primer_nombre }} {{ empleado.primer_apellido }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="proyecto-responsable-administrativo-id" class="form-label text-muted">ID Resp.</label>
+              <input type="number" class="form-control bg-light" id="proyecto-responsable-administrativo-id" name="responsable_administrativo_id" 
+                     value="{% if proyecto %}{{ proyecto.responsable_administrativo_id }}{% endif %}" readonly>
+            </div>
+            <div class="col-md-12">
+              <label for="proyecto-responsable-administrativo-nombre" class="form-label">Nombre Responsable Administrativo (Snapshot)</label>
+              <input type="text" class="form-control" id="proyecto-responsable-administrativo-nombre" name="responsable_administrativo_nombre" 
+                     value="{% if proyecto %}{{ proyecto.responsable_administrativo_nombre }}{% endif %}" readonly>
+            </div>
+            
+            <div class="col-md-6 mt-3">
+              <label for="proyecto-porcentaje-avance" class="form-label fw-bold">Porcentaje de Avance</label>
+              <div class="d-flex align-items-center gap-3">
+                <input type="range" class="form-range flex-grow-1" id="proyecto-porcentaje-avance" name="porcentaje_avance" min="0" max="100" 
+                       value="{% if proyecto %}{{ proyecto.porcentaje_avance }}{% else %}0{% endif %}">
+                <span class="range-bubble" id="porcentaje-avance-bubble">{% if proyecto %}{{ proyecto.porcentaje_avance }}{% else %}0{% endif %}%</span>
+              </div>
+            </div>
+            <div class="col-md-6 mt-3">
+              <label for="proyecto-fecha-cierre-real" class="form-label fw-bold">Fecha de Cierre Real</label>
+              <input type="date" class="form-control" id="proyecto-fecha-cierre-real" name="fecha_cierre_real" 
+                     value="{% if proyecto and proyecto.fecha_cierre_real %}{{ proyecto.fecha_cierre_real|date:'Y-m-d' }}{% endif %}">
+            </div>
+            
+            <div class="col-md-6 mt-3">
+              <label for="proyecto-acta-entrega-archivo" class="form-label fw-bold">Acta de Entrega Firmada</label>
+              
+              <div id="acta-entrega-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
+                <span class="badge bg-success p-2"><i class="bi bi-file-earmark-check me-1"></i>Acta cargada</span>
+                <a href="#" id="acta-entrega-archivo-download" target="_blank" class="btn btn-sm btn-outline-primary ms-2"><i class="bi bi-download"></i></a>
+              </div>
+              
+              <input type="file" class="form-control" id="proyecto-acta-entrega-archivo" name="acta_entrega_archivo">
+            </div>
+            <div class="col-md-6 mt-3">
+              <label for="proyecto-informe-final-archivo" class="form-label fw-bold">Informe Final del Proyecto</label>
+              
+              <div id="informe-final-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
+                <span class="badge bg-success p-2"><i class="bi bi-file-earmark-check me-1"></i>Informe final</span>
+                <a href="#" id="informe-final-archivo-download" target="_blank" class="btn btn-sm btn-outline-primary ms-2"><i class="bi bi-download"></i></a>
+              </div>
+              
+              <input type="file" class="form-control" id="proyecto-informe-final-archivo" name="informe_final_archivo">
+            </div>
+            
+            <!-- Factura y Centro de Costos link -->
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <h6 class="text-dark fw-bold"><i class="bi bi-tag-fill me-2 text-primary"></i>Vinculación de Costos (Factura)</h6>
+              <div class="row g-3 mt-1">
+                <div class="col-md-9">
+                  <label for="proyecto-factura-costo" class="form-label">Vincular Factura (Centro de Costos)</label>
+                  <select class="form-select border-primary" id="proyecto-factura-costo">
+                    <option value="">Cargando facturas...</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label for="proyecto-factura-costo-id" class="form-label text-muted">ID Factura</label>
+                  <input type="number" class="form-control bg-light" id="proyecto-factura-costo-id" name="factura_costo_id" 
+                         value="{% if proyecto %}{{ proyecto.factura_costo_id }}{% endif %}" readonly>
+                </div>
+                <div class="col-md-12">
+                  <label for="proyecto-factura-costo-numero" class="form-label">Número de Factura / CC (Snapshot)</label>
+                  <input type="text" class="form-control" id="proyecto-factura-costo-numero" name="factura_costo_numero" 
+                         value="{% if proyecto %}{{ proyecto.factura_costo_numero }}{% endif %}" 
+                         placeholder="Número de factura o centro de costos">
+                </div>
+              </div>
+            </div>
+            
+            <!-- Dashboard de Indicadores Financieros Reales -->
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <h6 class="text-dark fw-bold mb-3"><i class="bi bi-speedometer2 me-2 text-primary"></i>Indicadores Financieros P&L Real-Time</h6>
+              
+              <div class="row g-3" id="financial-indicators-grid">
+                <!-- Tarjeta 1: Valor Contrato -->
+                <div class="col-md-4">
+                  <div class="card finance-card bg-light border">
+                    <div class="card-body p-3">
+                      <div class="text-muted small fw-bold uppercase">VALOR CONTRATO</div>
+                      <h4 class="mt-2 text-dark font-monospace" id="fin-valor-contrato">$ 0,00</h4>
+                    </div>
+                  </div>
+                </div>
+                <!-- Tarjeta 2: Costo Personal -->
+                <div class="col-md-4">
+                  <div class="card finance-card bg-light border">
+                    <div class="card-body p-3">
+                      <div class="text-muted small fw-bold uppercase">COSTO PERSONAL (M.O.)</div>
+                      <h4 class="mt-2 text-dark font-monospace" id="fin-costo-personal">$ 0,00</h4>
+                    </div>
+                  </div>
+                </div>
+                <!-- Tarjeta 3: Costo Materiales -->
+                <div class="col-md-4">
+                  <div class="card finance-card bg-light border">
+                    <div class="card-body p-3">
+                      <div class="text-muted small fw-bold uppercase">COSTO MATERIALES</div>
+                      <h4 class="mt-2 text-dark font-monospace" id="fin-costo-materiales">$ 0,00</h4>
+                    </div>
+                  </div>
+                </div>
+                <!-- Tarjeta 4: Costo Total -->
+                <div class="col-md-4">
+                  <div class="card finance-card bg-light border">
+                    <div class="card-body p-3">
+                      <div class="text-muted small fw-bold uppercase">COSTO TOTAL</div>
+                      <h4 class="mt-2 text-dark font-monospace" id="fin-costo-total">$ 0,00</h4>
+                    </div>
+                  </div>
+                </div>
+                <!-- Tarjeta 5: Utilidad Estimada -->
+                <div class="col-md-4">
+                  <div class="card finance-card border" id="fin-card-utilidad">
+                    <div class="card-body p-3">
+                      <div class="text-muted small fw-bold uppercase">UTILIDAD NETO</div>
+                      <h4 class="mt-2 font-monospace" id="fin-utilidad-neta">$ 0,00</h4>
+                    </div>
+                  </div>
+                </div>
+                <!-- Tarjeta 6: Margen Rentabilidad -->
+                <div class="col-md-4">
+                  <div class="card finance-card border" id="fin-card-margen">
+                    <div class="card-body p-3">
+                      <div class="text-muted small fw-bold uppercase">MARGEN RENTABILIDAD</div>
+                      <h4 class="mt-2 font-monospace" id="fin-margen-rentabilidad">0,00%</h4>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botones de Navegación del Wizard -->
+      <div class="d-flex justify-content-between align-items-center mt-5 pt-3 border-top pb-3">
+        <div>
+          <button type="button" class="btn btn-outline-secondary" id="btn-wizard-back" disabled>
+            <i class="bi bi-arrow-left me-1"></i>Atrás
+          </button>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+            <i class="bi bi-x-circle me-1"></i>Cerrar
+          </button>
+          <button type="button" class="btn btn-primary" id="btn-wizard-next">
+            Continuar<i class="bi bi-arrow-right ms-1"></i>
+          </button>
+          <button type="submit" class="btn btn-success d-none" id="btn-wizard-save">
+            <i class="bi bi-check-circle me-1"></i>Guardar Todo
+          </button>
+        </div>
       </div>
     </form>
   </div>

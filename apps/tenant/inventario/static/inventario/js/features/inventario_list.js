@@ -14,6 +14,15 @@
     'use strict';
 
     const MOD = '[inventario.list]';
+
+    function mostrarOffcanvasSeguro(el) {
+        if (!el || !w.bootstrap?.Offcanvas) return;
+        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        d.body.classList.remove('overflow-hidden', 'modal-open');
+        var prev = bootstrap.Offcanvas.getInstance(el);
+        if (prev) prev.dispose();
+        new bootstrap.Offcanvas(el).show();
+    }
     const CORE_API_BASE = '/api/v1/inventario/productos'; // Core API Facade
     let table = null;
     let _eliminandoProducto = false; // ⚠️ v2.61.3: Flag para prevenir rowClick durante eliminación
@@ -199,9 +208,9 @@
      * Inicializar tabla de productos
      */
     function initTable() {
-        const gridEl = d.querySelector('#grid-inventario');
+        const gridEl = d.querySelector('#grid-productos');
         if (!gridEl) {
-            console.warn(`${MOD} Contenedor #grid-inventario no encontrado`);
+            console.warn(`${MOD} Contenedor #grid-productos no encontrado`);
             return;
         }
 
@@ -266,7 +275,7 @@
 
         // Crear tabla usando TabulatorFactory
         table = w.TabulatorFactory.create(
-            '#grid-inventario',
+            '#grid-productos',
             '/api/v1/inventario/productos/', // ⚠️ v2.61.3: Core API Facade
             getColumns(),
             tableConfig
@@ -283,7 +292,7 @@
      * Inicializar eventos de la lista (Event Delegation)
      */
     function initListEvents() {
-        const gridEl = d.querySelector('#grid-inventario');
+        const gridEl = d.querySelector('#grid-productos');
         if (!gridEl) return;
 
         // Event Delegation para botones de acción
@@ -305,8 +314,7 @@
 
                 const offcanvasEl = d.getElementById('offcanvas-inventario');
                 if (offcanvasEl) {
-                    const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                    offcanvas.show();
+                    mostrarOffcanvasSeguro(offcanvasEl);
                 }
                 return;
             }
@@ -325,8 +333,7 @@
 
                 const offcanvasEl = d.getElementById('offcanvas-inventario');
                 if (offcanvasEl) {
-                    const offcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                    offcanvas.show();
+                    mostrarOffcanvasSeguro(offcanvasEl);
                 }
                 return;
             }
@@ -475,8 +482,7 @@
 
                     const offcanvasEl = d.getElementById('offcanvas-inventario');
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
+                        mostrarOffcanvasSeguro(offcanvasEl);
                     }
                 } catch (error) {
                     console.error(`${MOD} Error al cargar Offcanvas desde rowClick:`, error);
@@ -525,15 +531,15 @@
      */
     function init() {
         // Verificar que el contenedor exista
-        const container = d.querySelector('#grid-inventario');
+        const container = d.querySelector('#grid-productos');
         if (!container) {
-            console.warn(`${MOD} Contenedor #grid-inventario no encontrado`);
+            console.warn(`${MOD} Contenedor #grid-productos no encontrado`);
             return;
         }
 
         // Verificar que el contenedor esté conectado al DOM
         if (!container.isConnected) {
-            console.warn(`${MOD} Contenedor #grid-inventario no está conectado al DOM`);
+            console.warn(`${MOD} Contenedor #grid-productos no está conectado al DOM`);
             return;
         }
 
@@ -551,10 +557,10 @@
     if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
         // Intentar múltiples selectores para cubrir diferentes estructuras de tabs
         const selectors = [
-            '#grid-inventario',
+            '#grid-productos',
             '#pane-existencias',
             '#tab-inventario-content',
-            '#workspace .tab-pane.show #grid-inventario'
+            '#pane-existencias #grid-productos'
         ];
         
         // Usar el primer selector disponible
@@ -602,9 +608,9 @@
             console.log(`${MOD} Tab de productos mostrado, verificando inicialización...`);
             
             // Verificar si la tabla existe y está inicializada
-            const gridEl = d.querySelector('#grid-inventario');
+            const gridEl = d.querySelector('#grid-productos');
             if (!gridEl) {
-                console.warn(`${MOD} Contenedor #grid-inventario no encontrado`);
+                console.warn(`${MOD} Contenedor #grid-productos no encontrado`);
                 return;
             }
             

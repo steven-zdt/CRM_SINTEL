@@ -1,7 +1,7 @@
-# AUDITORIA COMPLETA — CONTABILIDAD APP v3.7
+# AUDITORIA COMPLETA — CONTABILIDAD APP v3.7.8
 
-**Fecha de auditoría:** 2026-05-08 (actualizado post-correcciones)
-**Estado:** ✅ Implementado y Funcional — Pista Manual On-Demand operativa end-to-end
+**Fecha de auditoría:** 2026-05-19 (actualizado — Libro Diario sincronizado con AsientoContable)
+**Estado:** ✅ Implementado y Funcional — Pista Manual + Asientos + Periodos CRUD + Libro Diario operativo
 **Arquitectura:** Feature-Sliced Design (FSD) + Service Layer
 **Compliance:** AGENTS.md + NIIF PYMES Colombia
 
@@ -661,6 +661,447 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 
 ---
 
-**Auditoría completada:** 2026-05-13 (v3.7.1 — Orquestación de Contrapartidas)
+---
+
+## 12. CAMBIOS v3.7.5 — 2026-05-19
+
+### 12.1 Flujo Manual On-Demand — Correcciones
+
+#### FIX-1: Validación nivel 6 eliminada del flujo manual
+
+**Archivo:** `services/business_service.py` — `contabilizar_documento_manual()`
+
+**Problema:** El campo `CuentaContable.nivel` tiene `default=1`. Cualquier cuenta creada sin asignar nivel explícito fallaba la validación `if cuenta.nivel != 6`, bloqueando la contabilización aunque las líneas cuadraran.
+
+**Fix:** Eliminado el bloque `if cuenta.nivel != 6` del flujo manual On-Demand. El flujo automático (`_normalizar_movimientos`) conserva la validación de nivel 6 como corresponde a la normativa.
+
+**Regla post-fix:**
+- Flujo automático (ETL extractores): requiere nivel 6 — normativa estricta
+- Flujo manual On-Demand: solo requiere que la cuenta exista y esté activa — el contador decide
+
+#### FIX-2: Auto-creación de cuenta desde catálogo o inferencia PUC
+
+**Archivo:** `services/business_service.py` — nuevo método `_obtener_o_crear_cuenta(empresa_id, codigo)`
+
+**Problema:** El asistente IA puede sugerir códigos PUC válidos (ej. `235517`) que no existen en `CuentaContable` del tenant, lanzando "Cuenta X no existe o está inactiva".
+
+**Comportamiento del helper:**
+```
+1. Busca en CuentaContable (empresa_id + codigo + activa=True)
+2. Si no existe: busca en CatalogoMaestroNIIF → crea CuentaContable con nombre/nivel reales
+3. Si tampoco está en catálogo: infiere propiedades desde estructura PUC:
+   - nivel = len(codigo)
+   - tipo: primer dígito → 1=ACTIVO, 2=PASIVO, 3=PATRIMONIO, 4=INGRESO, 5/6=GASTO
+   - nombre = "Cuenta {codigo}"
+4. Usa get_or_create → idempotente, seguro ante race conditions
+```
+
+**Impacto:** Cualquier código PUC de 6 dígitos es ahora utilizable en el flujo manual sin configuración previa.
+
+#### FIX-3: Sincronización masiva del plan de cuentas
+
+**Archivo:** `services/business_service.py` — nuevo método `sincronizar_cuentas_plan(empresa_id)`
+**Archivo:** `api/viewsets.py` — nuevo `@action POST /cuentas-contables/sincronizar/`
+
+**Propósito:** Crear en `CuentaContable` todas las entradas del `CatalogoMaestroNIIF` que no existan. Idempotente.
+
+**Flujo de uso:**
+```bash
+# 1. Poblar CatalogoMaestroNIIF desde choices.py (si no está poblado)
+python manage.py poblar_catalogo_niif
+
+# 2. Sincronizar CuentaContable desde el catálogo
+POST /api/v1/contabilidad/cuentas-contables/sincronizar/
+# Response: { "creadas": N, "total_catalogo": 88, "total_plan": M }
+```
+
+#### FIX-4: Expansión del catálogo NIIF Colombia
+
+**Archivo:** `choices/choices.py`
+
+8 cuentas nivel 6 agregadas que faltaban para cubrir casos comunes de proveedores y costos:
+
+| Código | Nombre | Tipo |
+|--------|--------|------|
+| `220501` | Proveedores Nacionales - Bienes | Pasivo |
+| `220505` | Proveedores Nacionales - Servicios | Pasivo |
+| `221005` | Proveedores del Exterior - Bienes | Pasivo |
+| `221010` | Proveedores del Exterior - Servicios | Pasivo |
+| `233510` | Honorarios por Pagar | Pasivo |
+| `233515` | Comisiones por Pagar | Pasivo |
+| `233520` | Arrendamientos por Pagar | Pasivo |
+| `233525` | Servicios Públicos por Pagar | Pasivo |
+
+---
+
+### 12.2 Selector de Cuentas en Offcanvas Contabilizar
+
+**Archivo:** `templates/tenant/contabilidad/partials/pendiente_offcanvas_contabilizar.html`
+
+**Problema:** El único modo de asignar una cuenta era el autocompletado de texto (buscar por código/nombre). Si la cuenta no aparecía en búsqueda, el usuario no podía seleccionarla.
+
+**Fix:** Agregado botón `[⊞]` en cada fila de la tabla de líneas. Al hacer clic abre un **modal Bootstrap** con el catálogo completo de `CuentaContable` del tenant.
+
+**Arquitectura del selector:**
+
+```
+[⊞] clic → abrirSelectorCuentas(tr)
+  → document.body.appendChild(modalEl)   ← sale del stacking context del offcanvas
+  → bootstrap.Modal({ backdrop: false }) ← evita doble backdrop (pantalla negra)
+  → cargarCuentasModal()                 ← GET /cuentas-contables/?activa=true&page_size=200&app_origen=X
+  → renderCuentasModal()                 ← agrupa por tipo: Activo / Pasivo / Ingreso / Gasto
+  → seleccionarDesdeLista(codigo, nombre)← rellena hidden input + search input + nombre display
+  → recalcularTotales()
+```
+
+**Bug técnico Bootstrap 5 resuelto:** Modal dentro de offcanvas → el backdrop del modal queda detrás del offcanvas (z-index 1040 < 1045), pantalla negra, foco atrapado.
+**Solución:** `document.body.appendChild(modalEl)` saca el modal del stacking context. `backdrop: false` elimina el segundo overlay redundante.
+
+**Flujo de trabajo:**
+```
+Módulo Cuentas Contables  →  usuario crea cuenta nueva
+                          ↓
+Módulo Pendientes → Contabilizar Documento → [⊞] → modal → cuenta disponible
+```
+
+---
+
+### 12.3 Grid Asientos Contables — Correcciones
+
+**Problema:** El tab "Asientos Contables" no listaba ningún registro.
+
+**Tres causas identificadas y corregidas:**
+
+#### Causa 1 — Doble carga de scripts
+
+`list_asientos.html` incluía `assets_asientos.html` al final del template. El mismo include ya existe en `workspace.html extra_js` (línea 275). Resultado: dos ejecuciones del módulo JS → dos closures → dos `onVisibleOnce` listeners → doble `initTable()` en `#grid-asiento` → conflicto Tabulator.
+
+**Fix:** Eliminado `{% include 'tenant/contabilidad/partials/assets_asientos.html' %}` de `list_asientos.html`. Los assets se cargan una sola vez desde `extra_js`.
+
+#### Causa 2 — Filtro por defecto ocultaba asientos APROBADO
+
+El dropdown tenía `<option value="BORRADOR" selected>`. Los asientos generados por "Contabilizar Documento" siempre son `APROBADO`. El filtro ocultaba todo.
+
+**Fix:** Default cambiado a `<option value="">Todos los Estados</option>` (sin `selected` en ninguna opción).
+
+#### Causa 3 — Filtro client-side con paginación server-side
+
+`applyFilters()` usaba `table.setFilter({field:'estado', type:'=', value:'BORRADOR'})` — filtrado en memoria sobre la página ya cargada. Con `paginationMode: "remote"`, el servidor devuelve 10 registros paginados; el filtro client-side solo ve esos 10.
+
+**Fix:** Doble cambio en `asiento_list.js`:
+
+1. `initTable()` pasa `ajaxParams` a `TabulatorFactory`:
+```javascript
+ajaxParams: function() {
+    const estado = d.querySelector(FILTER_ESTADO_SELECTOR)?.value || '';
+    return estado ? { estado } : {};
+}
+```
+El factory inyecta `?estado=APROBADO` (o nada) en cada URL de request. El backend filtra via `filterset_fields = ['estado']`.
+
+2. `applyFilters()` reemplazado por:
+```javascript
+function applyFilters() {
+    if (!table || typeof table.replaceData !== 'function') return;
+    table.replaceData(); // re-ejecuta ajaxURLGenerator con valor actual del dropdown
+}
+```
+
+---
+
+### 12.5 Alineación de Menús y Subnavegación Secuencial Cíclica (v3.7.6)
+
+**Archivo:** `apps/tenant/core/templates/tenant/core/workspace.html`
+
+**Problema:** Los menús de Contabilidad carecían de una secuencia natural o lógica, presentándose en un orden desorganizado. La gestión contable requiere un ciclo de vida claro y estructurado.
+
+**Solución:** Se reorganizó la barra de pestañas (subnav) y los correspondientes paneles de contenido de la pestaña `#tab-contabilidad` para reflejar un **Flujo de Trabajo Secuencial y Cíclico** alineado con los procesos del departamento contable:
+1. **Periodos Contables** (`#subtab-periodos` - Pestaña ACTIVA por defecto): Primer paso del ciclo. Define, abre o cierra periodos para regular la entrada de datos.
+2. **Cuentas Contables** (`#subtab-cuentas`): Estructura del plan de cuentas (PUC) necesario para registrar movimientos.
+3. **Pendientes** (`#subtab-pendientes`): Captura y procesamiento de documentos e ingresos desde módulos operativos externos (Facturas, Gastos, etc.).
+4. **Asientos Contables** (`#subtab-asientos`): Creación y aprobación de asientos y comprobantes de diario.
+5. **Libro Diario** (`#subtab-libro-diario`): Auditoría cronológica de las transacciones procesadas.
+6. **Reportes** (`#subtab-reportes`): Cierre contable del periodo con reportes e informes financieros, completando el ciclo y guiando de vuelta a la apertura de un nuevo Periodo.
+
+---
+
+### 12.6 Estado post-correcciones v3.7.6
+
+| Componente | Estado | Nota |
+|-----------|--------|------|
+| Contabilizar Documento — cuadratura | ✅ Funciona | Botón habilitado cuando Debe = Haber |
+| Contabilizar Documento — cuentas PUC | ✅ Funciona | Auto-crea desde catálogo o inferencia |
+| Selector de Cuentas (modal) | ✅ Funciona | Agrupa por tipo, filtro client-side en modal |
+| Sincronizar Plan de Cuentas | ✅ Disponible | `POST /cuentas-contables/sincronizar/` |
+| Listado Asientos Contables | ✅ Funciona | Tabulator con filtro server-side por estado |
+| Filtro Estado (Todos/Borrador/Aprobado) | ✅ Funciona | Server-side via `?estado=X` |
+| Catálogo NIIF Colombia | ✅ 88 cuentas | +8 cuentas proveedores y costos |
+| Menús y Subnav Secuencial Cíclico | ✅ Implementado | Periodos → Cuentas → Pendientes → Asientos → Libro Diario → Reportes |
+
+---
+
+### 12.7 CRUD Periodos Contables — Correcciones (v3.7.7 — 2026-05-19)
+
+**Objetivo:** Habilitar el listado, creación, edición, cierre y eliminación de periodos contables desde `workspace/#contabilidad` → pestaña "Periodos Contables".
+
+**Seis bugs corregidos:**
+
+#### BUG-1: Selector CSS incorrecto — tabla nunca inicializaba (CRÍTICO)
+
+**Archivo:** `static/contabilidad/js/periodo/features/periodo_list.js`
+
+**Problema:** `TABLE_SELECTOR = '#grid-periodo'` no encontraba el elemento `id="grid-periodos"` del template. `d.querySelector(TABLE_SELECTOR)` devolvía `null` → `initTable()` retornaba inmediatamente → tabla completamente en blanco.
+
+**Fix:**
+```javascript
+// Antes
+const TABLE_SELECTOR = '#grid-periodo';
+// Después
+const TABLE_SELECTOR = '#grid-periodos';
+```
+
+#### BUG-2: Botón "Refrescar" no se enlazaba
+
+**Archivo:** `static/contabilidad/js/periodo/features/periodo_list.js`
+
+**Problema:** `d.querySelector('#btn-refrescar-periodo')` (sin 's') no encontraba `id="btn-refrescar-periodos"` (con 's') en el template.
+
+**Fix:**
+```javascript
+// Antes
+const btnRefresh = d.querySelector('#btn-refrescar-periodo');
+// Después
+const btnRefresh = d.querySelector('#btn-refrescar-periodos');
+```
+
+#### BUG-3: Filtro client-side con paginación server-side
+
+**Archivo:** `static/contabilidad/js/periodo/features/periodo_list.js`
+
+**Mismo patrón que asientos (BUG corregido en §12.3 Causa 3).**
+
+`applyFilters()` usaba `table.setFilter()` — filtra solo la página cargada, no el servidor.
+
+**Fix:** `ajaxParams` callback + `table.replaceData()`:
+```javascript
+// En initTable() — ajaxParams inyecta ?estado=X en cada request
+ajaxParams: function() {
+    const estado = d.querySelector(FILTER_ESTADO_SELECTOR)?.value || '';
+    return estado ? { estado } : {};
+}
+
+// applyFilters() — recarga desde servidor con filtro actual
+function applyFilters() {
+    if (!table || typeof table.replaceData !== 'function') return;
+    table.replaceData();
+}
+```
+
+#### BUG-4: `get_queryset()` no pasaba `empresa_id` al selector
+
+**Archivo:** `api/viewsets.py` — `PeriodoContableViewSet.get_queryset()`
+
+**Problema:** `PeriodoContableSelector.get_qs_list()` y `get_qs_detail()` se llamaban sin `empresa_id` — el selector acepta `empresa_id=None` y en ese caso omite el filtro. Aunque django-tenants garantiza aislamiento por esquema, el filtro por `empresa_id` es mandatorio por AGENTS.md (DSV).
+
+**Fix:**
+```python
+def get_queryset(self):
+    empresa_id = self.get_empresa_id()
+    if self.action == "list":
+        return PeriodoContableSelector.get_qs_list(empresa_id).order_by('-periodo')
+    elif self.action == "retrieve":
+        return PeriodoContableSelector.get_qs_detail(empresa_id)
+    return self.get_mutation_queryset(PeriodoContable, 'periodo', 'estado')
+```
+
+#### BUG-5: Action `cerrar` inexistente en ViewSet
+
+**Archivo:** `api/viewsets.py` — `PeriodoContableViewSet`
+
+**Problema:** `PeriodoAPI.cerrar(id)` en el frontend llama `POST /periodos-contables/{id}/cerrar/` pero el ViewSet no tenía este action → 404 al intentar cerrar un periodo.
+
+**Fix:** Action agregado:
+```python
+@action(detail=True, methods=['post'], url_path='cerrar')
+def cerrar(self, request, **kwargs):
+    """POST /periodos-contables/{uuid}/cerrar/ — Cierra un periodo ABIERTO."""
+    try:
+        periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
+        periodo = get_periodo_by_identifier(periodo_identifier)
+        resultado = self.service.cerrar_periodo(periodo.id, request.data)
+        periodo_obj = PeriodoContableSelector.get_qs_detail().get(id=resultado['id'])
+        serializer = PeriodoContableDetailSerializer(periodo_obj, context={'request': request})
+        return Response(serializer.data)
+    except Exception as e:
+        return self.handle_service_error(e)
+```
+
+**Endpoint expuesto:** `POST /api/v1/contabilidad/periodos-contables/{uuid}/cerrar/`
+- Body opcional: `{ "observaciones": "Cierre de mes" }`
+- Respuesta: `PeriodoContableDetailSerializer` con estado `CERRADO`
+
+#### BUG-6: `cerrar_periodo()` inexistente en Business Service
+
+**Archivo:** `services/business_service.py` — `ContabilidadBusinessService`
+
+**Problema:** El action de la ViewSet invocaba `self.service.cerrar_periodo()` pero el método no existía → `AttributeError`.
+
+**Fix:** Método agregado:
+```python
+@transaction.atomic
+def cerrar_periodo(self, periodo_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Cierra un periodo ABIERTO. Una vez cerrado no se puede reabrir."""
+    from apps.tenant.contabilidad.models import PeriodoContable
+    periodo = PeriodoContable.objects.get(id=periodo_id)
+    if periodo.estado == 'CERRADO':
+        raise ValidationError({'detail': 'El periodo ya esta cerrado.'})
+    data = {'estado': 'CERRADO'}
+    observaciones = payload.get('observaciones', '')
+    if observaciones:
+        data['observaciones'] = observaciones
+    periodo = self.crud.actualizar_periodo(periodo_id, data)
+    return {'id': periodo.id, 'uuid': str(periodo.uuid), 'status': 'cerrado'}
+```
+
+**Nota:** `crud.actualizar_periodo` detecta `estado == 'CERRADO'` y asigna `fecha_cierre = now()` automáticamente (ver `crud_service.py:234`).
+
+---
+
+### 12.8 Libro Diario — Sincronización con AsientoContable (v3.7.8 — 2026-05-19)
+
+**Objetivo:** El módulo Libro Diario ahora muestra los **AsientoContable** del tenant filtrados por periodo contable, con búsqueda y filtros funcionales. Reemplaza la implementación ETL anterior (DocumentoEnriquecido) por consulta directa al modelo.
+
+---
+
+#### Cambio de arquitectura: ETL → Query directa
+
+| Aspecto | Antes (v3.7.6) | Después (v3.7.8) |
+|---------|---------------|-----------------|
+| Fuente de datos | `get_libro_diario_periodo()` — extractores ETL | `AsientoContableSelector.get_qs_list()` — query directa |
+| Estructura de respuesta | `DocumentoEnriquecido` (cuentas_asignadas, movimientos, estado_contable) | `AsientoContableListSerializer` (numero, fecha, descripcion, estado, totales, cuadratura) |
+| Filtro de fecha | `fecha_inicio` + `fecha_fin` obligatorios | `periodo_uuid` (primario) o `fecha_inicio`+`fecha_fin` (fallback) |
+| Filtros adicionales | Ninguno | `estado`, `search` (numero/descripcion) — server-side |
+| Dropdown periodo | No existía | Carga `/periodos-contables/?ordering=-periodo` al abrir el tab |
+
+---
+
+#### `api/viewsets.py` — `LibroDiarioViewSet.list()`
+
+Lógica de resolución del rango de fechas:
+```
+1. ?periodo_uuid=<uuid>  → busca PeriodoContable, extrae fecha_inicio/fecha_fin del periodo
+2. ?fecha_inicio=X&fecha_fin=Y → usa directamente (fallback manual)
+3. Sin parámetros → retorna [] 200 OK (Tabulator muestra placeholder)
+```
+
+Query ORM:
+```python
+qs = AsientoContableSelector.get_qs_list(empresa_id).filter(
+    fecha__range=(fecha_inicio, fecha_fin)
+)
+# Filtros opcionales:
+if estado: qs = qs.filter(estado=estado)
+if search: qs = qs.filter(Q(numero__icontains=search) | Q(descripcion__icontains=search))
+qs = qs.order_by('fecha', 'numero')  # Orden cronológico — Código de Comercio Art. 48
+```
+
+---
+
+#### `templates/.../list_libro_diario.html`
+
+Barra de filtros rediseñada:
+
+| Campo | ID | Descripción |
+|-------|----|-------------|
+| Periodo | `#filter-periodo-libro` | Dropdown, puebla `fecha_inicio`/`fecha_fin` al seleccionar |
+| Desde | `#filter-fecha-inicio-libro` | Override manual de fecha |
+| Hasta | `#filter-fecha-fin-libro` | Override manual de fecha |
+| Estado | `#filter-estado-libro` | BORRADOR / APROBADO / CERRADO |
+| Buscar | `#search-libro-diario` | Filtro client-side sobre datos cargados |
+| Consultar | `#btn-consultar-libro-diario` | Dispara `loadData()` |
+| Refrescar | `#btn-refrescar-libro-diario` | Re-ejecuta `loadData()` |
+
+---
+
+#### `static/.../libro_diario_list.js`
+
+**Flujo de carga:**
+```
+Tab visible → loadPeriodos() → puebla dropdown con períodos disponibles
+                ↓
+Usuario selecciona periodo → auto-rellena fecha_inicio / fecha_fin
+                ↓
+Consultar → loadData() → LibroDiarioAPI.list({periodo_uuid, estado})
+                ↓
+API devuelve [] (sin params) o AsientoContable[] (con params)
+                ↓
+table.setData(currentData)  →  applySearchFilter()  →  updateResumen()
+```
+
+**Columnas Tabulator (AsientoContableListSerializer):**
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `numero` | strong | Número del asiento |
+| `fecha` | date | Formateada es-CO |
+| `descripcion` | text | Truncada a 60 chars |
+| `estado` | badge | BORRADOR / APROBADO / CERRADO |
+| `movimientos_count` | badge | Conteo de líneas |
+| `total_debe` | money-right | Total débito (azul) |
+| `total_haber` | money-right | Total crédito (rojo) |
+| `cuadratura` | icon | ✅ OK / ❌ Error |
+| Ver | button | HTMX → `/asientos-contables/{uuid}/render-offcanvas/detalle/` |
+
+**Panel resumen (actualizado):**
+```
+[N asientos]  [N cuadrados]  [N descuadrados]  [D: $X]  [H: $X]  [Cuadratura OK / Descuadre $X]
+```
+
+**Búsqueda:** Client-side via `table.setFilter(fn)` sobre `numero` y `descripcion` (datos ya en memoria).
+
+**Filtro estado:** Server-side — al cambiar, re-ejecuta `loadData()` con `?estado=X`.
+
+---
+
+#### `static/.../libro_diario.api.js`
+
+Parámetros soportados por `LibroDiarioAPI.list(params)`:
+
+```javascript
+{
+  periodo_uuid: 'uuid-del-periodo',  // Prioritario
+  fecha_inicio: 'YYYY-MM-DD',        // Fallback si no hay periodo_uuid
+  fecha_fin:    'YYYY-MM-DD',
+  estado:       'BORRADOR',          // Opcional
+  search:       'texto',             // Opcional
+}
+```
+
+---
+
+### 12.9 Estado post-correcciones v3.7.8
+
+| Componente | Estado | Nota |
+|-----------|--------|------|
+| Libro Diario — dropdown periodos | ✅ Funciona | Carga automática al abrir tab |
+| Libro Diario — filtro por periodo | ✅ Funciona | `?periodo_uuid=<uuid>` → rango fechas resuelto en backend |
+| Libro Diario — filtro por fechas | ✅ Funciona | `?fecha_inicio=X&fecha_fin=Y` como fallback manual |
+| Libro Diario — filtro estado | ✅ Funciona | Server-side `?estado=BORRADOR/APROBADO/CERRADO` |
+| Libro Diario — búsqueda | ✅ Funciona | Client-side sobre numero/descripcion (datos en memoria) |
+| Libro Diario — columnas | ✅ Funciona | Alineadas con AsientoContableListSerializer |
+| Libro Diario — cuadratura | ✅ Funciona | Badge OK/Error por asiento + resumen del periodo |
+| Libro Diario — detalle asiento | ✅ Funciona | Botón Ver → HTMX offcanvas detalle existente |
+| Periodos Contables — listado | ✅ Funciona | Tabulator carga desde `/periodos-contables/` |
+| Periodos Contables — CRUD completo | ✅ Funciona | Crear, Editar, Eliminar, Cerrar |
+| Contabilizar Documento — cuadratura | ✅ Funciona | Botón habilitado cuando Debe = Haber |
+| Contabilizar Documento — cuentas PUC | ✅ Funciona | Auto-crea desde catálogo o inferencia |
+| Selector de Cuentas (modal) | ✅ Funciona | Agrupa por tipo, filtro client-side en modal |
+| Sincronizar Plan de Cuentas | ✅ Disponible | `POST /cuentas-contables/sincronizar/` |
+| Listado Asientos Contables | ✅ Funciona | Tabulator con filtro server-side por estado |
+| Catálogo NIIF Colombia | ✅ 88 cuentas | +8 cuentas proveedores y costos |
+
+---
+
+**Auditoría completada:** 2026-05-19 (v3.7.8 — Libro Diario sincronizado con AsientoContable)
 **Próxima revisión:** Tras implementar ExtractorGastos y `ReglasOrquestacion`
 

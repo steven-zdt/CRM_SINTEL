@@ -9,12 +9,11 @@
     <input id="search-asiento" class="form-control form-control-sm"
            type="search" placeholder="Buscar por número o descripción..." />
     
-    {# ⚠️ v2.60 Fase 2: Filtro de Estado (Dashboard del Contador) #}
     <select id="filter-estado-asiento" class="form-select form-select-sm" style="width: auto;">
       <option value="">Todos los Estados</option>
-      <option value="BORRADOR" selected>Borradores (Dashboard Contador)</option>
-      <option value="APROBADO">Aprobados</option>
-      <option value="CERRADO">Cerrados</option>
+      <option value="BORRADOR">Borrador</option>
+      <option value="APROBADO">Aprobado</option>
+      <option value="CERRADO">Cerrado</option>
     </select>
     
     {# ⚠️ v2.60 Fase 2: Filtro de Cuadratura #}
@@ -60,8 +59,5 @@
   <div id="grid-asiento"></div>
 </div>
 
-{# ⚠️ v2.60: Contenedor HTMX dedicado para Offcanvas de AsientoContable #}
+{# Contenedor HTMX para Offcanvas — assets cargados por workspace extra_js #}
 <div id="offcanvas-container-asiento"></div>
-
-{# ⚠️ v2.60: Carga de scripts Feature-Sliced #}
-{% include 'tenant/contabilidad/partials/assets_asientos.html' %}

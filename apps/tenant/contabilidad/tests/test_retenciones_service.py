@@ -42,7 +42,7 @@ class RetencionesServiceTestCase(TenantAPITestCase):
             codigo='2365',
             nombre='Retención en la Fuente',
             nivel=6,
-            es_deudora=False,
+            tipo='PASIVO',
             activa=True,
         )
 

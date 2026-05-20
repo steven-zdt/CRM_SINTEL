@@ -51,12 +51,6 @@ class GastoServiceMixin:
         lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field or 'pk'
         return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_url_kwarg))
 
-    def service_calcular_retenciones(self, subtotal, retefuente_pct, reteica_pct):
-        """Calcula retenciones usando business service."""
-        return self.business_service_class.calcular_retenciones(
-            subtotal, retefuente_pct, reteica_pct
-        )
-
     def service_crear_gasto(self, data, empresa):
         """Bridge para creacion de gasto desde ViewSet."""
         return self.business_service_class.procesar_gasto(empresa, data)

@@ -226,6 +226,20 @@
                 width: 130
             },
             {
+                title: "Cotización",
+                field: "cotizacion_vinculada_info",
+                formatter: function(cell) {
+                    const info = cell.getValue();
+                    if (!info) {
+                        return '<span class="badge text-bg-light border text-muted"><i class="bi bi-dash-circle me-1"></i>Sin cotización</span>';
+                    }
+                    const label = info.label || info.codigo_unico || info.numero_cotizacion || 'Vinculada';
+                    return `<span class="badge text-bg-success" title="${label}"><i class="bi bi-link-45deg me-1"></i>${label}</span>`;
+                },
+                headerSort: false,
+                minWidth: 170
+            },
+            {
                 title: "Total",
                 field: "total",
                 formatter: function(cell) {
@@ -490,6 +504,21 @@
                                                 </div>
                                             </div>
 
+                                            <!-- Vinculacion Comercial -->
+                                            <hr class="my-3">
+                                            <h6 class="text-muted mb-2"><i class="bi bi-link-45deg me-2"></i>Vinculacion Comercial</h6>
+                                            <div class="mb-3">
+                                                <label class="form-label small">Cotizacion asociada</label>
+                                                <select class="form-select form-select-sm" id="cotizacion-${id}" name="cotizacion_uuid"
+                                                        data-current="${factura.cotizacion_vinculada_info?.uuid || ''}">
+                                                    <option value="">Sin cotizacion vinculada</option>
+                                                    ${factura.cotizacion_vinculada_info ? `<option value="${factura.cotizacion_vinculada_info.uuid}" selected>${factura.cotizacion_vinculada_info.label || factura.cotizacion_vinculada_info.codigo_unico || factura.cotizacion_vinculada_info.numero_cotizacion}</option>` : ''}
+                                                </select>
+                                                <small class="text-muted mt-1 d-block">
+                                                    <i class="bi bi-info-circle me-1"></i>Relacion opcional no estricta con cotizaciones.
+                                                </small>
+                                            </div>
+
                                             <!-- Vinculacion Contable -->
                                             <hr class="my-3">
                                             <h6 class="text-muted mb-2"><i class="bi bi-book me-2"></i>Vinculacion Contable</h6>
@@ -530,6 +559,28 @@
                     // Mostrar modal
                     const modal = new bootstrap.Modal(document.getElementById(`modal-editar-factura-${id}`));
                     modal.show();
+
+                    // Inicializar selector de cotizaciones
+                    const cotizacionSelect = document.getElementById(`cotizacion-${id}`);
+                    if (cotizacionSelect) {
+                        try {
+                            const cotRes = await w.http('GET', '/api/v1/cotizaciones/?page_size=100');
+                            if (cotRes && cotRes.ok && cotRes.data) {
+                                const cotizaciones = Array.isArray(cotRes.data) ? cotRes.data : (cotRes.data.results || []);
+                                const currentCotizacion = cotizacionSelect.dataset.current || '';
+                                cotizaciones.forEach(cotizacion => {
+                                    if (!cotizacion.uuid || cotizacionSelect.querySelector(`option[value="${cotizacion.uuid}"]`)) return;
+                                    const option = document.createElement('option');
+                                    option.value = cotizacion.uuid;
+                                    option.textContent = cotizacion.codigo_unico || cotizacion.numero_cotizacion || cotizacion.uuid;
+                                    option.selected = cotizacion.uuid === currentCotizacion;
+                                    cotizacionSelect.appendChild(option);
+                                });
+                            }
+                        } catch (error) {
+                            console.warn(`${MOD} No se pudieron cargar cotizaciones:`, error);
+                        }
+                    }
 
                     // Inicializar buscador de cuenta contable
                     const cuentaSearchInput = document.getElementById(`cuenta-search-${id}`);
@@ -613,7 +664,8 @@
                                 payload.cuenta_contable_uuid = null;
                             }
 
-
+                            const cotizacionUuid = payload.cotizacion_uuid || null;
+                            delete payload.cotizacion_uuid;
 
                             btnGuardar.disabled = true;
                             btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Guardando...';
@@ -627,6 +679,17 @@
                                         w.SintelFeedback.error('Error al guardar los cambios');
                                     }
                                 } else {
+                                    if (w.facturasAPI && typeof w.facturasAPI.vincularCotizacion === 'function') {
+                                        const linkRes = await w.facturasAPI.vincularCotizacion(id, cotizacionUuid);
+                                        if (!linkRes.ok) {
+                                            console.error(`${MOD} Error al vincular cotizacion:`, linkRes);
+                                            if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                                                w.SintelFeedback.error('Cambios guardados, pero no se pudo actualizar la cotización');
+                                            }
+                                            return;
+                                        }
+                                    }
+
                                     if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
                                         w.SintelFeedback.success('Cambios guardados exitosamente');
                                     }

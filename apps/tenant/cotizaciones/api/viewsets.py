@@ -36,19 +36,63 @@ logger = logging.getLogger(__name__)
 
 
 class ProductoViewSet(SintelDSVMixin, ProductoServiceMixin, BaseTenantViewSet):
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
     serializer_class = ProductoSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = Producto.objects.none()
 
+    def get_queryset(self):
+        if self.action == 'list':
+            return self.get_qs_list()
+        return self.get_qs_detail()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = self.service_crear_producto(serializer)
+        return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        partial = kwargs.get('partial', False)
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        updated = self.service_actualizar_producto(instance, serializer)
+        return Response(self.get_serializer(updated).data)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class ServicioViewSet(SintelDSVMixin, ServicioServiceMixin, BaseTenantViewSet):
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
     serializer_class = ServicioSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = Servicio.objects.none()
+
+    def get_queryset(self):
+        if self.action == 'list':
+            return self.get_qs_list()
+        return self.get_qs_detail()
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = self.service_crear_servicio(serializer)
+        return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        partial = kwargs.get('partial', False)
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        updated = self.service_actualizar_servicio(instance, serializer)
+        return Response(self.get_serializer(updated).data)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CotizacionViewSet(SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSet):
@@ -134,8 +178,6 @@ class CotizacionViewSet(SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSe
 
 
 class CotizacionItemViewSet(SintelDSVMixin, CotizacionItemServiceMixin, BaseTenantViewSet):
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
     serializer_class = CotizacionItemSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = CotizacionItem.objects.none()

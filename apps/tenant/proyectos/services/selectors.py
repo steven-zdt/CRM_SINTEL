@@ -13,7 +13,7 @@ from ..models import Proyecto
 # SSoT: CAMPOS CANÓNICOS (Zero Waste)
 # ==============================================================================
 LIST_FIELDS = [
-    'id', 'codigo', 'nombre', 'tipo_servicio', 'descripcion',
+    'id', 'uuid', 'codigo', 'nombre', 'tipo_servicio', 'descripcion',
     'fase_actual', 'estado_tarea',
     'fecha_inicio', 'fecha_fin_estimada',
     'cliente_id', 'cliente_nombre',
@@ -55,14 +55,15 @@ def qs_list(empresa_id, search=None):
 
     return qs.order_by('-updated_at')
 
-def qs_detail(empresa_id, pk):
+def qs_detail(empresa_id, uuid):
     """
-    QuerySet de detalle con relaciones prefetch. Retorna None si no existe (
-    el ViewSet lanza NotFound al recibir None).
+    QuerySet de detalle con relaciones prefetch. Retorna None si no existe
+    (el ViewSet lanza NotFound al recibir None).
+    Filtra por uuid (no pk) para cumplir M-001 del Roadmap M3.
     """
     return Proyecto.objects.filter(
         empresa_id=empresa_id,
-        pk=pk
+        uuid=uuid
     ).only(*DETAIL_FIELDS).select_related('factura_costo').prefetch_related(
         'equipo_trabajo',
         'pedidos',

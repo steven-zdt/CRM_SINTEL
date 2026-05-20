@@ -23,13 +23,13 @@ class ConfiguracionCotizacionListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfiguracionCotizacion
         fields = (
-            'id', 'empresa', 'empresa_nombre',
+            'id', 'uuid', 'empresa', 'empresa_nombre',
             'nombre_configuracion',
             'dias_validez',
             'es_activo', 'estado_display',
-            'ultimo_numero',  # Para mostrar estado de la secuencia
+            'ultimo_numero',
         )
-        read_only_fields = ('id', 'empresa', 'empresa_nombre', 'estado_display', 'ultimo_numero')
+        read_only_fields = ('id', 'uuid', 'empresa', 'empresa_nombre', 'estado_display', 'ultimo_numero')
     
     def get_estado_display(self, obj):
         """Retorna el estado en formato legible para el frontend."""
@@ -49,17 +49,16 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfiguracionCotizacion
         fields = (
-            'id', 'empresa', 'empresa_nombre',
+            'id', 'uuid', 'empresa', 'empresa_nombre',
             'nombre_configuracion',
             'dias_validez',
             'es_activo', 'estado_display',
-            # # WARNING: v2.60: Gestión de Folios Dinámicos
             'prefijo_secuencia',
             'sufijo_secuencia',
             'semilla_inicial',
-            'ultimo_numero',  # Read-only para mostrar estado actual
+            'ultimo_numero',
         )
-        read_only_fields = ('id', 'empresa', 'empresa_nombre', 'estado_display', 'ultimo_numero')
+        read_only_fields = ('id', 'uuid', 'empresa', 'empresa_nombre', 'estado_display', 'ultimo_numero')
     
     def get_estado_display(self, obj):
         """Retorna el estado en formato legible para el frontend."""

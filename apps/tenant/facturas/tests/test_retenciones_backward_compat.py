@@ -304,7 +304,7 @@ class EndpointBackwardCompatTestCase(TenantAPITestCase):
             codigo='2365',
             nombre='Retención',
             nivel=6,
-            es_deudora=False,
+            tipo='PASIVO',
             activa=True,
         )
 

@@ -36,8 +36,12 @@
     getCuentaByUuid: (uuid) => w.http('GET', `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}&app_origen=proveedores`)
   };
 
+  w.AppProveedor = w.AppProveedor || {};
+  w.AppProveedor.API = proveedoresAPI;
+
+  // Backwards compatibility wrapper
   w.Sintel = w.Sintel || {};
   w.Sintel.Proveedores = w.Sintel.Proveedores || {};
-  w.Sintel.Proveedores.API = proveedoresAPI;
+  w.Sintel.Proveedores.API = w.AppProveedor.API;
 
 })(window);

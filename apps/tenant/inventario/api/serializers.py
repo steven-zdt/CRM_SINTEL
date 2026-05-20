@@ -62,6 +62,35 @@ class NormalizationMixin:
         return attrs
 
 
+class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
+    """Campo relacionado que acepta UUID publico o PK interno en formularios legacy."""
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if queryset is None:
+            return queryset
+        root = getattr(self, 'root', None)
+        context = getattr(root, 'context', {}) if root else {}
+        empresa_id = context.get('empresa_id')
+        if empresa_id and hasattr(queryset.model, 'empresa_id'):
+            return queryset.filter(empresa_id=empresa_id)
+        return queryset
+
+    def to_internal_value(self, data):
+        if data in (None, ''):
+            if self.allow_null:
+                return None
+            self.fail('required')
+        data_str = str(data)
+        if not data_str.isdigit():
+            queryset = self.get_queryset()
+            try:
+                return queryset.get(uuid=data_str)
+            except (TypeError, ValueError, queryset.model.DoesNotExist):
+                self.fail('does_not_exist', pk_value=data)
+        return super().to_internal_value(data)
+
+
 # ==============================================================================
 # CATEGORÍAS
 # ==============================================================================
@@ -71,10 +100,13 @@ class CategoriaItemListSerializer(serializers.ModelSerializer):
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con CATEGORIA_LIST_FIELDS de services.py.
     """
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
+
     class Meta:
         model = CategoriaItem
-        fields = ['id', 'nombre', 'descripcion', 'aplicacion', 'activo']
-        read_only_fields = ['id']
+        fields = ['id', 'pk', 'nombre', 'descripcion', 'aplicacion', 'activo']
+        read_only_fields = ['id', 'pk']
 
 
 class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -86,18 +118,20 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
     cuenta_inventario_label = serializers.SerializerMethodField()
     cuenta_costo_label = serializers.SerializerMethodField()
     cuenta_ingreso_label = serializers.SerializerMethodField()
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
 
     class Meta:
         model = CategoriaItem
         fields = [
-            'id', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo', 
+            'id', 'pk', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo',
             'created_at', 'updated_at', 
             'cuenta_inventario_uuid', 'cuenta_inventario_label',
             'cuenta_costo_uuid', 'cuenta_costo_label',
             'cuenta_ingreso_uuid', 'cuenta_ingreso_label'
         ]
         read_only_fields = [
-            'id', 'created_at', 'updated_at', 'empresa',
+            'id', 'pk', 'created_at', 'updated_at', 'empresa',
             'cuenta_inventario_label', 'cuenta_costo_label', 'cuenta_ingreso_label'
         ]
     
@@ -114,18 +148,9 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
         return self.get_cuenta_label(obj.cuenta_ingreso_uuid)
     
     def get_cuenta_label(self, uuid_value):
-        if not uuid_value:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self._get_empresa_id()
-        return CuentaContableSelector.get_label_by_uuid(uuid_value, empresa_id)
+        return None
 
     def validate_cuenta_uuid(self, value):
-        if value:
-            from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self._get_empresa_id()
-            if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
-                raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
 
     def validate_cuenta_inventario_uuid(self, value):
@@ -183,6 +208,8 @@ class ProductoListSerializer(serializers.ModelSerializer):
     """
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     activo_display = serializers.CharField(source='get_activo_display', read_only=True)
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
     
     # WARNING: v2.60: Campos calculados (lógica en backend - Zero Trust)
     stock_total = serializers.DecimalField(source='stock_actual', max_digits=14, decimal_places=3, read_only=True)
@@ -192,11 +219,11 @@ class ProductoListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Producto
         fields = [
-            'id', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
+            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
             'stock_actual', 'stock_total', 'stock_minimo', 'precio_venta', 'costo_promedio',
             'valor_inventario', 'alerta_stock', 'activo', 'activo_display', 'imagen', 'unidad'
         ]
-        read_only_fields = ['id', 'categoria_nombre', 'activo_display', 'stock_total', 'valor_inventario', 'alerta_stock']
+        read_only_fields = ['id', 'pk', 'categoria_nombre', 'activo_display', 'stock_total', 'valor_inventario', 'alerta_stock']
     
     def get_valor_inventario(self, obj):
         """
@@ -227,12 +254,19 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     cuenta_inventario_label = serializers.SerializerMethodField()
     cuenta_costo_label = serializers.SerializerMethodField()
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
+    categoria = UUIDOrPKRelatedField(
+        queryset=CategoriaItem.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
 
         model = Producto
         fields = [
-            'id', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
+            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
             'descripcion', 'unidad', 'imagen',
             'precio_venta', 'costo_promedio',
             'stock_actual', 'stock_minimo',
@@ -241,7 +275,7 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'activo', 'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'created_at', 'updated_at', 'empresa',
+            'id', 'pk', 'created_at', 'updated_at', 'empresa',
             'stock_actual', 'costo_promedio', 'cuenta_inventario_label', 'cuenta_costo_label'
         ]
 
@@ -251,37 +285,17 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         return attrs
 
     def get_cuenta_inventario_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
-        if not obj.cuenta_inventario_uuid:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self._get_empresa_id()
-        return CuentaContableSelector.get_label_by_uuid(obj.cuenta_inventario_uuid, empresa_id)
+        """Label resuelto por frontend via Gateway Directo de contabilidad."""
+        return None
 
     def get_cuenta_costo_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
-        if not obj.cuenta_costo_uuid:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self._get_empresa_id()
-        return CuentaContableSelector.get_label_by_uuid(obj.cuenta_costo_uuid, empresa_id)
+        """Label resuelto por frontend via Gateway Directo de contabilidad."""
+        return None
 
     def validate_cuenta_inventario_uuid(self, value):
-        """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
-        if value:
-            from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self._get_empresa_id()
-            if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
-                raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
 
     def validate_cuenta_costo_uuid(self, value):
-        """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
-        if value:
-            from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self._get_empresa_id()
-            if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
-                raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
 
     def validate_categoria(self, value):
@@ -306,7 +320,8 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
 
 
 class StockResponseSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
+    id = serializers.UUIDField()
+    pk = serializers.IntegerField(required=False)
     nombre = serializers.CharField()
     stock_actual = serializers.DecimalField(max_digits=14, decimal_places=3)
 
@@ -322,14 +337,16 @@ class ServicioListSerializer(serializers.ModelSerializer):
     """
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     activo_display = serializers.CharField(source='get_activo_display', read_only=True)
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
 
     class Meta:
         model = Servicio
         fields = [
-            'id', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
+            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
             'precio_venta', 'activo', 'activo_display', 'imagen'
         ]
-        read_only_fields = ['id', 'categoria_nombre', 'activo_display']
+        read_only_fields = ['id', 'pk', 'categoria_nombre', 'activo_display']
 
 
 class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -340,18 +357,25 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     cuenta_ingreso_label = serializers.SerializerMethodField()
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
+    categoria = UUIDOrPKRelatedField(
+        queryset=CategoriaItem.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
 
         model = Servicio
         fields = [
-            'id', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
+            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
             'descripcion', 'imagen',
             'precio_venta',
             'cuenta_ingreso_uuid', 'cuenta_ingreso_label',
             'activo', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'empresa', 'cuenta_ingreso_label']
+        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa', 'cuenta_ingreso_label']
 
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
@@ -359,20 +383,10 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         return attrs
 
     def get_cuenta_ingreso_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
-        if not obj.cuenta_ingreso_uuid:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self._get_empresa_id()
-        return CuentaContableSelector.get_label_by_uuid(obj.cuenta_ingreso_uuid, empresa_id)
+        """Label resuelto por frontend via Gateway Directo de contabilidad."""
+        return None
 
     def validate_cuenta_ingreso_uuid(self, value):
-        """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
-        if value:
-            from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self._get_empresa_id()
-            if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
-                raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
 
     def validate_categoria(self, value):
@@ -406,15 +420,17 @@ class ActivoFijoListSerializer(serializers.ModelSerializer):
     """
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
 
     class Meta:
         model = ActivoFijo
         fields = [
-            'id', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
+            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
             'fecha_adquisicion', 'costo_adquisicion',
             'ubicacion', 'responsable', 'estado', 'estado_display'
         ]
-        read_only_fields = ['id', 'categoria_nombre', 'estado_display']
+        read_only_fields = ['id', 'pk', 'categoria_nombre', 'estado_display']
 
 
 class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -425,12 +441,19 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
     """
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
+    categoria = UUIDOrPKRelatedField(
+        queryset=CategoriaItem.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
 
         model = ActivoFijo
         fields = [
-            'id', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
+            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
             'marca', 'modelo', 'descripcion', 'imagen',
             'ubicacion', 'responsable',
             'fecha_adquisicion', 'costo_adquisicion', 'estado', 'estado_display',
@@ -438,7 +461,7 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
             'cuenta_depreciacion_uuid', 'cuenta_depreciacion_label',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'empresa', 'cuenta_activo_label', 'cuenta_depreciacion_label']
+        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa', 'cuenta_activo_label', 'cuenta_depreciacion_label']
         
     cuenta_activo_label = serializers.SerializerMethodField()
     cuenta_depreciacion_label = serializers.SerializerMethodField()
@@ -449,37 +472,17 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
         return attrs
 
     def get_cuenta_activo_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
-        if not obj.cuenta_activo_uuid:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self._get_empresa_id()
-        return CuentaContableSelector.get_label_by_uuid(obj.cuenta_activo_uuid, empresa_id)
+        """Label resuelto por frontend via Gateway Directo de contabilidad."""
+        return None
 
     def validate_cuenta_activo_uuid(self, value):
-        """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
-        if value:
-            from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self._get_empresa_id()
-            if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
-                raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
 
     def get_cuenta_depreciacion_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
-        if not obj.cuenta_depreciacion_uuid:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        empresa_id = self._get_empresa_id()
-        return CuentaContableSelector.get_label_by_uuid(obj.cuenta_depreciacion_uuid, empresa_id)
+        """Label resuelto por frontend via Gateway Directo de contabilidad."""
+        return None
 
     def validate_cuenta_depreciacion_uuid(self, value):
-        """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
-        if value:
-            from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-            empresa_id = self._get_empresa_id()
-            if not CuentaContableSelector.exists_by_uuid(value, empresa_id):
-                raise serializers.ValidationError("La cuenta contable no es valida o no pertenece a su empresa.")
         return value
 
     def validate_categoria(self, value):
@@ -507,64 +510,137 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
 # ==============================================================================
 class MovimientoInventarioListSerializer(serializers.ModelSerializer):
     """
-    WARNING: v2.60: Serializer optimizado para LISTAS (Tabulator Factory).
-    Solo incluye campos estrictamente necesarios para la tabla del frontend.
-    Campos alineados con MOVIMIENTO_LIST_FIELDS de services.py.
+    WARNING: v3.8.2: Serializer optimizado para LISTAS (Tabulator Factory).
+    Soporta Productos y Activos Fijos con campos dinamicos item_tipo/item_nombre/item_codigo.
     """
-    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
-    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
+    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True, allow_null=True, default=None)
+    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True, allow_null=True, default=None)
+    activo_fijo_nombre = serializers.CharField(source='activo_fijo.nombre', read_only=True, allow_null=True, default=None)
+    activo_fijo_codigo = serializers.CharField(source='activo_fijo.codigo', read_only=True, allow_null=True, default=None)
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
+    item_tipo = serializers.SerializerMethodField()
+    item_nombre = serializers.SerializerMethodField()
+    item_codigo = serializers.SerializerMethodField()
+    item_uuid = serializers.SerializerMethodField()
 
     class Meta:
         model = MovimientoInventario
         fields = [
-            'id', 'created_at', 'producto', 'producto_codigo', 'producto_nombre',
+            'id', 'pk', 'created_at',
+            'producto', 'producto_codigo', 'producto_nombre',
+            'activo_fijo', 'activo_fijo_codigo', 'activo_fijo_nombre',
+            'item_tipo', 'item_nombre', 'item_codigo', 'item_uuid',
             'tipo', 'tipo_display', 'cantidad', 'costo_unitario',
-            'origen_referencia', 'cliente_referencia', 'observaciones'
+            'origen_referencia', 'cliente_referencia', 'observaciones',
+            'factura_uuid', 'factura_numero'
         ]
-        read_only_fields = ['id', 'producto_codigo', 'producto_nombre', 'tipo_display']
+        read_only_fields = [
+            'id', 'pk', 'producto_codigo', 'producto_nombre',
+            'activo_fijo_codigo', 'activo_fijo_nombre',
+            'item_tipo', 'item_nombre', 'item_codigo', 'item_uuid', 'tipo_display'
+        ]
+
+    def get_item_tipo(self, obj):
+        if obj.producto_id:
+            return 'PRODUCTO'
+        if obj.activo_fijo_id:
+            return 'ACTIVO_FIJO'
+        return None
+
+    def get_item_nombre(self, obj):
+        if obj.producto_id and obj.producto:
+            return obj.producto.nombre
+        if obj.activo_fijo_id and obj.activo_fijo:
+            return obj.activo_fijo.nombre
+        return None
+
+    def get_item_codigo(self, obj):
+        if obj.producto_id and obj.producto:
+            return obj.producto.codigo
+        if obj.activo_fijo_id and obj.activo_fijo:
+            return obj.activo_fijo.codigo
+        return None
+
+    def get_item_uuid(self, obj):
+        if obj.producto_id and obj.producto:
+            return str(obj.producto.uuid)
+        if obj.activo_fijo_id and obj.activo_fijo:
+            return str(obj.activo_fijo.uuid)
+        return None
 
 
 class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    WARNING: v2.60: Serializer completo para DETALLE/CREACIÓN de Movimientos.
+    WARNING: v3.8.0: Serializer unificado para Productos y Activos Fijos (Kardex).
     Campos alineados con MOVIMIENTO_DETAIL_FIELDS de services.py.
-    Aplica NormalizationMixin para sanitizar datos de entrada.
+    Soporta routing dinámico según categoría de origen.
     WARNING: IMPORTANTE: Los movimientos NO se pueden editar/eliminar (integridad del Kardex).
     """
-    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
-    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
+    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True, allow_null=True)
+    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True, allow_null=True)
+    activo_fijo_nombre = serializers.CharField(source='activo_fijo.nombre', read_only=True, allow_null=True)
+    activo_fijo_codigo = serializers.CharField(source='activo_fijo.codigo', read_only=True, allow_null=True)
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
+    producto = UUIDOrPKRelatedField(queryset=Producto.objects.all(), required=False, allow_null=True)
+    activo_fijo = UUIDOrPKRelatedField(queryset=ActivoFijo.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = MovimientoInventario
         fields = [
-            'id', 'producto', 'producto_codigo', 'producto_nombre',
+            'id', 'pk', 'producto', 'producto_codigo', 'producto_nombre',
+            'activo_fijo', 'activo_fijo_codigo', 'activo_fijo_nombre',
             'tipo', 'tipo_display', 'cantidad', 'costo_unitario',
             'origen_referencia', 'cliente_referencia',
-            'observaciones', 'created_at', 'updated_at'
+            'observaciones', 'created_at', 'updated_at',
+            'factura_uuid', 'factura_numero'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'empresa']
-    
+        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa']
+
     def validate(self, attrs):
-        """WARNING: Zero Trust: Normalización estricta antes de persistir."""
+        """WARNING: v3.8.0: Validar exactly-one de producto/activo_fijo.
+        En PATCH parcial se omite la validación si ninguno de los dos está en el payload.
+        """
         attrs = self.normalize_data(attrs)
+
+        producto = attrs.get('producto')
+        activo_fijo = attrs.get('activo_fijo')
+
+        # En modo parcial (PATCH) solo validar si al menos uno viene en el payload
+        ambos_ausentes = 'producto' not in attrs and 'activo_fijo' not in attrs
+        if self.partial and ambos_ausentes:
+            return attrs
+
+        if not producto and not activo_fijo:
+            raise ValidationError("Debe seleccionar un Producto o un Activo Fijo.")
+        if producto and activo_fijo:
+            raise ValidationError("No puede seleccionar simultáneamente Producto y Activo Fijo.")
+
         return attrs
-    
+
     def validate_producto(self, value):
-        """
-        WARNING: v2.60: Validación estricta - Asegurar que el producto pertenezca al tenant actual.
-        Zero Trust: No confiar en el frontend.
-        """
+        """WARNING: v3.8.0: Validación estricta del Producto."""
         if value is None:
-            raise ValidationError("El producto es requerido.")
-        
+            return value
+
         empresa_id = self._get_empresa_id()
-        
-        # Validar que el producto pertenezca al tenant
         if not Producto.objects.filter(pk=value.id, empresa_id=empresa_id).exists():
             raise ValidationError(f"El producto con ID {value.id} no pertenece a este tenant.")
-        
+
+        return value
+
+    def validate_activo_fijo(self, value):
+        """WARNING: v3.8.0: Validación estricta del Activo Fijo."""
+        if value is None:
+            return value
+
+        empresa_id = self._get_empresa_id()
+        if not ActivoFijo.objects.filter(pk=value.id, empresa_id=empresa_id).exists():
+            raise ValidationError(f"El activo fijo con ID {value.id} no pertenece a este tenant.")
+
         return value
 
 
@@ -577,16 +653,19 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
     servicio_nombre = serializers.CharField(source='servicio.nombre', read_only=True)
+    id = serializers.UUIDField(source='uuid', read_only=True)
+    pk = serializers.IntegerField(source='id', read_only=True)
+    servicio = UUIDOrPKRelatedField(queryset=Servicio.objects.all())
 
     class Meta:
         model = HistorialServicio
         fields = [
-            'id', 'servicio', 'servicio_nombre',
+            'id', 'pk', 'servicio', 'servicio_nombre',
             'fecha_registro', 'cantidad', 'valor_cobrado',
             'origen_referencia', 'cliente_referencia',
             'observaciones', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'empresa']
+        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa']
     
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
@@ -611,10 +690,75 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
 
 
 # ==============================================================================
+# INGESTA MASIVA
+# ==============================================================================
+class ProductoCargaMasivaItemSerializer(serializers.Serializer):
+    """DTO de producto para carga masiva idempotente."""
+
+    codigo = serializers.CharField(max_length=64)
+    nombre = serializers.CharField(max_length=200)
+    categoria = serializers.CharField(max_length=100, required=False, allow_blank=True, default='General')
+    descripcion = serializers.CharField(required=False, allow_blank=True, default='')
+    unidad = serializers.CharField(max_length=16, required=False, allow_blank=True, default='UND')
+    precio_venta = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=0)
+    costo_promedio = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=0)
+    stock_actual = serializers.DecimalField(max_digits=14, decimal_places=3, required=False, default=0)
+
+    def validate_codigo(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("El codigo es obligatorio.")
+        return value
+
+    def validate_nombre(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("El nombre es obligatorio.")
+        return value
+
+
+class CargaMasivaInventarioSerializer(serializers.Serializer):
+    """Payload de carga masiva de productos."""
+
+    items = ProductoCargaMasivaItemSerializer(many=True)
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError("Debe enviar al menos un item.")
+        return value
+
+
+# ==============================================================================
+# TIMELINE UNIFICADO — Ledger Universal (v3.9.0)
+# ==============================================================================
+
+class MovimientoUnificadoListSerializer(serializers.Serializer):
+    """
+    Read-only serializer para el Ledger Universal.
+    Proyecta DTOs unificados de MovimientoInventario + HistorialServicio.
+    """
+    uuid = serializers.CharField(read_only=True)
+    fecha = serializers.CharField(read_only=True)
+    modulo_origen = serializers.ChoiceField(
+        choices=['PRODUCTO', 'ACTIVO_FIJO', 'SERVICIO'],
+        read_only=True
+    )
+    item_uuid = serializers.CharField(read_only=True)
+    item_codigo = serializers.CharField(read_only=True)
+    item_nombre = serializers.CharField(read_only=True)
+    tipo_accion = serializers.CharField(read_only=True)
+    tipo_accion_display = serializers.CharField(read_only=True)
+    cantidad = serializers.CharField(read_only=True)
+    valor_costo = serializers.CharField(read_only=True)
+    referencia = serializers.CharField(read_only=True)
+    observaciones = serializers.CharField(read_only=True)
+
+
+# ==============================================================================
 # ALIASES PARA COMPATIBILIDAD (v2.60)
 # ==============================================================================
-# WARNING: v2.60: Mantener aliases para compatibilidad con código existente
-# Los ViewSets deben usar los nombres Detail/List explícitos
+# WARNING: v2.60: Mantener aliases para compatibilidad con codigo existente
+# Los ViewSets deben usar los nombres Detail/List explicitos
 CategoriaItemSerializer = CategoriaItemDetailSerializer
 ProductoSerializer = ProductoDetailSerializer
 ServicioSerializer = ServicioDetailSerializer

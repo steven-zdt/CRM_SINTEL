@@ -46,8 +46,8 @@
 
         // Contabilidad (Vínculos)
         contabilidad: {
-            search: (query) => `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(query)}&app_origen=empleados&activa=true&tipo=PASIVO`,
-            getByUuid: (uuid) => `/api/v1/contabilidad/cuentas-contables/?uuid=${uuid}&app_origen=empleados`
+            search: (query) => `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(query || '')}&app_origen=empleados&activa=true&solo_auxiliares=true`,
+            getByUuid: (uuid) => `/api/v1/contabilidad/cuentas-contables/?uuid=${uuid}&app_origen=empleados&activa=true`
         }
     };
 

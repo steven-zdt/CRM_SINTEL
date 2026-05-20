@@ -19,6 +19,16 @@
     'use strict';
 
     const MOD = '[servicios.list]';
+
+    // Abre un offcanvas de forma segura, limpiando backdrops huerfanos primero.
+    function mostrarOffcanvasSeguro(el) {
+        if (!el || !w.bootstrap?.Offcanvas) return;
+        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        d.body.classList.remove('overflow-hidden', 'modal-open');
+        var prev = bootstrap.Offcanvas.getInstance(el);
+        if (prev) prev.dispose();
+        new bootstrap.Offcanvas(el).show();
+    }
     const GRID_ID = '#grid-servicios';
     const SEARCH_ID = '#search-servicio';
     const API_URL = '/api/v1/inventario/servicios/'; // ⚠️ v2.61.3: Core API Facade para CRUD
@@ -130,10 +140,12 @@
                         </div>
                     `;
                 },
-                width: 150,
+                width: 120,
                 headerSort: false,
                 resizable: false,
-                hozAlign: "center"
+                hozAlign: "center",
+                responsive: 0,
+                frozen: true
             }
         ];
     }
@@ -162,9 +174,8 @@
             paginationMode: "remote",
             paginationSize: 10,
             paginationSizeSelector: [10, 25, 50, 100],
-            layout: "fitDataStretch",
-            responsiveLayout: true,
-            responsiveLayoutCollapseStartOpen: false,
+            layout: "fitColumns",
+            responsiveLayout: "hide",
             placeholder: "No hay servicios registrados",
             locale: "es"
         };
@@ -231,10 +242,9 @@
                     // ⚠️ Safeguard: Esperar un momento para que el DOM se actualice
                     await new Promise(resolve => setTimeout(resolve, 100));
 
-                    const offcanvasEl = d.getElementById('offcanvas-servicios');
+                    const offcanvasEl = d.getElementById('offcanvas-inventario-servicio');
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
+                        mostrarOffcanvasSeguro(offcanvasEl);
                     } else {
                         console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);
                     }
@@ -295,15 +305,15 @@
                     if (!deleteRes.ok) {
                         if (w.UIManager && typeof w.UIManager.handleError === 'function') {
                             w.UIManager.handleError(deleteRes, MOD, {
-                                modalSelector: '#offcanvas-servicios',
-                                errorContainerSelector: '#form-servicio-feedback'
+                                modalSelector: '#offcanvas-inventario-servicio',
+                                errorContainerSelector: '#form-inventario-servicio-feedback'
                             });
                         }
                         return;
                     }
 
                     // ⚠️ v2.61.3: Cerrar cualquier offcanvas abierto
-                    const offcanvasServicio = d.getElementById('offcanvas-servicios');
+                    const offcanvasServicio = d.getElementById('offcanvas-inventario-servicio');
                     if (offcanvasServicio && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
                         const instance = bootstrap.Offcanvas.getInstance(offcanvasServicio);
                         if (instance) {
@@ -362,10 +372,9 @@
 
                     await new Promise(resolve => setTimeout(resolve, 100));
 
-                    const offcanvasEl = d.getElementById('offcanvas-servicios');
+                    const offcanvasEl = d.getElementById('offcanvas-inventario-servicio');
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
+                        mostrarOffcanvasSeguro(offcanvasEl);
                     }
                 } catch (error) {
                     console.error(`${MOD} Error al cargar Offcanvas desde rowClick:`, error);

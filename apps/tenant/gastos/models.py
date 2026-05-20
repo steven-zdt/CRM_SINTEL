@@ -9,6 +9,7 @@ NOTA: La integridad legal debe ser gestionada por procesos administrativos, el s
 El formato del documento debe cumplir con la normativa DIAN colombiana.
 """
 import datetime
+import uuid as uuid_module
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -26,6 +27,9 @@ class ResolucionDIAN(SintelTenantBaseModel):
     """
     Resolucion DIAN para Documentos Soporte.
     """
+    # UUID Lookup Field (AGENTS.md §25)
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+
     numero_resolucion = models.CharField(
         max_length=50,
         db_index=True,
@@ -110,6 +114,9 @@ class DocumentoSoporte(SintelTenantBaseModel):
     Documento Soporte - Evidencia legal de gasto.
     v2.62: Inmutabilidad deshabilitada para permitir ajustes operativos.
     """
+    # UUID Lookup Field (AGENTS.md §25)
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+
     # [FIELDS FIRST]
     resolucion_dian = models.ForeignKey(
         ResolucionDIAN,

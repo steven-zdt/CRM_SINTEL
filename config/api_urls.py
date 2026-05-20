@@ -131,19 +131,6 @@ except (ImportError, AttributeError) as e:
 except Exception as e:
     logger.error(f"ERROR: ERROR INESPERADO cargando URLs de gastos: {e}", exc_info=True)
 
-# WARNING: v2.40: ViewSet independiente para Resoluciones DIAN
-try:
-    from rest_framework.routers import DefaultRouter
-
-    from apps.tenant.gastos.api.viewsets import ResolucionDIANViewSet
-    resoluciones_router = DefaultRouter()
-    resoluciones_router.register(r'', ResolucionDIANViewSet, basename='resoluciones-dian')
-    urlpatterns.append(path('resoluciones-dian/', include(resoluciones_router.urls)))
-    logger.info("OK: URLs de resoluciones-dian registradas correctamente: /api/v1/resoluciones-dian/")
-except (ImportError, AttributeError) as e:
-    logger.error(f"ERROR: ERROR: No se pudieron cargar URLs de resoluciones-dian: {e}", exc_info=True)
-except Exception as e:
-    logger.error(f"ERROR: ERROR INESPERADO cargando URLs de resoluciones-dian: {e}", exc_info=True)
 
 try:
     urlpatterns.append(path('proveedores/', include('apps.tenant.proveedores.api.urls')))

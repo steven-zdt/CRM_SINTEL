@@ -12,7 +12,7 @@
     window.Sintel.Gastos = window.Sintel.Gastos || {};
 
     const API_ROOT = '/api/v1/gastos/';
-    const RESOLUCION_ROOT = '/api/v1/resoluciones-dian/';
+    const RESOLUCION_ROOT = '/api/v1/gastos/resoluciones/';
 
     /**
      * API Endpoints para Gastos (Gateway Directo)

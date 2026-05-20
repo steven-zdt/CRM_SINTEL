@@ -9,10 +9,10 @@
         </div>
         <div class="btn-group shadow-sm">
             <button type="button" class="btn btn-primary" id="btn-nuevo-producto"
-                    hx-get="/api/v1/inventario/productos/gestor-offcanvas/" 
-                    hx-target="#offcanvas-container-inventario" 
+                    hx-get="/api/v1/inventario/productos/gestor-offcanvas/"
+                    hx-target="#offcanvas-container-inventario"
                     hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-inventario'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                    hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-inventario'); }">
                 <i class="bi bi-plus-lg me-1"></i> Nuevo Producto
             </button>
             <button type="button" class="btn btn-outline-secondary" 
@@ -28,3 +28,5 @@
     
     <div id="grid-productos" class="flex-grow-1"></div>
 </div>
+
+{# Contenedor definido en list_inventario.html — NO duplicar aqui #}

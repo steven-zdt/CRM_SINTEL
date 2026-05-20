@@ -30,40 +30,42 @@ from django.core.exceptions import ValidationError
 # ==============================================================================
 
 CATEGORIA_LIST_FIELDS = (
-    'id', 'nombre', 'descripcion', 'aplicacion', 'activo', 'empresa_id',
+    'id', 'uuid', 'nombre', 'descripcion', 'aplicacion', 'activo', 'empresa_id',
     'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'cuenta_ingreso_uuid'
 )
 
 PRODUCTO_LIST_FIELDS = (
-    'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
+    'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'stock_actual', 'stock_minimo', 'precio_venta', 'costo_promedio', 'activo', 'imagen', 'unidad', 
     'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'empresa_id'
 )
 
 SERVICIO_LIST_FIELDS = (
-    'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
+    'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'precio_venta', 'activo', 'imagen', 'cuenta_ingreso_uuid', 'empresa_id'
 )
 
 ACTIVO_LIST_FIELDS = (
-    'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
+    'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'ubicacion', 'responsable', 'estado', 'fecha_adquisicion', 'costo_adquisicion', 
     'cuenta_activo_uuid', 'cuenta_depreciacion_uuid', 'empresa_id'
 )
 
 MOVIMIENTO_LIST_FIELDS = (
-    'id', 'created_at', 'producto', 'producto__id', 'producto__codigo', 'producto__nombre',
+    'id', 'uuid', 'created_at',
+    'producto', 'producto__id', 'producto__uuid', 'producto__codigo', 'producto__nombre',
+    'activo_fijo', 'activo_fijo__id', 'activo_fijo__uuid', 'activo_fijo__codigo', 'activo_fijo__nombre',
     'tipo', 'cantidad', 'costo_unitario', 'origen_referencia', 'cliente_referencia', 'observaciones', 'empresa_id'
 )
 
 CATEGORIA_DETAIL_FIELDS = (
-    'id', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo',
+    'id', 'uuid', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo',
     'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'cuenta_ingreso_uuid',
     'created_at', 'updated_at', 'empresa_id'
 )
 
 PRODUCTO_DETAIL_FIELDS = (
-    'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
+    'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'descripcion', 'unidad', 'imagen',
     'precio_venta', 'costo_promedio',
     'stock_actual', 'stock_minimo',
@@ -72,14 +74,14 @@ PRODUCTO_DETAIL_FIELDS = (
 )
 
 SERVICIO_DETAIL_FIELDS = (
-    'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
+    'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'descripcion', 'imagen', 'precio_venta',
     'cuenta_ingreso_uuid',
     'activo', 'created_at', 'updated_at', 'empresa_id'
 )
 
 ACTIVO_DETAIL_FIELDS = (
-    'id', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__nombre',
+    'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'marca', 'modelo', 'descripcion', 'imagen',
     'ubicacion', 'responsable',
     'fecha_adquisicion', 'costo_adquisicion', 'estado',
@@ -88,7 +90,9 @@ ACTIVO_DETAIL_FIELDS = (
 )
 
 MOVIMIENTO_DETAIL_FIELDS = (
-    'id', 'producto', 'producto__id', 'producto__codigo', 'producto__nombre',
+    'id', 'uuid',
+    'producto', 'producto__id', 'producto__uuid', 'producto__codigo', 'producto__nombre',
+    'activo_fijo', 'activo_fijo__id', 'activo_fijo__uuid', 'activo_fijo__codigo', 'activo_fijo__nombre',
     'tipo', 'cantidad', 'costo_unitario',
     'origen_referencia', 'cliente_referencia', 'observaciones',
     'created_at', 'updated_at', 'empresa_id'
@@ -152,10 +156,21 @@ class ProductoSelector:
         return qs
 
     @staticmethod
-    def get_detail(empresa_id: int, producto_id: int):
+    def get_detail(empresa_id: int, producto_uuid):
         """
         QuerySet optimizado para DETALLE de Producto.
         """
+        return (
+            Producto.objects
+            .filter(empresa_id=empresa_id, uuid=producto_uuid)
+            .select_related('categoria')
+            .only(*PRODUCTO_DETAIL_FIELDS)
+            .get()
+        )
+
+    @staticmethod
+    def get_by_id(empresa_id: int, producto_id: int):
+        """Obtiene un producto por PK interno solo para payloads ya validados."""
         return (
             Producto.objects
             .filter(empresa_id=empresa_id, pk=producto_id)
@@ -186,10 +201,21 @@ class ServicioSelector:
         return qs
 
     @staticmethod
-    def get_detail(empresa_id: int, servicio_id: int):
+    def get_detail(empresa_id: int, servicio_uuid):
         """
         QuerySet optimizado para DETALLE de Servicio.
         """
+        return (
+            Servicio.objects
+            .filter(empresa_id=empresa_id, uuid=servicio_uuid)
+            .select_related('categoria')
+            .only(*SERVICIO_DETAIL_FIELDS)
+            .get()
+        )
+
+    @staticmethod
+    def get_by_id(empresa_id: int, servicio_id: int):
+        """Obtiene un servicio por PK interno solo para payloads ya validados."""
         return (
             Servicio.objects
             .filter(empresa_id=empresa_id, pk=servicio_id)
@@ -222,10 +248,21 @@ class ActivoFijoSelector:
         return qs
 
     @staticmethod
-    def get_detail(empresa_id: int, activo_id: int):
+    def get_detail(empresa_id: int, activo_uuid):
         """
         QuerySet optimizado para DETALLE de Activo Fijo.
         """
+        return (
+            ActivoFijo.objects
+            .filter(empresa_id=empresa_id, uuid=activo_uuid)
+            .select_related('categoria')
+            .only(*ACTIVO_DETAIL_FIELDS)
+            .get()
+        )
+
+    @staticmethod
+    def get_by_id(empresa_id: int, activo_id: int):
+        """Obtiene un activo por PK interno solo para payloads ya validados."""
         return (
             ActivoFijo.objects
             .filter(empresa_id=empresa_id, pk=activo_id)
@@ -243,43 +280,55 @@ class MovimientoInventarioSelector:
         """
         qs = (
             MovimientoInventario.objects
-            .filter(producto__empresa_id=empresa_id)
-            .select_related('producto')
+            .filter(empresa_id=empresa_id)
+            .select_related('producto', 'activo_fijo')
             .only(*MOVIMIENTO_LIST_FIELDS)
         )
         if search:
             qs = qs.filter(
                 Q(producto__codigo__icontains=search) |
                 Q(producto__nombre__icontains=search) |
+                Q(activo_fijo__codigo__icontains=search) |
+                Q(activo_fijo__nombre__icontains=search) |
                 Q(origen_referencia__icontains=search) |
                 Q(observaciones__icontains=search)
             )
         return qs
 
     @staticmethod
-    def get_detail(empresa_id: int, movimiento_id: int):
+    def get_detail(empresa_id: int, movimiento_uuid):
         """
         QuerySet optimizado para DETALLE de Movimiento.
         """
         return (
             MovimientoInventario.objects
-            .filter(empresa_id=empresa_id, pk=movimiento_id)
-            .select_related('producto')
+            .filter(empresa_id=empresa_id, uuid=movimiento_uuid)
+            .select_related('producto', 'activo_fijo')
             .only(*MOVIMIENTO_DETAIL_FIELDS)
             .get()
+        )
+
+    @staticmethod
+    def get_kardex_for_producto(empresa_id: int, producto_id: int):
+        """Retorna movimientos de Kardex para un producto ya validado."""
+        return (
+            MovimientoInventario.objects
+            .filter(empresa_id=empresa_id, producto_id=producto_id)
+            .select_related('producto')
+            .only(*MOVIMIENTO_LIST_FIELDS)
+            .order_by('-created_at')
         )
 
 
 class CategoriaItemSelector:
     @staticmethod
-    def get_list(empresa_id: int = None, search: str = None):
+    def get_list(empresa_id: int, search: str = None):
         """
         QuerySet optimizado para LISTAR Categorias (tabla Tabulator).
         """
-        if empresa_id:
-            qs = CategoriaItem.objects.filter(empresa_id=empresa_id).only(*CATEGORIA_LIST_FIELDS)
-        else:
-            qs = CategoriaItem.objects.only(*CATEGORIA_LIST_FIELDS)
+        if not empresa_id:
+            raise ValidationError("empresa_id es obligatorio para listar categorias.")
+        qs = CategoriaItem.objects.filter(empresa_id=empresa_id).only(*CATEGORIA_LIST_FIELDS)
         if search:
             qs = qs.filter(
                 Q(nombre__icontains=search) |
@@ -288,10 +337,20 @@ class CategoriaItemSelector:
         return qs
 
     @staticmethod
-    def get_detail(empresa_id: int, categoria_id: int):
+    def get_detail(empresa_id: int, categoria_uuid):
         """
         QuerySet optimizado para DETALLE de Categoria.
         """
+        return (
+            CategoriaItem.objects
+            .filter(empresa_id=empresa_id, uuid=categoria_uuid)
+            .only(*CATEGORIA_DETAIL_FIELDS)
+            .get()
+        )
+
+    @staticmethod
+    def get_by_id(empresa_id: int, categoria_id: int):
+        """Obtiene una categoria por PK interno solo para payloads ya validados."""
         return (
             CategoriaItem.objects
             .filter(empresa_id=empresa_id, pk=categoria_id)
@@ -311,9 +370,125 @@ class HistorialServicioSelector:
             .select_related('servicio')
             .filter(empresa=empresa)
             .only(
-                'id', 'fecha_registro', 'cantidad', 'valor_cobrado',
+                'id', 'uuid', 'fecha_registro', 'cantidad', 'valor_cobrado',
                 'origen_referencia', 'cliente_referencia', 'observaciones',
-                'servicio__nombre'
+                'servicio', 'servicio__uuid', 'servicio__codigo', 'servicio__nombre',
             )
             .order_by('-fecha_registro')
         )
+
+
+# ==============================================================================
+# 4. TIMELINE UNIFICADO — Ledger Universal (v3.9.0)
+# ==============================================================================
+
+import datetime as _dt
+
+
+def _normalizar_fecha(val):
+    """Convierte datetime/date a datetime naive para ordenamiento uniforme."""
+    if val is None:
+        return _dt.datetime.min
+    if isinstance(val, _dt.datetime):
+        return val.replace(tzinfo=None) if val.tzinfo is not None else val
+    if isinstance(val, _dt.date):
+        return _dt.datetime(val.year, val.month, val.day)
+    return _dt.datetime.min
+
+
+def get_movimientos_timeline(empresa_id: int, search: str = None) -> list:
+    """
+    Combina MovimientoInventario (PRODUCTO/ACTIVO_FIJO) y HistorialServicio (SERVICIO)
+    en una lista unificada ordenada cronologicamente descendente.
+    Retorna lista de dicts con estructura comun para MovimientoUnificadoListSerializer.
+    Patron: Ledger Universal — trazabilidad completa del modulo Inventario.
+    """
+    qs_mov = (
+        MovimientoInventario.objects
+        .filter(empresa_id=empresa_id)
+        .select_related('producto', 'activo_fijo')
+        .only(*MOVIMIENTO_LIST_FIELDS)
+    )
+    if search:
+        qs_mov = qs_mov.filter(
+            Q(producto__nombre__icontains=search) |
+            Q(activo_fijo__nombre__icontains=search) |
+            Q(origen_referencia__icontains=search) |
+            Q(observaciones__icontains=search)
+        )
+
+    qs_hist = (
+        HistorialServicio.objects
+        .filter(empresa_id=empresa_id)
+        .select_related('servicio')
+        .only(
+            'id', 'uuid', 'fecha_registro', 'cantidad', 'valor_cobrado',
+            'origen_referencia', 'cliente_referencia', 'observaciones',
+            'servicio', 'servicio__uuid', 'servicio__codigo', 'servicio__nombre',
+        )
+    )
+    if search:
+        qs_hist = qs_hist.filter(
+            Q(servicio__nombre__icontains=search) |
+            Q(origen_referencia__icontains=search) |
+            Q(cliente_referencia__icontains=search) |
+            Q(observaciones__icontains=search)
+        )
+
+    resultado = []
+
+    for mov in qs_mov:
+        if mov.producto_id:
+            modulo = 'PRODUCTO'
+            p = mov.producto
+            item_nombre = p.nombre if p else ''
+            item_codigo = p.codigo if p else ''
+            item_uuid = str(p.uuid) if p else ''
+        else:
+            modulo = 'ACTIVO_FIJO'
+            a = mov.activo_fijo
+            item_nombre = a.nombre if a else ''
+            item_codigo = a.codigo if a else ''
+            item_uuid = str(a.uuid) if a else ''
+
+        fecha_dt = mov.created_at
+        resultado.append({
+            '_sort': _normalizar_fecha(fecha_dt),
+            'uuid': str(mov.uuid),
+            'fecha': fecha_dt.isoformat() if fecha_dt else '',
+            'modulo_origen': modulo,
+            'item_uuid': item_uuid,
+            'item_codigo': item_codigo,
+            'item_nombre': item_nombre,
+            'tipo_accion': mov.tipo,
+            'tipo_accion_display': mov.get_tipo_display(),
+            'cantidad': str(mov.cantidad or 0),
+            'valor_costo': str(mov.costo_unitario or 0),
+            'referencia': mov.origen_referencia or '',
+            'observaciones': mov.observaciones or '',
+        })
+
+    for hist in qs_hist:
+        svc = hist.servicio
+        fecha_dt = _dt.datetime.combine(hist.fecha_registro, _dt.time.min) if hist.fecha_registro else None
+        resultado.append({
+            '_sort': _normalizar_fecha(fecha_dt),
+            'uuid': str(hist.uuid),
+            'fecha': hist.fecha_registro.isoformat() if hist.fecha_registro else '',
+            'modulo_origen': 'SERVICIO',
+            'item_uuid': str(svc.uuid) if svc else '',
+            'item_codigo': svc.codigo if svc else '',
+            'item_nombre': svc.nombre if svc else '',
+            'tipo_accion': 'VENTA_SERVICIO',
+            'tipo_accion_display': 'Venta de Servicio',
+            'cantidad': str(hist.cantidad or 0),
+            'valor_costo': str(hist.valor_cobrado or 0),
+            'referencia': hist.origen_referencia or '',
+            'observaciones': hist.observaciones or '',
+        })
+
+    resultado.sort(key=lambda x: x['_sort'], reverse=True)
+    for item in resultado:
+        del item['_sort']
+
+    return resultado

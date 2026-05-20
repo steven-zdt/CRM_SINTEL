@@ -22,11 +22,12 @@ class ResolucionDIANNestedSerializer(serializers.ModelSerializer):
     fecha_fin = serializers.DateField(format='%Y-%m-%d', required=False, read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
-    
+
     class Meta:
         model = ResolucionDIAN
         fields = (
             'id',
+            'uuid',
             'numero_resolucion',
             'prefijo',
             'rango_desde',
@@ -55,6 +56,7 @@ class ResolucionDIANListSerializer(serializers.ModelSerializer):
         model = ResolucionDIAN
         fields = (
             'id',
+            'uuid',
             'numero_resolucion',
             'prefijo',
             'rango_desde',
@@ -81,6 +83,7 @@ class ResolucionDIANCreateSerializer(serializers.ModelSerializer):
         model = ResolucionDIAN
         fields = (
             'id',
+            'uuid',
             'empresa',
             'numero_resolucion',
             'prefijo',
@@ -92,7 +95,7 @@ class ResolucionDIANCreateSerializer(serializers.ModelSerializer):
             'clave_tecnica',
             'vigente',
         )
-        read_only_fields = ('id', 'empresa')
+        read_only_fields = ('id', 'uuid', 'empresa')
     
     def validate_vigente(self, value):
         if value is None or value == '':
@@ -138,6 +141,7 @@ class ResolucionDIANDetailSerializer(serializers.ModelSerializer):
         model = ResolucionDIAN
         fields = (
             'id',
+            'uuid',
             'empresa',
             'numero_resolucion',
             'prefijo',
@@ -179,12 +183,12 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     ds_numero_documento = serializers.SerializerMethodField()
     ds_vendedor = serializers.CharField(source='proveedor.razon_social', read_only=True)
     ds_fecha = serializers.DateField(source='fecha', format='%Y-%m-%d', read_only=True)
+    ds_subtotal = serializers.DecimalField(source='subtotal', max_digits=12, decimal_places=2, read_only=True)
     ds_total = serializers.DecimalField(source='total', max_digits=15, decimal_places=2, read_only=True)
     ds_activo = serializers.BooleanField(source='activo', read_only=True)
     ds_anulado = serializers.BooleanField(source='anulado', read_only=True)
     ds_numero_documento_proveedor = serializers.CharField(source='numero_documento_proveedor', read_only=True)
     cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, read_only=True)
-    cuenta_gasto_label = serializers.SerializerMethodField()
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
 
@@ -200,19 +204,11 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
         except Exception:
             return str(obj.consecutivo)
 
-    def get_cuenta_gasto_label(self, obj):
-        if not obj.cuenta_gasto_uuid:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        return CuentaContableSelector.get_label_by_uuid(
-            empresa_id=obj.empresa_id,
-            uuid=obj.cuenta_gasto_uuid
-        )
-
     class Meta:
         model = DocumentoSoporte
         fields = (
             'id',
+            'uuid',
             'categoria_contable',
             'categoria_contable_display',
             'descripcion',
@@ -221,12 +217,12 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             'ds_numero_documento',
             'ds_vendedor',
             'ds_fecha',
+            'ds_subtotal',
             'ds_total',
             'ds_activo',
             'ds_anulado',
             'ds_numero_documento_proveedor',
             'cuenta_gasto_uuid',
-            'cuenta_gasto_label',
         )
         read_only_fields = fields
 
@@ -253,6 +249,7 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
         model = DocumentoSoporte
         fields = (
             'id',
+            'uuid',
             'empresa',
             'resolucion_dian',
             'proveedor',
@@ -270,9 +267,9 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'descripcion',
             'observaciones',
             'subtotal',
-            'total_retefuente',       # [NEW v3.7.1] Pull Model
-            'total_reteica',          # [NEW v3.7.1] Pull Model
-            'total_reteiva',          # [NEW v3.7.1] Pull Model
+            'total_retefuente',
+            'total_reteica',
+            'total_reteiva',
             'total',
             'adjunto',
             'activo',
@@ -284,9 +281,9 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'updated_at',
         )
         read_only_fields = (
-            'id', 'empresa', 'resolucion_dian', 'prefijo', 'consecutivo', 
+            'id', 'uuid', 'empresa', 'resolucion_dian', 'prefijo', 'consecutivo',
             'vendedor_nit', 'vendedor_nombre', 'vendedor_direccion', 'vendedor_telefono',
-            'subtotal', 'total_retefuente', 'total_reteica', 'total_reteiva', 'total', 
+            'subtotal', 'total_retefuente', 'total_reteica', 'total_reteiva', 'total',
             'activo', 'anulado', 'fecha_anulacion', 'created_at', 'updated_at'
         )
 
@@ -299,13 +296,6 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             uuid=obj.cuenta_gasto_uuid
         )
     
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        from datetime import date, datetime
-        if 'fecha' in data and data['fecha'] is not None:
-            if isinstance(data['fecha'], date) and not isinstance(data['fecha'], datetime):
-                data['fecha'] = data['fecha'].isoformat()
-        return data
 
 
 # --- Alias para compatibilidad (v2.62.0) ---

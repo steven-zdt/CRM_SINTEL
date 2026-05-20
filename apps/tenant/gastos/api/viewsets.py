@@ -20,7 +20,6 @@ from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
-from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
 from apps.tenant.gastos.services import (
     GastoServiceMixin,
@@ -69,17 +68,14 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     ordering_fields = ["fecha", "total", "created_at"]
     ordering = ["-fecha", "-created_at"]
 
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
-
     def get_queryset(self):
         """SSoT: Delegar al mixin que usa get_empresa_id() validado."""
         if not hasattr(self, 'action') or self.action is None:
             return DocumentoSoporte.objects.none()
-            
+
         if self.action == "list":
             return self.get_qs_list()
-        
+
         return self.get_qs_detail()
 
     def get_serializer_class(self):
@@ -90,7 +86,7 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     def create(self, request, *args, **kwargs):
         """Crea un nuevo Gasto via Service Layer."""
         try:
-            empresa = resolve_tenant_empresa(request, self)
+            empresa = self._get_empresa()
             if not empresa:
                 return Response(
                     {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
@@ -133,7 +129,7 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
             return self.handle_service_error(e)
 
     @action(detail=True, methods=["post"], url_path="anular")
-    def anular(self, request, id=None):
+    def anular(self, request, uuid=None):
         """Anula un gasto (DocumentoSoporte) v2.62.0."""
         try:
             gasto = self.get_object()
@@ -179,12 +175,12 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
     def render_offcanvas_editar(self, request):
         """Renderiza offcanvas para editar."""
-        uuid = request.query_params.get('uuid') or request.query_params.get('id')
+        uuid_val = request.query_params.get('uuid') or request.query_params.get('id')
         empresa_id = self.get_empresa_id()
-        if not uuid:
+        if not uuid_val:
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
-            
-        instance = get_object_or_404(DocumentoSoporte, id=uuid, empresa_id=empresa_id)
+
+        instance = get_object_or_404(DocumentoSoporte, uuid=uuid_val, empresa_id=empresa_id)
         context = {
             'instance': instance,
             'offcanvas_id': 'offcanvas-gasto-editar',
@@ -195,28 +191,28 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
     def render_offcanvas_detalle(self, request):
         """Renderiza offcanvas de detalle."""
-        uuid = request.query_params.get('uuid') or request.query_params.get('id')
+        uuid_val = request.query_params.get('uuid') or request.query_params.get('id')
         empresa_id = self.get_empresa_id()
-        if not uuid:
+        if not uuid_val:
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
-            
-        instance = get_object_or_404(DocumentoSoporte, id=uuid, empresa_id=empresa_id)
+
+        instance = get_object_or_404(DocumentoSoporte, uuid=uuid_val, empresa_id=empresa_id)
         return Response({'instance': instance, 'offcanvas_id': 'offcanvas-gasto-detalle'}, template_name='tenant/gastos/offcanvas_detalle_gasto.html')
 
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/resolucion')
     def render_offcanvas_resolucion(self, request):
         """Renderiza offcanvas de resolucion DIAN."""
-        uuid = request.query_params.get('uuid') or request.query_params.get('id')
+        uuid_val = request.query_params.get('uuid') or request.query_params.get('id')
         empresa_id = self.get_empresa_id()
         context = {'offcanvas_id': 'offcanvas-resolucion-editor'}
-        
-        if uuid:
-            instance = get_object_or_404(ResolucionDIAN, id=uuid, empresa_id=empresa_id)
+
+        if uuid_val:
+            instance = get_object_or_404(ResolucionDIAN, uuid=uuid_val, empresa_id=empresa_id)
             context['instance'] = instance
             context['mode'] = 'edit'
         else:
             context['mode'] = 'create'
-            
+
         return Response(context, template_name='tenant/gastos/offcanvas_resolucion.html')
 
 
@@ -239,9 +235,6 @@ class ResolucionDIANViewSet(ResolucionServiceMixin, SintelDSVMixin, BaseTenantVi
     search_fields = ['numero_resolucion', 'prefijo']
     ordering_fields = ['fecha_resolucion', 'vigente', 'created_at']
     ordering = ['-vigente', '-fecha_resolucion']
-
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
 
     def get_queryset(self):
         if not hasattr(self, 'action') or self.action is None:
@@ -267,7 +260,7 @@ class ResolucionDIANViewSet(ResolucionServiceMixin, SintelDSVMixin, BaseTenantVi
             return self.handle_service_error(e)
 
     @action(detail=True, methods=["post"], url_path="desactivar")
-    def desactivar(self, request, id=None):
+    def desactivar(self, request, uuid=None):
         try:
             resolucion = self.get_object()
             resultado = self.service_desactivar_resolucion(resolucion)

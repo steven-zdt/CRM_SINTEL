@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -9,6 +8,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.api.base import BaseTenantViewSet
 
 # SINTEL v3.5: Refactorizacion Service Layer (Tri-Part)
 # PROHIBIDO IMPORTAR MODELOS directamente en ViewSets.
@@ -19,27 +19,19 @@ from apps.tenant.inventario import services as inv_services
 from .serializers import (
     ActivoFijoDetailSerializer,
     ActivoFijoListSerializer,
+    CargaMasivaInventarioSerializer,
     CategoriaItemDetailSerializer,
-    # v2.60: Serializers List/Detail explicitas
     CategoriaItemListSerializer,
     HistorialServicioSerializer,
     MovimientoInventarioListSerializer,
-    # v2.60: Aliases para compatibilidad
     MovimientoInventarioSerializer,
+    MovimientoUnificadoListSerializer,
     ProductoDetailSerializer,
     ProductoListSerializer,
     ServicioDetailSerializer,
     ServicioListSerializer,
     StockResponseSerializer,
 )
-
-# En dev: usar UnsafeSessionAuthentication si existe (CSRF relajado).
-try:
-    from apps.tenant.api.authentication import UnsafeSessionAuthentication
-    _UnsafeSessionAuthentication = UnsafeSessionAuthentication
-except Exception:
-    _UnsafeSessionAuthentication = None
-
 
 class StandardResultsSetPagination(PageNumberPagination):
     """
@@ -51,12 +43,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class BaseViewSet(viewsets.GenericViewSet, 
-                   mixins.ListModelMixin,
-                   mixins.RetrieveModelMixin,
-                   mixins.CreateModelMixin,
-                   mixins.UpdateModelMixin,
-                   mixins.DestroyModelMixin):
+class BaseViewSet(BaseTenantViewSet):
     """
     v2.60: ViewSet base para inventario usando GenericViewSet con mixins especificos.
     
@@ -71,11 +58,6 @@ class BaseViewSet(viewsets.GenericViewSet,
     renderer_classes = [JSONRenderer]
     pagination_class = StandardResultsSetPagination
 
-    def get_authenticators(self):
-        if settings.DEBUG and _UnsafeSessionAuthentication:
-            return [_UnsafeSessionAuthentication()]
-        return super().get_authenticators()
-    
     def _check_enforced_mode(self, request):
         """
         v2.60: Verifica si el usuario tiene permisos para mutaciones (ENFORCED MODE).
@@ -101,6 +83,17 @@ class BaseViewSet(viewsets.GenericViewSet,
         """
         empresa = inv_services.get_empresa_singleton()
         serializer.save(empresa=empresa)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        try:
+            empresa = inv_services.get_empresa_singleton()
+            context['empresa'] = empresa
+            context['empresa_id'] = empresa.id
+        except ValidationError:
+            context['empresa'] = None
+            context['empresa_id'] = None
+        return context
     
     def list(self, request, *args, **kwargs):
         """
@@ -157,7 +150,10 @@ class CategoriaItemViewSet(BaseViewSet, inv_services.CategoriaItemServiceMixin):
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.CategoriaItemSelector.get_detail(empresa_id=empresa.id, categoria_id=self.kwargs['pk'])
+        return inv_services.CategoriaItemSelector.get_detail(
+            empresa_id=empresa.id,
+            categoria_uuid=self.kwargs[self.lookup_url_kwarg],
+        )
     
     def get_empresa(self):
         return inv_services.get_empresa_singleton()
@@ -175,7 +171,7 @@ class CategoriaItemViewSet(BaseViewSet, inv_services.CategoriaItemServiceMixin):
         return Response(status=status.HTTP_204_NO_CONTENT)
     
     @action(detail=True, methods=['get'], url_path='resumen')
-    def resumen(self, request, pk=None):
+    def resumen(self, request, uuid=None):
         """
         v2.40: Retorna un resumen con el conteo de productos/servicios/activos asociados a esta categoria.
         """
@@ -215,7 +211,10 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.ProductoSelector.get_detail(empresa_id=empresa.id, producto_id=self.kwargs['pk'])
+        return inv_services.ProductoSelector.get_detail(
+            empresa_id=empresa.id,
+            producto_uuid=self.kwargs[self.lookup_url_kwarg],
+        )
     
     def create(self, request: Request, *args, **kwargs) -> Response:
         """
@@ -261,66 +260,28 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
             # Re-lanzar otros errores para que DRF los maneje normalmente
             raise
 
-    @action(detail=False, methods=["get", "post"], url_path="dt")
-    def datatables(self, request):
-        """
-        WARNING: DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
-        Ya no se usa - Tabulator Factory consume GET /api/v1/inventario/productos/ directamente.
-        Se mantiene por compatibilidad temporal, pero será eliminado en v2.50.
-        
-        WARNING: v2.40: DataTables SERVER-SIDE para Productos.
-        Retorna datos paginados en formato estándar DataTables server-side.
-        Usa DataTableServer helper para procesamiento seguro.
-        """
-        from apps.shared.datatable import DataTableServer, DataTableSpec
-        from apps.tenant.inventario.api.serializers import ProductoListSerializer
-        from apps.tenant.inventario import services as inv_services
-        
-        empresa = inv_services.get_empresa_singleton()
-        qs_base = inv_services.ProductoSelector.get_list(empresa_id=empresa.id)
-        
-        # WARNING: CRÍTICO: fields_map debe coincidir EXACTAMENTE con el orden de columnas en inventario.page.js
-        # Columnas: 0=codigo, 1=nombre, 2=categoria_nombre, 3=stock_actual, 4=precio_venta, 5=activo, 6=Acciones (no ordenable)
-        spec = DataTableSpec(
-            fields_map={
-                0: 'codigo',
-                1: 'nombre',
-                2: 'categoria__nombre',  # Serializer expone como categoria_nombre, pero en DB es categoria__nombre
-                3: 'stock_actual',
-                4: 'precio_venta',
-                5: 'activo'
-            },
-            search_fields=['codigo', 'nombre', 'categoria__nombre'],
-            base_qs=qs_base,
-            serializer=ProductoListSerializer,
-            extra_filter=lambda req, qs: qs  # Sin filtros adicionales
-        )
-        
-        # Procesar request DataTables
-        dt_server = DataTableServer(spec)
-        return dt_server.handle(request)
-
     @action(detail=True, methods=["get"], url_path="stock")
-    def stock(self, request, pk=None):
+    def stock(self, request, uuid=None):
         """
         Retorna solo el stock actual de un producto.
         
         WARNING: PERFORMANCE BIBLE: Solo campos necesarios (id, nombre, stock_actual)
         """
         # WARNING: CRÍTICO: Solo obtener campos necesarios - evitar get_object() que trae todos los campos
-        pk = self.kwargs.get('pk')
+        pk = self.kwargs.get(self.lookup_url_kwarg)
         empresa = inv_services.get_empresa_singleton()
         producto = self.service_producto_get_stock(empresa, pk)
         
         serializer = StockResponseSerializer({
-            "id": producto.id,
+            "id": producto.uuid,
+            "pk": producto.id,
             "nombre": producto.nombre,
             "stock_actual": producto.stock_actual
         })
         return Response(serializer.data)
     
     @action(detail=True, methods=["get"], url_path="kardex")
-    def kardex(self, request, pk=None):
+    def kardex(self, request, uuid=None):
         """
         WARNING: v2.40: Endpoint para obtener el historial de movimientos (Kardex) de un producto específico.
         Retorna todos los movimientos de inventario asociados al producto ordenados por fecha descendente.
@@ -331,7 +292,7 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
         - Producto solo campos necesarios (id, codigo, nombre, stock_actual)
         """
         from apps.tenant.inventario.api.serializers import MovimientoInventarioListSerializer
-        pk = self.kwargs.get('pk')
+        pk = self.kwargs.get(self.lookup_url_kwarg)
         empresa = inv_services.get_empresa_singleton()
         producto, movimientos = self.service_producto_get_kardex(empresa, pk)
         
@@ -341,12 +302,30 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
         return Response({
             "producto": {
                 "id": producto.id,
+                "uuid": str(producto.uuid),
                 "codigo": producto.codigo,
                 "nombre": producto.nombre,
                 "stock_actual": producto.stock_actual
             },
             "movimientos": serializer.data
         })
+
+    @action(detail=False, methods=["post"], url_path="ingesta-masiva")
+    def ingesta_masiva(self, request):
+        """Materializa productos desde una lista de DTOs validados."""
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        serializer = CargaMasivaInventarioSerializer(data=request.data, context=self.get_serializer_context())
+        serializer.is_valid(raise_exception=True)
+        empresa = self.get_empresa()
+        resultado = inv_services.IngestaService.materializar_carga_masiva_productos(
+            empresa.id,
+            serializer.validated_data['items'],
+            usuario=request.user,
+        )
+        return Response(resultado, status=status.HTTP_200_OK)
     
     def destroy(self, request, *args, **kwargs):
         """
@@ -432,7 +411,10 @@ class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.ServicioSelector.get_detail(empresa_id=empresa.id, servicio_id=self.kwargs['pk'])
+        return inv_services.ServicioSelector.get_detail(
+            empresa_id=empresa.id,
+            servicio_uuid=self.kwargs[self.lookup_url_kwarg],
+        )
     
     def destroy(self, request, *args, **kwargs):
         """
@@ -471,35 +453,6 @@ class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
         context = self.service_servicio_get_historial_context(empresa)
         return Response(context, template_name='inventario/offcanvas_historial_servicio.html')
 
-    @action(detail=False, methods=["get", "post"], url_path="dt")
-    def datatables(self, request):
-        """
-        DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
-        """
-        from apps.shared.datatable import DataTableServer, DataTableSpec
-        from apps.tenant.inventario.api.serializers import ServicioListSerializer
-        from apps.tenant.inventario import services as inv_services
-        
-        empresa = inv_services.get_empresa_singleton()
-        qs_base = inv_services.ServicioSelector.get_list(empresa_id=empresa.id)
-        
-        spec = DataTableSpec(
-            fields_map={
-                0: 'codigo',
-                1: 'nombre',
-                2: 'categoria__nombre',
-                3: 'precio_venta',
-                4: 'activo'
-            },
-            search_fields=['codigo', 'nombre', 'categoria__nombre'],
-            base_qs=qs_base,
-            serializer=ServicioListSerializer,
-            extra_filter=lambda req, qs: qs
-        )
-        
-        dt_server = DataTableServer(spec)
-        return dt_server.handle(request)
-
 
 class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
     """
@@ -518,7 +471,10 @@ class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.ActivoFijoSelector.get_detail(empresa_id=empresa.id, activo_id=self.kwargs['pk'])
+        return inv_services.ActivoFijoSelector.get_detail(
+            empresa_id=empresa.id,
+            activo_uuid=self.kwargs[self.lookup_url_kwarg],
+        )
     
     def destroy(self, request, *args, **kwargs):
         """
@@ -538,8 +494,9 @@ class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
         v2.40: Endpoint optimizado para Client-Side DataTables via Servicio.
         """
         empresa = inv_services.get_empresa_singleton()
-        serializer_data = self.service_activo_list_all(empresa)
-        return Response(serializer_data, status=status.HTTP_200_OK)
+        qs = self.service_activo_list_all(empresa)
+        serializer = ActivoFijoListSerializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):
@@ -566,6 +523,13 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
         empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
         return inv_services.MovimientoInventarioSelector.get_list(empresa_id=empresa.id, search=search).order_by('-created_at')
+
+    def get_object(self):
+        empresa = inv_services.get_empresa_singleton()
+        return inv_services.MovimientoInventarioSelector.get_detail(
+            empresa_id=empresa.id,
+            movimiento_uuid=self.kwargs[self.lookup_url_kwarg],
+        )
     
     def list(self, request, *args, **kwargs):
         """
@@ -585,43 +549,37 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
     @action(detail=False, methods=["get"], renderer_classes=[TemplateHTMLRenderer], url_path="gestor-offcanvas")
     def gestor_offcanvas(self, request):
         """
-        GET /api/v1/inventario/movimientos/gestor-offcanvas/
-        Devuelve el HTML del formulario de movimiento para HTMX Offcanvas.
+        GET /api/v1/inventario/movimientos/gestor-offcanvas/?id={uuid}
+        Devuelve el HTML del formulario de movimiento (crear o editar).
         """
         empresa = inv_services.get_empresa_singleton()
-        context = self.service_movimiento_get_offcanvas_context(empresa)
+        id_instancia = request.query_params.get('id')
+        context = self.service_movimiento_get_offcanvas_context(empresa, id_instancia)
         return Response(context, template_name='inventario/offcanvas_movimiento.html')
     
-    @action(detail=False, methods=["get", "post"], url_path="dt")
-    def datatables(self, request):
+    @action(detail=False, methods=['get'], url_path='timeline')
+    def timeline(self, request):
         """
-        DEPRECATED v2.40: Endpoint legacy para DataTables Server-Side.
+        GET /api/v1/inventario/movimientos/timeline/
+        Ledger Universal: lista cronologica unificada de PRODUCTOS + ACTIVOS_FIJOS + SERVICIOS.
+        Soporta paginacion remota Tabulator (?page, ?page_size) y busqueda (?search=).
         """
-        from apps.shared.datatable import DataTableServer, DataTableSpec
-        from apps.tenant.inventario.api.serializers import MovimientoInventarioListSerializer
-        from apps.tenant.inventario import services as inv_services
-        
         empresa = inv_services.get_empresa_singleton()
-        qs_base = inv_services.MovimientoInventarioSelector.get_list(empresa_id=empresa.id)
-        
-        spec = DataTableSpec(
-            fields_map={
-                0: 'created_at',
-                1: 'producto__codigo',
-                2: 'producto__nombre',
-                3: 'tipo',
-                4: 'cantidad',
-                5: 'origen_referencia',
-                6: 'observaciones'
-            },
-            search_fields=['producto__codigo', 'producto__nombre', 'origen_referencia', 'observaciones'],
-            base_qs=qs_base,
-            serializer=MovimientoInventarioListSerializer,
-            extra_filter=lambda req, qs: qs
-        )
-        
-        dt_server = DataTableServer(spec)
-        return dt_server.handle(request)
+        search = request.query_params.get('search') or None
+        data = inv_services.get_movimientos_timeline(empresa_id=empresa.id, search=search)
+
+        page = self.paginate_queryset(data)
+        if page is not None:
+            serializer = MovimientoUnificadoListSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = MovimientoUnificadoListSerializer(data, many=True)
+        return Response({
+            'count': len(data),
+            'next': None,
+            'previous': None,
+            'results': serializer.data,
+        })
 
     def perform_create(self, serializer):
         """
@@ -630,16 +588,30 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
         empresa = inv_services.get_empresa_singleton()
         self.service_movimiento_perform_create(serializer, empresa)
 
+    def partial_update(self, request, *args, **kwargs):
+        empresa = inv_services.get_empresa_singleton()
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.service_movimiento_perform_update(instance, serializer.validated_data, empresa)
+        return Response(self.get_serializer(instance).data)
 
-class HistorialServicioViewSet(
-    mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet,
-    inv_services.HistorialServiceMixin
-):
+    def update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        empresa = inv_services.get_empresa_singleton()
+        instance = self.get_object()
+        self.service_movimiento_perform_destroy(instance, empresa)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class HistorialServicioViewSet(BaseViewSet, inv_services.HistorialServiceMixin):
     """
     ViewSet para Historial de Servicios via Service Layer.
     """
     serializer_class = HistorialServicioSerializer
-    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     parser_classes = [JSONParser, FormParser]
     
     def get_queryset(self):
@@ -655,3 +627,9 @@ class HistorialServicioViewSet(
         """
         empresa = inv_services.get_empresa_singleton()
         serializer.save(empresa=empresa)
+
+    def update(self, request, *args, **kwargs):
+        return Response({"detail": "La edicion de historial de servicio no esta habilitada."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def partial_update(self, request, *args, **kwargs):
+        return Response({"detail": "La edicion de historial de servicio no esta habilitada."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)

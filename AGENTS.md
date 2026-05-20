@@ -5,7 +5,7 @@ name: reglas
 description: Reglas Core de Arquitectura y Desarrollo - Proyecto SINTEL v3.5.0
 ---
 
-# [CORE] SINTEL v3.5.0 — Reglas de Arquitectura y Estructura de Proyecto
+# [CORE] SINTEL v3.9.1 — Reglas de Arquitectura y Estructura de Proyecto
 
 Estas reglas son **ESTRICTAS, INMUTABLES Y OBLIGATORIAS** para cualquier modificación, refactorización o creación de código en este proyecto. Este archivo debe ser procesado y asimilado antes de implementar cualquier prompt o sugerencia de código.
 
@@ -18,6 +18,7 @@ Este documento refleja el **ADN real** del codebase: patrones, convenciones y es
 - **[PROHIBIDO]**: Usar emojis en CUALQUIER archivo `.py`.
 - **[PROHIBIDO]**: Caracteres especiales Unicode/multibyte en código Python.
 - **[PERMITIDO]**: Comentarios y docstrings en texto plano SOLAMENTE.
+
 - **RAZÓN**: Los emojis en código Python causan `SyntaxError` que rompen la compilación y generan `500 Internal Server Error` en Django.
 - **ALCANCE**: Aplica a TODO el proyecto - `/apps/`, `/config/`, `/tests/`, `/tools/`, `/scripts/`.
 - **VALIDACIÓN**: Toda PR debe pasar `python -m py_compile archivo.py` sin errores.
@@ -47,7 +48,7 @@ Este documento refleja el **ADN real** del codebase: patrones, convenciones y es
 
 **Backend Service Layer (`services/`):**
 - Modularización estricta por responsabilidad (paquete `services/`):
-   - `__init__.py`: Punto de entrada del paquete. Exporta las clases principales para imports limpios.
+   - `__init__.py`: Punto de entrada del paquete. **Re-exports EXPLÍCITOS y declarativos** de todos los símbolos públicos. **[PROHIBIDO]** `from .modulo import *` (wildcard imports). Cada símbolo debe estar listado explícitamente: `from .selectors import ClaseA, ClaseB, funcion_c`. Esto garantiza rastreabilidad y previene la exposición accidental de símbolos privados.
    - `crud_service.py`: Acceso a datos puro y persistencia transaccional (`@transaction.atomic`). Sin lógica de negocio.
    - `business_service.py`: Orquestación y lógica de negocio (idempotencia, validaciones semánticas, cálculos, persistencia desde DTO). Sin acceso directo a ViewSets.
    - `selectors.py`: Consultas `GET` optimizadas (read-only). Define tuplas `LIST_FIELDS`, `DETAIL_FIELDS` como SSoT de campos, y clases `<Modelo>Selector` con `@staticmethod` que retornan QuerySets filtrados por `empresa_id` con `.only()`.
@@ -288,6 +289,7 @@ Todas las apps tenant DEBEN importar permisos desde este modulo centralizado.
 ### 15.6. Autenticacion en Desarrollo
 
 1. `UnsafeSessionAuthentication` (`apps/tenant/api/authentication.py`): Omite validacion CSRF solo cuando `DEBUG=True`. En produccion se usa `SessionAuthentication` estandar.
+2. **[PROHIBIDO]** sobrescribir `get_authenticators()` en ViewSets hijos para inyectar `UnsafeSessionAuthentication` directamente. Esto es deuda tecnica (DEUDA-01). La autenticacion es responsabilidad de `BaseTenantViewSet` via `DEFAULT_AUTHENTICATION_CLASSES`. Si se detecta un override de `get_authenticators()` en un ViewSet hijo, eliminarlo.
 
 ## [GOVERNANCE] 16. Reglas de Gobernanza por Aplicación
 
@@ -688,6 +690,147 @@ Si la clave no está configurada, el endpoint devuelve `HTTP 400` con mensaje de
 
 ---
 
+## [HTMX-OFFCANVAS] 26. Patron Anti-Backdrop: Offcanvas + HTMX (Bootstrap 5)
+
+**PROBLEMA:** Combinar `hx-swap="innerHTML"` con `bootstrap.Offcanvas.getOrCreateInstance(el).show()` produce **pantalla negra en el segundo intento** de apertura. El swap elimina el elemento DOM pero no el `.offcanvas-backdrop` que Bootstrap dejó en `<body>`. Al volver a mostrar, se acumula un segundo backdrop → opacidad doble → pantalla completamente negra.
+
+### 26.1. Patron Obligatorio — `mostrarOffcanvasSeguro(el)`
+
+**[PROHIBIDO]** en cualquier handler que abra un offcanvas post-HTMX swap:
+```javascript
+// ❌ INCORRECTO — acumula backdrops
+bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+```
+
+**[OBLIGATORIO]** usar el helper de limpieza antes de mostrar:
+```javascript
+// ✅ CORRECTO — limpia backdrops huerfanos, crea instancia fresca
+function mostrarOffcanvasSeguro(el) {
+    if (!el || !w.bootstrap?.Offcanvas) return;
+    d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+    d.body.classList.remove('overflow-hidden', 'modal-open');
+    var prev = bootstrap.Offcanvas.getInstance(el);
+    if (prev) prev.dispose();
+    new bootstrap.Offcanvas(el).show();
+}
+mostrarOffcanvasSeguro(offcanvasEl);
+```
+
+En templates con `hx-on::after-request`, usar el helper global registrado en el template padre del modulo:
+```html
+hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-id'); }"
+```
+
+`sintelAbrirOffcanvas` encapsula identicamente la misma logica de limpieza.
+
+### 26.2. Contenedores HTMX — SSoT en Template Padre
+
+**[PROHIBIDO]** declarar el mismo `id` de contenedor HTMX en dos templates distintos del mismo modulo.
+
+**Regla:** el template que incluye los sub-templates (`list_inventario.html`, etc.) es la SSoT de los contenedores HTMX:
+```html
+<!-- ✅ CORRECTO: definidos UNA SOLA VEZ en el template padre -->
+<div id="offcanvas-container-inventario"></div>
+<div id="offcanvas-container-activos"></div>
+<div id="offcanvas-container-servicios"></div>
+```
+
+Los sub-templates incluidos (`list_productos.html`, `list_activos.html`, etc.) **NO deben** repetir estos contenedores. Duplicar un `id` en el DOM hace que HTMX apunte al primer match (dentro de un pane oculto) en vez del contenedor correcto.
+
+### 26.3. Inicializacion del Helper Global
+
+En el template padre del modulo agregar el script de definicion:
+```html
+<script>
+(function() {
+    window.sintelAbrirOffcanvas = function(id) {
+        document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        document.body.classList.remove('overflow-hidden', 'modal-open');
+        var el = document.getElementById(id);
+        if (el && window.bootstrap && window.bootstrap.Offcanvas) {
+            var prev = bootstrap.Offcanvas.getInstance(el);
+            if (prev) prev.dispose();
+            new bootstrap.Offcanvas(el).show();
+        }
+    };
+})();
+</script>
+```
+
+### 26.4. Diagnostico Rapido
+
+```bash
+# Detecta todos los getOrCreateInstance que pueden acumular backdrops
+grep -rn "getOrCreateInstance" apps/tenant/*/static/*/js/ --include="*.js"
+# Cada match debe ser evaluado: si viene despues de htmx.ajax o hx-swap → migrar a mostrarOffcanvasSeguro
+```
+
+---
+
+## [UUID-FORMS] 27. UUID-Safe Form Submissions — PROHIBIDO parseInt en Selects de API
+
+**PROBLEMA:** Los selects (`<select>`) cuyos options se cargan dinamicamente desde la API reciben `option.value = item.id` donde `item.id` es un **UUID string** (porque `CategoriaItemListSerializer` declara `id = serializers.UUIDField(source='uuid')`). Aplicar `parseInt()` sobre ese value extrae solo el prefijo numerico del UUID, generando un PK entero incorrecto.
+
+**Ejemplo del fallo:**
+```
+UUID del item seleccionado:  "9abc1234-xxxx-..."
+parseInt("9abc1234...", 10) = 9              ← extrae solo el '9' inicial
+Payload enviado: { categoria: 9 }           ← entero incorrecto
+Backend: CategoriaItem.objects.get(pk=9) → DoesNotExist
+Error: "Clave primaria '9' invalida — objeto no existe"
+```
+
+### 27.1. Patron Obligatorio en Editores JS
+
+**[PROHIBIDO]** convertir a entero cualquier campo de FK que puede ser UUID:
+```javascript
+// ❌ INCORRECTO — corrompe UUID en entero parcial
+categoria: formData.get('categoria') ? parseInt(formData.get('categoria'), 10) : null,
+categoria: parseInteger(formData.get('categoria')),
+```
+
+**[OBLIGATORIO]** enviar el valor crudo (string):
+```javascript
+// ✅ CORRECTO — UUIDOrPKRelatedField maneja tanto UUIDs como enteros
+categoria: formData.get('categoria') || null,
+```
+
+`UUIDOrPKRelatedField.to_internal_value(data)` ya discrimina internamente:
+- Si `data.isdigit()` → lookup por PK entero
+- Si no → lookup por UUID: `queryset.get(uuid=data_str)`
+
+No se necesita ninguna conversion en el frontend.
+
+### 27.2. Patron Obligatorio en Utils de Carga de Selects
+
+Cuando se compara `selectedId` con `option.value` para preseleccionar, usar comparacion de strings (no enteros):
+```javascript
+// ❌ INCORRECTO — parseInt(UUID) da NaN o entero parcial
+var selId = selectedId ? parseInt(selectedId, 10) : null;
+if (selId && cat.id === selId) { option.selected = true; }
+
+// ✅ CORRECTO — comparacion UUID-safe
+var selId = selectedId ? String(selectedId) : null;
+if (selId && String(cat.id) === selId) { option.selected = true; }
+```
+
+### 27.3. Alcance de la Regla
+
+Aplica a TODOS los campos de FK en formularios de inventario y cualquier app que use `Utils.loadCategoriasSelect` o cualquier funcion que cargue options desde la API:
+- `categoria` en Producto, Servicio, Activo Fijo
+- Cualquier campo FK con `UUIDOrPKRelatedField` en el serializer
+- Cualquier `<select>` cuyas opciones vengan de `GET /api/v1/*/`
+
+### 27.4. Diagnostico
+
+```bash
+# Detecta todos los parseInt sobre campos de formulario FK en editores JS
+grep -rn "parseInt.*formData\|parseInteger.*formData" apps/tenant/*/static/*/js/features/
+# Cada match sobre campos de FK (categoria, producto, servicio, etc.) debe ser migrado
+```
+
+---
+
 ## Apendice A. Comandos de Operacion
 
 ### Docker / Make (Desarrollo)
@@ -947,3 +1090,92 @@ class TestMiModeloCRUD(SintelTenantTestCase):
 ```
 
 **Referencia completa:** `apps/tenant/inventario/.agent/docs/TESTING_MULTI_TENANT_PATTERNS.md`
+
+## [UUID-MIGRATION] 25. Migracion Obligatoria de Lookup Field: PK Entero → UUID
+
+**PRINCIPIO:** Ningún ViewSet tenant debe exponer PKs enteros en URLs públicas. §14.6 establece `lookup_field="uuid"` como el estándar heredado de `BaseTenantViewSet`. Esta sección define el diagnóstico, patrón y verificación para cualquier ViewSet que use `lookup_field='id'`.
+
+### 25.1. Regla Mandatoria
+
+**[PROHIBIDO]** Declarar `lookup_field = 'id'` o `lookup_url_kwarg = 'id'` en ViewSets que hereden de `BaseTenantViewSet`. El `lookup_field = 'uuid'` se hereda automáticamente — no redeclarar.
+
+**[OBLIGATORIO]** Todo modelo que exponga un ViewSet con lookup DEBE tener un campo `uuid`:
+```python
+# Patron canonico (AGENTS.md §25) — igual en todos los modelos conformes
+uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+```
+
+### 25.2. Diagnostico
+
+```bash
+# Detecta ViewSets que sobreescriben lookup_field con 'id'
+grep -rn "lookup_field\s*=\s*['\"]id['\"]" apps/tenant/ --include="*.py"
+grep -rn "lookup_url_kwarg\s*=\s*['\"]id['\"]" apps/tenant/ --include="*.py"
+
+# Detecta modelos sin campo uuid
+grep -rL "uuid = models.UUIDField" apps/tenant/*/models.py
+```
+
+### 25.3. Patron de Migracion (4 Pasos Coordinados)
+
+**Paso 1 — Modelo:** Agregar campo `uuid`.
+```python
+import uuid as uuid_module
+# En la clase del modelo (despues de SintelTenantBaseModel):
+uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+```
+
+**Paso 2 — Migracion de BD** (patron seguro, 3 fases):
+```python
+# 0. Agregar nullable
+migrations.AddField(model_name='mimodelo', name='uuid',
+    field=models.UUIDField(db_index=True, null=True, blank=True, editable=False))
+# 1. Poblar registros existentes via SQL
+migrations.RunPython(lambda apps, schema: schema.execute(
+    "UPDATE <tabla> SET uuid = gen_random_uuid() WHERE uuid IS NULL;"))
+# 2. Hacer unique y requerido
+migrations.AlterField(model_name='mimodelo', name='uuid',
+    field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True))
+```
+
+**Paso 3 — Backend: Serializer + Selector + ViewSet:**
+- Serializer: agregar `'uuid'` a `Meta.fields` y `read_only_fields`.
+- Selector `get_detail()`: cambiar `pk=valor` → `uuid=valor`.
+- Selector `LIST_FIELDS` y `DETAIL_FIELDS`: agregar `'uuid'`.
+- ViewSet: eliminar `lookup_field = 'id'` y `lookup_url_kwarg = 'id'`.
+- Acciones `render-offcanvas/`: cambiar `Model.objects.get(id=val)` → `Model.objects.get(uuid=val)`.
+
+**Paso 4 — Frontend (coordinar en el mismo PR):**
+- `<app>.api.js`: Las funciones que construyen URLs de detalle reciben UUID desde el serializer.
+- `<modelo>_list.js`: Cambiar `data.id` → `data.uuid` al leer el identificador de Tabulator rows.
+- Templates: Cambiar `data-instance-id="{{ instance.id }}"` → `data-uuid="{{ instance.uuid }}"`.
+- Para edicion via formulario: `form.dataset.uuid` en lugar de `form.querySelector('[name="id"]')`.
+
+### 25.4. Verificacion Post-Migracion
+
+```bash
+# No deben existir
+grep -rn "lookup_field.*=.*['\"]id['\"]" apps/tenant/ --include="viewsets.py"
+grep -rn "data.id\b" apps/tenant/*/static/*/js/features/*.js
+grep -rn "data-instance-id" apps/tenant/ --include="*.html"
+
+# Smoke test manual
+curl -s http://tenant.local/api/v1/<app>/{UUID}/ | python3 -m json.tool  # debe dar 200
+curl -s http://tenant.local/api/v1/<app>/1/  # debe dar 404 (integer bloqueado)
+```
+
+### 25.5. Registro de Estado por App
+
+| App | ViewSet | Estado | Notas |
+|-----|---------|--------|-------|
+| gastos | GastoViewSet | **MIGRADO** (v3.7.6) | lookup uuid, serializer uuid, JS uuid |
+| gastos | ResolucionDIANViewSet | **MIGRADO** (v3.7.6) | lookup uuid, serializer uuid, JS uuid |
+| Demás ViewSets tenant | — | CONFORMES | Heredan uuid de BaseTenantViewSet |
+
+**Actualizar esta tabla** al migrar nuevas apps o confirmar conformidad.
+
+### 25.6. Prohibiciones
+
+- **[PROHIBIDO]** Puente permanente `get_object()` que soporte PK entero. Es transitorio (max 1 sprint) y debe eliminarse una vez el frontend migra.
+- **[PROHIBIDO]** Hardcodear `/api/v1/<app>/{integer}/` en frontend JS o templates.
+- **[PROHIBIDO]** Usar `pk=valor_uuid` en selectors cuando `valor_uuid` es un UUID string (type mismatch en PostgreSQL para columnas integer PK).

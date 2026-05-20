@@ -50,7 +50,28 @@ def test_crear_proveedor(tenant):
 @pytest.mark.django_db
 def test_api_list_proveedores_smoke(client, django_user_model, tenant):
     """Smoke test: lista de proveedores."""
+    from apps.public.tenants.models import TenantMembership
+    from apps.tenant.perfil.models import TenantProfile
+    
     user = django_user_model.objects.create(username="testuser", email="test@example.com")
+    
+    TenantMembership.objects.create(
+        client=tenant,
+        user=user,
+        is_active=True,
+        rol='ADMIN'
+    )
+    
+    with schema_context(tenant.schema_name):
+        empresa = Empresa.objects.first()
+        if not empresa:
+            empresa = Empresa.objects.create(nombre="Test Empresa")
+        TenantProfile.objects.create(
+            user=user,
+            empresa=empresa,
+            rol='ADMIN'
+        )
+        
     client.force_login(user)
     
     # 200 si TENANT_URLCONF ya incluye /api/v1/proveedores/

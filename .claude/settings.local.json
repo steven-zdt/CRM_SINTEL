@@ -2,7 +2,20 @@
   "permissions": {
     "allow": [
       "Bash(awk '{print $1}')",
-      "Bash(python manage.py help migrate_retenciones)"
+      "Bash(python manage.py help migrate_retenciones)",
+      "Bash(python -m py_compile apps/tenant/contabilidad/api/serializers.py)",
+      "Bash(python -m py_compile apps/tenant/contabilidad/integracion/extractores/gastos.py)",
+      "Bash(python -m py_compile apps/tenant/contabilidad/integracion/extractores/facturas.py)",
+      "Bash(python -m py_compile apps/tenant/contabilidad/integracion/extractores/nomina.py)",
+      "Bash(python -m py_compile apps/tenant/contabilidad/services/selectors.py)",
+      "Bash(docker compose *)",
+      "Bash(python -m py_compile apps/tenant/contabilidad/api/viewsets.py)",
+      "Bash(python -m py_compile 'c:\\\\Users\\\\Administrator\\\\Documents\\\\crm_sintel\\\\apps\\\\tenant\\\\contabilidad\\\\api\\\\viewsets.py')",
+      "Bash(python -m py_compile apps/tenant/cotizaciones/models.py apps/tenant/cotizaciones/configuracion/models.py apps/tenant/cotizaciones/migrations/0004_add_uuid_fields.py apps/tenant/cotizaciones/api/serializers.py apps/tenant/cotizaciones/api/viewsets.py apps/tenant/cotizaciones/configuracion/viewsets.py apps/tenant/cotizaciones/configuracion/serializers.py apps/tenant/cotizaciones/configuracion/services/selectors.py apps/tenant/cotizaciones/services/selectors.py apps/tenant/cotizaciones/services/item_service.py apps/tenant/cotizaciones/services/business_service.py apps/tenant/cotizaciones/services/pdf/service.py)",
+      "Bash(python -m py_compile apps/tenant/inventario/api/serializers.py)",
+      "Bash(python -m py_compile apps/tenant/inventario/models.py)",
+      "Bash(sed -n '117,135p' apps/tenant/inventario/static/inventario/js/features/servicios_list.js)",
+      "Bash(sed -n '160,175p' apps/tenant/inventario/static/inventario/js/features/activos_list.js)"
     ]
   }
 }

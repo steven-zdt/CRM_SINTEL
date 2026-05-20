@@ -10,18 +10,18 @@ class ConfiguracionSelector:
         return ConfiguracionCotizacion.objects.filter(
             empresa_id=empresa_id
         ).only(
-            'id', 'nombre_configuracion', 'es_activo', 'dias_validez', 
+            'id', 'uuid', 'nombre_configuracion', 'es_activo', 'dias_validez',
             'prefijo_secuencia', 'sufijo_secuencia', 'semilla_inicial', 'ultimo_numero'
         ).order_by('nombre_configuracion')
 
     @staticmethod
-    def get_detail(config_id, empresa_id):
-        """Retorna detalle de una configuracion."""
+    def get_detail(config_uuid, empresa_id):
+        """Retorna detalle de una configuracion por UUID."""
         return ConfiguracionCotizacion.objects.filter(
-            id=config_id,
+            uuid=config_uuid,
             empresa_id=empresa_id
         ).only(
-            'id', 'nombre_configuracion', 'es_activo', 'dias_validez', 
+            'id', 'uuid', 'nombre_configuracion', 'es_activo', 'dias_validez',
             'prefijo_secuencia', 'sufijo_secuencia', 'semilla_inicial', 'ultimo_numero'
         ).first()
 
@@ -31,4 +31,4 @@ class ConfiguracionSelector:
         return ConfiguracionCotizacion.objects.filter(
             empresa_id=empresa_id,
             es_activo=True
-        ).only('id', 'nombre_configuracion')
+        ).only('id', 'uuid', 'nombre_configuracion')

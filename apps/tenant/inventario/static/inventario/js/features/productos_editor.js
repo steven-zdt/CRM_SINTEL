@@ -73,7 +73,7 @@
         const payload = {
             codigo: formData.get('codigo')?.trim() || '',
             nombre: formData.get('nombre')?.trim() || '',
-            categoria: parseInteger(formData.get('categoria')),
+            categoria: formData.get('categoria') || null,
             unidad: formData.get('unidad')?.trim() || 'UND',
             descripcion: formData.get('descripcion')?.trim() || null,
             // v2.61.3: precio_venta y stock_minimo deben ser numeros (0 si esta vacio)
@@ -421,7 +421,7 @@
             if (selectCategoria) {
                 const productoId = obtenerProductoId();
                 const categoriaId = formProducto.querySelector('#producto-categoria')?.value;
-                cargarCategorias(categoriaId ? parseInt(categoriaId) : null);
+                cargarCategorias(categoriaId || null);
             }
 
             // v3.5 Dual Accounting: Inicializar dos buscadores de cuenta contable

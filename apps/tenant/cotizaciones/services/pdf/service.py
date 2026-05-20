@@ -25,7 +25,11 @@ def obtener_cotizacion_para_pdf(empresa_id: int, cotizacion_uuid) -> Cotizacion 
         ).prefetch_related(
             Prefetch(
                 'items',
-                queryset=CotizacionItem.objects.all().order_by('orden', 'id'),
+                queryset=CotizacionItem.objects.only(
+                    'cotizacion_id', 'tipo_item', 'descripcion', 'marca', 'referencia',
+                    'unidad', 'cantidad', 'costo_unitario', 'porcentaje_utilidad',
+                    'precio_unitario_venta', 'subtotal_linea', 'orden',
+                ).order_by('orden', 'id'),
                 to_attr='items_list'
             )
         ).first()

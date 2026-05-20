@@ -11,15 +11,31 @@ from apps.tenant.facturas.services import DETAIL_FIELDS
 
 
 class ItemFacturaSerializer(serializers.ModelSerializer):
-    """Serializer para ItemFactura (nested read-only en FacturaDetailSerializer)."""
+    """
+    Serializer para ItemFactura.
+    v3.9.2: Permite lectura y escritura de campos item_inventario_* para vinculación.
+    """
+    item_inventario_info = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = ItemFactura
         fields = (
-            "id", "linea_id", "codigo", "descripcion", "cantidad", "unidad_medida",
+            "id", "uuid", "linea_id", "codigo", "descripcion", "cantidad", "unidad_medida",
             "valor_unitario", "porcentaje_iva", "valor_iva", "subtotal", "total",
-            "es_servicio", "orden"
+            "es_servicio", "orden", "item_inventario_uuid", "item_inventario_tipo",
+            "item_inventario_codigo", "item_inventario_info"
         )
-        read_only_fields = ("id", "valor_iva", "subtotal", "total", "es_servicio")
+        read_only_fields = ("id", "uuid", "valor_iva", "subtotal", "total", "es_servicio", "item_inventario_info")
+
+    def get_item_inventario_info(self, obj):
+        if not obj.item_inventario_uuid or not obj.item_inventario_tipo:
+            return None
+        from apps.tenant.facturas.services.selectors import InventarioItemBridge
+        empresa_id = obj.empresa_id or (obj.factura.empresa_id if obj.factura else None)
+        if not empresa_id:
+            return None
+        return InventarioItemBridge.resolver_item(empresa_id, obj.item_inventario_uuid, obj.item_inventario_tipo)
+
 
 
 class FacturaListDTSerializer(serializers.ModelSerializer):
@@ -99,6 +115,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "medio_pago_codigo",
             "payment_due_date",
             "cuenta_contable_uuid",
+            "cotizacion_uuid",
             "has_nc",
             "nota_credito_id",
             "nota_credito_numero",
@@ -164,8 +181,9 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
             "anexos_meta",
             "cuenta_contable_uuid",
             "cuenta_contable_label",
+            "cotizacion_uuid",
         )
-        read_only_fields = ("id", "uuid", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta", "cuenta_contable_label")
+        read_only_fields = ("id", "uuid", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta", "cuenta_contable_label", "cotizacion_uuid")
     
     cuenta_contable_label = serializers.SerializerMethodField()
 
@@ -242,13 +260,22 @@ class FacturaWriteSerializer(serializers.ModelSerializer):
             "receptor_nit", "receptor_razon_social", "receptor_direccion", "receptor_email", "receptor_telefono",
             "moneda", "subtotal", "impuestos", "total",
             "forma_pago", "medio_pago_codigo", "payment_due_date",
-            "cuenta_contable_uuid",
+            "cuenta_contable_uuid", "cotizacion_uuid",
         )
         read_only_fields = ("subtotal", "impuestos", "total")
 
     def validate_cuenta_contable_uuid(self, value):
         """
         # WARNING: SINTEL v3.5: Sanitización de UUID.
+        Convierte "" a None para evitar errores de tipo en la base de datos.
+        """
+        if value == "":
+            return None
+        return value
+
+    def validate_cotizacion_uuid(self, value):
+        """
+        Sanitización de cotizacion_uuid.
         Convierte "" a None para evitar errores de tipo en la base de datos.
         """
         if value == "":
@@ -395,3 +422,15 @@ class NotaCreditoDetailSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+
+class CatalogoItemInventarioSerializer(serializers.Serializer):
+    """
+    Serializer de salida para items del catalogo unificado de inventario.
+    """
+    uuid = serializers.UUIDField(read_only=True)
+    codigo = serializers.CharField(read_only=True)
+    nombre = serializers.CharField(read_only=True)
+    precio_venta = serializers.FloatField(read_only=True)
+    tipo = serializers.CharField(read_only=True)
+

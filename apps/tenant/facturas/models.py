@@ -127,9 +127,17 @@ class Factura(SintelTenantBaseModel):
     
     # Vinculación Contable (v3.7)
     cuenta_contable_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
+        null=True,
+        blank=True,
         help_text=_("Cuenta PUC nivel 6 (Cartera/Ingreso/Gasto)")
+    )
+
+    # Vinculación Cotización (v3.9.3) — Soft reference
+    cotizacion_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=_("UUID de cotización vinculada (soft reference, permite orfandad)")
     )
 
     # DIAN / QR / CUFE y autorización
@@ -260,6 +268,10 @@ class Factura(SintelTenantBaseModel):
 
 
 class ItemFactura(SintelTenantBaseModel):
+    class TipoItemInventario(models.TextChoices):
+        PRODUCTO = 'PRODUCTO', _('Producto de Inventario')
+        SERVICIO = 'SERVICIO', _('Servicio de Inventario')
+
     factura = models.ForeignKey(Factura, on_delete=models.CASCADE, related_name='items', verbose_name=_('Factura'))
     
     # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
@@ -268,6 +280,22 @@ class ItemFactura(SintelTenantBaseModel):
     linea_id = models.CharField(max_length=10, blank=True, null=True, verbose_name=_('ID línea UBL'))
     codigo = models.CharField(max_length=50, blank=True, null=True, verbose_name=_('Código del ítem'))
     descripcion = models.CharField(max_length=500, verbose_name=_('Descripción'))
+
+    # Referencia blanda hacia Inventario (no FK, respeta snapshot documental)
+    item_inventario_uuid = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text=_('UUID del Producto o Servicio de Inventario. Referencia soft, sin FK.')
+    )
+    item_inventario_tipo = models.CharField(
+        max_length=10,
+        choices=TipoItemInventario.choices,
+        null=True, blank=True,
+        help_text=_('Tipo de item de inventario referenciado.')
+    )
+    item_inventario_codigo = models.CharField(
+        max_length=50, null=True, blank=True,
+        help_text=_('Snapshot del codigo de inventario al momento de vincular.')
+    )
 
     cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('1.00'),
                                    validators=[MinValueValidator(Decimal('0.01'))])
@@ -772,3 +800,48 @@ class NotaCredito(SintelTenantBaseModel):
 
 # Backward-compat alias for legacy imports in tests and old modules.
 NaturalezaFactura = Factura.Naturaleza
+
+# SINTEL v3.5 Secure Update Configuration Sets
+MANUAL_EDITABLE_FIELDS = [
+    'fecha_vencimiento',
+    'payment_due_date',
+    'forma_pago',
+    'medio_pago_codigo',
+    'estado_pago',
+    'cuenta_contable_uuid',
+    'orden_compra',
+]
+
+XML_IMMUTABLE_FIELDS = {
+    'numero',
+    'prefijo',
+    'consecutivo',
+    'tipo',
+    'naturaleza',
+    'fecha_emision',
+    'emisor_nit',
+    'emisor_razon_social',
+    'emisor_direccion',
+    'emisor_email',
+    'emisor_telefono',
+    'emisor_actividad_ciiu',
+    'receptor_nit',
+    'receptor_razon_social',
+    'receptor_direccion',
+    'receptor_email',
+    'receptor_telefono',
+    'moneda',
+    'subtotal',
+    'impuestos',
+    'total',
+    'cufe',
+    'qr_code',
+    'qr_url',
+    'autorizacion_numero',
+    'autorizacion_prefijo',
+    'autorizacion_rango_desde',
+    'autorizacion_rango_hasta',
+    'autorizacion_vigencia_inicio',
+    'autorizacion_vigencia_fin',
+}
+

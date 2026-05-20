@@ -16,6 +16,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from apps.config.tests.base_tenant import TenantAPITestCase
 from apps.tenant.contabilidad.integracion.contabilizador import Contabilizador
 from apps.tenant.contabilidad.integracion.dtos import (
     DocumentoOrigen,
@@ -26,7 +27,7 @@ from apps.tenant.contabilidad.integracion.dtos import (
     TipoTransaccion,
     TransaccionEconomica,
 )
-from apps.tenant.contabilidad.models import AsientoContable
+from apps.tenant.contabilidad.models import AsientoContable, ReglaContable
 
 
 class TestDTOLadoField(TestCase):

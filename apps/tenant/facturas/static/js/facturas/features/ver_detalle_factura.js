@@ -70,6 +70,89 @@
         return `<span class="badge ${estadoInfo.clase}">${estadoInfo.texto}</span>`;
     }
 
+    function renderCotizacionVinculada(data) {
+        const container = d.getElementById('view_cotizacion_vinculada_container');
+        const emptyState = d.getElementById('view_cotizacion_vinculada_empty');
+        const card = d.getElementById('view_cotizacion_vinculada_card');
+        const label = d.getElementById('view_cotizacion_vinculada_label');
+        const select = d.getElementById('view_cotizacion_vinculada_select');
+
+        if (!container || !emptyState || !card || !label) return;
+
+        container.dataset.facturaUuid = data.uuid || '';
+        const info = data.cotizacion_vinculada_info || null;
+
+        if (info) {
+            emptyState.classList.add('d-none');
+            card.classList.remove('d-none');
+            card.classList.add('d-flex');
+            label.textContent = info.label || info.codigo_unico || info.numero_cotizacion || info.uuid;
+            if (select) select.value = '';
+            return;
+        }
+
+        card.classList.add('d-none');
+        card.classList.remove('d-flex');
+        emptyState.classList.remove('d-none');
+        emptyState.classList.add('d-flex');
+        cargarCotizacionesDisponibles();
+    }
+
+    async function cargarCotizacionesDisponibles() {
+        const select = d.getElementById('view_cotizacion_vinculada_select');
+        if (!select || select.dataset.loaded === 'true') return;
+
+        try {
+            const response = w.http
+                ? await w.http('GET', '/api/v1/cotizaciones/?page_size=50')
+                : await fetch('/api/v1/cotizaciones/?page_size=50', { headers: { 'Accept': 'application/json' } })
+                    .then(async res => ({ ok: res.ok, data: await res.json() }));
+
+            if (!response.ok) return;
+
+            const rows = response.data?.results || response.data || [];
+            rows.forEach((cotizacion) => {
+                if (!cotizacion.uuid) return;
+                const option = d.createElement('option');
+                option.value = cotizacion.uuid;
+                option.textContent = cotizacion.codigo_unico || cotizacion.numero_cotizacion || cotizacion.uuid;
+                select.appendChild(option);
+            });
+            select.dataset.loaded = 'true';
+        } catch (error) {
+            console.warn(`${MOD} Error cargando cotizaciones:`, error);
+        }
+    }
+
+    async function actualizarCotizacionVinculada(cotizacionUuid) {
+        const container = d.getElementById('view_cotizacion_vinculada_container');
+        const facturaUuid = container?.dataset.facturaUuid || '';
+        if (!facturaUuid) return;
+
+        try {
+            const response = w.facturasAPI && typeof w.facturasAPI.vincularCotizacion === 'function'
+                ? await w.facturasAPI.vincularCotizacion(facturaUuid, cotizacionUuid)
+                : await w.http('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cotizacion/`, {
+                    cotizacion_uuid: cotizacionUuid || null
+                });
+
+            if (!response.ok) {
+                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+                    w.UIManager.handleError(response, MOD);
+                }
+                return;
+            }
+
+            renderCotizacionVinculada(Object.freeze(response.data || {}));
+            if (w.UIManager && typeof w.UIManager.notifySuccess === 'function') {
+                w.UIManager.notifySuccess(cotizacionUuid ? 'Cotización vinculada.' : 'Cotización desvinculada.');
+            }
+            d.dispatchEvent(new CustomEvent('facturaCotizacionChanged', { detail: response.data || {} }));
+        } catch (error) {
+            console.error(`${MOD} Error actualizando cotización vinculada:`, error);
+        }
+    }
+
     /**
      * Ver detalle de factura - Solo lectura
      * ⚠️ v2.61.2: Solo hace GET y asigna datos, sin funciones de submit/update
@@ -169,6 +252,8 @@
                 setElement('view_cufe', data.cufe);
             }
 
+            renderCotizacionVinculada(Object.freeze(data));
+
             // Items de la factura
             // ⚠️ v2.61.2: Cargar items desde endpoint separado si no vienen en la respuesta
             const tableBody = d.getElementById('view_detalle_items_body');
@@ -254,5 +339,20 @@
     if (typeof window.verDetalleFactura === 'undefined') {
         window.verDetalleFactura = verDetalleFactura;
     }
+
+    d.addEventListener('click', function(event) {
+        const vincularBtn = event.target.closest('#btn_vincular_cotizacion_factura');
+        if (vincularBtn) {
+            const select = d.getElementById('view_cotizacion_vinculada_select');
+            const cotizacionUuid = select?.value || null;
+            if (cotizacionUuid) actualizarCotizacionVinculada(cotizacionUuid);
+            return;
+        }
+
+        const desvincularBtn = event.target.closest('#btn_desvincular_cotizacion_factura');
+        if (desvincularBtn) {
+            actualizarCotizacionVinculada(null);
+        }
+    });
 
 })(window, document);

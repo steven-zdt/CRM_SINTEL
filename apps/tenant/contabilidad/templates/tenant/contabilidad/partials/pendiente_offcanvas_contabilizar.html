@@ -1,4 +1,4 @@
-{% load static %}
+{% load static l10n %}
 {# pendiente_offcanvas_contabilizar.html - Asignacion manual de cuentas PUC #}
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-pendiente-contabilizar"
      aria-labelledby="offcanvas-pendiente-label" style="width:90%;max-width:780px;">
@@ -46,7 +46,18 @@
 
     {# Campos del asiento #}
     <div class="row g-2 mb-3">
-      <div class="col-md-5">
+      <div class="col-md-4">
+        <label class="form-label small fw-bold">Periodo Contable *</label>
+        <select class="form-select form-select-sm" id="asiento-periodo" required>
+          <option value="" selected disabled>Seleccione...</option>
+          {% for pc in periodos_disponibles %}
+            <option value="{{ pc.uuid }}" data-inicio="{{ pc.fecha_inicio|date:'Y-m-d' }}" data-fin="{{ pc.fecha_fin|date:'Y-m-d' }}">
+              {{ pc.periodo }} ({{ pc.fecha_inicio|date:"d/m/Y" }} a {{ pc.fecha_fin|date:"d/m/Y" }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
         <label class="form-label small fw-bold">Tipo Comprobante *</label>
         <select class="form-select form-select-sm" id="asiento-tipo-comprobante">
           <option value="" selected disabled>Seleccione...</option>
@@ -113,6 +124,43 @@
     </div>
   </div>
 
+  <style>
+    #modal-selector-cuentas { z-index: 1065; }
+  </style>
+  {# Modal selector de cuentas contables — z-index > offcanvas (1045) #}
+  <div class="modal fade" id="modal-selector-cuentas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-white py-2">
+          <h6 class="modal-title mb-0 small fw-bold">
+            <i class="bi bi-journals me-2"></i>Cuentas Contables Disponibles
+          </h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-2">
+          <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" id="modal-cuenta-buscar"
+                   placeholder="Filtrar por código o nombre..." autocomplete="off">
+          </div>
+          <div class="text-muted small mb-2 px-1" id="modal-cuentas-count"></div>
+          <div style="max-height:380px;overflow-y:auto;" id="modal-cuentas-lista">
+            <div class="text-center text-muted small py-3">
+              <span class="spinner-border spinner-border-sm me-1"></span>Cargando...
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer py-2 bg-light">
+          <small class="text-muted me-auto">
+            <i class="bi bi-info-circle me-1"></i>
+            Para crear nuevas cuentas, ve a <strong>Contabilidad &rsaquo; Cuentas Contables</strong>
+          </small>
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="offcanvas-footer border-top p-3 bg-light">
     <div class="d-flex gap-2 justify-content-end align-items-center">
       <small class="text-muted me-auto" id="hint-cuadratura">El Debe debe ser igual al Haber para generar el asiento.</small>
@@ -131,9 +179,9 @@
   const MODELO = '{{ modelo }}';
   const DOC_ID = {{ documento_id }};
   const DOC_NUM = '{{ numero }}';
-  const DOC_SUBTOTAL = '{{ subtotal }}';
-  const DOC_IMPUESTOS = '{{ impuestos }}';
-  const DOC_TOTAL = '{{ total }}';
+  const DOC_SUBTOTAL = '{{ subtotal|unlocalize }}';
+  const DOC_IMPUESTOS = '{{ impuestos|unlocalize }}';
+  const DOC_TOTAL = '{{ total|unlocalize }}';
   const DOC_TERCERO_NIT = '{{ tercero_nit }}';
   const DOC_TERCERO_NOMBRE = '{{ tercero_nombre|escapejs }}';
   const API_CUENTAS = '/api/v1/contabilidad/cuentas-contables/';
@@ -144,6 +192,8 @@
 
   const offcanvasEl = document.getElementById('offcanvas-pendiente-contabilizar');
   const selectComprobante = document.getElementById('asiento-tipo-comprobante');
+  const selectPeriodo = document.getElementById('asiento-periodo');
+  const inputFecha = document.getElementById('asiento-fecha');
   const previewNumero = document.getElementById('preview-numero');
   const lineasBody = document.getElementById('lineas-body');
   const feedback = document.getElementById('feedback-contabilizar');
@@ -170,6 +220,31 @@
     }
   });
 
+  function validarFechaYPeriodo() {
+    feedback.classList.add('d-none');
+    const opt = selectPeriodo.options[selectPeriodo.selectedIndex];
+    if (opt && opt.value && inputFecha.value) {
+      const inicio = opt.dataset.inicio;
+      const fin = opt.dataset.fin;
+      const fechaVal = inputFecha.value;
+      if (fechaVal < inicio || fechaVal > fin) {
+        mostrarError(`La fecha seleccionada no corresponde al periodo contable seleccionado (${inicio} a ${fin}).`);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  selectPeriodo.addEventListener('change', () => {
+    validarFechaYPeriodo();
+    recalcularTotales();
+  });
+
+  inputFecha.addEventListener('change', () => {
+    validarFechaYPeriodo();
+    recalcularTotales();
+  });
+
   // Agregar fila manual
   document.getElementById('btn-agregar-linea').addEventListener('click', () => agregarLinea());
 
@@ -190,10 +265,18 @@
     tr.dataset.idx = idx;
     tr.innerHTML = `
       <td>
-        <input type="text" class="form-control form-control-sm cuenta-search" placeholder="Buscar cuenta nivel 6..."
-               autocomplete="off" data-idx="${idx}" value="${initialData.codigo ? (initialData.codigo + ' - ' + initialData.nombre) : ''}">
+        <div class="d-flex gap-1 align-items-start">
+          <div class="flex-grow-1 position-relative">
+            <input type="text" class="form-control form-control-sm cuenta-search" placeholder="Buscar o seleccionar..."
+                   autocomplete="off" data-idx="${idx}" value="${initialData.codigo ? (initialData.codigo + ' - ' + initialData.nombre) : ''}">
+            <div class="list-group cuenta-suggestions position-absolute shadow-sm" style="z-index:2000;min-width:320px;display:none;"></div>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-primary btn-select-cuenta flex-shrink-0"
+                  title="Ver todas las cuentas contables disponibles">
+            <i class="bi bi-table"></i>
+          </button>
+        </div>
         <input type="hidden" class="cuenta-codigo-hidden" value="${initialData.codigo || ''}">
-        <div class="list-group cuenta-suggestions position-absolute shadow-sm" style="z-index:2000;min-width:320px;display:none;"></div>
         <small class="text-muted cuenta-nombre-display">${initialData.nombre || ''}</small>
       </td>
       <td>
@@ -206,7 +289,7 @@
       </td>
       <td>
         <input type="text" class="form-control form-control-sm descripcion-input" placeholder="Descripcion linea..."
-               value="${initialData.nombre || ''}">
+               value="${initialData.descripcion || initialData.nombre || ''}">
       </td>
       <td class="text-center">
         <button type="button" class="btn btn-sm btn-outline-danger btn-remove-linea">
@@ -226,6 +309,7 @@
     const debeInput = tr.querySelector('.debe-input');
     const haberInput = tr.querySelector('.haber-input');
     const removeBtn = tr.querySelector('.btn-remove-linea');
+    const selectBtn = tr.querySelector('.btn-select-cuenta');
 
     let searchTimer = null;
     searchInput.addEventListener('input', function () {
@@ -257,7 +341,142 @@
         if (window.notyf) window.notyf.error('El asiento necesita al menos 2 lineas.');
       }
     });
+
+    if (selectBtn) {
+      selectBtn.addEventListener('click', () => abrirSelectorCuentas(tr));
+    }
   }
+
+  // ---- SELECTOR DE CUENTAS CONTABLES ----
+  let _selectorTargetTr = null;
+  let _todasLasCuentas = [];
+
+  function abrirSelectorCuentas(tr) {
+    _selectorTargetTr = tr;
+    const modalEl = document.getElementById('modal-selector-cuentas');
+    if (!modalEl || typeof bootstrap === 'undefined') return;
+
+    // Mover al <body> para salir del stacking context del offcanvas.
+    // Sin esto, Bootstrap 5 aplica un segundo backdrop que bloquea la pantalla.
+    if (modalEl.parentElement !== document.body) {
+      document.body.appendChild(modalEl);
+    }
+
+    // backdrop: false — el offcanvas ya provee el dimming; un segundo backdrop
+    // causaría pantalla negra y trampa de foco incorrecta.
+    const modalInst = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: false, keyboard: true });
+
+    modalEl.addEventListener('show.bs.modal', _onModalShow, { once: false });
+    modalInst.show();
+
+    const buscarInput = document.getElementById('modal-cuenta-buscar');
+    if (buscarInput) { buscarInput.value = ''; }
+  }
+
+  function _onModalShow() {
+    cargarCuentasModal('');
+    const buscarInput = document.getElementById('modal-cuenta-buscar');
+    if (buscarInput) {
+      buscarInput.removeEventListener('input', _onModalSearch);
+      buscarInput.addEventListener('input', _onModalSearch);
+      setTimeout(() => buscarInput.focus(), 300);
+    }
+  }
+
+  function _onModalSearch() {
+    const q = this.value.trim().toLowerCase();
+    renderCuentasModal(_todasLasCuentas.filter(c =>
+      c.codigo.toLowerCase().includes(q) || c.nombre.toLowerCase().includes(q)
+    ));
+  }
+
+  function cargarCuentasModal(query) {
+    const lista = document.getElementById('modal-cuentas-lista');
+    const countEl = document.getElementById('modal-cuentas-count');
+    if (!lista) return;
+
+    lista.innerHTML = '<div class="text-center text-muted small py-3"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</div>';
+
+    const jwt = window.jwtAuth?.getAccessToken?.() || '';
+    const appOrigenParam = APP_LABEL ? `&app_origen=${encodeURIComponent(APP_LABEL)}` : '';
+    fetch(`${API_CUENTAS}?activa=true&page_size=200&ordering=codigo${appOrigenParam}${query ? '&search=' + encodeURIComponent(query) : ''}`, {
+      headers: jwt ? { 'Authorization': `Bearer ${jwt}` } : {},
+      credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(data => {
+      _todasLasCuentas = data.results || (Array.isArray(data) ? data : []);
+      if (countEl) countEl.textContent = `${_todasLasCuentas.length} cuentas disponibles`;
+      renderCuentasModal(_todasLasCuentas);
+    })
+    .catch(() => {
+      lista.innerHTML = '<div class="text-center text-danger small py-3">Error al cargar cuentas.</div>';
+    });
+  }
+
+  function renderCuentasModal(cuentas) {
+    const lista = document.getElementById('modal-cuentas-lista');
+    const countEl = document.getElementById('modal-cuentas-count');
+    if (!lista) return;
+    if (countEl) countEl.textContent = `${cuentas.length} cuenta(s)`;
+
+    if (!cuentas.length) {
+      lista.innerHTML = '<div class="text-center text-muted small py-3">Sin resultados. Crea cuentas en <strong>Cuentas Contables</strong>.</div>';
+      return;
+    }
+
+    // Agrupar por tipo para mejor UX
+    const grupos = {};
+    cuentas.forEach(c => {
+      const g = c.tipo || 'OTRO';
+      if (!grupos[g]) grupos[g] = [];
+      grupos[g].push(c);
+    });
+
+    const TIPO_LABEL = { ACTIVO: 'Activo', PASIVO: 'Pasivo', PATRIMONIO: 'Patrimonio', INGRESO: 'Ingreso', GASTO: 'Gasto', OTRO: 'Otros' };
+    const TIPO_COLOR = { ACTIVO: 'primary', PASIVO: 'warning', PATRIMONIO: 'info', INGRESO: 'success', GASTO: 'danger', OTRO: 'secondary' };
+
+    let html = '';
+    Object.keys(grupos).sort().forEach(tipo => {
+      const color = TIPO_COLOR[tipo] || 'secondary';
+      html += `<div class="px-1 py-1"><span class="badge bg-${color} mb-1">${TIPO_LABEL[tipo] || tipo}</span></div>`;
+      html += '<div class="list-group list-group-flush mb-2">';
+      grupos[tipo].forEach(c => {
+        html += `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small btn-elegir-cuenta"
+                         data-codigo="${c.codigo}" data-nombre="${c.nombre}">
+                   <span class="fw-bold text-primary">${c.codigo}</span>
+                   <span class="text-muted ms-2">${c.nombre}</span>
+                 </button>`;
+      });
+      html += '</div>';
+    });
+    lista.innerHTML = html;
+
+    lista.querySelectorAll('.btn-elegir-cuenta').forEach(btn => {
+      btn.addEventListener('click', () => {
+        seleccionarDesdeLista(btn.dataset.codigo, btn.dataset.nombre);
+      });
+    });
+  }
+
+  function seleccionarDesdeLista(codigo, nombre) {
+    if (!_selectorTargetTr) return;
+    const searchInput = _selectorTargetTr.querySelector('.cuenta-search');
+    const hiddenCodigo = _selectorTargetTr.querySelector('.cuenta-codigo-hidden');
+    const nombreDisplay = _selectorTargetTr.querySelector('.cuenta-nombre-display');
+
+    if (searchInput) searchInput.value = `${codigo} - ${nombre}`;
+    if (hiddenCodigo) hiddenCodigo.value = codigo;
+    if (nombreDisplay) nombreDisplay.textContent = nombre;
+
+    const modalEl = document.getElementById('modal-selector-cuentas');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+      bootstrap.Modal.getInstance(modalEl)?.hide();
+    }
+    _selectorTargetTr = null;
+    recalcularTotales();
+  }
+  // ---- FIN SELECTOR DE CUENTAS CONTABLES ----
 
   function buscarCuenta(q, suggestionsDiv, searchInput, hiddenCodigo, nombreDisplay) {
     const jwt = window.jwtAuth?.getAccessToken?.() || '';
@@ -340,6 +559,7 @@
         nombre: l.cuenta_nombre,
         debe: l.debe || '',
         haber: l.haber || '',
+        descripcion: l.descripcion || '',
       }));
       if (window.notyf) window.notyf.success('Lineas sugeridas por IA. Revisa y confirma antes de generar.');
     })
@@ -364,9 +584,10 @@
     totalHaberEl.textContent = `$ ${haber.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
     const cuadrado = Math.abs(debe - haber) < 0.01 && debe > 0;
     const comprobanteSeleccionado = selectComprobante.value !== "";
+    const periodoSeleccionado = selectPeriodo.value !== "";
     cuadraturaBadge.textContent = cuadrado ? 'Cuadrado' : 'Sin cuadrar';
     cuadraturaBadge.className = `badge ${cuadrado ? 'bg-success' : 'bg-danger'}`;
-    btnGenerar.disabled = !cuadrado || !comprobanteSeleccionado;
+    btnGenerar.disabled = !cuadrado || !comprobanteSeleccionado || !periodoSeleccionado;
   }
 
   btnGenerar.addEventListener('click', function () {
@@ -374,9 +595,14 @@
     const fecha = document.getElementById('asiento-fecha').value;
     const descripcion = document.getElementById('asiento-descripcion').value.trim();
     const tipoComprobanteId = selectComprobante.value;
+    const periodoUuid = selectPeriodo.value;
 
-    if (!fecha || !descripcion || !tipoComprobanteId) {
-      mostrarError('Fecha, descripcion y tipo de comprobante son obligatorios.');
+    if (!fecha || !descripcion || !tipoComprobanteId || !periodoUuid) {
+      mostrarError('Fecha, descripcion, tipo de comprobante y periodo contable son obligatorios.');
+      return;
+    }
+
+    if (!validarFechaYPeriodo()) {
       return;
     }
 
@@ -416,6 +642,7 @@
         documento_id: DOC_ID,
         documento_numero: DOC_NUM,
         tipo_comprobante_id: tipoComprobanteId,
+        periodo_uuid: periodoUuid,
         fecha: fecha,
         descripcion: descripcion,
         lineas: lineas,

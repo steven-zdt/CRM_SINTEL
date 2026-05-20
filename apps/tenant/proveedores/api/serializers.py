@@ -1,7 +1,7 @@
 """
 Serializers para la API de proveedores v3.5.
 
-WARNING: SINTEL v3.5: Sincronización Arquitectónica
+SINTEL v3.5: Sincronización Arquitectónica
 - NormalizationMixin: Todos los serializadores heredan de este Mixin para sanitizar strings y validar tipos
 - Validación Estricta: validate_<field> para asegurar que ForeignKeys pertenezcan al tenant actual
 - Separación List/Detail: ListSerializer para tablas, DetailSerializer para formularios
@@ -20,11 +20,11 @@ from ..services import DETAIL_FIELDS, LIST_FIELDS
 # ==============================================================================
 class NormalizationMixin:
     """
-    WARNING: v2.60: Mixin para normalización de datos de entrada (Zero Trust).
+    Mixin para normalización de datos de entrada (Zero Trust).
     Sanitiza strings y valida tipos de datos antes de persistir.
     """
     def _get_empresa_id(self):
-        """WARNING: Zero Trust: Resuelve el ID de empresa de forma segura."""
+        """Resuelve el ID de empresa de forma segura (Zero Trust)."""
         # 1. Intentar desde contexto (SSoT para ViewSets)
         empresa_id = self.context.get('empresa_id')
         if empresa_id:
@@ -68,7 +68,7 @@ class NormalizationMixin:
 
 class ProveedorListSerializer(serializers.ModelSerializer):
     """
-    WARNING: v2.60: Serializer optimizado para listados (Tabulator) con campos requeridos.
+    Serializer optimizado para listados (Tabulator) con campos requeridos.
     
     Campos para Tabulator:
     - razon_social: Nombre legal del proveedor
@@ -126,7 +126,7 @@ class ProveedorListSerializer(serializers.ModelSerializer):
 
 class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    WARNING: v2.60: Serializer completo para DETALLE/EDICIÓN de Proveedores.
+    Serializer completo para DETALLE/EDICIÓN de Proveedores.
     Campos alineados con DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
@@ -148,12 +148,12 @@ class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer)
         read_only_fields = ("id", "created_at", "updated_at", "empresa", "cuenta_contable_label")
     
     def validate(self, attrs):
-        """WARNING: Zero Trust: Normalización estricta antes de persistir."""
+        """Normalización estricta antes de persistir (Zero Trust)."""
         attrs = self.normalize_data(attrs)
         return attrs
 
     def get_cuenta_contable_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
+        """Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
         if not obj.cuenta_contable_uuid:
             return None
         from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
@@ -161,7 +161,7 @@ class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer)
         return CuentaContableSelector.get_label_by_uuid(obj.cuenta_contable_uuid, empresa_id)
 
     def validate_cuenta_contable_uuid(self, value):
-        """WARNING: Zero Trust: Valida existencia y pertenencia al tenant."""
+        """Valida existencia y pertenencia al tenant (Zero Trust)."""
         if value:
             from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
             empresa_id = self._get_empresa_id()
@@ -171,7 +171,7 @@ class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer)
 
     def validate_codigo_contable(self, value):
         """
-        WARNING: v2.61.8: Valida que el codigo contable sea un codigo nivel 6 permitido 
+        Valida que el codigo contable sea un codigo nivel 6 permitido 
         para pasivos (Proveedores/Cuentas por Pagar).
         """
         if value:
@@ -184,7 +184,7 @@ class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer)
     
     def validate_email_contacto(self, value):
         """
-        WARNING: v2.60: Validación estricta del formato de email.
+        Validación estricta del formato de email.
         El NormalizationMixin ya valida el formato, pero esta validación adicional
         asegura que el campo sea válido incluso si viene vacío.
         """

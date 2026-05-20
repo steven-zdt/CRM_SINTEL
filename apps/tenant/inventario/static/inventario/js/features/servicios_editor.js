@@ -22,8 +22,8 @@
     const MOD = '[servicios.editor]';
     const CORE_API_BASE = '/api/v1/inventario/servicios'; // Core API Facade
     const FORM_ID = '#form-servicio';
-    const FEEDBACK_ID = '#form-servicio-feedback';
-    const OFFCANVAS_ID = '#offcanvas-servicios';
+    const FEEDBACK_ID = '#form-inventario-servicio-feedback';
+    const OFFCANVAS_ID = '#offcanvas-inventario-servicio';
     
     // ⚠️ v2.61.3: Flag para prevenir doble envío
     let _guardandoServicio = false;
@@ -43,7 +43,7 @@
         const payload = {
             codigo: formData.get('codigo')?.trim() || '',
             nombre: formData.get('nombre')?.trim() || '',
-            categoria: formData.get('categoria') ? parseInt(formData.get('categoria'), 10) : null,
+            categoria: formData.get('categoria') || null,
             descripcion: formData.get('descripcion')?.trim() || '',
             precio_venta: parseFloat(formData.get('precio_venta') || '0') || 0,
             activo: formData.get('activo') === 'on' || formData.get('activo') === 'true',

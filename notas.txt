@@ -385,133 +385,68 @@ NOTAS IMPORTANTES
 ================================================================================
 
 
-================================================================================
-AUDITORIA COMPLETA DEL PROYECTO SINTEL - 2025-04-01
-================================================================================
 
-ESTRUCTURA DEL PROYECTO:
-- apps/tenant/: 20 apps (clientes, contabilidad, core, cotizaciones, dashboard,
-  empleados, empresa, facturas, gastos, inventario, landing, mail, mailinbox,
-  perfil, proveedores, proyectos + api, migrations, templates)
-- apps/public/: 5 apps (accounts, console, core, impuestos, tenants)
-- apps/services/: 7 modulos (document_ingest, document_parser, empresa,
-  integrations, maildigester, onboarding, perfil, security)
-- apps/config/: API pagination, tests
-- apps/shared/: datatable.py (legacy)
+Alineación Backend-Frontend y UX Secuencial — Módulo Proyectos v3.5.1
+Contexto del Sistema:
+Actúas como un Ingeniero de Software Principal Full-Stack experto en Django 5, DRF, HTMX, y diseño de interfaces de usuario (UI/UX). Tu objetivo es sincronizar y alinear completamente el backend (apps/tenant/proyectos/models.py) con el frontend (http://home.sintel.com/workspace/#proyectosusando), basándote en la arquitectura SINTEL, los lineamientos de AGENTS.md y el estado validado del backend (uso de uuid, DSV, @transaction.atomic).
 
---- HALLAZGOS CRITICOS (P0) - BUGS EN PRODUCCION ---
+El Problema:
+Actualmente, la UI no expone de manera coherente todas las clases y campos del modelo. La gestión del proyecto debe transformarse en una experiencia secuencial, cíclica y estructurada como una Línea de Tiempo (Timeline) que guíe al usuario desde la creación del proyecto, pasando por la gestión de costos, hasta su cierre definitivo.
 
-[P0-1] NAMEERROR: fast_get_cufe NO IMPORTADO EN facturas/api/viewsets.py
-  Archivo: apps/tenant/facturas/api/viewsets.py lineas 507, 728
-  La funcion fast_get_cufe() se usa pero NUNCA se importa.
-  Definida en: apps/tenant/facturas/utils/ubl_parser.py:33
-  IMPACTO: NameError al subir XML con async=false. Rompe upload-ubl sync.
-  FIX: Agregar import fast_get_cufe desde ubl_parser
+Reglas de Generación Estrictas:
 
-[P0-2] PERMISOS AllowAny EN proyectos/api/viewsets.py (DEBUG OLVIDADO)
-  Archivo: apps/tenant/proyectos/api/viewsets.py:47
-  Valor actual: permission_classes = [AllowAny]
-  IMPACTO: Cualquier usuario anonimo puede CRUD proyectos. BRECHA DE SEGURIDAD.
-  FIX: Cambiar a [IsAuthenticated, IsTenantAdminOrReadOnly]
+Generación de Código: Debes generar el código necesario para los serializers, views, templates HTML (HTMX) y Vanilla JS.
 
-[P0-3] 19 URLs HARDCODEADAS CON FACADE LEGACY EN JS DE FACTURAS
-  Archivos afectados:
-    - facturas/static/js/facturas/facturas_main.js (11 refs)
-    - facturas/static/js/facturas/features/facturas_list.js (8 refs)
-  URL incorrecta: /api/v1/core/v1/facturas/facturas/...
-  URL correcta:   /api/v1/facturas/...
-  IMPACTO: Funcionalidad rota. Causa error 404 + HTML en lugar de JSON.
+Respetar la Base: Mantén intacta la migración a UUID, los selectores Zero Waste (.only()) y las validaciones de DSV (empresa_id).
 
---- HALLAZGOS ALTOS (P1) - DEUDA TECNICA ---
+Flujo Cíclico y Secuencial: La UI debe mutar dinámicamente dependiendo de la fase_actual del proyecto (BORRADOR -> INICIO -> PLANEACION -> EJECUCION -> CIERRE).
 
-[P1-1] FACADE LEGACY core/api/v1/ SIGUE ACTIVO (VIOLA AGENTS.md)
-  Directorio: apps/tenant/core/api/v1/ con 13 subdirectorios proxy
-  AGENTS.md dice: "Queda ELIMINADO el patron Facade monolitico"
+INSTRUCCIONES DE EJECUCIÓN PASO A PASO:
+FASE 1: Ampliación de Exposición en el Backend (API & Serializers)
+Archivos a modificar: api/serializers.py, services/selectors.py, api/viewsets.py.
 
-[P1-2] 44+ ARCHIVOS .BAK EN EL PROYECTO
-  apps/public/: 30+ | apps/tenant/: 10+ | config/: 3
+Acción: Revisa el modelo Proyecto y asegura que LIST_FIELDS y DETAIL_FIELDS expongan absolutamente todos los datos relevantes que la UI necesita para construir el Timeline.
 
-[P1-3] VIOLACIONES .objects.all() SIN .only() EN VIEWSETS
-  gastos/api/viewsets.py lineas 70,101
-  empresa/api/viewsets.py lineas 509,561,804
+Campos Obligatorios a exponer:
 
-[P1-4] REGISTRO DUPLICADO DE URLs PARA FACTURAS (3 rutas al mismo endpoint)
+Financieros: valor_contrato_proyectado, costo_mano_obra_real, costo_materiales_real, utilidad_estimada, margen_rentabilidad.
 
-[P1-5] TEMPLATES DUPLICADOS EN FACTURAS (facturas/ y tenant/facturas/)
+Archivos: contrato, acta, cronograma, entrega, informe.
 
-[P1-6] MISSING api_mixins.py EN clientes y proyectos
+Control: fase_actual, estado_tarea.
 
---- HALLAZGOS MEDIOS (P2) ---
+Integración Cíclica: Asegura que el método avanzar_fase exponga claramente las transiciones permitidas y retorne el estado actualizado de los indicadores financieros tras ejecutar calcular_indicadores_financieros().
 
-[P2-1] Registro duplicado de core en URL config (urls_tenant + api_urls)
-[P2-2] 9 referencias facade legacy en templates HTML de facturas
-[P2-3] Shim dead code en config/api_urls.py (GET_EMPRESA_EMISOR_DATA no se usa)
-[P2-4] TemplateHTMLRenderer importado pero no usado en facturas viewsets
+FASE 2: Arquitectura Frontend — UX Secuencial (Línea de Tiempo)
+Archivos a modificar: templates/tenant/proyectos/detalle_workspace.html (o equivalente en el workspace), css/js asociados.
 
---- CUMPLIMIENTO POSITIVO ---
+Diseño de UI: Implementa un componente visual de Timeline (Línea de Tiempo) en la cabecera del detalle del proyecto. Cada nodo del timeline corresponde a una fase_actual.
 
-[OK] Service Layer: 14/14 apps con services/
-[OK] Selectors: 14/14 apps con selectors.py
-[OK] CRUD Service: 13/14 apps con crud_service.py
-[OK] Cero Signals: 0 usos en apps/tenant/
-[OK] JS URLs corregidos en facturas.api.js, proyectos.api.js, inventario.api.js
+Renderizado Dinámico (HTMX): El cuerpo del workspace debe renderizar paneles diferentes (vía hx-get) dependiendo de la fase activa del proyecto. Diseña las siguientes vistas secuenciales:
 
---- PLAN DE ACCION --- COMPLETADO 2025-04-01
+Fase BORRADOR / INICIO: Formulario de definición. Selección de tipo de servicio, valor proyectado del contrato, carga de archivo contrato y acta. Asignación de responsables y snapshots iniciales.
 
-INMEDIATO: [P0-1] import fast_get_cufe, [P0-2] revertir AllowAny
-CORTO PLAZO: [P0-3] migrar URLs facade en JS, [P1-3] fix .objects.all()
-MEDIANO: [P1-2] eliminar .bak, [P1-5] templates duplicados, [P1-6] api_mixins
-LARGO: [P1-1] desmantelar facade core/api/v1/
+Fase PLANEACIÓN: Panel de planificación. Habilitación de submódulos para cargar el cronograma (archivo) y definir estimaciones iniciales.
 
-================================================================================
-CORRECCIONES APLICADAS - CIERRE DE AUDITORIA
-================================================================================
+Fase EJECUCIÓN (El Ciclo de Gestión): Esta es la vista más compleja. Debe contener un dashboard interactivo de costos en tiempo real:
 
-[P0-1] CORREGIDO - Import fast_get_cufe
-  Archivo: apps/tenant/facturas/api/viewsets.py:65
-  Cambio: Agregado 'from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe'
+Módulo Mano de Obra: Gestión de AsignacionPersonal (listar activos/inactivos).
 
-[P0-2] CORREGIDO - Permisos AllowAny revertidos
-  Archivo: apps/tenant/proyectos/api/viewsets.py:47
-  Cambio: permission_classes = [IsAuthenticated, IsTenantMember]
-  Eliminado import AllowAny no usado.
+Módulo Materiales: Gestión de PedidoProyecto e ItemPedido (mostrar solo aprobados para el P&L).
 
-[P0-3] CORREGIDO - 19 URLs facade legacy en JS facturas
-  Archivos: facturas_main.js (11 refs), facturas_list.js (8 refs)
-  Cambio: /api/v1/core/v1/facturas/facturas/ -> /api/v1/facturas/
+Módulo Snapshots: Gestión de proveedores y clientes en tiempo real.
 
-[P1-1+P1-2] CORREGIDO - 12 refs gateway _apps/ en JS
-  Archivos: gasto_form.js (7), resolucion_dian_form.js (1),
-    proveedores_form.js (2), maildigester.xml.modal.js (1),
-    proveedores/proveedores_form.js (1)
-  Cambio: /api/v1/core/_apps/{app}/ -> /api/v1/{app}/
+Fase CIERRE: Pantalla de resumen final. Bloqueo de edición de costos. Exposición destacada del P&L final (utilidad_estimada, margen_rentabilidad), cambio de estado_tarea a COMPLETADO, y subida obligatoria de entrega e informe.
 
-[P1-3] CORREGIDO - .objects.all() sin .only() en viewsets
-  gastos/api/viewsets.py: queryset = Gasto.objects.none()
-  empresa/api/viewsets.py: queryset = MailInboxConfig.objects.none()
-    get_queryset: .defer('imap_password'), render_offcanvas: .only(...)
+FASE 3: Sincronización HTMX y Vanilla JS para el Flujo
+Archivos a modificar: static/proyectos/js/proyectos.api.js, templates/tenant/proyectos/offcanvas_form.html.
 
-[P1-4] CORREGIDO - 49 archivos .bak eliminados + directorio venv.host.bak
+Acción JS: Crea interceptores para que, al transicionar de una fase a otra (botón "Avanzar Fase"), el JS procese la respuesta (que contiene los nuevos cálculos financieros) y actualice el DOM reactivamente (Object.freeze) sin recargar toda la página.
 
-[P1-5] CORREGIDO - Templates duplicados facturas
-  Migrados template_name en viewsets.py: facturas/ -> tenant/facturas/
-  Eliminado directorio legacy templates/facturas/ (13 archivos duplicados)
+Bloqueos de Seguridad UI: Si fase_actual es CIERRE, oculta los botones de agregar pedidos o asignar personal utilizando lógica de plantillas de Django.
 
-[P1-6] CORREGIDO - api_mixins.py creados
-  Nuevo: apps/tenant/clientes/services/api_mixins.py
-    (ClienteServiceMixin, ContactoServiceMixin)
-  Nuevo: apps/tenant/proyectos/services/api_mixins.py
-    (ProyectoServiceMixin)
-  Actualizados __init__.py con exports.
+FASE 4: Consolidación del Dashboard SSoT
+Acción: En la vista principal (#proyectosusando), actualiza la tabla Tabulator o el grid para que el indicador de fase_actual sea visualmente prominente (badges de colores) y los indicadores de rentabilidad (margen) tengan códigos de color (rojo si es negativo, verde si es positivo), extrayendo estos datos directamente de los fields expuestos en la Fase 1.
 
-[P2-2] CORREGIDO - 9 refs facade en templates HTML facturas
-  7 archivos HTML: /api/v1/core/v1/facturas/facturas/ -> /api/v1/facturas/
-
-[P2-3] CORREGIDO - Shim dead code en config/api_urls.py
-  Eliminada Ruta 2 duplicada identica a Ruta 1 en _safe_import_get_empresa_emisor_data
-
-[P2-4] DESCARTADO - TemplateHTMLRenderer SI se usa
-  Usado en gestor-offcanvas de facturas, gastos y proyectos viewsets.
-
-RESULTADO: 11/11 hallazgos resueltos. 0 pendientes.
-================================================================================
+Entregable Esperado por la IA:
+Genera el código estructurado para cada archivo impactado, utilizando bloques de código separados. Prioriza la maquetación HTML/Tailwind/Bootstrap del componente Timeline para garantizar la coherencia visual que el usuario experimentará de principio a fin.

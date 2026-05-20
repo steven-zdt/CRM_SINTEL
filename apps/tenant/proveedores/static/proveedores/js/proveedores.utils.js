@@ -32,7 +32,7 @@
                     return;
                 }
 
-                const response = await w.Sintel.Proveedores.API.searchCuentas(q);
+                const response = await w.AppProveedor.API.searchCuentas(q);
                 if (response.ok && response.data) {
                     const data = Array.isArray(response.data) ? response.data : (response.data.results || []);
                     renderResults(data);
@@ -94,8 +94,12 @@
         }
     };
 
+    w.AppProveedor = w.AppProveedor || {};
+    w.AppProveedor.Utils = proveedoresUtils;
+
+    // Backwards compatibility wrapper
     w.Sintel = w.Sintel || {};
     w.Sintel.Proveedores = w.Sintel.Proveedores || {};
-    w.Sintel.Proveedores.Utils = proveedoresUtils;
+    w.Sintel.Proveedores.Utils = w.AppProveedor.Utils;
 
 })(window);

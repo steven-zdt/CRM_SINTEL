@@ -1,0 +1,85 @@
+{% load static %}
+{# list_libro_diario.html — Libro Diario Contable v3.7.7 #}
+{# Normatividad PYMES Colombia: Codigo de Comercio Art. 48-59, Decreto 2420/2015 #}
+{# v3.7.7: Fuente de datos cambiada a AsientoContable; filtro por PeriodoContable #}
+<div id="ui-contabilidad-libro-diario" class="ui-module ui-contabilidad">
+
+  {# Barra de filtros #}
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-end">
+
+        {# Periodo (fuente primaria) #}
+        <div class="col-auto">
+          <label for="filter-periodo-libro" class="form-label form-label-sm mb-1 fw-semibold">
+            Periodo
+          </label>
+          <select id="filter-periodo-libro" class="form-select form-select-sm" style="min-width: 170px;">
+            <option value="">— Seleccionar —</option>
+          </select>
+        </div>
+
+        {# Rango manual (override cuando no se selecciona periodo) #}
+        <div class="col-auto">
+          <label for="filter-fecha-inicio-libro" class="form-label form-label-sm mb-1">Desde</label>
+          <input type="date" id="filter-fecha-inicio-libro" class="form-control form-control-sm" style="width: 145px;">
+        </div>
+        <div class="col-auto">
+          <label for="filter-fecha-fin-libro" class="form-label form-label-sm mb-1">Hasta</label>
+          <input type="date" id="filter-fecha-fin-libro" class="form-control form-control-sm" style="width: 145px;">
+        </div>
+
+        {# Estado del asiento #}
+        <div class="col-auto">
+          <label for="filter-estado-libro" class="form-label form-label-sm mb-1">Estado</label>
+          <select id="filter-estado-libro" class="form-select form-select-sm" style="width: 135px;">
+            <option value="">Todos</option>
+            <option value="BORRADOR">Borrador</option>
+            <option value="APROBADO">Aprobado</option>
+            <option value="CERRADO">Cerrado</option>
+          </select>
+        </div>
+
+        {# Busqueda #}
+        <div class="col-auto">
+          <label for="search-libro-diario" class="form-label form-label-sm mb-1">Buscar</label>
+          <input type="search" id="search-libro-diario" class="form-control form-control-sm"
+                 placeholder="Numero o descripcion..." style="width: 200px;">
+        </div>
+
+        {# Botones #}
+        <div class="col-auto">
+          <button id="btn-consultar-libro-diario" class="btn btn-sm btn-primary">
+            <i class="bi bi-search me-1"></i>Consultar
+          </button>
+          <button id="btn-refrescar-libro-diario" class="btn btn-sm btn-outline-secondary ms-1" title="Refrescar">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+
+        {# Resumen dinamico #}
+        <div class="col">
+          <div id="resumen-libro-diario" class="d-flex flex-wrap gap-1 justify-content-end"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  {# Feedback #}
+  <div id="feedback-libro-diario" class="alert d-none mb-2" role="alert" aria-live="polite"></div>
+
+  {# Tabla Tabulator #}
+  <div id="grid-libro-diario" style="max-width: 100%; overflow-x: auto;"></div>
+
+  {# Nota normativa #}
+  <div class="mt-2 text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    Libro Diario — Codigo de Comercio Art. 48. Asientos contables en orden cronologico por periodo.
+  </div>
+</div>
+
+{# Contenedor HTMX para offcanvas detalle del asiento #}
+<div id="offcanvas-container-libro-diario"></div>
+
+{% include 'tenant/contabilidad/partials/assets_libro_diario.html' %}

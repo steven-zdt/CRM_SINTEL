@@ -44,6 +44,8 @@ class ProyectoViewSet(
     queryset = Proyecto.objects.none()
     pagination_class = StandardResultsSetPagination
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    lookup_field = 'uuid'
+    lookup_value_regex = '[0-9a-f-]{36}'
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -63,9 +65,9 @@ class ProyectoViewSet(
         return self.proyecto_selector(empresa_id=empresa.id, search=search)
     
     def get_object(self):
-        """Usa el selector de detalle optimizado."""
+        """Usa el selector de detalle optimizado. Filtra por uuid (M-001 Roadmap M3)."""
         empresa = self.get_empresa()
-        obj = self.proyecto_detail_selector(empresa_id=empresa.id, pk=self.kwargs['pk'])
+        obj = self.proyecto_detail_selector(empresa_id=empresa.id, uuid=self.kwargs['uuid'])
         if not obj:
             raise NotFound("Proyecto no encontrado o no pertenece a este tenant.")
         return obj
@@ -150,7 +152,7 @@ class ProyectoViewSet(
         return Response(status=status.HTTP_204_NO_CONTENT)
     
     @action(detail=True, methods=['post'], url_path='avanzar-fase')
-    def avanzar_fase(self, request, pk=None):
+    def avanzar_fase(self, request, uuid=None):
         """
         POST /api/v1/proyectos/{id}/avanzar-fase/
         """
@@ -182,10 +184,10 @@ class ProyectoViewSet(
         """
         empresa = self.get_empresa()
         proyecto = None
-        id_instancia = request.query_params.get('id')
-        
+        id_instancia = request.query_params.get('uuid')
+
         if id_instancia:
-            proyecto = get_object_or_404(self.get_queryset(), id=id_instancia)
+            proyecto = get_object_or_404(self.get_queryset(), uuid=id_instancia)
         
         clientes = []
         try:

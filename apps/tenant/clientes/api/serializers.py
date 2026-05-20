@@ -3,8 +3,6 @@ from rest_framework import serializers
 from apps.tenant.api.utils import NormalizationMixin
 from apps.tenant.clientes.models import Cliente, ContactoCliente
 
-# # WARNING: v2.61.4: Importar NormalizationMixin expandido desde utils
-# Incluye validación de strings, decimales, booleanos, documentos, teléfonos
 
 class ClienteMiniSerializer(serializers.ModelSerializer):
     """
@@ -16,6 +14,7 @@ class ClienteMiniSerializer(serializers.ModelSerializer):
         model = Cliente
         fields = [
             'id',
+            'uuid',
             'numero_documento',
             'razon_social',
             'nombre_comercial',
@@ -27,7 +26,7 @@ class ClienteMiniSerializer(serializers.ModelSerializer):
 
 class ClienteListSerializer(serializers.ModelSerializer):
     """
-    # WARNING: v2.40: Serializer optimizado para listas (Tabulator).
+    Serializer optimizado para listas (Tabulator).
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     """
     tipo_documento_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
@@ -45,6 +44,7 @@ class ClienteListSerializer(serializers.ModelSerializer):
         model = Cliente
         fields = [
             'id',
+            'uuid',
             'tipo_persona', 'tipo_persona_display',
             'tipo_documento', 'tipo_documento_display',
             'numero_documento',
@@ -61,24 +61,22 @@ class ClienteListSerializer(serializers.ModelSerializer):
             'encargado',
             'activo'
         ]
-        read_only_fields = ['id', 'tipo_documento_display', 'tipo_persona_display', 'regimen_tributario_display', 'encargado']
+        read_only_fields = ['id', 'uuid', 'tipo_documento_display', 'tipo_persona_display', 'regimen_tributario_display', 'encargado']
 
 
 class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    # WARNING: v2.60: Serializer para Contactos de Cliente (CRUD independiente).
-    # WARNING: v2.61: Campo id explícito y forzado para preservarlo en actualizaciones anidadas.
-    # WARNING: v2.61: Integración con NormalizationMixin para Zero Trust.
+    Serializer para Contactos de Cliente (CRUD independiente).
+    Campo id explicito y forzado para preservarlo en actualizaciones anidadas.
+    Integracion con NormalizationMixin para Zero Trust.
     """
-    # cliente es opcional en el serializer para soportar el patron de creacion anidada inicial:
-    # al crear un cliente nuevo, el ID del padre aun no existe en el momento de validar el payload.
-    # El service layer valida y asigna el cliente_id antes de persistir.
-    # Para PATCH parcial DRF ignora required de todas formas cuando partial=True.
+    # cliente es opcional en el serializer para soportar el patron de creacion anidada inicial.
     cliente = serializers.PrimaryKeyRelatedField(
         queryset=Cliente.objects.only('id', 'empresa_id'),
         required=False,
         allow_null=True,
     )
+    cliente_uuid = serializers.UUIDField(source='cliente.uuid', read_only=True)
     cliente_nombre = serializers.SerializerMethodField(read_only=True)
     cliente_documento = serializers.SerializerMethodField(read_only=True)
     
@@ -92,7 +90,9 @@ class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer)
         model = ContactoCliente
         fields = [
             'id',
+            'uuid',
             'cliente',
+            'cliente_uuid',
             'nombre_completo',
             'cargo',
             'email',
@@ -104,7 +104,6 @@ class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer)
         ]
 
     def validate(self, attrs):
-        # Normalize fields
         attrs = self.normalize_data(attrs)
         if attrs.get('email'):
             attrs['email'] = attrs['email'].strip().lower()
@@ -114,13 +113,13 @@ class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer)
         empresa_id = self.context.get('empresa_id')
         cliente = attrs.get('cliente') or (self.instance.cliente if self.instance else None)
 
-        # Validate client belongs to this tenant
+        # Validar que el cliente pertenece a esta empresa.
         if cliente and empresa_id and cliente.empresa_id != empresa_id:
             raise serializers.ValidationError({
                 'cliente': ['El cliente especificado no pertenece a esta empresa.']
             })
 
-        # Validate unique (cliente, email) on update to surface error early
+        # Validar unico (cliente, email) para notificar el error de forma temprana.
         email = attrs.get('email')
         if email and cliente and self.instance:
             existing = ContactoCliente.objects.filter(
@@ -146,6 +145,7 @@ class ClienteDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         model = Cliente
         fields = [
             'id',
+            'uuid',
             'tipo_persona',
             'tipo_documento',
             'numero_documento',
@@ -167,49 +167,43 @@ class ClienteDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'observaciones',
             'cuenta_contable_uuid',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'uuid']
     
     def validate(self, attrs):
         """
-        # WARNING: v2.61.4: Validación completa (Zero Trust).
-        
-        1. Normalizar strings, números, booleanos
-        2. Normalizar documento para búsqueda de duplicados
-        3. Validar uniqueness: tipo_documento + numero_documento + empresa
+        Validacion completa (Zero Trust).
+        1. Normalizar strings, numeros, booleanos.
+        2. Normalizar documento para busqueda de duplicados.
+        3. Validar uniqueness: tipo_documento + numero_documento + empresa.
         """
-        # 1. Normalizar
         attrs = self.normalize_data(attrs)
 
         empresa_id = self.context.get('empresa_id')
         
-        # 2. Validar documento único (idempotencia preventiva)
         numero_documento = attrs.get('numero_documento')
         tipo_documento = attrs.get('tipo_documento')
         
         if numero_documento and tipo_documento:
-            # # WARNING: Normalizar documento para búsqueda (remover espacios, guiones)
             numero_documento_norm = self.normalize_document_number(numero_documento)
             attrs['numero_documento'] = numero_documento_norm
             
-            # En create se permite idempotencia: el service layer hace upsert por documento.
-            # En update sí validamos conflicto de unicidad excluyendo instancia actual.
+            # En update validamos conflicto de unicidad excluyendo la instancia actual.
             if empresa_id and self.instance is not None:
                 existing = Cliente.objects.filter(
                     empresa_id=empresa_id,
                     tipo_documento=tipo_documento,
                     numero_documento=numero_documento_norm
                 ).exclude(
-                    pk=self.instance.pk if self.instance else None
+                    pk=self.instance.pk
                 )
                 
                 if existing.exists():
                     raise serializers.ValidationError({
                         'numero_documento': [
-                            f'Ya existe un cliente con el documento tipo {tipo_documento} número {numero_documento_norm} en esta empresa'
+                            f'Ya existe un cliente con el documento tipo {tipo_documento} numero {numero_documento_norm} en esta empresa'
                         ]
                     })
         
-        # 3. Validar campos técnicos están normalizados
         if 'nombre_comercial' in attrs and attrs['nombre_comercial']:
             attrs['nombre_comercial'] = attrs['nombre_comercial'].strip()
         

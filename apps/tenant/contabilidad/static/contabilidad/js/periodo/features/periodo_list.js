@@ -12,7 +12,7 @@
   'use strict';
 
   const MOD = '[periodo.list]';
-  const TABLE_SELECTOR = '#grid-periodo';
+  const TABLE_SELECTOR = '#grid-periodos';
   const SEARCH_SELECTOR = '#search-periodo';
   const FILTER_ESTADO_SELECTOR = '#filter-estado-periodo';
   const API_URL = '/api/v1/contabilidad/periodos-contables/';
@@ -163,29 +163,23 @@
       getColumns(),
       {
         searchInputSelector: SEARCH_SELECTOR,
-        paginationSize: 10
+        paginationSize: 10,
+        ajaxParams: function() {
+          const estado = d.querySelector(FILTER_ESTADO_SELECTOR)?.value || '';
+          return estado ? { estado } : {};
+        }
       }
     );
-
-    // Aplicar filtros iniciales
-    applyFilters();
 
     return table;
   }
 
   /**
-   * Aplica filtros de estado
+   * Recarga la tabla con los filtros actuales como parametros de API.
    */
   function applyFilters() {
-    if (!table) return;
-
-    const estadoFilter = d.querySelector(FILTER_ESTADO_SELECTOR)?.value || '';
-
-    if (estadoFilter) {
-      table.setFilter([{ field: 'estado', type: '=', value: estadoFilter }]);
-    } else {
-      table.clearFilter();
-    }
+    if (!table || typeof table.replaceData !== 'function') return;
+    table.replaceData();
   }
 
   /**
@@ -267,7 +261,7 @@
     }
 
     // Botón refrescar
-    const btnRefresh = d.querySelector('#btn-refrescar-periodo');
+    const btnRefresh = d.querySelector('#btn-refrescar-periodos');
     if (btnRefresh) {
       btnRefresh.addEventListener('click', () => {
         if (table && typeof table.replaceData === 'function') {

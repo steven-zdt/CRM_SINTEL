@@ -1,63 +1,165 @@
-{# offcanvas_movimiento.html - Registro de Movimiento de Inventario v3.5 #}
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-movimientos" aria-labelledby="offcanvas-movimientos-label" style="width: 500px;">
-    <div class="offcanvas-header bg-success text-white">
+{# offcanvas_movimiento.html - Registro/Edicion Universal de Movimientos v3.9.1 #}
+{# Soporta Productos, Activos Fijos y Servicios. Modo crear y editar. #}
+{# Campos protegidos: nombre/precio del item son solo lectura. Unica variable: Cantidad + Tipo. #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-movimientos" aria-labelledby="offcanvas-movimientos-label" style="width: 550px;">
+    <div class="offcanvas-header {% if movimiento %}bg-warning{% else %}bg-success{% endif %} text-{% if movimiento %}dark{% else %}white{% endif %}">
         <h5 class="offcanvas-title" id="offcanvas-movimientos-label">
-            <i class="bi bi-arrow-left-right me-2"></i>Registrar Movimiento (Kardex)
+            <i class="bi bi-arrow-left-right me-2"></i>
+            {% if movimiento %}Editar Movimiento{% else %}Registrar Movimiento{% endif %}
         </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        <button type="button" class="btn-close {% if not movimiento %}btn-close-white{% endif %}" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
-    
+
     <div class="offcanvas-body">
         <div id="feedback-movimiento" class="alert d-none mb-3" role="alert"></div>
-        
+
         <form id="form-movimiento" class="row g-3">
             <input type="hidden" name="empresa" value="{{ empresa.id }}">
-            
+            <input type="hidden" id="movimiento-uuid" value="{% if movimiento %}{{ movimiento.uuid }}{% endif %}">
+
+            {# Data de edicion pre-cargada (usada por JS para rellenar) #}
+            {% if movimiento %}
+            <input type="hidden" id="movimiento-data-json"
+                   value='{"item_tipo":"{% if movimiento.producto_id %}PRODUCTO{% elif movimiento.activo_fijo_id %}ACTIVO_FIJO{% endif %}","item_uuid":"{% if movimiento.producto %}{{ movimiento.producto.uuid }}{% elif movimiento.activo_fijo %}{{ movimiento.activo_fijo.uuid }}{% endif %}","tipo":"{{ movimiento.tipo }}","cantidad":"{{ movimiento.cantidad }}","costo_unitario":"{{ movimiento.costo_unitario }}","origen_referencia":"{{ movimiento.origen_referencia|default:'' }}","observaciones":"{{ movimiento.observaciones|default:'' }}"}'>
+            {% endif %}
+
+            {# PASO 1: Selector de Categoria de Origen #}
             <div class="col-12">
-                <label for="movimiento-producto" class="form-label fw-bold">Producto <span class="text-danger">*</span></label>
-                <select class="form-select select2-offcanvas" id="movimiento-producto" name="producto" required>
-                    <option value="">Seleccione un producto...</option>
-                    {% for prod in productos %}
-                        <option value="{{ prod.id }}">[{{ prod.codigo }}] {{ prod.nombre }}</option>
-                    {% endfor %}
+                <label for="categoria_origen" class="form-label fw-bold">
+                    Categoria <span class="text-danger">*</span>
+                </label>
+                <select id="categoria_origen" class="form-select" required {% if movimiento %}disabled{% endif %}>
+                    <option value="">— Seleccionar —</option>
+                    <option value="PRODUCTO">Producto</option>
+                    <option value="ACTIVO_FIJO">Activo Fijo</option>
+                    <option value="SERVICIO">Servicio</option>
                 </select>
+                {% if movimiento %}<div class="form-text text-warning fw-semibold">La categoria no se puede cambiar en modo edicion.</div>{% endif %}
             </div>
-            
+
+            {# PASO 2: Selector de Item #}
             <div class="col-12">
-                <label for="movimiento-tipo" class="form-label fw-bold">Tipo de Movimiento <span class="text-danger">*</span></label>
-                <select class="form-select" id="movimiento-tipo" name="tipo" required>
-                    <option value="">Seleccione tipo...</option>
-                    {% for code, label in tipos %}
-                        <option value="{{ code }}">{{ label }}</option>
-                    {% endfor %}
+                <label for="item_seleccionado" class="form-label fw-bold">
+                    Item <span class="text-danger">*</span>
+                </label>
+                <select id="item_seleccionado" class="form-select" name="item_seleccionado"
+                        disabled required
+                        {% if movimiento %}disabled data-edit-uuid="{% if movimiento.producto %}{{ movimiento.producto.uuid }}{% elif movimiento.activo_fijo %}{{ movimiento.activo_fijo.uuid }}{% endif %}"{% endif %}>
+                    <option value="">— Seleccione una categoria primero —</option>
                 </select>
+                <div class="form-text" id="item_help_text"></div>
             </div>
-            
-            <div class="col-md-6">
-                <label for="movimiento-cantidad" class="form-label fw-bold">Cantidad <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="movimiento-cantidad" name="cantidad" step="0.001" min="0.001" placeholder="0.000" required>
+
+            {# PASO 3: Panel de Referencia del Item — SOLO LECTURA #}
+            <div id="panel_referencia_item" class="col-12 d-none">
+                <div class="card border-0 bg-light">
+                    <div class="card-body p-2">
+                        <p class="text-muted small mb-2 fw-semibold">
+                            <i class="bi bi-lock-fill me-1"></i>Datos de Referencia (solo lectura)
+                        </p>
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <input type="text" class="form-control form-control-sm"
+                                       id="movimiento-nombre-ref" readonly
+                                       placeholder="Nombre del item" aria-label="Nombre del item seleccionado">
+                            </div>
+                            <div class="col-md-7">
+                                <input type="text" class="form-control form-control-sm bg-white"
+                                       id="movimiento-precio-ref" readonly
+                                       placeholder="Precio / Costo referencia" aria-label="Precio de referencia">
+                            </div>
+                            <div class="col-md-5" id="stock_ref_container">
+                                <input type="text" class="form-control form-control-sm bg-white"
+                                       id="movimiento-stock-ref" readonly
+                                       placeholder="Stock actual" aria-label="Stock actual">
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            
-            <div class="col-md-6">
-                <label for="movimiento-costo" class="form-label fw-bold">Costo Unitario ($)</label>
-                <input type="number" class="form-control" id="movimiento-costo" name="costo_unitario" step="0.01" min="0" placeholder="0.00">
+
+            {# Costo unitario — oculto, el JS lo inyecta automaticamente desde el item #}
+            <input type="hidden" id="movimiento-costo" name="costo_unitario" value="0">
+
+            {# CONTENEDOR A: Campos Kardex #}
+            <div id="campos_kardex" class="col-12 d-none">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label for="tipo_movimiento" class="form-label fw-bold">
+                            Tipo de Movimiento <span class="text-danger">*</span>
+                        </label>
+                        <select id="tipo_movimiento" class="form-select" name="tipo" disabled>
+                            <option value="">— Seleccionar —</option>
+                        </select>
+                    </div>
+
+                    {# Búsqueda de Factura - Autocomplete #}
+                    <div class="col-12 position-relative">
+                        <label for="movimiento-busqueda-factura" class="form-label fw-bold">
+                            Vincular Factura (Opcional)
+                        </label>
+                        <div class="input-group shadow-sm">
+                            <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text"
+                                   class="form-control border-start-0 ps-0"
+                                   id="movimiento-busqueda-factura"
+                                   placeholder="Buscar factura por # o cliente..."
+                                   autocomplete="off">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="movimiento-btn-limpiar-factura" title="Limpiar selección" style="display:none;">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
+                        <div id="movimiento-facturas-dropdown" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 250px; overflow-y: auto; top: 100%; left: 0;"></div>
+                        <div id="movimiento-factura-vinculada" class="alert alert-info alert-sm d-none mt-2 mb-0 py-2 px-3" style="font-size: 0.875rem;">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            <span id="movimiento-factura-vinculada-text"></span>
+                        </div>
+                        <small class="form-text text-muted d-block mt-1">Vincula este movimiento con una factura específica.</small>
+                    </div>
+
+                    {# Hidden inputs para factura_uuid y factura_numero #}
+                    <input type="hidden" id="movimiento-factura-uuid" name="factura_uuid" value="">
+                    <input type="hidden" id="movimiento-factura-numero" name="factura_numero" value="">
+
+                    {# Cantidad — unica variable editable por el usuario #}
+                    <div class="col-12 d-none" id="cantidad_container">
+                        <label for="movimiento-cantidad" class="form-label fw-bold">
+                            Cantidad <span class="text-danger">*</span>
+                        </label>
+                        <input type="number" class="form-control" id="movimiento-cantidad"
+                               name="cantidad" step="0.001" min="0.001" placeholder="0.000">
+                        <div class="form-text text-muted">Ingrese la cantidad de unidades a registrar.</div>
+                    </div>
+                </div>
             </div>
-            
-            <div class="col-12">
-                <label for="movimiento-origen" class="form-label fw-bold">Referencia / Origen</label>
-                <input type="text" class="form-control" id="movimiento-origen" name="origen_referencia" placeholder="Ej: Factura #123, Ajuste de inventario...">
-                <div class="form-text">Documento o referencia que origina este movimiento.</div>
+
+            {# CONTENEDOR B: Campos Comunes #}
+            <div id="campos_comunes" class="col-12 d-none">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label for="movimiento-origen" class="form-label fw-bold">
+                            Referencia / Origen
+                        </label>
+                        <input type="text" class="form-control" id="movimiento-origen"
+                               name="origen_referencia" placeholder="Ej: Factura #123, Ajuste...">
+                        <div class="form-text">Documento o referencia que origina este movimiento.</div>
+                    </div>
+
+                    <div class="col-12">
+                        <label for="movimiento-observaciones" class="form-label fw-bold">
+                            Observaciones
+                        </label>
+                        <textarea class="form-control" id="movimiento-observaciones"
+                                  name="observaciones" rows="3" placeholder="Detalles adicionales..."></textarea>
+                    </div>
+                </div>
             </div>
-            
-            <div class="col-12">
-                <label for="movimiento-observaciones" class="form-label fw-bold">Observaciones</label>
-                <textarea class="form-control" id="movimiento-observaciones" name="observaciones" rows="3" placeholder="Detalles adicionales del movimiento..."></textarea>
-            </div>
-            
+
+            {# Botones de Accion #}
             <div class="col-12 mt-4 pt-3 border-top">
                 <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-success btn-lg" id="btn-guardar-movimiento">
-                        <i class="bi bi-save me-2"></i>Registrar Movimiento
+                    <button type="button" class="btn {% if movimiento %}btn-warning{% else %}btn-success{% endif %} btn-lg" id="btn-guardar-movimiento" disabled>
+                        <i class="bi bi-save me-2"></i>{% if movimiento %}Guardar Cambios{% else %}Registrar{% endif %}
                     </button>
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="offcanvas">
                         Cancelar
@@ -69,27 +171,7 @@
 </div>
 
 <script>
-    /**
-     * Inicialización específica del Offcanvas de Movimientos
-     * ⚠️ Se ejecuta cuando HTMX inyecta este HTML
-     */
     (function() {
-        console.log('[offcanvas.movimiento] Inicializando...');
-        
-        // ⚠️ v3.5: Sincronización defensiva para Select2 (DOM Shield compatibility)
-        const form = document.getElementById('form-movimiento');
-        if (form) {
-            form.addEventListener('submit', function() {
-                if (window.jQuery && typeof window.jQuery.fn.select2 !== 'undefined') {
-                    const $select = window.jQuery('#movimiento-producto');
-                    if ($select.data('select2')) {
-                        // Forzar que el valor de Select2 se refleje en el select nativo antes del submit
-                        $select.trigger('change');
-                    }
-                }
-            });
-        }
-
         if (window.MovimientosEditor && typeof window.MovimientosEditor.init === 'function') {
             window.MovimientosEditor.init();
         }

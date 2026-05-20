@@ -191,7 +191,52 @@
             data.cuenta_contable_uuid = cuentaUuid;
         }
 
+        // La cotización se guarda por endpoint dedicado para mantener edición limitada.
+        delete data.cotizacion_uuid;
+
         return data;
+    }
+
+    function getCotizacionUuidFromEditor() {
+        const select = d.querySelector('#factura-cotizacion_uuid');
+        if (!select) return undefined;
+        return select.value || null;
+    }
+
+    /**
+     * Guardar vinculaciones de inventario para cada ítem de la factura
+     * v3.9.2: Después de guardar la factura, actualiza los campos item_inventario_*
+     */
+    async function guardarVinculacionesInventario() {
+        const rows = d.querySelectorAll('tr[data-item-id]');
+        if (!rows.length) return;
+
+        for (const row of rows) {
+            const itemId = row.getAttribute('data-item-id');
+            const hiddenContainer = row.querySelector('[data-inventario-fields]');
+
+            // Solo guardar si hay vinculación
+            if (!hiddenContainer || !hiddenContainer.innerHTML.trim()) continue;
+
+            // Extraer UUIDs de los hidden inputs
+            const uuidInput = hiddenContainer.querySelector('input[name*="uuid"]');
+            const tipoInput = hiddenContainer.querySelector('input[name*="tipo"]');
+            const codigoInput = hiddenContainer.querySelector('input[name*="codigo"]');
+
+            if (!uuidInput || !tipoInput || !codigoInput) continue;
+
+            const data = {
+                item_inventario_uuid: uuidInput.value,
+                item_inventario_tipo: tipoInput.value,
+                item_inventario_codigo: codigoInput.value
+            };
+
+            // PATCH a /api/v1/items-factura/{itemId}/
+            const res = await w.http('PATCH', `/api/v1/items-factura/${itemId}/`, data);
+            if (!res.ok) {
+                console.warn(`${MOD} Error al guardar vinculación del ítem ${itemId}:`, res.data);
+            }
+        }
     }
 
     /**
@@ -265,6 +310,22 @@
             return;
         }
 
+        const cotizacionUuid = getCotizacionUuidFromEditor();
+        if (id && cotizacionUuid !== undefined && w.facturasAPI && typeof w.facturasAPI.vincularCotizacion === 'function') {
+            const linkRes = await w.facturasAPI.vincularCotizacion(id, cotizacionUuid);
+            if (!linkRes.ok) {
+                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+                    w.UIManager.handleError(linkRes, MOD, {
+                        errorContainerSelector: '#form-factura-feedback'
+                    });
+                }
+                return;
+            }
+        }
+
+        // ⚠️ v3.9.2: Guardar vinculaciones de inventario de cada ítem
+        await guardarVinculacionesInventario();
+
         // ⚠️ Éxito: Cerrar Offcanvas, mostrar feedback y disparar evento
         if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
             const offcanvasInstance = bootstrap.Offcanvas.getInstance(offcanvasEl);
@@ -313,6 +374,7 @@
 
         // [v3.7.0] Buscador de Cuentas Contables
         initCuentaContableSearch();
+        initCotizacionSelect();
 
 
 
@@ -460,6 +522,41 @@
             }).catch(err => {
                 console.warn('[facturas.editor:cuenta_search] No se pudo pre-cargar cuenta:', err);
             });
+        }
+    }
+
+    async function initCotizacionSelect() {
+        const select = d.querySelector('#factura-cotizacion_uuid');
+        if (!select || select.dataset.loaded === 'true') return;
+
+        const current = select.dataset.current || '';
+        const currentLabel = select.dataset.currentLabel || '';
+
+        try {
+            const res = await w.http('GET', '/api/v1/cotizaciones/?page_size=100');
+            if (!res || !res.ok) return;
+
+            const rows = Array.isArray(res.data) ? res.data : (res.data.results || []);
+            rows.forEach(cotizacion => {
+                if (!cotizacion.uuid || select.querySelector(`option[value="${cotizacion.uuid}"]`)) return;
+                const option = d.createElement('option');
+                option.value = cotizacion.uuid;
+                option.textContent = cotizacion.codigo_unico || cotizacion.numero_cotizacion || cotizacion.uuid;
+                option.selected = cotizacion.uuid === current;
+                select.appendChild(option);
+            });
+
+            if (current && currentLabel && !select.querySelector(`option[value="${current}"]`)) {
+                const option = d.createElement('option');
+                option.value = current;
+                option.textContent = currentLabel;
+                option.selected = true;
+                select.appendChild(option);
+            }
+
+            select.dataset.loaded = 'true';
+        } catch (error) {
+            console.warn('[facturas.editor:cotizacion_select] No se pudieron cargar cotizaciones:', error);
         }
     }
 

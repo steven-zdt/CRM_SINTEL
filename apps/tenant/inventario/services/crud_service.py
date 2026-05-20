@@ -38,6 +38,8 @@ def crear_producto(
     costo_promedio: Decimal = Decimal("0"),
     stock_minimo: Decimal = Decimal("0"),
     activo: bool = True,
+    cuenta_inventario_uuid=None,
+    cuenta_costo_uuid=None,
 ) -> Producto:
     """
     Crea un nuevo Producto en BD de forma atomica.
@@ -63,6 +65,8 @@ def crear_producto(
         costo_promedio=costo_promedio,
         stock_minimo=stock_minimo,
         activo=activo,
+        cuenta_inventario_uuid=cuenta_inventario_uuid,
+        cuenta_costo_uuid=cuenta_costo_uuid,
     )
 
 
@@ -81,6 +85,7 @@ def actualizar_producto(*, producto: Producto, **kwargs) -> Producto:
     campos_actualizables = [
         'nombre', 'categoria', 'descripcion', 'unidad',
         'precio_venta', 'costo_promedio', 'stock_minimo', 'activo',
+        'cuenta_inventario_uuid', 'cuenta_costo_uuid',
     ]
     campos_modificados = []
     for campo in campos_actualizables:
@@ -105,6 +110,7 @@ def crear_servicio(
     descripcion: str = "",
     precio_venta: Decimal = Decimal("0"),
     activo: bool = True,
+    cuenta_ingreso_uuid=None,
 ) -> Servicio:
     """
     Crea un nuevo Servicio en BD de forma atomica.
@@ -126,6 +132,7 @@ def crear_servicio(
         descripcion=descripcion,
         precio_venta=precio_venta,
         activo=activo,
+        cuenta_ingreso_uuid=cuenta_ingreso_uuid,
     )
 
 
@@ -143,6 +150,7 @@ def actualizar_servicio(*, servicio: Servicio, **kwargs) -> Servicio:
     """
     campos_actualizables = [
         'nombre', 'categoria', 'descripcion', 'precio_venta', 'activo',
+        'cuenta_ingreso_uuid',
     ]
     campos_modificados = []
     for campo in campos_actualizables:
@@ -170,6 +178,8 @@ def crear_activo(
     responsable: str = None,
     fecha_adquisicion=None,
     estado: str = ActivoFijo.Estado.ACTIVO,
+    cuenta_activo_uuid=None,
+    cuenta_depreciacion_uuid=None,
 ) -> ActivoFijo:
     """
     Crea un nuevo Activo Fijo en BD de forma atomica.
@@ -195,6 +205,8 @@ def crear_activo(
         costo_adquisicion=costo_adquisicion,
         fecha_adquisicion=fecha_adquisicion,
         estado=estado,
+        cuenta_activo_uuid=cuenta_activo_uuid,
+        cuenta_depreciacion_uuid=cuenta_depreciacion_uuid,
     )
 
 
@@ -213,6 +225,7 @@ def actualizar_activo(*, activo: ActivoFijo, **kwargs) -> ActivoFijo:
     campos_actualizables = [
         'nombre', 'categoria', 'descripcion', 'ubicacion',
         'responsable', 'costo_adquisicion', 'fecha_adquisicion', 'estado',
+        'cuenta_activo_uuid', 'cuenta_depreciacion_uuid',
     ]
     campos_modificados = []
     for campo in campos_actualizables:

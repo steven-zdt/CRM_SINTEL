@@ -30,8 +30,6 @@ class ConfiguracionCotizacionViewSet(ConfiguracionServiceMixin, BaseTenantViewSe
     # # WARNING: CRÍTICO: DRF necesita un queryset definido para generar las rutas del router
     # Usamos .none() como base porque el filtrado real se hace en get_queryset()
     queryset = ConfiguracionCotizacion.objects.none()
-    lookup_field = 'id'  # ConfiguracionCotizacion usa ID, no UUID
-    lookup_url_kwarg = 'id'
     serializer_class = ConfiguracionCotizacionDetailSerializer
     permission_classes = [permissions.IsAuthenticated, IsTenantMember]
     renderer_classes = [JSONRenderer]

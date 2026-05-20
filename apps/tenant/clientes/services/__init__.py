@@ -13,7 +13,11 @@ from apps.tenant.clientes.services.business_service import ClienteBusinessServic
 # Facade legacy (alias para compatibilidad)
 ClienteService = ClienteBusinessService
 
-from apps.tenant.clientes.services.api_mixins import ClienteServiceMixin, ContactoServiceMixin
+from apps.tenant.clientes.services.api_mixins import (
+    ClienteServiceMixin,
+    ContactoClienteServiceMixin,
+    ContactoServiceMixin,
+)
 
 __all__ = [
     'ClienteSelector',
@@ -21,5 +25,6 @@ __all__ = [
     'ClienteBusinessService',
     'ClienteService',
     'ClienteServiceMixin',
+    'ContactoClienteServiceMixin',
     'ContactoServiceMixin',
 ]

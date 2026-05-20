@@ -25,7 +25,7 @@
     </div>
 
     <form id="form-factura" method="POST" onsubmit="return false;">
-      <input type="hidden" id="factura-id" name="id" value="{% if factura %}{{ factura.id }}{% endif %}">
+      <input type="hidden" id="factura-id" name="id" value="{% if factura %}{{ factura.uuid }}{% endif %}">
 
       {# === DATOS BÁSICOS (XML) === #}
       <div class="card mb-3">
@@ -211,6 +211,35 @@
         </div>
       </div>
 
+      {# === VINCULACIÓN COMERCIAL (manual opcional) === #}
+      <div class="card mb-3 border-primary shadow-sm">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+          <h6 class="mb-0"><i class="bi bi-link-45deg me-2"></i>Vinculación Comercial</h6>
+          <span class="badge bg-light text-primary"><i class="bi bi-pencil me-1"></i>Opcional</span>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-12">
+              <label for="factura-cotizacion_uuid" class="form-label fw-bold text-primary">Cotización asociada</label>
+              <select class="form-select" id="factura-cotizacion_uuid" name="cotizacion_uuid"
+                      data-current="{% if factura and factura.cotizacion %}{{ factura.cotizacion.uuid }}{% endif %}"
+                      data-current-label="{% if factura and factura.cotizacion %}{{ factura.cotizacion.codigo_unico|default:factura.cotizacion.numero_cotizacion }}{% endif %}">
+                <option value="">Sin cotización vinculada</option>
+                {% if factura and factura.cotizacion %}
+                  <option value="{{ factura.cotizacion.uuid }}" selected>
+                    {{ factura.cotizacion.codigo_unico|default:factura.cotizacion.numero_cotizacion }}
+                  </option>
+                {% endif %}
+              </select>
+              <div class="form-text mt-1">
+                <i class="bi bi-info-circle me-1"></i>
+                Relación no estricta: la factura conserva su historial si la cotización se elimina.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {# === ÍTEMS (XML, solo lectura) === #}
       <div class="card mb-3">
         <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
@@ -258,6 +287,25 @@
           </div>
         </div>
       </div>
+
+      {# === VINCULACIÓN CON INVENTARIO (v3.9.2+) === #}
+      {% if factura and factura.items.exists %}
+      <div class="card mb-3 border-info">
+        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+          <h6 class="mb-0"><i class="bi bi-box-seam me-2"></i>Vincular Items con Inventario</h6>
+          <span class="badge bg-light text-info"><i class="bi bi-link me-1"></i>Opcional</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info small" role="alert">
+            <i class="bi bi-info-circle me-2"></i>
+            Busca y vincula cada ítem de factura con un producto o servicio del inventario para trazabilidad.
+          </div>
+          <div id="container-vinculaciones" class="row g-3">
+            {# Filas de búsqueda se generan dinámicamente por JS #}
+          </div>
+        </div>
+      </div>
+      {% endif %}
 
       {# === TOTALES (XML) === #}
       <div class="card mb-3">
@@ -310,3 +358,4 @@
 
 {% load static %}
 <script src="{% static 'js/facturas/features/facturas_editor.js' %}"></script>
+<script src="{% static 'js/facturas/features/factura_inventario_vinculacion.js' %}"></script>

@@ -15,6 +15,15 @@
     'use strict';
 
     const MOD = '[categorias.list]';
+
+    function mostrarOffcanvasSeguro(el) {
+        if (!el || !w.bootstrap?.Offcanvas) return;
+        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        d.body.classList.remove('overflow-hidden', 'modal-open');
+        var prev = bootstrap.Offcanvas.getInstance(el);
+        if (prev) prev.dispose();
+        new bootstrap.Offcanvas(el).show();
+    }
     const GRID_ID = '#grid-categorias';
     const SEARCH_ID = '#search-categoria';
     const API_URL = '/api/v1/inventario/categorias/'; // v2.61.3: Core API Facade para CRUD
@@ -244,8 +253,7 @@
 
                     const offcanvasEl = d.getElementById('offcanvas-categorias');
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
+                        mostrarOffcanvasSeguro(offcanvasEl);
                     } else {
                         console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);
                     }
@@ -396,8 +404,7 @@
 
                     const offcanvasEl = d.getElementById('offcanvas-categorias');
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        offcanvasInstance.show();
+                        mostrarOffcanvasSeguro(offcanvasEl);
                     }
                 } catch (error) {
                     console.error(`${MOD} Error al cargar Offcanvas desde rowClick:`, error);

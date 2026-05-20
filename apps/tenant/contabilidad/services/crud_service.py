@@ -35,8 +35,12 @@ class ContabilidadCRUDService:
             descripcion=data.get('descripcion'),
             estado=data.get('estado', 'BORRADOR'),
             tipo_comprobante=data.get('tipo_comprobante'),
+            tipo_comprobante_ref_id=data.get('tipo_comprobante_id') or data.get('tipo_comprobante_ref_id') or data.get('tipo_comprobante_ref'),
             numero_comprobante=data.get('numero_comprobante'),
-            factura_id=data.get('factura_id')
+            documento_origen_app=data.get('documento_origen_app'),
+            documento_origen_modelo=data.get('documento_origen_modelo'),
+            documento_origen_id=data.get('documento_origen_id'),
+            documento_origen_numero=data.get('documento_origen_numero')
         )
 
         # 2. Crear movimientos
@@ -51,6 +55,7 @@ class ContabilidadCRUDService:
                 empresa_id=empresa_id,
                 asiento=asiento,
                 cuenta_id=mov_data['cuenta_id'],
+                cuenta_codigo=mov_data.get('cuenta_codigo', ''),
                 orden=idx + 1,
                 debe=debe,
                 haber=haber,
@@ -68,10 +73,10 @@ class ContabilidadCRUDService:
             total_debe += debe
             total_haber += haber
 
-        # 3. Actualizar totales del asiento
-        asiento.total_debe = total_debe
-        asiento.total_haber = total_haber
-        asiento.save(update_fields=['total_debe', 'total_haber'])
+        # 3. Actualizar totales del asiento (campos primarios + legados)
+        asiento.debe_total = total_debe
+        asiento.haber_total = total_haber
+        asiento.save(update_fields=['debe_total', 'haber_total', 'total_debe', 'total_haber'])
         
         return asiento
 
@@ -82,7 +87,16 @@ class ContabilidadCRUDService:
         asiento = AsientoContable.objects.get(id=asiento_id)
         
         # 1. Actualizar campos básicos
-        campos_asiento = ['numero', 'fecha', 'descripcion', 'estado', 'tipo_comprobante', 'numero_comprobante', 'factura_id']
+        campos_asiento = [
+            'numero', 'fecha', 'descripcion', 'estado', 
+            'tipo_comprobante', 'tipo_comprobante_ref_id', 'numero_comprobante',
+            'documento_origen_app', 'documento_origen_modelo',
+            'documento_origen_id', 'documento_origen_numero'
+        ]
+        if 'tipo_comprobante_id' in data:
+            data['tipo_comprobante_ref_id'] = data.pop('tipo_comprobante_id')
+        if 'tipo_comprobante_ref' in data:
+            data['tipo_comprobante_ref_id'] = data.pop('tipo_comprobante_ref')
         for campo in campos_asiento:
             if campo in data:
                 setattr(asiento, campo, data[campo])
@@ -101,6 +115,7 @@ class ContabilidadCRUDService:
                     empresa_id=asiento.empresa_id,
                     asiento=asiento,
                     cuenta_id=mov_data['cuenta_id'],
+                    cuenta_codigo=mov_data.get('cuenta_codigo', ''),
                     orden=idx + 1,
                     debe=debe,
                     haber=haber,
@@ -118,8 +133,8 @@ class ContabilidadCRUDService:
                 total_debe += debe
                 total_haber += haber
             
-            asiento.total_debe = total_debe
-            asiento.total_haber = total_haber
+            asiento.debe_total = total_debe
+            asiento.haber_total = total_haber
 
         asiento.save()
         return asiento
@@ -139,6 +154,7 @@ class ContabilidadCRUDService:
         asiento = AsientoContable.objects.create(
             empresa_id=empresa_id,
             tipo_comprobante_ref_id=data.get('tipo_comprobante_id'),
+            periodo_contable_id=data.get('periodo_contable_id'),
             numero=data['numero'],
             fecha=data['fecha'],
             descripcion=data['descripcion'],

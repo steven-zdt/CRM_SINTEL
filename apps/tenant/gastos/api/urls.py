@@ -2,7 +2,8 @@
 URLs de la API de gastos (DRF Router).
 
 v2.62: FLEXIBILIDAD OPERATIVA - Inmutabilidad deshabilitada.
-Se incluye en config/api_urls.py bajo /api/v1/gastos/ y /api/v1/resoluciones-dian/.
+Se incluye en config/api_urls.py bajo /api/v1/gastos/.
+Resoluciones expuestas en /api/v1/gastos/resoluciones/ (v3.7.6).
 
 REGLA DE ORO: El ViewSet se registra como 'gastos' para mantener compatibilidad con el frontend,
 aunque el modelo base sea DocumentoSoporte.
@@ -18,25 +19,18 @@ logger = logging.getLogger(__name__)
 try:
     from .viewsets import GastoViewSet, ResolucionDIANViewSet
 except ImportError as e:
-    logger.error(f"ERROR: ERROR: No se pudo importar ViewSets: {e}", exc_info=True)
+    logger.error(f"ERROR: No se pudo importar ViewSets: {e}", exc_info=True)
     raise
 
-# WARNING: RECONSTRUCCION COMPLETA DEL ROUTER (v2.40)
-# Router para esta app
 router = DefaultRouter()
 
-# WARNING: CRITICO: Registro en la raiz (string vacio) porque el prefijo 'gastos/' ya esta en config/api_urls.py
-# El basename 'gastos' es VITAL para que DRF genere las URLs correctamente
-try:
-    router.register(r'', GastoViewSet, basename='gastos')
-    logger.info("OK: GastoViewSet registrado correctamente en router con basename='gastos'")
-except Exception as e:
-    logger.error(f"ERROR: ERROR registrando GastoViewSet en router: {e}", exc_info=True)
-    raise
+# WARNING: Orden critico — rutas especificas ANTES de r'' para evitar greedy matching.
+# r'' genera ^(?P<uuid>[^/.]+)/$ que capturaria "resoluciones" como uuid si va primero.
+router.register(r'resoluciones', ResolucionDIANViewSet, basename='resoluciones-dian')  # ANTES de r''
+router.register(r'', GastoViewSet, basename='gastos')  # AL FINAL
 
-# URLs generadas por el router
-# WARNING: ESTRUCTURA EXPLICITA: Usar router.urls directamente (patron estandar DRF)
-# WARNING: CRITICO: No usar include(router.urls) dentro de otro include, usar router.urls directamente
+logger.info("OK: GastoViewSet y ResolucionDIANViewSet registrados en el router de gastos")
+
 urlpatterns = router.urls
 
 # Log de URLs generadas (solo en DEBUG)

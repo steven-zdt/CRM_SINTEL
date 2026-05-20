@@ -17,9 +17,9 @@
     /**
      * Abrir offcanvas de empleado (Crear o Editar)
      */
-    async function open(id = null) {
+    async function open(uuid = null) {
         let url = `${API_URL}gestor-offcanvas/?tipo=empleado`;
-        if (id) url += `&id=${id}`;
+        if (uuid) url += `&uuid=${uuid}`;
 
         console.log(`${MOD} Cargando offcanvas: ${url}`);
         
@@ -338,12 +338,14 @@
      */
     function initCuentaContableSearch(container) {
         const searchInput = container.querySelector('#empleado-cuenta_contable_label');
+        const selectInput = container.querySelector('#empleado-cuenta_contable_select');
         const uuidInput = container.querySelector('#empleado-cuenta_contable_uuid');
         const suggestions = container.querySelector('#empleado-cuenta-resultados');
 
-        if (!searchInput || !uuidInput || !suggestions) return;
+        if (!searchInput || !selectInput || !uuidInput || !suggestions) return;
 
         let debounceTimer;
+        let lastResults = [];
 
         searchInput.addEventListener('input', () => {
             const query = searchInput.value.trim();
@@ -351,27 +353,110 @@
 
             if (query.length < 2) {
                 suggestions.classList.add('d-none');
+                populateSelect(lastResults);
                 return;
             }
 
             debounceTimer = setTimeout(async () => {
-                try {
-                    const api = window.Sintel.Empleados.API;
-                    const request = window.Sintel.Empleados.request;
-                    if (!api || !request) return;
-
-                    const url = api.contabilidad.search(query);
-                    const response = await request(url);
-
-                    if (response && response.ok && response.data) {
-                        const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
-                        renderSuggestions(results);
-                    }
-                } catch (err) {
-                    console.error(`${MOD} Error en búsqueda de cuentas:`, err);
-                }
+                searchCuentas(query);
             }, 300);
         });
+
+        searchInput.addEventListener('focus', () => {
+            if (!lastResults.length) {
+                searchCuentas(searchInput.value.trim());
+            }
+        });
+
+        selectInput.addEventListener('change', () => {
+            const selected = lastResults.find(cuenta => String(cuenta.uuid) === selectInput.value);
+            if (selected) {
+                applyCuenta(selected);
+            } else if (!selectInput.value) {
+                uuidInput.value = '';
+            }
+        });
+
+        if (uuidInput.value) {
+            hydrateSelectedCuenta(uuidInput.value);
+        } else {
+            searchCuentas('');
+        }
+
+        async function hydrateSelectedCuenta(uuid) {
+            try {
+                const response = await window.Sintel.Empleados.API.getCuentaByUuid(uuid);
+                if (!response?.ok || !response.data) {
+                    searchCuentas('');
+                    return;
+                }
+
+                const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
+                if (results.length) {
+                    const cuenta = results[0];
+                    lastResults = normalizeCuentaResults([cuenta]);
+                    populateSelect(lastResults);
+                    applyCuenta(cuenta);
+                    return;
+                }
+            } catch (err) {
+                console.error(`${MOD} Error cargando cuenta seleccionada:`, err);
+            }
+            searchCuentas('');
+        }
+
+        async function searchCuentas(query) {
+            try {
+                const api = window.Sintel.Empleados.API;
+                const request = window.Sintel.Empleados.request;
+                if (!api || !request) return;
+
+                const url = api.contabilidad.search(query);
+                const response = await request(url);
+
+                if (response && response.ok && response.data) {
+                    const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
+                    lastResults = normalizeCuentaResults(results);
+                    populateSelect(lastResults);
+                    renderSuggestions(lastResults);
+                }
+            } catch (err) {
+                console.error(`${MOD} Error en busqueda de cuentas:`, err);
+            }
+        }
+
+        function normalizeCuentaResults(results) {
+            const selectedUuid = uuidInput.value;
+            const selectedLabel = searchInput.value.trim();
+            const normalized = Array.isArray(results) ? [...results] : [];
+            if (selectedUuid && selectedLabel && !normalized.some(cuenta => String(cuenta.uuid) === String(selectedUuid))) {
+                normalized.unshift({
+                    uuid: selectedUuid,
+                    codigo: '',
+                    nombre: selectedLabel
+                });
+            }
+            return normalized;
+        }
+
+        function populateSelect(data) {
+            selectInput.innerHTML = '';
+
+            const emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = data.length ? 'Seleccione una cuenta...' : 'Sin cuentas disponibles';
+            selectInput.appendChild(emptyOption);
+
+            data.forEach(cuenta => {
+                const option = document.createElement('option');
+                option.value = cuenta.uuid;
+                option.textContent = getCuentaLabel(cuenta);
+                if (String(cuenta.uuid) === String(uuidInput.value)) {
+                    option.selected = true;
+                }
+                selectInput.appendChild(option);
+            });
+        }
 
         function renderSuggestions(data) {
             suggestions.innerHTML = '';
@@ -384,20 +469,33 @@
                 const item = document.createElement('button');
                 item.type = 'button';
                 item.className = 'list-group-item list-group-item-action small py-2';
-                item.innerHTML = `<div><span class="fw-bold text-primary">${cuenta.codigo}</span> - ${cuenta.nombre}</div>`;
+                item.innerHTML = `<div><span class="fw-bold text-primary">${cuenta.codigo || ''}</span> - ${cuenta.nombre || ''}</div>`;
                 
                 item.addEventListener('click', () => {
-                    searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
-                    uuidInput.value = cuenta.uuid;
+                    applyCuenta(cuenta);
                     suggestions.classList.add('d-none');
-                    
-                    // Feedback visual
-                    searchInput.classList.add('is-valid');
-                    setTimeout(() => searchInput.classList.remove('is-valid'), 2000);
                 });
                 suggestions.appendChild(item);
             });
             suggestions.classList.remove('d-none');
+        }
+
+        function applyCuenta(cuenta) {
+            searchInput.value = getCuentaLabel(cuenta);
+            selectInput.value = cuenta.uuid;
+            uuidInput.value = cuenta.uuid;
+
+            searchInput.classList.add('is-valid');
+            selectInput.classList.add('is-valid');
+            setTimeout(() => {
+                searchInput.classList.remove('is-valid');
+                selectInput.classList.remove('is-valid');
+            }, 2000);
+        }
+
+        function getCuentaLabel(cuenta) {
+            const codigo = cuenta.codigo ? `${cuenta.codigo} - ` : '';
+            return `${codigo}${cuenta.nombre || ''}`.trim();
         }
 
         // Cerrar sugerencias al hacer click fuera
@@ -411,6 +509,7 @@
         searchInput.addEventListener('change', () => {
             if (!searchInput.value.trim()) {
                 uuidInput.value = '';
+                selectInput.value = '';
             }
         });
     }

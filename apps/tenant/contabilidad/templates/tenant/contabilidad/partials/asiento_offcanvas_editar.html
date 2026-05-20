@@ -60,14 +60,9 @@
         
         <div class="col-md-6">
           <label class="form-label small fw-bold">Tipo de Comprobante</label>
-          <select class="form-select" id="select-tipo-comprobante">
-            <option value="">Seleccione tipo...</option>
-            <option value="FVE" {% if asiento.tipo_comprobante == 'FVE' %}selected{% endif %}>FVE - Factura de Venta Electrónica</option>
-            <option value="CE" {% if asiento.tipo_comprobante == 'CE' %}selected{% endif %}>CE - Comprobante de Egreso</option>
-            <option value="RC" {% if asiento.tipo_comprobante == 'RC' %}selected{% endif %}>RC - Recibo de Caja</option>
-            <option value="GN" {% if asiento.tipo_comprobante == 'GN' %}selected{% endif %}>GN - General</option>
-            <option value="ND" {% if asiento.tipo_comprobante == 'ND' %}selected{% endif %}>ND - Nota Débito</option>
-            <option value="NC" {% if asiento.tipo_comprobante == 'NC' %}selected{% endif %}>NC - Nota Crédito</option>
+          <select class="form-select" id="select-tipo-comprobante"
+                  data-current="{% if asiento.tipo_comprobante_ref %}{{ asiento.tipo_comprobante_ref }}{% endif %}">
+            <option value="">Cargando tipos...</option>
           </select>
           <small class="text-muted">Opcional: Tipo de documento relacionado</small>
         </div>

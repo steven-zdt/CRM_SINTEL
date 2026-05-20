@@ -173,7 +173,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
             qs = self.get_qs_detail().filter(empresa_id=empresa_id)
         elif self.action == "destroy":
             qs = Factura.objects.filter(empresa_id=empresa_id).only('id', 'estado', 'empresa_id')
-        elif self.action in ("partial_update", "update"):
+        elif self.action in ("partial_update", "update", "cambiar_estado", "vincular_cotizacion"):
             qs = Factura.objects.filter(empresa_id=empresa_id)
         else:
             qs = self.get_qs_list(search=search).filter(empresa_id=empresa_id)
@@ -202,7 +202,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         # # WARNING: v2.61.2: Acciones que no usan serializer (trabajan directamente con request.data)
         if self.action in ['create-from-dto', 'materialize', 'importar-ubl', 'upload-ubl', 'upload-document',
                            'summary', 'xml', 'app-response', 'update-inbox-state', 'gestor-offcanvas',
-                           'lista-centro-costos']:
+                           'lista-centro-costos', 'por_estado', 'cambiar_estado', 'vincular_cotizacion']:
             return None
 
         if self.action == "list":
@@ -375,6 +375,97 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=False, methods=["get"], url_path="por-estado")
+    def por_estado(self, request: Request) -> Response:
+        """
+        Filtra facturas por estado.
+
+        GET /api/v1/facturas/por-estado/?estado=ACEPTADA
+
+        Params:
+            estado (str): Uno de BORRADOR|ENVIADA|ACEPTADA|RECHAZADA|ANULADA
+
+        Returns:
+            200 OK con lista paginada de facturas del estado solicitado.
+            400 Bad Request si falta el parametro estado.
+        """
+        estado = request.query_params.get("estado")
+        if not estado:
+            return Response(
+                {"error": "missing_param", "detail": "El parametro 'estado' es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        valid_states = {choice[0] for choice in Factura.Estado.choices}
+        if estado not in valid_states:
+            return Response(
+                {"error": "invalid_estado", "detail": f"Estado invalido. Opciones: {sorted(valid_states)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = self.get_queryset().filter(estado=estado)
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = FacturaListSerializer(page, many=True, context={"request": request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = FacturaListSerializer(qs, many=True, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="cambiar-estado")
+    def cambiar_estado(self, request: Request, uuid=None) -> Response:
+        """
+        Cambia el estado de una factura.
+
+        POST /api/v1/facturas/{uuid}/cambiar-estado/
+        Body: {"estado": "ENVIADA"}
+
+        Params:
+            estado (str): Uno de BORRADOR|ENVIADA|ACEPTADA|RECHAZADA|ANULADA
+
+        Returns:
+            200 OK con FacturaDetailSerializer.
+            400 Bad Request si el estado es invalido o falta.
+        """
+        from apps.tenant.facturas.services.crud_service import FacturaCRUDService
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+
+        nuevo_estado = request.data.get("estado")
+        if not nuevo_estado:
+            return Response(
+                {"error": "missing_param", "detail": "El campo 'estado' es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        valid_states = {choice[0] for choice in Factura.Estado.choices}
+        if nuevo_estado not in valid_states:
+            return Response(
+                {"error": "invalid_estado", "detail": f"Estado invalido. Opciones: {sorted(valid_states)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        factura = self.get_object()
+        empresa_id = get_or_create_profile(request.user).empresa_id
+
+        # DSV: verificar propiedad del tenant
+        if factura.empresa_id != empresa_id:
+            return Response(
+                {"error": "forbidden", "detail": "La factura no pertenece a la empresa activa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            factura = FacturaCRUDService.actualizar(factura, {"estado": nuevo_estado})
+        except Exception as e:
+            log_up.error(f"[facturas:cambiar_estado] Error: {e}", extra={"factura_uuid": str(factura.uuid)})
+            return Response(
+                {"error": "update_failed", "detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = FacturaDetailSerializer(factura, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=["post"], url_path="importar-ubl")
     def importar_ubl(self, request: Request) -> Response:
         """
@@ -1482,23 +1573,159 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         
         # Template completo para edición
         return Response(context, template_name='tenant/facturas/offcanvas_editar_factura.html')
-    
+
+    @action(detail=False, methods=["get"], url_path="inventario-catalogo")
+    def inventario_catalogo(self, request: Request) -> Response:
+        """
+        Busca productos y servicios unificados del inventario.
+        """
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+        from apps.tenant.facturas.services.selectors import InventarioItemBridge
+        from .serializers import CatalogoItemInventarioSerializer
+
+        perfil = get_or_create_profile(request.user)
+        empresa_id = perfil.empresa_id
+
+        search = request.query_params.get("q", "")
+        catalogo = InventarioItemBridge.buscar_catalogo(empresa_id=empresa_id, search=search)
+
+        serializer = CatalogoItemInventarioSerializer(catalogo, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"], url_path="trazabilidad-inventario")
+    def trazabilidad_inventario(self, request: Request, pk=None) -> Response:
+        """
+        Retorna la trazabilidad de los items de la factura con respecto al inventario.
+        """
+        factura = self.get_object()
+        items = factura.items.all().only(
+            "id", "uuid", "codigo", "descripcion", "cantidad",
+            "item_inventario_uuid", "item_inventario_tipo", "item_inventario_codigo"
+        )
+        
+        from apps.tenant.facturas.services.selectors import InventarioItemBridge
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+        empresa_id = get_or_create_profile(request.user).empresa_id
+
+        trazabilidad = []
+        for item in items:
+            info = None
+            if item.item_inventario_uuid and item.item_inventario_tipo:
+                info = InventarioItemBridge.resolver_item(
+                    empresa_id=empresa_id,
+                    item_uuid=item.item_inventario_uuid,
+                    item_tipo=item.item_inventario_tipo
+                )
+            trazabilidad.append({
+                "item_factura_id": item.id,
+                "item_factura_uuid": str(item.uuid),
+                "codigo_factura": item.codigo,
+                "descripcion_factura": item.descripcion,
+                "cantidad": float(item.cantidad),
+                "vinculado": info is not None,
+                "item_inventario": info
+            })
+            
+        return Response(trazabilidad, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='buscar-para-movimiento')
+    def buscar_para_movimiento(self, request):
+        """
+        Búsqueda de facturas para vincular con movimientos de inventario.
+        GET /api/v1/facturas/buscar-para-movimiento/?q=FV-2026-001&naturaleza=VENTA
+        Retorna: [{ numero, fecha, receptor_razon_social, total, naturaleza }]
+        """
+        query = request.query_params.get('q', '').strip()
+        naturaleza = request.query_params.get('naturaleza', '').strip()
+
+        if len(query) < 2:
+            return Response([], status=status.HTTP_200_OK)
+
+        # Obtener empresa_id de forma segura desde el perfil del usuario
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+        perfil = get_or_create_profile(request.user)
+        empresa_id = perfil.empresa_id
+        qs = Factura.objects.filter(empresa_id=empresa_id).only(
+            'uuid', 'numero', 'fecha_emision', 'receptor_razon_social', 'receptor_nit',
+            'total', 'naturaleza'
+        )
+
+        # Búsqueda por número o cliente
+        qs = qs.filter(
+            Q(numero__icontains=query) | Q(receptor_razon_social__icontains=query)
+        )
+
+        # Filtro por naturaleza si se proporciona
+        if naturaleza in ('VENTA', 'COMPRA'):
+            qs = qs.filter(naturaleza=naturaleza)
+
+        # Ordenar por fecha descendente, límite 20 resultados
+        qs = qs.order_by('-fecha_emision')[:20]
+
+        resultados = [
+            {
+                'uuid': str(f.uuid),
+                'numero': f.numero,
+                'fecha': f.fecha_emision.strftime('%d/%m/%Y') if f.fecha_emision else '',
+                'cliente': f.receptor_razon_social or f.receptor_nit or 'N/A',
+                'total': str(f.total),
+                'naturaleza': f.naturaleza
+            }
+            for f in qs
+        ]
+
+        return Response(resultados, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], url_path='vincular-cotizacion')
+    def vincular_cotizacion(self, request, uuid=None):
+        """
+        PATCH /api/v1/facturas/{uuid}/vincular-cotizacion/
+        Vincula una factura con una cotización (soft reference).
+
+        Payload: {"cotizacion_uuid": "uuid" or null}
+        Respuesta: {"cotizacion_uuid": "uuid", "success": true}
+        """
+        factura = self.get_object()
+        cotizacion_uuid = request.data.get('cotizacion_uuid')
+
+        if cotizacion_uuid is not None:
+            # Validar que sea un UUID válido si se proporciona
+            try:
+                import uuid as uuid_module
+                uuid_module.UUID(str(cotizacion_uuid))
+            except (ValueError, AttributeError):
+                return Response(
+                    {'detail': 'cotizacion_uuid debe ser un UUID válido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        factura.cotizacion_uuid = cotizacion_uuid
+        factura.save(update_fields=['cotizacion_uuid'])
+
+        return Response({
+            'cotizacion_uuid': str(factura.cotizacion_uuid) if factura.cotizacion_uuid else None,
+            'success': True
+        }, status=status.HTTP_200_OK)
+
 
 class ItemFacturaViewSet(mixins.ListModelMixin,
                          mixins.RetrieveModelMixin,
+                         mixins.UpdateModelMixin,
                          mixins.DestroyModelMixin,
                          viewsets.GenericViewSet):
     """
     Endpoints para ítems de factura.
 
     # WARNING: NOTA: CRUD completo de ítems se recomienda gestionarlo a través de Factura (items embed).
-    Este ViewSet expone list, retrieve y destroy para casos específicos.
+    Este ViewSet expone list, retrieve, update (parcial) y destroy para casos específicos.
+    v3.9.2: Actualización de campos item_inventario_* para vinculación.
 
     # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() cuando sea necesario.
 
     Endpoints disponibles:
     - GET /api/v1/items-factura/ (lista de ítems con filtro por factura)
     - GET /api/v1/items-factura/{id}/ (detalle de un ítem)
+    - PATCH /api/v1/items-factura/{id}/ (actualizar ítem — campos item_inventario_* v3.9.2+)
     - DELETE /api/v1/items-factura/{id}/ (eliminar un ítem)
     """
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -1510,13 +1737,15 @@ class ItemFacturaViewSet(mixins.ListModelMixin,
         """
         QuerySet optimizado - NO usa .all().
         Filtra por factura si se proporciona el parámetro factura_id o factura.
+        Incluye campos de inventario para vinculación v3.9.2+.
         """
         qs = ItemFactura.objects.only(
-            "id", "factura_id", "linea_id", "codigo", "descripcion",
+            "id", "uuid", "empresa_id", "factura_id", "linea_id", "codigo", "descripcion",
             "cantidad", "unidad_medida", "valor_unitario", "porcentaje_iva",
             "valor_iva", "porcentaje_retefuente", "valor_retefuente",
             "porcentaje_reteiva", "valor_reteiva", "porcentaje_reteica", "valor_reteica",
-            "subtotal", "total", "es_servicio", "orden"
+            "subtotal", "total", "es_servicio", "orden",
+            "item_inventario_uuid", "item_inventario_tipo", "item_inventario_codigo"
         )
 
         # Filtro por factura (soporta 'factura' o 'factura_id' en query params)

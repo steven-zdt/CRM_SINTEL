@@ -52,7 +52,7 @@ class ProyectoListSerializer(serializers.ModelSerializer):
         model = Proyecto
         fields = [
             # Campos básicos (Tabulator)
-            'id', 'codigo', 'nombre', 'tipo_servicio', 'tipo_servicio_display',
+            'id', 'uuid', 'codigo', 'nombre', 'tipo_servicio', 'tipo_servicio_display',
             'fase_actual', 'fase_actual_display', 'estado_tarea', 'estado_display',
             'fecha_inicio', 'fecha_fin_estimada', 'fecha_fin_prevista',
             
@@ -105,7 +105,21 @@ class AsignacionPersonalSerializer(NormalizationMixin, serializers.ModelSerializ
     def validate(self, attrs):
         """# WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
+        
+        # Validación de negocio: No permitir asignaciones en proyectos en fase de CIERRE
+        proyecto = attrs.get('proyecto') or (self.instance.proyecto if self.instance else None)
+        if not proyecto and self.context:
+            proyecto = self.context.get('proyecto')
+        if not proyecto and self.parent and hasattr(self.parent, 'instance') and self.parent.instance:
+            proyecto = self.parent.instance
+            
+        if proyecto:
+            if proyecto.fase_actual == 'CIERRE':
+                raise serializers.ValidationError(
+                    "No se pueden agregar o modificar asignaciones de personal para proyectos en fase de CIERRE."
+                )
         return attrs
+
 
 
 class ItemPedidoSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -163,10 +177,15 @@ class PedidoProyectoSerializer(NormalizationMixin, serializers.ModelSerializer):
         
         # Validación de negocio: No permitir pedidos en proyectos cerrados
         proyecto = attrs.get('proyecto') or (self.instance.proyecto if self.instance else None)
+        if not proyecto and self.context:
+            proyecto = self.context.get('proyecto')
+        if not proyecto and self.parent and hasattr(self.parent, 'instance') and self.parent.instance:
+            proyecto = self.parent.instance
+            
         if proyecto:
-            if proyecto.fase_actual == 'CIERRE' and proyecto.estado_tarea == 'COMPLETADO':
+            if proyecto.fase_actual == 'CIERRE':
                 raise serializers.ValidationError(
-                    "No se pueden generar pedidos para proyectos en fase de cierre completados."
+                    "No se pueden generar o modificar pedidos para proyectos en fase de CIERRE."
                 )
         return attrs
 
@@ -203,7 +222,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         model = Proyecto
         exclude = ['empresa']  # SSoT: La empresa se maneja a nivel de viewset/middleware/services
         read_only_fields = [
-            'id', 'created_at', 'updated_at',
+            'id', 'uuid', 'created_at', 'updated_at',
             'costo_mano_obra_real', 'costo_materiales_real',
             'utilidad_estimada', 'margen_rentabilidad',
         ]
@@ -229,6 +248,25 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     def validate(self, attrs):
         """# WARNING: Zero Trust: Limpieza y normalización de todos los datos ingresados."""
         attrs = self.normalize_data(attrs)
+        
+        # Validación de negocio: Bloquear edición de costos y datos críticos en fase de CIERRE
+        if self.instance and self.instance.fase_actual == 'CIERRE':
+            # Campos permitidos para carga de actas/informes o finalización
+            allowed_fields = {'acta_entrega_archivo', 'informe_final_archivo', 'fecha_cierre_real', 'porcentaje_avance', 'estado_tarea'}
+            disallowed_changes = []
+            for key, val in attrs.items():
+                if key not in allowed_fields:
+                    current_val = getattr(self.instance, key)
+                    # Si es FK, comparar el ID
+                    if hasattr(current_val, 'id') and hasattr(val, 'id'):
+                        if current_val.id != val.id:
+                            disallowed_changes.append(key)
+                    elif current_val != val:
+                        disallowed_changes.append(key)
+            if disallowed_changes:
+                raise serializers.ValidationError(
+                    "No se pueden modificar costos ni datos críticos de un proyecto en fase de CIERRE."
+                )
         return attrs
 
     def get_costo_total(self, obj):

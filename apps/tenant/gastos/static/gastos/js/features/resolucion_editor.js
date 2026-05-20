@@ -124,10 +124,10 @@
             vigente: form.querySelector('[name="vigente"]')?.checked || false
         };
 
-        const id = form.querySelector('[name="id"]')?.value;
+        const uuid = form.querySelector('[name="uuid"]')?.value;
         const api = window.Sintel.Gastos.API.resoluciones;
-        const url = id ? api.update(id) : api.create;
-        const method = id ? 'PUT' : 'POST';
+        const url = uuid ? api.update(uuid) : api.create;
+        const method = uuid ? 'PUT' : 'POST';
 
         try {
             const response = await fetch(url, {

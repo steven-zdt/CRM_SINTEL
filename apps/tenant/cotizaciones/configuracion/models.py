@@ -4,6 +4,8 @@ Configuración de Perfiles v2.60 - SIMPLIFICADO (User-Driven)
 1. Lógica de generación de códigos (Prefijo, Sufijo, Semilla)
 2. Días de validez de la cotización (1 a 30 días)
 """
+import uuid as uuid_module
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -29,6 +31,8 @@ class ConfiguracionCotizacion(SintelTenantBaseModel):
     Campos nuevos:
     - dias_validez: Días de validez de la cotización (1 a 30 días)
     """
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+
     # empresa field inherited from SintelTenantBaseModel
     nombre_configuracion = models.CharField(
         max_length=100,

@@ -50,7 +50,7 @@
 </style>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-gasto-editar"
-     data-instance-id="{{ instance.id }}" aria-labelledby="offcanvas-gasto-label">
+     aria-labelledby="offcanvas-gasto-label">
     <div class="offcanvas-header border-bottom py-3 px-4">
         <h5 class="offcanvas-title fw-semibold" id="offcanvas-gasto-label">
             <i class="bi bi-pencil-fill text-primary me-2"></i>Editar Gasto
@@ -63,7 +63,7 @@
         <div id="form-gasto-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
         <div id="gasto-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
 
-        <form id="gasto-form" data-mode="edit" data-instance-id="{{ instance.id }}">
+        <form id="gasto-form" data-mode="edit" data-uuid="{{ instance.uuid }}">
             {% csrf_token %}
 
             {# ── Sección: Origen y Resolución ───────────────────────────── #}

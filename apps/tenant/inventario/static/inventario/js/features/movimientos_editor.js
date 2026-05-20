@@ -1,375 +1,585 @@
 /**
- * Feature: Editor - Movimientos de Inventario (Kardex) v2.61.3
- * ⚠️ Feature-Sliced Architecture: Lógica de creación y manejo de Modal
- * ⚠️ Vanilla JS: Sin dependencias de jQuery
- * ⚠️ API-First: Consume Core API facade (CORE_API_BASE)
- * ⚠️ Aislamiento Gradual v2.60: Sin bloques try/catch, usa UIManager.handleError()
- * 
- * Dependencias globales requeridas:
- * - w.http (definido en lib/http.js) - Capa de Datos
- * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
- * - w.SintelFeedback (definido en sintel-feedback.js) - Feedback visual
- * - w.inventarioAPI (definido en inventario.api.js) - API wrapper (opcional)
- * - w.MovimientosList (definido en movimientos_list.js) - Feature: Listado (para recargar tabla)
- * 
- * CRUD:
- * - CREATE: Registrar nuevo movimiento de inventario
- * ⚠️ NOTA: No hay UPDATE/DELETE por integridad del Kardex (movimientos históricos)
+ * Feature: Editor - Movimientos Universales de Inventario v3.9.1
+ * Campos protegidos: nombre/precio del item son solo lectura.
+ * Unica variable editable por usuario: Cantidad + Tipo de Movimiento.
+ * El costo_unitario se toma automaticamente del item seleccionado.
  */
 (function(w, d) {
     'use strict';
 
-    const MOD = '[movimientos.editor]';
-    const CORE_API_BASE = '/api/v1/inventario/movimientos'; // Core API Facade
-    const FORM_ID = '#form-movimiento';
-    const FEEDBACK_ID = '#feedback-movimiento';
-    const OFFCANVAS_ID = '#offcanvas-movimientos';
+    const MOD = '[movimientos.editor.v391]';
+    const ENDPOINTS = {
+        MOVIMIENTO: '/api/v1/inventario/movimientos/',
+        HISTORIAL_SERVICIO: '/api/v1/inventario/historial-servicios/',
+        PRODUCTOS: '/api/v1/inventario/productos/',
+        ACTIVOS: '/api/v1/inventario/activos/',
+        SERVICIOS: '/api/v1/inventario/servicios/'
+    };
+
+    const SELECTORS = {
+        FORM: '#form-movimiento',
+        OFFCANVAS: '#offcanvas-movimientos',
+        FEEDBACK: '#feedback-movimiento',
+        CATEGORIA: '#categoria_origen',
+        ITEM: '#item_seleccionado',
+        TIPO_MOV: '#tipo_movimiento',
+        CANTIDAD: '#movimiento-cantidad',
+        COSTO: '#movimiento-costo',          // hidden input
+        NOMBRE_REF: '#movimiento-nombre-ref', // readonly display
+        PRECIO_REF: '#movimiento-precio-ref', // readonly display
+        STOCK_REF: '#movimiento-stock-ref',   // readonly display
+        STOCK_REF_CONTAINER: '#stock_ref_container',
+        ORIGEN: '#movimiento-origen',
+        OBS: '#movimiento-observaciones',
+        CAMPOS_KARDEX: '#campos_kardex',
+        CAMPOS_COMUNES: '#campos_comunes',
+        BTN_GUARDAR: '#btn-guardar-movimiento',
+        CANTIDAD_CONTAINER: '#cantidad_container',
+        ITEM_HELP: '#item_help_text',
+        PANEL_REF: '#panel_referencia_item'
+    };
+
+    const TIPOS_MOVIMIENTO = {
+        PRODUCTO: [
+            { value: 'ENTRADA_COMPRA', label: 'Compra' },
+            { value: 'ENTRADA_AJUSTE', label: 'Ajuste (+)' },
+            { value: 'ENTRADA_DEVOLUCION', label: 'Devolucion Cliente' },
+            { value: 'SALIDA_VENTA', label: 'Venta' },
+            { value: 'SALIDA_BAJA', label: 'Baja / Deterioro' },
+            { value: 'SALIDA_CONSUMO', label: 'Consumo Interno' }
+        ],
+        ACTIVO_FIJO: [
+            { value: 'ASIGNACION_RESPONSABLE', label: 'Asignacion de Responsable' },
+            { value: 'TRASLADO_MANTENIMIENTO', label: 'Traslado a Mantenimiento' },
+            { value: 'RETORNO_MANTENIMIENTO', label: 'Retorno de Mantenimiento' },
+            { value: 'SALIDA_BAJA_ACTIVO', label: 'Baja de Activo' }
+        ]
+    };
+
+    let estadoFormulario = { categoriaActual: null, itemSeleccionado: null };
+    let itemsCargadosBuffer = [];
+
+    // =========================================================================
+    // 1. MUTACION DEL DOM
+    // =========================================================================
+
+    function mutatUIParaCategoria(categoria) {
+        const kardex = d.querySelector(SELECTORS.CAMPOS_KARDEX);
+        const comunes = d.querySelector(SELECTORS.CAMPOS_COMUNES);
+        const cantContainer = d.querySelector(SELECTORS.CANTIDAD_CONTAINER);
+
+        if (kardex) kardex.classList.add('d-none');
+        if (comunes) comunes.classList.add('d-none');
+        if (cantContainer) cantContainer.classList.add('d-none');
+
+        if (!categoria) return;
+
+        if (comunes) comunes.classList.remove('d-none');
+
+        if (categoria === 'PRODUCTO' || categoria === 'ACTIVO_FIJO') {
+            if (kardex) kardex.classList.remove('d-none');
+            if (categoria === 'PRODUCTO' && cantContainer) {
+                cantContainer.classList.remove('d-none');
+            }
+        }
+    }
+
+    function rellenarTiposMovimiento(categoria) {
+        const select = d.querySelector(SELECTORS.TIPO_MOV);
+        if (!select) return;
+        select.innerHTML = '<option value="">— Seleccionar —</option>';
+        select.disabled = true;
+        const tipos = TIPOS_MOVIMIENTO[categoria] || [];
+        tipos.forEach(t => {
+            const opt = d.createElement('option');
+            opt.value = t.value;
+            opt.textContent = t.label;
+            select.appendChild(opt);
+        });
+        if (tipos.length > 0) select.disabled = false;
+    }
+
+    function limpiarPanelReferencia() {
+        const panel = d.querySelector(SELECTORS.PANEL_REF);
+        if (panel) panel.classList.add('d-none');
+        const nombreRef = d.querySelector(SELECTORS.NOMBRE_REF);
+        const precioRef = d.querySelector(SELECTORS.PRECIO_REF);
+        const stockRef = d.querySelector(SELECTORS.STOCK_REF);
+        if (nombreRef) nombreRef.value = '';
+        if (precioRef) precioRef.value = '';
+        if (stockRef) stockRef.value = '';
+        const costoHidden = d.querySelector(SELECTORS.COSTO);
+        if (costoHidden) costoHidden.value = '0';
+    }
+
+    // =========================================================================
+    // 2. AUTO-LLENADO DE REFERENCIA (Campos protegidos)
+    // =========================================================================
 
     /**
-     * Recolectar datos del formulario de movimiento
-     * @returns {Object|null} Datos del movimiento o null si hay error
+     * Actualiza el costo unitario oculto segun el tipo de movimiento.
+     * Se llama tambien cuando cambia el tipo (ENTRADA vs SALIDA).
      */
-    function recolectarDatosFormulario() {
-        const form = d.querySelector(FORM_ID);
-        if (!form) {
-            console.error(`${MOD} Formulario ${FORM_ID} no encontrado`);
+    function actualizarCostoPorTipo(item, categoria) {
+        const inputCosto = d.querySelector(SELECTORS.COSTO);
+        if (!inputCosto || !item || categoria !== 'PRODUCTO') return;
+        const tipo = d.querySelector(SELECTORS.TIPO_MOV)?.value || '';
+        const esEntrada = tipo.startsWith('ENTRADA');
+        const precio = parseFloat(item.precio_venta || 0);
+        const costo = parseFloat(item.costo_promedio || 0);
+        inputCosto.value = (esEntrada ? costo : precio).toFixed(2);
+    }
+
+    /**
+     * Rellena los campos de referencia (solo lectura) con los datos del item.
+     * Tambien inyecta el costo_unitario en el input oculto.
+     */
+    function autoRellenarPorItem(item, categoria) {
+        const panel = d.querySelector(SELECTORS.PANEL_REF);
+        const nombreRef = d.querySelector(SELECTORS.NOMBRE_REF);
+        const precioRef = d.querySelector(SELECTORS.PRECIO_REF);
+        const stockRef = d.querySelector(SELECTORS.STOCK_REF);
+        const stockContainer = d.querySelector(SELECTORS.STOCK_REF_CONTAINER);
+        const inputCosto = d.querySelector(SELECTORS.COSTO);
+
+        if (!item || !panel) return;
+        panel.classList.remove('d-none');
+        if (nombreRef) nombreRef.value = item.nombre || '';
+
+        if (categoria === 'PRODUCTO') {
+            const unidad = item.unidad || 'UND';
+            const stock = parseFloat(item.stock_actual || 0).toFixed(3);
+            const precio = parseFloat(item.precio_venta || 0).toFixed(2);
+            const costoProm = parseFloat(item.costo_promedio || 0).toFixed(2);
+
+            if (precioRef) precioRef.value = 'Precio Vta: $' + precio + ' | Costo Prom: $' + costoProm;
+            if (stockRef) stockRef.value = 'Stock: ' + stock + ' ' + unidad;
+            if (stockContainer) stockContainer.classList.remove('d-none');
+
+            // Costo segun tipo de movimiento actual
+            actualizarCostoPorTipo(item, categoria);
+
+        } else if (categoria === 'SERVICIO') {
+            const precio = parseFloat(item.precio_venta || 0).toFixed(2);
+            if (precioRef) precioRef.value = 'Precio Servicio: $' + precio;
+            if (stockRef) stockRef.value = '';
+            if (stockContainer) stockContainer.classList.add('d-none');
+            if (inputCosto) inputCosto.value = precio;
+
+        } else if (categoria === 'ACTIVO_FIJO') {
+            const costoAdq = parseFloat(item.costo_adquisicion || 0).toFixed(2);
+            if (precioRef) precioRef.value = 'Costo Adquisicion: $' + costoAdq;
+            if (stockRef) stockRef.value = '';
+            if (stockContainer) stockContainer.classList.add('d-none');
+            if (inputCosto) inputCosto.value = '0.00';
+        }
+    }
+
+    // =========================================================================
+    // 3. VALIDACION Y FETCH
+    // =========================================================================
+
+    function validarYHabilitarGuardar() {
+        const categoria = d.querySelector(SELECTORS.CATEGORIA)?.value || '';
+        const item = d.querySelector(SELECTORS.ITEM)?.value || '';
+        const tipo = d.querySelector(SELECTORS.TIPO_MOV)?.value || '';
+        const cantidad = parseFloat(d.querySelector(SELECTORS.CANTIDAD)?.value || 0);
+        const btn = d.querySelector(SELECTORS.BTN_GUARDAR);
+
+        let esValido = false;
+        if (categoria && item) {
+            if (categoria === 'SERVICIO') {
+                esValido = true;
+            } else if (categoria === 'ACTIVO_FIJO' && tipo) {
+                esValido = true;
+            } else if (tipo && cantidad > 0) {
+                esValido = true;
+            }
+        }
+        if (btn) btn.disabled = !esValido;
+    }
+
+    async function cargarItemsPorCategoria(categoria) {
+        const itemSelect = d.querySelector(SELECTORS.ITEM);
+        if (!itemSelect) return;
+
+        itemSelect.disabled = true;
+        itemSelect.innerHTML = '<option value="">Cargando...</option>';
+
+        const endpointMap = {
+            PRODUCTO: ENDPOINTS.PRODUCTOS,
+            ACTIVO_FIJO: ENDPOINTS.ACTIVOS,
+            SERVICIO: ENDPOINTS.SERVICIOS
+        };
+        const endpoint = endpointMap[categoria];
+        if (!endpoint) return;
+
+        try {
+            if (!w.http || typeof w.http !== 'function') {
+                mostrarError('HTTP client no disponible');
+                return;
+            }
+            const res = await w.http('GET', endpoint);
+            if (!res.ok || !res.data) {
+                mostrarError('Error al cargar ' + categoria);
+                itemSelect.innerHTML = '<option value="">Error al cargar items</option>';
+                return;
+            }
+            const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
+            itemsCargadosBuffer = items;
+
+            itemSelect.innerHTML = '<option value="">— Seleccionar —</option>';
+            items.forEach(item => {
+                const opt = d.createElement('option');
+                opt.value = item.id || item.uuid;
+                const cod = item.codigo || '';
+                opt.textContent = cod ? '[' + cod + '] ' + (item.nombre || '') : (item.nombre || 'Sin nombre');
+                itemSelect.appendChild(opt);
+            });
+            itemSelect.disabled = false;
+
+            const help = d.querySelector(SELECTORS.ITEM_HELP);
+            if (help) help.textContent = items.length + ' ' + categoria.toLowerCase() + ' disponible(s)';
+        } catch (err) {
+            console.error(MOD, 'Error cargando items:', err);
+            mostrarError('Error al cargar ' + categoria);
+            itemSelect.innerHTML = '<option value="">Error al cargar</option>';
+        }
+    }
+
+    // =========================================================================
+    // 4. CONSTRUCCION DE PAYLOAD
+    // =========================================================================
+
+    function recolectarYConstructorPayload() {
+        const categoria = d.querySelector(SELECTORS.CATEGORIA)?.value || '';
+        const itemId = d.querySelector(SELECTORS.ITEM)?.value;
+        const tipo = d.querySelector(SELECTORS.TIPO_MOV)?.value || '';
+        const cantidad = parseFloat(d.querySelector(SELECTORS.CANTIDAD)?.value || 1);
+        const costo = parseFloat(d.querySelector(SELECTORS.COSTO)?.value || 0);  // desde hidden
+        const origen = d.querySelector(SELECTORS.ORIGEN)?.value?.trim() || '';
+        const obs = d.querySelector(SELECTORS.OBS)?.value?.trim() || '';
+
+        // Recopilar factura links (si existen)
+        const facturaUuidInput = d.getElementById('movimiento-factura-uuid');
+        const facturaNumeroInput = d.getElementById('movimiento-factura-numero');
+        const facturaUuid = facturaUuidInput?.value?.trim() || null;
+        const facturaNumero = facturaNumeroInput?.value?.trim() || null;
+
+        if (!categoria || !itemId) {
+            mostrarError('Debe seleccionar categoria e item');
+            return null;
+        }
+        if (categoria === 'PRODUCTO' && (!tipo || cantidad <= 0)) {
+            mostrarError('Debe seleccionar tipo y cantidad valida');
+            return null;
+        }
+        if (categoria === 'ACTIVO_FIJO' && !tipo) {
+            mostrarError('Debe seleccionar el tipo de movimiento');
             return null;
         }
 
-        const formData = new FormData(form);
-        const payload = {
-            producto: formData.get('producto') ? parseInt(formData.get('producto'), 10) : null,
-            tipo: formData.get('tipo') || '',
-            cantidad: parseFloat(formData.get('cantidad')) || 0,
-            costo_unitario: parseFloat(formData.get('costo_unitario')) || 0,
-            origen_referencia: formData.get('origen_referencia')?.trim() || '',
-            observaciones: formData.get('observaciones')?.trim() || ''
+        const base = {
+            origen_referencia: origen,
+            observaciones: obs,
+            cliente_referencia: '',
+            factura_uuid: facturaUuid,
+            factura_numero: facturaNumero
         };
 
-        // Validación granular para feedback específico
-        if (!payload.producto) {
-            mostrarError('El campo "Producto" es requerido. Por favor seleccione un producto de la lista.');
-            console.warn(`${MOD} Validación fallida: Producto ausente`, payload);
-            return null;
+        if (categoria === 'PRODUCTO') {
+            return {
+                endpoint: ENDPOINTS.MOVIMIENTO,
+                payload: { ...base, producto: itemId, tipo, cantidad, costo_unitario: costo }
+            };
         }
-        if (!payload.tipo) {
-            mostrarError('El campo "Tipo de Movimiento" es requerido. Por favor seleccione el sentido del movimiento.');
-            console.warn(`${MOD} Validación fallida: Tipo ausente`, payload);
-            return null;
+        if (categoria === 'ACTIVO_FIJO') {
+            return {
+                endpoint: ENDPOINTS.MOVIMIENTO,
+                payload: { ...base, activo_fijo: itemId, tipo, cantidad: 1, costo_unitario: 0 }
+            };
         }
-        if (!payload.cantidad || isNaN(payload.cantidad) || payload.cantidad <= 0) {
-            mostrarError('El campo "Cantidad" es requerido y debe ser un número mayor a cero.');
-            console.warn(`${MOD} Validación fallida: Cantidad inválida`, payload);
-            return null;
-        }
-
-        return payload;
-    }
-
-    /**
-     * Mostrar error en el contenedor de feedback
-     * @param {string} mensaje - Mensaje de error
-     */
-    function mostrarError(mensaje) {
-        const errorContainer = d.querySelector(FEEDBACK_ID);
-        if (errorContainer) {
-            errorContainer.className = 'alert alert-danger';
-            errorContainer.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i>${mensaje}`;
-            errorContainer.classList.remove('d-none');
-        }
-    }
-
-    /**
-     * Ocultar error
-     */
-    function ocultarError() {
-        const errorContainer = d.querySelector(FEEDBACK_ID);
-        if (errorContainer) {
-            errorContainer.classList.add('d-none');
-            errorContainer.innerHTML = '';
-        }
-    }
-
-    /**
-     * Cargar productos en el select
-     */
-    async function cargarProductos() {
-        if (!w.http || typeof w.http !== 'function') {
-            console.warn(`${MOD} w.http no disponible para cargar productos`);
-            return;
-        }
-
-        try {
-            // ⚠️ v2.61.3: Usar Core API Facade para cargar productos
-            const res = await w.http('GET', '/api/v1/inventario/productos/');
-            
-            if (!res.ok || !res.data) {
-                console.warn(`${MOD} Error al cargar productos`);
-                return;
-            }
-
-            const productos = Array.isArray(res.data) ? res.data : (res.data.results || []);
-            const select = d.querySelector('#movimiento-producto');
-            if (!select) return;
-
-            // Limpiar opciones
-            select.innerHTML = '<option value="">Seleccione...</option>';
-
-            // Agregar productos
-            productos.forEach(prod => {
-                const option = d.createElement('option');
-                option.value = prod.id;
-                option.textContent = `${prod.codigo} - ${prod.nombre}`;
-                select.appendChild(option);
-            });
-        } catch (error) {
-            console.error(`${MOD} Error al cargar productos:`, error);
-        }
-    }
-
-    /**
-     * Cerrar offcanvas
-     */
-    function cerrarOffcanvas() {
-        const offcanvasEl = d.querySelector(OFFCANVAS_ID);
-        if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-            const instance = bootstrap.Offcanvas.getInstance(offcanvasEl);
-            if (instance) {
-                instance.hide();
-            }
-        }
-    }
-
-    /**
-     * Abrir offcanvas para crear movimiento
-     */
-    function abrirOffcanvasCrear() {
-        // Verificar que Bootstrap esté disponible
-        if (typeof bootstrap === 'undefined') {
-            if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-                w.UIManager.notifyError({ status: 500, data: { detail: 'Error: Bootstrap no está cargado' } }, MOD);
-            }
-            return;
-        }
-        
-        // Buscar offcanvas
-        const offcanvasEl = d.querySelector(OFFCANVAS_ID);
-        if (!offcanvasEl) {
-            console.warn(`${MOD} Offcanvas ${OFFCANVAS_ID} no encontrado.`);
-            return;
-        }
-
-        // Limpiar formulario
-        const form = d.querySelector(FORM_ID);
-        if (form) {
-            form.reset();
-        }
-
-        // Ocultar contenedor de error
-        ocultarError();
-
-        // Abrir offcanvas usando Bootstrap 5
-        if (w.bootstrap && w.bootstrap.Offcanvas) {
-            const offcanvas = w.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-            offcanvas.show();
-        }
-    }
-
-    /**
-     * Guardar movimiento (crear)
-     * ⚠️ v2.61.3: CRUD - CREATE
-     * @param {Event} e - Evento del formulario (opcional)
-     */
-    async function guardarMovimiento(e) {
-        if (e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        ocultarError();
-
-        const payload = recolectarDatosFormulario();
-        if (!payload) {
-            return;
-        }
-
-        // ⚠️ v2.61.3: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-        if (!w.http || typeof w.http !== 'function') {
-            console.error(`${MOD} w.http no está disponible`);
-            if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-                w.UIManager.notifyError({ status: 500, data: { detail: 'API no disponible' } }, MOD);
-            }
-            return;
-        }
-
-        // ⚠️ Loading state
-        const btnGuardar = d.querySelector('#btn-guardar-movimiento');
-        const btnOriginalHTML = btnGuardar?.innerHTML || '';
-        if (btnGuardar) {
-            btnGuardar.disabled = true;
-            btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...';
-        }
-
-        try {
-            // ⚠️ CREATE: Crear nuevo movimiento
-            console.log(`${MOD} Creando nuevo movimiento`);
-            const res = await w.http('POST', `${CORE_API_BASE}/`, payload);
-
-            // Restaurar estado del botón ANTES de procesar respuesta
-            if (btnGuardar) {
-                btnGuardar.disabled = false;
-                btnGuardar.innerHTML = btnOriginalHTML;
-            }
-
-            // ⚠️ v2.61.3: Aislamiento Gradual - Solo verificar ok
-            if (!res.ok) {
-                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-                    w.UIManager.handleError(res, MOD, {
-                        modalSelector: OFFCANVAS_ID,
-                        errorContainerSelector: FEEDBACK_ID
-                    });
-                } else {
-                    mostrarError(res.data?.detail || res.data?.message || 'Error al guardar el movimiento');
+        if (categoria === 'SERVICIO') {
+            return {
+                endpoint: ENDPOINTS.HISTORIAL_SERVICIO,
+                payload: {
+                    ...base, servicio: itemId, cantidad,
+                    valor_cobrado: costo,
+                    fecha_registro: new Date().toISOString().split('T')[0]
                 }
+            };
+        }
+        return null;
+    }
+
+    // =========================================================================
+    // 5. FEEDBACK UI
+    // =========================================================================
+
+    function mostrarError(mensaje) {
+        const el = d.querySelector(SELECTORS.FEEDBACK);
+        if (el) {
+            el.className = 'alert alert-danger';
+            el.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>' + mensaje;
+            el.classList.remove('d-none');
+        }
+    }
+    function ocultarError() {
+        const el = d.querySelector(SELECTORS.FEEDBACK);
+        if (el) { el.classList.add('d-none'); el.innerHTML = ''; }
+    }
+    function cerrarOffcanvas() {
+        const el = d.querySelector(SELECTORS.OFFCANVAS);
+        if (el && w.bootstrap?.Offcanvas) {
+            const inst = w.bootstrap.Offcanvas.getInstance(el);
+            if (inst) inst.hide();
+        }
+    }
+
+    // =========================================================================
+    // 6. GUARDAR (CREAR o EDITAR)
+    // =========================================================================
+
+    async function guardarMovimiento(e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        ocultarError();
+
+        const movimientoUuid = (d.getElementById('movimiento-uuid')?.value || '').trim();
+        const modoEdicion = Boolean(movimientoUuid);
+
+        const resultado = recolectarYConstructorPayload();
+        if (!resultado) return;
+
+        const { endpoint, payload } = resultado;
+        const btn = d.querySelector(SELECTORS.BTN_GUARDAR);
+        const btnOriginal = btn?.innerHTML || '';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...'; }
+
+        try {
+            if (!w.http || typeof w.http !== 'function') {
+                mostrarError('HTTP client no disponible');
+                return;
+            }
+            let res;
+            if (modoEdicion) {
+                const patchUrl = '/api/v1/inventario/movimientos/' + movimientoUuid + '/';
+                res = await w.http('PATCH', patchUrl, {
+                    tipo: payload.tipo,
+                    cantidad: payload.cantidad,
+                    costo_unitario: payload.costo_unitario,
+                    origen_referencia: payload.origen_referencia,
+                    observaciones: payload.observaciones,
+                    factura_uuid: payload.factura_uuid,
+                    factura_numero: payload.factura_numero
+                });
+            } else {
+                res = await w.http('POST', endpoint, payload);
+            }
+
+            if (btn) { btn.disabled = false; btn.innerHTML = btnOriginal; }
+
+            if (!res.ok) {
+                const msg = res.data?.detail || res.data?.message
+                    || (res.data && JSON.stringify(res.data)) || 'Error al guardar';
+                mostrarError(msg);
                 return;
             }
 
-            // Éxito
-            if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
-                w.SintelFeedback.success('Movimiento registrado correctamente');
-            }
-
-            // Cerrar offcanvas
+            w.SintelFeedback?.success?.(modoEdicion ? 'Movimiento actualizado.' : 'Movimiento registrado.');
             cerrarOffcanvas();
+            w.MovimientosList?.recargar?.();
 
-            // Recargar tabla de movimientos
-            if (w.MovimientosList && typeof w.MovimientosList.recargar === 'function') {
-                w.MovimientosList.recargar();
-            } else if (window.SintelInventarioTables && window.SintelInventarioTables.movimientos) {
-                window.SintelInventarioTables.movimientos.replaceData();
-            }
-
-        } catch (error) {
-            console.error(`${MOD} Error al guardar movimiento:`, error);
-            mostrarError('Error inesperado al guardar el movimiento');
-            
-            // Restaurar estado del botón en caso de error
-            if (btnGuardar) {
-                btnGuardar.disabled = false;
-                btnGuardar.innerHTML = btnOriginalHTML;
-            }
+        } catch (err) {
+            console.error(MOD, 'Error:', err);
+            mostrarError('Error inesperado');
+            if (btn) { btn.disabled = false; btn.innerHTML = btnOriginal; }
         }
     }
 
-    /**
-     * Inicializar eventos del formulario
-     */
-    function initFormEvents() {
-        const form = d.querySelector(FORM_ID);
-        if (!form) {
-            console.warn(`${MOD} Formulario ${FORM_ID} no encontrado`);
-            return;
-        }
+    // =========================================================================
+    // 7. LISTENERS
+    // =========================================================================
 
-        // ⚠️ Prevenir submit nativo del formulario
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            guardarMovimiento(e);
-        });
+    function attachListeners() {
+        const form = d.querySelector(SELECTORS.FORM);
+        if (!form) return;
 
-        // Botón guardar (si existe)
-        const btnGuardar = form.querySelector('#btn-guardar-movimiento');
-        if (btnGuardar) {
-            btnGuardar.addEventListener('click', function(e) {
-                e.preventDefault();
-                guardarMovimiento(e);
+        // Cambio de categoria → fetch dinamico
+        const catSelect = d.querySelector(SELECTORS.CATEGORIA);
+        if (catSelect) {
+            catSelect.addEventListener('change', function() {
+                const cat = this.value;
+                estadoFormulario.categoriaActual = cat;
+                mutatUIParaCategoria(cat);
+                if (cat) rellenarTiposMovimiento(cat);
+                limpiarPanelReferencia();
+                itemsCargadosBuffer = [];
+                if (cat) {
+                    cargarItemsPorCategoria(cat);
+                } else {
+                    const itSel = d.querySelector(SELECTORS.ITEM);
+                    if (itSel) {
+                        itSel.disabled = true;
+                        itSel.innerHTML = '<option value="">— Seleccione una categoria primero —</option>';
+                    }
+                }
+                ocultarError();
+                validarYHabilitarGuardar();
             });
         }
 
-        // Limpiar errores al cambiar campos
-        const inputs = form.querySelectorAll('input, select, textarea');
-        inputs.forEach(input => {
-            input.addEventListener('input', ocultarError);
-            input.addEventListener('change', ocultarError);
+        // Cambio de item → auto-relleno de referencia
+        const itSel = d.querySelector(SELECTORS.ITEM);
+        if (itSel) {
+            itSel.addEventListener('change', function() {
+                const itemId = this.value;
+                estadoFormulario.itemSeleccionado = itemId;
+                if (!itemId) {
+                    limpiarPanelReferencia();
+                } else {
+                    const found = itemsCargadosBuffer.find(i => i.id === itemId || i.uuid === itemId);
+                    if (found) autoRellenarPorItem(found, estadoFormulario.categoriaActual);
+                }
+                validarYHabilitarGuardar();
+            });
+        }
+
+        // Cambio de tipo → actualiza costo segun ENTRADA/SALIDA (solo en modo crear)
+        const tipoSel = d.querySelector(SELECTORS.TIPO_MOV);
+        if (tipoSel) {
+            tipoSel.addEventListener('change', function() {
+                const modoEdicion = Boolean((d.getElementById('movimiento-uuid')?.value || '').trim());
+                if (!modoEdicion && estadoFormulario.categoriaActual === 'PRODUCTO') {
+                    const itemId = d.querySelector(SELECTORS.ITEM)?.value;
+                    const found = itemsCargadosBuffer.find(i => i.id === itemId || i.uuid === itemId);
+                    if (found) actualizarCostoPorTipo(found, 'PRODUCTO');
+                }
+                validarYHabilitarGuardar();
+            });
+        }
+
+        // Cantidad y otros campos → validar
+        [SELECTORS.CANTIDAD, SELECTORS.ORIGEN, SELECTORS.OBS].forEach(sel => {
+            const el = d.querySelector(sel);
+            if (el) {
+                el.addEventListener('change', validarYHabilitarGuardar);
+                el.addEventListener('input', validarYHabilitarGuardar);
+            }
         });
+
+        // Prevenir submit nativo
+        form.addEventListener('submit', function(e) { e.preventDefault(); });
+
+        // Unico punto de entrada del boton guardar
+        const btn = d.querySelector(SELECTORS.BTN_GUARDAR);
+        if (btn) btn.addEventListener('click', guardarMovimiento);
     }
 
-    /**
-     * Inicializar módulo de editor
-     * ⚠️ Se llama cuando se carga el modal o cuando se muestra
-     */
+    // =========================================================================
+    // 8. MODO EDICION — Pre-relleno completo
+    // =========================================================================
+
+    async function preRellenarModoEdicion() {
+        const dataInput = d.getElementById('movimiento-data-json');
+        if (!dataInput || !dataInput.value) return;
+
+        let datos;
+        try { datos = JSON.parse(dataInput.value); } catch (_) { return; }
+        if (!datos || !datos.item_tipo) return;
+
+        // 1. Activar y bloquear categoria
+        const catSel = d.querySelector(SELECTORS.CATEGORIA);
+        if (catSel) {
+            catSel.value = datos.item_tipo;
+            mutatUIParaCategoria(datos.item_tipo);
+            rellenarTiposMovimiento(datos.item_tipo);
+        }
+        estadoFormulario.categoriaActual = datos.item_tipo;
+
+        // 2. Cargar items y poblar buffer
+        await cargarItemsPorCategoria(datos.item_tipo);
+
+        // 3. Bloquear selector de item (no se puede cambiar en edicion)
+        const itSel = d.querySelector(SELECTORS.ITEM);
+        if (itSel && datos.item_uuid) {
+            itSel.value = datos.item_uuid;
+            itSel.disabled = true;  // item fijo en edicion
+            estadoFormulario.itemSeleccionado = datos.item_uuid;
+
+            const found = itemsCargadosBuffer.find(i => i.id === datos.item_uuid || i.uuid === datos.item_uuid);
+            if (found) autoRellenarPorItem(found, datos.item_tipo);
+        }
+
+        // 4. Pre-seleccionar tipo
+        const tipoSel = d.querySelector(SELECTORS.TIPO_MOV);
+        if (tipoSel && datos.tipo) {
+            tipoSel.value = datos.tipo;
+            tipoSel.disabled = false;
+        }
+
+        // 5. Pre-rellenar campos editables
+        const cantInput = d.querySelector(SELECTORS.CANTIDAD);
+        const costoHidden = d.querySelector(SELECTORS.COSTO);
+        const origenInput = d.querySelector(SELECTORS.ORIGEN);
+        const obsInput = d.querySelector(SELECTORS.OBS);
+
+        if (cantInput && datos.cantidad) cantInput.value = datos.cantidad;
+        // En edicion, el costo almacenado tiene precedencia sobre el calculado del item
+        if (costoHidden && datos.costo_unitario) costoHidden.value = datos.costo_unitario;
+        if (origenInput && datos.origen_referencia) origenInput.value = datos.origen_referencia;
+        if (obsInput && datos.observaciones) obsInput.value = datos.observaciones;
+
+        validarYHabilitarGuardar();
+    }
+
+    // =========================================================================
+    // 9. INICIALIZACION
+    // =========================================================================
+
     function init() {
-        console.log(`${MOD} Inicializando módulo de editor...`);
-        initFormEvents();
+        attachListeners();
+        ocultarError();
+
+        const form = d.querySelector(SELECTORS.FORM);
+        if (form) form.reset();
+
+        mutatUIParaCategoria(null);
+        limpiarPanelReferencia();
+        itemsCargadosBuffer = [];
+
+        const catSel = d.querySelector(SELECTORS.CATEGORIA);
+        if (catSel) catSel.value = '';
+
+        const itSel = d.querySelector(SELECTORS.ITEM);
+        if (itSel) {
+            itSel.disabled = true;
+            itSel.innerHTML = '<option value="">— Seleccione una categoria primero —</option>';
+        }
+
+        validarYHabilitarGuardar();
+
+        const dataInput = d.getElementById('movimiento-data-json');
+        if (dataInput && dataInput.value) {
+            setTimeout(preRellenarModoEdicion, 50);
+        }
     }
 
-    // ⚠️ Exposición global del módulo
     if (!w.MovimientosEditor) {
         w.MovimientosEditor = {
-            init: init,
+            init,
             guardar: guardarMovimiento,
-            abrir: abrirOffcanvasCrear,
-            recolectarDatos: recolectarDatosFormulario,
-            cargarProductos: cargarProductos,
+            abrir: function() {
+                const el = d.querySelector(SELECTORS.OFFCANVAS);
+                if (el) {
+                    d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+                    d.body.classList.remove('overflow-hidden', 'modal-open');
+                    var prev = w.bootstrap?.Offcanvas?.getInstance(el);
+                    if (prev) prev.dispose();
+                    if (w.bootstrap?.Offcanvas) new w.bootstrap.Offcanvas(el).show();
+                }
+            },
             cerrar: cerrarOffcanvas
         };
-    }
-
-    // ⚠️ Bootstrap: Reinicializar cuando se muestra el offcanvas
-    if (typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-        const offcanvasEl = d.querySelector(OFFCANVAS_ID);
-        if (offcanvasEl) {
-            offcanvasEl.addEventListener('shown.bs.offcanvas', function() {
-                console.log(`${MOD} Offcanvas mostrado, inicializando editor...`);
-                init();
-            });
-        }
-    }
-
-    // ⚠️ Configurar botón "Nuevo Movimiento" si existe
-    function configurarBotonNuevo() {
-        const btnNuevo = d.querySelector('#btn-nuevo-movimiento');
-        if (btnNuevo) {
-            // Remover listeners anteriores si existen (evitar duplicados)
-            const nuevoBtn = btnNuevo.cloneNode(true);
-            btnNuevo.parentNode.replaceChild(nuevoBtn, btnNuevo);
-            
-            nuevoBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                abrirOffcanvasCrear();
-            });
-            
-            return true;
-        }
-        return false;
-    }
-
-    // ⚠️ v2.61.3: Configurar botón "Nuevo Movimiento" si existe
-    // El botón puede no existir si el módulo se carga en un contexto diferente
-    function inicializarBotonNuevo() {
-        if (!configurarBotonNuevo()) {
-            // Si no está disponible, intentar después de un delay
-            setTimeout(() => {
-                configurarBotonNuevo(); // Silencioso: no mostrar warning si no existe
-            }, 500);
-        }
-    }
-
-    // Intentar configurar el botón inmediatamente
-    inicializarBotonNuevo();
-
-    // ⚠️ HTMX: Reinicializar cuando se carga el contenido vía HTMX
-    if (typeof htmx !== 'undefined') {
-        d.addEventListener('htmx:afterSwap', function(event) {
-            if (event.detail.target.id === 'pane-movimientos' || 
-                event.detail.target.id === 'tab-movimientos-content' ||
-                event.detail.target.id === 'grid-movimientos') {
-                setTimeout(() => {
-                    inicializarBotonNuevo();
-                }, 100);
-            }
-        });
     }
 
 })(window, document);

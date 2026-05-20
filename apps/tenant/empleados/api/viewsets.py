@@ -1,23 +1,20 @@
 import logging
 
 from django.db import IntegrityError
-from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, serializers, status, viewsets
+from rest_framework import filters, serializers, status
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import SAFE_METHODS
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
-from django.db.utils import ProgrammingError
 from django.utils.functional import cached_property
 from rest_framework.exceptions import NotFound
 
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.api.mixins import SintelDSVMixin, SintelServiceMixin
-from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.api.mixins import SintelDSVMixin
+from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.empleados.api.serializers import (
     ContratoNestedSerializer,
@@ -36,13 +33,7 @@ from apps.tenant.empleados.services import (
     ContratoServiceMixin,
     DevengoServiceMixin,
     EmpleadoServiceMixin,
-    anular_devengo_service,
-    calcular_liquidacion_nomina,
-    calcular_nomina_colombia,
-    qs_empleado_detail,
-    qs_historial_list,
 )
-from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +41,7 @@ logger = logging.getLogger(__name__)
 class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     """
     WARNING: v2.62.4: ViewSet para Empleados migrado a BaseTenantViewSet.
-    v3.6.1: UUID lookup field (AGENTS.md §14) - hereda lookup_field="uuid" de BaseTenantViewSet.
+    v3.6.1: UUID lookup field (AGENTS.md 14) - hereda lookup_field="uuid" de BaseTenantViewSet.
     """
     queryset = Empleado.objects.none()
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -75,29 +66,21 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     
     def get_object(self):
         """
-        v3.6.1: UUID lookup con fallback a PK para retrocompatibilidad (AGENTS.md §14).
+        v3.6.1: UUID lookup estricto (AGENTS.md Sec. 14).
         """
-        lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
-        empresa = self.get_empresa()
-
-        if not empresa:
-            raise NotFound("No se encontró configuración de Empresa para este tenant")
-
-        if lookup_value and len(str(lookup_value)) > 10:
-            obj = Empleado.objects.filter(uuid=lookup_value, empresa_id=empresa.id).first()
-            if obj:
-                return obj
-
-        if str(lookup_value).isdigit():
-            obj = Empleado.objects.filter(pk=lookup_value, empresa_id=empresa.id).first()
-            if obj:
-                return obj
-
-        raise NotFound(f'Empleado {lookup_value} no encontrado o no pertenece a este tenant.')
+        try:
+            return self.get_qs_detail()
+        except Empleado.DoesNotExist as exc:
+            lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+            raise NotFound(
+                f'Empleado {lookup_value} no encontrado o no pertenece a este tenant.'
+            ) from exc
     
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        context['empresa'] = self.get_empresa()
+        empresa = self.get_empresa()
+        context['empresa'] = empresa
+        context['empresa_id'] = empresa.id if empresa else None
         return context
 
     def list(self, request, *args, **kwargs):
@@ -111,7 +94,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         
-        # Si no hay paginación, retornar formato compatible
+        # Si no hay paginacion, retornar formato compatible
         serializer = self.get_serializer(queryset, many=True)
         return Response({
             'count': len(serializer.data),
@@ -126,7 +109,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     def create(self, request, *args, **kwargs):
         """
         WARNING: v2.40: Sobrescribir create para manejar errores de empresa no encontrada y validaciones.
-        v3.7.4: Mejorado manejo de errores de validación para JSON limpio.
+        v3.7.4: Mejorado manejo de errores de validacion para JSON limpio.
         """
         try:
             # Validar datos del serializer primero
@@ -151,11 +134,11 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         except serializers.ValidationError as e:
-            logger.error(f"[EmpleadoViewSet] Error de validación en create: {e.detail}", exc_info=True)
+            logger.error(f"[EmpleadoViewSet] Error de validacion en create: {e.detail}", exc_info=True)
             # v3.7.4: Asegurarse de que detail sea JSON limpio, no string de Python
             detail_data = e.detail if isinstance(e.detail, dict) else str(e.detail)
             return Response(
-                {"error": "Error de validación", "detail": detail_data},
+                {"error": "Error de validacion", "detail": detail_data},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except IntegrityError as e:
@@ -163,7 +146,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
             # Verificar si es un error de unicidad
             if 'uniq_empleado_per_tenant' in str(e):
                 return Response(
-                    {"error": "Ya existe un empleado con este tipo y número de documento en esta empresa."},
+                    {"error": "Ya existe un empleado con este tipo y numero de documento en esta empresa."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             return Response(
@@ -178,12 +161,12 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
             )
 
     def perform_create(self, serializer):
-        self.service_crear_empleado(serializer)
+        serializer.instance = self.service_crear_empleado(serializer)
     
     def update(self, request, *args, **kwargs):
         """
         WARNING: Paso 4: Sobrescribir update para devolver respuesta JSON con was_updated.
-        Permite que los listeners JS distingan entre creación y actualización.
+        Permite que los listeners JS distingan entre creacion y actualizacion.
         """
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
@@ -208,57 +191,67 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     def perform_update(self, serializer):
         """
         WARNING: v2.40: Al actualizar un empleado, si el estado cambia a RETIRADO,
-        cancelar automáticamente todos los contratos activos.
+        cancelar automaticamente todos los contratos activos.
         """
-        return self.service_actualizar_empleado(serializer)
+        serializer.instance = self.service_actualizar_empleado(serializer)
     
     def destroy(self, request, *args, **kwargs):
         """
-        WARNING: v2.40: Eliminación definitiva (Hard Delete) solo para empleados RETIRADOS.
-        Usa el service layer para eliminar en cascada todas las dependencias.
+        Hard Delete solo para empleados RETIRADOS.
+        Elimina en cascada: devengos → contratos → empleado.
+        DSV: empresa_id validado via get_queryset() y verificacion explicita en service.
         """
-        from django.core.exceptions import ValidationError
-        
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        from django.db.models.deletion import ProtectedError
+
         instance = self.get_object()
-        
-        try:
-            # WARNING: v2.40: Usar service layer para eliminación en cascada
-            resultado = self.service_eliminar_empleado_retirado(instance)
-            
-            logger.info(
-                f"[EmpleadoViewSet] Empleado {instance.id} eliminado exitosamente. "
-                f"Contratos eliminados: {resultado['contratos_eliminados']}, "
-                f"Devengos eliminados: {resultado['devengos_eliminados']}"
+
+        # DSV explícito: garantiza que el empleado pertenece al tenant activo
+        empresa_id = self.get_empresa_id()
+        if instance.empresa_id != empresa_id:
+            return Response(
+                {'detail': 'El empleado no pertenece a la empresa activa.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
-            
+
+        try:
+            resultado = self.service_eliminar_empleado_retirado(instance)
+            logger.info(
+                f"[EmpleadoViewSet] Empleado uuid={instance.uuid} eliminado. "
+                f"Contratos: {resultado['contratos_eliminados']}, "
+                f"Devengos: {resultado['devengos_eliminados']}"
+            )
             return Response({
-                'detail': 'Empleado eliminado exitosamente',
-                'resumen': resultado
+                'detail': 'Empleado eliminado exitosamente.',
+                'resumen': resultado,
             }, status=status.HTTP_200_OK)
-            
-        except ValidationError as e:
-            logger.warning(f"[EmpleadoViewSet] Intento de eliminar empleado {instance.id} con estado inválido: {instance.estado}")
+
+        except (DjangoValidationError, DRFValidationError) as e:
+            msg = e.detail if hasattr(e, 'detail') else str(e)
+            logger.warning(
+                f"[EmpleadoViewSet] Eliminacion rechazada uuid={instance.uuid} "
+                f"estado={instance.estado}: {msg}"
+            )
             return Response({
-                'detail': str(e),
+                'detail': msg,
                 'estado': instance.estado,
-                'estado_requerido': 'RETIRADO'
+                'estado_requerido': 'RETIRADO',
             }, status=status.HTTP_400_BAD_REQUEST)
-            
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"[EmpleadoViewSet] Error al eliminar empleado {instance.id}: {error_msg}", exc_info=True)
-            
-            # Manejar ProtectedError específicamente (por si acaso Django lo lanza de todas formas)
-            from django.db.models.deletion import ProtectedError
-            if isinstance(e, ProtectedError):
-                return Response({
-                    'detail': 'No se puede eliminar el empleado porque tiene registros relacionados protegidos. Intente nuevamente.',
-                    'error_type': 'protected_relation'
-                }, status=status.HTTP_409_CONFLICT)
-            
+
+        except ProtectedError:
+            logger.error(f"[EmpleadoViewSet] ProtectedError al eliminar uuid={instance.uuid}", exc_info=True)
             return Response({
-                'detail': f'Error al eliminar empleado: {error_msg}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                'detail': 'No se puede eliminar: el empleado tiene registros protegidos relacionados.',
+                'error_type': 'protected_relation',
+            }, status=status.HTTP_409_CONFLICT)
+
+        except Exception as e:
+            logger.error(f"[EmpleadoViewSet] Error inesperado al eliminar uuid={instance.uuid}: {e}", exc_info=True)
+            return Response(
+                {'detail': f'Error al eliminar empleado: {e}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
@@ -268,19 +261,19 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
         return Response(summary)
     
     @action(detail=True, methods=["get"], renderer_classes=[TemplateHTMLRenderer, JSONRenderer], url_path="historial-nominas")
-    def historial_nominas(self, request, id=None):
+    def historial_nominas(self, request, uuid=None):
         """
-        WARNING: v2.60: Devuelve el HTML del historial de nóminas para un empleado específico (HTMX)
-        o los datos JSON para Tabulator (paginación remota).
+        WARNING: v2.60: Devuelve el HTML del historial de nominas para un empleado especifico (HTMX)
+        o los datos JSON para Tabulator (paginacion remota).
         
         Endpoint: GET /api/v1/empleados/{id}/historial-nominas/
         
         Query params:
-        - format=json: Retorna datos JSON para Tabulator (paginación remota)
+        - format=json: Retorna datos JSON para Tabulator (paginacion remota)
         - Sin format: Retorna template HTML del offcanvas
         
         Returns:
-            Template HTML renderizado con el offcanvas del historial de nóminas
+            Template HTML renderizado con el offcanvas del historial de nominas
             o JSON con datos paginados para Tabulator
         """
         empresa = self.get_empresa()
@@ -298,9 +291,9 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
         if format_param == 'json' or request.accepted_renderer.format == 'json':
             # Usar el queryset optimizado del service layer
             search = request.query_params.get('search', None)
-            qs = qs_historial_list(empleado.id, empresa.id, search=search)
+            qs = self.get_historial_qs(empleado.id)
             
-            # Paginación usando StandardResultsSetPagination
+            # Paginacion usando StandardResultsSetPagination
             paginator = StandardResultsSetPagination()
             page = paginator.paginate_queryset(qs, request)
             
@@ -308,7 +301,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
                 serializer = DevengoSerializer(page, many=True)
                 return paginator.get_paginated_response(serializer.data)
             
-            # Si no hay paginación, retornar todos los resultados
+            # Si no hay paginacion, retornar todos los resultados
             serializer = DevengoSerializer(qs, many=True)
             return Response(serializer.data)
         
@@ -324,12 +317,12 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
     def gestor_offcanvas(self, request):
         """
         WARNING: Paso 4: Devuelve el HTML del formulario para HTMX Offcanvas (Zero Trust).
-        Centraliza la entrega de templates para los módulos features/*.js
+        Centraliza la entrega de templates para los modulos features/*.js
         """
         # WARNING: Paso 4: Zero Trust - La empresa se extrae del usuario autenticado
         empresa = getattr(request.user, 'empresa', None)
         if not empresa:
-            # Fallback: usar método get_empresa() si existe
+            # Fallback: usar metodo get_empresa() si existe
             try:
                 empresa = self.get_empresa()
             except:
@@ -341,7 +334,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
         empresa_id = empresa.id
         
         tipo = request.query_params.get('tipo', 'empleado')
-        obj_id = request.query_params.get('id')
+        obj_uuid = request.query_params.get('uuid')
         empleado_id = request.query_params.get('empleado')
         context = {'empresa_id': empresa_id}
         
@@ -352,49 +345,50 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
                 'ARL_CHOICES': ARL_CHOICES,
                 'RIESGO_ARL_CHOICES': RIESGO_ARL_CHOICES,
             })
-            if obj_id:
-                instance = get_object_or_404(Empleado, id=obj_id, empresa_id=empresa_id)
+            if obj_uuid:
+                instance = self.selector_class.get_detail(empresa_id, obj_uuid)
                 # v3.5: Usar serializer para resolver cuenta_contable_label (Pull Model)
-                serializer = EmpleadoDetailSerializer(instance, context={'empresa': empresa})
+                serializer = EmpleadoDetailSerializer(
+                    instance,
+                    context={'empresa': empresa, 'empresa_id': empresa_id},
+                )
                 context['empleado'] = serializer.data
                 return Response(context, template_name='tenant/empleados/offcanvas_editar_empleado.html')
             return Response(context, template_name='tenant/empleados/offcanvas_crear_empleado.html')
             
         elif tipo == 'contrato':
-            if obj_id:
-                contrato = get_object_or_404(Contrato, id=obj_id, empresa_id=empresa_id)
+            if obj_uuid:
+                contrato = self.contrato_selector.get_detail(empresa_id, obj_uuid)
                 context['contrato'] = contrato
                 context['empleado'] = contrato.empleado
                 return Response(context, template_name='tenant/empleados/offcanvas_editar_contrato.html')
             if empleado_id:
-                context['empleado'] = get_object_or_404(Empleado, id=empleado_id, empresa_id=empresa_id)
+                context['empleado'] = self.selector_class.get_by_id(empresa_id, empleado_id)
             return Response(context, template_name='tenant/empleados/offcanvas_crear_contrato.html')
             
         elif tipo == 'devengo':
-            if obj_id:
-                devengo = get_object_or_404(Devengo, id=obj_id, empresa_id=empresa_id)
+            if obj_uuid:
+                devengo = self.devengo_selector.get_detail(empresa_id, obj_uuid)
                 context['devengo'] = devengo
                 context['empleado'] = devengo.empleado
                 context['contrato'] = devengo.contrato
             if empleado_id:
-                empleado = get_object_or_404(Empleado, id=empleado_id, empresa_id=empresa_id)
+                empleado = self.selector_class.get_by_id(empresa_id, empleado_id)
                 context['empleado'] = empleado
-                # Obtener contrato ACTIVO del empleado
-                contrato_activo = Contrato.objects.filter(
-                    empleado=empleado,
-                    estado='ACTIVO',
-                    empresa_id=empresa_id
-                ).first()
+                contrato_activo = self.contrato_selector.get_activo_for_empleado(
+                    empresa_id,
+                    empleado.id,
+                )
                 if contrato_activo:
                     context['contrato'] = contrato_activo
             return Response(context, template_name='tenant/empleados/offcanvas_crear_devengo.html')
             
-        return Response({"error": "Tipo no válido"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error": "Tipo no valido"}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["get"], url_path="contrato-disponible")
-    def contrato_disponible(self, request, id=None):
+    def contrato_disponible(self, request, uuid=None):
         """
-        WARNING: v2.40: Valida si el empleado tiene contrato activo disponible para nómina.
+        WARNING: v2.40: Valida si el empleado tiene contrato activo disponible para nomina.
         Verifica que no exista ya un devengo para el periodo_mes actual.
         """
         from datetime import datetime
@@ -405,18 +399,11 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
 
         empleado = self.get_object()
         
-        # 1. Buscar contrato activo del empleado (WARNING: v2.40: Máquina de Estados - usar estado='ACTIVO')
-        contrato_activo = Contrato.objects.filter(
-            empleado=empleado,
-            estado='ACTIVO'
-        ).first()
-        
-        # Fallback: también buscar por campo activo legacy para compatibilidad
-        if not contrato_activo:
-            contrato_activo = Contrato.objects.filter(
-                empleado=empleado,
-                activo=True
-            ).first()
+        # 1. Buscar contrato activo del empleado (WARNING: v2.40: Maquina de Estados - usar estado='ACTIVO')
+        contrato_activo = self.contrato_selector.get_activo_for_empleado(
+            empresa.id,
+            empleado.id,
+        )
         
         if not contrato_activo:
             return Response({
@@ -424,11 +411,11 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
                 "error": "El empleado no tiene un contrato activo"
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # WARNING: v2.40: Máquina de Estados - Validar que el contrato esté ACTIVO
+        # WARNING: v2.40: Maquina de Estados - Validar que el contrato este ACTIVO
         if contrato_activo.estado != 'ACTIVO':
             return Response({
                 "disponible": False,
-                "error": f"El contrato no está activo (estado: {contrato_activo.estado})"
+                "error": f"El contrato no esta activo (estado: {contrato_activo.estado})"
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # 2. Obtener periodo_mes actual (YYYY-MM) desde query params o usar el mes actual
@@ -444,20 +431,20 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
         except ValueError:
             return Response({
                 "disponible": False,
-                "error": f"Formato de periodo inválido: {periodo_mes}. Debe ser YYYY-MM"
+                "error": f"Formato de periodo invalido: {periodo_mes}. Debe ser YYYY-MM"
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # 3. Verificar que NO exista ya un devengo para ese empleado en ese periodo
-        devengo_existente = Devengo.objects.filter(
-            empleado=empleado,
-            periodo_mes=periodo_mes,
-            anulado=False
-        ).exists()
+        devengo_existente = self.devengo_selector.exists_for_periodo(
+            empresa.id,
+            empleado.id,
+            periodo_mes,
+        )
         
         if devengo_existente:
             return Response({
                 "disponible": False,
-                "error": f"Ya existe una nómina registrada para el periodo {periodo_mes}"
+                "error": f"Ya existe una nomina registrada para el periodo {periodo_mes}"
             }, status=status.HTTP_409_CONFLICT)
         
         # 4. Retornar datos del contrato disponible
@@ -478,7 +465,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
 class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     """
     WARNING: v2.62.4: ViewSet para Contratos migrado a BaseTenantViewSet.
-    v3.6.1: UUID lookup field (AGENTS.md §14) - hereda lookup_field="uuid" de BaseTenantViewSet.
+    v3.6.1: UUID lookup field (AGENTS.md 14) - hereda lookup_field="uuid" de BaseTenantViewSet.
     """
     serializer_class = ContratoNestedSerializer
     # WARNING: v2.40: Permitir subida de archivos PDF (opcional)
@@ -504,25 +491,22 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
 
     def get_object(self):
         """
-        v3.6.1: UUID lookup con fallback a PK para retrocompatibilidad (AGENTS.md §14).
+        v3.6.1: UUID lookup estricto (AGENTS.md Sec. 14).
         """
-        lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+        try:
+            return self.get_qs_detail()
+        except Contrato.DoesNotExist as exc:
+            lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+            raise NotFound(
+                f'Contrato {lookup_value} no encontrado o no pertenece a este tenant.'
+            ) from exc
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
         empresa = self.get_empresa()
-
-        if not empresa:
-            raise NotFound("No se encontró configuración de Empresa para este tenant")
-
-        if lookup_value and len(str(lookup_value)) > 10:
-            obj = Contrato.objects.filter(uuid=lookup_value, empresa_id=empresa.id).first()
-            if obj:
-                return obj
-
-        if str(lookup_value).isdigit():
-            obj = Contrato.objects.filter(pk=lookup_value, empresa_id=empresa.id).first()
-            if obj:
-                return obj
-
-        raise NotFound(f'Contrato {lookup_value} no encontrado o no pertenece a este tenant.')
+        context['empresa'] = empresa
+        context['empresa_id'] = empresa.id if empresa else None
+        return context
 
     def create(self, request, *args, **kwargs):
         """
@@ -533,11 +517,11 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
             logger.info(f"[ContratoViewSet] Datos recibidos en create: {request.data}")
             logger.info(f"[ContratoViewSet] Tipo de datos: {type(request.data)}")
             
-            # Validar que el campo empleado esté presente
+            # Validar que el campo empleado este presente
             if 'empleado' not in request.data:
                 logger.error("[ContratoViewSet] Campo 'empleado' no encontrado en request.data")
                 return Response(
-                    {"error": "Error de validación", "detail": {"empleado": ["Este campo es requerido."]}},
+                    {"error": "Error de validacion", "detail": {"empleado": ["Este campo es requerido."]}},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
@@ -553,13 +537,13 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
             
             return response
         except serializers.ValidationError as e:
-            logger.error(f"[ContratoViewSet] Error de validación en create: {str(e)}", exc_info=True)
+            logger.error(f"[ContratoViewSet] Error de validacion en create: {str(e)}", exc_info=True)
             # WARNING: v2.60: Error Boundary Pattern - Retornar formato JSON estructurado para UIManager
             error_detail = e.detail if hasattr(e, 'detail') else str(e)
             if isinstance(error_detail, dict):
                 return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
             return Response(
-                {"error": "Error de validación en el contrato", "detail": str(error_detail)},
+                {"error": "Error de validacion en el contrato", "detail": str(error_detail)},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except IntegrityError as e:
@@ -582,7 +566,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         except Exception as e:
             logger.error(f"[ContratoViewSet] Error inesperado en create: {str(e)}", exc_info=True)
             return Response(
-                {"error": "Ocurrió un error inesperado al procesar el contrato.", "detail": str(e)},
+                {"error": "Ocurrio un error inesperado al procesar el contrato.", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -598,7 +582,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         
-        # Si no hay paginación, retornar formato compatible
+        # Si no hay paginacion, retornar formato compatible
         serializer = self.get_serializer(queryset, many=True)
         return Response({
             'count': len(serializer.data),
@@ -624,9 +608,9 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         # Validar que el empleado sea una instancia de Empleado
         if not isinstance(empleado, Empleado):
             logger.error(f"[ContratoViewSet] Campo 'empleado' no es una instancia de Empleado: {type(empleado)}")
-            raise ValidationError({'empleado': ['El empleado debe ser un ID válido.']})
+            raise ValidationError({'empleado': ['El empleado debe ser un ID valido.']})
         
-        # Extraer datos del serializer (excluyendo empleado que ya está validado)
+        # Extraer datos del serializer (excluyendo empleado que ya esta validado)
         data = {k: v for k, v in serializer.validated_data.items() if k != 'empleado'}
         data = self.service_preparar_datos_contrato(data)
         
@@ -645,7 +629,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     def update(self, request, *args, **kwargs):
         """
         WARNING: Paso 4: Sobrescribir update para devolver respuesta JSON con was_updated.
-        Permite que los listeners JS distingan entre creación y actualización.
+        Permite que los listeners JS distingan entre creacion y actualizacion.
         WARNING: v2.60: Error Boundary Pattern - Manejo de errores estandarizado.
         """
         try:
@@ -662,13 +646,13 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
             
             return Response(response_data, status=status.HTTP_200_OK)
         except serializers.ValidationError as e:
-            logger.error(f"[ContratoViewSet] Error de validación en update: {str(e)}", exc_info=True)
+            logger.error(f"[ContratoViewSet] Error de validacion en update: {str(e)}", exc_info=True)
             # WARNING: v2.60: Error Boundary Pattern - Retornar formato JSON estructurado para UIManager
             error_detail = e.detail if hasattr(e, 'detail') else str(e)
             if isinstance(error_detail, dict):
                 return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
             return Response(
-                {"error": "Error de validación en el contrato", "detail": str(error_detail)},
+                {"error": "Error de validacion en el contrato", "detail": str(error_detail)},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except IntegrityError as e:
@@ -691,7 +675,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         except Exception as e:
             logger.error(f"[ContratoViewSet] Error inesperado en update: {str(e)}", exc_info=True)
             return Response(
-                {"error": "Ocurrió un error inesperado al procesar el contrato.", "detail": str(e)},
+                {"error": "Ocurrio un error inesperado al procesar el contrato.", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -704,7 +688,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     
     def perform_update(self, serializer):
         """
-        WARNING: Paso 4: Método para actualizar contrato existente.
+        WARNING: Paso 4: Metodo para actualizar contrato existente.
         Usa service layer para garantizar integridad.
         """
         from rest_framework.exceptions import ValidationError
@@ -712,7 +696,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         instance = serializer.instance
         empleado = serializer.validated_data.get('empleado', instance.empleado)
         
-        # Extraer datos del serializer (excluyendo empleado que ya está validado)
+        # Extraer datos del serializer (excluyendo empleado que ya esta validado)
         data = {k: v for k, v in serializer.validated_data.items() if k != 'empleado'}
         data = self.service_preparar_datos_contrato(data)
         
@@ -730,10 +714,10 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
     def render_offcanvas_crear(self, request):
         """
-        Endpoint HTMX RESTful para cargar offcanvas de creación de contratos.
+        Endpoint HTMX RESTful para cargar offcanvas de creacion de contratos.
         
-        WARNING: v2.61: Feature-Sliced Architecture - Template dedicado para creación
-        - GET /api/v1/empleados/contratos/render-offcanvas/crear/?empleado={id} → Modo creación
+        WARNING: v2.61: Feature-Sliced Architecture - Template dedicado para creacion
+        - GET /api/v1/empleados/contratos/render-offcanvas/crear/?empleado={id}  Modo creacion
         
         Query params:
         - empleado: ID del empleado (requerido para crear contrato)
@@ -746,12 +730,12 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         empleado_id = request.query_params.get('empleado')
         if not empleado_id:
             return Response(
-                {"error": "Se requiere el parámetro 'empleado' para crear un contrato."},
+                {"error": "Se requiere el parametro 'empleado' para crear un contrato."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
-            empleado = get_object_or_404(Empleado, id=empleado_id, empresa_id=empresa.id)
+            empleado = self.get_empleado_by_id(empleado_id)
         except Exception as e:
             logger.error(f"[ContratoViewSet] Error al obtener empleado: {str(e)}", exc_info=True)
             return Response(
@@ -769,10 +753,10 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
     def render_offcanvas_editar(self, request, **kwargs):
         """
-        Endpoint HTMX RESTful para cargar offcanvas de edición de contratos.
+        Endpoint HTMX RESTful para cargar offcanvas de edicion de contratos.
         
-        WARNING: v2.61: Feature-Sliced Architecture - Template dedicado para edición
-        - GET /api/v1/empleados/contratos/{id}/render-offcanvas/editar/ → Modo edición
+        WARNING: v2.61: Feature-Sliced Architecture - Template dedicado para edicion
+        - GET /api/v1/empleados/contratos/{id}/render-offcanvas/editar/  Modo edicion
         
         Returns:
             Template HTML: tenant/core/partials/empleados/contrato_offcanvas_editar.html
@@ -788,7 +772,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
         except Contrato.DoesNotExist:
-            logger.error(f"[ContratoViewSet] Contrato no encontrado: {kwargs.get('id')}")
+            logger.error(f"[ContratoViewSet] Contrato no encontrado: {kwargs.get('uuid')}")
             return Response(
                 {"error": "Contrato no encontrado."},
                 status=status.HTTP_404_NOT_FOUND
@@ -824,36 +808,38 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         return Response(context, template_name='tenant/empleados/offcanvas_detalle_contrato.html')
     
     @action(detail=True, methods=['post'], url_path='cancelar')
-    def cancelar(self, request, id=None):
+    def cancelar(self, request, uuid=None):
         """
-        WARNING: v2.40: Máquina de Estados - Cambia el estado de un contrato a INACTIVO.
+        WARNING: v2.40: Maquina de Estados - Cambia el estado de un contrato a INACTIVO.
         WARNING: v2.60: Error Boundary Pattern - Manejo de errores estandarizado.
         """
         try:
             contrato = self.get_object()
             if contrato.estado == 'INACTIVO':
                 return Response(
-                    {"error": "El contrato ya está inactivo.", "detail": "No se puede cancelar un contrato que ya está inactivo."},
+                    {"error": "El contrato ya esta inactivo.", "detail": "No se puede cancelar un contrato que ya esta inactivo."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            contrato.estado = 'INACTIVO'
-            contrato.activo = False  # Sincronizar campo legacy
-            contrato.save(update_fields=['estado', 'activo'])
+            contrato = self.service_gestionar_contrato(
+                contrato.empleado,
+                {'estado': 'INACTIVO'},
+                contrato_existente=contrato,
+            )
             
             serializer = self.get_serializer(contrato)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"[ContratoViewSet] Error al cancelar contrato: {str(e)}", exc_info=True)
             return Response(
-                {"error": "Ocurrió un error inesperado al cancelar el contrato.", "detail": str(e)},
+                {"error": "Ocurrio un error inesperado al cancelar el contrato.", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
     """
-    WARNING: v2.62.4: ViewSet para Nómina migrado a BaseTenantViewSet.
-    v3.6.1: UUID lookup field (AGENTS.md §14) - hereda lookup_field="uuid" de BaseTenantViewSet.
+    WARNING: v2.62.4: ViewSet para Nomina migrado a BaseTenantViewSet.
+    v3.6.1: UUID lookup field (AGENTS.md 14) - hereda lookup_field="uuid" de BaseTenantViewSet.
     """
     serializer_class = DevengoSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -876,7 +862,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         if self.action == 'list':
             queryset = self.get_qs_list()
             
-            # WARNING: v2.95: Filtros de fecha para historial de nómina (adicionales al service layer)
+            # WARNING: v2.95: Filtros de fecha para historial de nomina (adicionales al service layer)
             fecha_inicio = self.request.query_params.get('fecha_inicio')
             fecha_fin = self.request.query_params.get('fecha_fin')
             
@@ -886,7 +872,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                     fecha_inicio_obj = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
                     queryset = queryset.filter(fecha_pago__gte=fecha_inicio_obj)
                 except (ValueError, TypeError):
-                    logger.warning(f"[DevengoViewSet] Formato de fecha_inicio inválido: {fecha_inicio}")
+                    logger.warning(f"[DevengoViewSet] Formato de fecha_inicio invalido: {fecha_inicio}")
             
             if fecha_fin:
                 try:
@@ -894,7 +880,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                     fecha_fin_obj = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
                     queryset = queryset.filter(fecha_pago__lte=fecha_fin_obj)
                 except (ValueError, TypeError):
-                    logger.warning(f"[DevengoViewSet] Formato de fecha_fin inválido: {fecha_fin}")
+                    logger.warning(f"[DevengoViewSet] Formato de fecha_fin invalido: {fecha_fin}")
             
             return queryset
 
@@ -902,25 +888,22 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
 
     def get_object(self):
         """
-        v3.6.1: UUID lookup con fallback a PK para retrocompatibilidad (AGENTS.md §14).
+        v3.6.1: UUID lookup estricto (AGENTS.md Sec. 14).
         """
-        lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+        try:
+            return self.get_qs_detail()
+        except Devengo.DoesNotExist as exc:
+            lookup_value = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+            raise NotFound(
+                f'Nomina {lookup_value} no encontrada o no pertenece a este tenant.'
+            ) from exc
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
         empresa = self.get_empresa()
-
-        if not empresa:
-            raise NotFound("No se encontró configuración de Empresa para este tenant")
-
-        if lookup_value and len(str(lookup_value)) > 10:
-            obj = Devengo.objects.filter(uuid=lookup_value, empresa_id=empresa.id).first()
-            if obj:
-                return obj
-
-        if str(lookup_value).isdigit():
-            obj = Devengo.objects.filter(pk=lookup_value, empresa_id=empresa.id).first()
-            if obj:
-                return obj
-
-        raise NotFound(f'Nomina {lookup_value} no encontrada o no pertenece a este tenant.')
+        context['empresa'] = empresa
+        context['empresa_id'] = empresa.id if empresa else None
+        return context
     
     def list(self, request, *args, **kwargs):
         """
@@ -933,7 +916,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         
-        # Si no hay paginación, retornar formato compatible
+        # Si no hay paginacion, retornar formato compatible
         serializer = self.get_serializer(queryset, many=True)
         return Response({
             'count': len(serializer.data),
@@ -945,15 +928,15 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
     @action(detail=False, methods=["get"], url_path="ultima-nomina")
     def ultima_nomina(self, request):
         """
-        WARNING: v2.40: Obtiene la última nómina pagada para un empleado o contrato.
+        WARNING: v2.40: Obtiene la ultima nomina pagada para un empleado o contrato.
         Query params: empleado_id (requerido) o contrato_id (opcional).
-        Retorna la última nómina no anulada para sugerir periodo y fecha de pago siguiente.
+        Retorna la ultima nomina no anulada para sugerir periodo y fecha de pago siguiente.
         """
         from datetime import datetime, timedelta
 
         from dateutil.relativedelta import relativedelta
         
-        empresa = Empresa.objects.only('id').first()
+        empresa = self.get_empresa()
         if not empresa:
             return Response({"error": "sin_empresa"}, status=status.HTTP_404_NOT_FOUND)
         
@@ -967,12 +950,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                 "error": "empleado_id es requerido"
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # WARNING: v2.60: Buscar última nómina no anulada del empleado usando empresa_id
-        ultima_nomina = Devengo.objects.filter(
-            empleado_id=empleado_id,
-            anulado=False,
-            empresa_id=empresa_id
-        ).order_by('-fecha_pago', '-periodo_mes').first()
+        ultima_nomina = self.get_ultima_nomina_for_empleado(empleado_id)
         
         if not ultima_nomina:
             # Primer pago: usar mes actual y fecha actual
@@ -987,7 +965,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                 "ultima_nomina": None
             }, status=status.HTTP_200_OK)
         
-        # Calcular periodo siguiente (mes siguiente al último pagado)
+        # Calcular periodo siguiente (mes siguiente al ultimo pagado)
         try:
             # Parsear periodo_mes (YYYY-MM)
             ultimo_periodo = datetime.strptime(ultima_nomina.periodo_mes, '%Y-%m')
@@ -1000,11 +978,11 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             periodo_sugerido = ahora.strftime('%Y-%m')
         
         # Calcular fecha de pago sugerida
-        # Si la última nómina fue quincenal (dias_laborados < 30), sugerir 15 días después
+        # Si la ultima nomina fue quincenal (dias_laborados < 30), sugerir 15 dias despues
         # Si fue mensual (dias_laborados = 30), sugerir mes siguiente
         ultima_fecha_pago = ultima_nomina.fecha_pago
         if ultima_nomina.dias_laborados and ultima_nomina.dias_laborados < 30:
-            # Quincenal: 15 días después
+            # Quincenal: 15 dias despues
             fecha_sugerida = (ultima_fecha_pago + timedelta(days=15)).strftime('%Y-%m-%d')
         else:
             # Mensual: mes siguiente, misma fecha del mes
@@ -1012,7 +990,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                 siguiente_fecha = ultima_fecha_pago + relativedelta(months=1)
                 fecha_sugerida = siguiente_fecha.strftime('%Y-%m-%d')
             except:
-                # Fallback: 30 días después
+                # Fallback: 30 dias despues
                 fecha_sugerida = (ultima_fecha_pago + timedelta(days=30)).strftime('%Y-%m-%d')
         
         return Response({
@@ -1029,12 +1007,12 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
 
     def create(self, request, *args, **kwargs):
         """
-        WARNING: v2.60: Sobrescribir create con validación estricta de duplicados (Zero Trust).
-        Prohíbe el Upsert automático para proteger la evidencia legal de la nómina.
+        WARNING: v2.60: Sobrescribir create con validacion estricta de duplicados (Zero Trust).
+        Prohibe el Upsert automatico para proteger la evidencia legal de la nomina.
         Retorna errores en formato JSON para UIManager.handleError.
         
-        WARNING: Validación Preventiva: Verifica duplicados ANTES de validar serializer.
-        Si existe una nómina para el mismo empleado y periodo, retorna error 409 Conflict.
+        WARNING: Validacion Preventiva: Verifica duplicados ANTES de validar serializer.
+        Si existe una nomina para el mismo empleado y periodo, retorna error 409 Conflict.
         """
         try:
             # WARNING: DEBUG: Log de datos recibidos
@@ -1055,38 +1033,38 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                         if 'unique' in str(error).lower() or 'duplicate' in str(error).lower():
                             return Response(
                                 {
-                                    "error": "Ya existe una nómina para este empleado, periodo y fecha de pago. Debe anular la nómina existente antes de crear una nueva.",
-                                    "detail": "No se puede crear una nómina duplicada para el mismo empleado, periodo y fecha de pago. Puede registrar múltiples nóminas en el mismo mes usando diferentes fechas de pago.",
+                                    "error": "Ya existe una nomina para este empleado, periodo y fecha de pago. Debe anular la nomina existente antes de crear una nueva.",
+                                    "detail": "No se puede crear una nomina duplicada para el mismo empleado, periodo y fecha de pago. Puede registrar multiples nominas en el mismo mes usando diferentes fechas de pago.",
                                     "code": "duplicate_nomina"
                                 },
                                 status=status.HTTP_409_CONFLICT
                             )
                 
-                # WARNING: v2.60: Retornar errores de validación en formato estructurado para UIManager
-                logger.error(f"[DevengoViewSet] Error de validación en create: {serializer.errors}")
+                # WARNING: v2.60: Retornar errores de validacion en formato estructurado para UIManager
+                logger.error(f"[DevengoViewSet] Error de validacion en create: {serializer.errors}")
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             
             try:
                 validacion = self.service_validar_limite_dias(request.data)
                 if validacion:
                     logger.info(
-                        f"[DevengoViewSet] Validación preventiva de días: Total={validacion['total_dias']}, "
+                        f"[DevengoViewSet] Validacion preventiva de dias: Total={validacion['total_dias']}, "
                         f"Nuevos={validacion['nuevos_dias']}, Final={validacion['total_final']}"
                     )
             except serializers.ValidationError as e:
                 error_detail = str(e.detail) if hasattr(e, 'detail') else str(e)
                 return Response(
                     {
-                        "error": "La suma de días laborados excede los 31 días permitidos del mes.",
+                        "error": "La suma de dias laborados excede los 31 dias permitidos del mes.",
                         "detail": error_detail,
                         "code": "dias_excedidos"
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             except Exception as e:
-                logger.warning(f"[DevengoViewSet] Error al validar días laborados: {str(e)}")
+                logger.warning(f"[DevengoViewSet] Error al validar dias laborados: {str(e)}")
             
-            # Ejecutar perform_create que calcula valores y guarda (creación nueva)
+            # Ejecutar perform_create que calcula valores y guarda (creacion nueva)
             self.perform_create(serializer)
             
             # WARNING: Paso 4: Retornar respuesta con was_updated para listeners JS
@@ -1094,7 +1072,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             response_data = {
                 **serializer.data,
                 "was_updated": False,
-                "message": "Nómina creada correctamente"
+                "message": "Nomina creada correctamente"
             }
             return Response(
                 response_data,
@@ -1103,13 +1081,13 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             )
             
         except serializers.ValidationError as e:
-            logger.error(f"[DevengoViewSet] Error de validación en create: {str(e)}", exc_info=True)
+            logger.error(f"[DevengoViewSet] Error de validacion en create: {str(e)}", exc_info=True)
             # WARNING: v2.60: Error Boundary Pattern - Retornar formato JSON estructurado para UIManager
             error_detail = e.detail if hasattr(e, 'detail') else str(e)
             if isinstance(error_detail, dict):
                 return Response(error_detail, status=status.HTTP_400_BAD_REQUEST)
             return Response(
-                {"error": "Error de validación en la nómina", "detail": str(error_detail)},
+                {"error": "Error de validacion en la nomina", "detail": str(error_detail)},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except ValueError as e:
@@ -1120,13 +1098,13 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             )
         except IntegrityError as e:
             logger.error(f"[DevengoViewSet] Error de integridad en create: {str(e)}", exc_info=True)
-            # WARNING: v2.60: Error Boundary Pattern - Capturar error de unicidad específico
+            # WARNING: v2.60: Error Boundary Pattern - Capturar error de unicidad especifico
             error_str = str(e).lower()
             if 'uniq_nomina_per_empleado_periodo' in error_str or 'unique constraint' in error_str:
                 return Response(
                     {
-                        "error": "Ya existe una nómina registrada para este empleado en el periodo seleccionado.",
-                        "detail": "No se puede crear una nómina duplicada. Si desea modificarla, debe anular la nómina existente primero.",
+                        "error": "Ya existe una nomina registrada para este empleado en el periodo seleccionado.",
+                        "detail": "No se puede crear una nomina duplicada. Si desea modificarla, debe anular la nomina existente primero.",
                         "code": "duplicate_nomina"
                     },
                     status=status.HTTP_409_CONFLICT
@@ -1138,34 +1116,34 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         except Exception as e:
             logger.error(f"[DevengoViewSet] Error inesperado en create: {str(e)}", exc_info=True)
             return Response(
-                {"error": "Ocurrió un error inesperado al procesar la nómina.", "detail": str(e)},
+                {"error": "Ocurrio un error inesperado al procesar la nomina.", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     def update(self, request, *args, **kwargs):
         """
-        WARNING: v2.60: Permite actualización solo a través de lógica de Upsert en create().
-        Método directo bloqueado para mantener inmutabilidad explícita.
+        WARNING: v2.60: Permite actualizacion solo a traves de logica de Upsert en create().
+        Metodo directo bloqueado para mantener inmutabilidad explicita.
         """
         return Response(
-            {"detail": "Para actualizar una nómina, use el endpoint de creación. El sistema detectará automáticamente si existe una nómina para el mismo periodo y la actualizará."},
+            {"detail": "Para actualizar una nomina, use el endpoint de creacion. El sistema detectara automaticamente si existe una nomina para el mismo periodo y la actualizara."},
             status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
     
     def partial_update(self, request, *args, **kwargs):
         """
-        WARNING: v2.60: Permite actualización solo a través de lógica de Upsert en create().
-        Método directo bloqueado para mantener inmutabilidad explícita.
+        WARNING: v2.60: Permite actualizacion solo a traves de logica de Upsert en create().
+        Metodo directo bloqueado para mantener inmutabilidad explicita.
         """
         return Response(
-            {"detail": "Para actualizar una nómina, use el endpoint de creación. El sistema detectará automáticamente si existe una nómina para el mismo periodo y la actualizará."},
+            {"detail": "Para actualizar una nomina, use el endpoint de creacion. El sistema detectara automaticamente si existe una nomina para el mismo periodo y la actualizara."},
             status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
     
     def destroy(self, request, *args, **kwargs):
         """
-        WARNING: v2.60: Eliminación de nómina (Hard Delete).
-        Valida Zero Trust y registra en log de auditoría.
+        WARNING: v2.60: Eliminacion de nomina (Hard Delete).
+        Valida Zero Trust y registra en log de auditoria.
         """
         instance = self.get_object()
         
@@ -1173,22 +1151,22 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             devengo_id = self.service_eliminar_devengo(instance, request)
             
             return Response(
-                {"detail": "Nómina eliminada correctamente", "id": devengo_id},
+                {"detail": "Nomina eliminada correctamente", "id": devengo_id},
                 status=status.HTTP_200_OK
             )
         except serializers.ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
-            logger.error(f"[DevengoViewSet] Error al eliminar nómina: {str(e)}", exc_info=True)
+            logger.error(f"[DevengoViewSet] Error al eliminar nomina: {str(e)}", exc_info=True)
             return Response(
-                {"error": "Ocurrió un error inesperado al eliminar la nómina.", "detail": str(e)},
+                {"error": "Ocurrio un error inesperado al eliminar la nomina.", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     def perform_update(self, serializer):
         """
-        WARNING: v2.60: Método para actualizar nómina existente (usado en lógica de Upsert).
+        WARNING: v2.60: Metodo para actualizar nomina existente (usado en logica de Upsert).
         Recalcula todos los valores usando la Capa de Servicio antes de guardar (Zero Trust).
         """
         serializer.instance = self.service_procesar_devengo(serializer, instance=serializer.instance)
@@ -1200,7 +1178,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         serializer.instance = self.service_procesar_devengo(serializer)
 
     @action(detail=True, methods=["post"], url_path="anular")
-    def anular(self, request, id=None):
+    def anular(self, request, uuid=None):
         instance = self.get_object()
         devengo = self.service_anular_devengo(instance)
         return Response({"status": "Anulado correctamente", "id": devengo.id})
@@ -1208,7 +1186,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
     @action(detail=False, methods=["post"], renderer_classes=[TemplateHTMLRenderer, JSONRenderer], url_path="preview-calculo", permission_classes=[IsTenantMember])
     def preview_calculo(self, request):
         """
-        WARNING: v2.60: Endpoint para previsualizar cálculo de nómina en tiempo real (HTMX Partial).
+        WARNING: v2.60: Endpoint para previsualizar calculo de nomina en tiempo real (HTMX Partial).
         Devuelve un partial HTML con los valores calculados actualizados.
         """
         from decimal import Decimal, InvalidOperation
@@ -1221,7 +1199,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         
         if not empresa:
             return Response(
-                {"error": "No se encontró configuración de Empresa para este tenant."}, 
+                {"error": "No se encontro configuracion de Empresa para este tenant."},
                 status=status.HTTP_403_FORBIDDEN,
                 template_name=ERROR_TEMPLATE
             )
@@ -1229,7 +1207,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         empresa_id = empresa.id
         
         try:
-            # WARNING: v2.60: Extraer datos del request.POST (HTMX envía datos como form-data)
+            # WARNING: v2.60: Extraer datos del request.POST (HTMX envia datos como form-data)
             # Soporta tanto request.data (DRF) como request.POST (HTMX form-data)
             contrato_id = request.data.get('contrato') or request.POST.get('contrato')
             dias_laborados = request.data.get('dias_laborados') or request.POST.get('dias_laborados')
@@ -1240,7 +1218,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             # WARNING: v2.60: Validar datos requeridos
             if not contrato_id:
                 return Response({
-                    "error": "El campo 'contrato' es obligatorio. Asegúrese de que el empleado tenga un contrato activo."
+                    "error": "El campo 'contrato' es obligatorio. Asegurese de que el empleado tenga un contrato activo."
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             if not dias_laborados:
@@ -1250,23 +1228,25 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             
             # WARNING: v2.60: Zero Trust - Obtener contrato ACTIVO validando empresa_id
             try:
-                contrato = Contrato.objects.get(id=contrato_id, estado='ACTIVO', empresa_id=empresa_id)
+                contrato = self.get_contrato_by_id(contrato_id)
+                if contrato.estado != 'ACTIVO' or not contrato.activo:
+                    raise Contrato.DoesNotExist
             except Contrato.DoesNotExist:
                 return Response({
-                    "error": "Contrato no encontrado o no está activo. Verifique que el contrato pertenezca a este tenant y esté en estado ACTIVO."
+                    "error": "Contrato no encontrado o no esta activo. Verifique que el contrato pertenezca a este tenant y este en estado ACTIVO."
                 }, status=status.HTTP_404_NOT_FOUND)
             
-            # WARNING: v2.60: Validar días laborados (permite decimales 0.5-30)
+            # WARNING: v2.60: Validar dias laborados (permite decimales 0.5-30)
             try:
                 dias_laborados = Decimal(str(dias_laborados))
             except (ValueError, InvalidOperation):
                 return Response({
-                    "error": "Los días laborados deben ser un número válido"
+                    "error": "Los dias laborados deben ser un numero valido"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('30'):
                 return Response({
-                    "error": "Los días laborados deben estar entre 0.5 y 30"
+                    "error": "Los dias laborados deben estar entre 0.5 y 30"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # WARNING: v2.60: Validar horas trabajadas si se proporciona
@@ -1280,30 +1260,30 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                         }, status=status.HTTP_400_BAD_REQUEST)
                 except (ValueError, InvalidOperation):
                     return Response({
-                        "error": "Las horas trabajadas deben ser un número válido"
+                        "error": "Las horas trabajadas deben ser un numero valido"
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             # Obtener valores opcionales (con valores por defecto 0 para evitar None)
-            # WARNING: v2.60: Normalización de decimales usando Decimal para precisión
+            # WARNING: v2.60: Normalizacion de decimales usando Decimal para precision
             try:
                 otros_devengos = Decimal(str(request.data.get('otros_devengos', 0) or request.POST.get('otros_devengos', 0) or 0))
                 prestamos = Decimal(str(request.data.get('prestamos', 0) or request.POST.get('prestamos', 0) or 0))
                 descuentos_operativos = Decimal(str(request.data.get('descuentos_operativos', 0) or request.POST.get('descuentos_operativos', 0) or 0))
             except (ValueError, InvalidOperation, TypeError) as e:
                 return Response({
-                    "error": f"Error en formato de datos numéricos: {str(e)}"
+                    "error": f"Error en formato de datos numericos: {str(e)}"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # WARNING: v2.60: Validar que el préstamo a descontar no sea mayor al disponible en el contrato
+            # WARNING: v2.60: Validar que el prestamo a descontar no sea mayor al disponible en el contrato
             if prestamos > 0:
                 prestamo_disponible = Decimal(str(contrato.prestamos_empresa or 0))
                 if prestamos > prestamo_disponible:
                     return Response({
-                        "error": f"El monto a descontar (${prestamos:,.2f}) no puede ser mayor al préstamo disponible en el contrato (${prestamo_disponible:,.2f})"
+                        "error": f"El monto a descontar (${prestamos:,.2f}) no puede ser mayor al prestamo disponible en el contrato (${prestamo_disponible:,.2f})"
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             # WARNING: v2.60: Calcular usando NominaCalculationService.calcular_liquidacion (SSoT - Normativa Colombiana)
-            # WARNING: Zero Trust: Pasar empresa_id para validación
+            # WARNING: Zero Trust: Pasar empresa_id para validacion
             from apps.tenant.empleados.services.business_service import NominaCalculationService
             calculo = NominaCalculationService.calcular_liquidacion(
                 contrato=contrato,
@@ -1319,7 +1299,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             neto_pagar = Decimal(calculo['neto_pagar'])
             if neto_pagar < 0:
                 return Response({
-                    "error": f"El neto a pagar no puede ser negativo (${neto_pagar:,.2f}). Revise los descuentos y préstamos.",
+                    "error": f"El neto a pagar no puede ser negativo (${neto_pagar:,.2f}). Revise los descuentos y prestamos.",
                     "calculo": calculo
                 }, status=status.HTTP_400_BAD_REQUEST)
             
@@ -1334,42 +1314,40 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
         except (InvalidOperation, TypeError) as e:
-            return Response({"error": f"Error en formato de datos numéricos: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
+            return Response({"error": f"Error en formato de datos numericos: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
         except Exception as e:
             logger.error(f"[DevengoViewSet] Error en preview_calculo: {str(e)}", exc_info=True)
             return Response({
-                "error": "Ocurrió un error inesperado al calcular la nómina.",
+                "error": "Ocurrio un error inesperado al calcular la nomina.",
                 "detail": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, template_name=ERROR_TEMPLATE)
     
     @action(detail=False, methods=["post"], url_path="previsualizar")
     def previsualizar(self, request):
         """
-        WARNING: v2.60: Endpoint para previsualizar cálculo de nómina sin guardar.
-        Usa calcular_liquidacion_nomina() como única fuente de verdad (SSoT).
+        WARNING: v2.60: Endpoint para previsualizar calculo de nomina sin guardar.
+        Usa calcular_liquidacion_nomina() como unica fuente de verdad (SSoT).
         Cumple con normativa laboral colombiana (Ley 2101 - 46 horas semanales).
         
         Recibe:
         - contrato_id: ID del contrato (requerido)
-        - dias_laborados: Días trabajados (0.5-30, requerido)
-        - horas_trabajadas: Horas trabajadas (opcional, para cálculo por horas)
+        - dias_laborados: Dias trabajados (0.5-30, requerido)
+        - horas_trabajadas: Horas trabajadas (opcional, para calculo por horas)
         - otros_devengos: Otros devengos en COP (opcional, default: 0)
-        - prestamos: Préstamos a descontar en COP (opcional, default: 0)
+        - prestamos: Prestamos a descontar en COP (opcional, default: 0)
         - descuentos_operativos: Descuentos operativos en COP (opcional, default: 0)
         
         Retorna:
         - salario_base: Salario base proporcional calculado
         - auxilio_transporte: Auxilio de transporte proporcional
-        - ibc: Ingreso Base de Cotización (para referencia)
-        - salud_empleado: Deducción de salud (4% sobre IBC)
-        - pension_empleado: Deducción de pensión (4% sobre IBC)
+        - ibc: Ingreso Base de Cotizacion (para referencia)
+        - salud_empleado: Deduccion de salud (4% sobre IBC)
+        - pension_empleado: Deduccion de pension (4% sobre IBC)
         - neto_pagar: Neto a pagar calculado
         """
         from decimal import Decimal, InvalidOperation
 
-        from apps.tenant.empleados.models import Contrato
-        
-        empresa = Empresa.objects.only('id').first()
+        empresa = self.get_empresa()
         if not empresa:
             return Response({"error": "sin_empresa"}, status=status.HTTP_404_NOT_FOUND)
         
@@ -1379,41 +1357,36 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             # Validar y obtener datos requeridos
             contrato_id = request.data.get('contrato')
             dias_laborados = request.data.get('dias_laborados', 30)
-            horas_trabajadas = request.data.get('horas_trabajadas', None)  # WARNING: v2.60: Soporte para cálculo por horas
+            horas_trabajadas = request.data.get('horas_trabajadas', None)  # WARNING: v2.60: Soporte para calculo por horas
             
             if not contrato_id:
                 return Response({
                     "error": "El campo 'contrato' es obligatorio"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # WARNING: v2.60: Máquina de Estados - Obtener contrato ACTIVO con Zero Trust
+            # WARNING: v2.60: Maquina de Estados - Obtener contrato ACTIVO con Zero Trust
             try:
-                contrato = Contrato.objects.get(id=contrato_id, estado='ACTIVO', empresa_id=empresa_id)
-            except Contrato.DoesNotExist:
-                # Fallback: buscar por campo activo legacy
-                try:
-                    contrato = Contrato.objects.get(id=contrato_id, activo=True, empresa_id=empresa_id)
-                    # Si existe pero no está ACTIVO, rechazar
-                    if contrato.estado != 'ACTIVO':
-                        return Response({
-                            "error": f"Contrato no está activo (estado: {contrato.estado})"
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                except Contrato.DoesNotExist:
+                contrato = self.get_contrato_by_id(contrato_id)
+                if contrato.estado != 'ACTIVO' or not contrato.activo:
                     return Response({
-                        "error": "Contrato no encontrado o no está activo"
-                    }, status=status.HTTP_404_NOT_FOUND)
+                        "error": f"Contrato no esta activo (estado: {contrato.estado})"
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            except Contrato.DoesNotExist:
+                return Response({
+                    "error": "Contrato no encontrado o no esta activo"
+                }, status=status.HTTP_404_NOT_FOUND)
             
-            # WARNING: v2.60: Validar días laborados (permite decimales 0.5-30)
+            # WARNING: v2.60: Validar dias laborados (permite decimales 0.5-30)
             try:
                 dias_laborados = Decimal(str(dias_laborados))
             except (ValueError, InvalidOperation):
                 return Response({
-                    "error": "Los días laborados deben ser un número válido"
+                    "error": "Los dias laborados deben ser un numero valido"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('30'):
                 return Response({
-                    "error": "Los días laborados deben estar entre 0.5 y 30"
+                    "error": "Los dias laborados deben estar entre 0.5 y 30"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # WARNING: v2.60: Validar horas trabajadas si se proporciona
@@ -1427,7 +1400,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                         }, status=status.HTTP_400_BAD_REQUEST)
                 except (ValueError, InvalidOperation):
                     return Response({
-                        "error": "Las horas trabajadas deben ser un número válido"
+                        "error": "Las horas trabajadas deben ser un numero valido"
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             # Obtener valores opcionales (con valores por defecto 0 para evitar None)
@@ -1435,12 +1408,12 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             prestamos = Decimal(str(request.data.get('prestamos', 0) or 0))
             descuentos_operativos = Decimal(str(request.data.get('descuentos_operativos', 0) or 0))
             
-            # WARNING: v2.60: Validar que el préstamo a descontar no sea mayor al disponible en el contrato
+            # WARNING: v2.60: Validar que el prestamo a descontar no sea mayor al disponible en el contrato
             if prestamos > 0:
                 prestamo_disponible = Decimal(str(contrato.prestamos_empresa or 0))
                 if prestamos > prestamo_disponible:
                     return Response({
-                        "error": f"El monto a descontar (${prestamos:,.2f}) no puede ser mayor al préstamo disponible en el contrato (${prestamo_disponible:,.2f})"
+                        "error": f"El monto a descontar (${prestamos:,.2f}) no puede ser mayor al prestamo disponible en el contrato (${prestamo_disponible:,.2f})"
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             # WARNING: v2.60: Calcular usando NominaCalculationService.calcular_liquidacion (SSoT - Normativa Colombiana)
@@ -1466,11 +1439,11 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         except (InvalidOperation, TypeError) as e:
             return Response({
-                "error": f"Error en formato de datos numéricos: {str(e)}"
+                "error": f"Error en formato de datos numericos: {str(e)}"
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"[DevengoViewSet] Error en previsualizar: {str(e)}", exc_info=True)
             return Response({
-                "error": "Ocurrió un error inesperado al calcular la previsualización.",
+                "error": "Ocurrio un error inesperado al calcular la previsualizacion.",
                 "detail": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

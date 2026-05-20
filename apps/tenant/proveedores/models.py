@@ -61,8 +61,8 @@ class Proveedor(SintelTenantBaseModel):
     # Estado
     activo = models.BooleanField(default=True)
     
-    # Mapeo Contable NIIF (v2.61.8)
-    # WARNING: v2.61.8: Solo se permiten codigos de subcuenta (nivel 6) para Pasivos (Clase 2).
+    # Mapeo Contable NIIF
+    # Solo se permiten codigos de subcuenta (nivel 6) para Pasivos (Clase 2).
     # Este campo permite mapear el proveedor a una cuenta por pagar especifica.
     codigo_contable = models.CharField(
         max_length=10, 

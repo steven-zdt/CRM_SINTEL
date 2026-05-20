@@ -111,12 +111,27 @@
      * Obtiene la lista de cuentas para select (lookup)
      * @returns {Promise<Array>} Lista de cuentas para select
      */
-    lookup: async function() {
-      const response = await w.http('GET', API_BASE);
+    lookup: async function(params = {}) {
+      const url = new URL(API_BASE, w.location.origin);
+      url.searchParams.append('solo_auxiliares', 'true');
+      url.searchParams.append('activa', 'true');
+      url.searchParams.append('page_size', params.page_size || 500);
+      if (params.search) url.searchParams.append('search', params.search);
+      if (params.app_origen) url.searchParams.append('app_origen', params.app_origen);
+
+      const response = await w.http('GET', url.pathname + url.search);
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
       return response.data.results || response.data;
+    },
+
+    searchAuxiliares: async function(search = '', params = {}) {
+      return CuentaAPI.lookup({
+        ...params,
+        search,
+        page_size: params.page_size || 20,
+      });
     }
   };
 

@@ -1,390 +1,366 @@
 /**
- * Feature: Listado y Tabulator - Movimientos de Inventario (Kardex) v2.61.3
- * ⚠️ Feature-Sliced Architecture: Lógica de inicialización y gestión de Tabulator
- * ⚠️ Vanilla JS: Sin dependencias de jQuery
- * ⚠️ API-First: Consume Core API facade (CORE_API_BASE)
- * ⚠️ Modular: Usa TabulatorFactory (The Engine)
- * ⚠️ Anti-Zombies: Previene instancias fantasma de Tabulator por recargas HTMX
- * 
- * Dependencias globales requeridas:
- * - TabulatorFactory (definido en tabulator.factory.js)
- * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
- * - w.MovimientosEditor (definido en movimientos_editor.js) - Feature: Crear
- * 
- * CRUD:
- * - READ: Lista movimientos de inventario con Tabulator
- * - READ (detail): Ver detalles de un movimiento
- * ⚠️ NOTA: No hay UPDATE/DELETE por integridad del Kardex (movimientos históricos)
+ * Feature: Ledger Universal — Movimientos Recientes (Timeline Unificado) v3.9.0
+ * Consolida Productos (Kardex), Activos Fijos (Eventos) y Servicios (Historial).
+ * Endpoint: GET /api/v1/inventario/movimientos/timeline/
+ * Dependencias: TabulatorFactory, w.http, w.SintelFeedback, htmx, bootstrap
  */
 (function(w, d) {
     'use strict';
 
-    const MOD = '[movimientos.list]';
+    const MOD = '[movimientos.list.v390]';
+
+    // Abre un offcanvas de forma segura, limpiando backdrops huerfanos primero.
+    function mostrarOffcanvasSeguro(el) {
+        if (!el || !w.bootstrap?.Offcanvas) return;
+        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        d.body.classList.remove('overflow-hidden', 'modal-open');
+        var prev = bootstrap.Offcanvas.getInstance(el);
+        if (prev) prev.dispose();
+        new bootstrap.Offcanvas(el).show();
+    }
     const GRID_ID = '#grid-movimientos';
     const SEARCH_ID = '#search-movimiento';
-    const API_URL = '/api/v1/inventario/movimientos/'; // ⚠️ v2.61.3: Core API Facade para CRUD
-    const CORE_API_BASE = '/api/v1/inventario/movimientos'; // Core API Facade
+    const API_URL = '/api/v1/inventario/movimientos/timeline/';
+    const API_MOV = '/api/v1/inventario/movimientos';
+    const API_HIST = '/api/v1/inventario/historial-servicios';
     let table = null;
 
-    // ⚠️ Anti-Zombies v2.61.3: Singleton global para instancias de Tabulator
-    if (window.SintelInventarioTables && window.SintelInventarioTables.movimientos) {
-        if (window.SintelInventarioTables.movimientos && typeof window.SintelInventarioTables.movimientos.destroy === 'function') {
-            try {
-                window.SintelInventarioTables.movimientos.destroy();
-            } catch (error) {
-                console.warn(`${MOD} Error al destruir instancia zombie:`, error);
-            }
-        }
-    }
-    if (!window.SintelInventarioTables) {
-        window.SintelInventarioTables = {};
+    w.SintelInventarioTables = w.SintelInventarioTables || {};
+    if (w.SintelInventarioTables.movimientos?.destroy) {
+        try { w.SintelInventarioTables.movimientos.destroy(); } catch (_) {}
     }
 
-    /**
-     * Formatear fecha y hora
-     * @param {string} value - Fecha en formato ISO
-     * @returns {string} Fecha formateada
-     */
-    function formatearFechaHora(value) {
-        if (!value) return '-';
+    // -----------------------------------------------------------------------
+    // Helpers de formato
+    // -----------------------------------------------------------------------
+
+    function fmtFecha(val) {
+        if (!val) return '-';
         try {
-            const date = new Date(value);
-            return date.toLocaleString('es-CO');
-        } catch (error) {
-            return value;
-        }
+            // Acepta tanto 'YYYY-MM-DD' como ISO datetime
+            const d = new Date(val.length === 10 ? val + 'T00:00:00' : val);
+            return d.toLocaleString('es-CO');
+        } catch (_) { return val; }
     }
 
-    /**
-     * Formatear badge de tipo de movimiento
-     * @param {string} tipo - Tipo de movimiento
-     * @param {string} tipoDisplay - Texto de tipo para mostrar
-     * @returns {string} HTML del badge
-     */
-    function formatearTipoMovimiento(tipo, tipoDisplay) {
-        let color = 'bg-secondary';
-        // Entradas
-        if (tipo && tipo.includes('ENTRADA')) {
-            color = 'bg-success';
-        }
-        // Salidas
-        else if (tipo && tipo.includes('SALIDA')) {
-            color = 'bg-danger';
-        }
-        
-        const texto = tipoDisplay || tipo || 'N/A';
-        return `<span class="badge ${color}">${texto}</span>`;
+    function fmtMoneda(val) {
+        const n = parseFloat(val) || 0;
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+        }).format(n);
     }
 
-    /**
-     * Definir columnas específicas del módulo
-     * @returns {Array} Configuración de columnas Tabulator
-     */
+    function badgeModulo(modulo) {
+        if (modulo === 'PRODUCTO')    return '<span class="badge bg-success">Producto</span>';
+        if (modulo === 'ACTIVO_FIJO') return '<span class="badge bg-warning text-dark">Activo</span>';
+        if (modulo === 'SERVICIO')    return '<span class="badge bg-info text-dark">Servicio</span>';
+        return '<span class="badge bg-secondary">' + (modulo || '-') + '</span>';
+    }
+
+    function badgeTipoAccion(tipo, tipoDisplay) {
+        const label = tipoDisplay || tipo || '-';
+        let cls = 'bg-secondary';
+        if (tipo && tipo.includes('ENTRADA')) cls = 'bg-success';
+        else if (tipo && tipo.includes('SALIDA')) cls = 'bg-danger';
+        else if (tipo && (tipo.includes('TRASLADO') || tipo.includes('ASIGNACION'))) cls = 'bg-warning text-dark';
+        else if (tipo && tipo.includes('BAJA')) cls = 'bg-dark';
+        else if (tipo === 'VENTA_SERVICIO') cls = 'bg-info text-dark';
+        return '<span class="badge ' + cls + '">' + label + '</span>';
+    }
+
+    // -----------------------------------------------------------------------
+    // Columnas del Ledger Universal
+    // -----------------------------------------------------------------------
+
     function getColumns() {
         return [
             {
-                title: "Fecha",
-                field: "created_at",
-                formatter: function(cell) {
-                    return formatearFechaHora(cell.getValue());
-                },
-                width: 160
+                title: 'Fecha',
+                field: 'fecha',
+                formatter: function(cell) { return fmtFecha(cell.getValue()); },
+                width: 145
             },
             {
-                title: "Tipo Movimiento",
-                field: "tipo",
-                formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    return formatearTipoMovimiento(rowData.tipo, rowData.tipo_display);
-                },
-                width: 150
-            },
-            {
-                title: "Producto",
-                field: "producto_nombre",
-                formatter: function(cell) {
-                    const data = cell.getRow().getData();
-                    const codigo = data.producto_codigo || '';
-                    const nombre = data.producto_nombre || '-';
-                    return `<strong>${codigo}</strong> - ${nombre}`;
-                },
-                minWidth: 250,
-                headerFilter: "input"
-            },
-            {
-                title: "Cantidad",
-                field: "cantidad",
-                formatter: function(cell) {
-                    const val = parseFloat(cell.getValue()) || 0;
-                    return val.toFixed(3);
-                },
+                title: 'Modulo',
+                field: 'modulo_origen',
+                formatter: function(cell) { return badgeModulo(cell.getValue()); },
                 width: 100,
-                hozAlign: "right"
+                headerFilter: 'list',
+                headerFilterParams: {
+                    values: { '': 'Todos', 'PRODUCTO': 'Producto', 'ACTIVO_FIJO': 'Activo', 'SERVICIO': 'Servicio' }
+                }
             },
             {
-                title: "Costo Unit. ($)",
-                field: "costo_unitario",
+                title: 'Item',
+                field: 'item_nombre',
                 formatter: function(cell) {
-                    const val = parseFloat(cell.getValue()) || 0;
-                    return val.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    const d = cell.getRow().getData();
+                    const codigo = d.item_codigo
+                        ? '<span class="text-muted me-1">[' + d.item_codigo + ']</span>'
+                        : '';
+                    const nombre = d.item_nombre || '<span class="text-muted">-</span>';
+                    return codigo + '<strong>' + nombre + '</strong>';
                 },
-                width: 120,
-                hozAlign: "right"
+                minWidth: 200,
+                headerFilter: 'input'
             },
             {
-                title: "Origen",
-                field: "origen_referencia",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '<span class="text-muted">-</span>';
-                },
-                width: 150
-            },
-            {
-                title: "Destino",
-                field: "cliente_referencia",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '<span class="text-muted">-</span>';
-                },
-                width: 150
-            },
-            {
-                title: "Observaciones",
-                field: "observaciones",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '<span class="text-muted">-</span>';
-                },
-                width: 200
-            },
-            {
-                title: "Acciones",
-                field: "acciones",
+                title: 'Transaccion',
+                field: 'tipo_accion',
                 formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    const id = rowData.id;
-                    // ⚠️ Solo botón de ver detalles (movimientos históricos no se editan/eliminan)
-                    return `
-                        <button type="button" class="btn btn-outline-info btn-sm btn-ver-detalle-movimiento" data-id="${id}" title="Ver Detalles">
-                            <i class="bi bi-eye"></i>
-                        </button>
-                    `;
+                    const d = cell.getRow().getData();
+                    return badgeTipoAccion(d.tipo_accion, d.tipo_accion_display);
                 },
-                width: 80,
+                width: 155
+            },
+            {
+                title: 'Impacto',
+                field: 'cantidad',
+                formatter: function(cell) {
+                    const d = cell.getRow().getData();
+                    if (d.modulo_origen === 'SERVICIO') {
+                        const val = parseFloat(d.valor_costo) || 0;
+                        return '<span class="text-info">' + fmtMoneda(val) + '</span>';
+                    }
+                    if (d.modulo_origen === 'ACTIVO_FIJO') {
+                        return '<span class="text-muted">Evento</span>';
+                    }
+                    const cant = parseFloat(d.cantidad) || 0;
+                    return cant.toFixed(3);
+                },
+                width: 110,
+                hozAlign: 'right'
+            },
+            {
+                title: 'Referencia',
+                field: 'referencia',
+                formatter: function(cell) {
+                    const v = cell.getValue();
+                    return v ? String(v) : '<span class="text-muted">-</span>';
+                },
+                width: 145
+            },
+            {
+                title: 'Acciones',
+                field: 'uuid',
+                formatter: function(cell) {
+                    const row = cell.getRow().getData();
+                    const uuid = row.uuid;
+                    const modulo = row.modulo_origen;
+                    const verBtn = '<button class="btn btn-outline-info btn-km-ver" data-uuid="' + uuid + '" data-modulo="' + modulo + '" title="Ver detalle"><i class="bi bi-eye"></i></button>';
+                    const delBtn = '<button class="btn btn-outline-danger btn-km-eliminar" data-uuid="' + uuid + '" data-modulo="' + modulo + '" title="Eliminar"><i class="bi bi-trash"></i></button>';
+                    if (modulo === 'SERVICIO') {
+                        // Servicio: ver + eliminar (sin editar — no hay form de edicion)
+                        return '<div class="btn-group btn-group-sm">' + verBtn + delBtn + '</div>';
+                    }
+                    const editBtn = '<button class="btn btn-outline-primary btn-km-editar" data-uuid="' + uuid + '" title="Editar"><i class="bi bi-pencil"></i></button>';
+                    return '<div class="btn-group btn-group-sm">' + verBtn + editBtn + delBtn + '</div>';
+                },
+                width: 125,
                 headerSort: false,
                 resizable: false,
-                hozAlign: "center"
+                hozAlign: 'center',
+                responsive: 0,
+                frozen: true
             }
         ];
     }
 
-    /**
-     * Inicializar tabla de movimientos
-     * @returns {Object|null} Instancia de Tabulator o null
-     */
+    // -----------------------------------------------------------------------
+    // Inicializar tabla
+    // -----------------------------------------------------------------------
+
     function initTable() {
-        const gridEl = d.querySelector(GRID_ID);
-        if (!gridEl) {
-            console.warn(`${MOD} Contenedor ${GRID_ID} no encontrado`);
-            return null;
-        }
+        const el = d.querySelector(GRID_ID);
+        if (!el || !w.TabulatorFactory?.create) return null;
 
-        // ⚠️ Verificar que TabulatorFactory esté disponible
-        if (!w.TabulatorFactory || typeof w.TabulatorFactory.create !== 'function') {
-            console.error(`${MOD} TabulatorFactory no está disponible`);
-            return null;
-        }
-
-        // Configuración de la tabla
-        const tableConfig = {
+        table = w.TabulatorFactory.create(GRID_ID, API_URL, getColumns(), {
             searchInputSelector: SEARCH_ID,
             pagination: true,
-            paginationMode: "remote",
-            paginationSize: 10,
-            paginationSizeSelector: [10, 25, 50, 100],
-            layout: "fitDataStretch",
-            responsiveLayout: true,
-            responsiveLayoutCollapseStartOpen: false,
-            placeholder: "No hay movimientos registrados",
-            locale: "es"
-        };
+            paginationMode: 'remote',
+            paginationSize: 15,
+            paginationSizeSelector: [10, 15, 25, 50],
+            layout: 'fitColumns',
+            responsiveLayout: 'hide',
+            placeholder: 'No hay movimientos registrados',
+            locale: 'es'
+        });
 
-        // Crear tabla usando TabulatorFactory
-        table = w.TabulatorFactory.create(
-            GRID_ID,
-            API_URL,
-            getColumns(),
-            tableConfig
-        );
-
-        // Guardar instancia en singleton global
-        window.SintelInventarioTables.movimientos = table;
-
-        // Event Delegation para acciones del Grid
+        w.SintelInventarioTables.movimientos = table;
         initListEvents();
-
         return table;
     }
 
-    /**
-     * Ver detalles de un movimiento
-     * ⚠️ CRUD: READ (detail)
-     * @param {string|number} movimientoId - ID del movimiento
-     */
-    async function verDetalle(movimientoId) {
-        if (!movimientoId) {
-            console.warn(`${MOD} ID de movimiento no proporcionado`);
-            return;
-        }
+    // -----------------------------------------------------------------------
+    // Acciones: Ver, Editar, Eliminar
+    // -----------------------------------------------------------------------
 
+    async function abrirDetalle(uuid, modulo) {
+        if (!w.http) return;
         try {
-            // ⚠️ API-First: Obtener información del movimiento
-            let movimientoRes;
-            if (w.http && typeof w.http === 'function') {
-                movimientoRes = await w.http('GET', `${CORE_API_BASE}/${movimientoId}/`);
-            } else if (w.inventarioAPI && w.inventarioAPI.movimientos && typeof w.inventarioAPI.movimientos.get === 'function') {
-                movimientoRes = await w.inventarioAPI.movimientos.get(movimientoId);
-            } else {
-                console.error(`${MOD} API no disponible`);
-                return;
+            const apiBase = modulo === 'SERVICIO' ? API_HIST : API_MOV;
+            const res = await w.http('GET', apiBase + '/' + uuid + '/');
+            if (!res.ok) { mostrarError('No se pudo cargar el detalle.'); return; }
+            const m = res.data;
+
+            const itemNombre = m.item_nombre || m.producto_nombre || m.activo_fijo_nombre
+                || (m.servicio ? (m.servicio.nombre || m.servicio_nombre) : '') || '-';
+            const itemCodigo = m.item_codigo || m.producto_codigo || m.activo_fijo_codigo
+                || (m.servicio ? (m.servicio.codigo || '') : '') || '';
+
+            const badgeMod = badgeModulo(modulo);
+            const tipoDisplay = m.tipo_accion_display || m.tipo_display || m.tipo || '-';
+
+            const html = '<dl class="row mb-0 small">'
+                + '<dt class="col-5">Modulo</dt><dd class="col-7">' + badgeMod + '</dd>'
+                + '<dt class="col-5">Item</dt><dd class="col-7">' + (itemCodigo ? '[' + itemCodigo + '] ' : '') + itemNombre + '</dd>'
+                + '<dt class="col-5">Transaccion</dt><dd class="col-7">' + tipoDisplay + '</dd>'
+                + '<dt class="col-5">Cantidad</dt><dd class="col-7">' + (m.cantidad || '-') + '</dd>'
+                + '<dt class="col-5">Valor / Costo</dt><dd class="col-7">' + fmtMoneda(m.costo_unitario || m.valor_cobrado || 0) + '</dd>'
+                + '<dt class="col-5">Referencia</dt><dd class="col-7">' + (m.origen_referencia || m.referencia || '-') + '</dd>'
+                + '<dt class="col-5">Destino</dt><dd class="col-7">' + (m.cliente_referencia || '-') + '</dd>'
+                + '<dt class="col-5">Observaciones</dt><dd class="col-7">' + (m.observaciones || '-') + '</dd>'
+                + '<dt class="col-5">Fecha</dt><dd class="col-7">' + fmtFecha(m.created_at || m.fecha_registro || '') + '</dd>'
+                + '</dl>';
+
+            const container = d.getElementById('offcanvas-container-movimientos');
+            if (container) {
+                container.innerHTML = '<div class="offcanvas offcanvas-end show" tabindex="-1" id="offcanvas-movimiento-detalle" style="width:480px;">'
+                    + '<div class="offcanvas-header bg-info text-white">'
+                    + '<h5 class="offcanvas-title"><i class="bi bi-eye me-2"></i>Detalle</h5>'
+                    + '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>'
+                    + '</div><div class="offcanvas-body">' + html + '</div></div>';
+                const el = d.getElementById('offcanvas-movimiento-detalle');
+                mostrarOffcanvasSeguro(el);
             }
-
-            // ⚠️ Aislamiento Gradual - Solo verificar ok
-            if (!movimientoRes.ok || !movimientoRes.data) {
-                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-                    w.UIManager.handleError(movimientoRes, MOD);
-                }
-                return;
-            }
-
-            const movimiento = movimientoRes.data;
-
-            // Construir información del movimiento
-            const info = `
-                <strong>Fecha:</strong> ${movimiento.created_at ? formatearFechaHora(movimiento.created_at) : '-'}<br>
-                <strong>Tipo:</strong> ${movimiento.tipo_display || movimiento.tipo || '-'}<br>
-                <strong>Producto:</strong> ${movimiento.producto_nombre || movimiento.producto_codigo || '-'}<br>
-                <strong>Cantidad:</strong> ${parseFloat(movimiento.cantidad || 0).toFixed(3)}<br>
-                <strong>Origen:</strong> ${movimiento.origen_referencia || '-'}<br>
-                <strong>Destino:</strong> ${movimiento.cliente_referencia || '-'}<br>
-                <strong>Observaciones:</strong> ${movimiento.observaciones || '-'}
-            `;
-
-            // Mostrar información usando SintelFeedback
-            if (w.SintelFeedback && typeof w.SintelFeedback.info === 'function') {
-                w.SintelFeedback.info(info);
-            } else if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-                // Fallback: usar UIManager si SintelFeedback no está disponible
-                w.UIManager.notifyError({ status: 200, data: { detail: info } }, MOD);
-            }
-
-        } catch (error) {
-            console.error(`${MOD} Error al obtener detalles:`, error);
-            if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                w.SintelFeedback.error('Error al cargar los detalles del movimiento');
-            }
+        } catch (err) {
+            console.error(MOD, err);
+            mostrarError('Error al cargar el detalle.');
         }
     }
 
-    /**
-     * Event Delegation para acciones del Grid
-     */
-    function initListEvents() {
-        const gridElement = d.querySelector(GRID_ID);
-        if (!gridElement) {
-            console.warn(`${MOD} Elemento ${GRID_ID} no encontrado para eventos`);
-            return;
+    async function abrirEditar(uuid) {
+        try {
+            await htmx.ajax('GET', API_MOV + '/gestor-offcanvas/?id=' + uuid, {
+                target: '#offcanvas-container-movimientos',
+                swap: 'innerHTML'
+            });
+            await new Promise(r => setTimeout(r, 80));
+            const el = d.getElementById('offcanvas-movimientos');
+            mostrarOffcanvasSeguro(el);
+        } catch (err) {
+            console.error(MOD, err);
+            mostrarError('Error al cargar el formulario de edicion.');
         }
+    }
 
-        // ⚠️ Event Delegation: Escuchar clics en el contenedor del grid
-        gridElement.addEventListener('click', async (e) => {
-            // Botón Ver Detalle
-            const btnVerDetalle = e.target.closest('.btn-ver-detalle-movimiento');
-            if (btnVerDetalle) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                const id = btnVerDetalle.getAttribute('data-id');
-                if (!id) {
-                    console.warn(`${MOD} Botón sin data-id`);
-                    return;
-                }
+    async function eliminar(uuid, modulo, btn) {
+        const esServicio = modulo === 'SERVICIO';
+        const msgConfirm = esServicio
+            ? 'Eliminar este registro de Historial de Servicio? Esta accion es irreversible.'
+            : 'Eliminar este movimiento? El stock del producto sera recalculado automaticamente.';
 
-                // ⚠️ Loading state
-                const originalHTML = btnVerDetalle.innerHTML;
-                btnVerDetalle.disabled = true;
-                btnVerDetalle.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+        if (!confirm(msgConfirm)) return;
 
-                try {
-                    await verDetalle(id);
-                } catch (error) {
-                    console.error(`${MOD} Error al ver detalle:`, error);
-                } finally {
-                    // Restaurar estado del botón
-                    btnVerDetalle.disabled = false;
-                    btnVerDetalle.innerHTML = originalHTML;
-                }
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+        try {
+            const apiBase = esServicio ? API_HIST : API_MOV;
+            const res = await w.http('DELETE', apiBase + '/' + uuid + '/');
+            if (!res.ok) {
+                mostrarError(res.data?.detail || 'Error al eliminar.');
+                return;
+            }
+            const msg = esServicio ? 'Historial eliminado.' : 'Movimiento eliminado. Stock recalculado.';
+            w.SintelFeedback?.success?.(msg);
+            table?.replaceData();
+        } catch (err) {
+            console.error(MOD, err);
+            mostrarError('Error inesperado al eliminar.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Event delegation
+    // -----------------------------------------------------------------------
+
+    function initListEvents() {
+        const grid = d.querySelector(GRID_ID);
+        if (!grid) return;
+
+        grid.addEventListener('click', async function(e) {
+            const btnVer = e.target.closest('.btn-km-ver');
+            if (btnVer) {
+                e.preventDefault(); e.stopPropagation();
+                await abrirDetalle(btnVer.dataset.uuid, btnVer.dataset.modulo);
+                return;
+            }
+
+            const btnEdit = e.target.closest('.btn-km-editar');
+            if (btnEdit) {
+                e.preventDefault(); e.stopPropagation();
+                const original = btnEdit.innerHTML;
+                btnEdit.disabled = true;
+                btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+                try { await abrirEditar(btnEdit.dataset.uuid); }
+                finally { btnEdit.disabled = false; btnEdit.innerHTML = original; }
+                return;
+            }
+
+            const btnDel = e.target.closest('.btn-km-eliminar');
+            if (btnDel) {
+                e.preventDefault(); e.stopPropagation();
+                await eliminar(btnDel.dataset.uuid, btnDel.dataset.modulo, btnDel);
                 return;
             }
         });
     }
 
-    /**
-     * Recargar tabla
-     */
-    function recargar() {
-        if (table) {
-            table.replaceData();
+    // -----------------------------------------------------------------------
+    // Helpers UI
+    // -----------------------------------------------------------------------
+
+    function mostrarError(msg) {
+        const el = d.getElementById('feedback-movimientos-list');
+        if (el) {
+            el.className = 'alert alert-danger mb-2';
+            el.textContent = msg;
+            el.classList.remove('d-none');
+            setTimeout(() => el.classList.add('d-none'), 5000);
         }
     }
 
-    /**
-     * Inicializar módulo de listado de movimientos
-     * ⚠️ Lazy Loading: Solo se inicializa cuando el tab está visible
-     */
-    function init() {
-        console.log(`${MOD} Inicializando módulo de listado...`);
-        
-        const gridEl = d.querySelector(GRID_ID);
-        if (!gridEl) {
-            console.warn(`${MOD} Contenedor ${GRID_ID} no encontrado. El módulo se inicializará cuando el tab esté visible.`);
-            return;
-        }
+    function recargar() {
+        if (table) table.replaceData();
+    }
 
+    // -----------------------------------------------------------------------
+    // Init
+    // -----------------------------------------------------------------------
+
+    function init() {
+        const el = d.querySelector(GRID_ID);
+        if (!el) return;
         initTable();
     }
 
-    // ⚠️ Exposición global del módulo
-    if (!w.MovimientosList) {
-        w.MovimientosList = {
-            init: init,
-            recargar: recargar,
-            verDetalle: verDetalle,
-            getTable: () => table
-        };
-    }
+    w.MovimientosList = { init, recargar, getTable: () => table };
 
-    // ⚠️ Auto-inicialización si el DOM está listo
     if (d.readyState === 'loading') {
         d.addEventListener('DOMContentLoaded', init);
+    } else if (w.DOMUtils?.onVisibleOnce) {
+        w.DOMUtils.onVisibleOnce('#pane-movimientos', init);
     } else {
-        // Si el tab de movimientos está visible, inicializar inmediatamente
-        const tabMovimientos = d.querySelector('#tab-movimientos');
-        if (tabMovimientos && tabMovimientos.classList.contains('active')) {
+        const tab = d.querySelector('#tab-movimientos');
+        if (tab?.classList.contains('active')) {
             init();
-        } else {
-            // Lazy loading: inicializar cuando el tab se muestre
-            if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
-                w.DOMUtils.onVisibleOnce('#pane-movimientos', init);
-            } else {
-                // Fallback: escuchar evento de tab
-                const tabButton = d.querySelector('#tab-movimientos');
-                if (tabButton) {
-                    tabButton.addEventListener('shown.bs.tab', function() {
-                        if (!table) {
-                            init();
-                        }
-                    });
-                }
-            }
+        } else if (tab) {
+            tab.addEventListener('shown.bs.tab', function() { if (!table) init(); });
         }
     }
 

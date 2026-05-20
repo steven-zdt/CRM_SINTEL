@@ -129,7 +129,7 @@
 
             const action = btn.dataset.action;
             const data = cell.getRow().getData();
-            const uuid = data.id;
+            const uuid = data.uuid;
 
             switch (action) {
                 case 'view': this.verDetalle(uuid); break;
@@ -291,7 +291,7 @@
                 const spinner = document.querySelector('[data-spinner="resoluciones"]');
                 if (spinner) spinner.style.display = 'none';
 
-                const apiUrl = window.Sintel.Gastos.API?.resoluciones?.list || '/api/v1/resoluciones-dian/';
+                const apiUrl = window.Sintel.Gastos.API?.resoluciones?.list || '/api/v1/gastos/resoluciones/';
                 const columns = [
                     { title: "N° Resolución", field: "numero_resolucion", width: 150, headerFilter: "input" },
                     { title: "Prefijo", field: "prefijo", width: 100, headerFilter: "input" },
@@ -347,7 +347,7 @@
 
             const action = btn.dataset.action;
             const data = cell.getRow().getData();
-            const uuid = data.id || data.uuid;
+            const uuid = data.uuid;
 
             switch (action) {
                 case 'edit':
@@ -368,7 +368,7 @@
 
         desactivar: async function(uuid) {
             try {
-                const response = await fetch(`/api/v1/resoluciones-dian/${uuid}/desactivar/`, {
+                const response = await fetch(`/api/v1/gastos/resoluciones/${uuid}/desactivar/`, {
                     method: 'POST',
                     headers: window.Sintel.Gastos.getHeaders()
                 });

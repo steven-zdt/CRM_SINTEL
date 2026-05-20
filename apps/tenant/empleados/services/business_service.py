@@ -1,8 +1,8 @@
 """
-Business Service para Empleados - Lógica de negocio y orquestación.
+Business Service para Empleados - Logica de negocio y orquestacion.
 
 WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
-- Este archivo contiene SOLO lógica de negocio (validaciones, cálculos, orquestación).
+- Este archivo contiene SOLO logica de negocio (validaciones, calculos, orquestacion).
 - Delega persistencia a crud_service.py.
 - Todas las funciones son @staticmethod.
 """
@@ -25,17 +25,17 @@ logger = logging.getLogger(__name__)
 
 
 class EmpleadoBusinessService:
-    """Lógica de negocio para Empleado."""
+    """Logica de negocio para Empleado."""
 
     @staticmethod
     def crear_empleado(data: dict, empresa) -> Empleado:
-        """Orquesta la creación de un empleado con validaciones."""
+        """Orquesta la creacion de un empleado con validaciones."""
         return EmpleadoCRUDService.crear_empleado(data, empresa)
 
     @staticmethod
     def actualizar_empleado(empleado: Empleado, data: dict) -> Empleado:
         """
-        Orquesta la actualización de un empleado.
+        Orquesta la actualizacion de un empleado.
         Si el estado cambia a RETIRADO, cancela contratos activos.
         """
         nuevo_estado = data.get('estado', empleado.estado)
@@ -55,24 +55,29 @@ class EmpleadoBusinessService:
         return empleado
 
     @staticmethod
-    def eliminar_empleado_retirado(empleado: Empleado) -> dict:
+    def eliminar_empleado_retirado(empleado: Empleado, empresa_id: int = None) -> dict:
         """
-        Elimina un empleado RETIRADO y todas sus dependencias.
-        Solo permite eliminación si estado == 'RETIRADO'.
+        Elimina un empleado RETIRADO y sus dependencias en cascada.
+        Guarda: devengos → contratos → empleado (dentro de @transaction.atomic en CRUDService).
+        DSV: verifica empresa_id si se proporciona.
         """
+        if empresa_id is not None and empleado.empresa_id != empresa_id:
+            raise ValidationError('El empleado no pertenece a la empresa activa.')
         if empleado.estado != 'RETIRADO':
             raise ValidationError(
                 f'Solo se pueden eliminar empleados con estado RETIRADO. '
                 f'Estado actual: {empleado.estado}'
             )
-
         return EmpleadoCRUDService.eliminar_empleado(empleado)
 
     @staticmethod
     @transaction.atomic
     def cancelar_contratos_activos(empleado: Empleado) -> int:
         """Cancela todos los contratos activos de un empleado."""
-        contratos_activos = empleado.contratos.filter(estado='ACTIVO')
+        contratos_activos = empleado.contratos.filter(
+            empresa_id=empleado.empresa_id,
+            estado='ACTIVO',
+        )
         count = contratos_activos.count()
 
         if count > 0:
@@ -90,19 +95,19 @@ class EmpleadoBusinessService:
 
 
 class ContratoBusinessService:
-    """Lógica de negocio para Contrato."""
+    """Logica de negocio para Contrato."""
 
     @staticmethod
     @transaction.atomic
     def gestionar_contrato(empleado: Empleado, data: dict, contrato_existente=None) -> Contrato:
         """
-        Orquesta la creación o actualización de un contrato.
-        Garantiza un único contrato activo por empleado.
+        Orquesta la creacion o actualizacion de un contrato.
+        Garantiza un unico contrato activo por empleado.
         """
         # Determinar estado final
         estado_final = data.get('estado', contrato_existente.estado if contrato_existente else 'ACTIVO')
 
-        # Si el contrato quedará ACTIVO, desactivar contratos previos
+        # Si el contrato quedara ACTIVO, desactivar contratos previos
         if estado_final == 'ACTIVO':
             ContratoCRUDService.desactivar_contratos_previos(empleado, contrato_existente)
 
@@ -117,7 +122,7 @@ class ContratoBusinessService:
         """Normaliza y valida payload de contrato."""
         prepared_data = dict(data)
 
-        # Normalizar fecha_fin vacía
+        # Normalizar fecha_fin vacia
         if 'fecha_fin' in prepared_data:
             if prepared_data['fecha_fin'] == '' or prepared_data['fecha_fin'] is None:
                 prepared_data['fecha_fin'] = None
@@ -137,14 +142,18 @@ class ContratoBusinessService:
 
 
 class DevengoBusinessService:
-    """Lógica de negocio para Devengo (Nómina)."""
+    """Logica de negocio para Devengo (Nomina)."""
 
     @staticmethod
     def validar_contrato_activo(empleado: Empleado):
         """Valida que el empleado tenga un contrato activo."""
-        if not empleado.contratos.filter(activo=True, estado='ACTIVO').exists():
+        if not empleado.contratos.filter(
+            empresa_id=empleado.empresa_id,
+            activo=True,
+            estado='ACTIVO',
+        ).only('id').exists():
             raise ValidationError(
-                "No se puede registrar nómina: El empleado no tiene un contrato activo."
+                "No se puede registrar nomina: El empleado no tiene un contrato activo."
             )
 
     @staticmethod
@@ -156,14 +165,14 @@ class DevengoBusinessService:
         devengo_id_excluir: int = None
     ) -> dict:
         """
-        Valida que la suma de días pagados en un mes no exceda 31.
+        Valida que la suma de dias pagados en un mes no exceda 31.
         """
         try:
             nuevos_dias = Decimal(str(nuevos_dias))
         except (ValueError, TypeError):
-            raise ValidationError("Los días laborados deben ser un número válido")
+            raise ValidationError("Los dias laborados deben ser un numero valido")
 
-        # Sumar días existentes (no anulados)
+        # Sumar dias existentes (no anulados)
         qs = Devengo.objects.filter(
             empleado_id=empleado_id,
             periodo_mes=periodo_mes,
@@ -180,9 +189,9 @@ class DevengoBusinessService:
 
         if total_final > Decimal('31'):
             raise ValidationError(
-                f"El total de días pagados en {periodo_mes} excedería el límite legal (31 días). "
-                f"Ya se han registrado {total_dias} días. Con {nuevos_dias} días adicionales, "
-                f"el total sería {total_final} días."
+                f"El total de dias pagados en {periodo_mes} excederia el limite legal (31 dias). "
+                f"Ya se han registrado {total_dias} dias. Con {nuevos_dias} dias adicionales, "
+                f"el total seria {total_final} dias."
             )
 
         return {
@@ -214,8 +223,8 @@ class DevengoBusinessService:
 
         if existente:
             return {
-                "error": "Ya existe una nómina para este empleado, periodo y fecha de pago.",
-                "detail": f"Ya existe una nómina registrada para el periodo {periodo_mes} "
+                "error": "Ya existe una nomina para este empleado, periodo y fecha de pago.",
+                "detail": f"Ya existe una nomina registrada para el periodo {periodo_mes} "
                          f"con fecha de pago {fecha_pago_obj.strftime('%Y-%m-%d')}.",
                 "devengo_existente_id": existente.id,
                 "periodo_mes": periodo_mes,
@@ -236,22 +245,31 @@ class DevengoBusinessService:
         """
         Orquesta el procesamiento completo de un devengo:
         - Validaciones de negocio
-        - Cálculos de nómina
-        - Actualización de préstamos
+        - Calculos de nomina
+        - Actualizacion de prestamos
         - Persistencia
         """
         # Validaciones
+        if empleado.empresa_id != empresa_id:
+            raise ValidationError({'empleado': 'El empleado no pertenece a este tenant.'})
+
         if contrato.empresa_id != empresa_id:
             raise ValidationError({'contrato': 'El contrato no pertenece a este tenant.'})
 
+        if contrato.empleado_id != empleado.id:
+            raise ValidationError({'contrato': 'El contrato no pertenece al empleado indicado.'})
+
+        if empleado.estado == 'RETIRADO':
+            raise ValidationError({'empleado': 'No se puede registrar nomina a un empleado retirado.'})
+
         if contrato.estado != 'ACTIVO' or not contrato.activo:
             raise ValidationError({
-                'contrato': f'No se puede registrar nómina: El contrato no está activo '
+                'contrato': f'No se puede registrar nomina: El contrato no esta activo '
                            f'(estado actual: {contrato.estado}).'
             })
 
         if instance and instance.anulado:
-            raise ValidationError({'anulado': 'No se puede actualizar una nómina anulada.'})
+            raise ValidationError({'anulado': 'No se puede actualizar una nomina anulada.'})
 
         # Extraer datos
         dias_laborados = data.get('dias_laborados', instance.dias_laborados if instance else 30)
@@ -259,7 +277,7 @@ class DevengoBusinessService:
         prestamos = data.get('prestamos', Decimal('0'))
         periodo_mes = data.get('periodo_mes')
 
-        # Validar límite de días
+        # Validar limite de dias
         if periodo_mes and dias_laborados:
             DevengoBusinessService.validar_limite_dias_mes(
                 empleado_id=empleado.id,
@@ -269,7 +287,7 @@ class DevengoBusinessService:
                 devengo_id_excluir=instance.pk if instance else None
             )
 
-        # Calcular nómina
+        # Calcular nomina
         calculo = NominaCalculationService.calcular_liquidacion(
             contrato=contrato,
             dias_laborados=dias_laborados,
@@ -289,7 +307,7 @@ class DevengoBusinessService:
         if instance:
             devengo = DevengoCRUDService.actualizar_devengo(instance, data)
         else:
-            # Remover 'empleado' de data para evitar conflicto (se pasa explícitamente como parámetro)
+            # Remover 'empleado' de data para evitar conflicto (se pasa explicitamente como parametro)
             data_copy = data.copy()
             data_copy.pop('empleado', None)
             devengo = DevengoCRUDService.crear_devengo(empleado, data_copy)
@@ -301,18 +319,18 @@ class DevengoBusinessService:
     def anular_devengo(devengo: Devengo, empresa_id: int) -> Devengo:
         """Anula un devengo y maneja implicaciones contables."""
         if devengo.empresa_id != empresa_id:
-            raise ValidationError({'empresa': 'La nómina no pertenece a este tenant.'})
+            raise ValidationError({'empresa': 'La nomina no pertenece a este tenant.'})
 
         return DevengoCRUDService.anular_devengo(devengo)
 
     @staticmethod
     @transaction.atomic
     def eliminar_devengo(devengo: Devengo, empresa_id: int) -> int:
-        """Elimina un devengo y revierte préstamos si aplica."""
+        """Elimina un devengo y revierte prestamos si aplica."""
         if devengo.empresa_id != empresa_id:
-            raise ValidationError({'empresa': 'La nómina no pertenece a este tenant.'})
+            raise ValidationError({'empresa': 'La nomina no pertenece a este tenant.'})
 
-        # Revertir préstamo si existe
+        # Revertir prestamo si existe
         if devengo.prestamos and devengo.prestamos > 0 and devengo.contrato:
             ContratoCRUDService.actualizar_prestamo_contrato(
                 devengo.contrato,
@@ -323,7 +341,7 @@ class DevengoBusinessService:
 
 
 class NominaCalculationService:
-    """Cálculos de nómina según normativa colombiana."""
+    """Calculos de nomina segun normativa colombiana."""
 
     @staticmethod
     def calcular_liquidacion(
@@ -336,7 +354,7 @@ class NominaCalculationService:
         empresa_id: int = None
     ) -> dict:
         """
-        Calcula liquidación de nómina según normativa colombiana.
+        Calcula liquidacion de nomina segun normativa colombiana.
         Base: Ley 2101 de 2021 (46 horas semanales).
         """
         # Validaciones
@@ -344,16 +362,16 @@ class NominaCalculationService:
             raise ValidationError({'contrato': 'El contrato no pertenece a la empresa especificada.'})
 
         if contrato.estado != 'ACTIVO' or not contrato.activo:
-            raise ValueError("No se puede calcular nómina para un contrato inactivo")
+            raise ValueError("No se puede calcular nomina para un contrato inactivo")
 
-        # Normalizar días
+        # Normalizar dias
         try:
             dias_laborados = Decimal(str(dias_laborados))
         except (ValueError, TypeError):
-            raise ValueError("Los días laborados deben ser un número válido")
+            raise ValueError("Los dias laborados deben ser un numero valido")
 
         if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('30'):
-            raise ValueError("Los días laborados deben estar entre 0.5 y 30")
+            raise ValueError("Los dias laborados deben estar entre 0.5 y 30")
 
         # Constantes normativa
         HORAS_MENSUALES = Decimal('200')  # 46 horas * 4.33 semanas
@@ -377,7 +395,7 @@ class NominaCalculationService:
                 factor = dias_laborados / DIAS_MENSUALES
                 auxilio_transporte = auxilio_mensual * factor
 
-        # 3. IBC (Ingreso Base de Cotización)
+        # 3. IBC (Ingreso Base de Cotizacion)
         ibc = salario_base  # NO incluye auxilio de transporte
 
         # 4. DEDUCCIONES DE LEY (4% cada una)
@@ -410,7 +428,7 @@ class NominaCalculationService:
 
     @staticmethod
     def calcular_nomina_dinamica(contrato, dias_laborados, horas_extras=0, otros_devengos=0):
-        """Cálculo alternativo con horas extras (v2.95)."""
+        """Calculo alternativo con horas extras (v2.95)."""
         valor_hora = Decimal(contrato.salario_mensual) / Decimal(220)
         total_horas = Decimal(dias_laborados) * Decimal(8)
         salario_base = valor_hora * total_horas

@@ -16,13 +16,14 @@ class ClienteBusinessService:
         self.selector = ClienteSelector()
 
     @transaction.atomic
-    def registrar_cliente_completo(self, empresa_id: int, data: dict, contactos_raw: list = None, cliente_instance: Cliente = None) -> Cliente:
+    def registrar_cliente_completo(self, empresa_id: int, data: dict, contactos_raw: list = None, cliente_instance: Cliente = None) -> tuple:
         """
         Orchestrates creation or update of a client and their contacts.
         If cliente_instance is provided, updates directly without upsert logic.
         """
         data = self._sanitize_retenciones(data)
         
+        created = False
         if cliente_instance:
             cliente = self.crud.update_cliente(cliente_instance, data)
         else:
@@ -41,12 +42,13 @@ class ClienteBusinessService:
                 cliente = self.crud.update_cliente(existing, data)
             else:
                 cliente = self.crud.create_cliente(empresa_id, data)
+                created = True
 
         # 2. Sync contacts if provided
         if contactos_raw is not None:
             self.sincronizar_contactos(empresa_id, cliente.id, contactos_raw)
             
-        return cliente
+        return cliente, created
 
     def sincronizar_contactos(self, empresa_id: int, cliente_id: int, contactos_raw: list):
         """

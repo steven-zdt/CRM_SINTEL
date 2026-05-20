@@ -1,10 +1,5 @@
 """
-ViewSet para Clientes v2.61.4 - Tabulator Implementation + HTMX Offcanvas
-
-# WARNING: API-First: Endpoints RESTful para consumo desde Tabulator (Vanilla JS)
-# WARNING: SSoT: Empresa se inyecta automáticamente desde el tenant
-# WARNING: v2.61.4: Renderizado robusto con render_template_safe() para HTMX
-# WARNING: v2.61.4: Caching de empresa con cached_property para optimización
+ViewSet para Clientes - Tabulator Implementation + HTMX Offcanvas
 """
 import logging
 from django.db.utils import ProgrammingError
@@ -22,7 +17,7 @@ from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
 from apps.tenant.api.utils import render_template_safe, resolve_tenant_empresa
-from .mixins import ClienteServiceMixin, ContactoClienteServiceMixin
+from apps.tenant.clientes.services.api_mixins import ClienteServiceMixin, ContactoClienteServiceMixin
 from apps.tenant.clientes.api.serializers import (
     ClienteDetailSerializer,
     ClienteListSerializer,
@@ -42,31 +37,31 @@ logger = logging.getLogger(__name__)
 
 class StandardResultsSetPagination(PageNumberPagination):
     """
-    # WARNING: v2.40: Paginación estándar para Tabulator.
+    Paginacion estandar para Tabulator.
     Tabulator espera: {count, next, previous, results: [...]}
     """
-    page_size = 10  # Default: 10 (estándar SaaS)
+    page_size = 10  # Default: 10
     page_size_query_param = 'page_size'
     max_page_size = 100
 
 
 class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenantViewSet):
     """
-    # WARNING: v2.60: ViewSet para Clientes con soporte Tabulator y HTMX Offcanvas.
+    ViewSet para Clientes con soporte Tabulator y HTMX Offcanvas.
     
     Endpoints:
     - GET /api/v1/clientes/ - Lista paginada (Tabulator)
-    - GET /api/v1/clientes/{id}/ - Detalle
+    - GET /api/v1/clientes/{uuid}/ - Detalle
     - POST /api/v1/clientes/ - Crear
-    - PUT /api/v1/clientes/{id}/ - Actualizar completo
-    - PATCH /api/v1/clientes/{id}/ - Actualizar parcial
-    - DELETE /api/v1/clientes/{id}/ - Eliminar
+    - PUT /api/v1/clientes/{uuid}/ - Actualizar completo
+    - PATCH /api/v1/clientes/{uuid}/ - Actualizar parcial
+    - DELETE /api/v1/clientes/{uuid}/ - Eliminar
     - GET /api/v1/clientes/offcanvas/ - Renderizar HTML del Offcanvas (HTMX)
     """
-    # # WARNING: CRÍTICO: DRF necesita un queryset definido para generar las rutas del router
-    # Usamos .none() como base porque el filtrado real se hace en get_queryset() o en los métodos
+    lookup_field = 'uuid'
+    lookup_url_kwarg = 'uuid'
     queryset = Cliente.objects.none()
-    serializer_class = ClienteDetailSerializer  # # WARNING: CRITICO: DRF necesita serializer_class para generar rutas
+    serializer_class = ClienteDetailSerializer
     pagination_class = StandardResultsSetPagination
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -76,18 +71,18 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
 
     def get_object(self):
         """
-        # [SSoT] Double Semantic Verification (DSV)
-        Validates that the object exists AND belongs to the tenant.
+        [SSoT] Double Semantic Verification (DSV)
+        Validates that the object exists AND belongs to the tenant by UUID.
         """
-        pk = self.kwargs.get(self.lookup_url_kwarg)
+        uuid_val = self.kwargs.get(self.lookup_url_kwarg)
         empresa = self.get_empresa()
         if not empresa:
             raise NotFound("Empresa no detectada en el contexto del tenant.")
             
-        obj = Cliente.objects.filter(pk=pk, empresa_id=empresa.id).first()
+        obj = Cliente.objects.filter(uuid=uuid_val, empresa_id=empresa.id).first()
         if not obj:
-            logger.warning(f"[clientes:DSV] IDOR Intent or Missing Record: ID {pk} for Empresa {empresa.id}")
-            raise NotFound(f"Cliente con ID {pk} no encontrado en su organizacion.")
+            logger.warning(f"[clientes:DSV] IDOR Intent or Missing Record: UUID {uuid_val} for Empresa {empresa.id}")
+            raise NotFound(f"Cliente con UUID {uuid_val} no encontrado en su organizacion.")
         return obj
 
     def get_queryset(self):
@@ -125,10 +120,10 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
 
     def get_empresa(self):
         """
-        # WARNING: v2.61.4: Obtiene empresa con fallback robusto.
+        Obtiene empresa con fallback robusto.
 
-        Orden de resolución:
-        1) BaseTenantViewSet.tenant_empresa (si está disponible)
+        Orden de resolucion:
+        1) BaseTenantViewSet.tenant_empresa (si esta disponible)
         2) request.tenant.empresa (inyectado por middleware)
         3) request.tenant_empresa (compatibilidad)
         4) Empresa singleton del esquema tenant
@@ -157,7 +152,7 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
     
     def get_serializer_context(self):
         """
-        # WARNING: v2.61.4: Agregar empresa_id al contexto del serializer.
+        Agregar empresa_id al contexto del serializer.
         
         Esto permite que los serializers accedan a empresa_id en sus validaciones.
         Usado por ClienteDetailSerializer para validar uniqueness de documento.
@@ -168,7 +163,7 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
             if empresa:
                 context['empresa_id'] = empresa.id
         except Exception:
-            # Si hay error obteniendo empresa, ignorar (será capturado después)
+            # Si hay error obteniendo empresa, ignorar (sera capturado despues)
             pass
         return context
 
@@ -183,14 +178,15 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
         if serializer.is_valid():
             contactos_raw = request.data.get('contactos')
             try:
-                cliente = self.cliente_service.registrar_cliente_completo(
+                cliente, created = self.cliente_service.registrar_cliente_completo(
                     empresa_id=empresa.id, 
                     data=serializer.validated_data, 
                     contactos_raw=contactos_raw
                 )
                 data = ClienteDetailSerializer(cliente, context=self.get_serializer_context()).data
                 data['redirect'] = '/workspace/#clientes'
-                return Response(data, status=status.HTTP_201_CREATED)
+                status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+                return Response(data, status=status_code)
             except serializers.ValidationError as e:
                 return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -206,7 +202,7 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
         if serializer.is_valid():
             try:
                 contactos_raw = request.data.get('contactos')
-                cliente = self.cliente_service.registrar_cliente_completo(
+                cliente, created = self.cliente_service.registrar_cliente_completo(
                     empresa_id=cliente.empresa_id,
                     data=serializer.validated_data,
                     contactos_raw=contactos_raw,
@@ -231,7 +227,7 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
         if serializer.is_valid():
             try:
                 contactos_raw = request.data.get('contactos')
-                cliente = self.cliente_service.registrar_cliente_completo(
+                cliente, created = self.cliente_service.registrar_cliente_completo(
                     empresa_id=cliente.empresa_id,
                     data=serializer.validated_data,
                     contactos_raw=contactos_raw,
@@ -265,14 +261,14 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
     )
     def offcanvas(self, request):
         """
-        # WARNING: v2.61.4: Devuelve el HTML del Offcanvas para crear o editar un cliente (vía HTMX).
+        Devuelve el HTML del Offcanvas para crear o editar un cliente (via HTMX).
         
         Renderizado robusto con render_template_safe() para manejar:
         - Template no encontrado
         - Errores de filesystem (OSError, PermissionError)
         
         Query params:
-        - id: ID del cliente para edición (opcional)
+        - id: ID del cliente para edicion (opcional)
         
         Returns:
             Template HTML renderizado con contexto del cliente (si existe) y sus contactos
@@ -313,7 +309,6 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
         
         context['is_draft'] = context['modo'] == 'crear'
 
-        # # WARNING: v2.61.4: Usar wrapper seguro para renderizado
         return render_template_safe(
             context, 
             template_name,
@@ -328,9 +323,9 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
     )
     def render_offcanvas_crear(self, request):
         """
-        # WARNING: v2.61.4: Endpoint HTMX RESTful para cargar offcanvas de creación de clientes.
+        Endpoint HTMX RESTful para cargar offcanvas de creacion de clientes.
         
-        # WARNING: v2.61.4: Renderizado robusto con render_template_safe()
+        Renderizado robusto con render_template_safe()
         
         GET /api/v1/clientes/render-offcanvas/crear/
         
@@ -353,7 +348,6 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
             'modo': 'crear'
         }
         
-        # # WARNING: v2.61.4: Usar wrapper seguro
         return render_template_safe(
             context,
             'tenant/clientes/offcanvas_crear_cliente.html',
@@ -366,13 +360,13 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
         renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
         url_path='render-offcanvas/editar'
     )
-    def render_offcanvas_editar(self, request, id=None):
+    def render_offcanvas_editar(self, request, uuid=None):
         """
-        # WARNING: v2.61.4: Endpoint HTMX RESTful para cargar offcanvas de edición de clientes.
+        Endpoint HTMX RESTful para cargar offcanvas de edicion de clientes.
         
-        # WARNING: v2.61.4: Renderizado robusto con render_template_safe()
+        Renderizado robusto con render_template_safe()
         
-        GET /api/v1/clientes/{id}/render-offcanvas/editar/
+        GET /api/v1/clientes/{uuid}/render-offcanvas/editar/
         
         Returns:
             Template HTML: clientes/offcanvas_editar_cliente.html
@@ -381,14 +375,13 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
         cliente = self.get_object() # DSV auto filters by tenant
         if cliente is None:
             return Response(
-                {'error': 'cliente_not_found', 'detail': f'Cliente {id} no existe en este tenant'},
+                {'error': 'cliente_not_found', 'detail': f'Cliente {uuid} no existe en este tenant'},
                 status=status.HTTP_404_NOT_FOUND,
             )
         # PERFORMANCE BIBLE: Cargar contactos con .only()
         contactos = self.contacto_selector.get_contacto_list(empresa_id=cliente.empresa_id, cliente_id=cliente.id)
-        # §18: cuenta_contable_uuid se pasa como opaco al template.
+        # cuenta_contable_uuid se pasa como opaco al template.
         # El nombre se resuelve en frontend via JS (GET /api/v1/contabilidad/cuentas-contables/?uuid=)
-        # NO importar desde apps.tenant.contabilidad aqui (viola §18 Pull Model / Bounded Context).
 
         context = {
             'cliente': cliente,
@@ -403,18 +396,18 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
         )
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
-    def render_offcanvas_detalle(self, request, id=None):
+    def render_offcanvas_detalle(self, request, uuid=None):
         """
-        # WARNING: v2.61: Endpoint HTMX RESTful para cargar offcanvas de detalle de clientes (read-only).
+        Endpoint HTMX RESTful para cargar offcanvas de detalle de clientes (read-only).
 
-        GET /api/v1/clientes/{id}/render-offcanvas/detalle/
+        GET /api/v1/clientes/{uuid}/render-offcanvas/detalle/
 
         Returns:
             Template HTML: clientes/offcanvas_detalle_cliente.html
         """
         cliente = self.get_object()
 
-        # # WARNING: PERFORMANCE BIBLE: Cargar contactos con .only()
+        # PERFORMANCE BIBLE: Cargar contactos con .only()
         contactos = self.contacto_selector.get_contacto_list(empresa_id=cliente.empresa_id, cliente_id=cliente.id)
 
         context = {
@@ -423,7 +416,6 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
             'modo': 'detalle'
         }
 
-        # # WARNING: v2.61.4: Usar wrapper seguro para TemplateHTMLRenderer
         return render_template_safe(
             context,
             'tenant/clientes/offcanvas_detalle_cliente.html',
@@ -433,9 +425,10 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
 
 class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
     """
-    # WARNING: v2.60: ViewSet para Contactos de Cliente con Zero Trust estricto.
+    ViewSet para Contactos de Cliente con Zero Trust estricto.
     """
-
+    lookup_field = 'uuid'
+    lookup_url_kwarg = 'uuid'
     queryset = ContactoCliente.objects.none()
     serializer_class = ContactoClienteSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -444,16 +437,19 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
 
     def get_object(self):
         """DSV for Contacto."""
-        pk = self.kwargs.get(self.lookup_url_kwarg)
+        uuid_val = self.kwargs.get(self.lookup_url_kwarg)
         empresa = self.get_empresa()
-        obj = ContactoCliente.objects.filter(pk=pk, empresa_id=empresa.id).first()
+        if not empresa:
+            raise NotFound("Empresa no detectada en el contexto del tenant.")
+            
+        obj = ContactoCliente.objects.filter(uuid=uuid_val, empresa_id=empresa.id).first()
         if not obj:
+            logger.warning(f"[contactos:DSV] IDOR Intent or Missing Record: UUID {uuid_val} for Empresa {empresa.id}")
             raise NotFound("Contacto no encontrado.")
         return obj
 
     # ... rest of ContactoClienteViewSet truncated for multi-replace ...
     
-    # # WARNING: v2.61: Restringir métodos HTTP según requerimiento
     http_method_names = ['get', 'post', 'patch', 'delete']
     
     def list(self, request, *args, **kwargs):
@@ -487,7 +483,7 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
     
     def get_empresa(self):
         """
-        # WARNING: v2.60: Zero Trust - Obtiene la empresa del usuario.
+        Zero Trust - Obtiene la empresa del usuario.
         """
         return resolve_tenant_empresa(self.request, self)
 
@@ -531,7 +527,7 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):
         """
-        # WARNING: v2.60: Devuelve el HTML del gestor de contactos (vía HTMX).
+        Devuelve el HTML del gestor de contactos (via HTMX).
         """
         empresa = self.get_empresa()
         cliente = None
@@ -562,7 +558,6 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
             'contactos': contactos
         }
         
-        # # WARNING: v2.61.4: Usar wrapper seguro para TemplateHTMLRenderer
         return render_template_safe(
             context,
             'tenant/clientes/contactos_offcanvas.html',
@@ -616,16 +611,16 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
         renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
         url_path='render-offcanvas/editar'
     )
-    def render_offcanvas_editar(self, request, id=None):
+    def render_offcanvas_editar(self, request, uuid=None):
         """
         Endpoint HTMX RESTful para cargar offcanvas de edición de contacto.
-        GET /api/v1/clientes/contactos/{id}/render-offcanvas/editar/
+        GET /api/v1/clientes/contactos/{uuid}/render-offcanvas/editar/
         """
         try:
             contacto = self.get_object()
         except ContactoCliente.DoesNotExist:
             return Response(
-                {'error': 'contacto_not_found', 'detail': f'Contacto {id} no existe'},
+                {'error': 'contacto_not_found', 'detail': f'Contacto {uuid} no existe'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
@@ -645,10 +640,10 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
         renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
         url_path='render-offcanvas/detalle'
     )
-    def render_offcanvas_detalle(self, request, id=None):
+    def render_offcanvas_detalle(self, request, uuid=None):
         """
         Endpoint HTMX RESTful para cargar offcanvas de detalle (read-only).
-        GET /api/v1/clientes/contactos/{id}/render-offcanvas/detalle/
+        GET /api/v1/clientes/contactos/{uuid}/render-offcanvas/detalle/
         """
         from rest_framework.exceptions import NotFound
         

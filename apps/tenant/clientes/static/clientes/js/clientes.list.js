@@ -332,16 +332,16 @@
 
         switch (action) {
             case 'edit':
-                if (type === 'clientes') editCliente(rowData.id);
-                else if (type === 'contactos') editContacto(rowData.id);
+                if (type === 'clientes') editCliente(rowData.uuid);
+                else if (type === 'contactos') editContacto(rowData.uuid);
                 break;
             case 'view':
-                if (type === 'clientes') viewCliente(rowData.id);
-                else if (type === 'contactos') viewContacto(rowData.id);
+                if (type === 'clientes') viewCliente(rowData.uuid);
+                else if (type === 'contactos') viewContacto(rowData.uuid);
                 break;
             case 'delete':
                 if (type === 'clientes') deleteCliente(rowData);
-                else if (type === 'contactos') deleteContacto(rowData.id);
+                else if (type === 'contactos') deleteContacto(rowData.uuid);
                 break;
         }
     }
@@ -349,10 +349,10 @@
     /**
      * Edit cliente - Load form and show offcanvas
      */
-    function editCliente(id) {
-        const url = `/api/v1/clientes/${id}/render-offcanvas/editar/`;
+    function editCliente(uuid) {
+        const url = `/api/v1/clientes/${uuid}/render-offcanvas/editar/`;
         try {
-            log.info(`Loading edit form for cliente ${id}`);
+            log.info(`Loading edit form for cliente ${uuid}`);
             
             // Use htmx.ajax with swap listener pattern
             htmx.ajax('GET', url, {
@@ -360,7 +360,7 @@
                 swap: 'innerHTML'
             });
         } catch (error) {
-            log.error(`Error loading edit form for cliente ${id}`, error);
+            log.error(`Error loading edit form for cliente ${uuid}`, error);
             showError('Error al cargar el formulario');
         }
     }
@@ -368,10 +368,10 @@
     /**
      * View cliente details - Load form and show offcanvas
      */
-    function viewCliente(id) {
-        const url = `/api/v1/clientes/${id}/render-offcanvas/detalle/`;
+    function viewCliente(uuid) {
+        const url = `/api/v1/clientes/${uuid}/render-offcanvas/detalle/`;
         try {
-            log.info(`Loading detail view for cliente ${id}`);
+            log.info(`Loading detail view for cliente ${uuid}`);
 
             // Use htmx.ajax with swap listener pattern
             htmx.ajax('GET', url, {
@@ -379,7 +379,7 @@
                 swap: 'innerHTML'
             });
         } catch (error) {
-            log.error(`Error loading detail view for cliente ${id}`, error);
+            log.error(`Error loading detail view for cliente ${uuid}`, error);
             showError('Error al cargar detalles');
         }
     }
@@ -391,7 +391,7 @@
      * @param {Object} rowData - Fila completa de Tabulator (requiere id y activo)
      */
     async function deleteCliente(rowData) {
-        const id = rowData.id;
+        const uuid = rowData.uuid;
         const isActive = rowData.activo === true || rowData.activo === 'true';
 
         if (isActive) {
@@ -402,7 +402,7 @@
 
         if (!confirm('\u00bfEsta seguro de eliminar este cliente de forma permanente?')) return;
 
-        const response = await w.clientesAPI.delete(id);
+        const response = await w.clientesAPI.delete(uuid);
         if (response.ok || response.status === 204) {
             showSuccess('Cliente eliminado correctamente');
             document.dispatchEvent(new CustomEvent('clienteEliminado'));
@@ -410,7 +410,7 @@
             const msg = response.data?.message
                 || response.data?.detail
                 || 'No se pudo eliminar el cliente';
-            log.error('Error eliminando cliente ' + id, response.data);
+            log.error('Error eliminando cliente ' + uuid, response.data);
             showError(msg);
         }
     }
@@ -418,17 +418,17 @@
     /**
      * View contacto details
      */
-    function viewContacto(id) {
-        const url = `/api/v1/clientes/contactos/${id}/render-offcanvas/detalle/`;
+    function viewContacto(uuid) {
+        const url = `/api/v1/clientes/contactos/${uuid}/render-offcanvas/detalle/`;
         try {
-            log.info(`Loading detail view for contacto ${id}`);
+            log.info(`Loading detail view for contacto ${uuid}`);
 
             htmx.ajax('GET', url, {
                 target: DOM.containerContactos,
                 swap: 'innerHTML'
             });
         } catch (error) {
-            log.error(`Error loading detail view for contacto ${id}`, error);
+            log.error(`Error loading detail view for contacto ${uuid}`, error);
             showError('Error al cargar detalles');
         }
     }
@@ -436,18 +436,16 @@
     /**
      * Edit contacto
      */
-    async function editContacto(id) {
-        if (!confirm('¿Desea editar este contacto?')) return;
-
-        const url = `/api/v1/clientes/contactos/gestor-offcanvas/?id=${id}`;
+    async function editContacto(uuid) {
+        const url = `/api/v1/clientes/contactos/${uuid}/render-offcanvas/editar/`;
         try {
             await htmx.ajax('GET', url, {
                 target: DOM.containerContactos,
                 swap: 'innerHTML'
             });
-            log.info(`Loaded edit form for contacto ${id}`);
+            log.info(`Loaded edit form for contacto ${uuid}`);
         } catch (error) {
-            log.error(`Error loading edit form for contacto ${id}`, error);
+            log.error(`Error loading edit form for contacto ${uuid}`, error);
             showError('Error al cargar el formulario');
         }
     }
@@ -455,11 +453,11 @@
     /**
      * Delete contacto with confirmation
      */
-    async function deleteContacto(id) {
+    async function deleteContacto(uuid) {
         if (!confirm('¿Está seguro de eliminar este contacto?')) return;
 
         try {
-            const response = await w.http('DELETE', `/api/v1/clientes/contactos/${id}/`);
+            const response = await w.http('DELETE', `/api/v1/clientes/contactos/${uuid}/`);
             if (response.ok || response.status === 204) {
                 showSuccess('Contacto eliminado');
                 document.dispatchEvent(new CustomEvent('contactoEliminado'));
@@ -467,7 +465,7 @@
                 showError('No se puede eliminar este contacto');
             }
         } catch (error) {
-            log.error(`Error deleting contacto ${id}`, error);
+            log.error(`Error deleting contacto ${uuid}`, error);
             showError('Error al eliminar');
         }
     }

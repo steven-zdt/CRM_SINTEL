@@ -16,7 +16,8 @@ from django_tenants.utils import get_public_schema_name
 # Prefijos PRIVADOS: aquí defines exactamente qué segmentos requieren membresía
 # Puedes añadir '/app', '/secure', '/intranet', '/api/tenant/', etc.
 # WARNING: v2.30: /workspace/ es ruta privada que requiere membresía
-PRIVATE_PREFIXES = ("/dashboard", "/workspace", "/miapp", "/api/tenant/")
+# WARNING: v3.9.1: /api/v1/ agregado para cubrir todas las APIs de tenant
+PRIVATE_PREFIXES = ("/dashboard", "/workspace", "/miapp", "/api/tenant/", "/api/v1/")
 
 # Nombre del esquema público (obtenido dinámicamente de django-tenants)
 PUBLIC_SCHEMA_NAME = get_public_schema_name()

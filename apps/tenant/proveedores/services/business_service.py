@@ -161,6 +161,8 @@ class ProveedorBusinessService:
 
     def crear_proveedor(self, empresa_id, data):
         """Orquesta la creación de un proveedor con validaciones."""
+        if not Empresa.objects.filter(id=empresa_id).exists():
+            raise ValidationError({"empresa": ["La empresa no existe."]})
         self.validate_niif_code(data.get('codigo_contable'))
         data = self._sanitize_retenciones(data)
         return self.crud.create(empresa_id, data)
@@ -203,6 +205,9 @@ class ProveedorBusinessService:
         empresa_id = datos_proveedor.get("empresa") or datos_proveedor.get("empresa_id")
         if not empresa_id:
              raise ValidationError({"empresa": ["La empresa es obligatoria."]})
+
+        if not Empresa.objects.filter(id=empresa_id).exists():
+            raise ValidationError({"empresa": ["La empresa no existe."]})
         
         # Normalizar numero_documento / nit
         nit = datos_proveedor.get("nit") or datos_proveedor.get("numero_documento")
