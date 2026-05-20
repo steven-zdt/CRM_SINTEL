@@ -44,14 +44,53 @@ All frameworks, tools, prompts, and skills must be parameterized by `app_name`.
 
 Use Flash mode for quick, high-frequency work where the user needs the answer more than the story.
 
-Response contract:
+### Lifecycle (Karpathy) — OBLIGATORIO
 
-0. **Define the success check first** — the exact command or observable that confirms the fix worked. Do not act without one.
+Every Flash task MUST traverse these 4 gates in order. Do not skip.
+
+```
+[EXAMINE]  Read MEMORY.md + AGENTS.md + target app audit + targeted grep/glob.
+           Output: list of in-scope files + constraints. NO writes here.
+
+[PLAN]     Declare in <=5 lines:
+             OBJECTIVE  : <verbatim user goal>
+             IN-SCOPE   : <closed file list, max 10>
+             OUT-OF-SCOPE: <anything else — DO NOT TOUCH>
+             SUCCESS    : <observable check>
+           If steps > 7 → task is too big, split and ask user.
+
+[EXECUTE]  Apply minimal diff. After each .py edit → py_compile.
+           Never touch out-of-scope files. Never refactor adjacent code.
+           If you find unrelated bugs → note them, DO NOT fix.
+
+[CLOSE]    Run SUCCESS check.
+             PASS → "RESUELTO: <evidence>" + STOP.
+             FAIL → different diagnosis, never same fix. 2 fails → escalate + STOP.
+```
+
+### Tangent Guard (Karpathy) — STRICT
+
+Before every Edit/Write tool call, the action must answer YES to:
+
+> *"Does this change appear LITERALLY in the user's stated objective?"*
+
+If unsure → do not do it. Examples of forbidden tangents:
+
+- "Aproveche para arreglar los tests" (unless tests are the objective)
+- "Refactorice mientras estaba ahi"
+- "Tambien actualice X que estaba mal"
+- "Anadi una validacion extra por seguridad"
+
+These belong in a CLOSE-time report to the user, not in the diff.
+
+### Response contract
+
+0. Define the success check FIRST — the exact command/observable.
 1. Start with the result or next concrete action.
-2. Keep only the key evidence: file paths, commands, statuses, or official URLs.
-3. Use 2 to 6 bullets only when bullets make the answer easier to scan.
-4. Escalate to a fuller plan when the action is risky, destructive, ambiguous, or cross-app.
-5. For official/latest claims, cite official Google sources or state that verification was not possible.
+2. Keep only key evidence: file paths, commands, statuses, official URLs.
+3. Use 2-6 bullets only when bullets aid scanning.
+4. Escalate to a fuller plan when risky, destructive, ambiguous, or cross-app.
+5. For official/latest claims, cite Google sources or state verification was not possible.
 
 ## Guardrails
 
@@ -62,10 +101,11 @@ Response contract:
 - Do not put emojis or non-ASCII text in `.py` files.
 - Preserve user changes in the worktree.
 
-## Finish
+## Finish (CLOSE gate)
 
-1. Run the success check defined at step 0. If it passes → report `RESUELTO: <evidencia>` and **STOP**.
-2. If check fails → different approach, never the same fix again. After 2 failures → escalate and STOP.
-3. Summarize changed behavior, not every edited line.
+1. Run the success check defined in PLAN. PASS → `RESUELTO: <evidencia>` + **STOP**.
+2. FAIL → different approach, never the same fix. 2 failures → escalate + STOP.
+3. Summarize changed behavior (NOT every edited line).
 4. Report exact validation commands and outcomes.
-5. Update `MEMORY.md` after structural fixes or significant bugs.
+5. List any **out-of-scope findings** discovered but NOT fixed (so user can prioritize).
+6. Update `MEMORY.md` after structural fixes or significant bugs.

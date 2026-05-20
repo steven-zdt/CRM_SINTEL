@@ -22,12 +22,18 @@ description: Reglas Core — SINTEL v2.62.0 (referencia completa en AGENTS.md)
 | FK a `TenantProfile` | Nunca FK a `settings.AUTH_USER_MODEL` en tenant |
 | `apps/public/` requiere RFC | + etiqueta `needs-admin-approval` |
 
-## Karpathy (aplicar antes de cada tarea)
+## Karpathy (aplicar antes de cada tarea) — OBLIGATORIO
 
-1. Pensar antes de codificar — asumir → preguntar si hay incertidumbre
-2. Código mínimo — sin abstracciones especulativas
-3. Cambios quirúrgicos — tocar solo lo necesario, no "mejorar" lo adyacente
-4. Ejecución basada en objetivos — `Paso → verificar: [check]`
+**Ciclo:** EXAMINAR → PLAN → EJECUTAR → CERRAR (ver `behavior.md` §1).
+
+1. **Pensar antes de codificar** — Si dudas, PREGUNTA antes de tocar archivos.
+2. **Codigo minimo** — Sin abstracciones especulativas. Si 200 lineas pueden ser 50, reescribir.
+3. **Cambios quirurgicos** — Tocar SOLO lo del objetivo literal. Prohibido "mejorar" lo adyacente.
+   - ¿Test roto cerca? → Anotar, NO arreglar.
+   - ¿Bug adyacente? → Reportar al cerrar, NO arreglar.
+   - ¿Refactor tentador? → NO. Solo el objetivo.
+4. **Ejecucion basada en objetivos** — `Paso → verificar: [check de exito concreto]`.
+5. **Contrato de alcance** — Declarar archivos EN/FUERA de alcance antes del primer Edit (ver `behavior.md` §0).
 
 ## Service Layer (flujo unidireccional)
 
