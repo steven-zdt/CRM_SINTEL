@@ -1,37 +1,108 @@
 {% load static %}
-{# list.html - Módulo de Proyectos v2.60 - HTMX + Offcanvas #}
-{# ⚠️ v2.60: Migrado de Bootstrap Modals a HTMX + Offcanvas #}
-{# ⚠️ API-First Architecture - Backend DRF + Frontend Tabulator #}
+{# proyectos_list.html - v3.9.6 - KPIs + Filtros por Fase + Grid mejorado #}
 
 <div id="tab-proyectos-content" class="ui-module ui-proyectos" role="region" aria-label="Módulo de Proyectos">
-  
-  {# Toolbar #}
-  <div class="d-flex justify-content-between align-items-center gap-2 mb-3" id="toolbar-proyectos">
-    <div class="btn-group shadow-sm">
-      {# ⚠️ v2.60: Botón HTMX para gestionar proyecto (crear/editar) #}
-      <button type="button" class="btn btn-primary btn-sm" 
-              hx-get="/api/v1/proyectos/gestor-offcanvas/" 
-              hx-target="#offcanvas-container-proyectos" 
+
+  {# === KPIs === #}
+  <div class="row g-3 mb-3" id="proyectos-kpis">
+    <div class="col-6 col-xl-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+          <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:44px;height:44px;">
+            <i class="bi bi-folder2-open text-primary fs-5"></i>
+          </div>
+          <div>
+            <div id="kpi-total" class="fs-4 fw-bold lh-1 mb-1">—</div>
+            <div class="small text-muted">Total Proyectos</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+          <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:44px;height:44px;">
+            <i class="bi bi-lightning-charge text-warning fs-5"></i>
+          </div>
+          <div>
+            <div id="kpi-ejecucion" class="fs-4 fw-bold lh-1 mb-1">—</div>
+            <div class="small text-muted">En Ejecución</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+          <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:44px;height:44px;">
+            <i class="bi bi-check2-circle text-success fs-5"></i>
+          </div>
+          <div>
+            <div id="kpi-completados" class="fs-4 fw-bold lh-1 mb-1">—</div>
+            <div class="small text-muted">Completados</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+          <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:44px;height:44px;">
+            <i class="bi bi-cash-stack text-info fs-5"></i>
+          </div>
+          <div>
+            <div id="kpi-cartera" class="fs-6 fw-bold lh-1 mb-1">—</div>
+            <div class="small text-muted">Cartera Total</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# === Toolbar === #}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3" id="toolbar-proyectos">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+      <button type="button" class="btn btn-primary btn-sm"
+              hx-get="/api/v1/proyectos/gestor-offcanvas/"
+              hx-target="#offcanvas-container-proyectos"
               hx-swap="innerHTML"
               hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-proyecto'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
         <i class="bi bi-folder-plus me-1"></i>Nuevo Proyecto
       </button>
-      <button type="button" class="btn btn-outline-secondary" onclick="window.ProyectosModule?.refresh()" title="Refrescar lista">
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.ProyectosModule?.refresh()" title="Refrescar">
         <i class="bi bi-arrow-clockwise"></i>
       </button>
     </div>
-  </div>
-  
-  {# Input de búsqueda para Tabulator #}
-  <div class="mb-3">
-    <div class="input-group">
-      <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-      <input type="text" id="search-proyecto" class="form-control border-start-0" 
-             placeholder="Buscar por nombre, código, cliente o responsable...">
+    <div class="input-group input-group-sm" style="max-width:320px;">
+      <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+      <input type="text" id="search-proyecto" class="form-control border-start-0 ps-0"
+             placeholder="Buscar proyecto, código, cliente...">
     </div>
   </div>
 
-  {# ⚠️ Contenedor del Grid de Tabulator #}
+  {# === Filtros por Fase === #}
+  <div class="d-flex gap-2 flex-wrap mb-3" id="filtros-fase-proyectos">
+    <button class="btn btn-sm btn-outline-dark active" data-fase="">
+      <i class="bi bi-grid-3x3-gap me-1"></i>Todos
+    </button>
+    <button class="btn btn-sm btn-outline-secondary" data-fase="BORRADOR">
+      Borrador
+    </button>
+    <button class="btn btn-sm btn-outline-info" data-fase="INICIO">
+      Inicio
+    </button>
+    <button class="btn btn-sm btn-outline-primary" data-fase="PLANEACION">
+      Planeación
+    </button>
+    <button class="btn btn-sm btn-outline-warning" data-fase="EJECUCION">
+      Ejecución
+    </button>
+    <button class="btn btn-sm btn-outline-success" data-fase="CIERRE">
+      Cierre
+    </button>
+  </div>
+
+  {# === Grid === #}
   <div class="card shadow-sm border-0">
     <div class="card-body p-0">
       <div id="grid-proyectos" class="w-100"></div>
@@ -40,5 +111,5 @@
 
 </div>
 
-{# ⚠️ v2.60: Contenedor HTMX para recibir el HTML del Offcanvas #}
+{# Contenedor HTMX para Offcanvas #}
 <div id="offcanvas-container-proyectos"></div>

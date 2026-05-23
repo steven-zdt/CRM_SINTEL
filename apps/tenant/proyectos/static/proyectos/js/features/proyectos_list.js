@@ -1,448 +1,424 @@
 /**
- * Feature: Listado y Tabulator - Proyectos v2.60
- * ⚠️ Feature-Sliced Architecture: Lógica de inicialización y gestión de Tabulator
- * ⚠️ Vanilla JS: Sin dependencias de jQuery
- * ⚠️ API-First: Consume DRF REST API
- * ⚠️ Modular: Usa TabulatorFactory (The Engine)
- * ⚠️ Anti-Zombies: Previene instancias fantasma de Tabulator por recargas HTMX
- * 
- * Dependencias globales requeridas:
- * - TabulatorFactory (definido en tabulator.factory.js)
- * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
+ * Feature: Listado Proyectos v3.9.6
+ * - KPIs calculados desde datos del grid
+ * - Filtros por fase (chips)
+ * - Columnas rediseñadas: Proyecto+Código, Responsable, Avance, Documentos, Período, Contrato/Margen
  */
 (function (w, d) {
     'use strict';
 
     const MOD = '[proyectos.list]';
-    let table = null;
+    let table  = null;
 
-    // ⚠️ Anti-Zombies v2.60: Singleton global para instancias de Tabulator
+    // Anti-Zombies: destruir instancias previas en HTMX swap
     if (window.SintelProyectosTables) {
         Object.values(window.SintelProyectosTables).forEach(tb => {
             if (tb && typeof tb.destroy === 'function') {
-                try {
-                    tb.destroy();
-                } catch (error) {
-                    console.warn(`${MOD} Error al destruir instancia zombie:`, error);
-                }
+                try { tb.destroy(); } catch (_) {}
             }
         });
     }
     window.SintelProyectosTables = {};
 
-    // Formateador de moneda
-    function formatearMoneda(value) {
-        if (value === null || value === undefined || value === '') return '$ 0,00';
-        const num = parseFloat(value);
-        if (isNaN(num)) return '$ 0,00';
+    // ─── Utilidades ───────────────────────────────────────────────────────────
+
+    function fmtMoneda(v) {
+        const n = parseFloat(v);
+        if (!v && v !== 0 || isNaN(n)) return '—';
         return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2
-        }).format(num);
+            style: 'currency', currency: 'COP',
+            minimumFractionDigits: 0, maximumFractionDigits: 0
+        }).format(n);
     }
 
-    // Formateador de porcentaje
-    function formatearPorcentaje(value) {
-        if (value === null || value === undefined || value === '') return '0,00%';
-        const num = parseFloat(value);
-        if (isNaN(num)) return '0,00%';
-        return new Intl.NumberFormat('es-CO', {
-            style: 'percent',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        }).format(num / 100);
+    function fmtFecha(v) {
+        if (!v) return '—';
+        try {
+            return new Date(v + 'T00:00:00').toLocaleDateString('es-CO', {
+                day: '2-digit', month: 'short', year: 'numeric'
+            });
+        } catch (_) { return v; }
     }
 
-    // Definir columnas específicas del módulo
+    // ─── KPIs ─────────────────────────────────────────────────────────────────
+
+    function actualizarKPIs(rows) {
+        const total       = rows.length;
+        const ejecucion   = rows.filter(r => r.fase_actual === 'EJECUCION').length;
+        const completados = rows.filter(r => r.estado_tarea === 'COMPLETADO').length;
+        const cartera     = rows.reduce((s, r) => s + (parseFloat(r.valor_contrato_proyectado) || 0), 0);
+
+        const set = (id, v) => { const el = d.getElementById(id); if (el) el.textContent = v; };
+        set('kpi-total',       total);
+        set('kpi-ejecucion',   ejecucion);
+        set('kpi-completados', completados);
+        set('kpi-cartera',     fmtMoneda(cartera));
+    }
+
+    // ─── Columnas ─────────────────────────────────────────────────────────────
+
     function getColumns() {
-        const fmtFecha = (v) => {
-            if (!v) return '---';
-            try { return new Date(v).toLocaleDateString('es-CO'); } catch { return v; }
-        };
-
         return [
+            // 1. Proyecto — nombre + código + tipo_servicio
             {
                 title: "Proyecto",
                 field: "nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
-                    return cell.getValue() || '---';
-                },
-                minWidth: 220,
-                frozen: true
-            },
-            {
-                title: "Fase Actual",
-                field: "fase_actual_display",
+                frozen: true,
+                minWidth: 230,
                 formatter: function (cell) {
-                    const value = cell.getValue() || '---';
-                    const fase = cell.getRow().getData().fase_actual;
-                    const map = {
-                        'BORRADOR':  ['bg-secondary', 'Borrador'],
-                        'INICIO':    ['bg-info text-dark', 'Inicio'],
-                        'PLANEACION':['bg-primary', 'Planeación'],
-                        'EJECUCION': ['bg-warning text-dark', 'Ejecución'],
-                        'CIERRE':    ['bg-success', 'Cierre'],
-                    };
-                    const [cls, label] = map[fase] || ['bg-secondary', value];
-                    return `<span class="badge ${cls} px-2">${label}</span>`;
-                },
-                width: 120,
-                hozAlign: "center",
-                headerHozAlign: "center"
+                    const row      = cell.getRow().getData();
+                    const nombre   = row.nombre   || '—';
+                    const codigo   = row.codigo   || '';
+                    const tipo     = row.tipo_servicio_display || '';
+                    const tipoHtml = tipo
+                        ? `<span class="badge bg-light text-secondary border fw-normal me-1" style="font-size:0.65rem;">${tipo}</span>`
+                        : '';
+                    return `
+                        <div style="line-height:1.35;">
+                          <div class="fw-semibold text-truncate" style="max-width:200px;" title="${nombre}">${nombre}</div>
+                          <div class="mt-1">${tipoHtml}${codigo ? `<code class="text-muted" style="font-size:0.7rem;">${codigo}</code>` : ''}</div>
+                        </div>`;
+                }
             },
+            // 2. Fase
+            {
+                title: "Fase",
+                field: "fase_actual",
+                width: 118,
+                hozAlign: "center",
+                headerHozAlign: "center",
+                formatter: function (cell) {
+                    const fase = cell.getValue();
+                    const MAP = {
+                        'BORRADOR':   ['bg-secondary',            'Borrador'],
+                        'INICIO':     ['bg-info text-dark',       'Inicio'],
+                        'PLANEACION': ['bg-primary',              'Planeación'],
+                        'EJECUCION':  ['bg-warning text-dark',    'Ejecución'],
+                        'CIERRE':     ['bg-success',              'Cierre'],
+                    };
+                    const [cls, label] = MAP[fase] || ['bg-secondary', fase || '—'];
+                    return `<span class="badge ${cls} px-2 py-1">${label}</span>`;
+                }
+            },
+            // 3. Estado
             {
                 title: "Estado",
-                field: "estado_display",
+                field: "estado_tarea",
+                width: 120,
+                hozAlign: "center",
+                headerHozAlign: "center",
                 formatter: function (cell) {
-                    const estado = cell.getRow().getData().estado_tarea;
-                    const map = {
+                    const est = cell.getValue();
+                    const MAP = {
                         'PENDIENTE':  ['bg-secondary', 'Pendiente'],
                         'EN_PROCESO': ['bg-primary',   'En Proceso'],
                         'DETENIDO':   ['bg-danger',    'Detenido'],
                         'COMPLETADO': ['bg-success',   'Completado'],
                     };
-                    const [cls, label] = map[estado] || ['bg-secondary', cell.getValue() || '---'];
-                    return `<span class="badge ${cls} px-2">${label}</span>`;
-                },
-                width: 120,
-                hozAlign: "center",
-                headerHozAlign: "center"
+                    const [cls, label] = MAP[est] || ['bg-light text-dark', est || '—'];
+                    return `<span class="badge ${cls} px-2 py-1">${label}</span>`;
+                }
             },
+            // 4. Avance
+            {
+                title: "Avance",
+                field: "porcentaje_avance",
+                width: 110,
+                hozAlign: "center",
+                headerHozAlign: "center",
+                formatter: function (cell) {
+                    const pct = parseFloat(cell.getValue()) || 0;
+                    const color = pct >= 80 ? '#198754' : pct >= 40 ? '#ffc107' : '#6c757d';
+                    return `
+                        <div style="line-height:1.2;">
+                          <div class="fw-semibold" style="font-size:0.8rem;color:${color};">${pct.toFixed(0)}%</div>
+                          <div class="progress mt-1" style="height:5px;border-radius:3px;">
+                            <div class="progress-bar" style="width:${pct}%;background:${color};"></div>
+                          </div>
+                        </div>`;
+                }
+            },
+            // 5. Responsable
+            {
+                title: "Responsable",
+                field: "responsable_actual_nombre",
+                minWidth: 150,
+                formatter: function (cell) {
+                    const nombre = cell.getValue();
+                    if (!nombre) return '<span class="text-muted small">—</span>';
+                    const iniciales = nombre.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+                    return `
+                        <div class="d-flex align-items-center gap-2">
+                          <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
+                               style="width:26px;height:26px;font-size:0.65rem;">${iniciales}</div>
+                          <span class="text-truncate small" style="max-width:110px;" title="${nombre}">${nombre}</span>
+                        </div>`;
+                }
+            },
+            // 6. Cliente
             {
                 title: "Cliente",
                 field: "cliente_nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
-                    return cell.getValue() || '---';
-                },
-                minWidth: 160
+                minWidth: 160,
+                formatter: function (cell) {
+                    const v = cell.getValue();
+                    if (!v) return '<span class="text-muted small">—</span>';
+                    return `<span class="text-truncate d-block small" style="max-width:145px;" title="${v}">${v}</span>`;
+                }
             },
+            // 7. Documentos — Factura + Cotización apiladas
             {
-                title: "Factura",
+                title: "Documentos",
                 field: "factura_costo_numero",
-                formatter: function (cell) {
-                    const factura = cell.getValue();
-                    if (!factura) return '<span class="text-muted small">---</span>';
-                    return `<span class="badge bg-light text-dark border fw-semibold">${factura}</span>`;
-                },
-                width: 120,
+                width: 160,
                 hozAlign: "center",
-                headerHozAlign: "center"
-            },
-            {
-                title: "Cotización",
-                field: "cotizacion_numero",
+                headerHozAlign: "center",
                 formatter: function (cell) {
-                    const numero = cell.getValue();
-                    if (!numero) return '<span class="text-muted small">---</span>';
-                    return `<span class="badge bg-info-subtle text-info-emphasis border border-info fw-semibold">${numero}</span>`;
-                },
-                width: 120,
-                hozAlign: "center",
-                headerHozAlign: "center"
+                    const row       = cell.getRow().getData();
+                    const factura   = row.factura_costo_numero;
+                    const cotizacion= row.cotizacion_numero;
+                    const parts     = [];
+                    if (factura)    parts.push(`<span class="badge bg-light text-dark border fw-semibold" style="font-size:0.7rem;"><i class="bi bi-receipt me-1"></i>${factura}</span>`);
+                    if (cotizacion) parts.push(`<span class="badge bg-info-subtle text-info-emphasis border border-info fw-semibold" style="font-size:0.7rem;"><i class="bi bi-file-earmark-text me-1"></i>${cotizacion}</span>`);
+                    if (!parts.length) return '<span class="text-muted small">—</span>';
+                    return `<div class="d-flex flex-column gap-1 align-items-center">${parts.join('')}</div>`;
+                }
             },
+            // 8. Período — inicio a fin estimado apiladas
             {
-                title: "Inicio",
+                title: "Período",
                 field: "fecha_inicio",
-                formatter: (cell) => fmtFecha(cell.getValue()),
-                width: 100,
+                width: 140,
                 hozAlign: "center",
-                headerHozAlign: "center"
-            },
-            {
-                title: "Fin Estimado",
-                field: "fecha_fin_prevista",
-                formatter: (cell) => fmtFecha(cell.getValue()),
-                width: 110,
-                hozAlign: "center",
-                headerHozAlign: "center"
-            },
-            {
-                title: "Valor Contrato",
-                field: "valor_contrato_proyectado",
-                formatter: (cell) => formatearMoneda(cell.getValue()),
-                hozAlign: "right",
-                headerHozAlign: "right",
-                width: 145
-            },
-            {
-                title: "Utilidad",
-                field: "utilidad_planeada",
+                headerHozAlign: "center",
                 formatter: function (cell) {
-                    const utilidad = parseFloat(cell.getValue()) || 0;
-                    const contrato = parseFloat(cell.getRow().getData().valor_contrato_proyectado) || 0;
-                    const pct = contrato > 0 ? ((utilidad / contrato) * 100).toFixed(1) : '0.0';
-                    const color = utilidad > 0 ? '#198754' : utilidad < 0 ? '#dc3545' : '#6c757d';
-                    const badgeCls = utilidad > 0 ? 'bg-success' : utilidad < 0 ? 'bg-danger' : 'bg-secondary';
+                    const row   = cell.getRow().getData();
+                    const ini   = fmtFecha(row.fecha_inicio);
+                    const fin   = fmtFecha(row.fecha_fin_prevista);
                     return `
-                        <div style="text-align:right; line-height:1.3;">
-                            <span style="font-weight:600; color:${color};">${formatearMoneda(utilidad)}</span><br>
-                            <span class="badge ${badgeCls} px-1" style="font-size:0.7rem;">${pct}%</span>
+                        <div style="line-height:1.35;font-size:0.78rem;">
+                          <div><i class="bi bi-calendar-event text-muted me-1"></i>${ini}</div>
+                          <div class="text-muted"><i class="bi bi-calendar-x me-1"></i>${fin}</div>
                         </div>`;
-                },
+                }
+            },
+            // 9. Contrato + Margen apilados
+            {
+                title: "Contrato / Margen",
+                field: "valor_contrato_proyectado",
+                width: 165,
                 hozAlign: "right",
                 headerHozAlign: "right",
-                width: 155
+                formatter: function (cell) {
+                    const row       = cell.getRow().getData();
+                    const contrato  = parseFloat(row.valor_contrato_proyectado) || 0;
+                    const margen    = parseFloat(row.margen_rentabilidad)        || 0;
+                    const badgeCls  = margen > 0 ? 'bg-success' : margen < 0 ? 'bg-danger' : 'bg-secondary';
+                    return `
+                        <div style="line-height:1.35; text-align:right;">
+                          <div class="fw-semibold" style="font-size:0.85rem;">${fmtMoneda(contrato)}</div>
+                          <div class="mt-1">
+                            <span class="badge ${badgeCls} px-1" style="font-size:0.7rem;">
+                              <i class="bi bi-graph-up me-1"></i>${margen.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>`;
+                }
             },
+            // 10. Acciones — frozen
             {
                 title: "",
-                formatter: function (cell) {
-                    const uuid = cell.getRow().getData().uuid;
-                    return `
-                        <div class="btn-group btn-group-sm">
-                            <button type="button" class="btn btn-outline-primary btn-edit-proyecto" data-uuid="${uuid}" title="Editar">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-proyecto" data-uuid="${uuid}" title="Eliminar">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>`;
-                },
+                field: "uuid",
                 headerSort: false,
                 hozAlign: "center",
-                width: 90,
-                frozen: true
+                width: 88,
+                frozen: true,
+                formatter: function (cell) {
+                    const uuid = cell.getValue();
+                    return `
+                        <div class="btn-group btn-group-sm">
+                          <button type="button" class="btn btn-outline-primary btn-edit-proyecto"
+                                  data-uuid="${uuid}" title="Editar proyecto">
+                            <i class="bi bi-pencil"></i>
+                          </button>
+                          <button type="button" class="btn btn-outline-danger btn-delete-proyecto"
+                                  data-uuid="${uuid}" title="Eliminar proyecto">
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </div>`;
+                }
             }
         ];
     }
 
-    // Inicializar Tabulator usando Factory (The Engine)
+    // ─── Inicializar Tabulator ─────────────────────────────────────────────────
+
     function initTabulator() {
         if (!w.TabulatorFactory) {
-            console.error(`${MOD} TabulatorFactory no está disponible`);
+            console.error(`${MOD} TabulatorFactory no disponible`);
             return;
         }
+        const gridEl = d.querySelector('#grid-proyectos');
+        if (!gridEl) { console.warn(`${MOD} #grid-proyectos no encontrado`); return; }
 
-        const gridElement = d.querySelector('#grid-proyectos');
-        if (!gridElement) {
-            console.warn(`${MOD} Elemento #grid-proyectos no encontrado`);
-            return;
-        }
-
-        // ⚠️ Anti-Zombies v2.60: Destruir instancia previa si existe
         if (window.SintelProyectosTables.main) {
-            try {
-                window.SintelProyectosTables.main.destroy();
-                console.log(`${MOD} Instancia zombie de Tabulator destruida`);
-            } catch (error) {
-                console.warn(`${MOD} Error al destruir instancia previa:`, error);
-            }
+            try { window.SintelProyectosTables.main.destroy(); } catch (_) {}
         }
 
-        // ⚠️ DRY: Solo definimos lo específico, el resto viene del Factory
         table = w.TabulatorFactory.create(
             '#grid-proyectos',
             '/api/v1/proyectos/',
             getColumns(),
-            {
-                searchInputSelector: '#search-proyecto'
-            }
+            { searchInputSelector: '#search-proyecto' }
         );
 
-        // ⚠️ Anti-Zombies v2.60: Guardar instancia en singleton global
         if (table) {
             window.SintelProyectosTables.main = table;
-            console.log(`${MOD} Tabulator inicializado y guardado en SintelProyectosTables`);
-        }
 
+            // Calcular KPIs tras cargar datos
+            table.on('dataLoaded', function (data) {
+                actualizarKPIs(data);
+            });
+            table.on('dataFiltered', function (_filters, rows) {
+                actualizarKPIs(rows.map(r => r.getData()));
+            });
+        }
         return table;
     }
 
-    // Event Delegation para acciones del Grid
-    function initListEvents() {
-        const gridElement = d.querySelector('#grid-proyectos');
-        if (!gridElement) {
-            console.warn(`${MOD} Elemento #grid-proyectos no encontrado para eventos`);
-            return;
-        }
+    // ─── Filtros por Fase ─────────────────────────────────────────────────────
 
-        // ⚠️ Event Delegation: Escuchar clics en el contenedor del grid
-        gridElement.addEventListener('click', async (e) => {
-            // Botón Editar
+    function initFiltrosFase() {
+        const contenedor = d.getElementById('filtros-fase-proyectos');
+        if (!contenedor) return;
+
+        contenedor.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-fase]');
+            if (!btn) return;
+
+            // Activar chip
+            contenedor.querySelectorAll('[data-fase]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const fase = btn.getAttribute('data-fase');
+            if (!table) return;
+            table.clearFilter(true);  // quitar filtros anteriores
+            if (fase) {
+                table.setFilter('fase_actual', '=', fase);
+            }
+        });
+    }
+
+    // ─── Event Delegation (Editar / Eliminar) ─────────────────────────────────
+
+    function initListEvents() {
+        const gridEl = d.querySelector('#grid-proyectos');
+        if (!gridEl) return;
+
+        gridEl.addEventListener('click', async (e) => {
+            // Editar
             const btnEdit = e.target.closest('.btn-edit-proyecto');
             if (btnEdit) {
                 e.preventDefault();
                 e.stopPropagation();
-
                 const uuid = btnEdit.getAttribute('data-uuid');
-                if (!uuid) {
-                    console.warn(`${MOD} Botón sin data-uuid`);
-                    return;
-                }
-
-                // Loading state
-                const originalHTML = btnEdit.innerHTML;
+                if (!uuid) return;
+                const orig = btnEdit.innerHTML;
                 btnEdit.disabled = true;
                 btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
                 try {
-                    // HTMX: Cargar Offcanvas desde el servidor usando uuid
                     await htmx.ajax('GET', `/api/v1/proyectos/gestor-offcanvas/?uuid=${uuid}`, {
-                        target: '#offcanvas-container-proyectos',
-                        swap: 'innerHTML'
+                        target: '#offcanvas-container-proyectos', swap: 'innerHTML'
                     });
-
-                    // ⚠️ v2.62.3: La apertura se delega al htmx:afterSwap en proyectos_editor.js
-                    // Esto centraliza la lógica y evita el error de cierre automático.
-                } catch (error) {
-                    console.error(`${MOD} Error al cargar Offcanvas:`, error);
-                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                        w.SintelFeedback.error('Error al cargar el formulario de proyecto');
-                    }
+                } catch (_) {
+                    w.SintelFeedback?.error?.('Error al cargar el formulario de proyecto');
                 } finally {
-                    // Restaurar estado del botón
                     btnEdit.disabled = false;
-                    btnEdit.innerHTML = originalHTML;
+                    btnEdit.innerHTML = orig;
                 }
                 return;
             }
 
-            // Botón Eliminar
-            const btnDelete = e.target.closest('.btn-delete-proyecto');
-            if (btnDelete) {
+            // Eliminar
+            const btnDel = e.target.closest('.btn-delete-proyecto');
+            if (btnDel) {
                 e.preventDefault();
                 e.stopPropagation();
-
-                const uuid = btnDelete.getAttribute('data-uuid');
-                if (!uuid) {
-                    console.warn(`${MOD} Botón eliminar sin data-uuid`);
-                    return;
-                }
-
-                // Confirmación
-                if (!confirm('¿Está seguro de eliminar este proyecto? Esta acción no se puede deshacer.')) {
-                    return;
-                }
-
-                // Loading state
-                const originalHTML = btnDelete.innerHTML;
-                btnDelete.disabled = true;
-                btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
+                const uuid = btnDel.getAttribute('data-uuid');
+                if (!uuid) return;
+                if (!confirm('¿Eliminar este proyecto? Esta acción no se puede deshacer.')) return;
+                const orig = btnDel.innerHTML;
+                btnDel.disabled = true;
+                btnDel.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
                     const res = await w.http('DELETE', `/api/v1/proyectos/${uuid}/`);
-
                     if (res.ok) {
-                        if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
-                            w.SintelFeedback.success('Proyecto eliminado correctamente');
-                        }
-                        // Recargar grid
-                        if (table && typeof table.replaceData === 'function') {
-                            table.replaceData();
-                        }
+                        w.SintelFeedback?.success?.('Proyecto eliminado correctamente');
+                        table?.replaceData?.();
                     } else {
-                        if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-                            w.UIManager.handleError(res, MOD);
-                        } else {
-                            alert('Error al eliminar el proyecto');
-                        }
+                        w.UIManager?.handleError?.(res, MOD) || alert('Error al eliminar');
                     }
-                } catch (error) {
-                    console.error(`${MOD} Error al eliminar proyecto:`, error);
-                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                        w.SintelFeedback.error('Error al eliminar el proyecto');
-                    }
+                } catch (_) {
+                    w.SintelFeedback?.error?.('Error al eliminar el proyecto');
                 } finally {
-                    btnDelete.disabled = false;
-                    btnDelete.innerHTML = originalHTML;
+                    btnDel.disabled = false;
+                    btnDel.innerHTML = orig;
                 }
                 return;
             }
         });
-
-        console.log(`${MOD} Event delegation configurado`);
     }
 
-    // ⚠️ Recarga Reactiva: Escuchar evento personalizado
+    // ─── Evento proyectoGuardado ───────────────────────────────────────────────
+
     function initEventListeners() {
-        // Escuchar evento de proyecto guardado para refrescar el grid
         d.addEventListener('proyectoGuardado', () => {
-            if (table && typeof table.replaceData === 'function') {
-                table.replaceData();
-                console.log(`${MOD} Grid refrescado tras guardar proyecto`);
-            } else {
-                console.warn(`${MOD} No se pudo refrescar: tabla no inicializada`);
-            }
+            table?.replaceData?.();
         });
-
-        console.log(`${MOD} Event listeners configurados`);
     }
 
-    // Inicialización principal
-    function init() {
-        console.log(`${MOD} Inicializando módulo de listado...`);
+    // ─── Init ─────────────────────────────────────────────────────────────────
 
-        // ⚠️ Lazy Loading: Solo inicializar cuando el tab esté visible
-        const tabElement = d.querySelector('#tab-proyectos');
-        if (tabElement) {
-            // Usar DOMUtils.onVisibleOnce si está disponible
-            if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
-                w.DOMUtils.onVisibleOnce(tabElement.id ? '#' + tabElement.id : tabElement, () => {
-                    initTabulator();
-                    initListEvents();
-                    initEventListeners();
-                });
-            } else {
-                // Fallback: Inicializar directamente
+    function init() {
+        const tabEl = d.querySelector('#tab-proyectos');
+        if (tabEl && w.DOMUtils?.onVisibleOnce) {
+            w.DOMUtils.onVisibleOnce(tabEl.id ? '#' + tabEl.id : tabEl, () => {
                 initTabulator();
                 initListEvents();
+                initFiltrosFase();
                 initEventListeners();
-            }
+            });
         } else {
-            // Si no hay tab, inicializar directamente
             initTabulator();
             initListEvents();
+            initFiltrosFase();
             initEventListeners();
         }
     }
 
-    // ⚠️ HTMX: Limpiar instancias zombie en recargas
+    // HTMX: limpiar zombie en swap
     if (typeof htmx !== 'undefined') {
-        d.addEventListener('htmx:beforeSwap', (event) => {
-            // Si se está recargando el contenedor principal, destruir instancias
-            if (event.detail.target.id === 'tab-proyectos-content' ||
-                event.detail.target.closest('#tab-proyectos-content')) {
-                if (window.SintelProyectosTables.main) {
-                    try {
-                        window.SintelProyectosTables.main.destroy();
-                        delete window.SintelProyectosTables.main;
-                        console.log(`${MOD} Instancia destruida por HTMX swap`);
-                    } catch (error) {
-                        console.warn(`${MOD} Error al destruir instancia en HTMX swap:`, error);
-                    }
-                }
+        d.addEventListener('htmx:beforeSwap', (ev) => {
+            if (ev.detail.target.id === 'tab-proyectos-content' ||
+                ev.detail.target.closest?.('#tab-proyectos-content')) {
+                try { window.SintelProyectosTables.main?.destroy?.(); } catch (_) {}
+                delete window.SintelProyectosTables.main;
             }
         });
     }
 
-    // Auto-inicializar cuando el DOM esté listo
     if (d.readyState === 'loading') {
         d.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
 
-    // ⚠️ API Pública: Exponer funciones para uso externo
+    // API pública
     w.ProyectosListModule = {
         init,
-        refresh: () => {
-            if (table && typeof table.replaceData === 'function') {
-                table.replaceData();
-            }
-        },
+        refresh: () => table?.replaceData?.(),
         getTable: () => table
     };
-
-    // ⚠️ Compatibilidad: Alias para uso legacy
-    if (!w.ProyectosModule) {
-        w.ProyectosModule = {
-            refresh: () => {
-                if (table && typeof table.replaceData === 'function') {
-                    table.replaceData();
-                }
-            }
-        };
-    }
+    w.ProyectosModule = w.ProyectosModule || { refresh: () => table?.replaceData?.() };
 
 })(window, document);
