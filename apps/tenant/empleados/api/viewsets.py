@@ -347,12 +347,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
             })
             if obj_uuid:
                 instance = self.selector_class.get_detail(empresa_id, obj_uuid)
-                # v3.5: Usar serializer para resolver cuenta_contable_label (Pull Model)
-                serializer = EmpleadoDetailSerializer(
-                    instance,
-                    context={'empresa': empresa, 'empresa_id': empresa_id},
-                )
-                context['empleado'] = serializer.data
+                context['empleado'] = instance
                 return Response(context, template_name='tenant/empleados/offcanvas_editar_empleado.html')
             return Response(context, template_name='tenant/empleados/offcanvas_crear_empleado.html')
             
