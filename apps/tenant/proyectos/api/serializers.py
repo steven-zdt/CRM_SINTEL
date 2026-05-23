@@ -293,6 +293,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     proveedor_info = serializers.SerializerMethodField()
     servicio_nombre = serializers.CharField(source='servicio_asociado.nombre', read_only=True, allow_null=True)
     servicio_asociado = UUIDOrPKRelatedField(queryset=None, required=False, allow_null=True)
+    cotizacion_info = serializers.SerializerMethodField()
 
     class Meta:
         model = Proyecto
@@ -332,8 +333,6 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
                 from apps.tenant.inventario.models import Servicio
                 empresa_id = self.context.get('empresa_id')
                 if empresa_id:
-                    # ⚠️ NO usar .only() aquí — UUIDOrPKRelatedField.to_internal_value()
-                    # necesita hacer queryset.get(uuid=...) que puede requerir campos adicionales
                     self.fields['servicio_asociado'].queryset = Servicio.objects.filter(
                         empresa_id=empresa_id
                     )
@@ -341,6 +340,16 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
                     self.fields['servicio_asociado'].queryset = Servicio.objects.none()
             except ImportError:
                 self.fields['servicio_asociado'].queryset = Servicio.objects.none()
+
+    def get_cotizacion_info(self, obj):
+        """Resuelve la cotizacion vinculada via Factura.cotizacion_uuid (Zero-Waste)."""
+        if not obj.factura_costo_id:
+            return None
+        try:
+            from apps.tenant.facturas.services.business_service import FacturaInterAppAPI
+            return FacturaInterAppAPI.resolve_cotizacion(factura_id=obj.factura_costo_id)
+        except Exception:
+            return None
 
     def validate(self, attrs):
         """

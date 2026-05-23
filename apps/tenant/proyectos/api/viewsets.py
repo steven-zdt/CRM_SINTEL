@@ -229,16 +229,60 @@ class ProyectoViewSet(
         except ImportError:
             pass
             
-        facturas = []
+        facturas_raw = []
         try:
             from apps.tenant.facturas.services.business_service import FacturaInterAppAPI
-            facturas = list(
+            facturas_raw = list(
                 FacturaInterAppAPI.list_all()
                 .only('id', 'numero', 'receptor_razon_social', 'total', 'cotizacion_uuid', 'cotizacion_numero')
                 .order_by('-fecha_emision')[:200]
             )
         except Exception:
             pass
+
+        # Construir mapa cotizacion_uuid → datos enriquecidos (single IN query, Zero-Waste)
+        cotizaciones_map = {}
+        uuids_cot = [str(f.cotizacion_uuid) for f in facturas_raw if f.cotizacion_uuid]
+        if uuids_cot:
+            try:
+                from apps.tenant.cotizaciones.models import Cotizacion
+                cots = Cotizacion.objects.filter(
+                    uuid__in=uuids_cot
+                ).select_related('cliente').only(
+                    'uuid', 'estado', 'total_con_impuestos',
+                    'fecha_emision', 'fecha_vencimiento',
+                    'cliente__razon_social'
+                )
+                cotizaciones_map = {
+                    str(c.uuid): {
+                        'estado': c.estado,
+                        'total': float(c.total_con_impuestos or 0),
+                        'cliente': c.cliente.razon_social if c.cliente else '',
+                        'fecha_emision': c.fecha_emision.isoformat() if c.fecha_emision else '',
+                        'fecha_vencimiento': c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else '',
+                    }
+                    for c in cots
+                }
+            except Exception:
+                pass
+
+        # Enriquecer facturas como lista de dicts con datos de cotizacion embebidos
+        facturas = []
+        for f in facturas_raw:
+            uuid_key = str(f.cotizacion_uuid) if f.cotizacion_uuid else ''
+            cot = cotizaciones_map.get(uuid_key, {})
+            facturas.append({
+                'id': f.id,
+                'numero': f.numero,
+                'receptor_razon_social': getattr(f, 'receptor_razon_social', '') or '',
+                'cotizacion_uuid': str(f.cotizacion_uuid) if f.cotizacion_uuid else '',
+                'cotizacion_numero': f.cotizacion_numero or '',
+                'cot_estado': cot.get('estado', ''),
+                'cot_total': cot.get('total', ''),
+                'cot_cliente': cot.get('cliente', ''),
+                'cot_fecha_emision': cot.get('fecha_emision', ''),
+                'cot_fecha_vencimiento': cot.get('fecha_vencimiento', ''),
+            })
 
         context = {
             'proyecto': proyecto,

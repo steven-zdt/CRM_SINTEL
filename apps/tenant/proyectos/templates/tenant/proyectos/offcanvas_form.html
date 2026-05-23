@@ -294,10 +294,15 @@
                     {% for factura in facturas %}
                       <option value="{{ factura.id }}"
                               data-numero="{{ factura.numero }}"
-                              data-cotizacion-uuid="{{ factura.cotizacion_uuid|default:'' }}"
-                              data-cotizacion-numero="{{ factura.cotizacion_numero|default:'' }}"
+                              data-cotizacion-uuid="{{ factura.cotizacion_uuid }}"
+                              data-cotizacion-numero="{{ factura.cotizacion_numero }}"
+                              data-cot-estado="{{ factura.cot_estado }}"
+                              data-cot-total="{{ factura.cot_total }}"
+                              data-cot-cliente="{{ factura.cot_cliente }}"
+                              data-cot-fecha-emision="{{ factura.cot_fecha_emision }}"
+                              data-cot-fecha-vencimiento="{{ factura.cot_fecha_vencimiento }}"
                               {% if proyecto and proyecto.factura_costo_id == factura.id %}selected{% endif %}>
-                        {{ factura.numero }}{% if factura.receptor_razon_social %} — {{ factura.receptor_razon_social }}{% endif %}{% if factura.cotizacion_numero %} [COT-{{ factura.cotizacion_numero }}]{% endif %}
+                        {{ factura.numero }}{% if factura.receptor_razon_social %} — {{ factura.receptor_razon_social }}{% endif %}{% if factura.cotizacion_numero %} [{{ factura.cotizacion_numero }}]{% endif %}
                       </option>
                     {% endfor %}
                   </select>
@@ -306,21 +311,43 @@
                 <input type="hidden" id="proyecto-factura-costo-numero" name="factura_costo_numero" value="{% if proyecto %}{{ proyecto.factura_costo_numero }}{% endif %}">
               </div>
 
-              {# Panel de Cotizacion vinculada — reactivo via JS #}
-              <div id="panel-cotizacion-vinculada" class="mt-2 p-2 rounded border border-info-subtle bg-info-subtle d-none">
-                <div class="d-flex align-items-center gap-3">
-                  <i class="bi bi-file-earmark-check text-info fs-5 flex-shrink-0"></i>
-                  <div>
-                    <div class="fw-bold text-dark" id="cotizacion-numero-display" style="font-size:1rem;"></div>
-                    <div class="text-muted" style="font-size:0.72rem;">
-                      <span class="me-1">Cotización vinculada a esta factura</span>
-                      <code id="cotizacion-uuid-display" class="text-info-emphasis"></code>
-                    </div>
+              {# Panel de Cotizacion vinculada — reactivo via JS (v3.9.6) #}
+              <div id="panel-cotizacion-vinculada" class="mt-3 p-3 rounded border border-info-subtle bg-info-subtle d-none">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="fw-bold text-info-emphasis small">
+                    <i class="bi bi-file-earmark-text me-1"></i>Cotización Vinculada
+                  </span>
+                  <span id="cot-estado-badge" class="badge bg-secondary">---</span>
+                </div>
+                <div class="row g-2" style="font-size:0.82rem;">
+                  <div class="col-6">
+                    <div class="text-muted">Número</div>
+                    <div id="cot-numero" class="fw-semibold">---</div>
+                  </div>
+                  <div class="col-6">
+                    <div class="text-muted">Total</div>
+                    <div id="cot-total" class="fw-semibold text-success">---</div>
+                  </div>
+                  <div class="col-12">
+                    <div class="text-muted">Cliente</div>
+                    <div id="cot-cliente" class="fw-semibold">---</div>
+                  </div>
+                  <div class="col-6">
+                    <div class="text-muted">Emisión</div>
+                    <div id="cot-fecha-emision" class="text-body-secondary">---</div>
+                  </div>
+                  <div class="col-6">
+                    <div class="text-muted">Vencimiento</div>
+                    <div id="cot-fecha-vencimiento" class="text-body-secondary">---</div>
+                  </div>
+                  <div class="col-12">
+                    <div class="text-muted">UUID</div>
+                    <code id="cotizacion-uuid-display" class="text-muted" style="font-size:0.7rem;"></code>
                   </div>
                 </div>
               </div>
-              <div id="panel-sin-cotizacion" class="mt-2 p-2 rounded border bg-light text-center text-muted d-none" style="font-size:0.82rem;">
-                <i class="bi bi-dash-circle me-1"></i>Esta factura no tiene cotización vinculada.
+              <div id="panel-sin-cotizacion" class="mt-2 alert alert-secondary py-2 d-none" style="font-size:0.82rem;">
+                <i class="bi bi-info-circle me-1"></i>Esta factura no tiene cotización vinculada.
               </div>
             </div>
 

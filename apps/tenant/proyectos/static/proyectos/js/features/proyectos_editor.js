@@ -689,29 +689,76 @@
     }
 
     /**
-     * Actualiza el panel de Cotizacion vinculada segun la factura seleccionada (Fase 1)
-     * Lee el data-cotizacion-uuid de la <option> seleccionada y muestra/oculta el panel.
+     * Rellena el panel de cotizacion con datos completos (v3.9.6).
+     * Acepta el dict cotizacion_info de la API o un objeto construido desde data-* attrs.
+     */
+    function renderizarCotizacionInfo(info) {
+        const ESTADO_BADGE = {
+            'ACEPTADA':  'bg-success',
+            'ENVIADA':   'bg-primary',
+            'BORRADOR':  'bg-secondary',
+            'CANCELADA': 'bg-danger',
+        };
+        const estadoBadge = d.getElementById('cot-estado-badge');
+        const numEl       = d.getElementById('cot-numero');
+        const totalEl     = d.getElementById('cot-total');
+        const clienteEl   = d.getElementById('cot-cliente');
+        const fechaEmEl   = d.getElementById('cot-fecha-emision');
+        const fechaVenEl  = d.getElementById('cot-fecha-vencimiento');
+        const uuidEl      = d.getElementById('cotizacion-uuid-display');
+
+        if (!info) {
+            [estadoBadge, numEl, totalEl, clienteEl, fechaEmEl, fechaVenEl].forEach(el => {
+                if (el) el.textContent = '---';
+            });
+            return;
+        }
+
+        if (estadoBadge) {
+            estadoBadge.textContent = info.estado || '---';
+            estadoBadge.className   = `badge ${ESTADO_BADGE[info.estado] || 'bg-secondary'}`;
+        }
+        if (numEl)    numEl.textContent    = info.numero_cotizacion || info.cotizacion_numero || '---';
+        if (totalEl) {
+            const total = (info.total_con_impuestos != null) ? info.total_con_impuestos : info.total;
+            totalEl.textContent = (total != null && total !== '' && !isNaN(total))
+                ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(total)
+                : '---';
+        }
+        if (clienteEl)  clienteEl.textContent  = info.cliente_razon_social || info.cliente || '---';
+        if (fechaEmEl)  fechaEmEl.textContent   = info.fecha_emision  || '---';
+        if (fechaVenEl) fechaVenEl.textContent  = info.fecha_vencimiento || '---';
+        if (uuidEl)     uuidEl.textContent      = info.uuid || info.cotizacion_uuid || '';
+    }
+
+    /**
+     * Lee los data-cot-* de la <option> seleccionada y renderiza el panel completo (v3.9.6).
      */
     function actualizarPanelCotizacion(selectEl) {
-        const panelVinculada   = d.querySelector('#panel-cotizacion-vinculada');
-        const panelSin         = d.querySelector('#panel-sin-cotizacion');
-        const numeroDisplay    = d.querySelector('#cotizacion-numero-display');
-        const uuidDisplay      = d.querySelector('#cotizacion-uuid-display');
+        const panelVinculada = d.querySelector('#panel-cotizacion-vinculada');
+        const panelSin       = d.querySelector('#panel-sin-cotizacion');
 
         if (!panelVinculada || !panelSin) return;
-
-        const opt = selectEl.options[selectEl.selectedIndex];
-        const cotizacionNumero = opt ? (opt.getAttribute('data-cotizacion-numero') || '') : '';
-        const cotizacionUuid   = opt ? (opt.getAttribute('data-cotizacion-uuid')   || '') : '';
 
         panelVinculada.classList.add('d-none');
         panelSin.classList.add('d-none');
 
-        if (!selectEl.value) return;
+        if (!selectEl || !selectEl.value) return;
 
-        if (cotizacionNumero || cotizacionUuid) {
-            if (numeroDisplay) numeroDisplay.textContent = cotizacionNumero ? `Cotización ${cotizacionNumero}` : 'Cotización vinculada';
-            if (uuidDisplay)   uuidDisplay.textContent   = cotizacionUuid || '';
+        const opt             = selectEl.options[selectEl.selectedIndex];
+        const cotizacionUuid  = opt ? (opt.getAttribute('data-cotizacion-uuid')   || '') : '';
+        const cotizacionNumero= opt ? (opt.getAttribute('data-cotizacion-numero') || '') : '';
+
+        if (cotizacionUuid || cotizacionNumero) {
+            renderizarCotizacionInfo({
+                uuid:              cotizacionUuid,
+                cotizacion_numero: cotizacionNumero,
+                estado:            opt.getAttribute('data-cot-estado')            || '',
+                total:             parseFloat(opt.getAttribute('data-cot-total')  || '0'),
+                cliente:           opt.getAttribute('data-cot-cliente')           || '',
+                fecha_emision:     opt.getAttribute('data-cot-fecha-emision')     || '',
+                fecha_vencimiento: opt.getAttribute('data-cot-fecha-vencimiento') || '',
+            });
             panelVinculada.classList.remove('d-none');
         } else {
             panelSin.classList.remove('d-none');
@@ -863,6 +910,16 @@
                     facturaNumeroInput.value = opt.getAttribute('data-numero') || '';
             }
             actualizarPanelCotizacion(facturaVentaSelectEl);
+        }
+
+        // Si la API retorna cotizacion_info completa (v3.9.6), usar datos enriquecidos
+        if (currentProyecto.cotizacion_info) {
+            const panelVinculada = d.getElementById('panel-cotizacion-vinculada');
+            const panelSin       = d.getElementById('panel-sin-cotizacion');
+            if (panelVinculada) panelVinculada.classList.add('d-none');
+            if (panelSin)       panelSin.classList.add('d-none');
+            renderizarCotizacionInfo(currentProyecto.cotizacion_info);
+            if (panelVinculada) panelVinculada.classList.remove('d-none');
         }
 
         // Renderizar candados y navegar al Step de la fase actual
