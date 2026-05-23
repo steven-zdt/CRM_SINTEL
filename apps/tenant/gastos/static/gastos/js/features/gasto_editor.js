@@ -41,6 +41,9 @@
         // Inicializar buscador de cuentas (v3.7.1)
         initCuentaSearch(form);
 
+        // Inicializar selectores de inventario
+        initInventarioSelects(form);
+
         // ── Eventos para Valores Financieros (Input editable) ────────────────
         const subtotalInput = form.querySelector('#subtotal');
 
@@ -110,9 +113,12 @@
         const select = form.querySelector('#resolucion');
         if (!select) return;
 
-        const currentValue = select.dataset.value || select.value;
+        const currentValue = select.dataset.selected || select.dataset.value || select.value;
 
         try {
+            const preOption = select.querySelector(`option[value="${currentValue}"]`);
+            const preText = preOption ? preOption.textContent : null;
+
             const response = await fetch(window.Sintel.Gastos.API.resoluciones.list, {
                 headers: window.Sintel.Gastos.getHeaders()
             });
@@ -120,13 +126,25 @@
             const resoluciones = Array.isArray(result) ? result : (result.results || []);
 
             select.innerHTML = '<option value="">Seleccione...</option>';
+            let found = false;
             resoluciones.forEach(res => {
                 const opt = document.createElement('option');
                 opt.value = res.id;
                 opt.textContent = `${res.prefijo || ''} ${res.numero_resolucion}`;
-                opt.selected = (res.id == currentValue);
+                if (res.id?.toString() === currentValue?.toString()) {
+                    opt.selected = true;
+                    found = true;
+                }
                 select.appendChild(opt);
             });
+
+            if (currentValue && !found && preText) {
+                const opt = document.createElement('option');
+                opt.value = currentValue;
+                opt.textContent = preText;
+                opt.selected = true;
+                select.appendChild(opt);
+            }
 
             // Si es creación y no hay selección, intentar cargar la activa
             if (!select.value && !form.dataset.uuid) {
@@ -154,9 +172,12 @@
         const select = form.querySelector('#proveedor_uuid');
         if (!select) return;
 
-        const currentValue = select.dataset.value || select.value;
+        const currentValue = select.dataset.selected || select.dataset.value || select.value;
 
         try {
+            const preOption = select.querySelector(`option[value="${currentValue}"]`);
+            const preText = preOption ? preOption.textContent : null;
+
             const response = await fetch(window.Sintel.Gastos.API.proveedores.list, {
                 headers: window.Sintel.Gastos.getHeaders()
             });
@@ -164,13 +185,34 @@
             _proveedoresCache = Array.isArray(result) ? result : (result.results || []);
 
             select.innerHTML = '<option value="">Seleccione...</option>';
+            let found = false;
             _proveedoresCache.forEach(p => {
                 const opt = document.createElement('option');
                 opt.value = p.id;
                 opt.textContent = p.razon_social;
-                opt.selected = (p.id == currentValue);
+                if (p.id?.toString() === currentValue?.toString()) {
+                    opt.selected = true;
+                    found = true;
+                }
                 select.appendChild(opt);
             });
+
+            if (currentValue && !found && preText) {
+                const opt = document.createElement('option');
+                opt.value = currentValue;
+                opt.textContent = preText;
+                opt.selected = true;
+                select.appendChild(opt);
+                
+                // Agregar al cache local ficticio para que actualizarInfoProveedor no falle
+                _proveedoresCache.push({
+                    id: currentValue,
+                    razon_social: preText,
+                    numero_documento: form.querySelector('#vendedor_nit_display')?.textContent || '',
+                    telefono_contacto: form.querySelector('#vendedor_telefono_display')?.textContent || '',
+                    direccion: form.querySelector('#vendedor_direccion_display')?.textContent || ''
+                });
+            }
             
             if (currentValue) actualizarInfoProveedor(form, currentValue);
         } catch (e) {
@@ -263,10 +305,6 @@
         if (totalInput) totalInput.value = total.toFixed(2);
     }
 
-    /**
-     * Recolección Zero Trust de datos (v3.7.1 - Integración Contable §18).
-     * Contrapartida orquestada por app contabilidad.
-     */
     function collectData(form) {
         let gastoUuidVal = form.querySelector('#cuenta_gasto_uuid')?.value;
 
@@ -274,6 +312,8 @@
         if (gastoUuidVal && gastoUuidVal.length < 32) {
             gastoUuidVal = null;
         }
+
+        const tipoRelacion = form.querySelector('#tipo_relacion_inventario')?.value || 'NINGUNO';
 
         return {
             resolucion_dian: form.querySelector('#resolucion')?.value,
@@ -285,7 +325,10 @@
             observaciones: form.querySelector('#observaciones')?.value,
             subtotal: parseFloat(form.querySelector('#subtotal')?.value) || 0,
             total: parseFloat(form.querySelector('#total')?.value) || 0,
-            cuenta_gasto_uuid: gastoUuidVal || null
+            cuenta_gasto_uuid: gastoUuidVal || null,
+            producto_relacionado: tipoRelacion === 'PRODUCTO' ? (form.querySelector('#producto_relacionado')?.value || null) : null,
+            servicio_relacionado: tipoRelacion === 'SERVICIO' ? (form.querySelector('#servicio_relacionado')?.value || null) : null,
+            activo_relacionado: tipoRelacion === 'ACTIVO_FIJO' ? (form.querySelector('#activo_relacionado')?.value || null) : null
         };
     }
 
@@ -461,8 +504,195 @@
         }
     }
 
+    /**
+     * Gestión e inicialización de selectores de inventario (Fase 4 - Trazabilidad).
+     */
+    async function cargarProductos(form) {
+        const select = form.querySelector('#producto_relacionado');
+        if (!select) return;
+        const currentValue = select.dataset.selected || select.dataset.value || select.value;
+
+        try {
+            const preOption = select.querySelector(`option[value="${currentValue}"]`);
+            const preText = preOption ? preOption.textContent : null;
+
+            const response = await fetch(window.Sintel.Gastos.API.inventario.productos, {
+                headers: window.Sintel.Gastos.getHeaders()
+            });
+            const result = await response.json();
+            const items = Array.isArray(result) ? result : (result.results || []);
+
+            select.innerHTML = '<option value="">Seleccione producto...</option>';
+            let found = false;
+            items.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `${item.codigo || ''} - ${item.nombre}`;
+                if (item.id?.toString() === currentValue?.toString()) {
+                    opt.selected = true;
+                    found = true;
+                }
+                select.appendChild(opt);
+            });
+
+            if (currentValue && !found && preText) {
+                const opt = document.createElement('option');
+                opt.value = currentValue;
+                opt.textContent = preText;
+                opt.selected = true;
+                select.appendChild(opt);
+            }
+        } catch (e) {
+            console.error('[GastoEditor] Error productos:', e);
+        }
+    }
+
+    async function cargarServicios(form) {
+        const select = form.querySelector('#servicio_relacionado');
+        if (!select) return;
+        const currentValue = select.dataset.selected || select.dataset.value || select.value;
+
+        try {
+            const preOption = select.querySelector(`option[value="${currentValue}"]`);
+            const preText = preOption ? preOption.textContent : null;
+
+            const response = await fetch(window.Sintel.Gastos.API.inventario.servicios, {
+                headers: window.Sintel.Gastos.getHeaders()
+            });
+            const result = await response.json();
+            const items = Array.isArray(result) ? result : (result.results || []);
+
+            select.innerHTML = '<option value="">Seleccione servicio...</option>';
+            let found = false;
+            items.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `${item.codigo || ''} - ${item.nombre}`;
+                if (item.id?.toString() === currentValue?.toString()) {
+                    opt.selected = true;
+                    found = true;
+                }
+                select.appendChild(opt);
+            });
+
+            if (currentValue && !found && preText) {
+                const opt = document.createElement('option');
+                opt.value = currentValue;
+                opt.textContent = preText;
+                opt.selected = true;
+                select.appendChild(opt);
+            }
+        } catch (e) {
+            console.error('[GastoEditor] Error servicios:', e);
+        }
+    }
+
+    async function cargarActivos(form) {
+        const select = form.querySelector('#activo_relacionado');
+        if (!select) return;
+        const currentValue = select.dataset.selected || select.dataset.value || select.value;
+
+        try {
+            const preOption = select.querySelector(`option[value="${currentValue}"]`);
+            const preText = preOption ? preOption.textContent : null;
+
+            const response = await fetch(window.Sintel.Gastos.API.inventario.activos, {
+                headers: window.Sintel.Gastos.getHeaders()
+            });
+            const result = await response.json();
+            const items = Array.isArray(result) ? result : (result.results || []);
+
+            select.innerHTML = '<option value="">Seleccione activo fijo...</option>';
+            let found = false;
+            items.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = `${item.codigo || ''} - ${item.nombre}`;
+                if (item.id?.toString() === currentValue?.toString()) {
+                    opt.selected = true;
+                    found = true;
+                }
+                select.appendChild(opt);
+            });
+
+            if (currentValue && !found && preText) {
+                const opt = document.createElement('option');
+                opt.value = currentValue;
+                opt.textContent = preText;
+                opt.selected = true;
+                select.appendChild(opt);
+            }
+        } catch (e) {
+            console.error('[GastoEditor] Error activos fijos:', e);
+        }
+    }
+
+    function initInventarioSelects(form) {
+        const tipoRelacionSelect = form.querySelector('#tipo_relacion_inventario');
+        if (!tipoRelacionSelect) return;
+
+        const wrapperProducto = form.querySelector('#wrapper_producto_relacionado');
+        const wrapperServicio = form.querySelector('#wrapper_servicio_relacionado');
+        const wrapperActivo = form.querySelector('#wrapper_activo_relacionado');
+
+        const selectProducto = form.querySelector('#producto_relacionado');
+        const selectServicio = form.querySelector('#servicio_relacionado');
+        const selectActivo = form.querySelector('#activo_relacionado');
+
+        function ocultarTodos() {
+            if (wrapperProducto) wrapperProducto.classList.add('d-none');
+            if (wrapperServicio) wrapperServicio.classList.add('d-none');
+            if (wrapperActivo) wrapperActivo.classList.add('d-none');
+        }
+
+        tipoRelacionSelect.addEventListener('change', async function() {
+            const tipo = this.value;
+            ocultarTodos();
+
+            // Limpiar valores seleccionados al ocultar
+            if (selectProducto) selectProducto.value = '';
+            if (selectServicio) selectServicio.value = '';
+            if (selectActivo) selectActivo.value = '';
+
+            if (tipo === 'PRODUCTO') {
+                if (wrapperProducto) wrapperProducto.classList.remove('d-none');
+                await cargarProductos(form);
+            } else if (tipo === 'SERVICIO') {
+                if (wrapperServicio) wrapperServicio.classList.remove('d-none');
+                await cargarServicios(form);
+            } else if (tipo === 'ACTIVO_FIJO') {
+                if (wrapperActivo) wrapperActivo.classList.remove('d-none');
+                await cargarActivos(form);
+            }
+        });
+
+        // Lógica de detección de valores preexistentes (Modo Edición)
+        const valProd = selectProducto?.dataset.selected;
+        const valServ = selectServicio?.dataset.selected;
+        const valAct = selectActivo?.dataset.selected;
+
+        const isValid = (val) => val && val !== 'None' && val !== 'null' && val !== 'undefined' && val.trim() !== '';
+
+        if (isValid(valProd)) {
+            tipoRelacionSelect.value = 'PRODUCTO';
+            if (wrapperProducto) wrapperProducto.classList.remove('d-none');
+            cargarProductos(form);
+        } else if (isValid(valServ)) {
+            tipoRelacionSelect.value = 'SERVICIO';
+            if (wrapperServicio) wrapperServicio.classList.remove('d-none');
+            cargarServicios(form);
+        } else if (isValid(valAct)) {
+            tipoRelacionSelect.value = 'ACTIVO_FIJO';
+            if (wrapperActivo) wrapperActivo.classList.remove('d-none');
+            cargarActivos(form);
+        } else {
+            tipoRelacionSelect.value = 'NINGUNO';
+            ocultarTodos();
+        }
+    }
+
     // Exportar
-    window.Sintel.Gastos.Editor = { init, cargarResoluciones, calcularTotales };
+    window.Sintel.Gastos.Editor = { init, cargarResoluciones, calcularTotales, initInventarioSelects, cargarProductos, cargarServicios, cargarActivos };
 
     // Inicialización HTMX
     document.body.addEventListener('htmx:afterSettle', (evt) => {

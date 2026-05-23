@@ -77,6 +77,9 @@
                         <select class="form-select" id="resolucion" name="resolucion" required
                                 data-selected="{{ instance.resolucion.id }}">
                             <option value="">Cargando...</option>
+                            {% if instance.resolucion %}
+                            <option value="{{ instance.resolucion.id }}" selected>{{ instance.resolucion.prefijo|default:'' }} {{ instance.resolucion.numero_resolucion }}</option>
+                            {% endif %}
                         </select>
                     </div>
                     <div class="col-md-6">
@@ -104,6 +107,9 @@
                         <select class="form-select" id="proveedor_uuid" name="proveedor_uuid" required
                                 data-selected="{{ instance.proveedor.id }}">
                             <option value="">Seleccione...</option>
+                            {% if instance.proveedor %}
+                            <option value="{{ instance.proveedor.id }}" selected>{{ instance.proveedor.razon_social }}</option>
+                            {% endif %}
                         </select>
                     </div>
                 </div>
@@ -261,31 +267,40 @@
                     <div class="col-md-6">
                         <label for="tipo_relacion_inventario" class="form-label">Tipo de Relación</label>
                         <select class="form-select" id="tipo_relacion_inventario">
-                            <option value="NINGUNO">Ninguno</option>
-                            <option value="PRODUCTO">Producto</option>
-                            <option value="SERVICIO">Servicio</option>
-                            <option value="ACTIVO_FIJO">Activo Fijo</option>
+                            <option value="NINGUNO" {% if not instance.producto_relacionado and not instance.servicio_relacionado and not instance.activo_relacionado %}selected{% endif %}>Ninguno</option>
+                            <option value="PRODUCTO" {% if instance.producto_relacionado %}selected{% endif %}>Producto</option>
+                            <option value="SERVICIO" {% if instance.servicio_relacionado %}selected{% endif %}>Servicio</option>
+                            <option value="ACTIVO_FIJO" {% if instance.activo_relacionado %}selected{% endif %}>Activo Fijo</option>
                         </select>
                     </div>
-                    <div class="col-md-6 d-none" id="wrapper_producto_relacionado">
+                    <div class="col-md-6 {% if not instance.producto_relacionado %}d-none{% endif %}" id="wrapper_producto_relacionado">
                         <label for="producto_relacionado" class="form-label">Producto Relacionado</label>
                         <select class="form-select" id="producto_relacionado" name="producto_relacionado"
                                 data-selected="{{ instance.producto_relacionado.id }}">
                             <option value="">Seleccione producto...</option>
+                            {% if instance.producto_relacionado %}
+                            <option value="{{ instance.producto_relacionado.id }}" selected>{{ instance.producto_relacionado.codigo }} - {{ instance.producto_relacionado.nombre }}</option>
+                            {% endif %}
                         </select>
                     </div>
-                    <div class="col-md-6 d-none" id="wrapper_servicio_relacionado">
+                    <div class="col-md-6 {% if not instance.servicio_relacionado %}d-none{% endif %}" id="wrapper_servicio_relacionado">
                         <label for="servicio_relacionado" class="form-label">Servicio Relacionado</label>
                         <select class="form-select" id="servicio_relacionado" name="servicio_relacionado"
                                 data-selected="{{ instance.servicio_relacionado.id }}">
                             <option value="">Seleccione servicio...</option>
+                            {% if instance.servicio_relacionado %}
+                            <option value="{{ instance.servicio_relacionado.id }}" selected>{{ instance.servicio_relacionado.codigo }} - {{ instance.servicio_relacionado.nombre }}</option>
+                            {% endif %}
                         </select>
                     </div>
-                    <div class="col-md-6 d-none" id="wrapper_activo_relacionado">
+                    <div class="col-md-6 {% if not instance.activo_relacionado %}d-none{% endif %}" id="wrapper_activo_relacionado">
                         <label for="activo_relacionado" class="form-label">Activo Fijo Relacionado</label>
                         <select class="form-select" id="activo_relacionado" name="activo_relacionado"
                                 data-selected="{{ instance.activo_relacionado.id }}">
                             <option value="">Seleccione activo fijo...</option>
+                            {% if instance.activo_relacionado %}
+                            <option value="{{ instance.activo_relacionado.id }}" selected>{{ instance.activo_relacionado.codigo }} - {{ instance.activo_relacionado.nombre }}</option>
+                            {% endif %}
                         </select>
                     </div>
                 </div>

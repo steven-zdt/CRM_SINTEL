@@ -108,6 +108,12 @@
         proveedores: {
             list: '/api/v1/proveedores/'
         },
+        inventario: {
+            productos: '/api/v1/inventario/productos/',
+            servicios: '/api/v1/inventario/servicios/',
+            activos: '/api/v1/inventario/activos/'
+        },
+        
         
         // Renderizado (HTMX / Views)
         endpoints: {

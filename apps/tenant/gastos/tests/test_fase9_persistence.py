@@ -48,6 +48,27 @@ def test_creacion_gasto_completo_persistencia(client, tenant1):
             tipo_documento="NIT"
         )
 
+        # Crear configuracion de retenciones (v3.7.1 Pull Model)
+        from apps.tenant.contabilidad.models import ConfiguracionRetenciones
+        ConfiguracionRetenciones.objects.create(
+            empresa=emp,
+            tipo_tercero='PROVEEDOR',
+            nit_tercero='9001234567',
+            tipo_retencion='RETEFUENTE',
+            porcentaje_por_defecto=Decimal('4.00'),
+            naturaleza='COMPRA',
+            activa=True
+        )
+        ConfiguracionRetenciones.objects.create(
+            empresa=emp,
+            tipo_tercero='PROVEEDOR',
+            nit_tercero='9001234567',
+            tipo_retencion='RETEICA',
+            porcentaje_por_defecto=Decimal('0.69'),
+            naturaleza='COMPRA',
+            activa=True
+        )
+
         # 2. Payload realista (basado en v2.62.1 y gasto_editor.js)
         payload = {
             "documento_soporte": {

@@ -70,6 +70,25 @@
                 { title: "Fecha", field: "ds_fecha", width: 110, headerFilter: "input" },
                 { title: "Vendedor / Proveedor", field: "ds_vendedor", minWidth: 200, headerFilter: "input" },
                 { title: "Categoría", field: "categoria_contable_display", width: 150, headerFilter: "input" },
+                {
+                    title: "Asociado a",
+                    field: "producto_relacionado_nombre",
+                    width: 180,
+                    headerFilter: "input",
+                    formatter: function(cell) {
+                        const data = cell.getData();
+                        if (data.producto_relacionado_nombre) {
+                            return `<span class="badge bg-light text-dark border border-info"><i class="bi bi-box text-info me-1"></i>${data.producto_relacionado_nombre}</span>`;
+                        }
+                        if (data.servicio_relacionado_nombre) {
+                            return `<span class="badge bg-light text-dark border border-warning"><i class="bi bi-gear text-warning me-1"></i>${data.servicio_relacionado_nombre}</span>`;
+                        }
+                        if (data.activo_relacionado_nombre) {
+                            return `<span class="badge bg-light text-dark border border-primary"><i class="bi bi-building text-primary me-1"></i>${data.activo_relacionado_nombre}</span>`;
+                        }
+                        return `<span class="text-muted">-</span>`;
+                    }
+                },
                 { 
                     title: "Total", 
                     field: "ds_total", 
