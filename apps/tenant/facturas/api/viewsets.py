@@ -1561,21 +1561,24 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                         empresa=empresa,
                         id=factura_id
                     ).only(
-                        'id', 'numero', 'prefijo', 'consecutivo', 'tipo', 'estado', 'naturaleza',
+                        'id', 'uuid', 'numero', 'prefijo', 'consecutivo', 'tipo', 'estado', 'naturaleza',
                         'fecha_emision', 'fecha_vencimiento',
                         'emisor_nit', 'emisor_razon_social', 'emisor_direccion', 'emisor_email', 'emisor_telefono',
                         'receptor_nit', 'receptor_razon_social', 'receptor_direccion', 'receptor_email', 'receptor_telefono',
                         'moneda', 'categoria', 'forma_pago', 'medio_pago_codigo', 'payment_due_date',
                         'subtotal', 'impuestos', 'total',
                         'cuenta_contable_uuid',
+                        'cotizacion_uuid', 'cotizacion_numero',
                         'cufe', 'qr_url',
                         'anexos__pdf_file', 'anexos__ubl_xml', 'anexos__application_response_xml',
                     ).first()
-                
+
                 if not factura:
                     context['error'] = "Factura no encontrada o no pertenece a este tenant."
                     return Response(context, template_name='tenant/facturas/offcanvas_crear_factura.html')
-                
+
+                context['factura'] = factura
+
                 # Determinar si es modo lectura o edición
                 # # WARNING: REGLA: Solo borradores pueden editarse
                 context['readonly'] = factura.estado != Factura.Estado.BORRADOR
