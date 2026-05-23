@@ -292,6 +292,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     responsables_info = serializers.SerializerMethodField()
     proveedor_info = serializers.SerializerMethodField()
     servicio_nombre = serializers.CharField(source='servicio_asociado.nombre', read_only=True, allow_null=True)
+    servicio_asociado_uuid = serializers.CharField(source='servicio_asociado.uuid', read_only=True, allow_null=True)
     servicio_asociado = UUIDOrPKRelatedField(queryset=None, required=False, allow_null=True)
     cotizacion_info = serializers.SerializerMethodField()
 

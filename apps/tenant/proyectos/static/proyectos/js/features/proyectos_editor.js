@@ -266,8 +266,8 @@
     function irAStep(stepIdx) {
         currentStep = stepIdx;
 
-        // Phase 0 cleanup: clear all responsable fields in Borrador phase
-        if (stepIdx === 0) {
+        // Phase 0 cleanup: clear all responsable fields ONLY when creating a new project
+        if (stepIdx === 0 && !currentProyecto) {
             const responsableSelects = [
                 'proyecto-responsable-comercial-select',
                 'proyecto-responsable-tecnico-select',
@@ -882,7 +882,7 @@
         const servicioSelectEl = d.querySelector('#proyecto-servicio-asociado-select');
         const servicioInput = d.querySelector('#proyecto-servicio-asociado');
         if (servicioSelectEl && servicioInput) {
-            const servicioUuid = currentProyecto.servicio_asociado_id;
+            const servicioUuid = currentProyecto.servicio_asociado_uuid;
             // ⚠️ UUID-Safe: solo asignar si es un UUID válido (36 caracteres con guiones)
             if (servicioUuid && typeof servicioUuid === 'string' && servicioUuid.length === 36) {
                 servicioSelectEl.setAttribute('data-selected-uuid', servicioUuid);
