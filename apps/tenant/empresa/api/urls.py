@@ -13,6 +13,8 @@ from rest_framework.routers import DefaultRouter
 from apps.tenant.empresa.api.viewsets import (
     EmpresaViewSet,
     MailInboxConfigViewSet,
+    SedeViewSet,
+    AreaViewSet,
     actividades_lookup,
     ciiu_lookup,
     form_metadata,
@@ -25,6 +27,8 @@ router = DefaultRouter()
 # El router se incluye con path('empresas/', include(...)), así que registramos sin prefijo
 # # WARNING: CRÍTICO: Registrar rutas específicas ANTES de la ruta vacía para evitar conflictos
 router.register(r'mail-inbox-config', MailInboxConfigViewSet, basename='mail-inbox-config')
+router.register(r'sedes', SedeViewSet, basename='sedes')
+router.register(r'areas', AreaViewSet, basename='areas')
 router.register(r'', EmpresaViewSet, basename='empresas')
 
 # URLs generadas por el router + endpoints auxiliares

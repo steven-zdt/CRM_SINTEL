@@ -18,6 +18,18 @@
     </div>
   </div>
   
+  {% if calculo.valor_horas_extras and calculo.valor_horas_extras != '0.00' %}
+  <div class="col-md-6">
+    <label class="form-label text-muted small">H.E. y Recargos</label>
+    <div class="input-group">
+      <span class="input-group-text">$</span>
+      <input type="text" class="form-control bg-light text-warning fw-semibold"
+             value="{{ calculo.valor_horas_extras|floatformat:2 }}" readonly>
+      <input type="hidden" name="valor_horas_extras" value="{{ calculo.valor_horas_extras }}">
+    </div>
+  </div>
+  {% endif %}
+
   <div class="col-md-6">
     <label class="form-label text-muted small">Salud (4%)</label>
     <div class="input-group">

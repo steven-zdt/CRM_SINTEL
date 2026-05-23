@@ -71,7 +71,7 @@ class GastoBusinessService:
     @transaction.atomic
     def eliminar_gasto(gasto_id: int, empresa_id: int = None) -> Tuple[bool, Dict[str, Any], int]:
         """
-        Elimina un gasto (Sigue el estandar de Clientes: Bloqueo si activo, Físico si inactivo).
+        Elimina un gasto (Sigue el estandar de Clientes: Bloqueo si activo, Fisico si inactivo).
         En Gastos, 'Inactivo' para borrado significa anulado=True.
         """
         from apps.tenant.gastos.services.crud_service import DocumentoCRUDService
@@ -85,13 +85,13 @@ class GastoBusinessService:
             if not documento:
                 return False, {"detail": "Documento no encontrado."}, 404
 
-            # [STANDARDIZATION] Bloquear si no está anulado
+            # [STANDARDIZATION] Bloquear si no esta anulado
             if not documento.anulado:
                 return False, {
                     "detail": "No se puede eliminar un gasto activo. Debe anularlo primero para poder borrar el registro permanentemente."
                 }, 400
 
-            # [STANDARDIZATION] Borrado físico de registros inactivos
+            # [STANDARDIZATION] Borrado fisico de registros inactivos
             DocumentoCRUDService.eliminar_documento(documento)
             return True, {"message": "Gasto eliminado permanentemente."}, 204
             
@@ -110,7 +110,7 @@ class GastoBusinessService:
         """
         logger.info(f"[GastoBusinessService:procesar_gasto] Iniciando proceso para empresa={empresa.id}")
         try:
-            # Normalización de datos
+            # Normalizacion de datos
             ds_data = data.get('documento_soporte', data) if 'documento_soporte' in data else data
             
             # SINTEL v3.7.1 - Asegurar que descripcion se capture (si viene afuera o adentro)
@@ -126,7 +126,7 @@ class GastoBusinessService:
             if not resolucion_id:
                 return False, {"error": "resolucion_requerida", "message": "Debe especificar una resolucion DIAN."}, 400
 
-            # DSV: Resolución
+            # DSV: Resolucion
             resolucion = ResolucionDIAN.objects.filter(id=resolucion_id, empresa=empresa).first()
             if not resolucion:
                 return False, {"error": "resolucion_invalida", "message": "La resolucion no es valida."}, 404
@@ -160,6 +160,53 @@ class GastoBusinessService:
                 return False, {"error": "proveedor_invalido", "message": f"El proveedor '{proveedor_id}' no es valido o no pertenece a su empresa."}, 404
             
             ds_data['proveedor'] = proveedor
+
+            # DSV: Relaciones Opcionales a Inventario (FASE 2)
+            from apps.tenant.inventario.models import Producto, Servicio, ActivoFijo
+
+            def resolver_item_inventario(model_class, item_id, model_name):
+                if not item_id:
+                    return None
+                if isinstance(item_id, model_class):
+                    if item_id.empresa_id != empresa.id:
+                        raise ValidationError({
+                            f"{model_name}_relacionado": f"El {model_name} especificado no pertenece a la empresa."
+                        })
+                    return item_id
+                
+                is_item_uuid = False
+                try:
+                    if isinstance(item_id, str) and len(item_id) >= 32:
+                        uuid_lib.UUID(str(item_id))
+                        is_item_uuid = True
+                except (ValueError, TypeError):
+                    pass
+
+                item = None
+                if is_item_uuid:
+                    item = model_class.objects.filter(uuid=item_id, empresa=empresa).first()
+                else:
+                    try:
+                        item = model_class.objects.filter(id=int(item_id), empresa=empresa).first()
+                    except (ValueError, TypeError):
+                        pass
+
+                if not item:
+                    raise ValidationError({
+                        f"{model_name}_relacionado": f"El {model_name} especificado '{item_id}' no es valido o no pertenece a la empresa."
+                    })
+                return item
+
+            producto_rel_id = ds_data.pop('producto_relacionado', None) or ds_data.pop('producto_relacionado_id', None)
+            servicio_rel_id = ds_data.pop('servicio_relacionado', None) or ds_data.pop('servicio_relacionado_id', None)
+            activo_rel_id = ds_data.pop('activo_relacionado', None) or ds_data.pop('activo_relacionado_id', None)
+
+            if producto_rel_id:
+                ds_data['producto_relacionado'] = resolver_item_inventario(Producto, producto_rel_id, 'producto')
+            if servicio_rel_id:
+                ds_data['servicio_relacionado'] = resolver_item_inventario(Servicio, servicio_rel_id, 'servicio')
+            if activo_rel_id:
+                ds_data['activo_relacionado'] = resolver_item_inventario(ActivoFijo, activo_rel_id, 'activo')
 
             # 1. Validar DIAN
             fecha_doc = ds_data.get('fecha')

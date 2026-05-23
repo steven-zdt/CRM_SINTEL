@@ -1,7 +1,7 @@
 """
 Admin de Cotizaciones v2.60 - RESILIENTE
 # WARNING: v2.60: Alineado con Desacoplamiento Radical.
-Permite gestión de cotizaciones incluso con fallos en otros módulos.
+Permite gestion de cotizaciones incluso con fallos en otros modulos.
 """
 from django.contrib import admin
 from django.db import connection
@@ -12,7 +12,7 @@ from .models import Cotizacion, CotizacionItem, Producto, Servicio
 
 
 class CotizacionItemInline(admin.TabularInline):
-    """Edición de ítems con Snapshot (Marca/Ref/Costo) visible."""
+    """Edicion de items con Snapshot (Marca/Ref/Costo) visible."""
     model = CotizacionItem
     extra = 0
     fields = (
@@ -37,7 +37,7 @@ class CotizacionAdmin(admin.ModelAdmin):
     inlines = [CotizacionItemInline]
     
     fieldsets = (
-        (_('Identificación y Resiliencia'), {
+        (_('Identificacion y Resiliencia'), {
             'fields': ('numero_cotizacion', 'empresa', 'estado', 'configuracion')
         }),
         (_('Datos del Cliente'), {
@@ -61,7 +61,7 @@ class CotizacionAdmin(admin.ModelAdmin):
     get_cliente_display.short_description = _("Cliente / Respaldo")
 
     def has_module_permission(self, request):
-        """Prevenir visualización en esquema público (Tenancy)."""
+        """Prevenir visualizacion en esquema publico (Tenancy)."""
         if connection.schema_name == 'public':
             return False
         return True
@@ -72,23 +72,23 @@ class ConfiguracionCotizacionAdmin(admin.ModelAdmin):
     # WARNING: v2.60: Admin simplificado para modo User-Driven.
     
     Solo gestiona:
-    1. Generación de códigos (Prefijo, Sufijo, Semilla)
-    2. Días de validez de la cotización
+    1. Generacion de codigos (Prefijo, Sufijo, Semilla)
+    2. Dias de validez de la cotizacion
     """
     list_display = ('nombre_configuracion', 'dias_validez', 'es_activo', 'empresa', 'ultimo_numero')
     list_filter = ('es_activo', 'empresa')
     search_fields = ('nombre_configuracion', 'prefijo_secuencia', 'sufijo_secuencia')
     
     fieldsets = (
-        (_('Información General'), {
+        (_('Informacion General'), {
             'fields': ('empresa', 'nombre_configuracion', 'es_activo')
         }),
-        (_('Configuración de Validez'), {
-            'description': _("Define los días de validez de la cotización. Se usa para calcular automáticamente la fecha de vencimiento."),
+        (_('Configuracion de Validez'), {
+            'description': _("Define los dias de validez de la cotizacion. Se usa para calcular automaticamente la fecha de vencimiento."),
             'fields': ('dias_validez',)
         }),
-        (_('Generación de Códigos (Folios Dinámicos)'), {
-            'description': _("Configuración para la generación automática de números de cotización."),
+        (_('Generacion de Codigos (Folios Dinamicos)'), {
+            'description': _("Configuracion para la generacion automatica de numeros de cotizacion."),
             'fields': (
                 'prefijo_secuencia', 
                 'sufijo_secuencia', 
@@ -101,7 +101,7 @@ class ConfiguracionCotizacionAdmin(admin.ModelAdmin):
     readonly_fields = ('ultimo_numero',)
     
     def has_module_permission(self, request):
-        """Prevenir visualización en esquema público (Tenancy)."""
+        """Prevenir visualizacion en esquema publico (Tenancy)."""
         if connection.schema_name == 'public':
             return False
         return True

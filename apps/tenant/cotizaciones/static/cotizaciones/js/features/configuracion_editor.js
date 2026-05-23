@@ -69,10 +69,10 @@
       if (mode === 'create') {
         response = await api.createConfiguracion(data);
       } else {
-        const idInput = d.querySelector(formId + ' input[name="id"]') || d.querySelector('#input-config-id');
-        const id = idInput ? idInput.value : null;
-        if (!id) throw new Error('ID de configuración no encontrado');
-        response = await api.updateConfiguracion(id, data);
+        const uuidInput = d.querySelector(formId + ' input[name="uuid"]') || d.querySelector('#input-config-uuid') || d.querySelector(formId + ' input[name="id"]');
+        const uuid = uuidInput ? uuidInput.value : null;
+        if (!uuid) throw new Error('UUID de configuración no encontrado');
+        response = await api.updateConfiguracion(uuid, data);
       }
 
       if (response && (response.id || response.uuid)) {

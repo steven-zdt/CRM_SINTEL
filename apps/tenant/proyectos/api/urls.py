@@ -9,16 +9,18 @@ import logging
 
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import ProyectoViewSet
+from .viewsets import ProyectoViewSet, ItemPresupuestoViewSet, TareaDiariaViewSet
 
 logger = logging.getLogger(__name__)
 
 # Se inicializa el router por defecto de DRF para ViewSets
 router = DefaultRouter()
 
-# # WARNING: IMPORTANTE: No incluir el prefijo 'proyectos/' aquí. 
+# # WARNING: IMPORTANTE: No incluir el prefijo 'proyectos/' aquí.
 # El enrutador principal ya delega ese path. Se registra en la raíz del namespace.
 router.register(r"", ProyectoViewSet, basename="proyecto")
+router.register(r"items-presupuesto", ItemPresupuestoViewSet, basename="items-presupuesto")
+router.register(r"tareas-diarias", TareaDiariaViewSet, basename="tareas-diarias")
 
 urlpatterns = router.urls
 

@@ -252,6 +252,45 @@
                 </div>
             </div>
 
+            {# ── Sección: Asignación a Inventario (Opcional) ───────────── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-box-seam me-1"></i>Asignación a Inventario (Opcional)
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="tipo_relacion_inventario" class="form-label">Tipo de Relación</label>
+                        <select class="form-select" id="tipo_relacion_inventario">
+                            <option value="NINGUNO">Ninguno</option>
+                            <option value="PRODUCTO">Producto</option>
+                            <option value="SERVICIO">Servicio</option>
+                            <option value="ACTIVO_FIJO">Activo Fijo</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-none" id="wrapper_producto_relacionado">
+                        <label for="producto_relacionado" class="form-label">Producto Relacionado</label>
+                        <select class="form-select" id="producto_relacionado" name="producto_relacionado"
+                                data-selected="{{ instance.producto_relacionado.id }}">
+                            <option value="">Seleccione producto...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-none" id="wrapper_servicio_relacionado">
+                        <label for="servicio_relacionado" class="form-label">Servicio Relacionado</label>
+                        <select class="form-select" id="servicio_relacionado" name="servicio_relacionado"
+                                data-selected="{{ instance.servicio_relacionado.id }}">
+                            <option value="">Seleccione servicio...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-none" id="wrapper_activo_relacionado">
+                        <label for="activo_relacionado" class="form-label">Activo Fijo Relacionado</label>
+                        <select class="form-select" id="activo_relacionado" name="activo_relacionado"
+                                data-selected="{{ instance.activo_relacionado.id }}">
+                            <option value="">Seleccione activo fijo...</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
             {# ── Sección: Detalles y Observaciones ────────────────────── #}
             <div class="section-divider">
                 <p class="section-title">

@@ -1,53 +1,142 @@
 /**
- * Dashboard Main Module
- * 
- * Namespace: window.Sintel.Dashboard
- * Versión: v3.5
+ * Dashboard Main Module v3.9.4
+ * Renderiza métricas consolidadas con Pull Model + Offcanvas seguro
+ *
+ * Namespace: window.Sintel.Dashboard.Main
  */
-(function() {
+(function(w, d) {
     'use strict';
 
-    window.Sintel = window.Sintel || {};
-    window.Sintel.Dashboard = window.Sintel.Dashboard || {};
+    const MOD = '[DashboardMain]';
+    const CACHE_TTL = 15 * 60 * 1000;
 
-    function init(selector) {
-        const container = document.querySelector(selector);
-        if (!container) {
-            console.error('[Dashboard] Container no encontrado:', selector);
-            return;
+    let metricas = null;
+    let ultimaActualizacion = 0;
+
+    async function inicializar() {
+        console.log(`${MOD} Inicializando...`);
+        try {
+            metricas = await cargarMetricas();
+            renderizarWidgetFacturas();
+            renderizarWidgetInventario();
+            renderizarWidgetEmpleados();
+            actualizarTiempoActualizacion();
+            setupOffcanvasListeners();
+        } catch (error) {
+            console.error(`${MOD} Error:`, error);
+            mostrarErrorGlobal();
         }
-
-        loadWidgets(container);
-        loadActivity();
     }
 
-    function loadWidgets(container) {
-        fetch(window.Sintel.Dashboard.API.dashboard.widgets, {
-            headers: window.Sintel.Dashboard.getHeaders()
-        })
-        .then(r => r.json())
-        .then(data => {
-            container.innerHTML = renderWidgets(data);
-        })
-        .catch(err => console.error('[Dashboard] Error cargando widgets:', err));
+    async function cargarMetricas() {
+        const ahora = Date.now();
+        if (metricas && (ahora - ultimaActualizacion) < CACHE_TTL) {
+            return metricas;
+        }
+        try {
+            const data = await w.Sintel.Dashboard.obtenerMetricas();
+            ultimaActualizacion = ahora;
+            return data;
+        } catch (error) {
+            throw error;
+        }
     }
 
-    function renderWidgets(data) {
-        const widgets = [
-            { title: 'Facturas del Mes', value: data.facturas_mes || 0, icon: 'receipt', color: 'primary' },
-            { title: 'Total Facturado', value: `$${(data.total_facturado || 0).toLocaleString()}`, icon: 'currency-dollar', color: 'success' },
-            { title: 'Clientes Activos', value: data.clientes_activos || 0, icon: 'people', color: 'info' },
-            { title: 'Cotizaciones Pendientes', value: data.cotizaciones_pendientes || 0, icon: 'file-text', color: 'warning' }
-        ];
+    function renderizarWidgetFacturas() {
+        const container = d.getElementById('widget-facturas');
+        if (!container || !metricas?.facturas) return;
+        const f = metricas.facturas;
+        container.innerHTML = `
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="bi bi-file-invoice me-2"></i>Facturación</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6"><p class="text-muted small mb-1">Total</p><h4 class="mb-0">${f.total_facturas}</h4></div>
+                        <div class="col-6"><p class="text-muted small mb-1">Pendientes</p><h4 class="mb-0 text-warning">${f.facturas_pendientes}</h4></div>
+                        <div class="col-6"><p class="text-muted small mb-1">Vencidas</p><h4 class="mb-0 text-danger">${f.facturas_vencidas}</h4></div>
+                        <div class="col-6"><p class="text-muted small mb-1">Ingresos</p><h4 class="mb-0 text-success">$${parseFloat(f.ingresos_mes).toLocaleString('es-CO')}</h4></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
 
-        return widgets.map(w => `
-            <div class="col-md-3">
-                <div class="card border-${w.color}">
-                    <div class="card-body">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-shrink-0">
-                                <i class="bi bi-${w.icon} fs-1 text-${w.color}"></i>
-                            </div>
+    function renderizarWidgetInventario() {
+        const container = d.getElementById('widget-inventario');
+        if (!container || !metricas?.inventario) return;
+        const inv = metricas.inventario;
+        container.innerHTML = `
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0"><i class="bi bi-box me-2"></i>Inventario</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6"><p class="text-muted small mb-1">Productos</p><h4 class="mb-0">${inv.total_productos}</h4></div>
+                        <div class="col-6"><p class="text-muted small mb-1">Bajo Stock</p><h4 class="mb-0 text-danger">${inv.productos_bajo_stock}</h4></div>
+                        <div class="col-12"><p class="text-muted small mb-1">Valor</p><h4 class="mb-0">$${parseFloat(inv.valor_inventario).toLocaleString('es-CO')}</h4></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderizarWidgetEmpleados() {
+        const container = d.getElementById('widget-empleados');
+        if (!container || !metricas?.empleados) return;
+        const emp = metricas.empleados;
+        container.innerHTML = `
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="bi bi-people me-2"></i>Empleados</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6"><p class="text-muted small mb-1">Total</p><h4 class="mb-0">${emp.total_empleados}</h4></div>
+                        <div class="col-6"><p class="text-muted small mb-1">Activos</p><h4 class="mb-0 text-success">${emp.empleados_activos}</h4></div>
+                        <div class="col-6"><p class="text-muted small mb-1">Nóminas Pendientes</p><h4 class="mb-0 text-warning">${emp.nominas_pendientes}</h4></div>
+                        <div class="col-6"><p class="text-muted small mb-1">Nómina (mes)</p><h4 class="mb-0">$${parseFloat(emp.total_nómina_mes).toLocaleString('es-CO')}</h4></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function actualizarTiempoActualizacion() {
+        const timestamp = d.getElementById('dashboard-timestamp');
+        if (!timestamp || !metricas?.fecha_actualizacion) return;
+        const fecha = new Date(metricas.fecha_actualizacion);
+        timestamp.textContent = fecha.toLocaleString('es-CO');
+    }
+
+    function setupOffcanvasListeners() {
+        d.querySelectorAll('[id^="offcanvas-dashboard-"]').forEach(el => {
+            el.addEventListener('hidden.bs.offcanvas', () => {
+                console.log(`${MOD} Offcanvas cerrado`);
+            });
+        });
+    }
+
+    function mostrarErrorGlobal() {
+        const container = d.getElementById('dashboard-error');
+        if (!container) return;
+        container.innerHTML = '<div class="alert alert-danger">Error al cargar el dashboard.</div>';
+    }
+
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', inicializar);
+    } else {
+        inicializar();
+    }
+
+    w.Sintel = w.Sintel || {};
+    w.Sintel.Dashboard = w.Sintel.Dashboard || {};
+    w.Sintel.Dashboard.Main = {
+        inicializar,
+        cargarMetricas
+    };
                             <div class="flex-grow-1 ms-3">
                                 <h6 class="text-muted mb-1">${w.title}</h6>
                                 <h4 class="mb-0">${w.value}</h4>

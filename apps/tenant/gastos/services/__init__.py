@@ -8,8 +8,10 @@ del modulo de gastos, siguiendo el patron de arquitectura modular (selectors, cr
 from .selectors import (
     ResolucionSelector,
     DocumentoSelector,
-    LIST_FIELDS,
-    DETAIL_FIELDS
+    RESOLUCION_LIST_FIELDS,
+    DOCUMENTO_LIST_FIELDS,
+    DOCUMENTO_DETAIL_FIELDS,
+    RESOLUCION_DETAIL_FIELDS
 )
 from .crud_service import (
     ResolucionCRUDService,
@@ -30,6 +32,8 @@ __all__ = [
     'ResolucionBusinessService',
     'GastoServiceMixin',
     'ResolucionServiceMixin',
-    'LIST_FIELDS',
-    'DETAIL_FIELDS'
+    'RESOLUCION_LIST_FIELDS',
+    'DOCUMENTO_LIST_FIELDS',
+    'DOCUMENTO_DETAIL_FIELDS',
+    'RESOLUCION_DETAIL_FIELDS'
 ]

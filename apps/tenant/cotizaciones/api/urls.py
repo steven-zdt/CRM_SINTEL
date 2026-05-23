@@ -40,8 +40,8 @@ ui_urlpatterns = [
     path('editor/draft/', CotizacionEditorDraftView.as_view(), name='ui_editor_draft'),
     path('partials/configuracion/lista/', ConfiguracionListOffcanvasView.as_view(), name='ui_list_configuracion'),
     path('partials/configuracion/crear/', ConfiguracionCrearOffcanvasView.as_view(), name='ui_crear_configuracion'),
-    path('partials/configuracion/editar/<int:id>/', ConfiguracionEditarOffcanvasView.as_view(), name='ui_editar_configuracion'),
-    path('partials/configuracion/ver/<int:id>/', ConfiguracionVerOffcanvasView.as_view(), name='ui_ver_configuracion'),
+    path('partials/configuracion/editar/<uuid:uuid>/', ConfiguracionEditarOffcanvasView.as_view(), name='ui_editar_configuracion'),
+    path('partials/configuracion/ver/<uuid:uuid>/', ConfiguracionVerOffcanvasView.as_view(), name='ui_ver_configuracion'),
     path('partials/ver/<uuid:uuid>/', CotizacionDetalleOffcanvasView.as_view(), name='ui_detalle_cotizacion'),
 ]
 

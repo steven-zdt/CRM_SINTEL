@@ -1,26 +1,26 @@
 """
-Comando de gestión para limpiar todos los datos de la app cotizaciones.
+Comando de gestion para limpiar todos los datos de la app cotizaciones.
 
 # WARNING: ADVERTENCIA: Este comando elimina TODOS los datos de las tablas de cotizaciones.
 Incluye:
-- CotizacionItem (ítems de cotizaciones)
+- CotizacionItem (items de cotizaciones)
 - Cotizacion (cotizaciones)
-- Producto (catálogo de productos)
-- Servicio (catálogo de servicios)
-- ConfiguracionCotizacion (perfiles de configuración)
+- Producto (catalogo de productos)
+- Servicio (catalogo de servicios)
+- ConfiguracionCotizacion (perfiles de configuracion)
 
 Uso (Local):
     python manage.py tenant_command limpiar_cotizaciones --schema=tenant_name --confirm
     python manage.py all_tenants_command limpiar_cotizaciones --confirm
 
 Uso (Docker - Comandos directos):
-    # Para un tenant específico:
+    # Para un tenant especifico:
     docker compose -f infra/compose/docker-compose.yml exec -T app python manage.py tenant_command limpiar_cotizaciones --schema=tenant_name --confirm
     
     # Para todos los tenants:
     docker compose -f infra/compose/docker-compose.yml exec -T app python manage.py all_tenants_command limpiar_cotizaciones --confirm
     
-    # Modo simulación (ver qué se eliminaría):
+    # Modo simulacion (ver que se eliminaria):
     docker compose -f infra/compose/docker-compose.yml exec -T app python manage.py tenant_command limpiar_cotizaciones --schema=tenant_name --dry-run
 
 Uso (Docker - Scripts helper):
@@ -29,8 +29,8 @@ Uso (Docker - Scripts helper):
     ./scripts/limpiar_cotizaciones.sh all --confirm
     
     # Windows (PowerShell):
-    .\scripts\limpiar_cotizaciones.ps1 tenant_name -Confirm
-    .\scripts\limpiar_cotizaciones.ps1 all -Confirm
+    .\\scripts\\limpiar_cotizaciones.ps1 tenant_name -Confirm
+    .\\scripts\\limpiar_cotizaciones.ps1 all -Confirm
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -46,7 +46,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--confirm',
             action='store_true',
-            help='Confirmar eliminación (requerido para ejecutar)'
+            help='Confirmar eliminacion (requerido para ejecutar)'
         )
         parser.add_argument(
             '--dry-run',
@@ -60,8 +60,8 @@ class Command(BaseCommand):
 
         if not confirm and not dry_run:
             raise CommandError(
-                "# WARNING: ADVERTENCIA: Este comando eliminará TODOS los datos de cotizaciones.\n"
-                "Use --confirm para confirmar o --dry-run para ver qué se eliminaría.\n\n"
+                "# WARNING: ADVERTENCIA: Este comando eliminara TODOS los datos de cotizaciones.\n"
+                "Use --confirm para confirmar o --dry-run para ver que se eliminaria.\n\n"
                 "Uso en Docker:\n"
                 "  # Comando directo:\n"
                 "  docker compose -f infra/compose/docker-compose.yml exec -T app python manage.py tenant_command limpiar_cotizaciones --schema=tenant_name --confirm\n\n"
@@ -71,7 +71,7 @@ class Command(BaseCommand):
                 "  .\\scripts\\limpiar_cotizaciones.ps1 tenant_name -Confirm"
             )
 
-        # Obtener información del schema actual (si está disponible)
+        # Obtener informacion del schema actual (si esta disponible)
         from django.db import connection
         schema_name = getattr(connection, 'schema_name', 'unknown')
         
@@ -99,28 +99,28 @@ class Command(BaseCommand):
         self.stdout.write(f"\n  TOTAL: {total} registros a eliminar\n")
 
         if dry_run:
-            self.stdout.write(self.style.SUCCESS("[OK] Modo DRY-RUN: No se eliminó nada."))
+            self.stdout.write(self.style.SUCCESS("[OK] Modo DRY-RUN: No se elimino nada."))
             return
 
         if not confirm:
-            raise CommandError("Use --confirm para confirmar la eliminación.")
+            raise CommandError("Use --confirm para confirmar la eliminacion.")
 
-        # Confirmación final
+        # Confirmacion final
         self.stdout.write(self.style.ERROR("# WARNING:  ADVERTENCIA FINAL:"))
-        self.stdout.write(self.style.ERROR("   Se eliminarán TODOS los datos de:"))
+        self.stdout.write(self.style.ERROR("   Se eliminaran TODOS los datos de:"))
         self.stdout.write(self.style.ERROR("   - CotizacionItem"))
         self.stdout.write(self.style.ERROR("   - Cotizacion"))
         self.stdout.write(self.style.ERROR("   - Producto"))
         self.stdout.write(self.style.ERROR("   - Servicio"))
         self.stdout.write(self.style.ERROR("   - ConfiguracionCotizacion"))
-        self.stdout.write(self.style.ERROR("\n   Esta acción NO se puede deshacer.\n"))
+        self.stdout.write(self.style.ERROR("\n   Esta accion NO se puede deshacer.\n"))
 
-        # Proceder con la eliminación en orden (respetando foreign keys)
+        # Proceder con la eliminacion en orden (respetando foreign keys)
         try:
             with transaction.atomic():
                 self.stdout.write("Eliminando datos...")
 
-                # 1. Eliminar ítems de cotizaciones primero (dependen de Cotizacion)
+                # 1. Eliminar items de cotizaciones primero (dependen de Cotizacion)
                 deleted_items = CotizacionItem.objects.all().delete()
                 self.stdout.write(
                     self.style.SUCCESS(f"[OK] Eliminados {deleted_items[0]} CotizacionItem")
@@ -132,13 +132,13 @@ class Command(BaseCommand):
                     self.style.SUCCESS(f"[OK] Eliminadas {deleted_cotizaciones[0]} Cotizacion")
                 )
 
-                # 3. Eliminar productos del catálogo
+                # 3. Eliminar productos del catalogo
                 deleted_productos = Producto.objects.all().delete()
                 self.stdout.write(
                     self.style.SUCCESS(f"[OK] Eliminados {deleted_productos[0]} Producto")
                 )
 
-                # 4. Eliminar servicios del catálogo
+                # 4. Eliminar servicios del catalogo
                 deleted_servicios = Servicio.objects.all().delete()
                 self.stdout.write(
                     self.style.SUCCESS(f"[OK] Eliminados {deleted_servicios[0]} Servicio")

@@ -71,7 +71,7 @@
     
     // URLs Configuracion
     configuracionUrl: BASE + '/configuracion/',
-    configuracionDetailUrl: function (id) { return BASE + '/configuracion/' + id + '/'; },
+    configuracionDetailUrl: function (uuid) { return BASE + '/configuracion/' + uuid + '/'; },
     
     // Métodos Configuracion
     createConfiguracion: function (data) {
@@ -80,14 +80,14 @@
         body: JSON.stringify(data)
       });
     },
-    updateConfiguracion: function (id, data) {
-      return request(this.configuracionDetailUrl(id), {
+    updateConfiguracion: function (uuid, data) {
+      return request(this.configuracionDetailUrl(uuid), {
         method: 'PATCH',
         body: JSON.stringify(data)
       });
     },
-    deleteConfiguracion: function (id) {
-      return request(this.configuracionDetailUrl(id), {
+    deleteConfiguracion: function (uuid) {
+      return request(this.configuracionDetailUrl(uuid), {
         method: 'DELETE'
       });
     },

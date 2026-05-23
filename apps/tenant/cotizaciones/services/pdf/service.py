@@ -1,5 +1,5 @@
 """
-Servicio de generación de PDF para cotizaciones v2.60.
+Servicio de generacion de PDF para cotizaciones v2.60.
 """
 import logging
 from decimal import Decimal
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def obtener_cotizacion_para_pdf(empresa_id: int, cotizacion_uuid) -> Cotizacion | None:
-    """Obtiene una cotización con todos sus items optimizados para generación de PDF."""
+    """Obtiene una cotizacion con todos sus items optimizados para generacion de PDF."""
     try:
         cotizacion = Cotizacion.objects.filter(
             empresa_id=empresa_id,
@@ -36,7 +36,7 @@ def obtener_cotizacion_para_pdf(empresa_id: int, cotizacion_uuid) -> Cotizacion 
 
         return cotizacion
     except Exception as e:
-        logger.error(f"[PDF Service] Error obteniendo cotización {cotizacion_uuid}: {str(e)}")
+        logger.error(f"[PDF Service] Error obteniendo cotizacion {cotizacion_uuid}: {str(e)}")
         return None
 
 
@@ -100,7 +100,7 @@ def render_to_pdf(context: dict, request: HttpRequest | None = None) -> bytes:
     """Genera el PDF a partir del contexto preparado usando CotizacionPDFGenerator."""
     try:
         if not isinstance(context, dict) or 'cotizacion' not in context or 'empresa' not in context:
-            raise ValueError("Contexto inválido para PDF")
+            raise ValueError("Contexto invalido para PDF")
         
         pdf_bytes = CotizacionPDFGenerator.render_to_pdf(
             template_path='tenant/cotizaciones/pdf/formato_profesional.html',
@@ -108,7 +108,7 @@ def render_to_pdf(context: dict, request: HttpRequest | None = None) -> bytes:
         )
         
         if not pdf_bytes:
-            raise ValueError("PDF generado está vacío")
+            raise ValueError("PDF generado esta vacio")
         
         return pdf_bytes
         

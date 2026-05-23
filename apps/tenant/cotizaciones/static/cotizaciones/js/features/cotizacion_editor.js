@@ -436,8 +436,8 @@
 
       var utils = w.Sintel.Cotizaciones.utils;
       var payload = {
-        cliente: parseInt(d.getElementById('cot-cliente-id')?.value || 0),
-        configuracion: parseInt(d.getElementById('cot-config-id')?.value || 0),
+        cliente: d.getElementById('cot-cliente-id')?.value || '',
+        configuracion: d.getElementById('cot-config-id')?.value || '',
         fecha_emision: d.getElementById('cot-fecha-emision')?.value || '',
         iva_porcentaje: parseFloat(d.getElementById('cot-iva')?.value || 19),
         porcentaje_aiu_admin: parseFloat(d.getElementById('cot-aiu-admin')?.value || 0),

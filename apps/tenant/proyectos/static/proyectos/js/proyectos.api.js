@@ -95,12 +95,68 @@
       return w.http('DELETE', `${API_BASE}/${uuid}/`);
     },
 
-    /** GET /api/v1/facturas/lista-centro-costos/ 
+    /** GET /api/v1/facturas/lista-centro-costos/
      *  Vínculo cross-app para centros de costos.
      */
     fetchCentrosCostos: async () => {
       console.log(`[${MOD}] fetchCentrosCostos()`);
       return w.http('GET', '/api/v1/facturas/lista-centro-costos/');
+    },
+
+    /** Presupuesto Planeado (v3.5.2) */
+    presupuesto: {
+      /** GET /api/v1/proyectos/items-presupuesto/?proyecto_uuid=<uuid> */
+      list: async (proyectoUuid) => {
+        console.log(`[${MOD}] presupuesto.list(${proyectoUuid})`);
+        if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+        const url = buildUrlWithParams(`${API_BASE}/items-presupuesto/`, { proyecto_uuid: proyectoUuid });
+        return w.http('GET', url);
+      },
+
+      /** POST /api/v1/proyectos/items-presupuesto/ */
+      create: async (data) => {
+        console.log(`[${MOD}] presupuesto.create()`, data);
+        return w.http('POST', `${API_BASE}/items-presupuesto/`, data);
+      },
+
+      /** DELETE /api/v1/proyectos/items-presupuesto/<id>/ */
+      delete: async (itemId) => {
+        console.log(`[${MOD}] presupuesto.delete(${itemId})`);
+        if (!itemId) return { ok: false, status: 400, data: { detail: 'Item ID requerido' } };
+        return w.http('DELETE', `${API_BASE}/items-presupuesto/${itemId}/`);
+      }
+    },
+
+    tareasDiarias: {
+      /** GET /api/v1/proyectos/tareas-diarias/?proyecto_uuid=<uuid> */
+      list: async (proyectoUuid, fechaInicio, fechaFin) => {
+        console.log(`[${MOD}] tareasDiarias.list(${proyectoUuid})`);
+        const params = { proyecto_uuid: proyectoUuid };
+        if (fechaInicio) params.fecha_inicio = fechaInicio;
+        if (fechaFin) params.fecha_fin = fechaFin;
+        const url = buildUrlWithParams(`${API_BASE}/tareas-diarias/`, params);
+        return w.http('GET', url);
+      },
+
+      /** POST /api/v1/proyectos/tareas-diarias/ */
+      create: async (data) => {
+        console.log(`[${MOD}] tareasDiarias.create()`, data);
+        return w.http('POST', `${API_BASE}/tareas-diarias/`, data);
+      },
+
+      /** POST /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/ */
+      cambiarEstado: async (tareaId, nuevoEstado) => {
+        console.log(`[${MOD}] tareasDiarias.cambiarEstado(${tareaId}, ${nuevoEstado})`);
+        if (!tareaId || !nuevoEstado) return { ok: false, status: 400, data: { detail: 'Tarea ID y nuevo estado requeridos' } };
+        return w.http('POST', `${API_BASE}/tareas-diarias/${tareaId}/cambiar-estado/`, { nuevo_estado: nuevoEstado });
+      },
+
+      /** DELETE /api/v1/proyectos/tareas-diarias/<id>/ */
+      delete: async (tareaId) => {
+        console.log(`[${MOD}] tareasDiarias.delete(${tareaId})`);
+        if (!tareaId) return { ok: false, status: 400, data: { detail: 'Tarea ID requerido' } };
+        return w.http('DELETE', `${API_BASE}/tareas-diarias/${tareaId}/`);
+      }
     },
 
     formatCurrency: (value) => {

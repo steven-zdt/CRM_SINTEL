@@ -57,31 +57,58 @@
 
     // Definir columnas específicas del módulo
     function getColumns() {
-        return [
+        const fmtFecha = (v) => {
+            if (!v) return '---';
+            try { return new Date(v).toLocaleDateString('es-CO'); } catch { return v; }
+        };
 
+        return [
             {
-                title: "Nombre del Proyecto",
+                title: "Proyecto",
                 field: "nombre",
                 formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
                     return cell.getValue() || '---';
                 },
-                minWidth: 250
+                minWidth: 220,
+                frozen: true
             },
             {
-                title: "Centro de Costos",
-                field: "factura_costo_numero",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
-                    return cell.getValue() || '---';
+                title: "Fase Actual",
+                field: "fase_actual_display",
+                formatter: function (cell) {
+                    const value = cell.getValue() || '---';
+                    const fase = cell.getRow().getData().fase_actual;
+                    const map = {
+                        'BORRADOR':  ['bg-secondary', 'Borrador'],
+                        'INICIO':    ['bg-info text-dark', 'Inicio'],
+                        'PLANEACION':['bg-primary', 'Planeación'],
+                        'EJECUCION': ['bg-warning text-dark', 'Ejecución'],
+                        'CIERRE':    ['bg-success', 'Cierre'],
+                    };
+                    const [cls, label] = map[fase] || ['bg-secondary', value];
+                    return `<span class="badge ${cls} px-2">${label}</span>`;
                 },
-                width: 150
+                width: 120,
+                hozAlign: "center",
+                headerHozAlign: "center"
             },
             {
-                title: "Tipo de Servicio",
-                field: "tipo_servicio_display",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
-                    return cell.getValue() || '---';
+                title: "Estado",
+                field: "estado_display",
+                formatter: function (cell) {
+                    const estado = cell.getRow().getData().estado_tarea;
+                    const map = {
+                        'PENDIENTE':  ['bg-secondary', 'Pendiente'],
+                        'EN_PROCESO': ['bg-primary',   'En Proceso'],
+                        'DETENIDO':   ['bg-danger',    'Detenido'],
+                        'COMPLETADO': ['bg-success',   'Completado'],
+                    };
+                    const [cls, label] = map[estado] || ['bg-secondary', cell.getValue() || '---'];
+                    return `<span class="badge ${cls} px-2">${label}</span>`;
                 },
-                width: 180
+                width: 120,
+                hozAlign: "center",
+                headerHozAlign: "center"
             },
             {
                 title: "Cliente",
@@ -89,141 +116,93 @@
                 formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
                     return cell.getValue() || '---';
                 },
-                minWidth: 200
+                minWidth: 160
             },
             {
-                title: "Responsable",
-                field: "responsable_actual_nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
-                    return cell.getValue() || '---';
-                },
-                width: 180
-            },
-            {
-                title: "Proveedor",
-                field: "proveedor_nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function (cell) {
-                    return cell.getValue() || '---';
-                },
-                width: 180
-            },
-            {
-                title: "Fase",
-                field: "fase_actual_display",
+                title: "Factura",
+                field: "factura_costo_numero",
                 formatter: function (cell) {
-                    const value = cell.getValue() || '---';
-                    const fase = cell.getRow().getData().fase_actual;
-                    let badgeClass = 'bg-secondary';
-                    if (fase === 'BORRADOR') badgeClass = 'bg-secondary';
-                    else if (fase === 'INICIO') badgeClass = 'bg-info';
-                    else if (fase === 'PLANEACION') badgeClass = 'bg-primary';
-                    else if (fase === 'EJECUCION') badgeClass = 'bg-warning';
-                    else if (fase === 'CIERRE') badgeClass = 'bg-success';
-                    return `<span class="badge ${badgeClass}">${value}</span>`;
+                    const factura = cell.getValue();
+                    if (!factura) return '<span class="text-muted small">---</span>';
+                    return `<span class="badge bg-light text-dark border fw-semibold">${factura}</span>`;
                 },
-                width: 150
+                width: 120,
+                hozAlign: "center",
+                headerHozAlign: "center"
             },
             {
-                title: "Estado",
-                field: "estado_display",
+                title: "Cotización",
+                field: "cotizacion_numero",
                 formatter: function (cell) {
-                    const value = cell.getValue() || '---';
-                    const estado = cell.getRow().getData().estado_tarea;
-                    let badgeClass = 'bg-secondary';
-                    if (estado === 'PENDIENTE') badgeClass = 'bg-secondary';
-                    else if (estado === 'EN_PROCESO') badgeClass = 'bg-primary';
-                    else if (estado === 'DETENIDO') badgeClass = 'bg-danger';
-                    else if (estado === 'COMPLETADO') badgeClass = 'bg-success';
-                    return `<span class="badge ${badgeClass}">${value}</span>`;
+                    const numero = cell.getValue();
+                    if (!numero) return '<span class="text-muted small">---</span>';
+                    return `<span class="badge bg-info-subtle text-info-emphasis border border-info fw-semibold">${numero}</span>`;
                 },
-                width: 150
+                width: 120,
+                hozAlign: "center",
+                headerHozAlign: "center"
             },
             {
-                title: "Fecha Inicio",
+                title: "Inicio",
                 field: "fecha_inicio",
-                formatter: function (cell) {
-                    const value = cell.getValue();
-                    if (!value) return '---';
-                    try {
-                        const date = new Date(value);
-                        return date.toLocaleDateString('es-CO');
-                    } catch (error) {
-                        return value;
-                    }
-                },
-                width: 120
+                formatter: (cell) => fmtFecha(cell.getValue()),
+                width: 100,
+                hozAlign: "center",
+                headerHozAlign: "center"
             },
             {
-                title: "Fecha Fin",
+                title: "Fin Estimado",
                 field: "fecha_fin_prevista",
-                formatter: function (cell) {
-                    const value = cell.getValue();
-                    if (!value) return '---';
-                    try {
-                        const date = new Date(value);
-                        return date.toLocaleDateString('es-CO');
-                    } catch (error) {
-                        return value;
-                    }
-                },
-                width: 120
+                formatter: (cell) => fmtFecha(cell.getValue()),
+                width: 110,
+                hozAlign: "center",
+                headerHozAlign: "center"
             },
             {
                 title: "Valor Contrato",
                 field: "valor_contrato_proyectado",
-                formatter: function (cell) {
-                    return formatearMoneda(cell.getValue());
-                },
+                formatter: (cell) => formatearMoneda(cell.getValue()),
                 hozAlign: "right",
-                width: 150
-            },
-            {
-                title: "Costo Total",
-                field: "costo_total",
-                formatter: function (cell) {
-                    return formatearMoneda(cell.getValue());
-                },
-                hozAlign: "right",
-                width: 150
+                headerHozAlign: "right",
+                width: 145
             },
             {
                 title: "Utilidad",
-                field: "utilidad_estimada",
+                field: "utilidad_planeada",
                 formatter: function (cell) {
-                    return formatearMoneda(cell.getValue());
-                },
-                hozAlign: "right",
-                width: 130
-            },
-            {
-                title: "Margen %",
-                field: "margen_rentabilidad",
-                formatter: function (cell) {
-                    return formatearPorcentaje(cell.getValue());
-                },
-                hozAlign: "right",
-                width: 100
-            },
-            {
-                title: "Acciones",
-                formatter: function (cell) {
-                    const rowData = cell.getRow().getData();
-                    const uuid = rowData.uuid;
-
+                    const utilidad = parseFloat(cell.getValue()) || 0;
+                    const contrato = parseFloat(cell.getRow().getData().valor_contrato_proyectado) || 0;
+                    const pct = contrato > 0 ? ((utilidad / contrato) * 100).toFixed(1) : '0.0';
+                    const color = utilidad > 0 ? '#198754' : utilidad < 0 ? '#dc3545' : '#6c757d';
+                    const badgeCls = utilidad > 0 ? 'bg-success' : utilidad < 0 ? 'bg-danger' : 'bg-secondary';
                     return `
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-edit-proyecto" data-uuid="${uuid}" title="Editar Proyecto">
+                        <div style="text-align:right; line-height:1.3;">
+                            <span style="font-weight:600; color:${color};">${formatearMoneda(utilidad)}</span><br>
+                            <span class="badge ${badgeCls} px-1" style="font-size:0.7rem;">${pct}%</span>
+                        </div>`;
+                },
+                hozAlign: "right",
+                headerHozAlign: "right",
+                width: 155
+            },
+            {
+                title: "",
+                formatter: function (cell) {
+                    const uuid = cell.getRow().getData().uuid;
+                    return `
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-primary btn-edit-proyecto" data-uuid="${uuid}" title="Editar">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-proyecto" data-uuid="${uuid}" title="Eliminar Proyecto">
+                            <button type="button" class="btn btn-outline-danger btn-delete-proyecto" data-uuid="${uuid}" title="Eliminar">
                                 <i class="bi bi-trash"></i>
                             </button>
-                        </div>
-                    `;
+                        </div>`;
                 },
                 headerSort: false,
                 hozAlign: "center",
-                width: 120
+                width: 90,
+                frozen: true
             }
         ];
     }
@@ -399,7 +378,7 @@
         if (tabElement) {
             // Usar DOMUtils.onVisibleOnce si está disponible
             if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
-                w.DOMUtils.onVisibleOnce(tabElement, () => {
+                w.DOMUtils.onVisibleOnce(tabElement.id ? '#' + tabElement.id : tabElement, () => {
                     initTabulator();
                     initListEvents();
                     initEventListeners();

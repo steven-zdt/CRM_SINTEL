@@ -9,7 +9,7 @@
       <select id="cliente_select" class="form-select" required onchange="document.getElementById('cliente').value = this.value">
         <option value="">Seleccione un cliente</option>
         {% for cliente in clientes %}
-        <option value="{{ cliente.id }}">{{ cliente.razon_social }}</option>
+        <option value="{{ cliente.uuid }}">{{ cliente.razon_social }}</option>
         {% endfor %}
       </select>
       <input type="hidden" id="cliente" name="cliente" value="">
@@ -26,7 +26,7 @@
       <select id="configuracion_select" class="form-select" required onchange="document.getElementById('configuracion').value = this.value">
         <option value="">Seleccione una configuración</option>
         {% for configuracion in configuraciones %}
-        <option value="{{ configuracion.id }}">{{ configuracion.nombre_configuracion }}</option>
+        <option value="{{ configuracion.uuid }}">{{ configuracion.nombre_configuracion }}</option>
         {% endfor %}
       </select>
       <input type="hidden" id="configuracion" name="configuracion" value="">

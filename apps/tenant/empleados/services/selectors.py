@@ -6,7 +6,7 @@ WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 - Todas las funciones son @staticmethod.
 - Usa .only() para cargar solo campos necesarios (Zero Waste).
 """
-from django.db.models import Count, Exists, OuterRef, Q, Sum
+from django.db.models import Count, Exists, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -20,24 +20,35 @@ from apps.tenant.empleados.models import Contrato, Devengo, Empleado
 # Campos estrictamente necesarios para LISTAS (Tabulator)
 EMPLEADO_LIST_FIELDS = (
     'id', 'uuid', 'tipo_documento', 'numero_documento', 'primer_nombre', 'primer_apellido',
-    'segundo_nombre', 'segundo_apellido', 'estado', 'fecha_ingreso', 'empresa_id',
-    'cuenta_contable_uuid'
+    'segundo_nombre', 'segundo_apellido', 'estado', 'fecha_ingreso', 'empresa_id', 'foto',
 )
 
 CONTRATO_LIST_FIELDS = (
     'id', 'uuid', 'empleado', 'empleado__id', 'empleado__uuid',
     'empleado__primer_nombre', 'empleado__primer_apellido',
     'tipo', 'fecha_inicio', 'fecha_fin', 'salario_mensual', 'auxilio_transporte',
-    'cargo', 'estado', 'activo', 'empresa_id'
+    'cargo', 'estado', 'activo', 'empresa_id', 'horas_semanales',
 )
 
 DEVENGO_LIST_FIELDS = (
-    'id', 'uuid', 'empleado', 'empleado__id', 'empleado__uuid',
+    'id', 'uuid', 'empresa_id',
+    # Empleado (cross-model via select_related)
+    'empleado', 'empleado__id', 'empleado__uuid',
+    'empleado__tipo_documento', 'empleado__numero_documento',
     'empleado__primer_nombre', 'empleado__primer_apellido',
-    'contrato', 'contrato__id', 'contrato__uuid', 'periodo_mes', 'fecha_pago', 'dias_laborados',
+    # Contrato (cross-model via select_related)
+    'contrato', 'contrato__id', 'contrato__uuid', 'contrato__tipo', 'contrato__cargo', 'contrato__salario_mensual',
+    # Nómina — período y fechas
+    'periodo_mes', 'fecha_inicio', 'fecha_fin', 'fecha_pago', 'dias_laborados',
+    # Devengos
     'salario_base', 'auxilio_transporte', 'otros_devengos',
+    'horas_extras_diurnas', 'horas_extras_nocturnas', 'recargo_nocturno_horas', 'recargo_festivo_horas', 'valor_horas_extras',
+    # Deducciones
     'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
-    'neto_pagar', 'anulado', 'empresa_id'
+    # Totales y estado
+    'neto_pagar', 'anulado',
+    # Mapeo contable (SSoT: Devengo es la entidad contable)
+    'cuenta_contable_uuid',
 )
 
 # Campos completos para DETALLE (formularios de edicion)
@@ -45,23 +56,35 @@ EMPLEADO_DETAIL_FIELDS = (
     'id', 'uuid', 'empresa', 'empresa__id', 'tipo_documento', 'numero_documento',
     'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
     'email', 'telefono', 'eps', 'afp', 'arl', 'nivel_riesgo_arl',
-    'estado', 'fecha_ingreso', 'fecha_retiro', 'cuenta_contable_uuid'
+    'estado', 'fecha_ingreso', 'fecha_retiro', 'foto',
 )
 
 CONTRATO_DETAIL_FIELDS = (
     'id', 'uuid', 'empresa', 'empresa__id', 'empleado', 'empleado__id', 'empleado__uuid',
     'empleado__primer_nombre', 'empleado__primer_apellido',
     'tipo', 'fecha_inicio', 'fecha_fin', 'salario_mensual', 'auxilio_transporte',
-    'prestamos_empresa', 'cargo', 'archivo_pdf', 'estado', 'activo'
+    'prestamos_empresa', 'cargo', 'archivo_pdf', 'estado', 'activo', 'horas_semanales',
 )
 
 DEVENGO_DETAIL_FIELDS = (
-    'id', 'uuid', 'empresa', 'empresa__id', 'empleado', 'empleado__id', 'empleado__uuid',
+    'id', 'uuid', 'empresa', 'empresa__id',
+    # Empleado
+    'empleado', 'empleado__id', 'empleado__uuid',
+    'empleado__tipo_documento', 'empleado__numero_documento',
     'empleado__primer_nombre', 'empleado__primer_apellido',
-    'contrato', 'contrato__id', 'contrato__uuid', 'periodo_mes', 'fecha_pago', 'dias_laborados',
+    # Contrato
+    'contrato', 'contrato__id', 'contrato__uuid', 'contrato__tipo', 'contrato__salario_mensual',
+    # Nómina
+    'periodo_mes', 'fecha_inicio', 'fecha_fin', 'fecha_pago', 'dias_laborados',
+    # Devengos
     'salario_base', 'auxilio_transporte', 'otros_devengos',
+    'horas_extras_diurnas', 'horas_extras_nocturnas', 'recargo_nocturno_horas', 'recargo_festivo_horas', 'valor_horas_extras',
+    # Deducciones
     'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
-    'observaciones', 'neto_pagar', 'anulado'
+    # Totales, notas y estado
+    'observaciones', 'neto_pagar', 'anulado',
+    # Mapeo contable
+    'cuenta_contable_uuid',
 )
 
 
@@ -91,9 +114,19 @@ class EmpleadoSelector:
             empresa_id=empresa_id
         )
 
+        contrato_activo_uuid = Subquery(
+            Contrato.objects.filter(
+                empleado_id=OuterRef('pk'),
+                activo=True,
+                estado='ACTIVO',
+                empresa_id=empresa_id,
+            ).values('uuid')[:1]
+        )
+
         qs = Empleado.objects.filter(empresa_id=empresa_id).annotate(
             tiene_contrato_activo=Exists(has_contract),
-            tiene_nominas_registradas=Exists(has_payroll)
+            tiene_nominas_registradas=Exists(has_payroll),
+            contrato_activo_uuid=contrato_activo_uuid,
         ).only(*EMPLEADO_LIST_FIELDS)
 
         if search:
@@ -120,6 +153,78 @@ class EmpleadoSelector:
         return Empleado.objects.filter(
             empresa_id=empresa_id, pk=empleado_id
         ).only('id', 'uuid', 'empresa_id', 'estado').get()
+
+    @staticmethod
+    def get_empleados_activos(empresa_id: int):
+        """Retorna todos los empleados activos."""
+        return Empleado.objects.filter(
+            empresa_id=empresa_id,
+            estado='ACTIVO'
+        ).only('id', 'uuid', 'numero_documento', 'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido')
+
+    @staticmethod
+    def get_empleados_sin_contrato(empresa_id: int):
+        """Retorna empleados activos que NO tienen un contrato vigente."""
+        has_contract = Contrato.objects.filter(
+            empleado_id=OuterRef('pk'),
+            activo=True,
+            estado='ACTIVO',
+            empresa_id=empresa_id
+        )
+        return Empleado.objects.filter(
+            empresa_id=empresa_id,
+            estado='ACTIVO'
+        ).annotate(
+            tiene_contrato_activo=Exists(has_contract)
+        ).filter(
+            tiene_contrato_activo=False
+        ).only('id', 'uuid', 'numero_documento', 'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido')
+
+    @classmethod
+    def get_disponibles_para_periodo(cls, empresa_id: int, fecha_inicio, fecha_fin):
+        """
+        Retorna los empleados de la empresa con contrato activo que NO
+        tienen nominas registradas (no anuladas) solapadas con el rango dado.
+        """
+        from datetime import date
+        if isinstance(fecha_inicio, str):
+            fecha_inicio = date.fromisoformat(fecha_inicio)
+        if isinstance(fecha_fin, str):
+            fecha_fin = date.fromisoformat(fecha_fin)
+
+        start_month = fecha_inicio.strftime('%Y-%m')
+        end_month = fecha_fin.strftime('%Y-%m')
+
+        solapados = Devengo.objects.filter(
+            empresa_id=empresa_id,
+            anulado=False
+        ).filter(
+            Q(fecha_inicio__lte=fecha_fin, fecha_fin__gte=fecha_inicio) |
+            Q(
+                Q(fecha_inicio__isnull=True) | Q(fecha_fin__isnull=True),
+                periodo_mes__gte=start_month,
+                periodo_mes__lte=end_month
+            )
+        ).values_list('empleado_id', flat=True)
+
+
+        has_contract = Contrato.objects.filter(
+            empleado_id=OuterRef('pk'),
+            activo=True,
+            estado='ACTIVO',
+            empresa_id=empresa_id
+        )
+
+        return Empleado.objects.filter(
+            empresa_id=empresa_id,
+            estado='ACTIVO'
+        ).annotate(
+            tiene_contrato_activo=Exists(has_contract)
+        ).filter(
+            tiene_contrato_activo=True
+        ).exclude(
+            id__in=solapados
+        ).only('id', 'uuid', 'primer_nombre', 'primer_apellido', 'numero_documento')
 
 
 class ContratoSelector:
@@ -260,14 +365,17 @@ class NominaSummarySelector:
             count_pagos=Count('id')
         )
 
-        activos = Empleado.objects.filter(
-            empresa_id=empresa_id, estado='ACTIVO'
-        ).only('id').count()
+        qs_emp = Empleado.objects.filter(empresa_id=empresa_id).only('id', 'estado')
+        activos = qs_emp.filter(estado='ACTIVO').count()
+        retirados = qs_emp.filter(estado='RETIRADO').count()
+        total = qs_emp.count()
 
         return {
+            "total_empleados": total,
+            "empleados_activos": activos,
+            "empleados_retirados": retirados,
             "total_nomina_mes": str(totales['total_neto']),
             "empleados_pagados": totales['count_pagos'],
-            "empleados_activos": activos
         }
 
 

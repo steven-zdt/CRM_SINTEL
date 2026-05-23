@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Empleado Editor Module - Formulario de Empleado (Crear/Editar)
  * 
@@ -34,6 +35,16 @@
         }
     }
 
+    function _mostrarOffcanvasSeguro(el) {
+        if (!el || !window.bootstrap?.Offcanvas) return;
+        document.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+        document.body.classList.remove('overflow-hidden', 'modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        const oc = bootstrap.Offcanvas.getOrCreateInstance(el);
+        oc.show();
+    }
+
     /**
      * Listener para activar offcanvas tras inyección HTMX
      */
@@ -45,8 +56,7 @@
             const offcanvasEl = target.querySelector('.offcanvas');
             if (offcanvasEl && window.bootstrap) {
                 console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
-                const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                bsOffcanvas.show();
+                _mostrarOffcanvasSeguro(offcanvasEl);
 
                 // Vincular validador al formulario
                 const form = offcanvasEl.querySelector('form');
@@ -68,18 +78,9 @@
                         });
                     }
 
-                    // Inicializar buscador de cuentas contables (v3.5.0)
-                    initCuentaContableSearch(offcanvasEl);
                 }
             }
         });
-    }
-
-    /**
-     * Handler global para respuestas exitosas de HTMX en empleados
-     */
-    function setupHTMXListeners() {
-        document.body.addEventListener('htmx:afterRequest', handleAfterRequest);
     }
 
     /**
@@ -115,73 +116,57 @@
     }
 
     /**
-     * Enviar formulario de empleado (crear o editar)
+     * Enviar formulario de empleado (crear o editar).
+     * Usa FormData para soportar upload de foto (multipart/form-data).
      */
     async function submitEmpleado(form) {
-        // Determinar si es crear o editar
         const offcanvas = form.closest('.offcanvas');
         const empleadoUuid = offcanvas?.dataset.empleadoUuid;
 
-        // Recolectar todos los campos del formulario
-        const data = {
-            // ── Identificación ──
-            tipo_documento: form.querySelector('[name="tipo_documento"]')?.value || '',
-            numero_documento: form.querySelector('[name="numero_documento"]')?.value || '',
-            primer_nombre: form.querySelector('[name="primer_nombre"]')?.value || '',
-            segundo_nombre: form.querySelector('[name="segundo_nombre"]')?.value || null,
-            primer_apellido: form.querySelector('[name="primer_apellido"]')?.value || '',
-            segundo_apellido: form.querySelector('[name="segundo_apellido"]')?.value || null,
+        // Construir FormData con todos los campos del formulario
+        const fd = new FormData();
+        const campos = [
+            'tipo_documento', 'numero_documento',
+            'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
+            'email', 'telefono',
+            'eps', 'afp', 'arl', 'nivel_riesgo_arl',
+            'fecha_ingreso', 'estado', 'fecha_retiro',
+        ];
+        campos.forEach(c => {
+            const el = form.querySelector(`[name="${c}"]`);
+            if (el && el.value !== '' && el.value !== null) fd.append(c, el.value);
+        });
 
-            // ── Contacto ──
-            email: form.querySelector('[name="email"]')?.value || '',
-            telefono: form.querySelector('[name="telefono"]')?.value || null,
-
-            // ── Seguridad Social (REQUERIDOS) ──
-            eps: form.querySelector('[name="eps"]')?.value || '',
-            afp: form.querySelector('[name="afp"]')?.value || '',
-            arl: form.querySelector('[name="arl"]')?.value || '',
-            nivel_riesgo_arl: form.querySelector('[name="nivel_riesgo_arl"]')?.value || 'I',
-
-            // ── Información Laboral ──
-            fecha_ingreso: form.querySelector('[name="fecha_ingreso"]')?.value || '',
-            estado: form.querySelector('[name="estado"]')?.value || 'ACTIVO',
-            fecha_retiro: form.querySelector('[name="fecha_retiro"]')?.value || null,
-        };
-
-        // ── Contabilidad (Opcional) ──
-        const cuentaUuid = form.querySelector('[name="cuenta_contable_uuid"]')?.value;
-        if (cuentaUuid && cuentaUuid.trim()) {
-            data.cuenta_contable_uuid = cuentaUuid;
+        // Foto: solo adjuntar si el usuario seleccionó un archivo
+        const fotoInput = form.querySelector('[name="foto"]');
+        if (fotoInput && fotoInput.files && fotoInput.files.length > 0) {
+            fd.append('foto', fotoInput.files[0]);
         }
 
-        const submitBtn = form.querySelector('[id="btn-guardar-empleado"]') ||
-                          form.querySelector('[id="btn-crear-empleado"]');
+        const submitBtn = offcanvas?.querySelector('[id="btn-guardar-empleado"]') ||
+                          offcanvas?.querySelector('[id="btn-crear-empleado"]') ||
+                          document.getElementById('btn-guardar-empleado') ||
+                          document.getElementById('btn-crear-empleado');
 
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
         }
 
+        // Sin Content-Type: el browser lo establece automáticamente con el boundary correcto
+        const headers = {
+            'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]')?.value || ''
+        };
+
         try {
             let response;
-            const headers = {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]')?.value || ''
-            };
-
             if (empleadoUuid) {
-                // PATCH: Editar empleado
                 response = await fetch(`${API_URL}${empleadoUuid}/`, {
-                    method: 'PATCH',
-                    headers,
-                    body: JSON.stringify(data)
+                    method: 'PATCH', headers, body: fd
                 });
             } else {
-                // POST: Crear empleado
                 response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(data)
+                    method: 'POST', headers, body: fd
                 });
             }
 
@@ -265,65 +250,6 @@
     }
 
     /**
-     * Handler para respuesta HTMX
-     */
-    function handleAfterRequest(evt) {
-        const target = evt.target;
-        const isEmpleadoForm = target && target.id === 'empleado-form';
-        
-        if (!isEmpleadoForm) return;
-
-        const detail = evt.detail;
-        
-        // Verificar si es respuesta exitosa
-        if (detail.successful) {
-            try {
-                const response = JSON.parse(detail.xhr.response);
-                
-                // Cerrar offcanvas
-                const offcanvas = document.querySelector('#empleadoOffcanvas');
-                if (offcanvas && bootstrap && bootstrap.Offcanvas) {
-                    const bsOffcanvas = bootstrap.Offcanvas.getInstance(offcanvas);
-                    if (bsOffcanvas) {
-                        bsOffcanvas.hide();
-                    }
-                }
-
-                // Notificar éxito
-                if (window.UIManager) {
-                    const message = response.message || 'Empleado guardado correctamente';
-                    window.UIManager.notifySuccess(message);
-                }
-
-                // Recargar tabla
-                if (window.Sintel.Empleados.EmpleadoList) {
-                    window.Sintel.Empleados.EmpleadoList.reload();
-                }
-
-            } catch (e) {
-                console.error('[EmpleadoEditor] Error procesando respuesta:', e);
-            }
-        } else {
-            // Manejar error
-            try {
-                const response = JSON.parse(detail.xhr.response);
-                const errorMsg = response.error || response.detail || 'Error al guardar el empleado';
-                
-                if (window.UIManager) {
-                    window.UIManager.handleError({
-                        error: errorMsg,
-                        detail: response.detail
-                    });
-                }
-            } catch (e) {
-                if (window.UIManager) {
-                    window.UIManager.notifyError('Error inesperado al guardar el empleado');
-                }
-            }
-        }
-    }
-
-    /**
      * Limpiar formulario
      */
     function clear() {
@@ -333,189 +259,7 @@
         }
     }
 
-    /**
-     * [v3.5.0] Inicializar buscador asíncrono de cuentas contables
-     */
-    function initCuentaContableSearch(container) {
-        const searchInput = container.querySelector('#empleado-cuenta_contable_label');
-        const selectInput = container.querySelector('#empleado-cuenta_contable_select');
-        const uuidInput = container.querySelector('#empleado-cuenta_contable_uuid');
-        const suggestions = container.querySelector('#empleado-cuenta-resultados');
-
-        if (!searchInput || !selectInput || !uuidInput || !suggestions) return;
-
-        let debounceTimer;
-        let lastResults = [];
-
-        searchInput.addEventListener('input', () => {
-            const query = searchInput.value.trim();
-            clearTimeout(debounceTimer);
-
-            if (query.length < 2) {
-                suggestions.classList.add('d-none');
-                populateSelect(lastResults);
-                return;
-            }
-
-            debounceTimer = setTimeout(async () => {
-                searchCuentas(query);
-            }, 300);
-        });
-
-        searchInput.addEventListener('focus', () => {
-            if (!lastResults.length) {
-                searchCuentas(searchInput.value.trim());
-            }
-        });
-
-        selectInput.addEventListener('change', () => {
-            const selected = lastResults.find(cuenta => String(cuenta.uuid) === selectInput.value);
-            if (selected) {
-                applyCuenta(selected);
-            } else if (!selectInput.value) {
-                uuidInput.value = '';
-            }
-        });
-
-        if (uuidInput.value) {
-            hydrateSelectedCuenta(uuidInput.value);
-        } else {
-            searchCuentas('');
-        }
-
-        async function hydrateSelectedCuenta(uuid) {
-            try {
-                const response = await window.Sintel.Empleados.API.getCuentaByUuid(uuid);
-                if (!response?.ok || !response.data) {
-                    searchCuentas('');
-                    return;
-                }
-
-                const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
-                if (results.length) {
-                    const cuenta = results[0];
-                    lastResults = normalizeCuentaResults([cuenta]);
-                    populateSelect(lastResults);
-                    applyCuenta(cuenta);
-                    return;
-                }
-            } catch (err) {
-                console.error(`${MOD} Error cargando cuenta seleccionada:`, err);
-            }
-            searchCuentas('');
-        }
-
-        async function searchCuentas(query) {
-            try {
-                const api = window.Sintel.Empleados.API;
-                const request = window.Sintel.Empleados.request;
-                if (!api || !request) return;
-
-                const url = api.contabilidad.search(query);
-                const response = await request(url);
-
-                if (response && response.ok && response.data) {
-                    const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
-                    lastResults = normalizeCuentaResults(results);
-                    populateSelect(lastResults);
-                    renderSuggestions(lastResults);
-                }
-            } catch (err) {
-                console.error(`${MOD} Error en busqueda de cuentas:`, err);
-            }
-        }
-
-        function normalizeCuentaResults(results) {
-            const selectedUuid = uuidInput.value;
-            const selectedLabel = searchInput.value.trim();
-            const normalized = Array.isArray(results) ? [...results] : [];
-            if (selectedUuid && selectedLabel && !normalized.some(cuenta => String(cuenta.uuid) === String(selectedUuid))) {
-                normalized.unshift({
-                    uuid: selectedUuid,
-                    codigo: '',
-                    nombre: selectedLabel
-                });
-            }
-            return normalized;
-        }
-
-        function populateSelect(data) {
-            selectInput.innerHTML = '';
-
-            const emptyOption = document.createElement('option');
-            emptyOption.value = '';
-            emptyOption.textContent = data.length ? 'Seleccione una cuenta...' : 'Sin cuentas disponibles';
-            selectInput.appendChild(emptyOption);
-
-            data.forEach(cuenta => {
-                const option = document.createElement('option');
-                option.value = cuenta.uuid;
-                option.textContent = getCuentaLabel(cuenta);
-                if (String(cuenta.uuid) === String(uuidInput.value)) {
-                    option.selected = true;
-                }
-                selectInput.appendChild(option);
-            });
-        }
-
-        function renderSuggestions(data) {
-            suggestions.innerHTML = '';
-            if (!data || !data.length) {
-                suggestions.classList.add('d-none');
-                return;
-            }
-
-            data.forEach(cuenta => {
-                const item = document.createElement('button');
-                item.type = 'button';
-                item.className = 'list-group-item list-group-item-action small py-2';
-                item.innerHTML = `<div><span class="fw-bold text-primary">${cuenta.codigo || ''}</span> - ${cuenta.nombre || ''}</div>`;
-                
-                item.addEventListener('click', () => {
-                    applyCuenta(cuenta);
-                    suggestions.classList.add('d-none');
-                });
-                suggestions.appendChild(item);
-            });
-            suggestions.classList.remove('d-none');
-        }
-
-        function applyCuenta(cuenta) {
-            searchInput.value = getCuentaLabel(cuenta);
-            selectInput.value = cuenta.uuid;
-            uuidInput.value = cuenta.uuid;
-
-            searchInput.classList.add('is-valid');
-            selectInput.classList.add('is-valid');
-            setTimeout(() => {
-                searchInput.classList.remove('is-valid');
-                selectInput.classList.remove('is-valid');
-            }, 2000);
-        }
-
-        function getCuentaLabel(cuenta) {
-            const codigo = cuenta.codigo ? `${cuenta.codigo} - ` : '';
-            return `${codigo}${cuenta.nombre || ''}`.trim();
-        }
-
-        // Cerrar sugerencias al hacer click fuera
-        document.addEventListener('click', (e) => {
-            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
-                suggestions.classList.add('d-none');
-            }
-        });
-
-        // Limpiar UUID si el campo de búsqueda se vacía
-        searchInput.addEventListener('change', () => {
-            if (!searchInput.value.trim()) {
-                uuidInput.value = '';
-                selectInput.value = '';
-            }
-        });
-    }
-
     // Inicializar listeners
-    setupHTMXListeners();
     setupOffcanvasLoadListener();
 
     // Exportar módulo

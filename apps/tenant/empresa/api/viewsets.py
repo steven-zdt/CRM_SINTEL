@@ -11,6 +11,7 @@ ViewSets y vistas auxiliares para la app empresa.
 - SessionAuthentication + CSRF para workspace
 """
 import logging
+from functools import cached_property
 
 from django.db import transaction
 from django.db.models import Q
@@ -25,6 +26,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.empresa.api.serializers import (
     EmpresaDetailSerializer,
     EmpresaHeaderSerializer,
@@ -33,8 +36,14 @@ from apps.tenant.empresa.api.serializers import (
     MailInboxConfigDetailSerializer,
     MailInboxConfigListSerializer,
     MailInboxConfigTestConnectionSerializer,
+    SedeListSerializer,
+    SedeDetailSerializer,
+    SedeUpsertSerializer,
+    AreaListSerializer,
+    AreaDetailSerializer,
+    AreaUpsertSerializer,
 )
-from apps.tenant.empresa.models import Empresa, MailInboxConfig
+from apps.tenant.empresa.models import Empresa, MailInboxConfig, Sede, Area
 
 log = logging.getLogger("empresa.api")
 log_mailinbox = logging.getLogger("mailinbox.api")
@@ -105,7 +114,8 @@ class EmpresaViewSet(viewsets.ModelViewSet):
             return False
         
         # Usar IsTenantAdmin para verificar permisos
-        return IsTenantAdmin().has_permission(request, self)
+        res = IsTenantAdmin().has_permission(request, self)
+        return res
     
     def get_serializer_class(self):
         """Selecciona el serializer según la acción."""
@@ -820,10 +830,14 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
         }
         
         try:
-            # WARNING: RUTA CORRECTA: Usar el path relativo al directorio 'templates' del app
-            logger.debug(f"[render_offcanvas] Renderizando template con contexto: config={instance is not None if instance else False}, error_message={error_message}")
+            template_name = (
+                'tenant/empresa/offcanvas_editar_mailinboxconfig.html'
+                if instance else
+                'tenant/empresa/offcanvas_crear_mailinboxconfig.html'
+            )
+            logger.debug(f"[render_offcanvas] template={template_name}, config={instance is not None}, error={error_message}")
             html = render_to_string(
-                'tenant/empresa/offcanvas_mailinbox.html',
+                template_name,
                 context,
                 request=request
             )
@@ -1093,3 +1107,258 @@ def actividades_lookup(request):
 
 # Alias para compatibilidad con el nombre solicitado
 ciiu_lookup = actividades_lookup
+
+
+class SedeViewSet(BaseTenantViewSet):
+    """
+    ViewSet para Sedes (Sucursales).
+    Aislamiento tenant-isolated y lookup por UUID heredado de BaseTenantViewSet.
+    """
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    parser_classes = [JSONParser, FormParser]
+    renderer_classes = [JSONRenderer]
+    pagination_class = StandardResultsSetPagination
+
+    @cached_property
+    def tenant_empresa(self):
+        return resolve_tenant_empresa(self.request, self)
+
+    def get_empresa(self):
+        return self.tenant_empresa
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['empresa_id'] = self.get_empresa().id
+        return context
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return SedeListSerializer
+        elif self.action == 'retrieve':
+            return SedeDetailSerializer
+        return SedeUpsertSerializer
+
+    def get_queryset(self):
+        empresa_id = self.get_empresa().id
+        search = self.request.query_params.get('search', None)
+
+        if self.action == 'list':
+            from apps.tenant.empresa.services.selectors import SedeSelector
+            return SedeSelector.get_list(empresa_id, search=search)
+        else:
+            return Sede.objects.filter(empresa_id=empresa_id)
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        empresa_id = self.get_empresa().id
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from apps.tenant.empresa.services.business_service import SedeService
+        try:
+            sede = SedeService.crear_sede(empresa_id, serializer.validated_data)
+            return Response(
+                SedeDetailSerializer(sede, context=self.get_serializer_context()).data,
+                status=status.HTTP_201_CREATED
+            )
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        empresa_id = self.get_empresa().id
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from apps.tenant.empresa.services.business_service import SedeService
+        try:
+            sede = SedeService.actualizar_sede(empresa_id, instance.uuid, serializer.validated_data)
+            return Response(
+                SedeDetailSerializer(sede, context=self.get_serializer_context()).data,
+                status=status.HTTP_200_OK
+            )
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        empresa_id = self.get_empresa().id
+        instance = self.get_object()
+
+        from apps.tenant.empresa.services.business_service import SedeService
+        try:
+            SedeService.eliminar_sede(empresa_id, instance.uuid)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], url_path='render-offcanvas', url_name='render-offcanvas')
+    def render_offcanvas(self, request: Request, *args, **kwargs) -> Response:
+        from django.template.loader import render_to_string
+        from django.http import HttpResponse
+
+        sede_uuid = request.query_params.get('uuid')
+        empresa_id = self.get_empresa().id
+        instance = None
+        if sede_uuid:
+            try:
+                instance = Sede.objects.only(
+                    'id', 'uuid', 'nombre', 'direccion', 'telefono', 'encargado_nombre'
+                ).get(empresa_id=empresa_id, uuid=sede_uuid)
+            except Sede.DoesNotExist:
+                pass
+
+        context = {
+            'sede': instance,
+            'is_edit': instance is not None,
+        }
+
+        template = (
+            'tenant/empresa/offcanvas_editar_sede.html'
+            if instance else
+            'tenant/empresa/offcanvas_crear_sede.html'
+        )
+        html = render_to_string(template, context, request=request)
+        return HttpResponse(html, content_type='text/html')
+
+
+class AreaViewSet(BaseTenantViewSet):
+    """
+    ViewSet para Areas (Departamentos).
+    Aislamiento tenant-isolated y lookup por UUID heredado de BaseTenantViewSet.
+    """
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    parser_classes = [JSONParser, FormParser]
+    renderer_classes = [JSONRenderer]
+    pagination_class = StandardResultsSetPagination
+
+    @cached_property
+    def tenant_empresa(self):
+        return resolve_tenant_empresa(self.request, self)
+
+    def get_empresa(self):
+        return self.tenant_empresa
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['empresa_id'] = self.get_empresa().id
+        return context
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return AreaListSerializer
+        elif self.action == 'retrieve':
+            return AreaDetailSerializer
+        return AreaUpsertSerializer
+
+    def get_queryset(self):
+        empresa_id = self.get_empresa().id
+        sede_uuid = self.request.query_params.get('sede_uuid', None)
+        search = self.request.query_params.get('search', None)
+
+        if self.action == 'list':
+            from apps.tenant.empresa.services.selectors import AreaSelector
+            return AreaSelector.get_list(empresa_id, search=search)
+        else:
+            return Area.objects.filter(sede__empresa_id=empresa_id)
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        empresa_id = self.get_empresa().id
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from apps.tenant.empresa.services.business_service import AreaService
+        try:
+            sede_id = serializer.validated_data['sede'].id
+            data = {
+                'sede': sede_id,
+                'nombre': serializer.validated_data['nombre'],
+                'codigo_funcionamiento': serializer.validated_data['codigo_funcionamiento'],
+            }
+            area = AreaService.crear_area(empresa_id, data)
+            return Response(
+                AreaDetailSerializer(area, context=self.get_serializer_context()).data,
+                status=status.HTTP_201_CREATED
+            )
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        empresa_id = self.get_empresa().id
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from apps.tenant.empresa.services.business_service import AreaService
+        try:
+            sede_id = serializer.validated_data['sede'].id
+            data = {
+                'sede': sede_id,
+                'nombre': serializer.validated_data['nombre'],
+                'codigo_funcionamiento': serializer.validated_data['codigo_funcionamiento'],
+            }
+            area = AreaService.actualizar_area(empresa_id, instance.uuid, data)
+            return Response(
+                AreaDetailSerializer(area, context=self.get_serializer_context()).data,
+                status=status.HTTP_200_OK
+            )
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        empresa_id = self.get_empresa().id
+        instance = self.get_object()
+
+        from apps.tenant.empresa.services.business_service import AreaService
+        try:
+            AreaService.eliminar_area(empresa_id, instance.uuid)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], url_path='render-offcanvas', url_name='render-offcanvas')
+    def render_offcanvas(self, request: Request, *args, **kwargs) -> Response:
+        from django.template.loader import render_to_string
+        from django.http import HttpResponse
+
+        area_uuid = request.query_params.get('uuid')
+        empresa_id = self.get_empresa().id
+        instance = None
+        if area_uuid:
+            try:
+                instance = Area.objects.only(
+                    'id', 'uuid', 'sede_id', 'nombre', 'codigo_funcionamiento'
+                ).get(sede__empresa_id=empresa_id, uuid=area_uuid)
+            except Area.DoesNotExist:
+                pass
+
+        from apps.tenant.empresa.services.selectors import SedeSelector
+        sedes = SedeSelector.get_list(empresa_id)
+
+        context = {
+            'area': instance,
+            'is_edit': instance is not None,
+            'sedes': sedes,
+        }
+
+        template = (
+            'tenant/empresa/offcanvas_editar_area.html'
+            if instance else
+            'tenant/empresa/offcanvas_crear_area.html'
+        )
+        html = render_to_string(template, context, request=request)
+        return HttpResponse(html, content_type='text/html')

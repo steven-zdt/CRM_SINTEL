@@ -72,12 +72,12 @@
         <select class="form-select form-select-sm" id="cot-cliente-select">
           <option value="">-- Seleccione cliente --</option>
           {% for c in clientes %}
-          <option value="{{ c.id }}" {% if cotizacion.cliente_id == c.id %}selected{% endif %}>
+          <option value="{{ c.uuid }}" {% if cotizacion.cliente.uuid == c.uuid %}selected{% endif %}>
             {{ c.razon_social }}
           </option>
           {% endfor %}
         </select>
-        <input type="hidden" id="cot-cliente-id" value="{{ cotizacion.cliente_id|default:'' }}">
+        <input type="hidden" id="cot-cliente-id" value="{{ cotizacion.cliente.uuid|default:'' }}">
       </div>
       <div class="col-md-2">
         <label class="form-label form-label-sm fw-semibold mb-1">Fecha Emision</label>
@@ -98,12 +98,12 @@
         <select class="form-select form-select-sm" id="cot-config-select">
           <option value="">Seleccione...</option>
           {% for config in configuraciones %}
-          <option value="{{ config.id }}" {% if config.id == cotizacion.configuracion_id %}selected{% endif %}>
+          <option value="{{ config.uuid }}" {% if config.uuid == cotizacion.configuracion.uuid %}selected{% endif %}>
             {{ config.nombre_configuracion }}
           </option>
           {% endfor %}
         </select>
-        <input type="hidden" id="cot-config-id" value="{{ cotizacion.configuracion_id|default:'' }}">
+        <input type="hidden" id="cot-config-id" value="{{ cotizacion.configuracion.uuid|default:'' }}">
       </div>
       <div class="col-md-2">
         <label class="form-label form-label-sm fw-semibold mb-1">Tipo</label>

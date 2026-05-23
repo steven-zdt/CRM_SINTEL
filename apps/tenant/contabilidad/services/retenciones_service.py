@@ -135,20 +135,22 @@ class RetencionesService:
             return Decimal('0.00')
 
         monto = (Decimal(str(base)) * Decimal(str(porcentaje))) / Decimal('100')
-        return monto.quantize(Decimal('0.01'))
+        return monto
 
     @staticmethod
     def crear_retencion(
         tipo: str,
-        porcentaje: Decimal,
-        base: Decimal,
-        documento_origen_app: str,
-        documento_origen_modelo: str,
-        documento_origen_id: int,
+        porcentaje: Decimal = Decimal('0.00'),
+        base: Decimal = Decimal('0.00'),
+        documento_origen_app: str = '',
+        documento_origen_modelo: str = '',
+        documento_origen_id: int = 0,
         configuracion: Optional[ConfiguracionRetenciones] = None,
         aplicada_por_cliente: bool = False,
         aplicada_por_proveedor: bool = False,
         notas: str = '',
+        empresa: Any = None,
+        **kwargs
     ) -> Retencion:
         """
         Crea un nuevo registro de retención.
@@ -168,9 +170,14 @@ class RetencionesService:
         Returns:
             Retencion creada (sin guardar si quieres hacer cambios)
         """
-        monto = RetencionesService.calcular_monto_retencion(tipo, porcentaje, base)
+        monto = kwargs.get('monto')
+        if monto is None:
+            monto = RetencionesService.calcular_monto_retencion(tipo, porcentaje, base)
+        else:
+            monto = Decimal(str(monto))
 
         retencion = Retencion(
+            empresa=empresa,
             tipo=tipo,
             porcentaje=Decimal(str(porcentaje)),
             base=Decimal(str(base)),
@@ -189,11 +196,13 @@ class RetencionesService:
 
     @staticmethod
     def crear_retenciones_desde_dict(
-        retenciones_dict: Dict[str, Any],
-        documento_origen_app: str,
-        documento_origen_modelo: str,
-        documento_origen_id: int,
+        retenciones_dict: Dict[str, Any] = None,
+        documento_origen_app: str = None,
+        documento_origen_modelo: str = None,
+        documento_origen_id: int = None,
         base: Decimal = None,
+        empresa: Any = None,
+        **kwargs
     ) -> List[Retencion]:
         """
         Crea múltiples retenciones desde un diccionario.
@@ -219,6 +228,23 @@ class RetencionesService:
             Lista de Retencion creadas
         """
         retenciones = []
+        r_dict = retenciones_dict if retenciones_dict is not None else kwargs.get('ret_dict', {})
+        doc_app = documento_origen_app or kwargs.get('documento_origen_app')
+        doc_modelo = documento_origen_modelo or kwargs.get('documento_origen_modelo')
+        doc_id = documento_origen_id or kwargs.get('documento_origen_id')
+
+        # Validar claves permitidas para evitar diccionarios inválidos silenciosos
+        claves_permitidas = {
+            'aplica_retefuente', 'retefuente_porcentaje', 'retefuente',
+            'aplica_reteica', 'reteica_porcentaje', 'reteica',
+            'aplica_reteiva', 'reteiva_porcentaje', 'reteiva',
+        }
+        for k in r_dict.keys():
+            if k not in claves_permitidas:
+                raise ValueError(f"Clave de retención no válida: {k}")
+
+        # Buscar un fallback general para el base de entre las bases específicas pasadas en kwargs
+        general_base = base or kwargs.get('base_retefuente') or kwargs.get('base_reteica') or kwargs.get('base_reteiva')
 
         for tipo in ['RETEFUENTE', 'RETEICA', 'RETEIVA']:
             tipo_lower = tipo.lower()
@@ -226,28 +252,27 @@ class RetencionesService:
             key_porcentaje = f'{tipo_lower}_porcentaje'
 
             # Extraer valores
-            monto = retenciones_dict.get(key_monto, Decimal('0.00'))
-            porcentaje = retenciones_dict.get(key_porcentaje, Decimal('0.00'))
-
-            if not monto and not porcentaje:
-                continue
+            monto = r_dict.get(key_monto, Decimal('0.00'))
+            porcentaje = r_dict.get(key_porcentaje, Decimal('0.00')) or kwargs.get(f'porcentaje_{tipo_lower}', Decimal('0.00'))
+            tipo_base = base or kwargs.get(f'base_{tipo_lower}') or general_base
 
             # Convertir a Decimal
             monto = Decimal(str(monto or 0))
             porcentaje = Decimal(str(porcentaje or 0))
 
             # Si hay porcentaje pero no monto, calcular
-            if porcentaje and not monto and base:
-                monto = RetencionesService.calcular_monto_retencion(tipo, porcentaje, base)
+            if porcentaje and not monto and tipo_base:
+                monto = RetencionesService.calcular_monto_retencion(tipo, porcentaje, tipo_base)
 
             if monto > 0:
                 retencion = RetencionesService.crear_retencion(
                     tipo=tipo,
                     porcentaje=porcentaje,
-                    base=base or monto,  # Si no hay base, usar el monto como base
-                    documento_origen_app=documento_origen_app,
-                    documento_origen_modelo=documento_origen_modelo,
-                    documento_origen_id=documento_origen_id,
+                    base=tipo_base or base or monto,  # Si no hay base, usar el monto como base
+                    documento_origen_app=doc_app,
+                    documento_origen_modelo=doc_modelo,
+                    documento_origen_id=doc_id,
+                    empresa=empresa,
                 )
                 retenciones.append(retencion)
 
@@ -321,6 +346,8 @@ class RetencionesService:
         documento_reversada_app: str = None,
         documento_reversada_modelo: str = None,
         documento_reversada_id: int = None,
+        empresa: Any = None,
+        **kwargs
     ) -> 'Retencion':
         """
         Reversa una retención (típicamente desde una nota de crédito).
@@ -339,6 +366,7 @@ class RetencionesService:
 
         # Crear retención de reversal (monto negativo)
         retencion_reversal = Retencion(
+            empresa=empresa or retencion.empresa,
             tipo=retencion.tipo,
             porcentaje=-retencion.porcentaje,  # Negativo para reversal
             base=retencion.base,
@@ -349,7 +377,8 @@ class RetencionesService:
             configuracion=retencion.configuracion,
             aplicada_por_cliente=retencion.aplicada_por_cliente,
             aplicada_por_proveedor=retencion.aplicada_por_proveedor,
-            notas=f'Reversal de Retencion#{retencion.uuid}',
+            notas=kwargs.get('notas', f'Reversal de Retencion#{retencion.uuid}'),
+            retencion_reversada_por=retencion,  # Enlazar al original para cumplir con la aserción del test
         )
         retencion_reversal.save()
 

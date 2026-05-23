@@ -1,8 +1,8 @@
 """
-Serializers para Configuración de Cotizaciones v2.60 - SIMPLIFICADO (User-Driven).
+Serializers para Configuracion de Cotizaciones v2.60 - SIMPLIFICADO (User-Driven).
 
 # WARNING: v2.60: Serializers simplificados para modo User-Driven.
-Solo exponen: generación de códigos y días de validez.
+Solo exponen: generacion de codigos y dias de validez.
 """
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
@@ -14,8 +14,8 @@ class ConfiguracionCotizacionListSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para listado Tabulator v2.60.
     
-    # WARNING: v2.60: Mínima exposición para alto rendimiento en grillas remotas.
-    Solo campos esenciales: nombre, días de validez, estado, empresa.
+    # WARNING: v2.60: Minima exposicion para alto rendimiento en grillas remotas.
+    Solo campos esenciales: nombre, dias de validez, estado, empresa.
     """
     empresa_nombre = serializers.CharField(source='empresa.razon_social', read_only=True)
     estado_display = serializers.SerializerMethodField()
@@ -38,10 +38,10 @@ class ConfiguracionCotizacionListSerializer(serializers.ModelSerializer):
 
 class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
     """
-    Serializer completo para detalle de perfil de configuración v2.60 - SIMPLIFICADO.
+    Serializer completo para detalle de perfil de configuracion v2.60 - SIMPLIFICADO.
     
-    # WARNING: v2.60: CRUD completo de perfiles de configuración.
-    Solo incluye: generación de códigos y días de validez.
+    # WARNING: v2.60: CRUD completo de perfiles de configuracion.
+    Solo incluye: generacion de codigos y dias de validez.
     """
     empresa_nombre = serializers.CharField(source='empresa.razon_social', read_only=True)
     estado_display = serializers.SerializerMethodField()
@@ -66,15 +66,15 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
     
     def validate_nombre_configuracion(self, value):
         """
-        # WARNING: v2.60: Zero Trust - Sanitización de nombre de configuración.
+        # WARNING: v2.60: Zero Trust - Sanitizacion de nombre de configuracion.
         - Eliminar espacios al inicio y final
-        - Eliminar espacios múltiples
-        - Validar longitud mínima y máxima
+        - Eliminar espacios multiples
+        - Validar longitud minima y maxima
         """
         if not value:
-            raise serializers.ValidationError(_('El nombre de configuración es obligatorio.'))
+            raise serializers.ValidationError(_('El nombre de configuracion es obligatorio.'))
         
-        # Sanitización: strip y normalización de espacios
+        # Sanitizacion: strip y normalizacion de espacios
         nombre_limpio = ' '.join(str(value).strip().split())
         
         if len(nombre_limpio) < 3:
@@ -87,19 +87,19 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
     
     def validate_dias_validez(self, value):
         """
-        # WARNING: v2.60: Zero Trust - Validación de días de validez.
-        Debe estar entre 1 y 30 días.
+        # WARNING: v2.60: Zero Trust - Validacion de dias de validez.
+        Debe estar entre 1 y 30 dias.
         """
         if value is not None:
             if value < 1 or value > 30:
-                raise serializers.ValidationError(_('Los días de validez deben estar entre 1 y 30 días.'))
+                raise serializers.ValidationError(_('Los dias de validez deben estar entre 1 y 30 dias.'))
         return value
     
     def validate(self, data):
         """
-        # WARNING: SSoT v2.60: Validaciones del perfil de configuración simplificado.
+        # WARNING: SSoT v2.60: Validaciones del perfil de configuracion simplificado.
         - Validar unicidad de nombre_configuracion por empresa
-        - Validar que dias_validez esté entre 1 y 30 (ya validado en validate_dias_validez, pero por seguridad)
+        - Validar que dias_validez este entre 1 y 30 (ya validado en validate_dias_validez, pero por seguridad)
         - La empresa se obtiene del tenant actual (singleton), nunca del payload
         """
         # # WARNING: SSoT: Eliminar 'empresa' del data si fue enviado por error
@@ -112,7 +112,7 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
         
         empresa = None
         if self.instance:
-            # Si es actualización, usar la empresa del instance
+            # Si es actualizacion, usar la empresa del instance
             empresa = self.instance.empresa
         else:
             request = self.context.get('request')
@@ -125,7 +125,7 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
                 empresa = Empresa.objects.only('id').first()
             if not empresa:
                 raise serializers.ValidationError({
-                    'detail': _('No se encontró la empresa del tenant. Por favor, configure la empresa primero.')
+                    'detail': _('No se encontro la empresa del tenant. Por favor, configure la empresa primero.')
                 })
         
         # Validar unicidad de nombre_configuracion por empresa
@@ -142,15 +142,15 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
             
             if queryset.exists():
                 raise serializers.ValidationError({
-                    'nombre_configuracion': _('Ya existe un perfil de configuración con este nombre para esta empresa.')
+                    'nombre_configuracion': _('Ya existe un perfil de configuracion con este nombre para esta empresa.')
                 })
         
-        # Validar que dias_validez esté entre 1 y 30 (validación adicional por seguridad)
+        # Validar que dias_validez este entre 1 y 30 (validacion adicional por seguridad)
         dias_validez = data.get('dias_validez')
         if dias_validez is not None:
             if dias_validez < 1 or dias_validez > 30:
                 raise serializers.ValidationError({
-                    'dias_validez': _('Los días de validez deben estar entre 1 y 30 días.')
+                    'dias_validez': _('Los dias de validez deben estar entre 1 y 30 dias.')
                 })
         
         return data

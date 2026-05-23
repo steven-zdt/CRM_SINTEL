@@ -27,7 +27,7 @@ class ResolucionDIAN(SintelTenantBaseModel):
     """
     Resolucion DIAN para Documentos Soporte.
     """
-    # UUID Lookup Field (AGENTS.md §25)
+    # UUID Lookup Field (AGENTS.md ?25)
     uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
 
     numero_resolucion = models.CharField(
@@ -114,7 +114,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
     Documento Soporte - Evidencia legal de gasto.
     v2.62: Inmutabilidad deshabilitada para permitir ajustes operativos.
     """
-    # UUID Lookup Field (AGENTS.md §25)
+    # UUID Lookup Field (AGENTS.md ?25)
     uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
 
     # [FIELDS FIRST]
@@ -132,7 +132,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
         choices=CATEGORIA_CONTABLE_CHOICES,
         null=True,
         blank=True,
-        verbose_name="Categoría Contable"
+        verbose_name="Categoria Contable"
     )
    
     fecha = models.DateField(verbose_name=_('Fecha del Documento'))
@@ -151,8 +151,8 @@ class DocumentoSoporte(SintelTenantBaseModel):
         db_index=True, 
         blank=True, 
         null=True,
-        verbose_name=_('Número Documento Proveedor'),
-        help_text=_('Número de la factura o documento de referencia del proveedor')
+        verbose_name=_('Numero Documento Proveedor'),
+        help_text=_('Numero de la factura o documento de referencia del proveedor')
     )
     
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
@@ -199,6 +199,35 @@ class DocumentoSoporte(SintelTenantBaseModel):
         db_index=True,
         verbose_name="Cuenta de Gasto/Egreso (UUID)",
         help_text="UUID de la CuentaContable de resultado (ej. 5105 Gastos). Contabilidad determina la contrapartida segun tipo de transaccion."
+    )
+
+    # Relaciones Opcionales a Inventario (Fase 1: Trazabilidad)
+    producto_relacionado = models.ForeignKey(
+        'tenant_inventario.Producto',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='documentos_soporte',
+        verbose_name=_('Producto Relacionado'),
+        help_text=_('Producto opcional de inventario asociado a este gasto')
+    )
+    servicio_relacionado = models.ForeignKey(
+        'tenant_inventario.Servicio',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='documentos_soporte',
+        verbose_name=_('Servicio Relacionado'),
+        help_text=_('Servicio opcional de inventario asociado a este gasto')
+    )
+    activo_relacionado = models.ForeignKey(
+        'tenant_inventario.ActivoFijo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='documentos_soporte',
+        verbose_name=_('Activo Fijo Relacionado'),
+        help_text=_('Activo Fijo opcional asociado a este gasto')
     )
     
     adjunto = models.FileField(upload_to='documentos_soporte/%Y/%m/', blank=True, null=True)
@@ -255,13 +284,18 @@ class DocumentoSoporte(SintelTenantBaseModel):
         """Retorna el numero completo usando la funcion de la resolucion."""
         return self.resolucion_dian.formar_consecutivo(self.consecutivo)
 
+    def _get_retencion_model(self):
+        """Retorna de forma perezosa el modelo Retencion de contabilidad para evitar importacion circular."""
+        from django.apps import apps
+        return apps.get_model('contabilidad', 'Retencion')
+
     @property
     def total_retefuente(self) -> Decimal:
         """Lee RETEFUENTE desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
         if not self.pk:
             return self.retefuente or Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
+            Retencion = self._get_retencion_model()
             total = Retencion.objects.filter(
                 tipo='RETEFUENTE',
                 documento_origen_app='gastos',
@@ -279,7 +313,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
         if not self.pk:
             return self.reteica or Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
+            Retencion = self._get_retencion_model()
             total = Retencion.objects.filter(
                 tipo='RETEICA',
                 documento_origen_app='gastos',
@@ -297,7 +331,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
         if not self.pk:
             return Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
+            Retencion = self._get_retencion_model()
             total = Retencion.objects.filter(
                 tipo='RETEIVA',
                 documento_origen_app='gastos',
@@ -325,8 +359,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
         """Suma total de todas las retenciones asociadas en Contabilidad."""
         if not self.pk: return Decimal('0.00')
         try:
-            from django.apps import apps
-            Retencion = apps.get_model('contabilidad', 'Retencion')
+            Retencion = self._get_retencion_model()
             total = Retencion.objects.filter(
                 empresa=self.empresa,
                 documento_origen_app='gastos',
@@ -343,8 +376,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
         """Retorna el monto de Retefuente desde Contabilidad."""
         if not self.pk: return self.retefuente or Decimal('0.00')
         try:
-            from django.apps import apps
-            Retencion = apps.get_model('contabilidad', 'Retencion')
+            Retencion = self._get_retencion_model()
             monto = Retencion.objects.filter(
                 tipo='RETEFUENTE',
                 documento_origen_app='gastos',
@@ -361,8 +393,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
         """Retorna el monto de ReteICA desde Contabilidad."""
         if not self.pk: return self.reteica or Decimal('0.00')
         try:
-            from django.apps import apps
-            Retencion = apps.get_model('contabilidad', 'Retencion')
+            Retencion = self._get_retencion_model()
             monto = Retencion.objects.filter(
                 tipo='RETEICA',
                 documento_origen_app='gastos',

@@ -714,40 +714,51 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
     def render_offcanvas_crear(self, request):
         """
-        Endpoint HTMX RESTful para cargar offcanvas de creacion de contratos.
-        
-        WARNING: v2.61: Feature-Sliced Architecture - Template dedicado para creacion
-        - GET /api/v1/empleados/contratos/render-offcanvas/crear/?empleado={id}  Modo creacion
-        
-        Query params:
-        - empleado: ID del empleado (requerido para crear contrato)
-        
-        Returns:
-            Template HTML: tenant/core/partials/empleados/contrato_offcanvas_form.html
+        Endpoint HTMX para cargar offcanvas de creacion de contratos.
+        - Con ?empleado=ID → modo directo (empleado pre-seleccionado)
+        - Sin ?empleado    → modo independiente (selector de empleados activos)
         """
+        from apps.tenant.empleados.services.selectors import EmpleadoSelector
+
         empresa = self.get_empresa()
-        
         empleado_id = request.query_params.get('empleado')
-        if not empleado_id:
-            return Response(
-                {"error": "Se requiere el parametro 'empleado' para crear un contrato."},
-                status=status.HTTP_400_BAD_REQUEST
+
+        if empleado_id:
+            try:
+                empleado = self.get_empleado_by_id(empleado_id)
+            except Exception as e:
+                logger.error(f"[ContratoViewSet] Empleado no encontrado: {str(e)}")
+                return Response(
+                    {"error": "Empleado no encontrado o no pertenece a este tenant."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            context = {
+                'empleado': empleado,
+                'contrato': None,
+                'empresa': empresa,
+                'modo_independiente': False,
+            }
+        else:
+            # Empleados que ya tienen contrato activo — se excluyen del selector.
+            # Un empleado con contrato activo no puede recibir un segundo contrato activo.
+            ya_contratados = (
+                Contrato.objects.filter(empresa_id=empresa.id, estado='ACTIVO')
+                .values_list('empleado_id', flat=True)
             )
-        
-        try:
-            empleado = self.get_empleado_by_id(empleado_id)
-        except Exception as e:
-            logger.error(f"[ContratoViewSet] Error al obtener empleado: {str(e)}", exc_info=True)
-            return Response(
-                {"error": "Empleado no encontrado o no pertenece a este tenant."},
-                status=status.HTTP_404_NOT_FOUND
+            empleados_qs = (
+                Empleado.objects.filter(empresa_id=empresa.id, estado='ACTIVO')
+                .exclude(id__in=ya_contratados)
+                .only('id', 'primer_nombre', 'primer_apellido', 'numero_documento')
+                .order_by('primer_apellido', 'primer_nombre')
             )
-        
-        context = {
-            'empleado': empleado,
-            'contrato': None,
-            'empresa': empresa
-        }
+            context = {
+                'empleado': None,
+                'contrato': None,
+                'empresa': empresa,
+                'modo_independiente': True,
+                'empleados_disponibles': empleados_qs,
+            }
+
         return Response(context, template_name='tenant/empleados/offcanvas_crear_contrato.html')
     
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
@@ -928,9 +939,8 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
     @action(detail=False, methods=["get"], url_path="ultima-nomina")
     def ultima_nomina(self, request):
         """
-        WARNING: v2.40: Obtiene la ultima nomina pagada para un empleado o contrato.
-        Query params: empleado_id (requerido) o contrato_id (opcional).
-        Retorna la ultima nomina no anulada para sugerir periodo y fecha de pago siguiente.
+        DEPRECADO v4.0: Reemplazado por ultimo-periodo (url_path="ultimo-periodo").
+        Mantener para retrocompatibilidad; redirige a la misma logica.
         """
         from datetime import datetime, timedelta
 
@@ -1043,26 +1053,6 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                 # WARNING: v2.60: Retornar errores de validacion en formato estructurado para UIManager
                 logger.error(f"[DevengoViewSet] Error de validacion en create: {serializer.errors}")
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
-            try:
-                validacion = self.service_validar_limite_dias(request.data)
-                if validacion:
-                    logger.info(
-                        f"[DevengoViewSet] Validacion preventiva de dias: Total={validacion['total_dias']}, "
-                        f"Nuevos={validacion['nuevos_dias']}, Final={validacion['total_final']}"
-                    )
-            except serializers.ValidationError as e:
-                error_detail = str(e.detail) if hasattr(e, 'detail') else str(e)
-                return Response(
-                    {
-                        "error": "La suma de dias laborados excede los 31 dias permitidos del mes.",
-                        "detail": error_detail,
-                        "code": "dias_excedidos"
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            except Exception as e:
-                logger.warning(f"[DevengoViewSet] Error al validar dias laborados: {str(e)}")
             
             # Ejecutar perform_create que calcula valores y guarda (creacion nueva)
             self.perform_create(serializer)
@@ -1244,11 +1234,12 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                     "error": "Los dias laborados deben ser un numero valido"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('30'):
+            # Sin limite superior: v4.0 elimino el tope de 30 dias (rige solapamiento de fechas)
+            if dias_laborados < Decimal('0.5'):
                 return Response({
-                    "error": "Los dias laborados deben estar entre 0.5 y 30"
+                    "error": "Los dias laborados deben ser al menos 0.5"
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # WARNING: v2.60: Validar horas trabajadas si se proporciona
             horas_trabajadas_decimal = None
             if horas_trabajadas is not None:
@@ -1262,7 +1253,7 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                     return Response({
                         "error": "Las horas trabajadas deben ser un numero valido"
                     }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # Obtener valores opcionales (con valores por defecto 0 para evitar None)
             # WARNING: v2.60: Normalizacion de decimales usando Decimal para precision
             try:
@@ -1285,6 +1276,14 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             # WARNING: v2.60: Calcular usando NominaCalculationService.calcular_liquidacion (SSoT - Normativa Colombiana)
             # WARNING: Zero Trust: Pasar empresa_id para validacion
             from apps.tenant.empleados.services.business_service import NominaCalculationService
+
+            def _get_decimal(key, default=0):
+                val = request.data.get(key) or request.POST.get(key) or default
+                try:
+                    return Decimal(str(val))
+                except Exception:
+                    return Decimal('0')
+
             calculo = NominaCalculationService.calcular_liquidacion(
                 contrato=contrato,
                 dias_laborados=dias_laborados,
@@ -1292,7 +1291,11 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                 otros_devengos=otros_devengos,
                 prestamos=prestamos,
                 descuentos_operativos=descuentos_operativos,
-                empresa_id=empresa_id
+                empresa_id=empresa_id,
+                horas_extras_diurnas=_get_decimal('horas_extras_diurnas'),
+                horas_extras_nocturnas=_get_decimal('horas_extras_nocturnas'),
+                recargo_nocturno_horas=_get_decimal('recargo_nocturno_horas'),
+                recargo_festivo_horas=_get_decimal('recargo_festivo_horas'),
             )
             
             # WARNING: Error Boundary Pattern: Validar que el neto no sea negativo
@@ -1322,12 +1325,278 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                 "detail": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR, template_name=ERROR_TEMPLATE)
     
+    @action(detail=False, methods=['get'], url_path='empleados-disponibles', permission_classes=[IsTenantMember])
+    def empleados_disponibles(self, request):
+        """
+        GET /api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
+        Retorna empleados ACTIVOS con contrato activo que NO tienen nominas solapadas en ese rango.
+        """
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({"error": "sin_empresa"}, status=status.HTTP_404_NOT_FOUND)
+
+        fecha_inicio_str = request.query_params.get('fecha_inicio')
+        fecha_fin_str    = request.query_params.get('fecha_fin')
+
+        if not fecha_inicio_str or not fecha_fin_str:
+            return Response({"error": "fecha_inicio y fecha_fin son requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+
+        from datetime import date
+        try:
+            fecha_inicio = date.fromisoformat(fecha_inicio_str)
+            fecha_fin    = date.fromisoformat(fecha_fin_str)
+        except (ValueError, TypeError):
+            return Response({"error": "Formato de fecha invalido. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if fecha_inicio > fecha_fin:
+            return Response({"error": "fecha_inicio no puede ser mayor que fecha_fin"}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.tenant.empleados.services.selectors import EmpleadoSelector
+        empleados = EmpleadoSelector.get_disponibles_para_periodo(
+            empresa_id=empresa.id,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin
+        )
+
+        return Response([
+            {
+                "id":               emp.id,
+                "uuid":             str(emp.uuid),
+                "primer_nombre":    emp.primer_nombre,
+                "primer_apellido":  emp.primer_apellido,
+                "numero_documento": emp.numero_documento,
+                "nombre_completo":  f"{emp.primer_nombre} {emp.primer_apellido}",
+            }
+            for emp in empleados
+        ], status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='ultimo-periodo', permission_classes=[IsTenantMember])
+    def ultimo_periodo(self, request):
+        """
+        GET /api/v1/empleados/devengos/ultimo-periodo/?empleado=ID
+        Retorna el ultimo devengo no anulado del empleado con fecha_inicio/fin garantizadas.
+        Si el devengo es legacy (sin fechas), las deriva del periodo_mes.
+        """
+        empresa  = self.get_empresa()
+        if not empresa:
+            return Response({'tiene_nominas': False, 'ultimo': None})
+
+        empleado_id = request.query_params.get('empleado', '')
+        if not empleado_id:
+            return Response({'tiene_nominas': False, 'ultimo': None})
+
+        ultimo = (
+            Devengo.objects
+            .filter(empresa_id=empresa.id, empleado_id=empleado_id, anulado=False)
+            .order_by('-fecha_fin', '-fecha_pago', '-periodo_mes')
+            .only('id', 'periodo_mes', 'fecha_inicio', 'fecha_fin', 'fecha_pago',
+                  'dias_laborados', 'neto_pagar')
+            .first()
+        )
+
+        if not ultimo:
+            return Response({'tiene_nominas': False, 'ultimo': None})
+
+        import calendar as _cal
+        fi = ultimo.fecha_inicio
+        ff = ultimo.fecha_fin
+        if not fi or not ff:
+            try:
+                y, m = map(int, ultimo.periodo_mes.split('-'))
+                from datetime import date
+                fi = date(y, m, 1)
+                ff = date(y, m, _cal.monthrange(y, m)[1])
+            except Exception:
+                fi = ff = None
+
+        return Response({
+            'tiene_nominas': True,
+            'ultimo': {
+                'id':            ultimo.id,
+                'periodo_mes':   ultimo.periodo_mes,
+                'fecha_inicio':  str(fi) if fi else None,
+                'fecha_fin':     str(ff) if ff else None,
+                'fecha_pago':    str(ultimo.fecha_pago) if ultimo.fecha_pago else None,
+                'dias_laborados': str(ultimo.dias_laborados),
+                'neto_pagar':    str(ultimo.neto_pagar),
+            }
+        })
+
+    @action(detail=False, methods=['get'], url_path='verificar-periodo', permission_classes=[IsTenantMember])
+    def verificar_periodo(self, request):
+        """
+        GET /api/v1/empleados/devengos/verificar-periodo/?empleado=ID&periodo_mes=YYYY-MM
+                                                          &dias=N&fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
+        Detecta solapamiento exacto por rango de fechas.
+        Retorna: puede_crear, conflictos[], dias_registrados, dias_disponibles.
+        """
+        from decimal import Decimal
+        from django.db.models import Q, Sum
+
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({'puede_crear': False, 'error': 'sin_empresa'}, status=status.HTTP_403_FORBIDDEN)
+
+        empleado_id  = request.query_params.get('empleado')
+        periodo_mes  = request.query_params.get('periodo_mes')
+        dias_str     = request.query_params.get('dias', '0')
+        fecha_inicio = request.query_params.get('fecha_inicio')
+        fecha_fin    = request.query_params.get('fecha_fin')
+
+        if not empleado_id or not periodo_mes:
+            return Response({'puede_crear': True, 'conflictos': [], 'dias_registrados': '0', 'dias_disponibles': '31'})
+
+        qs_base = Devengo.objects.filter(
+            empresa_id=empresa.id,
+            empleado_id=empleado_id,
+            anulado=False,
+        )
+
+        conflictos_qs = qs_base
+        if fecha_inicio and fecha_fin:
+            conflictos_qs = qs_base.filter(
+                fecha_inicio__lte=fecha_fin,
+                fecha_fin__gte=fecha_inicio,
+            )
+        else:
+            conflictos_qs = qs_base.filter(periodo_mes=periodo_mes)
+
+        conflictos_qs = conflictos_qs.only(
+            'id', 'uuid', 'periodo_mes', 'fecha_inicio', 'fecha_fin', 'dias_laborados'
+        )
+
+        conflictos = [
+            {
+                'id':            c.id,
+                'uuid':          str(c.uuid),
+                'periodo_mes':   c.periodo_mes,
+                'fecha_inicio':  str(c.fecha_inicio) if c.fecha_inicio else None,
+                'fecha_fin':     str(c.fecha_fin) if c.fecha_fin else None,
+                'dias_laborados': str(c.dias_laborados),
+            }
+            for c in conflictos_qs[:5]
+        ]
+
+        dias_registrados = qs_base.filter(periodo_mes=periodo_mes).aggregate(
+            total=Sum('dias_laborados')
+        )['total'] or Decimal('0')
+
+        try:
+            dias_solicitados = Decimal(str(dias_str))
+        except Exception:
+            dias_solicitados = Decimal('0')
+
+        dias_disponibles = max(Decimal('0'), Decimal('31') - dias_registrados)
+        puede_crear = len(conflictos) == 0
+
+        return Response({
+            'puede_crear':       puede_crear,
+            'conflictos':        conflictos,
+            'dias_registrados':  str(dias_registrados),
+            'dias_disponibles':  str(dias_disponibles),
+        })
+
+    @action(detail=True, methods=['patch'], url_path='asignar-cuenta', permission_classes=[IsTenantMember])
+    def asignar_cuenta(self, request, uuid=None):
+        """
+        PATCH /api/v1/empleados/devengos/{uuid}/asignar-cuenta/
+        Whitelist PATCH solo para cuenta_contable_uuid. Mantiene inmutabilidad del resto.
+        """
+        import uuid as uuid_module
+        empresa  = self.get_empresa()
+        devengo  = self.get_object()
+
+        if devengo.empresa_id != empresa.id:
+            return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+
+        # La clave debe existir en el payload (distingue "no enviado" de null intencional)
+        if 'cuenta_contable_uuid' not in request.data:
+            return Response({'error': 'cuenta_contable_uuid es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        cuenta_uuid_raw = request.data.get('cuenta_contable_uuid')
+
+        if cuenta_uuid_raw is None:
+            # null intencional: limpia el campo
+            devengo.cuenta_contable_uuid = None
+            devengo.save(update_fields=['cuenta_contable_uuid'])
+            return Response({'ok': True, 'cuenta_contable_uuid': None}, status=status.HTTP_200_OK)
+
+        try:
+            cuenta_uuid = uuid_module.UUID(str(cuenta_uuid_raw))
+        except (ValueError, AttributeError):
+            return Response({'error': 'cuenta_contable_uuid no es un UUID valido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        devengo.cuenta_contable_uuid = cuenta_uuid
+        devengo.save(update_fields=['cuenta_contable_uuid'])
+
+        return Response({'ok': True, 'cuenta_contable_uuid': str(cuenta_uuid)}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
+    def render_offcanvas_crear(self, request):
+        """Sirve el formulario unificado de Registrar Nomina (un solo paso)."""
+        empresa = self.get_empresa()
+        return Response({'empresa': empresa}, template_name='tenant/empleados/offcanvas_crear_devengo.html')
+
+    @action(detail=False, methods=['get'], url_path='info-empleado', permission_classes=[IsTenantMember])
+    def info_empleado(self, request):
+        """
+        GET /api/v1/empleados/devengos/info-empleado/?empleado=ID
+        Retorna contrato activo + datos del empleado para el formulario unificado de nomina.
+        """
+        from apps.tenant.empleados.services.selectors import ContratoSelector
+
+        empresa = self.get_empresa()
+        empleado_id_raw = request.query_params.get('empleado')
+        if not empleado_id_raw:
+            return Response({'error': 'empleado es requerido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            eid = int(empleado_id_raw)
+        except (ValueError, TypeError):
+            return Response({'error': 'ID invalido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            emp = Empleado.objects.filter(
+                empresa_id=empresa.id, pk=eid, estado='ACTIVO'
+            ).only(
+                'id', 'uuid', 'primer_nombre', 'primer_apellido',
+                'numero_documento', 'eps', 'afp', 'arl'
+            ).get()
+        except Empleado.DoesNotExist:
+            return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+        contrato = ContratoSelector.get_activo_for_empleado(empresa.id, emp.id)
+        if not contrato:
+            return Response({'error': 'El empleado no tiene contrato activo'}, status=status.HTTP_404_NOT_FOUND)
+
+        eps_map = dict(EPS_CHOICES)
+        afp_map = dict(AFP_CHOICES)
+        arl_map = dict(ARL_CHOICES)
+
+        return Response({
+            'empleado': {
+                'id':               emp.id,
+                'nombre_completo':  f"{emp.primer_nombre} {emp.primer_apellido}",
+                'numero_documento': emp.numero_documento,
+                'eps_label':        eps_map.get(emp.eps, emp.eps),
+                'afp_label':        afp_map.get(emp.afp, emp.afp),
+                'arl_label':        arl_map.get(emp.arl, emp.arl),
+            },
+            'contrato': {
+                'id':              contrato.id,
+                'tipo':            contrato.tipo,
+                'cargo':           contrato.cargo or '',
+                'salario_mensual': str(contrato.salario_mensual),
+                'horas_semanales': contrato.horas_semanales or 42,
+            }
+        }, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=["post"], url_path="previsualizar")
     def previsualizar(self, request):
         """
-        WARNING: v2.60: Endpoint para previsualizar calculo de nomina sin guardar.
-        Usa calcular_liquidacion_nomina() como unica fuente de verdad (SSoT).
-        Cumple con normativa laboral colombiana (Ley 2101 - 46 horas semanales).
+        DEPRECADO v4.0: Reemplazado por preview-calculo (url_path="preview-calculo").
+        preview-calculo devuelve un partial HTML para HTMX; este endpoint devuelve JSON.
+        El frontend ya no llama a este endpoint directamente.
         
         Recibe:
         - contrato_id: ID del contrato (requerido)
@@ -1447,3 +1716,51 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                 "error": "Ocurrio un error inesperado al calcular la previsualizacion.",
                 "detail": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear', permission_classes=[IsTenantMember])
+    def render_offcanvas_crear(self, request):
+        """
+        Endpoint HTMX para renderizar el formulario de creacion de devengos.
+        """
+        from apps.tenant.empleados.services.selectors import EmpleadoSelector, ContratoSelector
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({"error": "Sin tenant asignado"}, status=403)
+        
+        context = {'empresa_id': empresa.id}
+        empleado_id = request.query_params.get('empleado')
+        
+        if empleado_id:
+            empleado = EmpleadoSelector.get_by_id(empresa.id, empleado_id)
+            context['empleado'] = empleado
+            contrato_activo = ContratoSelector.get_activo_for_empleado(
+                empresa.id,
+                empleado.id,
+            )
+            if contrato_activo:
+                context['contrato'] = contrato_activo
+                
+        # Inject defaults if present
+        context['periodo_mes_default'] = request.query_params.get('periodo_mes', '')
+        context['fecha_inicio_default'] = request.query_params.get('fecha_inicio', '')
+        context['fecha_fin_default'] = request.query_params.get('fecha_fin', '')
+        context['fecha_pago_default'] = request.query_params.get('fecha_pago', '')
+        context['dias_laborados_default'] = request.query_params.get('dias_laborados', '')
+
+        return Response(context, template_name='tenant/empleados/offcanvas_crear_devengo.html')
+
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar', permission_classes=[IsTenantMember])
+    def render_offcanvas_editar(self, request, uuid=None):
+        """
+        Endpoint HTMX para renderizar el formulario de edicion de devengos.
+        """
+        instance = self.get_object()
+        return Response({'devengo': instance}, template_name='tenant/empleados/offcanvas_crear_devengo.html')
+
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle', permission_classes=[IsTenantMember])
+    def render_offcanvas_detalle(self, request, uuid=None):
+        """
+        Endpoint HTMX para renderizar los detalles del devengo.
+        """
+        instance = self.get_object()
+        return Response({'devengo': instance}, template_name='tenant/empleados/offcanvas_crear_devengo.html')

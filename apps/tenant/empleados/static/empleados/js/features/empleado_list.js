@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Empleado List Module - Tabla de Empleados con Tabulator
  * 
@@ -15,37 +16,35 @@
     let empleadoNombreEliminar = null;
 
     /**
-     * Handler con event delegation para acciones de la celda
+     * Handler con event delegation para acciones de la celda.
+     * Solo opera acciones CRUD del módulo Empleados: editar y eliminar.
      */
     function handleCellAction(e, cell) {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
-        
+
         const action = btn.dataset.action;
-        const id = btn.dataset.id;
-        
+        const id     = btn.dataset.id;
+
         switch (action) {
-            case 'editar':           editar(id);         break;
-            case 'crear-contrato':
-            case 'editar-contrato':
-                if (window.Sintel.Empleados.ContratoEditor) {
-                    window.Sintel.Empleados.ContratoEditor.openContratoOffcanvas(id);
-                }
-                break;
-            case 'registrar-nomina': registrarNomina(id);   break;
-            case 'historial':
-                if (window.Sintel.Empleados.NominaHistorial) {
-                    window.Sintel.Empleados.NominaHistorial.openHistorial(id);
-                }
+            case 'editar':
+                editar(id);
                 break;
             case 'eliminar': {
                 const rowData = cell.getRow().getData();
-                const nombre = `${rowData.primer_nombre || ''} ${rowData.primer_apellido || ''}`.trim();
-                const doc = rowData.numero_documento || '';
+                const nombre  = `${rowData.primer_nombre || ''} ${rowData.primer_apellido || ''}`.trim();
+                const doc     = rowData.numero_documento || '';
                 confirmarEliminar(id, nombre, doc);
                 break;
             }
         }
+    }
+
+    // Iniciales de respaldo para empleados sin foto
+    function _initiales(data) {
+        const n = (data.primer_nombre || '').charAt(0).toUpperCase();
+        const a = (data.primer_apellido || '').charAt(0).toUpperCase();
+        return n + a || '?';
     }
 
     /**
@@ -53,41 +52,64 @@
      */
     function getColumnas() {
         return [
-            { title: "Documento", field: "numero_documento", headerFilter: "input", width: 120 },
-            { title: "Nombre", field: "primer_nombre", headerFilter: "input" },
-            { title: "Apellido", field: "primer_apellido", headerFilter: "input" },
-            { 
-                title: "Estado", 
-                field: "estado", 
-                formatter: function(cell) {
-                    const estado = cell.getValue();
-                    const badgeClass = estado === 'ACTIVO' ? 'bg-success' : 
-                                       estado === 'RETIRADO' ? 'bg-danger' : 'bg-secondary';
-                    return '<span class="badge ' + badgeClass + '">' + (estado || 'N/A') + '</span>';
-                }
+            // ── Avatar ──────────────────────────────────────────────
+            {
+                title: '',
+                field: 'foto_url',
+                width: 52,
+                headerSort: false,
+                hozAlign: 'center',
+                formatter: (cell) => {
+                    const data = cell.getRow().getData();
+                    const url  = cell.getValue();
+                    if (url) {
+                        return `<img src="${url}" alt=""
+                                     style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid #dee2e6;">`;
+                    }
+                    const ini   = _initiales(data);
+                    const color = data.estado === 'RETIRADO' ? '#adb5bd' : '#0d6efd';
+                    return `<div style="width:36px;height:36px;border-radius:50%;background:${color}20;
+                                        border:2px solid ${color}40;display:flex;align-items:center;
+                                        justify-content:center;font-size:.75rem;font-weight:700;color:${color};">
+                                ${ini}
+                            </div>`;
+                },
+            },
+            // ── Empleado ─────────────────────────────────────────────
+            {
+                title: 'Empleado',
+                field: 'nombre_completo',
+                minWidth: 160,
+                headerFilter: 'input',
+                formatter: (cell) => {
+                    const data = cell.getRow().getData();
+                    const nom  = cell.getValue() || `${data.primer_nombre || ''} ${data.primer_apellido || ''}`.trim();
+                    const doc  = data.numero_documento ? `<div class="small text-muted">${data.numero_documento}</div>` : '';
+                    return `<div class="fw-semibold lh-sm">${nom}</div>${doc}`;
+                },
+            },
+            { title: "Estado",
+              field: "estado",
+              width: 95,
+              formatter: (cell) => {
+                const estado = cell.getValue();
+                const cls = estado === 'ACTIVO' ? 'bg-success' : estado === 'RETIRADO' ? 'bg-danger' : 'bg-secondary';
+                return `<span class="badge ${cls}">${estado || 'N/A'}</span>`;
+              }
             },
             { title: "Ingreso", field: "fecha_ingreso", width: 100 },
             {
                 title: 'Acciones',
-                width: 250,
+                width: 110,
                 hozAlign: 'center',
                 headerSort: false,
                 formatter: (cell) => {
-                    const data = cell.getRow().getData();
-                    const id = data.id;
-                    const uuid = data.uuid;
-                    const tieneContrato = data.tiene_contrato_activo;
+                    const data       = cell.getRow().getData();
+                    const uuid       = data.uuid;
                     const esRetirado = data.estado === 'RETIRADO';
-
                     let html = '<div class="btn-group btn-group-sm">';
-                    html += `<button data-action="editar" data-id="${uuid}" class="btn btn-outline-primary" title="Editar"><i class="bi bi-pencil"></i></button>`;
-                    if (!esRetirado) {
-                        html += `<button data-action="${tieneContrato ? 'editar-contrato' : 'crear-contrato'}" data-id="${id}" class="btn btn-outline-success" title="Contrato"><i class="bi bi-file-text"></i></button>`;
-                        if (tieneContrato) {
-                            html += `<button data-action="registrar-nomina" data-id="${id}" class="btn btn-outline-info" title="Nomina"><i class="bi bi-cash-coin"></i></button>`;
-                            html += `<button data-action="historial" data-id="${id}" class="btn btn-outline-secondary" title="Historial"><i class="bi bi-clock-history"></i></button>`;
-                        }
-                    } else {
+                    html += `<button data-action="editar" data-id="${uuid}" class="btn btn-outline-primary" title="Editar empleado"><i class="bi bi-pencil"></i></button>`;
+                    if (esRetirado) {
                         html += `<button data-action="eliminar" data-id="${uuid}" class="btn btn-outline-danger" title="Eliminar permanentemente"><i class="bi bi-trash"></i></button>`;
                     }
                     html += '</div>';
@@ -102,6 +124,12 @@
      * Inicializa la tabla de empleados usando TabulatorFactory
      */
     async function init(selector, config = {}) {
+        // Evitar inicialización redundante
+        if (window.Sintel.Empleados.table) {
+            console.log('[EmpleadoList] Tabla ya inicializada, omitiendo...');
+            return window.Sintel.Empleados.table;
+        }
+
         // Esperar a que TabulatorFactory esté disponible
         if (!window.TabulatorFactory) {
             console.warn('[EmpleadoList] TabulatorFactory no disponible, reintentando en 100ms...');
@@ -314,17 +342,6 @@
         }
     }
 
-    /**
-     * Abrir offcanvas para registrar nómina
-     */
-    function registrarNomina(empleadoId) {
-        if (window.Sintel.Empleados.DevengoEditor && typeof window.Sintel.Empleados.DevengoEditor.open === 'function') {
-            window.Sintel.Empleados.DevengoEditor.open(empleadoId);
-        } else {
-            console.error('[EmpleadoList] DevengoEditor no cargado');
-        }
-    }
-
     // Exportar modulo
     window.Sintel.Empleados.EmpleadoList = {
         init,
@@ -333,7 +350,6 @@
         editar,
         verDetalle,
         crear,
-        registrarNomina,
         confirmarEliminar,
         ejecutarEliminar
     };

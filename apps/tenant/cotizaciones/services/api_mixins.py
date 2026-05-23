@@ -1,5 +1,5 @@
 """
-API Mixins para Cotizaciones - Inyección de servicios en ViewSets.
+API Mixins para Cotizaciones - Inyeccion de servicios en ViewSets.
 """
 from .business_service import CotizacionService
 from .selectors import CotizacionSelector

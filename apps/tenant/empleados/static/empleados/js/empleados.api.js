@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Empleados API - SSoT de URLs y endpoints
  * 
@@ -41,7 +42,20 @@
         devengos: {
             list: '/api/v1/empleados/devengos/',
             detail: (id) => `/api/v1/empleados/devengos/${id}/`,
-            anular: (id) => `/api/v1/empleados/devengos/${id}/anular/`
+            crearOffcanvas: '/api/v1/empleados/devengos/render-offcanvas/crear/',
+            infoEmpleado: (empleadoId) => `/api/v1/empleados/devengos/info-empleado/?empleado=${empleadoId}`,
+            anular: (id) => `/api/v1/empleados/devengos/${id}/anular/`,
+            asignarCuenta: (id) => `/api/v1/empleados/devengos/${id}/asignar-cuenta/`,
+            ultimoPeriodo: (empleadoId) =>
+                `/api/v1/empleados/devengos/ultimo-periodo/?empleado=${empleadoId}`,
+            verificarPeriodo: (empleadoId, periodoMes, dias, fechaInicio, fechaFin) => {
+                const p = new URLSearchParams({ empleado: empleadoId, periodo_mes: periodoMes, dias: dias || 0 });
+                if (fechaInicio) p.set('fecha_inicio', fechaInicio);
+                if (fechaFin)    p.set('fecha_fin', fechaFin);
+                return `/api/v1/empleados/devengos/verificar-periodo/?${p}`;
+            },
+            empleadosDisponibles: (fechaInicio, fechaFin) =>
+                `/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`,
         },
 
         // Contabilidad (Vínculos)
@@ -52,22 +66,28 @@
     };
 
     /**
-     * Headers por defecto para fetch
+     * Lee el CSRF token en tiempo de request (no al cargar el modulo).
+     * Intenta el campo hidden del formulario primero, luego la cookie.
      */
-    const defaultHeaders = {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
-    };
+    function getCsrfToken() {
+        const domToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+        if (domToken) return domToken;
+        return document.cookie
+            .split('; ')
+            .find(r => r.startsWith('csrftoken='))
+            ?.split('=')[1] || '';
+    }
 
     /**
-     * Inyectar JWT si está disponible
+     * Headers dinamicos por request — CSRF se lee en el momento, no al cargar.
      */
     function getHeaders() {
-        const headers = { ...defaultHeaders };
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+        };
         const token = window.jwtAuth?.getAccessToken?.();
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
     }
 
@@ -104,6 +124,15 @@
     window.Sintel.Empleados.API.getCuentaByUuid = async (uuid) => {
         if (!uuid) return { ok: false, data: null };
         const url = API.contabilidad.getByUuid(uuid);
+        return await request(url);
+    };
+    
+    /**
+     * Obtiene la lista de empleados disponibles para un período sin nóminas cruzadas.
+     */
+    window.Sintel.Empleados.API.getEmpleadosDisponibles = async (fechaInicio, fechaFin) => {
+        if (!fechaInicio || !fechaFin) return { ok: false, data: [] };
+        const url = API.devengos.empleadosDisponibles(fechaInicio, fechaFin);
         return await request(url);
     };
 

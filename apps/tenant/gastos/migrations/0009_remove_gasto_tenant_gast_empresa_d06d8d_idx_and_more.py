@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='gasto',
             name='descripcion',
-            field=models.TextField(blank=True, null=True, verbose_name='Descripción'),
+            field=models.TextField(blank=True, null=True, verbose_name='Descripcion'),
         ),
         migrations.AddIndex(
             model_name='gasto',

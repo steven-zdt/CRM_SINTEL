@@ -27,7 +27,7 @@ DETAIL_FIELDS = (
 
 DETAIL_FK_FIELDS = (
     "cliente__razon_social", "cliente__nombre_comercial", 
-    "cliente__numero_documento", "configuracion__id",
+    "cliente__numero_documento", "cliente__uuid", "configuracion__id", "configuracion__uuid",
 )
 
 class CotizacionSelector:
@@ -73,21 +73,30 @@ class CotizacionSelector:
         return Cliente.objects.filter(
             empresa_id=empresa_id,
             activo=True
-        ).only('id', 'razon_social').order_by('razon_social')
+        ).only('id', 'uuid', 'razon_social').order_by('razon_social')
 
     @staticmethod
     def get_configuraciones_activas(empresa_id):
         return ConfiguracionCotizacion.objects.filter(
             empresa_id=empresa_id,
             es_activo=True
-        ).only('id', 'nombre_configuracion').order_by('nombre_configuracion')
+        ).only('id', 'uuid', 'nombre_configuracion').order_by('nombre_configuracion')
 
     @staticmethod
     def get_configuracion_by_id(config_id, empresa_id):
         return ConfiguracionCotizacion.objects.filter(
             empresa_id=empresa_id, pk=config_id
         ).only(
-            'id', 'nombre_configuracion', 'es_activo', 'dias_validez',
+            'id', 'uuid', 'nombre_configuracion', 'es_activo', 'dias_validez',
+            'prefijo_secuencia', 'sufijo_secuencia', 'semilla_inicial', 'ultimo_numero'
+        ).first()
+
+    @staticmethod
+    def get_configuracion_by_uuid(uuid, empresa_id):
+        return ConfiguracionCotizacion.objects.filter(
+            empresa_id=empresa_id, uuid=uuid
+        ).only(
+            'id', 'uuid', 'nombre_configuracion', 'es_activo', 'dias_validez',
             'prefijo_secuencia', 'sufijo_secuencia', 'semilla_inicial', 'ultimo_numero'
         ).first()
 
@@ -96,6 +105,6 @@ class CotizacionSelector:
         return ConfiguracionCotizacion.objects.filter(
             empresa_id=empresa_id
         ).only(
-            'id', 'nombre_configuracion', 'es_activo', 'dias_validez',
+            'id', 'uuid', 'nombre_configuracion', 'es_activo', 'dias_validez',
             'prefijo_secuencia', 'sufijo_secuencia', 'ultimo_numero'
         ).order_by('-es_activo', 'nombre_configuracion')

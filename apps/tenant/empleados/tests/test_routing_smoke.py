@@ -12,7 +12,7 @@ from apps.tenant.empleados.models import Devengo, Empleado
 
 
 @pytest.mark.django_db
-def test_routing_devengos_list_after_include(client, django_user_model, tenant):
+def test_routing_devengos_list_after_include(client, admin_user, tenant):
     """
     Verifica que el endpoint /api/v1/empleados/devengos/ responde correctamente.
     
@@ -21,9 +21,7 @@ def test_routing_devengos_list_after_include(client, django_user_model, tenant):
     2. El include esté en config/api_urls.py
     3. El router esté registrado en apps/tenant/empleados/api/urls.py
     """
-    # Crear un usuario global (tu backend valida membresía en el middleware/permiso)
-    user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    client.force_login(user)
+    client.force_login(admin_user)
     
     # Si el include en TENANT_URLCONF está OK, debe ser 200 (aunque no haya datos)
     # Nota: El host del tenant se simula automáticamente por django-tenants en tests
@@ -37,43 +35,47 @@ def test_routing_devengos_list_after_include(client, django_user_model, tenant):
 
 
 @pytest.mark.django_db
-def test_routing_devengos_list_with_data(client, django_user_model, tenant):
+def test_routing_devengos_list_with_data(client, admin_user, tenant):
     """
     Verifica que el endpoint devuelve datos cuando existen devengos.
     """
     with schema_context(tenant.schema_name):
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.first()
         e = Empleado.objects.create(
             tipo_documento="CC",
             numero_documento="1234567890",
             primer_nombre="Ana",
             primer_apellido="Pérez",
             email="ana@example.com",
-            fecha_ingreso="2026-01-01"
+            fecha_ingreso="2026-01-01",
+            empresa=empresa,
+            eps="EPS004",
+            afp="AFP001",
+            arl="ARL002"
+        )
+        from apps.tenant.empleados.models import Contrato
+        c = Contrato.objects.create(
+            empresa=empresa, empleado=e, tipo="FIJO", fecha_inicio="2024-01-01", salario_mensual=Decimal("1000000.00"), cargo="Analista"
         )
         Devengo.objects.create(
+            empresa=empresa,
             empleado=e,
-            periodo_inicio="2026-01-01",
-            periodo_fin="2026-01-15",
+            contrato=c,
+            periodo_mes="2026-01",
             fecha_pago="2026-01-20",
             dias_laborados=15,
-            salario_basico=Decimal("1000000.00"),
+            salario_base=Decimal("1000000.00"),
             auxilio_transporte=Decimal("0.00"),
-            horas_extras=Decimal("100000.00"),
-            recargos=Decimal("50000.00"),
-            comisiones=Decimal("0.00"),
-            bonificaciones=Decimal("0.00"),
-            ibc=Decimal("1000000.00"),
+            otros_devengos=Decimal("150000.00"),
             salud_empleado=Decimal("40000.00"),
             pension_empleado=Decimal("40000.00"),
-            fondo_solidaridad=Decimal("0.00"),
-            salud_empleador=Decimal("120000.00"),
-            pension_empleador=Decimal("120000.00"),
-            arl_empleador=Decimal("10000.00"),
-            caja_compensacion=Decimal("40000.00"),
+            prestamos=Decimal("0.00"),
+            descuentos_operativos=Decimal("0.00"),
+            neto_pagar=Decimal("1070000.00")
         )
     
-    user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    client.force_login(user)
+    client.force_login(admin_user)
     
     resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
     

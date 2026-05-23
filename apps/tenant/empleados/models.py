@@ -68,17 +68,21 @@ class Empleado(SintelTenantBaseModel):
     arl = models.CharField(max_length=10, choices=ARL_CHOICES, verbose_name=_('ARL Contratada'))
     nivel_riesgo_arl = models.CharField(max_length=5, choices=RIESGO_ARL_CHOICES, default='I')
     
+    # Foto de perfil
+    foto = models.ImageField(
+        _('Foto'),
+        upload_to='empleados/fotos/',
+        null=True,
+        blank=True,
+        help_text=_('Foto de perfil del empleado (opcional)')
+    )
+
     # Estado y fechas
     estado = models.CharField(max_length=12, choices=ESTADOS, default='ACTIVO')
     fecha_ingreso = models.DateField()
     fecha_retiro = models.DateField(null=True, blank=True)
 
-    # Mapeo Contable (v3.5.0)
-    cuenta_contable_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
-        help_text="Cuenta PUC nivel 6 (Salarios/Prestaciones por pagar)"
-    )
+
 
     class Meta:
         verbose_name = _('Empleado')
@@ -119,9 +123,16 @@ class Contrato(SintelTenantBaseModel):
         ('FIJO', 'Término Fijo'),
         ('INDEF', 'Indefinido'),
         ('OBRA', 'Obra o Labor'),
-        ('PRESTACION', 'Prestación de Servicios')  # WARNING: Nuevo: Independiente
+        ('PRESTACION', 'Prestación de Servicios')
     ]
     ESTADOS = [('ACTIVO', 'Activo'), ('INACTIVO', 'Inactivo'), ('HISTORICO', 'Histórico')]
+    HORAS_SEMANALES_CHOICES = [
+        (36, '36 h/semana'),
+        (40, '40 h/semana'),
+        (42, '42 h/semana — Estándar Colombia 2026 (Ley 2101/2021)'),
+        (44, '44 h/semana'),
+        (48, '48 h/semana'),
+    ]
     
     # UUID Lookup Field (AGENTS.md §14)
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
@@ -162,6 +173,13 @@ class Contrato(SintelTenantBaseModel):
         help_text="Préstamos o deudas que la empresa tiene con el empleado en COP (puede ser 0)"
     )
     
+    # Jornada laboral (Ley 2101/2021 — reduccion progresiva, 42h en 2026)
+    horas_semanales = models.PositiveSmallIntegerField(
+        default=42,
+        choices=HORAS_SEMANALES_CHOICES,
+        help_text="Horas laborales semanales pactadas. Referencia para calculo de H.E. y recargos."
+    )
+
     # Información adicional
     cargo = models.CharField(max_length=120)
     archivo_pdf = models.FileField(
@@ -242,8 +260,10 @@ class Devengo(SintelTenantBaseModel):
     contrato = models.ForeignKey(Contrato, on_delete=models.PROTECT, related_name="pagos_nomina")
     
     # Periodo y fecha
-    periodo_mes = models.CharField(max_length=7, help_text="Formato: YYYY-MM")
-    fecha_pago = models.DateField()
+    periodo_mes  = models.CharField(max_length=7, help_text="Formato: YYYY-MM")
+    fecha_inicio = models.DateField(null=True, blank=True, help_text="Primer dia del periodo laborado")
+    fecha_fin    = models.DateField(null=True, blank=True, help_text="Ultimo dia del periodo laborado")
+    fecha_pago   = models.DateField()
     
     # WARNING: Días laborados para cálculo proporcional (0.5-30 días)
     # WARNING: v2.95: Permite decimales para soportar medio día (0.5) y cálculo por horas
@@ -268,12 +288,19 @@ class Devengo(SintelTenantBaseModel):
         help_text="Auxilio de transporte proporcional calculado en COP"
     )
     otros_devengos = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
-        default=0, 
+        max_digits=12,
+        decimal_places=2,
+        default=0,
         help_text="Otros devengos adicionales del periodo en COP (valor fijo, no proporcional)"
     )
-    
+
+    # Horas extras y recargos (Decreto 2663/1950 - normativa vigente Colombia)
+    horas_extras_diurnas   = models.DecimalField(max_digits=6, decimal_places=2, default=0, help_text="H.E. diurnas Lun-Sab 6am-9pm (+25%)")
+    horas_extras_nocturnas = models.DecimalField(max_digits=6, decimal_places=2, default=0, help_text="H.E. nocturnas 9pm-6am (+75%)")
+    recargo_nocturno_horas = models.DecimalField(max_digits=6, decimal_places=2, default=0, help_text="Horas nocturnas ordinarias (+35%)")
+    recargo_festivo_horas  = models.DecimalField(max_digits=6, decimal_places=2, default=0, help_text="Horas dominicales/festivas (+75%)")
+    valor_horas_extras     = models.DecimalField(max_digits=12, decimal_places=2, default=0, editable=False, help_text="Valor calculado de H.E. y recargos en COP")
+
     # WARNING: DEDUCCIONES (porcentajes legales + descuentos en COP)
     salud_empleado = models.DecimalField(max_digits=12, decimal_places=2, help_text="4% Ley - Deducción en COP")
     pension_empleado = models.DecimalField(max_digits=12, decimal_places=2, help_text="4% Ley - Deducción en COP")
@@ -292,6 +319,14 @@ class Devengo(SintelTenantBaseModel):
     # WARNING: SSoT: neto_pagar se calcula en service layer (en COP)
     neto_pagar = models.DecimalField(max_digits=12, decimal_places=2, editable=False, help_text="Neto a pagar en COP")
     anulado = models.BooleanField(default=False, help_text="Nómina anulada (no se puede editar)")
+    
+    
+    # Mapeo Contable (v3.5.0)
+    cuenta_contable_uuid = models.UUIDField(
+        null=True, 
+        blank=True, 
+        help_text="Cuenta PUC nivel 6 (Salarios/Prestaciones por pagar)"
+    )
     
     class Meta:
         verbose_name = _('Nómina')

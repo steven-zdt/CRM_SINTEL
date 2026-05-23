@@ -215,7 +215,7 @@
             </select>
           </div>
           
-          <div class="col-md-9">
+          <div class="col-md-12">
             <label for="proyecto-cliente-select" class="form-label fw-bold">Vincular Cliente</label>
             <select class="form-select" id="proyecto-cliente-select">
               <option value="">-- Seleccionar cliente existente --</option>
@@ -225,19 +225,21 @@
                 </option>
               {% endfor %}
             </select>
+            <input type="hidden" id="proyecto-cliente-id"     name="cliente_id"     value="{% if proyecto %}{{ proyecto.cliente_id }}{% endif %}">
+            <input type="hidden" id="proyecto-cliente-nombre" name="cliente_nombre" value="{% if proyecto %}{{ proyecto.cliente_nombre }}{% endif %}">
           </div>
-          <div class="col-md-3">
-            <label for="proyecto-cliente-id" class="form-label text-muted">ID Cliente</label>
-            <input type="number" class="form-control bg-light" id="proyecto-cliente-id" name="cliente_id" 
-                   value="{% if proyecto %}{{ proyecto.cliente_id }}{% endif %}" readonly>
-          </div>
+
           <div class="col-md-12">
-            <label for="proyecto-cliente-nombre" class="form-label">Nombre / Razón Social (Snapshot Histórico)</label>
-            <input type="text" class="form-control" id="proyecto-cliente-nombre" name="cliente_nombre" 
-                   value="{% if proyecto %}{{ proyecto.cliente_nombre }}{% endif %}" 
-                   placeholder="Razón social snapshot">
+            <label for="proyecto-servicio-asociado-select" class="form-label text-danger fw-bold">Servicio del Catálogo *</label>
+            <select class="form-select border-primary" id="proyecto-servicio-asociado-select">
+              <option value="">-- Seleccionar servicio --</option>
+            </select>
+            {# ⚠️ UUID-Safe: No usar undefined en el value — siempre string válido o vacío #}
+            <input type="hidden" id="proyecto-servicio-asociado" name="servicio_asociado"
+                   value="{% if proyecto and proyecto.servicio_asociado_id and proyecto.servicio_asociado %}{{ proyecto.servicio_asociado.uuid }}{% else %}{% endif %}">
+            <div class="form-text text-muted">Servicio del portafolio/catálogo de la empresa.</div>
           </div>
-          
+
           <div class="col-12">
             <label for="proyecto-descripcion" class="form-label fw-bold">Descripción General</label>
             <textarea class="form-control" id="proyecto-descripcion" name="descripcion" rows="4" 
@@ -265,7 +267,7 @@
           </h5>
           
           <div class="row g-3">
-            <div class="col-md-9">
+            <div class="col-md-12">
               <label for="proyecto-responsable-comercial-select" class="form-label fw-bold">Responsable Comercial (Nómina)</label>
               <select class="form-select border-primary" id="proyecto-responsable-comercial-select">
                 <option value="">-- Seleccionar Responsable --</option>
@@ -275,18 +277,53 @@
                   </option>
                 {% endfor %}
               </select>
+              <input type="hidden" id="proyecto-responsable-comercial-id"     name="responsable_comercial_id"     value="{% if proyecto %}{{ proyecto.responsable_comercial_id }}{% endif %}">
+              <input type="hidden" id="proyecto-responsable-comercial-nombre" name="responsable_comercial_nombre" value="{% if proyecto %}{{ proyecto.responsable_comercial_nombre }}{% endif %}">
             </div>
-            <div class="col-md-3">
-              <label for="proyecto-responsable-comercial-id" class="form-label text-muted">ID Resp.</label>
-              <input type="number" class="form-control bg-light" id="proyecto-responsable-comercial-id" name="responsable_comercial_id" 
-                     value="{% if proyecto %}{{ proyecto.responsable_comercial_id }}{% endif %}" readonly>
+
+            {# === FACTURA DE VENTA + COTIZACION (Fase 1) === #}
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <h6 class="text-dark fw-bold mb-3">
+                <i class="bi bi-receipt me-2 text-primary"></i>Factura de Venta Vinculada
+              </h6>
+              <div class="row g-3">
+                <div class="col-md-12">
+                  <label for="proyecto-factura-venta-select" class="form-label fw-bold">Seleccionar Factura de Venta</label>
+                  <select class="form-select border-primary" id="proyecto-factura-venta-select">
+                    <option value="">-- Sin factura vinculada --</option>
+                    {% for factura in facturas %}
+                      <option value="{{ factura.id }}"
+                              data-numero="{{ factura.numero }}"
+                              data-cotizacion-uuid="{{ factura.cotizacion_uuid|default:'' }}"
+                              data-cotizacion-numero="{{ factura.cotizacion_numero|default:'' }}"
+                              {% if proyecto and proyecto.factura_costo_id == factura.id %}selected{% endif %}>
+                        {{ factura.numero }}{% if factura.receptor_razon_social %} — {{ factura.receptor_razon_social }}{% endif %}{% if factura.cotizacion_numero %} [COT-{{ factura.cotizacion_numero }}]{% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <input type="hidden" id="proyecto-factura-costo-id"     name="factura_costo"         value="{% if proyecto %}{{ proyecto.factura_costo_id }}{% endif %}">
+                <input type="hidden" id="proyecto-factura-costo-numero" name="factura_costo_numero" value="{% if proyecto %}{{ proyecto.factura_costo_numero }}{% endif %}">
+              </div>
+
+              {# Panel de Cotizacion vinculada — reactivo via JS #}
+              <div id="panel-cotizacion-vinculada" class="mt-2 p-2 rounded border border-info-subtle bg-info-subtle d-none">
+                <div class="d-flex align-items-center gap-3">
+                  <i class="bi bi-file-earmark-check text-info fs-5 flex-shrink-0"></i>
+                  <div>
+                    <div class="fw-bold text-dark" id="cotizacion-numero-display" style="font-size:1rem;"></div>
+                    <div class="text-muted" style="font-size:0.72rem;">
+                      <span class="me-1">Cotización vinculada a esta factura</span>
+                      <code id="cotizacion-uuid-display" class="text-info-emphasis"></code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="panel-sin-cotizacion" class="mt-2 p-2 rounded border bg-light text-center text-muted d-none" style="font-size:0.82rem;">
+                <i class="bi bi-dash-circle me-1"></i>Esta factura no tiene cotización vinculada.
+              </div>
             </div>
-            <div class="col-md-12">
-              <label for="proyecto-responsable-comercial-nombre" class="form-label">Nombre Responsable Comercial (Snapshot)</label>
-              <input type="text" class="form-control" id="proyecto-responsable-comercial-nombre" name="responsable_comercial_nombre" 
-                     value="{% if proyecto %}{{ proyecto.responsable_comercial_nombre }}{% endif %}" readonly>
-            </div>
-            
+
             <div class="col-md-12 mt-4">
               <label for="proyecto-contrato-archivo" class="form-label fw-bold">Documento / Archivo del Contrato</label>
               
@@ -301,10 +338,11 @@
               </div>
               
               <input type="file" class="form-control" id="proyecto-contrato-archivo" name="contrato_archivo">
-              <div class="form-text text-muted">Formatos permitidos: PDF, DOCX, ZIP. Máx. 10MB.</div>
+              <div class="form-text text-muted">Formatos permitidos: PDF, DOCX, ZIP. Max. 10MB.</div>
             </div>
           </div>
         </div>
+
       </div>
 
       <!-- STEP 2: Planeación (Diseño y Técnica) -->
@@ -326,7 +364,7 @@
           </h5>
           
           <div class="row g-3">
-            <div class="col-md-9">
+            <div class="col-md-12">
               <label for="proyecto-responsable-tecnico-select" class="form-label fw-bold">Responsable Técnico (Nómina)</label>
               <select class="form-select border-primary" id="proyecto-responsable-tecnico-select">
                 <option value="">-- Seleccionar Responsable --</option>
@@ -336,22 +374,14 @@
                   </option>
                 {% endfor %}
               </select>
-            </div>
-            <div class="col-md-3">
-              <label for="proyecto-responsable-tecnico-id" class="form-label text-muted">ID Resp.</label>
-              <input type="number" class="form-control bg-light" id="proyecto-responsable-tecnico-id" name="responsable_tecnico_id" 
-                     value="{% if proyecto %}{{ proyecto.responsable_tecnico_id }}{% endif %}" readonly>
-            </div>
-            <div class="col-md-12">
-              <label for="proyecto-responsable-tecnico-nombre" class="form-label">Nombre Responsable Técnico (Snapshot)</label>
-              <input type="text" class="form-control" id="proyecto-responsable-tecnico-nombre" name="responsable_tecnico_nombre" 
-                     value="{% if proyecto %}{{ proyecto.responsable_tecnico_nombre }}{% endif %}" readonly>
+              <input type="hidden" id="proyecto-responsable-tecnico-id"     name="responsable_tecnico_id"     value="{% if proyecto %}{{ proyecto.responsable_tecnico_id }}{% endif %}">
+              <input type="hidden" id="proyecto-responsable-tecnico-nombre" name="responsable_tecnico_nombre" value="{% if proyecto %}{{ proyecto.responsable_tecnico_nombre }}{% endif %}">
             </div>
             
             <div class="col-md-6 mt-3">
               <label for="proyecto-fecha-inicio" class="form-label fw-bold">Fecha de Inicio Real</label>
-              <input type="date" class="form-control" id="proyecto-fecha-inicio" name="fecha_inicio" 
-                     value="{% if proyecto and proyecto.fecha_inicio %}{{ proyecto.fecha_inicio|date:'Y-m-d' }}{% endif %}">
+              <input type="date" class="form-control" id="proyecto-fecha-inicio" name="fecha_inicio"
+                     value="{% if proyecto and proyecto.fecha_inicio %}{{ proyecto.fecha_inicio|date:'Y-m-d' }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}">
             </div>
             <div class="col-md-6 mt-3">
               <label for="proyecto-fecha-fin" class="form-label fw-bold">Fecha Fin Estimada</label>
@@ -367,7 +397,97 @@
                        value="{% if proyecto %}{{ proyecto.valor_contrato_proyectado }}{% else %}0{% endif %}">
               </div>
             </div>
-            
+
+            <!-- Presupuesto Manual (v3.5.2) -->
+            <div class="col-md-12 mt-4">
+              <h6 class="text-primary mb-3"><i class="bi bi-calculator me-2"></i>Desglose de Costos Planeados (Presupuesto)</h6>
+
+              <!-- Formulario para agregar ítem -->
+              <div class="row g-2 mb-3">
+                <div class="col-3">
+                  <select id="pres-categoria" class="form-select form-select-sm">
+                    <option value="">-- Categoría --</option>
+                    <option value="MANO_OBRA">Mano de Obra</option>
+                    <option value="EQUIPOS">Equipos</option>
+                    <option value="MATERIALES">Materiales</option>
+                  </select>
+                </div>
+                <div class="col-4">
+                  <input type="text" id="pres-descripcion" class="form-control form-control-sm" placeholder="Descripción (ej: Instalación...)">
+                </div>
+                <div class="col-2">
+                  <input type="number" id="pres-cantidad" class="form-control form-control-sm" placeholder="Cantidad" min="0.01" step="0.01" value="1">
+                </div>
+                <div class="col-2">
+                  <input type="number" id="pres-valor-unitario" class="form-control form-control-sm" placeholder="Valor unit." min="0" step="0.01">
+                </div>
+                <div class="col-1">
+                  <button type="button" id="btn-agregar-presupuesto" class="btn btn-sm btn-outline-primary w-100" title="Agregar ítem">
+                    <i class="bi bi-plus"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tabla dinámica de ítems -->
+              <div class="table-responsive border rounded mb-3">
+                <table id="tabla-presupuesto" class="table table-sm table-striped mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width: 25%;">Categoría</th>
+                      <th style="width: 30%;">Descripción</th>
+                      <th style="width: 12%; text-align: center;">Cantidad</th>
+                      <th style="width: 18%; text-align: right;">Valor Unit.</th>
+                      <th style="width: 12%; text-align: right;">Subtotal</th>
+                      <th style="width: 3%;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-presupuesto">
+                    <!-- Poblado por JS -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Resumen financiero reactivo (Fase 2 Planeacion)
+                   BASE: valor_contrato_proyectado
+                   utilidad_plan = BASE - sum(subtotales)
+                   margen_plan % = utilidad_plan / BASE * 100
+              -->
+              <div class="row g-2">
+                <div class="col-3">
+                  <div class="card bg-light border-0">
+                    <div class="card-body p-2">
+                      <small class="text-muted d-block">Valor Contrato</small>
+                      <div class="fw-bold" id="pres-resumen-contrato" style="font-size: 1rem;">$0</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card bg-danger bg-opacity-10 border-0">
+                    <div class="card-body p-2">
+                      <small class="text-muted d-block">Total Costos</small>
+                      <div class="fw-bold text-danger" id="pres-resumen-costos" style="font-size: 1rem;">$0</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card bg-success bg-opacity-10 border-0">
+                    <div class="card-body p-2">
+                      <small class="text-muted d-block">Utilidad</small>
+                      <div class="fw-bold text-success" id="pres-resumen-utilidad" style="font-size: 1rem;">$0</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card bg-primary bg-opacity-10 border-0">
+                    <div class="card-body p-2">
+                      <small class="text-muted d-block">Margen %</small>
+                      <div class="fw-bold text-primary" id="pres-resumen-margen" style="font-size: 1rem;">0%</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="col-md-6 mt-4">
               <label for="proyecto-acta-inicio-archivo" class="form-label fw-bold">Acta de Inicio Firmada</label>
               
@@ -411,7 +531,7 @@
           </h5>
           
           <div class="row g-3">
-            <div class="col-md-9">
+            <div class="col-md-12">
               <label for="proyecto-responsable-operativo-select" class="form-label fw-bold">Responsable Operativo (Nómina)</label>
               <select class="form-select border-primary" id="proyecto-responsable-operativo-select">
                 <option value="">-- Seleccionar Responsable --</option>
@@ -421,18 +541,52 @@
                   </option>
                 {% endfor %}
               </select>
-            </div>
-            <div class="col-md-3">
-              <label for="proyecto-responsable-operativo-id" class="form-label text-muted">ID Resp.</label>
-              <input type="number" class="form-control bg-light" id="proyecto-responsable-operativo-id" name="responsable_operativo_id" 
-                     value="{% if proyecto %}{{ proyecto.responsable_operativo_id }}{% endif %}" readonly>
-            </div>
-            <div class="col-md-12">
-              <label for="proyecto-responsable-operativo-nombre" class="form-label">Nombre Responsable Operativo (Snapshot)</label>
-              <input type="text" class="form-control" id="proyecto-responsable-operativo-nombre" name="responsable_operativo_nombre" 
-                     value="{% if proyecto %}{{ proyecto.responsable_operativo_nombre }}{% endif %}" readonly>
+              <input type="hidden" id="proyecto-responsable-operativo-id"     name="responsable_operativo_id"     value="{% if proyecto %}{{ proyecto.responsable_operativo_id }}{% endif %}">
+              <input type="hidden" id="proyecto-responsable-operativo-nombre" name="responsable_operativo_nombre" value="{% if proyecto %}{{ proyecto.responsable_operativo_nombre }}{% endif %}">
             </div>
             
+            <!-- Panel Indicadores Financieros Reales (Fase 3)
+                 IDs fin-* son actualizados por populateStepDetails() desde indicadores_financieros.real
+                 BASE: valor_contrato_proyectado
+                 costo_real = costo_mano_obra_real + costo_materiales_real
+                 utilidad_real = BASE - costo_real
+                 margen_real % = utilidad_real / BASE * 100
+            -->
+            <div class="col-md-12 mt-2 mb-2">
+              <div class="rounded-3 border overflow-hidden">
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-primary bg-opacity-10 border-bottom">
+                  <span class="fw-semibold text-primary small">
+                    <i class="bi bi-file-earmark-text me-1"></i>Valor del Contrato (base)
+                  </span>
+                  <span class="fw-bold font-monospace text-primary small" id="fin-valor-contrato">$ 0</span>
+                </div>
+                <div class="px-3 py-2 bg-white">
+                  <div class="d-flex justify-content-between py-1">
+                    <span class="text-secondary small"><i class="bi bi-person-workspace me-1 text-warning"></i>Mano de Obra (real)</span>
+                    <span class="font-monospace small" id="fin-costo-personal">$ 0</span>
+                  </div>
+                  <div class="d-flex justify-content-between py-1">
+                    <span class="text-secondary small"><i class="bi bi-box-seam me-1 text-warning"></i>Materiales (real)</span>
+                    <span class="font-monospace small" id="fin-costo-materiales">$ 0</span>
+                  </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-danger bg-opacity-10 border-top border-bottom">
+                  <span class="fw-semibold text-danger small"><i class="bi bi-calculator me-1"></i>Total Costos Reales</span>
+                  <span class="fw-bold font-monospace text-danger small" id="fin-costo-total">$ 0</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center px-3 py-2">
+                  <span class="fw-bold text-dark small"><i class="bi bi-piggy-bank me-1 text-success"></i>Utilidad Estimada</span>
+                  <div class="text-end">
+                    <div class="fw-bold font-monospace small" id="fin-utilidad-neta">$ 0</div>
+                  </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center px-3 py-1 bg-light border-top">
+                  <span class="text-muted small"><i class="bi bi-percent me-1"></i>Margen Rentabilidad</span>
+                  <span class="badge bg-secondary" id="fin-margen-rentabilidad">0%</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Equipo de trabajo asignado -->
             <div class="col-md-12 mt-4">
               <h6 class="border-bottom pb-2 mb-2 text-dark">
@@ -458,6 +612,93 @@
                 </div>
               </div>
             </div>
+
+            <!-- Seguimiento de Tareas Diarias (v3.5.3) -->
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <h6 class="text-primary mb-3">
+                <i class="bi bi-calendar-event me-2"></i>Seguimiento de Tareas Diarias (v3.5.3)
+              </h6>
+
+              <!-- Periodo información -->
+              <div class="row g-2 mb-3">
+                <div class="col-auto">
+                  <small class="text-muted">Período del Proyecto:</small>
+                  <div class="fw-bold" id="tareas-periodo-display">--</div>
+                </div>
+              </div>
+
+              <!-- Formulario para crear tarea -->
+              <div class="row g-2 mb-3 p-3 bg-light rounded">
+                <div class="col-md-2">
+                  <label class="form-label form-label-sm fw-bold">Inicio</label>
+                  <input type="date" id="tareas-fecha-inicio" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label form-label-sm fw-bold">Fin</label>
+                  <input type="date" id="tareas-fecha-fin" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm fw-bold">Título</label>
+                  <input type="text" id="tareas-titulo" class="form-control form-control-sm" placeholder="Ej: Cableado">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label form-label-sm fw-bold">Prioridad</label>
+                  <select id="tareas-prioridad" class="form-select form-select-sm">
+                    <option value="NORMAL">Normal</option>
+                    <option value="BAJA">Baja</option>
+                    <option value="ALTA">Alta</option>
+                  </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                  <button type="button" id="btn-agregar-tarea" class="btn btn-sm btn-outline-primary w-100">
+                    <i class="bi bi-plus"></i>Agregar
+                  </button>
+                </div>
+              </div>
+
+              <!-- Timeline container -->
+              <div id="tareas-timeline-container" class="timeline-wrapper border rounded p-3" style="max-height: 500px; overflow-y: auto;">
+                <div class="text-center text-muted py-5">
+                  <i class="bi bi-hourglass-split"></i> Cargando tareas...
+                </div>
+              </div>
+
+              <!-- Summary cards -->
+              <div class="row g-2 mt-3">
+                <div class="col-3">
+                  <div class="card bg-light border-0">
+                    <div class="card-body p-2">
+                      <small class="text-muted d-block">Pendientes</small>
+                      <div class="fw-bold" id="tareas-resumen-pendiente">0</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card bg-warning bg-opacity-10 border-0">
+                    <div class="card-body p-2">
+                      <small class="text-muted d-block">En Proceso</small>
+                      <div class="fw-bold text-warning" id="tareas-resumen-en-proceso">0</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card bg-success bg-opacity-10 border-0">
+                    <div class="card-body p-2">
+                      <small class="text-muted d-block">Completadas</small>
+                      <div class="fw-bold text-success" id="tareas-resumen-completada">0</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card bg-danger bg-opacity-10 border-0">
+                    <div class="card-body p-2">
+                      <small class="text-muted d-block">Canceladas</small>
+                      <div class="fw-bold text-danger" id="tareas-resumen-cancelada">0</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -476,153 +717,164 @@
         </div>
         
         <div class="unlocked-content" id="unlocked-step-4">
-          <h5 class="text-primary border-bottom pb-2 mb-3">
-            <i class="bi bi-check2-all me-2"></i>Fase 4: Cierre (Administrativa y Financiera)
+          <h5 class="text-primary border-bottom pb-2 mb-4">
+            <i class="bi bi-file-earmark-text me-2"></i>Fase 4: Informe Ejecutivo de Cierre
           </h5>
-          
-          <div class="row g-3">
-            <div class="col-md-9">
-              <label for="proyecto-responsable-administrativo-select" class="form-label fw-bold">Responsable Administrativo (Nómina)</label>
-              <select class="form-select border-primary" id="proyecto-responsable-administrativo-select">
-                <option value="">-- Seleccionar Responsable --</option>
-                {% for empleado in empleados %}
-                  <option value="{{ empleado.id }}" {% if proyecto and proyecto.responsable_administrativo_id == empleado.id %}selected{% endif %}>
-                    {{ empleado.primer_nombre }} {{ empleado.primer_apellido }}
-                  </option>
-                {% endfor %}
-              </select>
+
+          <!-- SECCION 1: CONTEXTO (Read-Only Snapshot desde Fase 1) -->
+          <div class="row g-3 mb-4 pb-3 border-bottom">
+            <h6 class="col-12 text-dark fw-bold"><i class="bi bi-info-circle me-2 text-secondary"></i>Contexto del Proyecto</h6>
+            <div class="col-md-6">
+              <label class="form-label small text-muted">Cliente</label>
+              <input type="text" class="form-control bg-light" id="contexto-cliente-nombre" readonly>
             </div>
-            <div class="col-md-3">
-              <label for="proyecto-responsable-administrativo-id" class="form-label text-muted">ID Resp.</label>
-              <input type="number" class="form-control bg-light" id="proyecto-responsable-administrativo-id" name="responsable_administrativo_id" 
-                     value="{% if proyecto %}{{ proyecto.responsable_administrativo_id }}{% endif %}" readonly>
+            <div class="col-md-6">
+              <label class="form-label small text-muted">Factura / Centro de Costos</label>
+              <input type="text" class="form-control bg-light" id="contexto-factura-costo-numero" readonly>
             </div>
-            <div class="col-md-12">
-              <label for="proyecto-responsable-administrativo-nombre" class="form-label">Nombre Responsable Administrativo (Snapshot)</label>
-              <input type="text" class="form-control" id="proyecto-responsable-administrativo-nombre" name="responsable_administrativo_nombre" 
-                     value="{% if proyecto %}{{ proyecto.responsable_administrativo_nombre }}{% endif %}" readonly>
+          </div>
+
+          <!-- SECCION 2: COMPARATIVO PLANEADO vs REAL
+               BASE: valor_contrato_proyectado
+               Planeado: sum(ItemPresupuestoProyecto)
+               Real:     costo_mano_obra_real + costo_materiales_real
+               Variacion: costo_plan - costo_real (+ bajo presupuesto, - sobrecosto)
+               Utilidad: BASE - Costos
+               Margen %: Utilidad / BASE * 100
+          -->
+          <div class="mb-4 pb-3 border-bottom">
+            <h6 class="text-dark fw-bold mb-2">
+              <i class="bi bi-bar-chart-steps me-2 text-warning"></i>Comparativo Planeado vs Real
+            </h6>
+
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered mb-0" style="font-size:0.85rem;">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:40%;">Indicador</th>
+                    <th class="text-end text-primary" style="width:20%;">Planeado</th>
+                    <th class="text-end text-success" style="width:20%;">Real</th>
+                    <th class="text-end" style="width:20%;">Variación</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="table-light">
+                    <td class="fw-semibold"><i class="bi bi-file-earmark-text me-1 text-primary"></i>Valor Contrato (base)</td>
+                    <td class="text-end font-monospace fw-bold text-primary" colspan="3" id="dash-valor-contrato">$ 0</td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted"><i class="bi bi-calculator me-1"></i>Total Costos</td>
+                    <td class="text-end font-monospace text-danger" id="dash-costo-total">$ 0</td>
+                    <td class="text-end font-monospace text-danger" id="dash-real-costo-total">$ 0</td>
+                    <td class="text-end" id="dash-variacion-badge"><span class="badge bg-secondary">—</span></td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted small ps-3"><i class="bi bi-person-workspace me-1"></i>Mano de Obra</td>
+                    <td class="text-end font-monospace small" id="dash-mano-obra">$ 0</td>
+                    <td class="text-end font-monospace small text-muted">—</td>
+                    <td></td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted small ps-3"><i class="bi bi-tools me-1"></i>Equipos</td>
+                    <td class="text-end font-monospace small" id="dash-equipos">$ 0</td>
+                    <td class="text-end font-monospace small text-muted">—</td>
+                    <td></td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted small ps-3"><i class="bi bi-box-seam me-1"></i>Materiales</td>
+                    <td class="text-end font-monospace small" id="dash-materiales">$ 0</td>
+                    <td class="text-end font-monospace small text-muted">—</td>
+                    <td></td>
+                  </tr>
+                  <tr class="fw-bold">
+                    <td><i class="bi bi-piggy-bank me-1 text-success"></i>Utilidad</td>
+                    <td class="text-end font-monospace" id="dash-utilidad">$ 0</td>
+                    <td class="text-end font-monospace" id="dash-real-utilidad">$ 0</td>
+                    <td class="text-end">
+                      <span id="dash-porcentaje-utilidad" class="badge bg-secondary">0%</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted"><i class="bi bi-percent me-1"></i>Margen %</td>
+                    <td class="text-end font-monospace">
+                      {# calculado por JS, mismo elemento dash-porcentaje-utilidad arriba #}
+                      <small class="text-muted">ver badge</small>
+                    </td>
+                    <td class="text-end font-monospace" id="dash-real-margen">0%</td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            
-            <div class="col-md-6 mt-3">
-              <label for="proyecto-porcentaje-avance" class="form-label fw-bold">Porcentaje de Avance</label>
-              <div class="d-flex align-items-center gap-3">
-                <input type="range" class="form-range flex-grow-1" id="proyecto-porcentaje-avance" name="porcentaje_avance" min="0" max="100" 
-                       value="{% if proyecto %}{{ proyecto.porcentaje_avance }}{% else %}0{% endif %}">
-                <span class="range-bubble" id="porcentaje-avance-bubble">{% if proyecto %}{{ proyecto.porcentaje_avance }}{% else %}0{% endif %}%</span>
-              </div>
-            </div>
-            <div class="col-md-6 mt-3">
-              <label for="proyecto-fecha-cierre-real" class="form-label fw-bold">Fecha de Cierre Real</label>
-              <input type="date" class="form-control" id="proyecto-fecha-cierre-real" name="fecha_cierre_real" 
-                     value="{% if proyecto and proyecto.fecha_cierre_real %}{{ proyecto.fecha_cierre_real|date:'Y-m-d' }}{% endif %}">
-            </div>
-            
-            <div class="col-md-6 mt-3">
-              <label for="proyecto-acta-entrega-archivo" class="form-label fw-bold">Acta de Entrega Firmada</label>
-              
-              <div id="acta-entrega-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
-                <span class="badge bg-success p-2"><i class="bi bi-file-earmark-check me-1"></i>Acta cargada</span>
-                <a href="#" id="acta-entrega-archivo-download" target="_blank" class="btn btn-sm btn-outline-primary ms-2"><i class="bi bi-download"></i></a>
-              </div>
-              
-              <input type="file" class="form-control" id="proyecto-acta-entrega-archivo" name="acta_entrega_archivo">
-            </div>
-            <div class="col-md-6 mt-3">
-              <label for="proyecto-informe-final-archivo" class="form-label fw-bold">Informe Final del Proyecto</label>
-              
-              <div id="informe-final-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
-                <span class="badge bg-success p-2"><i class="bi bi-file-earmark-check me-1"></i>Informe final</span>
-                <a href="#" id="informe-final-archivo-download" target="_blank" class="btn btn-sm btn-outline-primary ms-2"><i class="bi bi-download"></i></a>
-              </div>
-              
-              <input type="file" class="form-control" id="proyecto-informe-final-archivo" name="informe_final_archivo">
-            </div>
-            
-            <!-- Factura y Centro de Costos link -->
-            <div class="col-md-12 mt-4 pt-3 border-top">
-              <h6 class="text-dark fw-bold"><i class="bi bi-tag-fill me-2 text-primary"></i>Vinculación de Costos (Factura)</h6>
-              <div class="row g-3 mt-1">
-                <div class="col-md-9">
-                  <label for="proyecto-factura-costo" class="form-label">Vincular Factura (Centro de Costos)</label>
-                  <select class="form-select border-primary" id="proyecto-factura-costo">
-                    <option value="">Cargando facturas...</option>
-                  </select>
-                </div>
-                <div class="col-md-3">
-                  <label for="proyecto-factura-costo-id" class="form-label text-muted">ID Factura</label>
-                  <input type="number" class="form-control bg-light" id="proyecto-factura-costo-id" name="factura_costo_id" 
-                         value="{% if proyecto %}{{ proyecto.factura_costo_id }}{% endif %}" readonly>
-                </div>
-                <div class="col-md-12">
-                  <label for="proyecto-factura-costo-numero" class="form-label">Número de Factura / CC (Snapshot)</label>
-                  <input type="text" class="form-control" id="proyecto-factura-costo-numero" name="factura_costo_numero" 
-                         value="{% if proyecto %}{{ proyecto.factura_costo_numero }}{% endif %}" 
-                         placeholder="Número de factura o centro de costos">
-                </div>
-              </div>
-            </div>
-            
-            <!-- Dashboard de Indicadores Financieros Reales -->
-            <div class="col-md-12 mt-4 pt-3 border-top">
-              <h6 class="text-dark fw-bold mb-3"><i class="bi bi-speedometer2 me-2 text-primary"></i>Indicadores Financieros P&L Real-Time</h6>
-              
-              <div class="row g-3" id="financial-indicators-grid">
-                <!-- Tarjeta 1: Valor Contrato -->
-                <div class="col-md-4">
-                  <div class="card finance-card bg-light border">
-                    <div class="card-body p-3">
-                      <div class="text-muted small fw-bold uppercase">VALOR CONTRATO</div>
-                      <h4 class="mt-2 text-dark font-monospace" id="fin-valor-contrato">$ 0,00</h4>
-                    </div>
-                  </div>
-                </div>
-                <!-- Tarjeta 2: Costo Personal -->
-                <div class="col-md-4">
-                  <div class="card finance-card bg-light border">
-                    <div class="card-body p-3">
-                      <div class="text-muted small fw-bold uppercase">COSTO PERSONAL (M.O.)</div>
-                      <h4 class="mt-2 text-dark font-monospace" id="fin-costo-personal">$ 0,00</h4>
-                    </div>
-                  </div>
-                </div>
-                <!-- Tarjeta 3: Costo Materiales -->
-                <div class="col-md-4">
-                  <div class="card finance-card bg-light border">
-                    <div class="card-body p-3">
-                      <div class="text-muted small fw-bold uppercase">COSTO MATERIALES</div>
-                      <h4 class="mt-2 text-dark font-monospace" id="fin-costo-materiales">$ 0,00</h4>
-                    </div>
-                  </div>
-                </div>
-                <!-- Tarjeta 4: Costo Total -->
-                <div class="col-md-4">
-                  <div class="card finance-card bg-light border">
-                    <div class="card-body p-3">
-                      <div class="text-muted small fw-bold uppercase">COSTO TOTAL</div>
-                      <h4 class="mt-2 text-dark font-monospace" id="fin-costo-total">$ 0,00</h4>
-                    </div>
-                  </div>
-                </div>
-                <!-- Tarjeta 5: Utilidad Estimada -->
-                <div class="col-md-4">
-                  <div class="card finance-card border" id="fin-card-utilidad">
-                    <div class="card-body p-3">
-                      <div class="text-muted small fw-bold uppercase">UTILIDAD NETO</div>
-                      <h4 class="mt-2 font-monospace" id="fin-utilidad-neta">$ 0,00</h4>
-                    </div>
-                  </div>
-                </div>
-                <!-- Tarjeta 6: Margen Rentabilidad -->
-                <div class="col-md-4">
-                  <div class="card finance-card border" id="fin-card-margen">
-                    <div class="card-body p-3">
-                      <div class="text-muted small fw-bold uppercase">MARGEN RENTABILIDAD</div>
-                      <h4 class="mt-2 font-monospace" id="fin-margen-rentabilidad">0,00%</h4>
-                    </div>
-                  </div>
+          </div>
+
+          <!-- SECCION 3: CONFIGURACION DE CIERRE (Editable Fields - 5 only) -->
+          <div class="mb-4">
+            <h6 class="text-dark fw-bold mb-3"><i class="bi bi-gear me-2 text-warning"></i>Configuración de Cierre</h6>
+
+            <div class="row g-3">
+              <!-- Campo 1: Porcentaje de Avance (Range Slider 0-100) -->
+              <div class="col-md-12">
+                <label for="proyecto-porcentaje-avance" class="form-label fw-bold">
+                  <i class="bi bi-percent me-1"></i>Porcentaje de Avance
+                </label>
+                <div class="d-flex align-items-center gap-3">
+                  <input type="range" class="form-range flex-grow-1" id="proyecto-porcentaje-avance"
+                         name="porcentaje_avance" min="0" max="100"
+                         value="{% if proyecto %}{{ proyecto.porcentaje_avance }}{% else %}0{% endif %}">
+                  <span class="badge bg-primary" id="porcentaje-avance-display">0%</span>
                 </div>
               </div>
+
+              <!-- Campo 2: Estado de la Tarea (Select) -->
+              <div class="col-md-6">
+                <label for="proyecto-estado-tarea" class="form-label fw-bold">Estado de la Tarea</label>
+                <select class="form-select border-primary" id="proyecto-estado-tarea" name="estado_tarea">
+                  <option value="PENDIENTE" {% if proyecto and proyecto.estado_tarea == 'PENDIENTE' %}selected{% endif %}>Pendiente</option>
+                  <option value="EN_PROCESO" {% if proyecto and proyecto.estado_tarea == 'EN_PROCESO' %}selected{% endif %}>En Proceso</option>
+                  <option value="DETENIDO" {% if proyecto and proyecto.estado_tarea == 'DETENIDO' %}selected{% endif %}>Detenido</option>
+                  <option value="COMPLETADO" {% if proyecto and proyecto.estado_tarea == 'COMPLETADO' %}selected{% endif %}>Completado</option>
+                </select>
+              </div>
+
+              <!-- Campo 3: Fecha de Cierre Real (Date Input) -->
+              <div class="col-md-6">
+                <label for="proyecto-fecha-cierre-real" class="form-label fw-bold">Fecha de Cierre Real</label>
+                <input type="date" class="form-control border-primary" id="proyecto-fecha-cierre-real"
+                       name="fecha_cierre_real"
+                       value="{% if proyecto and proyecto.fecha_cierre_real %}{{ proyecto.fecha_cierre_real|date:'Y-m-d' }}{% endif %}">
+              </div>
+
+              <!-- Campo 4: Acta de Entrega Firmada (File Upload) -->
+              <div class="col-md-6">
+                <label for="proyecto-acta-entrega-archivo" class="form-label fw-bold">
+                  <i class="bi bi-file-earmark-pdf me-1"></i>Acta de Entrega Firmada
+                </label>
+                <div id="acta-entrega-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
+                  <span class="badge bg-success p-2"><i class="bi bi-check-circle me-1"></i>Cargado</span>
+                </div>
+                <input type="file" class="form-control border-primary" id="proyecto-acta-entrega-archivo"
+                       name="acta_entrega_archivo">
+              </div>
+
+              <!-- Campo 5: Informe Final del Proyecto (File Upload) -->
+              <div class="col-md-6">
+                <label for="proyecto-informe-final-archivo" class="form-label fw-bold">
+                  <i class="bi bi-file-earmark-text me-1"></i>Informe Final del Proyecto
+                </label>
+                <div id="informe-final-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
+                  <span class="badge bg-success p-2"><i class="bi bi-check-circle me-1"></i>Cargado</span>
+                </div>
+                <input type="file" class="form-control border-primary" id="proyecto-informe-final-archivo"
+                       name="informe_final_archivo">
+              </div>
             </div>
+          </div>
+
+          <!-- Nota informativa Fase 4 -->
+          <div class="alert alert-info alert-sm mb-0" role="alert">
+            <i class="bi bi-info-circle me-2"></i>
+            Los indicadores financieros son calculados automáticamente desde las tareas y el equipo registrado.
           </div>
         </div>
       </div>

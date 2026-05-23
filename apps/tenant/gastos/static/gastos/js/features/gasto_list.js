@@ -10,21 +10,25 @@
     const GastoList = {
         table: null,
         tableId: "#grid-gastos",
+        _initializing: false,
 
         init: function(retryCount = 0) {
             const container = document.querySelector(this.tableId);
-            if (this.table || !container) return;
+            if (this.table || !container || this._initializing) return;
 
+            this._initializing = true;
             console.log("[GastoList] Inicializando tabla v2.62...");
 
             // Verificar si TabulatorFactory está disponible
             if (!window.TabulatorFactory) {
                 if (retryCount < 5) {
                     console.warn("[GastoList] TabulatorFactory no disponible, reintentando en 500ms...");
+                    this._initializing = false;
                     setTimeout(() => this.init(retryCount + 1), 500);
                 } else {
                     console.error("[GastoList] TabulatorFactory nunca estuvo disponible después de 5 intentos");
                     window.UIManager?.notifyError("Error al cargar la tabla de gastos");
+                    this._initializing = false;
                 }
                 return;
             }
@@ -47,11 +51,15 @@
                 if (!this.table) {
                     console.warn("[GastoList] TabulatorFactory.create retornó null, reintentando...");
                     this.table = null; // Limpiar
+                    this._initializing = false;
                     setTimeout(() => this.init(0), 1000);
+                } else {
+                    this._initializing = false;
                 }
             } catch (error) {
                 console.error("[GastoList] Error al inicializar Tabulator:", error);
                 window.UIManager?.notifyError("Error al inicializar tabla de gastos");
+                this._initializing = false;
             }
         },
 
@@ -267,20 +275,24 @@
     const ResolucionList = {
         table: null,
         tableId: "#grid-resoluciones",
+        _initializing: false,
 
         init: function(retryCount = 0) {
             const container = document.querySelector(this.tableId);
-            if (this.table || !container) return;
+            if (this.table || !container || this._initializing) return;
 
+            this._initializing = true;
             console.log('[ResolucionList] Inicializando tabla de resoluciones v2.62...');
 
             // Verificar si TabulatorFactory está disponible
             if (!window.TabulatorFactory) {
                 if (retryCount < 5) {
                     console.warn("[ResolucionList] TabulatorFactory no disponible, reintentando en 500ms...");
+                    this._initializing = false;
                     setTimeout(() => this.init(retryCount + 1), 500);
                 } else {
                     console.error("[ResolucionList] TabulatorFactory nunca estuvo disponible después de 5 intentos");
+                    this._initializing = false;
                 }
                 return;
             }
@@ -331,9 +343,16 @@
                 this.table = window.TabulatorFactory?.create(this.tableId, apiUrl, columns, {
                     placeholder: "No hay resoluciones registradas"
                 });
+                
+                if (!this.table) {
+                    this._initializing = false;
+                } else {
+                    this._initializing = false;
+                }
             } catch (error) {
                 console.error("[ResolucionList] Error crítico al inicializar:", error);
                 window.UIManager?.notifyError("Error al cargar lista de resoluciones");
+                this._initializing = false;
             }
         },
 

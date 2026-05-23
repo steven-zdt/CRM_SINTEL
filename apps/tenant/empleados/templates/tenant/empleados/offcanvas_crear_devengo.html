@@ -1,103 +1,100 @@
-{# offcanvas_crear_devengo.html - Offcanvas del módulo Nóminas v2.61 #}
-{# ⚠️ v2.61: HTMX + Offcanvas con Zero Trust #}
+{# offcanvas_crear_devengo.html — Formulario Unificado Registrar Nomina v4.0 #}
+{# Un solo paso: selector empleado + periodo + campos completos en un formulario. #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-devengo" aria-labelledby="offcanvas-devengo-label" style="width: 95%; max-width: 1000px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-devengo"
+     aria-labelledby="offcanvas-devengo-label" style="width: 95%; max-width: 1000px;">
   <div class="offcanvas-header border-bottom bg-light">
     <h5 class="offcanvas-title" id="offcanvas-devengo-label">
-      <i class="bi bi-cash-coin me-2"></i>
-      <span>Registrar Nómina</span>
+      <i class="bi bi-cash-coin me-2"></i>Registrar Nómina
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
+
   <div class="offcanvas-body">
     <div id="form-devengo-feedback" class="alert d-none mb-3" role="alert"></div>
-    
+
     <form id="form-devengo" method="POST" onsubmit="return false;">
       {% csrf_token %}
-      <input type="hidden" id="devengo-id" name="id" value="">
-      <input type="hidden" id="devengo-empleado-id" name="empleado" value="{{ empleado.id }}">
-      <input type="hidden" id="devengo-contrato-id" name="contrato" value="{{ contrato.id }}">
-      
-      {# Información del Empleado (Solo lectura) #}
+      <input type="hidden" id="devengo-empleado-id"  name="empleado">
+      <input type="hidden" id="devengo-contrato-id"  name="contrato">
+      <input type="hidden" id="devengo-periodo_mes"  name="periodo_mes">
+
+      {# ── 1. Período y Empleado ─────────────────────────────────────────────── #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-person me-2"></i>Información del Empleado
+          <i class="bi bi-calendar-range me-2"></i>Período y Empleado
         </h6>
+
+        {# Fechas #}
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label for="devengo-fecha_inicio" class="form-label fw-bold text-danger">Fecha Inicio *</label>
+            <input type="date" class="form-control" id="devengo-fecha_inicio" name="fecha_inicio" required>
+          </div>
+          <div class="col-md-4">
+            <label for="devengo-fecha_fin_field" class="form-label fw-bold text-danger">Fecha Fin *</label>
+            <input type="date" class="form-control" id="devengo-fecha_fin_field" name="fecha_fin" required>
+          </div>
+          <div class="col-md-4">
+            <label for="devengo-fecha_pago" class="form-label fw-bold text-danger">Fecha de Pago *</label>
+            <input type="date" class="form-control" id="devengo-fecha_pago" name="fecha_pago" required>
+          </div>
+        </div>
+
+        {# Estado reactivo dias — poblado por JS #}
+        <div id="wrapper-dias-estado" class="mb-3"></div>
+
+        {# Selector de empleado — habilitado tras ingresar período válido #}
         <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label text-muted small">Nombre Completo</label>
-            <input type="text" class="form-control bg-light" value="{{ empleado.nombre_completo }}" readonly>
+          <div class="col-md-8">
+            <label for="devengo-select-empleado" class="form-label fw-bold text-danger">Empleado *</label>
+            <select id="devengo-select-empleado" class="form-select" disabled>
+              <option value="">Ingrese primero el período laborado...</option>
+            </select>
           </div>
-          <div class="col-md-4">
-            <label class="form-label text-muted small">Documento</label>
-            <input type="text" class="form-control bg-light" value="{{ empleado.numero_documento }}" readonly>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label text-muted small">Cargo</label>
-            <input type="text" class="form-control bg-light" value="{{ contrato.cargo }}" readonly>
+        </div>
+
+        {# Panel informativo del empleado — aparece al seleccionar (JS lo puebla) #}
+        <div id="panel-info-empleado" class="d-none mt-3 p-3 bg-light rounded-2 border">
+          <div class="row g-2 small">
+            <div class="col-md-4">
+              <span class="text-muted">Documento:</span>
+              <span id="info-numero-documento" class="fw-semibold ms-1">—</span>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted">EPS:</span>
+              <span id="info-eps" class="fw-semibold ms-1">—</span>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted">AFP:</span>
+              <span id="info-afp" class="fw-semibold ms-1">—</span>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted">ARL:</span>
+              <span id="info-arl" class="fw-semibold ms-1">—</span>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted">Cargo:</span>
+              <span id="info-cargo" class="fw-semibold ms-1">—</span>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted">Tipo contrato:</span>
+              <span id="info-tipo-contrato" class="fw-semibold ms-1">—</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {# Información de Seguridad Social (Solo lectura) #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-shield-check me-2"></i>Seguridad Social
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label text-muted small">EPS</label>
-            <input type="text" class="form-control bg-light" value="{{ empleado.get_eps_display }}" readonly>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label text-muted small">Fondo de Pensión (AFP)</label>
-            <input type="text" class="form-control bg-light" value="{{ empleado.get_afp_display }}" readonly>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label text-muted small">ARL</label>
-            <input type="text" class="form-control bg-light" value="{{ empleado.get_arl_display }}" readonly>
-          </div>
-        </div>
-      </div>
-      
-      {# Periodo y Fecha #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-calendar-range me-2"></i>Periodo y Fecha
-        </h6>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label for="devengo-periodo_mes" class="form-label text-danger fw-bold">Periodo (YYYY-MM) *</label>
-            <input type="text" class="form-control"
-                   id="devengo-periodo_mes" name="periodo_mes"
-                   value="{{ 'now'|date:'Y-m' }}"
-                   pattern="\d{4}-\d{2}" placeholder="2024-01" required
-                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
-                   hx-target="#devengo-campos-calculados-wrapper"
-                   hx-include="#form-devengo"
-                   hx-trigger="change, keyup changed delay:200ms">
-          </div>
-          <div class="col-md-6">
-            <label for="devengo-fecha_pago" class="form-label text-danger fw-bold">Fecha de Pago *</label>
-            <input type="date" class="form-control" id="devengo-fecha_pago" name="fecha_pago" required
-                   hx-post="/api/v1/empleados/devengos/preview-calculo/"
-                   hx-target="#devengo-campos-calculados-wrapper"
-                   hx-include="#form-devengo"
-                   hx-trigger="change">
-          </div>
-        </div>
-      </div>
-      
-      {# Días Laborados #}
+      {# ── 2. Días Laborados ─────────────────────────────────────────────────── #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
           <i class="bi bi-calendar-check me-2"></i>Días Laborados
         </h6>
         <div class="row g-3">
           <div class="col-md-6">
-            <label for="devengo-dias_laborados" class="form-label text-danger fw-bold">Días Laborados *</label>
+            <label for="devengo-dias_laborados" class="form-label fw-bold text-danger">Días Laborados *</label>
             <input type="number" class="form-control" id="devengo-dias_laborados" name="dias_laborados"
-                   value="30" step="0.1" min="0.1" max="30" required
+                   step="0.1" min="0.1" max="31" required
                    hx-post="/api/v1/empleados/devengos/preview-calculo/"
                    hx-target="#devengo-campos-calculados-wrapper"
                    hx-include="#form-devengo"
@@ -106,14 +103,63 @@
         </div>
       </div>
 
-      {# Contenedor Dinámico para Cálculos #}
-      <div id="devengo-campos-calculados-wrapper">
-          <div class="alert alert-info">
-              <i class="bi bi-info-circle me-2"></i>Ingrese los días y periodo para previsualizar el cálculo.
+      {# ── 3. Horas Extras y Recargos ────────────────────────────────────────── #}
+      <div class="mb-4" id="he-section">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-clock-history me-2"></i>Horas Extras y Recargos
+          <small class="text-muted fw-normal ms-2">(opcional)</small>
+        </h6>
+
+        {# Referencia jornada + horas ordinarias — JS actualiza data-hs-contrato y #he-horas-ordinarias #}
+        <div class="card border-0 bg-light rounded-2 px-3 py-2 mb-3 small">
+          <div class="row g-0 text-center">
+            <div class="col-6 border-end pe-2">
+              <div class="text-muted">Jornada pactada en contrato</div>
+              <div class="fw-bold text-primary">
+                <span id="he-ref-hs" data-hs-contrato="42">—</span> h/semana
+              </div>
+            </div>
+            <div class="col-6 ps-2">
+              <div class="text-muted">Horas ordinarias este período</div>
+              <div class="fw-bold" id="he-horas-ordinarias">—</div>
+            </div>
           </div>
+        </div>
+
+        {# Acumulados ocultos enviados al backend #}
+        <input type="hidden" id="hf-he-diurnas"   name="horas_extras_diurnas"   value="0">
+        <input type="hidden" id="hf-he-nocturnas"  name="horas_extras_nocturnas" value="0">
+        <input type="hidden" id="hf-rec-nocturno"  name="recargo_nocturno_horas" value="0">
+        <input type="hidden" id="hf-rec-festivo"   name="recargo_festivo_horas"  value="0">
+
+        <div class="row g-2 align-items-end mb-2">
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold">Tipo de hora extra / recargo</label>
+            <select id="he-tipo-select" class="form-select form-select-sm">
+              <option value="diurna"       data-recargo="25">H.E. Diurna — Lun-Sáb 6am-9pm (+25%)</option>
+              <option value="nocturna"     data-recargo="75">H.E. Nocturna — 9pm-6am (+75%)</option>
+              <option value="rec_nocturno" data-recargo="35">Recargo Nocturno ordinario (+35%)</option>
+              <option value="festivo"      data-recargo="75">H.E. Dominical / Festivo (+75%)</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small fw-semibold">Cantidad de horas</label>
+            <input type="number" id="he-horas-input" class="form-control form-control-sm"
+                   min="0.5" step="0.5" placeholder="0.5">
+          </div>
+          <div class="col-md-3">
+            <button type="button" id="btn-agregar-he" class="btn btn-outline-primary btn-sm w-100">
+              <i class="bi bi-plus-lg me-1"></i>Agregar
+            </button>
+          </div>
+        </div>
+        <div id="he-lista" class="mb-1"></div>
+        <div id="he-total-row" class="d-none small text-end text-muted pe-1">
+          Total horas extras acumuladas: <strong id="he-total-horas">0</strong> h
+        </div>
       </div>
 
-      {# Devengos Adicionales #}
+      {# ── 4. Devengos y Deducciones Adicionales ─────────────────────────────── #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
           <i class="bi bi-plus-circle me-2"></i>Devengos y Deducciones Adicionales (COP)
@@ -148,8 +194,21 @@
           </div>
         </div>
       </div>
-      
-      {# Observaciones #}
+
+      {# ── 5. Cuenta Contable ────────────────────────────────────────────────── #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-journal-check me-2"></i>Cuenta Contable
+          <small class="text-muted fw-normal ms-2">2505 — Salarios por pagar</small>
+        </h6>
+        <input type="hidden" name="cuenta_contable_uuid" id="devengo-cuenta-uuid">
+        <input type="text" class="form-control mb-2" id="devengo-cuenta-busqueda"
+               placeholder="Buscar: 2505, salarios por pagar...">
+        <div id="devengo-cuenta-resultados" class="list-group mb-2" style="max-height:200px;overflow-y:auto;"></div>
+        <div id="devengo-cuenta-label" class="text-success small fst-italic"></div>
+      </div>
+
+      {# ── 6. Observaciones ─────────────────────────────────────────────────── #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
           <i class="bi bi-chat-left-text me-2"></i>Observaciones
@@ -157,8 +216,17 @@
         <textarea class="form-control" id="devengo-observaciones" name="observaciones" rows="2"></textarea>
       </div>
 
+      {# ── 7. Vista previa del cálculo (HTMX partial — reactivo) ───────────── #}
+      <div id="devengo-campos-calculados-wrapper" class="mb-4">
+        <div class="alert alert-info">
+          <i class="bi bi-info-circle me-2"></i>
+          Seleccione empleado, período y días laborados para previsualizar el cálculo.
+        </div>
+      </div>
+
     </form>
   </div>
+
   <div class="offcanvas-footer border-top bg-light p-3">
     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
       <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
@@ -167,8 +235,30 @@
               hx-target="#grid-empleados"
               hx-swap="none"
               hx-include="#form-devengo"
-              hx-on::htmx:before-request="const btn=this; if(!btn.disabled){btn.disabled=true; btn.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\' aria-hidden=\'true\'></span>Guardando...';}"
-              hx-on::htmx:response-error="window.UIManager&&window.UIManager.handleError&&window.UIManager.handleError(event.detail,'[devengo.offcanvas]',{errorContainerSelector:'#form-devengo-feedback'})">
+              hx-on::htmx:before-request="
+                const empId   = document.getElementById('devengo-empleado-id')?.value?.trim();
+                const contrId = document.getElementById('devengo-contrato-id')?.value?.trim();
+                const fi      = document.getElementById('devengo-fecha_inicio')?.value?.trim();
+                const ff      = document.getElementById('devengo-fecha_fin_field')?.value?.trim();
+                const fp      = document.getElementById('devengo-fecha_pago')?.value?.trim();
+                const fb      = document.getElementById('form-devengo-feedback');
+                const errores = [];
+                if (!empId || !contrId) errores.push('Seleccione un empleado con contrato activo.');
+                if (!fi) errores.push('Fecha inicio es obligatoria.');
+                if (!ff) errores.push('Fecha fin es obligatoria.');
+                if (!fp) errores.push('Fecha de pago es obligatoria.');
+                if (errores.length) {
+                  if (fb) { fb.className='alert alert-danger'; fb.textContent=errores.join(' '); fb.classList.remove('d-none'); }
+                  htmx.trigger(event.target, 'abort');
+                  return;
+                }
+                if (fb) fb.classList.add('d-none');
+                const btn=this; if(!btn.disabled){btn.disabled=true; btn.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\' aria-hidden=\'true\'></span>Guardando...';}
+              "
+              hx-on::htmx:response-error="
+                this.disabled=false; this.innerHTML='<i class=\'bi bi-check-lg me-1\'></i>Guardar Nómina';
+                window.UIManager&&window.UIManager.handleError&&window.UIManager.handleError(event.detail,'[devengo.offcanvas]',{errorContainerSelector:'#form-devengo-feedback'});
+              ">
         <i class="bi bi-check-lg me-1"></i>Guardar Nómina
       </button>
     </div>

@@ -944,7 +944,7 @@
         if (tabElement) {
             // Usar DOMUtils.onVisibleOnce si está disponible
             if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
-                w.DOMUtils.onVisibleOnce(tabElement, () => {
+                w.DOMUtils.onVisibleOnce(tabElement.id ? '#' + tabElement.id : tabElement, () => {
                     initTabulator();
                     initListEvents();
                     initEventListeners();

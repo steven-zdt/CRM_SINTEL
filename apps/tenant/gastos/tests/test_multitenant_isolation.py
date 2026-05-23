@@ -34,7 +34,7 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
         prov1 = Proveedor.objects.create(empresa=emp1, razon_social="Proveedor 1", numero_documento="999", tipo_documento="NIT")
         
         ds1 = DocumentoSoporte.objects.create(
-            empresa=emp1, resolucion_dian=res1, prefijo="G1", consecutivo=1,
+            empresa=emp1, resolucion_dian=res1, consecutivo=1,
             fecha="2026-05-01", proveedor=prov1,
             subtotal=1000, total=1000,
             descripcion="Gasto T1",
@@ -70,7 +70,7 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
         # Crear varios documentos en T2 para que g2.id sea mayor que cualquier ID en T1
         for i in range(5):
             DocumentoSoporte.objects.create(
-                empresa=emp2, resolucion_dian=res2, prefijo="G2", consecutivo=10+i,
+                empresa=emp2, resolucion_dian=res2, consecutivo=10+i,
                 fecha="2026-05-01", proveedor=prov2,
                 subtotal=100, total=100,
                 descripcion=f"Gasto T2-{i}",
@@ -78,7 +78,7 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
             )
 
         g2 = DocumentoSoporte.objects.create(
-            empresa=emp2, resolucion_dian=res2, prefijo="G2", consecutivo=20,
+            empresa=emp2, resolucion_dian=res2, consecutivo=20,
             fecha="2026-05-01", proveedor=prov2,
             subtotal=2000, total=2000,
             descripcion="Gasto T2",

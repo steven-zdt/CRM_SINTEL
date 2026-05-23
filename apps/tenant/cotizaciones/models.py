@@ -50,8 +50,8 @@ class Cotizacion(SintelTenantBaseModel):
         db_index=True,
         blank=True,
         null=True,
-        verbose_name=_('Código Único'),
-        help_text=_('Código único generado automáticamente desde el perfil de configuración (ej: "STS. 0422-2026")')
+        verbose_name=_('Codigo Unico'),
+        help_text=_('Codigo unico generado automaticamente desde el perfil de configuracion (ej: "STS. 0422-2026")')
     )
     
     # empresa field inherited from SintelTenantBaseModel

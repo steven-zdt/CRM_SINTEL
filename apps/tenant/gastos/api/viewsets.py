@@ -83,6 +83,14 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
             return GastoSerializer
         return GastoDetailSerializer
     
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        try:
+            context['empresa_id'] = self.get_empresa_id()
+        except Exception:
+            context['empresa_id'] = None
+        return context
+    
     def create(self, request, *args, **kwargs):
         """Crea un nuevo Gasto via Service Layer."""
         try:
@@ -107,11 +115,11 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
             return Response({"error": "error_interno", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
-        """Elimina un gasto físicamente."""
+        """Elimina un gasto fisicamente."""
         try:
             from django.conf import settings
             if not settings.DEBUG:
-                # En producción, el gasto debe estar anulado primero
+                # En produccion, el gasto debe estar anulado primero
                 instance = self.get_object()
                 if not instance.anulado:
                     return Response(

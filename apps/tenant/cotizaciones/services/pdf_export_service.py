@@ -19,7 +19,7 @@ class CotizacionPDFExportService:
     @staticmethod
     def render_to_pdf(template_path, context):
         if not HAS_XHTML2PDF:
-            raise ImportError("xhtml2pdf no está instalado.")
+            raise ImportError("xhtml2pdf no esta instalado.")
         
         try:
             template = get_template(template_path)
@@ -101,5 +101,5 @@ class CotizacionPDFExportService:
     @classmethod
     def generar_pdf_interno(cls, cotizacion, empresa, request=None):
         context = cls.preparar_contexto(cotizacion, empresa, request)
-        # Aquí se podrían añadir campos internos al contexto si fuera necesario
+        # Aqui se podrian anadir campos internos al contexto si fuera necesario
         return cls.render_to_pdf('tenant/cotizaciones/pdf/formato_interno.html', context)

@@ -376,6 +376,200 @@ class TestCierreProyectoBloqueo(TenantAPITestCase):
         self.assertIn('No se pueden generar o modificar pedidos', str(serializer.errors['non_field_errors'][0]))
 
 
+class TestServicioAsociado(TenantAPITestCase):
+    """
+    FASE 5 QA — Testing de Vinculación Servicio-Proyecto (v3.5.4)
+    Valida:
+    - Creación de proyecto con servicio_asociado (UUID-Safe)
+    - DSV: Bloqueo de servicio de otro tenant
+    - Actualización de proyecto con nuevo servicio
+    - Rechazo de servicio inexistente
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.first()
+        if not self.empresa:
+            self.empresa = Empresa.objects.create(
+                razon_social='Empresa Test Servicio',
+                nit='900111222',
+            )
+
+    def test_asociar_servicio_proyecto_exitoso(self):
+        """
+        Crear proyecto con UUID de Servicio válido.
+        Valida que el campo servicio_asociado se asigna correctamente.
+        """
+        try:
+            from apps.tenant.inventario.models import Servicio
+        except ImportError:
+            self.skipTest('Inventario app no disponible')
+
+        # Crear un servicio en la empresa
+        servicio = Servicio.objects.create(
+            empresa=self.empresa,
+            nombre='Servicio Instalación',
+            descripcion='Servicio de instalación técnica',
+            tipo='SERVICIO',
+            codigo='SRV-001',
+        )
+
+        # Crear proyecto CON servicio_asociado
+        from apps.tenant.proyectos.services.business_service import orchestrate_create_proyecto
+
+        proyecto = orchestrate_create_proyecto(
+            empresa=self.empresa,
+            data={
+                'nombre': 'Proyecto con Servicio',
+                'tipo_servicio': 'INSTALACION',
+                'servicio_asociado': servicio,  # Pasar instancia de Servicio
+            }
+        )
+
+        # Validar que el servicio se asoció correctamente
+        self.assertIsNotNone(proyecto.servicio_asociado)
+        self.assertEqual(proyecto.servicio_asociado.id, servicio.id)
+        self.assertEqual(proyecto.servicio_asociado.empresa_id, self.empresa.id)
+
+    def test_dsv_asociar_servicio_otro_tenant(self):
+        """
+        DSV: Intentar asociar un servicio de otra empresa debe fallar.
+        Valida que la validación DSV en business_service bloquea IDOR.
+        """
+        try:
+            from apps.tenant.inventario.models import Servicio
+        except ImportError:
+            self.skipTest('Inventario app no disponible')
+
+        # Crear empresa 2 (otro tenant)
+        empresa2 = Empresa.objects.create(
+            razon_social='Otra Empresa',
+            nit='900222333',
+        )
+
+        # Crear servicio EN OTRA EMPRESA
+        servicio_otro = Servicio.objects.create(
+            empresa=empresa2,
+            nombre='Servicio Otra Empresa',
+            descripcion='Servicio de otra empresa',
+            tipo='SERVICIO',
+            codigo='SRV-002',
+        )
+
+        # Intentar crear proyecto en empresa1 con servicio de empresa2 — DEBE FALLAR
+        from apps.tenant.proyectos.services.business_service import orchestrate_create_proyecto
+        from rest_framework.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError) as ctx:
+            orchestrate_create_proyecto(
+                empresa=self.empresa,
+                data={
+                    'nombre': 'Proyecto IDOR Attempt',
+                    'tipo_servicio': 'INSTALACION',
+                    'servicio_asociado': servicio_otro,  # Servicio de otra empresa
+                }
+            )
+
+        # Validar que el error menciona empresa_id mismatch
+        self.assertIn('no pertenece a la empresa', str(ctx.exception))
+
+    def test_update_servicio_asociado_exitoso(self):
+        """
+        Actualizar proyecto existente con nuevo servicio_asociado.
+        Valida que orchestrate_update_proyecto sincroniza el cambio.
+        """
+        try:
+            from apps.tenant.inventario.models import Servicio
+        except ImportError:
+            self.skipTest('Inventario app no disponible')
+
+        # Crear dos servicios
+        servicio1 = Servicio.objects.create(
+            empresa=self.empresa,
+            nombre='Servicio A',
+            tipo='SERVICIO',
+            codigo='SRV-A',
+        )
+        servicio2 = Servicio.objects.create(
+            empresa=self.empresa,
+            nombre='Servicio B',
+            tipo='SERVICIO',
+            codigo='SRV-B',
+        )
+
+        # Crear proyecto con servicio1
+        from apps.tenant.proyectos.services.business_service import (
+            orchestrate_create_proyecto,
+            orchestrate_update_proyecto,
+        )
+
+        proyecto = orchestrate_create_proyecto(
+            empresa=self.empresa,
+            data={
+                'nombre': 'Proyecto Actualizable',
+                'tipo_servicio': 'INSTALACION',
+                'servicio_asociado': servicio1,
+            }
+        )
+
+        self.assertEqual(proyecto.servicio_asociado.id, servicio1.id)
+
+        # Actualizar a servicio2
+        proyecto_actualizado = orchestrate_update_proyecto(
+            proyecto=proyecto,
+            data={
+                'servicio_asociado': servicio2,
+            }
+        )
+
+        # Validar cambio
+        self.assertEqual(proyecto_actualizado.servicio_asociado.id, servicio2.id)
+
+    def test_serializer_queryset_filtrado_por_empresa(self):
+        """
+        Validar que ProyectoDetailSerializer filtra servicios por empresa_id.
+        El queryset del campo servicio_asociado debe incluir SOLO servicios
+        de la empresa actual.
+        """
+        try:
+            from apps.tenant.inventario.models import Servicio
+        except ImportError:
+            self.skipTest('Inventario app no disponible')
+
+        from apps.tenant.proyectos.api.serializers import ProyectoDetailSerializer
+
+        # Crear empresa2 y servicio en empresa2
+        empresa2 = Empresa.objects.create(
+            razon_social='Empresa B',
+            nit='900333444',
+        )
+        servicio_empresa1 = Servicio.objects.create(
+            empresa=self.empresa,
+            nombre='Servicio Empresa1',
+            tipo='SERVICIO',
+            codigo='SRV-E1',
+        )
+        servicio_empresa2 = Servicio.objects.create(
+            empresa=empresa2,
+            nombre='Servicio Empresa2',
+            tipo='SERVICIO',
+            codigo='SRV-E2',
+        )
+
+        # Serializer con contexto de empresa1
+        serializer = ProyectoDetailSerializer(
+            context={'empresa_id': self.empresa.id}
+        )
+
+        # Validar que el queryset del campo servicio_asociado
+        # incluye SOLO servicios de empresa1
+        servicio_queryset = serializer.fields['servicio_asociado'].queryset
+        servicio_ids = list(servicio_queryset.values_list('id', flat=True))
+
+        self.assertIn(servicio_empresa1.id, servicio_ids)
+        self.assertNotIn(servicio_empresa2.id, servicio_ids)
+
+
 # pytest fixtures para testing funcional
 @pytest.fixture
 def client():

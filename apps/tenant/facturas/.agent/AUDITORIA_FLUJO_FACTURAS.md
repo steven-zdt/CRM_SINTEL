@@ -19,7 +19,7 @@
 | 5 | **Resolución de Naturaleza** — `VENTA` (tenant es emisor) / `COMPRA` (tenant es receptor) por comparación NIT | ✅ |
 | 6 | **Gestión de Anexos** — XMLs en `FacturaAnexos` (campo separado, optimiza queries principales) | ✅ |
 | 7 | **Rastreo de Pagos** — Campo `estado_pago`: `NO_PAGADA / PAGO_PARCIAL / PAGADA` | ✅ (v2.97) |
-| 8 | **Edición Controlada** — Modal centralizado para los 8 `MANUAL_EDITABLE_FIELDS`; campos XML siempre readonly | ✅ (v2.98) |
+| 8 | **Edición Controlada** — Modal centralizado para los 8 `MANUAL_EDITABLE_FIELDS`; campos XML siempre readonly | ✅ (v2.en el edit98) |
 | 9 | **Pull Model Retenciones** — `@property` lee desde `Contabilidad.Retencion`; Factura no almacena retenciones | ✅ (v3.7.1) |
 | 10 | **UUID Lookup** — `lookup_field = 'uuid'` via `BaseTenantViewSet` | ✅ (mig 0011/0015) |
 | 11 | **Inter-App API** — `FacturaInterAppAPI` abierto para lectura sin empresa_id (Contabilidad, Proyectos, Gastos, etc.) | ✅ (v3.10.0) |

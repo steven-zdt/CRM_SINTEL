@@ -30,7 +30,8 @@ DOCUMENTO_LIST_FIELDS = (
     'id', 'uuid', 'consecutivo', 'subtotal',
     'fecha', 'total', 'categoria_contable', 'descripcion',
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
-    'cuenta_gasto_uuid'
+    'cuenta_gasto_uuid',
+    'producto_relacionado_id', 'servicio_relacionado_id', 'activo_relacionado_id'
 )
 
 # Campos completos para DETALLE (formularios de edicion)
@@ -40,6 +41,7 @@ DOCUMENTO_DETAIL_FIELDS = (
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
     'cuenta_gasto_uuid',
     'resolucion_dian_id', 'proveedor_id',
+    'producto_relacionado_id', 'servicio_relacionado_id', 'activo_relacionado_id',
     'created_at', 'updated_at'
 )
 
@@ -123,14 +125,20 @@ class DocumentoSelector:
             empresa_id=empresa_id
         ).select_related(
             'resolucion_dian',
-            'proveedor'
+            'proveedor',
+            'producto_relacionado',
+            'servicio_relacionado',
+            'activo_relacionado'
         ).only(
             *DOCUMENTO_LIST_FIELDS,
             'resolucion_dian_id',
             'resolucion_dian__prefijo',
             'resolucion_dian__consecutivo',
             'proveedor__razon_social',
-            'proveedor_id'
+            'proveedor_id',
+            'producto_relacionado__nombre',
+            'servicio_relacionado__nombre',
+            'activo_relacionado__nombre'
         )
 
         if resolucion_id:
@@ -154,7 +162,10 @@ class DocumentoSelector:
         ).select_related(
             'resolucion_dian',
             'proveedor',
-            'usuario_anulacion'
+            'usuario_anulacion',
+            'producto_relacionado',
+            'servicio_relacionado',
+            'activo_relacionado'
         )
         if documento_uuid:
             return qs.filter(uuid=documento_uuid)
@@ -187,12 +198,4 @@ class DocumentoSelector:
         }
 
 
-# Compatibilidad legacy - tuplas de campos por modelo
-LIST_FIELDS = {
-    'documento': DOCUMENTO_LIST_FIELDS,
-    'resolucion': RESOLUCION_LIST_FIELDS,
-}
 
-DETAIL_FIELDS = {
-    'resolucion': RESOLUCION_DETAIL_FIELDS,
-}

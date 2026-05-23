@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 class ConfiguracionBusinessService:
     @staticmethod
     def crear_configuracion(empresa, datos):
-        """Lógica de negocio para crear configuración."""
+        """Logica de negocio para crear configuracion."""
         return ConfiguracionCRUDService.create_configuracion(empresa, **datos)
 
     @staticmethod
     def actualizar_configuracion(instance, datos):
-        """Lógica de negocio para actualizar configuración."""
+        """Logica de negocio para actualizar configuracion."""
         return ConfiguracionCRUDService.update_configuracion(instance, **datos)

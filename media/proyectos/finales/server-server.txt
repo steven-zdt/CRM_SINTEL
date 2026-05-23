@@ -1,0 +1,8 @@
+user == sintel
+pasword = Sintel2738.$
+
+carpeta compartida
+usuario_samba
+pass = Sintel2026
+\\192.168.2.196\Compartido
+ssh sintel@192.168.2.196

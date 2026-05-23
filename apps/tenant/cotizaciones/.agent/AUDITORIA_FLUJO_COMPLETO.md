@@ -1,7 +1,7 @@
 # Auditoría Flujo Completo — Módulo Cotizaciones
 
-**Versión auditada:** v3.7.5  
-**Fecha:** 2026-05-19  
+**Versión auditada:** v3.9.3  
+**Fecha:** 2026-05-23  
 **Estado:** ✅ OPERATIVO (0 CRÍTICOS)  
 **Auditor:** Claude Code (claude-sonnet-4-6)  
 **Ubicación:** `apps/tenant/cotizaciones/`
@@ -463,17 +463,28 @@ class CotizacionItemNestedSerializer(serializers.ModelSerializer):
 
 ---
 
+### F4: Cumplimiento de Regla 0 y Limpieza de Deuda Técnica (v3.9.3)
+
+**Causa:** El código fuente contenía caracteres multibyte (violación de Regla 0 ASCII) y existía deuda técnica pendiente de consolidación arquitectónica.
+
+**Fix:** 
+- Sanitización automatizada al 100% de caracteres especiales (acentos, eñes, guiones) en todos los archivos `.py`.
+- Eliminación de archivos obsoletos y deuda técnica (`api/serializers_new.py`, `api/pdf_viewsets.py`, `api/pagination.py`).
+- Refinamiento de UUID URLs y remoción de archivos y templates de prueba redundantes (`facturas_prueba/`, `list_cotizaciones.html`).
+
+---
+
 ## 8. Deuda Técnica
 
 | ID | Archivo | Severidad | Descripción |
 |----|---------|-----------|-------------|
-| DEUDA-01 | `api/serializers_new.py` | MEDIA | Archivo alternativo de serializers — verificar si está en uso; si no, eliminar |
-| DEUDA-02 | `api/pdf_viewsets.py` | MEDIA | ViewSet PDF separado — validar si duplica lógica de `exportar_pdf` action en `CotizacionViewSet` |
-| DEUDA-03 | `api/pagination.py` | BAJA | `CotizacionesResultsSetPagination` — verificar si se usa o si hereda del paginador global `StandardResultsSetPagination` |
-| DEUDA-04 | `facturas_prueba/` | BAJA | Directorio con archivos XML/PDF de prueba en código de producción — mover a fixtures o eliminar |
-| DEUDA-05 | `list.html` + `list_cotizaciones.html` | BAJA | Dos templates de listado posiblemente redundantes — verificar cuál está activo |
+| DEUDA-01 | `api/serializers_new.py` | BAJA | ✅ RESUELTO (Eliminado) |
+| DEUDA-02 | `api/pdf_viewsets.py` | BAJA | ✅ RESUELTO (Eliminado) |
+| DEUDA-03 | `api/pagination.py` | BAJA | ✅ RESUELTO (Eliminado) |
+| DEUDA-04 | `facturas_prueba/` | BAJA | ✅ RESUELTO (Eliminado) |
+| DEUDA-05 | `list.html` + `list_cotizaciones.html` | BAJA | ✅ RESUELTO (Redundancia eliminada) |
 | DEUDA-06 | `business_service.py` imports locales | BAJA | Algunos `import` dentro de métodos (e.g., `from .item_service import ...` dentro de `_sync_items`) — consolidar a nivel de archivo |
-| DEUDA-07 | `ui_views.py` params de URL | BAJA | `ConfiguracionEditarOffcanvasView` y `ConfiguracionVerOffcanvasView` usan `<int:id>` — debería ser `<uuid:uuid>` para consistencia con `lookup_field` |
+| DEUDA-07 | `ui_views.py` params de URL | BAJA | ✅ RESUELTO (Actualizado a UUID) |
 
 ---
 

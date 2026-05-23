@@ -1,0 +1,65 @@
+Utilizar Google Antigravity para construir esto es la decisión técnica correcta. Al ser un entorno de desarrollo "agent-first", en lugar de programar cada línea tú mismo, vas a dirigir a los agentes de IA para que construyan las herramientas por ti, asegurando que se aplique la regla estricta de "solo lectura" para proteger tus archivos.
+
+Aquí tienes el paso a paso detallado para ejecutar esta automatización desde cero en tu máquina local.
+
+Paso 1: Inicialización del Workspace
+Primero, prepararemos un entorno aislado.
+
+Crea una nueva carpeta en tu Mac M1 llamada mcp-cotizador-seguridad.
+
+Abre Google Antigravity, selecciona esta carpeta y abre la terminal integrada.
+
+Crea una subcarpeta llamada datos_empresa y coloca allí una copia de tu lista de precios (precios_actuales.xlsx) y tu plantilla vacía (plantilla_maestra.xlsx).
+
+Inicializa la base de conocimiento del proyecto ejecutando el comando ag init en la terminal. Esto crea la carpeta .antigravity/ que los agentes usarán para entender el contexto.
+
+Paso 2: Planificación Agéntica (El Prompt Inicial)
+En Antigravity, no empiezas escribiendo código, empiezas definiendo la tarea en el Agent Manager. Ve al panel del agente, haz clic en "New Task" y proporciónale este prompt exacto para garantizar la seguridad de tu proceso:
+
+"Actúa como un desarrollador backend. Necesito crear un servidor MCP en Python utilizando el SDK oficial mcp.
+El objetivo es automatizar cotizaciones de seguridad electrónica sin modificar mis archivos originales. Crea dos herramientas MCP:
+
+buscar_precio_producto: Debe usar pandas para leer el archivo datos_empresa/precios_actuales.xlsx en modo de solo lectura y retornar el precio exacto de un artículo dado.
+
+generar_excel_cotizacion: Debe recibir datos en formato JSON, abrir datos_empresa/plantilla_maestra.xlsx, inyectar los datos en las celdas correspondientes y usar la función 'Guardar como' para crear un archivo nuevo en la carpeta de salida (ej. cotizaciones_generadas/cliente_X.xlsx). Bajo ninguna circunstancia se debe sobreescribir la plantilla maestra.
+Genera el código en un archivo servidor_cotizaciones.py y crea el archivo requirements.txt."
+
+Paso 3: Revisión del Código y Entorno Virtual
+El agente de Antigravity generará la estructura. La lógica de este servidor te resultará muy familiar, estructurándose de manera similar a la creación de vistas o endpoints aislados en Django, donde cada herramienta cumple una única función pura.
+
+Una vez que el agente termine, revisa el archivo servidor_cotizaciones.py para validar que la función de guardado efectivamente crea un archivo nuevo.
+
+En la terminal, crea y activa tu entorno virtual:
+python3 -m venv venv
+source venv/bin/activate
+
+Pídele al agente que instale las dependencias generadas o hazlo tú mismo: pip install -r requirements.txt.
+
+Paso 4: Configuración del MCP en Antigravity
+Para que el editor y Gemini reconozcan tus nuevas herramientas locales, debes enlazar el servidor.
+
+Abre el menú desplegable ("...") en la parte superior del panel del agente de Antigravity y selecciona MCP Store.
+
+Haz clic en Manage MCP Servers y luego en View raw config.
+
+Se abrirá un archivo llamado mcp_config.json. Añade tu nuevo servidor apuntando a la ruta absoluta de tu Mac M1:
+
+JSON
+{
+  "mcpServers": {
+    "cotizador_seguridad": {
+      "command": "/Usuarios/tu_usuario/mcp-cotizador-seguridad/venv/bin/python",
+      "args": ["/Usuarios/tu_usuario/mcp-cotizador-seguridad/servidor_cotizaciones.py"]
+    }
+  }
+}
+Paso 5: Despliegue de Notificaciones (Correo)
+Una vez que el proceso de Excel sea seguro y esté probado, debes agregar la herramienta de envío. Para garantizar una alta entregabilidad de los correos a tus clientes (y que no caigan en spam), puedes instruir al agente de Antigravity para que integre una arquitectura cloud robusta utilizando AWS SES a través de la librería boto3, añadiendo una tercera herramienta MCP llamada enviar_cotizacion_aws.
+
+Paso 6: Ejecución y Prueba Controlada
+Abre un nuevo chat general en Antigravity, el cual ya tendrá cargadas las herramientas de tu MCP.
+Escribe: "Un cliente me acaba de pedir una cotización para 4 cámaras IP y un DVR de 8 canales. Búscalo en mi lista de precios y genérale la cotización."
+
+El sistema buscará los valores, inyectará los datos y creará el archivo nuevo, manteniendo tus procesos y finanzas completamente resguardados.
+
+¿Te gustaría que le indiquemos al agente de Antigravity que implemente el servidor MCP utilizando un framework asíncrono como FastMCP desde el principio para que pueda manejar múltiples cotizaciones al mismo tiempo?

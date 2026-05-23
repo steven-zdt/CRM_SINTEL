@@ -1,5 +1,6 @@
 {# offcanvas_detalle_contrato.html - Vista de DETALLE de Contrato v2.61 #}
 {# ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado SOLO para visualización #}
+{% load currency_filters %}
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-contrato-detalle" aria-labelledby="offcanvas-contrato-detalle-label" style="width: 90%; max-width: 600px;">
   <div class="offcanvas-header border-bottom bg-light">
@@ -70,15 +71,15 @@
         <div class="row g-3">
           <div class="col-6">
             <label class="small text-muted d-block">Salario Mensual</label>
-            <span class="fw-bold text-success">${{ contrato.salario_mensual|floatformat:2 }}</span>
+            <span class="fw-bold text-success">{{ contrato.salario_mensual|currency_cop }}</span>
           </div>
           <div class="col-6">
             <label class="small text-muted d-block">Auxilio Transporte</label>
-            <span class="fw-bold">${{ contrato.auxilio_transporte|floatformat:2 }}</span>
+            <span class="fw-bold">{{ contrato.auxilio_transporte|currency_cop }}</span>
           </div>
           <div class="col-12">
             <label class="small text-muted d-block">Préstamos Empresa</label>
-            <span class="fw-bold text-danger">${{ contrato.prestamos_empresa|floatformat:2 }}</span>
+            <span class="fw-bold text-danger">{{ contrato.prestamos_empresa|currency_cop }}</span>
           </div>
         </div>
       </div>

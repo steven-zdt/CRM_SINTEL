@@ -28,7 +28,11 @@ def _resolve_empresa():
     """Resuelve la Empresa del tenant activo. Retorna None si falla."""
     try:
         from apps.tenant.empresa.models import Empresa
-        return Empresa.objects.only('id').first()
+        # Buscar prioritariamente la SSoT con singleton_key=1
+        empresa = Empresa.objects.filter(singleton_key=1).only('id').first()
+        if not empresa:
+            empresa = Empresa.objects.only('id').order_by('id').first()
+        return empresa
     except Exception:
         return None
 

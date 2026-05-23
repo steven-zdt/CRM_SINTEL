@@ -1,5 +1,5 @@
 """
-Motor modular de generación de PDF para Cotizaciones v2.60.
+Motor modular de generacion de PDF para Cotizaciones v2.60.
 """
 from io import BytesIO
 import logging
@@ -17,7 +17,7 @@ except ImportError:
 
 class CotizacionPDFGenerator:
     """
-    Motor modular de PDF. Separado de la lógica de negocio.
+    Motor modular de PDF. Separado de la logica de negocio.
     """
     
     @staticmethod
@@ -27,7 +27,7 @@ class CotizacionPDFGenerator:
         """
         if not HAS_XHTML2PDF:
             raise ImportError(
-                "xhtml2pdf no está instalado. "
+                "xhtml2pdf no esta instalado. "
                 "Instale con: pip install xhtml2pdf"
             )
         
@@ -36,7 +36,7 @@ class CotizacionPDFGenerator:
             html = template.render(context)
             
             if not html:
-                logger.error(f"[PDF Generator] Template '{template_path}' renderizado está vacío")
+                logger.error(f"[PDF Generator] Template '{template_path}' renderizado esta vacio")
                 return None
             
             result = BytesIO()

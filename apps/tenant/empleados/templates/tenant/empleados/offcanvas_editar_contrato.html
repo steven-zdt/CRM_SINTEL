@@ -17,13 +17,8 @@
     {# ⚠️ Contenedor de feedback para UIManager (manejo de errores 400) #}
     <div id="form-contrato-editar-feedback" class="alert d-none mb-3" role="alert"></div>
     
-    {# ⚠️ Formulario puramente declarativo - El éxito se maneja en contrato_editor.js #}
-    <form id="form-contrato-editar" method="POST" onsubmit="return false;" enctype="multipart/form-data"
-          hx-patch="/api/v1/empleados/contratos/{{ contrato.id }}/"
-          hx-target="#grid-empleados" 
-          hx-swap="none"
-          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-          hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[contratos.editar]', {errorContainerSelector: '#form-contrato-editar-feedback'})">
+    {# Formulario declarativo — HTMX esta en el boton de guardar para deteccion confiable #}
+    <form id="form-contrato-editar" onsubmit="return false;" enctype="multipart/form-data">
       {% csrf_token %}
       <input type="hidden" id="contrato-editar-id" name="id" value="{% if contrato %}{{ contrato.id }}{% endif %}">
       <input type="hidden" id="contrato-editar-empleado-id" name="empleado" value="{% if contrato %}{{ contrato.empleado.id }}{% endif %}">
@@ -111,10 +106,23 @@
           </div>
           <div class="col-md-6">
             <label for="contrato-editar-auxilio_transporte" class="form-label">Auxilio de Transporte (COP)</label>
-            <input type="number" class="form-control" id="contrato-editar-auxilio_transporte" name="auxilio_transporte" 
-                   value="{% if contrato %}{{ contrato.auxilio_transporte|default:0 }}{% else %}0{% endif %}" 
+            <input type="number" class="form-control" id="contrato-editar-auxilio_transporte" name="auxilio_transporte"
+                   value="{% if contrato %}{{ contrato.auxilio_transporte|default:0 }}{% else %}0{% endif %}"
                    step="0.01" min="0">
             <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+          </div>
+          <div class="col-md-6">
+            <label for="contrato-editar-horas_semanales" class="form-label text-danger fw-bold">Jornada Semanal *</label>
+            <select class="form-select" id="contrato-editar-horas_semanales" name="horas_semanales" required>
+              {% with hs=contrato.horas_semanales|default:42 %}
+              <option value="42" {% if hs == 42 %}selected{% endif %}>42 h/semana — Estándar Colombia 2026</option>
+              <option value="40" {% if hs == 40 %}selected{% endif %}>40 h/semana</option>
+              <option value="44" {% if hs == 44 %}selected{% endif %}>44 h/semana</option>
+              <option value="48" {% if hs == 48 %}selected{% endif %}>48 h/semana</option>
+              <option value="36" {% if hs == 36 %}selected{% endif %}>36 h/semana</option>
+              {% endwith %}
+            </select>
+            <small class="form-text text-muted">Ley 2101/2021 — base para cálculo de H.E. y recargos</small>
           </div>
           <div class="col-md-12">
             <label for="contrato-editar-prestamos_empresa" class="form-label">Préstamos de la Empresa (COP)</label>
@@ -154,7 +162,15 @@
       <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
         <i class="bi bi-x-lg me-1"></i>Cancelar
       </button>
-      <button type="submit" class="btn btn-success" id="btn-guardar-contrato-editar" form="form-contrato-editar">
+      <button type="button" class="btn btn-success" id="btn-guardar-contrato-editar"
+              hx-patch="/api/v1/empleados/contratos/{{ contrato.uuid }}/"
+              hx-target="#offcanvas-container-contratos"
+              hx-swap="none"
+              hx-include="#form-contrato-editar"
+              hx-encoding="multipart/form-data"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              hx-on::htmx:before-request="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\'></span>Guardando...';"
+              hx-on::htmx:response-error="window.UIManager&&window.UIManager.handleError&&window.UIManager.handleError(event.detail,'[contratos.editar]',{errorContainerSelector:'#form-contrato-editar-feedback'});">
         <i class="bi bi-check-lg me-1"></i>Actualizar Contrato
       </button>
     </div>

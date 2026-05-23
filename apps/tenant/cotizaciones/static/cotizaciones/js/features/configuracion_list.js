@@ -25,17 +25,17 @@
             formatter: function() { return '<button class="btn btn-sm btn-primary">Editar</button>'; },
             cellClick: function(e, cell) {
               var data = cell.getRow().getData();
-              ConfiguracionList.onEdit(data.id);
+              ConfiguracionList.onEdit(data.uuid);
             }
           }
         ]
       });
       this.table = table;
     },
-    onEdit: function(id) {
+    onEdit: function(uuid) {
         // Disparar HTMX para abrir editor
         var btn = d.createElement('button');
-        btn.setAttribute('hx-get', '/cotizaciones/partials/configuracion/editar/' + id + '/');
+        btn.setAttribute('hx-get', '/cotizaciones/partials/configuracion/editar/' + uuid + '/');
         btn.setAttribute('hx-target', '#offcanvas-container');
         d.body.appendChild(btn);
         if (w.htmx) w.htmx.process(btn);

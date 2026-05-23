@@ -13,16 +13,18 @@ class EmpresaTemplateTests(TenantAPITestCase):
     def setUp(self):
         """Configuración inicial."""
         super().setUp()
-        self.empresa = Empresa.objects.create(
-            razon_social='Test Empresa',
-            nit='900123456',
-            dv='1',
-            direccion='Calle Test 123',
-            ciudad='Bogotá',
-            departamento='Cundinamarca',
-            email='test@example.com',
-            activa=True,
-        )
+        self.empresa = Empresa.objects.first()
+        if not self.empresa:
+            self.empresa = Empresa.objects.create(
+                razon_social='Test Empresa',
+                nit='900123456',
+                dv='1',
+                direccion='Calle Test 123',
+                ciudad='Bogotá',
+                departamento='Cundinamarca',
+                email='test@example.com',
+                activa=True,
+            )
     
     def test_api_endpoints_no_render_templates(self):
         """Test: Los endpoints /api/v1/empresas/ no renderizan templates."""

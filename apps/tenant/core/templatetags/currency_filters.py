@@ -48,6 +48,27 @@ def currency_cop(value):
         return "$0,00"
 
 
+@register.filter(name='format_cop')
+def format_cop(value):
+    """
+    Formatea un valor como numero COP sin simbolo $ ni decimales.
+    Para usar dentro de input-group donde el $ ya esta en el span.
+
+    Ejemplo:
+        {{ 1300000.50|format_cop }}  -> 1.300.001
+    """
+    if value is None:
+        return "0"
+    try:
+        if isinstance(value, str):
+            value = re.sub(r'[^\d.,-]', '', value)
+            value = value.replace(',', '.')
+        int_val = int(round(float(Decimal(str(value)))))
+        return f"{int_val:,}".replace(',', '.')
+    except (ValueError, TypeError, AttributeError):
+        return "0"
+
+
 @register.filter(name='sanitize_text')
 def sanitize_text(value):
     """

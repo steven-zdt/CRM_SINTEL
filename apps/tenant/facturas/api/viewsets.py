@@ -276,6 +276,47 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                 {"error": "internal_error", "detail": "Ocurrió un error inesperado al actualizar la factura."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+            
+    @action(detail=True, methods=["patch"], url_path="vincular-cotizacion")
+    def vincular_cotizacion(self, request: Request, uuid=None) -> Response:
+        """
+        Vincula o desvincula una cotización a esta factura.
+        # WARNING: SINTEL v3.5: Delegación a BusinessService.
+        """
+        factura = self.get_object()
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+        empresa_id = get_or_create_profile(request.user).empresa_id
+
+        # Wrap in dict to match business service expected data
+        data = {"cotizacion_uuid": request.data.get("cotizacion_uuid")}
+
+        try:
+            with transaction.atomic():
+                factura = FacturaBusinessService.actualizar_factura_limitado(
+                    factura=factura,
+                    data=data,
+                    empresa_id=empresa_id
+                )
+
+            # Retrieve detail serializer manually since get_serializer_class returns None for actions
+            return Response(FacturaDetailSerializer(factura).data, status=status.HTTP_200_OK)
+
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except DjangoValidationError as e:
+            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
+            return Response({"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, IntegrityError, ProtectedError) as e:
+            return Response(
+                {"error": "update_failed", "detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            log_up.error(f"[facturas:vincular_cotizacion] Unexpected error: {str(e)}", extra={"factura_id": factura.id})
+            return Response(
+                {"error": "internal_error", "detail": "Ocurrió un error inesperado al vincular la cotización."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def create(self, request: Request, *args, **kwargs) -> Response:
         """

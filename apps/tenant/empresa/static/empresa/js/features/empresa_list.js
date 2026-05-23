@@ -16,9 +16,18 @@
     const MOD = '[empresa.list]';
     let table = null;
 
-    // ⚠️ Anti-Zombies v2.60: Singleton global para instancias de Tabulator
     if (!w.SintelEmpresaTables) {
         w.SintelEmpresaTables = {};
+    }
+
+    // Helper anti-backdrop-acumulado (patron inventario v3.9.0)
+    function mostrarOffcanvasSeguro(el) {
+        if (!el || !w.bootstrap || !w.bootstrap.Offcanvas) return;
+        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        d.body.classList.remove('overflow-hidden', 'modal-open');
+        var prev = bootstrap.Offcanvas.getInstance(el);
+        if (prev) prev.dispose();
+        new bootstrap.Offcanvas(el).show();
     }
 
     // Definir columnas específicas del módulo
@@ -168,7 +177,7 @@
                 // ⚠️ Safeguard: Verificar que el elemento existe antes de abrir
                 const offcanvasEl = d.getElementById('offcanvas-empresa');
                 if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                    bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                    mostrarOffcanvasSeguro(offcanvasEl);
                 } else {
                     console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);
                 }
@@ -211,7 +220,7 @@
         if (tabElement) {
             // Usar DOMUtils.onVisibleOnce si está disponible
             if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
-                w.DOMUtils.onVisibleOnce(tabElement, () => {
+                w.DOMUtils.onVisibleOnce(tabElement.id ? '#' + tabElement.id : tabElement, () => {
                     initTabulator();
                     initListEvents();
                     initEventListeners();
@@ -274,7 +283,7 @@
                     requestAnimationFrame(() => {
                         const offcanvasEl = d.getElementById('offcanvas-empresa');
                         if (offcanvasEl && typeof bootstrap !== 'undefined') {
-                            bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                            mostrarOffcanvasSeguro(offcanvasEl);
                             console.log('[empresa.list] Offcanvas de empresa mostrado');
                         }
                     });

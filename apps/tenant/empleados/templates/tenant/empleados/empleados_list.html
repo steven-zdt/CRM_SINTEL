@@ -91,7 +91,7 @@
       <div class="tab-pane fade" id="tab-pane-contratos" role="tabpanel" 
            aria-labelledby="tab-contratos" tabindex="0">
         
-        {# Toolbar #}
+        {# Toolbar - Contratos #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="contratos">
           <div class="input-group input-group-sm w-auto">
             <input type="text" 
@@ -105,6 +105,9 @@
               <i class="bi bi-search"></i>
             </button>
           </div>
+          <button class="btn btn-primary btn-sm" id="btn-nuevo-contrato">
+            <i class="bi bi-plus-lg me-1"></i>Nuevo Contrato
+          </button>
         </div>
         
         {# Spinner #}
@@ -130,7 +133,7 @@
       <div class="tab-pane fade" id="tab-pane-nominas" role="tabpanel" 
            aria-labelledby="tab-nominas" tabindex="0">
         
-        {# Toolbar #}
+        {# Toolbar - Nominas #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="nominas">
           <div class="input-group input-group-sm w-auto">
             <input type="text" 
@@ -144,6 +147,9 @@
               <i class="bi bi-search"></i>
             </button>
           </div>
+          <button class="btn btn-primary btn-sm" id="btn-nueva-nomina">
+            <i class="bi bi-cash-coin me-1"></i>Registrar Nomina
+          </button>
         </div>
         
         {# Spinner #}
@@ -172,6 +178,56 @@
 <div id="offcanvas-container-empleados"></div>
 <div id="offcanvas-container-contratos"></div>
 <div id="offcanvas-container-nominas"></div>
+
+{# Offcanvas: Asignar Cuenta Contable a Devengo #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-asignar-cuenta-devengo"
+     aria-labelledby="oc-cuenta-label" data-bs-backdrop="static" style="width:420px;">
+  <div class="offcanvas-header border-bottom">
+    <h6 class="offcanvas-title fw-bold" id="oc-cuenta-label">
+      <i class="bi bi-journal-check me-2 text-success"></i>Asignar Cuenta Contable
+    </h6>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+
+    {# Info del Devengo #}
+    <div class="card bg-light border-0 rounded-3 mb-4 p-3">
+      <div class="row g-2 small">
+        <div class="col-12">
+          <span class="text-muted">Empleado:</span>
+          <strong id="oc-cuenta-empleado" class="ms-1">—</strong>
+        </div>
+        <div class="col-6">
+          <span class="text-muted">Período:</span>
+          <strong id="oc-cuenta-periodo" class="ms-1">—</strong>
+        </div>
+        <div class="col-6 text-end">
+          <span class="text-muted">Neto:</span>
+          <strong id="oc-cuenta-neto" class="ms-1 text-success">—</strong>
+        </div>
+      </div>
+    </div>
+
+    {# Buscador #}
+    <input type="hidden" id="oc-cuenta-devengo-uuid">
+    <input type="hidden" id="oc-cuenta-uuid-selected">
+
+    <label class="form-label fw-semibold">
+      <i class="bi bi-search me-1"></i>Buscar Cuenta PUC
+    </label>
+    <input type="text" id="oc-cuenta-busqueda" class="form-control mb-2"
+           placeholder="Código o nombre (ej: 2505, salarios...)">
+    <div id="oc-cuenta-resultados" class="list-group mb-3" style="max-height:220px;overflow-y:auto;"></div>
+
+    <div id="oc-cuenta-label-selected" class="text-muted small mb-3 fst-italic"></div>
+
+    <div class="d-grid">
+      <button id="btn-guardar-cuenta-devengo" type="button" class="btn btn-success">
+        <i class="bi bi-check-lg me-1"></i>Guardar
+      </button>
+    </div>
+  </div>
+</div>
 
 {# Modal de Confirmacion Eliminar #}
 <div class="modal fade" id="confirmarEliminarModal" tabindex="-1" aria-hidden="true">

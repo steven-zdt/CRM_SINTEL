@@ -1,50 +1,164 @@
 {% load static %}
-{# list.html - Módulo Empresa v2.60 - HTMX + Offcanvas #}
-{# ⚠️ v2.60: Migrado de Bootstrap Modals a HTMX + Offcanvas #}
-{# ⚠️ SINGLETON: Empresa es singleton (0-1 registros por tenant) #}
+{# empresa_list.html - Módulo Empresa v2.65 - Sedes y Áreas como tabs independientes #}
+{# SINGLETON: Empresa es singleton (0-1 registros por tenant) #}
 <div id="ui-empresa-list" class="ui-module ui-empresa">
-  <!-- Card Container -->
-  <div class="card">
-    <!-- Card Header -->
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="card-title mb-0">
-        <i class="bi bi-building"></i> Mi Empresa
-      </h5>
-      <div>
-        {# ⚠️ v2.60: Botón HTMX para gestionar empresa (crear/editar) #}
-        <button class="btn btn-sm btn-primary" 
-                hx-get="/api/v1/empresas/gestor-offcanvas/" 
-                hx-target="#offcanvas-container-empresa" 
-                hx-swap="innerHTML"
-                hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-empresa'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
-          <i class="bi bi-pencil me-1"></i>Gestionar
-        </button>
-      </div>
-    </div>
-    
-    <!-- Card Body -->
-    <div class="card-body">
-      <!-- Feedback -->
-      <div id="feedback-empresa-list" class="alert d-none" role="alert" aria-live="polite"></div>
-      
-      {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
-      <div class="mb-3">
-        <input type="text" id="search-empresa" class="form-control" placeholder="Buscar por NIT, razón social, dirección, teléfono o email...">
-      </div>
 
-      {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
-      <div class="card shadow-sm border-0">
-        <div class="card-body p-0">
-          <div id="grid-empresa" class="flex-grow-1" style="min-height: 300px;"></div>
+  <ul class="nav nav-pills mb-4" id="empresa-subnav" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="empresa-datos-tab" data-bs-toggle="tab" data-bs-target="#subtab-datos"
+              type="button" role="tab" aria-controls="subtab-datos" aria-selected="true">
+        <i class="bi bi-building me-2"></i>Datos de Empresa
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="empresa-sedes-tab" data-bs-toggle="tab" data-bs-target="#subtab-sedes"
+              type="button" role="tab" aria-controls="subtab-sedes" aria-selected="false">
+        <i class="bi bi-geo-alt me-2"></i>Sedes
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="empresa-areas-tab" data-bs-toggle="tab" data-bs-target="#subtab-areas"
+              type="button" role="tab" aria-controls="subtab-areas" aria-selected="false">
+        <i class="bi bi-diagram-3 me-2"></i>Áreas
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="empresa-tab-content">
+
+    <!-- Tab 1: Datos de Empresa + Buzones -->
+    <div class="tab-pane fade show active" id="subtab-datos" role="tabpanel" aria-labelledby="empresa-datos-tab">
+      <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-building"></i> Mi Empresa
+          </h5>
+          <button class="btn btn-sm btn-primary"
+                  hx-get="/api/v1/empresas/gestor-offcanvas/"
+                  hx-target="#offcanvas-container-empresa"
+                  hx-swap="innerHTML"
+                  hx-on::after-settle="if(event.detail.successful !== false){ sintelAbrirOffcanvasEmpresa('offcanvas-empresa'); }">
+            <i class="bi bi-pencil me-1"></i>Gestionar
+          </button>
+        </div>
+        <div class="card-body">
+          <div id="feedback-empresa-list" class="alert d-none" role="alert" aria-live="polite"></div>
+          <div class="mb-3">
+            <input type="text" id="search-empresa" class="form-control" placeholder="Buscar por NIT, razón social, dirección, teléfono o email...">
+          </div>
+          <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+              <div id="grid-empresa" class="flex-grow-1" style="min-height: 200px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% include 'tenant/empresa/mailinbox_list.html' %}
+      {% include 'tenant/empresa/mailinbox_modals.html' %}
+    </div>
+
+    <!-- Tab 2: Sedes -->
+    <div class="tab-pane fade" id="subtab-sedes" role="tabpanel" aria-labelledby="empresa-sedes-tab">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-geo-fill text-primary me-2"></i>Sedes (Sucursales)
+          </h5>
+          <button class="btn btn-sm btn-primary"
+                  hx-get="/api/v1/empresas/sedes/render-offcanvas/"
+                  hx-target="#offcanvas-container-sede"
+                  hx-swap="innerHTML"
+                  hx-on::after-settle="if(event.detail.successful !== false){ sintelAbrirOffcanvasEmpresa('offcanvas-sede'); }">
+            <i class="bi bi-plus-circle me-1"></i>Nueva Sede
+          </button>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <input type="text" id="search-sede" class="form-control" placeholder="Buscar por nombre, dirección o encargado...">
+          </div>
+          <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+              <div id="grid-sede" style="min-height: 300px;"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- Tab 3: Áreas -->
+    <div class="tab-pane fade" id="subtab-areas" role="tabpanel" aria-labelledby="empresa-areas-tab">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-diagram-3-fill text-success me-2"></i>Áreas (Departamentos)
+          </h5>
+          <button class="btn btn-sm btn-primary"
+                  hx-get="/api/v1/empresas/areas/render-offcanvas/"
+                  hx-target="#offcanvas-container-area"
+                  hx-swap="innerHTML"
+                  hx-on::after-settle="if(event.detail.successful !== false){ sintelAbrirOffcanvasEmpresa('offcanvas-area'); }">
+            <i class="bi bi-plus-circle me-1"></i>Nueva Área
+          </button>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <input type="text" id="search-area" class="form-control" placeholder="Buscar por nombre, código o sede...">
+          </div>
+          <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+              <div id="grid-area" style="min-height: 300px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
-{# ⚠️ v2.40: Módulo MailInboxConfig (comparte tab con Empresa) #}
-{% include 'tenant/empresa/mailinbox_list.html' %}
-{% include 'tenant/empresa/mailinbox_modals.html' %}
-
-{# ⚠️ v2.60: Contenedor HTMX para recibir el HTML del Offcanvas #}
+{# Contenedores HTMX para Offcanvas #}
 <div id="offcanvas-container-empresa"></div>
+<div id="offcanvas-container-sede"></div>
+<div id="offcanvas-container-area"></div>
+
+{# sintelAbrirOffcanvas — helper global anti-backdrop-acumulado (patron inventario v3.9.0) #}
+{# Limpia backdrops huerfanos antes de mostrar cualquier offcanvas HTMX del modulo empresa #}
+<script>
+(function() {
+    window.sintelAbrirOffcanvasEmpresa = function(id) {
+        document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+        document.body.classList.remove('overflow-hidden', 'modal-open');
+        var el = document.getElementById(id);
+        if (el && window.bootstrap && window.bootstrap.Offcanvas) {
+            var prev = bootstrap.Offcanvas.getInstance(el);
+            if (prev) prev.dispose();
+            new bootstrap.Offcanvas(el).show();
+        }
+    };
+})();
+</script>
+
+{# Redraw Tabulator al activar sub-tab — evita columnas mal renderizadas en contenedor oculto #}
+<script>
+(function() {
+    var sedesTab = document.getElementById('empresa-sedes-tab');
+    var areasTab = document.getElementById('empresa-areas-tab');
+    if (sedesTab) {
+        sedesTab.addEventListener('shown.bs.tab', function() {
+            requestAnimationFrame(function() {
+                var t = window.SedeListModule && window.SedeListModule.getTable && window.SedeListModule.getTable();
+                if (t) { t.redraw(true); } else if (window.SedeListModule) { window.SedeListModule.init(); }
+            });
+        });
+    }
+    if (areasTab) {
+        areasTab.addEventListener('shown.bs.tab', function() {
+            requestAnimationFrame(function() {
+                var t = window.AreaListModule && window.AreaListModule.getTable && window.AreaListModule.getTable();
+                if (t) { t.redraw(true); } else if (window.AreaListModule) { window.AreaListModule.init(); }
+            });
+        });
+    }
+})();
+</script>
+

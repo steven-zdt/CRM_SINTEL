@@ -1,7 +1,7 @@
 from typing import Any
 from django.db import transaction
 
-from apps.tenant.empresa.models import Empresa
+from apps.tenant.empresa.models import Empresa, Sede, Area
 
 # Campos canónicos alineados con los serializers y UI
 LIST_FIELDS = (
@@ -136,3 +136,107 @@ def get_empresa_emisor_data() -> dict[str, Any]:
 def get_mailbox_config(config_id: int):
     from apps.tenant.empresa.impl.mailbox_provider import get_mailbox_config as _get_mailbox_config
     return _get_mailbox_config(config_id)
+
+
+@transaction.atomic
+def crear_sede_db(empresa_id: int, data: dict) -> Sede:
+    nombre = data.get('nombre')
+    if Sede.objects.filter(empresa_id=empresa_id, nombre=nombre).exists():
+        raise ValueError("Ya existe una sede con este nombre en la empresa.")
+    
+    sede = Sede(
+        empresa_id=empresa_id,
+        nombre=nombre,
+        direccion=data.get('direccion', ''),
+        telefono=data.get('telefono', ''),
+        encargado_nombre=data.get('encargado_nombre', '')
+    )
+    sede.full_clean()
+    sede.save()
+    return sede
+
+
+@transaction.atomic
+def actualizar_sede_db(sede: Sede, data: dict) -> Sede:
+    nombre = data.get('nombre')
+    if nombre and Sede.objects.filter(empresa_id=sede.empresa_id, nombre=nombre).exclude(pk=sede.pk).exists():
+        raise ValueError("Ya existe otra sede con este nombre en la empresa.")
+    
+    if 'nombre' in data:
+        sede.nombre = data['nombre']
+    if 'direccion' in data:
+        sede.direccion = data['direccion']
+    if 'telefono' in data:
+        sede.telefono = data['telefono']
+    if 'encargado_nombre' in data:
+        sede.encargado_nombre = data['encargado_nombre']
+        
+    sede.full_clean()
+    sede.save()
+    return sede
+
+
+@transaction.atomic
+def eliminar_sede_db(sede: Sede) -> None:
+    if sede.areas.exists():
+        raise ValueError("No se puede eliminar la sede porque tiene areas asociadas.")
+    sede.delete()
+
+
+@transaction.atomic
+def crear_area_db(empresa_id: int, data: dict) -> Area:
+    sede_id = data.get('sede')
+    # Validar que sede pertenece a empresa_id (anti-IDOR / DSV)
+    sede = Sede.objects.filter(empresa_id=empresa_id, pk=sede_id).first()
+    if not sede:
+        raise ValueError("La sede especificada no existe o no pertenece a la empresa.")
+        
+    nombre = data.get('nombre')
+    codigo_funcionamiento = data.get('codigo_funcionamiento')
+    
+    if Area.objects.filter(sede=sede, nombre=nombre).exists():
+        raise ValueError("Ya existe un area con este nombre en la sede especificada.")
+    if Area.objects.filter(sede=sede, codigo_funcionamiento=codigo_funcionamiento).exists():
+        raise ValueError("Ya existe un area con este codigo de funcionamiento en la sede especificada.")
+        
+    area = Area(
+        empresa_id=empresa_id,
+        sede=sede,
+        nombre=nombre,
+        codigo_funcionamiento=codigo_funcionamiento
+    )
+    area.full_clean()
+    area.save()
+    return area
+
+
+@transaction.atomic
+def actualizar_area_db(area: Area, data: dict) -> Area:
+    if 'sede' in data:
+        sede_id = data['sede']
+        sede = Sede.objects.filter(empresa_id=area.empresa_id, pk=sede_id).first()
+        if not sede:
+            raise ValueError("La sede especificada no existe o no pertenece a la empresa.")
+        area.sede = sede
+
+    nombre = data.get('nombre', area.nombre)
+    codigo_funcionamiento = data.get('codigo_funcionamiento', area.codigo_funcionamiento)
+    
+    if Area.objects.filter(sede=area.sede, nombre=nombre).exclude(pk=area.pk).exists():
+        raise ValueError("Ya existe otra area con este nombre en la sede especificada.")
+    if Area.objects.filter(sede=area.sede, codigo_funcionamiento=codigo_funcionamiento).exclude(pk=area.pk).exists():
+        raise ValueError("Ya existe otra area con este codigo de funcionamiento en la sede especificada.")
+        
+    if 'nombre' in data:
+        area.nombre = data['nombre']
+    if 'codigo_funcionamiento' in data:
+        area.codigo_funcionamiento = data['codigo_funcionamiento']
+        
+    area.full_clean()
+    area.save()
+    return area
+
+
+@transaction.atomic
+def eliminar_area_db(area: Area) -> None:
+    area.delete()

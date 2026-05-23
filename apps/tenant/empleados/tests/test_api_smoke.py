@@ -11,7 +11,7 @@ from apps.tenant.empleados.models import Empleado
 
 
 @pytest.mark.django_db
-def test_empleados_list_smoke(client, django_user_model, tenant):
+def test_empleados_list_smoke(client, admin_user, tenant):
     """
     Smoke test: lista de empleados.
     
@@ -20,18 +20,24 @@ def test_empleados_list_smoke(client, django_user_model, tenant):
     """
     # Insertar registro en el esquema del tenant
     with schema_context(tenant.schema_name):
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.first()
         Empleado.objects.create(
             tipo_documento="CC",
             numero_documento="1234567890",
             primer_nombre="Ana",
             primer_apellido="Pérez",
             email="ana@example.com",
-            estado="ACTIVO"
+            estado="ACTIVO",
+            fecha_ingreso="2024-01-01",
+            empresa=empresa,
+            eps="EPS004",
+            afp="AFP001",
+            arl="ARL002"
         )
     
     # Autenticar usuario global (según fixtures)
-    user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    client.force_login(user)
+    client.force_login(admin_user)
     
     # La ruta se incluirá más adelante en TENANT_URLCONF (/api/v1/empleados/)
     resp = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
@@ -41,22 +47,30 @@ def test_empleados_list_smoke(client, django_user_model, tenant):
 
 
 @pytest.mark.django_db
-def test_empleados_create_smoke(client, django_user_model, tenant):
+def test_empleados_create_smoke(client, admin_user, tenant):
     """
     Smoke test: crear empleado.
     
     Verifica que el endpoint de creación responda correctamente.
     """
-    user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    client.force_login(user)
+    client.force_login(admin_user)
+    
+    with schema_context(tenant.schema_name):
+        from apps.tenant.empresa.models import Empresa
+        empresa = Empresa.objects.first()
     
     payload = {
+        "empresa": str(empresa.id),
         "tipo_documento": "CC",
         "numero_documento": "9876543210",
         "primer_nombre": "Juan",
         "primer_apellido": "García",
         "email": "juan@example.com",
-        "estado": "ACTIVO"
+        "estado": "ACTIVO",
+        "fecha_ingreso": "2024-01-01",
+        "eps": "EPS004",
+        "afp": "AFP001",
+        "arl": "ARL002"
     }
     
     resp = client.post(
@@ -76,7 +90,7 @@ def test_empleados_create_smoke(client, django_user_model, tenant):
 
 
 @pytest.mark.django_db
-def test_empleados_multitenancy_isolation(client, django_user_model, tenant, tenant_factory):
+def test_empleados_multitenancy_isolation(client, admin_user, tenant, tenant_factory):
     """
     Smoke test: aislamiento multitenant.
     
@@ -87,26 +101,61 @@ def test_empleados_multitenancy_isolation(client, django_user_model, tenant, ten
     
     # Crear empleado en tenant1
     with schema_context(tenant.schema_name):
+        from apps.tenant.empresa.models import Empresa
+        empresa1 = Empresa.objects.first()
         Empleado.objects.create(
             tipo_documento="CC",
             numero_documento="1111111111",
             primer_nombre="Tenant1",
             primer_apellido="User",
-            email="t1@example.com"
+            email="t1@example.com",
+            fecha_ingreso="2024-01-01",
+            empresa=empresa1,
+            eps="EPS004",
+            afp="AFP001",
+            arl="ARL002"
         )
     
     # Crear empleado en tenant2
     with schema_context(tenant2.schema_name):
+        from apps.tenant.empresa.models import Empresa
+        empresa2 = Empresa.objects.first()
+        # Ensure Empresa exists in tenant2 as tenant_factory might not run the migrations.
+        if not empresa2:
+            empresa2 = Empresa.objects.create(
+                razon_social='EMPRESA TEST 2',
+                nit='901234568',
+                direccion='Dir test 2',
+                telefono='3000000001'
+            )
         Empleado.objects.create(
             tipo_documento="CC",
             numero_documento="2222222222",
             primer_nombre="Tenant2",
             primer_apellido="User",
-            email="t2@example.com"
+            email="t2@example.com",
+            fecha_ingreso="2024-01-01",
+            empresa=empresa2,
+            eps="EPS004",
+            afp="AFP001",
+            arl="ARL002"
         )
     
-    user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    client.force_login(user)
+    from apps.public.tenants.models import TenantMembership
+    from apps.tenant.perfil.models import TenantProfile
+    TenantMembership.objects.get_or_create(
+        client=tenant2,
+        user=admin_user,
+        defaults={'is_active': True, 'rol': 'ADMIN'}
+    )
+    with schema_context(tenant2.schema_name):
+        TenantProfile.objects.get_or_create(
+            user=admin_user,
+            empresa=empresa2,
+            defaults={'rol': 'ADMIN'}
+        )
+    
+    client.force_login(admin_user)
     
     # Verificar que tenant1 solo ve su empleado (si el router está incluido)
     resp1 = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")

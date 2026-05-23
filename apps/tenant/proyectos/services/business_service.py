@@ -223,6 +223,46 @@ def asignar_snapshot_proveedor(proyecto, proveedor_id=None, proveedor_nombre=Non
     elif proveedor_nombre:
         proyecto.proveedor_nombre = proveedor_nombre
 
+def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
+    """
+    Validación DSV (Double Semantic Verification) para servicio_asociado.
+    Garantiza que el servicio pertenezca exactamente a la empresa del proyecto.
+    Lanza ValidationError si falla la validación.
+    """
+    if not servicio_asociado:
+        return  # None o no enviado es válido
+
+    try:
+        from apps.tenant.inventario.models import Servicio
+
+        # Si es instancia, verificar que la empresa coincida
+        if hasattr(servicio_asociado, 'empresa_id'):
+            if servicio_asociado.empresa_id != proyecto.empresa_id:
+                raise ValidationError(
+                    f'El servicio seleccionado no pertenece a la empresa actual. '
+                    f'Servicio empresa_id: {servicio_asociado.empresa_id}, '
+                    f'Proyecto empresa_id: {proyecto.empresa_id}.'
+                )
+        else:
+            # Si es un ID/UUID, consultar la BD con DSV
+            servicio = Servicio.objects.filter(
+                id=servicio_asociado,
+                empresa_id=proyecto.empresa_id
+            ).only('id', 'empresa_id').first()
+
+            if not servicio:
+                raise ValidationError(
+                    f'El servicio con ID "{servicio_asociado}" no existe en esta empresa '
+                    f'o pertenece a otro tenant.'
+                )
+    except ImportError:
+        # Si inventario no está disponible, no validar
+        pass
+    except ValidationError:
+        raise  # Re-lanzar ValidationError
+    except Exception as e:
+        raise ValidationError(f'Error validando servicio_asociado: {str(e)}')
+
 def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable_nombre=None):
     """
     Valida y cambia la fase del proyecto.
@@ -271,10 +311,11 @@ def orchestrate_create_proyecto(empresa, data):
     factura_numero = data.pop('factura_costo_numero', None)
     proveedor_id = data.pop('proveedor_id', None)
     proveedor_nombre = data.pop('proveedor_nombre', None)
-    
+    servicio_asociado = data.pop('servicio_asociado', None)
+
     proyecto = Proyecto(empresa=empresa, **data)
     asignar_snapshot_cliente(proyecto, cliente_id, cliente_nombre)
-    
+
     if responsable_id or responsable_nombre:
         asignar_snapshot_responsable(proyecto, responsable_id, responsable_nombre)
 
@@ -283,6 +324,10 @@ def orchestrate_create_proyecto(empresa, data):
 
     if proveedor_id or proveedor_nombre:
         asignar_snapshot_proveedor(proyecto, proveedor_id, proveedor_nombre)
+
+    if servicio_asociado:
+        validar_servicio_asociado_dsv(proyecto, servicio_asociado)
+        proyecto.servicio_asociado = servicio_asociado
         
     proyecto = save_proyecto(proyecto)
     calcular_indicadores_financieros(proyecto)
@@ -320,25 +365,30 @@ def orchestrate_update_proyecto(proyecto, data):
     factura_numero = data.pop('factura_costo_numero', None)
     proveedor_id = data.pop('proveedor_id', None)
     proveedor_nombre = data.pop('proveedor_nombre', None)
+    servicio_asociado = data.pop('servicio_asociado', None)
     nueva_fase = data.pop('fase_actual', None)
-    
+
     for key, value in data.items():
         if hasattr(proyecto, key):
             setattr(proyecto, key, value)
-    
+
     if cliente_id is not None or cliente_nombre:
         asignar_snapshot_cliente(proyecto, cliente_id, cliente_nombre)
-        
+
     if nueva_fase and nueva_fase != proyecto.fase_actual:
         cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id, responsable_nombre)
     elif responsable_id is not None or responsable_nombre:
         asignar_snapshot_responsable(proyecto, responsable_id, responsable_nombre)
-        
+
     if factura_id is not None or factura_numero:
         asignar_snapshot_factura(proyecto, factura_id, factura_numero)
-        
+
     if proveedor_id is not None or proveedor_nombre:
         asignar_snapshot_proveedor(proyecto, proveedor_id, proveedor_nombre)
+
+    if servicio_asociado is not None:
+        validar_servicio_asociado_dsv(proyecto, servicio_asociado)
+        proyecto.servicio_asociado = servicio_asociado
         
     proyecto = save_proyecto(proyecto)
     calcular_indicadores_financieros(proyecto)

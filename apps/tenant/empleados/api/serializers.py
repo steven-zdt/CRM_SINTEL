@@ -11,6 +11,14 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
 from rest_framework import serializers
 
+
+class NullableUUIDField(serializers.UUIDField):
+    """UUIDField que convierte cadena vacía en None (útil con FormData/HTMX)."""
+    def to_internal_value(self, data):
+        if data == '' or data is None:
+            return None
+        return super().to_internal_value(data)
+
 # WARNING: v2.60: Importar campos desde services.py (SSoT)
 from apps.tenant.empresa.models import Empresa
 
@@ -80,8 +88,7 @@ class NormalizationMixin:
         if empresa:
             return empresa.id
 
-        empresa = Empresa.objects.only('id').first()
-        return empresa.id if empresa else None
+        return None
 
 class EmpleadoListSerializer(serializers.ModelSerializer):
     """
@@ -93,22 +100,34 @@ class EmpleadoListSerializer(serializers.ModelSerializer):
     nombre_completo = serializers.ReadOnlyField()
     tipo_doc_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
-    
+
+    # Foto de perfil — URL relativa para el avatar en Tabulator
+    foto_url = serializers.SerializerMethodField()
+
     # Indicadores de estado procedentes de anotaciones en services.py
     # Determinan la visibilidad de botones: Crear Contrato -> Registrar Nomina -> Historial
     tiene_contrato_activo = serializers.BooleanField(read_only=True)
     tiene_nominas_registradas = serializers.BooleanField(read_only=True)
+    contrato_activo_uuid = serializers.UUIDField(read_only=True, allow_null=True)
+
+    def get_foto_url(self, obj):
+        if not obj.foto:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.foto.url) if request else obj.foto.url
 
     class Meta:
         model = Empleado
         fields = (
             'id', 'uuid', 'tipo_documento', 'tipo_doc_display', 'numero_documento',
-            'primer_nombre', 'primer_apellido', 'nombre_completo', 
+            'primer_nombre', 'primer_apellido', 'nombre_completo',
             'estado', 'estado_display', 'fecha_ingreso',
-            'tiene_contrato_activo', 'tiene_nominas_registradas'
+            'foto_url',
+            'tiene_contrato_activo', 'tiene_nominas_registradas', 'contrato_activo_uuid'
         )
         read_only_fields = ['id', 'uuid', 'nombre_completo', 'tipo_doc_display', 'estado_display',
-                           'tiene_contrato_activo', 'tiene_nominas_registradas']
+                           'foto_url',
+                           'tiene_contrato_activo', 'tiene_nominas_registradas', 'contrato_activo_uuid']
 
 class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
@@ -141,7 +160,8 @@ class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
         fields = (
             'id', 'uuid', 'empleado', 'empleado_nombre', 'tipo', 'tipo_display',
             'fecha_inicio', 'fecha_fin', 'salario_mensual', 'auxilio_transporte', 
-            'prestamos_empresa', 'cargo', 'archivo_pdf', 'estado', 'estado_display', 'activo'
+            'prestamos_empresa', 'cargo', 'archivo_pdf', 'estado', 'estado_display', 'activo',
+            'horas_semanales',
         )
         read_only_fields = ('id', 'uuid', 'estado_display', 'activo', 'empleado_nombre')
 
@@ -228,7 +248,8 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
     WARNING: v2.95: Todos los valores monetarios estan en COP (Pesos Colombianos).
     """
     # WARNING: v2.60: Campos requeridos
-    periodo_mes = serializers.CharField(required=True, help_text="Periodo en formato YYYY-MM (ej: 2024-01)")
+    # required=False: puede derivarse automaticamente de fecha_inicio en el viewset
+    periodo_mes = serializers.CharField(required=False, allow_blank=True, help_text="Periodo YYYY-MM — se deriva de fecha_inicio si no se envia")
     fecha_pago = serializers.DateField(required=True)
     dias_laborados = serializers.DecimalField(max_digits=5, decimal_places=2, required=True, help_text="Dias laborados (0.5-30, permite decimales)")
     empleado = serializers.PrimaryKeyRelatedField(
@@ -242,19 +263,39 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
         help_text="ID del contrato activo"
     )
     
-    # WARNING: v2.60: Campos calculados - READ_ONLY (Zero Trust: el backend los calcula, nunca confiar en el frontend)
-    salario_base = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Salario base proporcional en COP (calculado automaticamente)")
-    auxilio_transporte = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Auxilio de transporte proporcional en COP (calculado automaticamente)")
-    salud_empleado = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Deduccion de salud (4%) en COP (calculado automaticamente)")
-    pension_empleado = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Deduccion de pension (4%) en COP (calculado automaticamente)")
-    neto_pagar = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, help_text="Neto a pagar en COP (calculado automaticamente)")
-    empleado_nombre = serializers.CharField(source='empleado.nombre_completo', read_only=True)
+    # WARNING: v2.60: Campos calculados - READ_ONLY
+    salario_base        = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    auxilio_transporte  = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    salud_empleado      = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    pension_empleado    = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    neto_pagar          = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    # Campos de presentación (read-only, cross-model via select_related)
+    empleado_uuid       = serializers.UUIDField(source='empleado.uuid',              read_only=True)
+    empleado_nombre     = serializers.CharField(source='empleado.nombre_completo',   read_only=True)
+    empleado_documento  = serializers.CharField(source='empleado.numero_documento',  read_only=True)
+    contrato_tipo         = serializers.CharField(source='contrato.tipo',              read_only=True)
+    contrato_tipo_display = serializers.CharField(source='contrato.get_tipo_display', read_only=True)
+    contrato_cargo        = serializers.CharField(source='contrato.cargo',             read_only=True)
+
+    # Mapeo contable — SSoT en Devengo (Pull Model Contabilidad)
+    # NullableUUIDField: acepta cadena vacía de FormData/HTMX y la convierte en None
+    cuenta_contable_uuid = NullableUUIDField(required=False, allow_null=True)
     
     # WARNING: v2.95: Campos opcionales con valores por defecto
     prestamos = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Prestamos descontados en COP")
     descuentos_operativos = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Descuentos operativos en COP")
     otros_devengos = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Otros devengos en COP")
     observaciones = serializers.CharField(required=False, allow_blank=True)
+    fecha_inicio  = serializers.DateField(required=False, allow_null=True)
+    fecha_fin     = serializers.DateField(required=False, allow_null=True)
+
+    # Horas extras y recargos (Decreto 2663/1950 - normativa colombiana)
+    horas_extras_diurnas   = serializers.DecimalField(max_digits=6, decimal_places=2, required=False, default=0)
+    horas_extras_nocturnas = serializers.DecimalField(max_digits=6, decimal_places=2, required=False, default=0)
+    recargo_nocturno_horas = serializers.DecimalField(max_digits=6, decimal_places=2, required=False, default=0)
+    recargo_festivo_horas  = serializers.DecimalField(max_digits=6, decimal_places=2, required=False, default=0)
+    valor_horas_extras     = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     
     def __init__(self, *args, **kwargs):
         """WARNING: v2.60: Inicializar querysets dinamicamente para validacion Zero Trust."""
@@ -267,26 +308,50 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
                     empresa_id=empresa_id
                 ).only('id', 'uuid', 'empresa_id', 'estado', 'primer_nombre', 'primer_apellido')
             if 'contrato' in self.fields:
+                # Solo contratos ACTIVOS son válidos para registrar nómina.
+                # Esto rechaza el FK antes de llegar a validate_contrato.
                 self.fields['contrato'].queryset = Contrato.objects.filter(
-                    empresa_id=empresa_id
+                    empresa_id=empresa_id,
+                    estado='ACTIVO',
+                    activo=True,
                 ).select_related('empleado').only(
                     'id', 'uuid', 'empresa_id', 'empleado_id', 'empleado__id',
                     'estado', 'activo', 'salario_mensual', 'auxilio_transporte',
-                    'prestamos_empresa', 'tipo',
+                    'prestamos_empresa', 'tipo', 'horas_semanales',
                 )
 
     class Meta:
         model = Devengo
         fields = (
-            'id', 'uuid', 'empleado', 'contrato', 'empleado_nombre', 'periodo_mes',
-            'fecha_pago', 'dias_laborados', 'salario_base', 'auxilio_transporte', 
-            'otros_devengos', 'salud_empleado', 'pension_empleado',
-            'prestamos', 'descuentos_operativos', 'observaciones',
-            'neto_pagar', 'anulado'
+            # Identificación
+            'id', 'uuid',
+            # Relaciones
+            'empleado', 'contrato',
+            # Info presentación (read-only)
+            'empleado_uuid', 'empleado_nombre', 'empleado_documento',
+            'contrato_tipo', 'contrato_tipo_display', 'contrato_cargo',
+            # Período
+            'periodo_mes', 'fecha_pago', 'dias_laborados',
+            # Devengos
+            'salario_base', 'auxilio_transporte', 'otros_devengos',
+            # Horas extras y recargos
+            'horas_extras_diurnas', 'horas_extras_nocturnas', 'recargo_nocturno_horas', 'recargo_festivo_horas', 'valor_horas_extras',
+            # Deducciones
+            'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
+            # Totales y estado
+            'observaciones', 'neto_pagar', 'anulado',
+            # Rango de fechas del período
+            'fecha_inicio', 'fecha_fin',
+            # Mapeo contable
+            'cuenta_contable_uuid',
         )
         read_only_fields = (
-            'id', 'uuid', 'salario_base', 'auxilio_transporte', 'salud_empleado',
-            'pension_empleado', 'neto_pagar', 'anulado', 'empleado_nombre'
+            'id', 'uuid',
+            'salario_base', 'auxilio_transporte', 'salud_empleado', 'pension_empleado', 'neto_pagar',
+            'valor_horas_extras',
+            'anulado',
+            'empleado_uuid', 'empleado_nombre', 'empleado_documento',
+            'contrato_tipo', 'contrato_tipo_display', 'contrato_cargo',
         )
     
     def validate(self, attrs):
@@ -336,32 +401,54 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
         return attrs
     
     def validate_empleado(self, value):
-        """WARNING: v2.60: Validacion estricta - Asegurar que el empleado pertenezca al tenant actual."""
+        """Valida tenant y que el empleado tenga contrato activo antes de registrar nomina."""
         if value is None:
             return value
-        
+
         empresa_id = self._get_empresa_id()
         if not empresa_id:
             raise serializers.ValidationError("No se encontro configuracion de Empresa para este tenant.")
-        
+
         if value.empresa_id != empresa_id:
             raise serializers.ValidationError(f"El empleado con ID {value.id} no pertenece a este tenant.")
-        
+
+        # Garantia: no se puede registrar nomina a un empleado sin contrato activo.
+        # Espejo de la logica del selector get_disponibles_para_periodo en el frontend.
+        tiene_contrato = Contrato.objects.filter(
+            empresa_id=empresa_id,
+            empleado_id=value.id,
+            estado='ACTIVO',
+            activo=True,
+        ).only('id').exists()
+        if not tiene_contrato:
+            raise serializers.ValidationError(
+                'El empleado no tiene un contrato activo. '
+                'Cree un contrato antes de registrar nomina.'
+            )
+
         return value
-    
+
     def validate_contrato(self, value):
-        """WARNING: v2.60: Validacion estricta - Asegurar que el contrato pertenezca al tenant actual y al empleado."""
+        """Valida tenant, estado activo y vinculacion contrato-empleado."""
         if value is None:
             return value
-        
+
         empresa_id = self._get_empresa_id()
         if not empresa_id:
             raise serializers.ValidationError("No se encontro configuracion de Empresa para este tenant.")
-        
+
         if value.empresa_id != empresa_id:
             raise serializers.ValidationError(f"El contrato con ID {value.id} no pertenece a este tenant.")
-        
-        # Validar que el contrato pertenezca al empleado (si esta en el contexto)
+
+        # El queryset ya filtra estado='ACTIVO', pero la validacion explicita garantiza
+        # que tampoco llegue un contrato inactivo por bypass directo del API.
+        if value.estado != 'ACTIVO' or not value.activo:
+            raise serializers.ValidationError(
+                f'El contrato seleccionado no esta activo (estado: {value.estado}). '
+                f'Solo se puede registrar nomina con un contrato ACTIVO.'
+            )
+
+        # Validar que el contrato pertenezca al empleado enviado en el mismo payload.
         empleado = self.initial_data.get('empleado') if hasattr(self, 'initial_data') else None
         if empleado:
             if isinstance(empleado, int):
@@ -370,10 +457,10 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
                 empleado_id = empleado.id
             else:
                 empleado_id = None
-            
+
             if empleado_id and value.empleado_id != empleado_id:
                 raise serializers.ValidationError("El contrato seleccionado no pertenece al empleado especificado.")
-        
+
         return value
 
 class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -381,18 +468,28 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     WARNING: v2.60: Serializer completo para DETALLE/EDICION de Empleados.
     Campos alineados con EMPLEADO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
-    
+
     WARNING: v2.95: Incluye campos de seguridad social (EPS, AFP, ARL).
     """
     contratos = ContratoNestedSerializer(many=True, read_only=True)
     nombre_completo = serializers.ReadOnlyField()
-    
+
+    # Foto de perfil — ImageField writable + URL read-only
+    foto = serializers.ImageField(required=False, allow_null=True, use_url=True)
+    foto_url = serializers.SerializerMethodField()
+
+    def get_foto_url(self, obj):
+        if not obj.foto:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.foto.url) if request else obj.foto.url
+
     # Campos opcionales
     segundo_nombre = serializers.CharField(required=False, allow_blank=True, allow_null=False)
     segundo_apellido = serializers.CharField(required=False, allow_blank=True, allow_null=False)
     telefono = serializers.CharField(required=False, allow_blank=True, allow_null=False)
     fecha_retiro = serializers.DateField(required=False, allow_null=True)
-    
+
     # WARNING: v2.95: Campos de seguridad social
     eps = serializers.ChoiceField(choices=EPS_CHOICES, required=True)
     afp = serializers.ChoiceField(choices=AFP_CHOICES, required=True)
@@ -402,15 +499,9 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         required=False,
         default='I'
     )
-    
-    # WARNING: v3.5: Integracion Contable
-    cuenta_contable_uuid = serializers.UUIDField(required=False, allow_null=True)
 
     # WARNING: v2.60: Empresa es read_only pero se asigna en perform_create
     empresa = serializers.PrimaryKeyRelatedField(read_only=True)
-
-    # WARNING: v3.5: Integracion Contable - 18: label dinamico para UI (Pull Model)
-    cuenta_contable_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Empleado
@@ -418,61 +509,47 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'id', 'uuid', 'empresa', 'tipo_documento', 'numero_documento',
             'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
             'email', 'telefono',
-            'eps', 'afp', 'arl', 'nivel_riesgo_arl',  # WARNING: v2.95: Seguridad Social
+            'eps', 'afp', 'arl', 'nivel_riesgo_arl',
             'estado', 'fecha_ingreso', 'fecha_retiro',
+            'foto', 'foto_url',
             'nombre_completo', 'contratos',
-            'cuenta_contable_uuid', 'cuenta_contable_label'  # WARNING: v3.5: Integracion Contable - 18
         )
-        read_only_fields = ('id', 'uuid', 'empresa', 'nombre_completo', 'contratos', 'cuenta_contable_label')
-
-    def get_cuenta_contable_label(self, obj):
-        """
-        Retorna el UUID contable pasivo sin acoplar empleados a contabilidad.
-        """
-        if isinstance(obj, dict):
-            cuenta_uuid = obj.get('cuenta_contable_uuid')
-        else:
-            cuenta_uuid = obj.cuenta_contable_uuid
-
-        if not cuenta_uuid:
-            return None
-
-        return str(cuenta_uuid)
-
-    def validate_cuenta_contable_uuid(self, value):
-        """
-        Acepta UUID contable como dato pasivo para el Pull Model.
-        """
-        return value
+        read_only_fields = ('id', 'uuid', 'empresa', 'nombre_completo', 'contratos', 'foto_url')
 
     def validate(self, attrs):
-        """
-        WARNING: v2.60: Zero Trust - Normalizacion estricta antes de persistir.
-        """
-        # Remover empresa si viene en los datos (debe ser asignada por perform_create)
+        """Zero Trust — normaliza y verifica unicidad antes de persistir."""
         attrs.pop('empresa', None)
         attrs = self.normalize_data(attrs)
-        
-        # WARNING: v2.60: Validacion de unicidad preventiva (empresa, tipo, numero)
-        # Evita IntegrityError 500 y proporciona feedback 400 limpio
-        empresa = self.context.get('empresa')
+
+        # Usar empresa_id desde context (nunca None si usuario autenticado)
+        # _get_empresa_id() busca 'empresa_id' y luego 'empresa' en el context,
+        # evitando el fallo silencioso cuando context['empresa'] es None.
+        empresa_id = self._get_empresa_id()
         tipo = attrs.get('tipo_documento')
         numero = attrs.get('numero_documento')
-        
-        if tipo and numero and empresa:
-            qs = Empleado.objects.filter(
-                empresa_id=empresa.id,
-                tipo_documento=tipo,
-                numero_documento=numero
-            ).only('id')
+
+        if tipo and numero and empresa_id:
+            qs = (
+                Empleado.objects
+                .filter(empresa_id=empresa_id, tipo_documento=tipo, numero_documento=numero)
+                .only('id', 'primer_nombre', 'primer_apellido', 'estado')
+            )
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
-            
-            if qs.exists():
-                raise serializers.ValidationError({
-                    'numero_documento': f'Ya existe un empleado con {tipo} {numero} en esta empresa.'
-                })
-                
+
+            conflicting = qs.first()
+            if conflicting:
+                nombre = f'{conflicting.primer_nombre} {conflicting.primer_apellido}'.strip()
+                estado = conflicting.estado
+                if estado == 'RETIRADO':
+                    msg = (
+                        f'El documento {tipo} {numero} pertenece a {nombre} (RETIRADO). '
+                        f'Reactive ese empleado en lugar de crear uno nuevo.'
+                    )
+                else:
+                    msg = f'El documento {tipo} {numero} ya esta registrado para {nombre}.'
+                raise serializers.ValidationError({'numero_documento': msg})
+
         return attrs
     
     def validate_email(self, value):

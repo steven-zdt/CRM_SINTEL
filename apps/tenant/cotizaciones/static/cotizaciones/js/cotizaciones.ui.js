@@ -63,9 +63,11 @@
       var fd = new FormData(form);
       fd.forEach(function (val, key) { payload[key] = val; });
 
-      // Convertir IDs numericos
+      // Convertir IDs numericos (solo si consisten puramente en digitos)
       ['cliente', 'configuracion'].forEach(function (k) {
-        if (payload[k]) payload[k] = parseInt(payload[k], 10) || payload[k];
+        if (payload[k] && /^\d+$/.test(payload[k])) {
+          payload[k] = parseInt(payload[k], 10) || payload[k];
+        }
       });
 
       fetch(endpoint, {

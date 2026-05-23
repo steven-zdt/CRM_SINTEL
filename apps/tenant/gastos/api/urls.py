@@ -24,7 +24,7 @@ except ImportError as e:
 
 router = DefaultRouter()
 
-# WARNING: Orden critico — rutas especificas ANTES de r'' para evitar greedy matching.
+# WARNING: Orden critico - rutas especificas ANTES de r'' para evitar greedy matching.
 # r'' genera ^(?P<uuid>[^/.]+)/$ que capturaria "resoluciones" como uuid si va primero.
 router.register(r'resoluciones', ResolucionDIANViewSet, basename='resoluciones-dian')  # ANTES de r''
 router.register(r'', GastoViewSet, basename='gastos')  # AL FINAL

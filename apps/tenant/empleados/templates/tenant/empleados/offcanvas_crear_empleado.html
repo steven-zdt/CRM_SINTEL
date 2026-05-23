@@ -177,33 +177,8 @@
         </div>
       </div>
 
-      {# ── 4. Vinculación Contable (v3.5) ───────────────────── #}
-      <div class="section-divider">
-        <p class="section-title s-success">
-          <i class="bi bi-journal-check"></i>Vinculación Contable
-        </p>
-        <div class="row g-3">
-          <div class="col-12">
-            <label for="empleado-cuenta_contable_label" class="form-label">Cuenta Contable (Pasivo Nómina)</label>
-            <div class="position-relative" data-cuenta-contable-picker>
-              <input type="text" class="form-control" id="empleado-cuenta_contable_label"
-                     value=""
-                     placeholder="Buscar por codigo o nombre (ej: 2505, salarios, nomina)...">
-              <select class="form-select mt-2" id="empleado-cuenta_contable_select" aria-label="Resultados de cuentas contables">
-                <option value="">Busque una cuenta para seleccionarla...</option>
-              </select>
-              <input type="hidden" id="empleado-cuenta_contable_uuid" name="cuenta_contable_uuid"
-                     value="">
-              <div id="empleado-cuenta-resultados" class="list-group position-absolute w-100 shadow-sm d-none"
-                   style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
-            </div>
-            <small class="text-muted">Cuenta donde se registrarán los pasivos y salarios.</small>
-          </div>
-        </div>
-      </div>
-
       {# ── 5. Fecha de Ingreso ───────────────────────────────── #}
-      <div class="mb-2">
+      <div class="section-divider">
         <p class="section-title s-primary">
           <i class="bi bi-calendar-event"></i>Ingreso
         </p>
@@ -211,6 +186,37 @@
           <div class="col-12">
             <label for="empleado-fecha_ingreso" class="form-label">Fecha de Ingreso *</label>
             <input type="date" class="form-control" id="empleado-fecha_ingreso" name="fecha_ingreso" required>
+          </div>
+        </div>
+      </div>
+
+      {# ── 6. Foto de Perfil ─────────────────────────────────── #}
+      <div class="mb-2">
+        <p class="section-title s-success">
+          <i class="bi bi-person-bounding-box"></i>Foto de Perfil
+          <span class="ms-1 fw-normal text-muted" style="font-size:.65rem;text-transform:none;">(opcional)</span>
+        </p>
+        <div class="d-flex align-items-center gap-3">
+          <div id="foto-preview-crear" class="rounded-circle overflow-hidden bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
+               style="width:72px;height:72px;">
+            <i class="bi bi-person-fill text-secondary" style="font-size:2.2rem;"></i>
+          </div>
+          <div class="flex-grow-1">
+            <label for="empleado-foto" class="form-label">Seleccionar imagen</label>
+            <input type="file" class="form-control form-control-sm" id="empleado-foto" name="foto"
+                   accept="image/jpeg,image/png,image/webp"
+                   onchange="(function(inp){
+                     const f=inp.files[0];
+                     const prev=document.getElementById('foto-preview-crear');
+                     if(f && prev){
+                       const r=new FileReader();
+                       r.onload=function(e){
+                         prev.innerHTML='<img src=\''+e.target.result+'\' style=\'width:72px;height:72px;object-fit:cover;\'>';
+                       };
+                       r.readAsDataURL(f);
+                     }
+                   })(this)">
+            <div class="form-text">JPG, PNG o WebP — máximo 2 MB</div>
           </div>
         </div>
       </div>

@@ -139,10 +139,10 @@ class DocumentoCRUDService:
     @staticmethod
     @transaction.atomic
     def eliminar_documento(documento: DocumentoSoporte):
-        """Elimina físicamente un documento."""
+        """Elimina fisicamente un documento."""
         doc_id = documento.id
         documento.delete()
-        logger.info(f"[DocumentoCRUD] Eliminado físicamente documento ID={doc_id}")
+        logger.info(f"[DocumentoCRUD] Eliminado fisicamente documento ID={doc_id}")
 
     @staticmethod
     def _obtener_siguiente_consecutivo(resolucion: ResolucionDIAN) -> int:

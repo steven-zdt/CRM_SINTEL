@@ -27,7 +27,19 @@ app.autodiscover_tasks()
 # Esto asegura que las tareas se registren aunque no estén en una app Django
 app.conf.imports = (
     "apps.services.maildigester.tasks",  # Tarea crítica de ingesta de correo
+    "apps.tenant.dashboard.tasks",  # Dashboard: snapshots + caché
 )
+
+# ============================================================================
+# Celery Beat Schedule — Tareas Periódicas
+# ============================================================================
+from apps.tenant.dashboard.celery_beat_schedule import CELERY_BEAT_SCHEDULE
+
+# Merge dashboard schedule con schedule existente (si existe)
+if not hasattr(app.conf, 'beat_schedule'):
+    app.conf.beat_schedule = {}
+
+app.conf.beat_schedule.update(CELERY_BEAT_SCHEDULE)
 
 
 @app.task(bind=True)

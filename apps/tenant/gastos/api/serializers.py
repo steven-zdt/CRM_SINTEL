@@ -13,6 +13,37 @@ from ..models import DocumentoSoporte, ResolucionDIAN
 from apps.tenant.proveedores.models import Proveedor
 
 
+from apps.tenant.inventario.models import Producto, Servicio, ActivoFijo
+
+class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
+    """Campo relacionado que acepta UUID publico o PK interno en formularios legacy."""
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if queryset is None:
+            return queryset
+        root = getattr(self, 'root', None)
+        context = getattr(root, 'context', {}) if root else {}
+        empresa_id = context.get('empresa_id')
+        if empresa_id and hasattr(queryset.model, 'empresa_id'):
+            return queryset.filter(empresa_id=empresa_id)
+        return queryset
+
+    def to_internal_value(self, data):
+        if data in (None, ''):
+            if self.allow_null:
+                return None
+            self.fail('required')
+        data_str = str(data)
+        if not data_str.isdigit():
+            queryset = self.get_queryset()
+            try:
+                return queryset.get(uuid=data_str)
+            except (TypeError, ValueError, queryset.model.DoesNotExist):
+                self.fail('does_not_exist', pk_value=data)
+        return super().to_internal_value(data)
+
+
 class ResolucionDIANNestedSerializer(serializers.ModelSerializer):
     """
     Serializer anidado para ResolucionDIAN (v2.40).
@@ -176,7 +207,7 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para Tabulator (v2.40).
     Alineado con DocumentoSoporte tras unificacion.
-    WARNING: v3.7.1 - Campo UUID opaco para integracion contable (§18 Pull Model).
+    WARNING: v3.7.1 - Campo UUID opaco para integracion contable (?18 Pull Model).
     """
     ds_consecutivo = serializers.IntegerField(source='consecutivo', read_only=True)
     ds_prefijo = serializers.SerializerMethodField()
@@ -191,6 +222,14 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, read_only=True)
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
+
+    producto_relacionado = UUIDOrPKRelatedField(queryset=Producto.objects.all(), required=False, allow_null=True)
+    servicio_relacionado = UUIDOrPKRelatedField(queryset=Servicio.objects.all(), required=False, allow_null=True)
+    activo_relacionado = UUIDOrPKRelatedField(queryset=ActivoFijo.objects.all(), required=False, allow_null=True)
+
+    producto_relacionado_nombre = serializers.CharField(source='producto_relacionado.nombre', read_only=True, allow_null=True)
+    servicio_relacionado_nombre = serializers.CharField(source='servicio_relacionado.nombre', read_only=True, allow_null=True)
+    activo_relacionado_nombre = serializers.CharField(source='activo_relacionado.nombre', read_only=True, allow_null=True)
 
     def get_ds_prefijo(self, obj):
         try:
@@ -223,6 +262,12 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             'ds_anulado',
             'ds_numero_documento_proveedor',
             'cuenta_gasto_uuid',
+            'producto_relacionado',
+            'servicio_relacionado',
+            'activo_relacionado',
+            'producto_relacionado_nombre',
+            'servicio_relacionado_nombre',
+            'activo_relacionado_nombre',
         )
         read_only_fields = fields
 
@@ -230,7 +275,7 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
 class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     """
     Serializer completo para evidencia legal y clasificacion operativa (v2.40).
-    WARNING: v3.7.1 - Campo UUID opaco para integracion contable (§18 Pull Model).
+    WARNING: v3.7.1 - Campo UUID opaco para integracion contable (?18 Pull Model).
     Contrapartida orquestada por app contabilidad.
     """
     resolucion_dian = ResolucionDIANNestedSerializer(read_only=True)
@@ -244,6 +289,14 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     cuenta_gasto_label = serializers.SerializerMethodField()
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
+
+    producto_relacionado = UUIDOrPKRelatedField(queryset=Producto.objects.all(), required=False, allow_null=True)
+    servicio_relacionado = UUIDOrPKRelatedField(queryset=Servicio.objects.all(), required=False, allow_null=True)
+    activo_relacionado = UUIDOrPKRelatedField(queryset=ActivoFijo.objects.all(), required=False, allow_null=True)
+
+    producto_relacionado_nombre = serializers.CharField(source='producto_relacionado.nombre', read_only=True, allow_null=True)
+    servicio_relacionado_nombre = serializers.CharField(source='servicio_relacionado.nombre', read_only=True, allow_null=True)
+    activo_relacionado_nombre = serializers.CharField(source='activo_relacionado.nombre', read_only=True, allow_null=True)
 
     class Meta:
         model = DocumentoSoporte
@@ -277,6 +330,12 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'fecha_anulacion',
             'cuenta_gasto_uuid',
             'cuenta_gasto_label',
+            'producto_relacionado',
+            'servicio_relacionado',
+            'activo_relacionado',
+            'producto_relacionado_nombre',
+            'servicio_relacionado_nombre',
+            'activo_relacionado_nombre',
             'created_at',
             'updated_at',
         )
@@ -284,7 +343,8 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'id', 'uuid', 'empresa', 'resolucion_dian', 'prefijo', 'consecutivo',
             'vendedor_nit', 'vendedor_nombre', 'vendedor_direccion', 'vendedor_telefono',
             'subtotal', 'total_retefuente', 'total_reteica', 'total_reteiva', 'total',
-            'activo', 'anulado', 'fecha_anulacion', 'created_at', 'updated_at'
+            'activo', 'anulado', 'fecha_anulacion', 'created_at', 'updated_at',
+            'producto_relacionado_nombre', 'servicio_relacionado_nombre', 'activo_relacionado_nombre'
         )
 
     def get_cuenta_gasto_label(self, obj):

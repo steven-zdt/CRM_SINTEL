@@ -15,10 +15,12 @@ from rest_framework.renderers import TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.empresa.models import Empresa
-from .serializers import ProyectoDetailSerializer, ProyectoListSerializer
+from .serializers import ProyectoDetailSerializer, ProyectoListSerializer, ItemPresupuestoSerializer, TareaDiariaSerializer
 from .mixins import ProyectoServiceMixin
-from ..models import Proyecto
+from ..models import Proyecto, ItemPresupuestoProyecto, TareaDiariaProyecto
+from ..services import PresupuestoBusinessService, PRESUPUESTO_ITEM_FIELDS, TareasDiariasBusinessService, TareasDiariasSelector, TAREA_FIELDS
 
 class StandardResultsSetPagination(PageNumberPagination):
     """
@@ -71,7 +73,18 @@ class ProyectoViewSet(
         if not obj:
             raise NotFound("Proyecto no encontrado o no pertenece a este tenant.")
         return obj
-    
+
+    def get_serializer_context(self):
+        """Agrega empresa_id al contexto para que ProyectoDetailSerializer.servicio_asociado lo use."""
+        context = super().get_serializer_context()
+        try:
+            empresa = self.get_empresa()
+            context['empresa_id'] = empresa.id
+        except Exception:
+            # Si no hay empresa, dejar context sin empresa_id (será manejado por __init__)
+            pass
+        return context
+
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
@@ -216,11 +229,23 @@ class ProyectoViewSet(
         except ImportError:
             pass
             
+        facturas = []
+        try:
+            from apps.tenant.facturas.services.business_service import FacturaInterAppAPI
+            facturas = list(
+                FacturaInterAppAPI.list_all()
+                .only('id', 'numero', 'receptor_razon_social', 'total', 'cotizacion_uuid', 'cotizacion_numero')
+                .order_by('-fecha_emision')[:200]
+            )
+        except Exception:
+            pass
+
         context = {
             'proyecto': proyecto,
             'clientes': clientes,
             'empleados': empleados,
             'proveedores': proveedores,
+            'facturas': facturas,
             'tipos_servicio': Proyecto.TIPO_SERVICIO,
             'fases': Proyecto.FASES,
             'estados_tarea': Proyecto.ESTADO_TAREA,
@@ -228,3 +253,200 @@ class ProyectoViewSet(
         
         # [v3.5] Ruta local FSD
         return Response(context, template_name='tenant/proyectos/offcanvas_form.html')
+
+
+class ItemPresupuestoViewSet(BaseTenantViewSet):
+    """
+    ViewSet para ítems de presupuesto planeado (v3.5.2).
+
+    Endpoints:
+    - GET    /api/v1/proyectos/items-presupuesto/?proyecto_uuid=<uuid>
+    - POST   /api/v1/proyectos/items-presupuesto/
+    - PATCH  /api/v1/proyectos/items-presupuesto/<id>/
+    - DELETE /api/v1/proyectos/items-presupuesto/<id>/
+    """
+    serializer_class = ItemPresupuestoSerializer
+    queryset = ItemPresupuestoProyecto.objects.none()
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    lookup_field = 'id'
+    lookup_url_kwarg = 'id'
+
+    def get_queryset(self):
+        """Filtrado por proyecto_uuid + empresa_id (DSV)."""
+        empresa_id = self._get_empresa_id()
+        qs = ItemPresupuestoProyecto.objects.filter(empresa_id=empresa_id)
+
+        proyecto_uuid = self.request.query_params.get('proyecto_uuid')
+        if proyecto_uuid:
+            qs = qs.filter(proyecto__uuid=proyecto_uuid)
+
+        return qs.only(*PRESUPUESTO_ITEM_FIELDS)
+
+    def _get_empresa_id(self):
+        """Obtiene empresa_id del contexto de request (multi-tenant)."""
+        empresa = Empresa.objects.only('id').first()
+        if not empresa:
+            raise APIException(detail='No se encontró la empresa configurada en este tenant.')
+        return empresa.id
+
+    def _get_proyecto(self, proyecto_uuid):
+        """Obtiene el proyecto correspondiente (DSV)."""
+        empresa_id = self._get_empresa_id()
+        proyecto = get_object_or_404(
+            Proyecto,
+            uuid=proyecto_uuid,
+            empresa_id=empresa_id
+        )
+        return proyecto
+
+    def perform_create(self, serializer):
+        """
+        Crea un nuevo ítem de presupuesto.
+        Delegación al service para validación y cálculo.
+        """
+        empresa = Empresa.objects.only('id').first()
+        proyecto_uuid = self.request.data.get('proyecto_uuid')
+        proyecto = self._get_proyecto(proyecto_uuid)
+
+        PresupuestoBusinessService.crear_item(
+            empresa=empresa,
+            proyecto=proyecto,
+            data=serializer.validated_data
+        )
+
+    def perform_update(self, serializer):
+        """
+        Actualiza un ítem de presupuesto.
+        Delegación al service para validación y cálculo.
+        """
+        PresupuestoBusinessService.actualizar_item(
+            item=self.get_object(),
+            data=serializer.validated_data
+        )
+
+    def perform_destroy(self, instance):
+        """
+        Elimina un ítem de presupuesto.
+        Delegación al service para recálculo de proyecto padre.
+        """
+        PresupuestoBusinessService.eliminar_item(instance)
+
+
+class TareaDiariaViewSet(BaseTenantViewSet):
+    """
+    ViewSet para tareas diarias (v3.5.3).
+
+    Endpoints:
+    - GET    /api/v1/proyectos/tareas-diarias/?proyecto_uuid=<uuid>
+    - POST   /api/v1/proyectos/tareas-diarias/
+    - PATCH  /api/v1/proyectos/tareas-diarias/<id>/
+    - DELETE /api/v1/proyectos/tareas-diarias/<id>/
+    - POST   /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/
+
+    DSV: Filtrado automático por empresa_id vía BaseTenantViewSet.
+    """
+    serializer_class = TareaDiariaSerializer
+    queryset = TareaDiariaProyecto.objects.none()
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    lookup_field = 'id'
+    lookup_url_kwarg = 'id'
+
+    def get_queryset(self):
+        """Filtrado por proyecto_uuid + empresa_id (DSV)."""
+        empresa_id = self._get_empresa_id()
+        qs = TareaDiariaProyecto.objects.filter(empresa_id=empresa_id)
+
+        proyecto_uuid = self.request.query_params.get('proyecto_uuid')
+        if proyecto_uuid:
+            qs = qs.filter(proyecto__uuid=proyecto_uuid)
+
+        fecha_inicio = self.request.query_params.get('fecha_inicio')
+        if fecha_inicio:
+            qs = qs.filter(fecha_inicio__gte=fecha_inicio)
+
+        fecha_fin = self.request.query_params.get('fecha_fin')
+        if fecha_fin:
+            qs = qs.filter(fecha_fin__lte=fecha_fin)
+
+        return qs.only(*TAREA_FIELDS)
+
+    def _get_empresa_id(self):
+        """Obtiene empresa_id del contexto de request (multi-tenant)."""
+        empresa = Empresa.objects.only('id').first()
+        if not empresa:
+            raise APIException(detail='No se encontró la empresa configurada en este tenant.')
+        return empresa.id
+
+    def _get_proyecto(self, proyecto_uuid):
+        """Obtiene el proyecto correspondiente (DSV)."""
+        empresa_id = self._get_empresa_id()
+        proyecto = get_object_or_404(
+            Proyecto,
+            uuid=proyecto_uuid,
+            empresa_id=empresa_id
+        )
+        return proyecto
+
+    def perform_create(self, serializer):
+        """
+        Crea una nueva tarea diaria.
+        Delegación al service para validaciones y cálculos.
+        """
+        empresa = Empresa.objects.only('id').first()
+        proyecto_uuid = self.request.data.get('proyecto_uuid')
+        proyecto = self._get_proyecto(proyecto_uuid)
+
+        TareasDiariasBusinessService.crear_tarea(
+            empresa=empresa,
+            proyecto=proyecto,
+            fecha_inicio=serializer.validated_data['fecha_inicio'],
+            fecha_fin=serializer.validated_data['fecha_fin'],
+            titulo=serializer.validated_data['titulo'],
+            descripcion=serializer.validated_data.get('descripcion', ''),
+            prioridad=serializer.validated_data.get('prioridad', 'NORMAL'),
+            asignado_a=serializer.validated_data.get('asignado_a', '')
+        )
+
+    def perform_update(self, serializer):
+        """
+        Actualiza una tarea diaria.
+        Delegación al service para validaciones.
+        """
+        TareasDiariasBusinessService.actualizar_tarea(
+            tarea=self.get_object(),
+            data=serializer.validated_data
+        )
+
+    def perform_destroy(self, instance):
+        """
+        Elimina una tarea diaria.
+        Delegación al service para validaciones.
+        """
+        TareasDiariasBusinessService.eliminar_tarea(instance)
+
+    @action(detail=True, methods=['post'], url_path='cambiar-estado')
+    def cambiar_estado(self, request, id=None):
+        """
+        POST /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/
+        Cambia el estado de una tarea (PENDIENTE → EN_PROCESO → COMPLETADA, etc).
+
+        Body: { "nuevo_estado": "EN_PROCESO" | "COMPLETADA" | "CANCELADA" }
+        """
+        tarea = self.get_object()
+        nuevo_estado = request.data.get('nuevo_estado')
+
+        if not nuevo_estado:
+            return Response(
+                {'detail': 'El campo "nuevo_estado" es requerido.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            TareasDiariasBusinessService.cambiar_estado_tarea(tarea, nuevo_estado)
+            serializer = self.get_serializer(tarea)
+            return Response(serializer.data)
+        except ValidationError as e:
+            return Response(
+                {'detail': str(e.detail) if hasattr(e, 'detail') else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )

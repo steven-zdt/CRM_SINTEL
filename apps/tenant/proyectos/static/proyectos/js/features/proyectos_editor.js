@@ -16,6 +16,8 @@
     const MOD = '[proyectos.editor]';
     let currentProyecto = null;
     let currentStep = 0;
+    let presupuestoListenersInitialized = false;
+    let editorEventsInitialized = false;
     const phaseMap = {
         'BORRADOR': 0,
         'INICIO': 1,
@@ -35,16 +37,50 @@
             return null;
         }
 
+        // Pre-sync: asegurar que el select de factura esté reflejado en el input hidden ANTES de FormData
+        const facturaSelect      = form.querySelector('#proyecto-factura-venta-select');
+        const facturaIdInput     = form.querySelector('#proyecto-factura-costo-id');
+        const facturaNumeroInput = form.querySelector('#proyecto-factura-costo-numero');
+        if (facturaSelect && facturaIdInput) {
+            facturaIdInput.value = facturaSelect.value || '';
+            if (facturaSelect.value && facturaNumeroInput && !facturaNumeroInput.value) {
+                const opt = facturaSelect.options[facturaSelect.selectedIndex];
+                if (opt) facturaNumeroInput.value = opt.getAttribute('data-numero') || opt.text.trim();
+            }
+        }
+
         const formData = new FormData(form);
 
-        // ⚠️ DOM Shield: Remover campos vacíos
+        // ⚠️ DOM Shield: Remover campos vacíos, "undefined" string, None, null
         for (const [key, value] of Array.from(formData.entries())) {
-            if (value === '' || value === null) {
+            if (key === 'factura_costo') continue; // manejado explícitamente abajo
+            // Limpiar: '', null, 'undefined', 'None', etc.
+            if (value === '' || value === null || value === 'undefined' || value === 'None') {
                 formData.delete(key);
             }
         }
 
-        // Clean empty file inputs
+        // FK factura_costo: enviar solo si tiene valor; si vacío, no enviar (PATCH parcial no altera el FK)
+        if (!formData.get('factura_costo')) {
+            formData.delete('factura_costo');
+        }
+
+        // Phase-based field cleanup: remove responsable fields that are empty
+        // (prevents "invalid integer" validation errors for unselected responsables)
+        const responsableFields = [
+            'responsable_comercial_id', 'responsable_comercial_nombre',
+            'responsable_tecnico_id', 'responsable_tecnico_nombre',
+            'responsable_operativo_id', 'responsable_operativo_nombre',
+            'responsable_administrativo_id', 'responsable_administrativo_nombre',
+        ];
+        responsableFields.forEach(field => {
+            const value = formData.get(field);
+            if (value === '' || value === null) {
+                formData.delete(field);
+            }
+        });
+
+        // Limpiar file inputs vacíos
         const fileFields = ['contrato_archivo', 'acta_inicio_archivo', 'cronograma_archivo', 'acta_entrega_archivo', 'informe_final_archivo'];
         fileFields.forEach(field => {
             const input = form.querySelector(`[name="${field}"]`);
@@ -53,9 +89,7 @@
             }
         });
 
-        // Eliminar UUID de los datos a enviar
         formData.delete('uuid');
-
         return formData;
     }
 
@@ -138,7 +172,6 @@
 
         // Actualizar datos del formulario en el DOM tras persistencia
         if (currentProyecto) {
-            // Actualizar UUID e inputs
             const uuidInput = d.querySelector('#proyecto-uuid');
             if (uuidInput) uuidInput.value = currentProyecto.uuid;
 
@@ -146,8 +179,22 @@
             if (codigoInput && currentProyecto.codigo) {
                 codigoInput.value = currentProyecto.codigo;
             }
-            
-            // Recargar detalles y estado del wizard
+
+            // Re-sync factura select: la respuesta del PATCH contiene 'factura_costo' (PK)
+            const selFactura   = d.querySelector('#proyecto-factura-venta-select');
+            const inpFacturaId = d.querySelector('#proyecto-factura-costo-id');
+            const inpFacturaNo = d.querySelector('#proyecto-factura-costo-numero');
+            if (selFactura) {
+                const fkVal = currentProyecto.factura_costo || '';
+                selFactura.value = fkVal;
+                if (inpFacturaId) inpFacturaId.value = fkVal;
+                if (fkVal && inpFacturaNo && !inpFacturaNo.value) {
+                    const opt = selFactura.options[selFactura.selectedIndex];
+                    if (opt) inpFacturaNo.value = opt.getAttribute('data-numero') || '';
+                }
+                actualizarPanelCotizacion(selFactura);
+            }
+
             renderStepLocks();
             populateStepDetails();
         }
@@ -219,6 +266,34 @@
     function irAStep(stepIdx) {
         currentStep = stepIdx;
 
+        // Phase 0 cleanup: clear all responsable fields in Borrador phase
+        if (stepIdx === 0) {
+            const responsableSelects = [
+                'proyecto-responsable-comercial-select',
+                'proyecto-responsable-tecnico-select',
+                'proyecto-responsable-operativo-select',
+                'proyecto-responsable-administrativo-select',
+            ];
+            const responsableFields = [
+                'proyecto-responsable-comercial-id', 'proyecto-responsable-comercial-nombre',
+                'proyecto-responsable-tecnico-id', 'proyecto-responsable-tecnico-nombre',
+                'proyecto-responsable-operativo-id', 'proyecto-responsable-operativo-nombre',
+                'proyecto-responsable-administrativo-id', 'proyecto-responsable-administrativo-nombre',
+            ];
+
+            // Clear selects
+            responsableSelects.forEach(selectId => {
+                const select = d.querySelector(`#${selectId}`);
+                if (select) select.value = '';
+            });
+
+            // Clear hidden inputs
+            responsableFields.forEach(fieldId => {
+                const input = d.querySelector(`#${fieldId}`);
+                if (input) input.value = '';
+            });
+        }
+
         // Actualizar visualización de las pestañas de contenido
         const panes = d.querySelectorAll('#offcanvas-proyecto .step-pane');
         panes.forEach((pane, idx) => {
@@ -268,13 +343,59 @@
     }
 
     /**
-     * Renderizar candados y habilitar/deshabilitar fases en el stepper
+     * Aplicar atributo readonly a todos los inputs de una fase específica
+     * @param {number} stepIdx - Índice del step (0-4)
+     * @param {boolean} readOnly - true para read-only, false para editable
+     */
+    function applyReadOnlyToStep(stepIdx, readOnly) {
+        // Seleccionar el pane específico por índice
+        const panes = d.querySelectorAll('#offcanvas-proyecto .step-pane');
+        if (!panes || panes.length <= stepIdx) return;
+
+        const pane = panes[stepIdx];
+
+        // Seleccionar todos los inputs, selects, textareas en el step
+        const inputs = pane.querySelectorAll('input, select, textarea, [contenteditable]');
+        inputs.forEach(input => {
+            if (readOnly) {
+                input.setAttribute('readonly', 'readonly');
+                input.setAttribute('disabled', 'disabled');
+                input.style.cursor = 'not-allowed';
+                input.style.opacity = '0.6';
+            } else {
+                input.removeAttribute('readonly');
+                input.removeAttribute('disabled');
+                input.style.cursor = 'auto';
+                input.style.opacity = '1';
+            }
+        });
+
+        // Desactivar botones de acción en fases anteriores (cuando están en read-only)
+        if (readOnly) {
+            const buttons = pane.querySelectorAll('button:not(.btn-wizard-back):not(.btn-wizard-next):not([data-bs-dismiss])');
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+            });
+        } else {
+            // Reactivar botones cuando se habilita edición
+            const buttons = pane.querySelectorAll('button:not([data-bs-dismiss])');
+            buttons.forEach(btn => {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            });
+        }
+    }
+
+    /**
+     * Renderizar candados y habilitar/deshabilitar fases en el stepper.
+     * Todas las fases accesibles (actuales y anteriores) son siempre editables.
      */
     function renderStepLocks() {
         const currentFase = currentProyecto?.fase_actual || 'BORRADOR';
         const activeFaseIdx = phaseMap[currentFase] || 0;
 
-        // Configurar clases visuales de los nodos del Stepper header
+        // Marcar visualmente fases completadas en el header del stepper
         const nodes = d.querySelectorAll('#offcanvas-proyecto .step-node');
         nodes.forEach((node, idx) => {
             node.classList.remove('locked', 'completed');
@@ -285,16 +406,20 @@
             }
         });
 
-        // Mostrar u ocultar contenedor con mensaje bloqueado y overlay de fase
+        // Mostrar fases alcanzadas (editable), bloquear fases futuras
         for (let idx = 1; idx <= 4; idx++) {
             const lockedContainer = d.querySelector(`#locked-step-${idx}`);
             const unlockedContent = d.querySelector(`#unlocked-step-${idx}`);
+
             if (idx > activeFaseIdx) {
+                // Fase futura: mostrar candado
                 if (lockedContainer) lockedContainer.classList.remove('d-none');
                 if (unlockedContent) unlockedContent.classList.add('d-none');
             } else {
+                // Fase alcanzada: siempre editable, sin restricciones
                 if (lockedContainer) lockedContainer.classList.add('d-none');
                 if (unlockedContent) unlockedContent.classList.remove('d-none');
+                applyReadOnlyToStep(idx - 1, false);
             }
         }
 
@@ -339,6 +464,105 @@
     }
 
     /**
+     * Inicializar Informe Ejecutivo de Cierre (Fase 4).
+     * Lee desde currentProyecto (API) para evitar race condition con _items async.
+     *
+     * FORMULAS:
+     *   BASE              = valor_contrato_proyectado
+     *   costo_plan        = costo_planeado_total  (sum ItemPresupuestoProyecto)
+     *   costo_real        = costo_mano_obra_real + costo_materiales_real
+     *   utilidad_plan     = BASE - costo_plan
+     *   utilidad_real     = BASE - costo_real
+     *   margen_plan %     = utilidad_plan / BASE * 100
+     *   margen_real %     = utilidad_real / BASE * 100
+     *   variacion_costo   = costo_plan - costo_real  (+ bajo presupuesto / - sobrecosto)
+     */
+    function initInformeCierre() {
+        if (!currentProyecto) return;
+
+        const fmt    = (n) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0);
+        const fmtPct = (n) => `${(n || 0).toFixed(1)}%`;
+        const setEl  = (id, text) => { const el = d.querySelector(`#${id}`); if (el) el.textContent = text; };
+
+        // Contexto (Fase 1)
+        const clienteNombre = currentProyecto.cliente_info?.nombre
+            || currentProyecto.cliente_nombre
+            || (currentProyecto.cliente_id ? `Cliente ID: ${currentProyecto.cliente_id}` : 'Sin cliente asignado');
+        const facturaNumero = currentProyecto.factura_costo_numero || currentProyecto.factura_ref || 'Sin factura';
+        const ctx1 = d.querySelector('#contexto-cliente-nombre');
+        const ctx2 = d.querySelector('#contexto-factura-costo-numero');
+        if (ctx1) ctx1.value = clienteNombre;
+        if (ctx2) ctx2.value = facturaNumero;
+
+        // Numeros base desde API (campos de modelo)
+        const BASE        = parseFloat(currentProyecto.valor_contrato_proyectado) || 0;
+        const costoPlan   = parseFloat(currentProyecto.costo_planeado_total)      || 0;
+        const costoMO     = parseFloat(currentProyecto.costo_mano_obra_real)      || 0;
+        const costoMat    = parseFloat(currentProyecto.costo_materiales_real)     || 0;
+        const costoReal   = costoMO + costoMat;
+
+        // Presupuesto planeado por categoria (Fase 2 _items como fallback si ya estan cargados)
+        const items = w.Sintel?.ProyectosPresupuesto?._items || [];
+        const sumCat = (cat) => items.filter(i => i.categoria === cat)
+                                     .reduce((s, i) => s + (parseFloat(i.subtotal) || 0), 0);
+        const planMO       = sumCat('MANO_OBRA');
+        const planEquipos  = sumCat('EQUIPOS');
+        const planMat      = sumCat('MATERIALES');
+        // Si _items esta vacio (race condition), usar costo_planeado_total del modelo
+        const costoPlanUI  = (planMO + planEquipos + planMat) > 0
+                             ? (planMO + planEquipos + planMat)
+                             : costoPlan;
+
+        const utilPlan   = BASE - costoPlanUI;
+        const utilReal   = BASE - costoReal;
+        const margenPlan = BASE > 0 ? (utilPlan  / BASE * 100) : 0;
+        const margenReal = BASE > 0 ? (utilReal  / BASE * 100) : 0;
+        const variacion  = costoPlanUI - costoReal;   // + bajo presupuesto, - sobrecosto
+        const varPct     = costoPlanUI > 0 ? (variacion / costoPlanUI * 100) : 0;
+
+        // Encabezado: Valor Contrato
+        setEl('dash-valor-contrato', fmt(BASE));
+
+        // Desglose costos planeados (Fase 2 presupuesto)
+        setEl('dash-mano-obra',   fmt(planMO       > 0 ? planMO      : costoPlan));
+        setEl('dash-equipos',     fmt(planEquipos  > 0 ? planEquipos : 0));
+        setEl('dash-materiales',  fmt(planMat      > 0 ? planMat     : 0));
+        setEl('dash-costo-total', fmt(costoPlanUI));
+
+        // Utilidad planeada
+        setEl('dash-utilidad', fmt(utilPlan));
+        const pctEl = d.querySelector('#dash-porcentaje-utilidad');
+        if (pctEl) {
+            pctEl.textContent = fmtPct(margenPlan);
+            pctEl.className = 'badge px-2 py-1 mt-1';
+            pctEl.classList.add(utilPlan > 0 ? 'bg-success' : utilPlan < 0 ? 'bg-danger' : 'bg-secondary');
+        }
+
+        // Panel comparativo Planeado vs Real (IDs agregados en Fase 4 template)
+        setEl('dash-real-costo-total', fmt(costoReal));
+        setEl('dash-real-utilidad',    fmt(utilReal));
+        setEl('dash-real-margen',      fmtPct(margenReal));
+
+        const varEl = d.querySelector('#dash-variacion-badge');
+        if (varEl) {
+            if (variacion > 0) {
+                varEl.className = 'badge bg-success';
+                varEl.textContent = `Bajo presupuesto ${fmtPct(varPct)}`;
+            } else if (variacion < 0) {
+                varEl.className = 'badge bg-danger';
+                varEl.textContent = `Sobrecosto ${fmtPct(varPct)}`;
+            } else {
+                varEl.className = 'badge bg-secondary';
+                varEl.textContent = 'En presupuesto 0%';
+            }
+        }
+
+        // Porcentaje Avance
+        const pctAvanceEl = d.querySelector('#porcentaje-avance-display');
+        if (pctAvanceEl) pctAvanceEl.textContent = `${parseInt(currentProyecto.porcentaje_avance) || 0}%`;
+    }
+
+    /**
      * Rellenar todos los componentes dinámicos de las fases unlocked
      */
     function populateStepDetails() {
@@ -350,6 +574,18 @@
         updateFileBadge('cronograma_archivo', 'cronograma-archivo-existing', 'cronograma-archivo-download');
         updateFileBadge('acta_entrega_archivo', 'acta-entrega-archivo-existing', 'acta-entrega-archivo-download');
         updateFileBadge('informe_final_archivo', 'informe-final-archivo-existing', 'informe-final-archivo-download');
+
+        // 1.5. Presupuesto Planeado (v3.5.2 - Fase 2)
+        if (currentProyecto?.uuid) {
+            const enCierre = currentProyecto.fase_actual === 'CIERRE';
+            w.Sintel.ProyectosPresupuesto.init(currentProyecto.uuid, enCierre);
+        }
+
+        // 1.6. Tareas Diarias (v3.5.3 - Fase 3)
+        if (currentProyecto?.uuid) {
+            const enCierre = currentProyecto.fase_actual === 'CIERRE';
+            w.Sintel.TareasDiarias.init(currentProyecto.uuid, currentProyecto, enCierre);
+        }
 
         // 2. Equipo de Trabajo (Fase 3)
         const equipoList = d.querySelector('#equipo-trabajo-list');
@@ -417,48 +653,73 @@
             }
         }
 
-        // 4. Indicadores Financieros (Fase 4)
-        const ind = currentProyecto.indicadores_financieros || {};
-        const valContrato = ind.valor_contrato || 0;
-        const costPersonal = currentProyecto.costo_mano_obra_real || 0;
-        const costMateriales = currentProyecto.costo_materiales_real || 0;
-        const costTotal = ind.costo_total || (costPersonal + costMateriales);
-        const utilidad = ind.utilidad_estimada || 0;
-        const margen = ind.margen_rentabilidad || 0;
+        // 4. Indicadores Financieros REALES (Fase 3)
+        // BASE: valor_contrato es la base de todos los calculos
+        // ind.real.* viene del serializer get_indicadores_financieros
+        const valContrato    = parseFloat(currentProyecto.valor_contrato_proyectado) || 0;
+        const costPersonal   = parseFloat(currentProyecto.costo_mano_obra_real) || 0;
+        const costMateriales = parseFloat(currentProyecto.costo_materiales_real) || 0;
+        const costTotal      = costPersonal + costMateriales;
+        // utilidad_real = valor_contrato - costo_total_real
+        const utilidad = valContrato - costTotal;
+        // margen_real % = utilidad_real / valor_contrato * 100
+        const margen = valContrato > 0 ? (utilidad / valContrato * 100) : 0;
 
         const setElementText = (id, text) => {
             const el = d.querySelector(`#${id}`);
             if (el) el.textContent = text;
         };
 
-        setElementText('fin-valor-contrato', w.proyectosAPI.formatCurrency(valContrato));
-        setElementText('fin-costo-personal', w.proyectosAPI.formatCurrency(costPersonal));
+        setElementText('fin-valor-contrato',   w.proyectosAPI.formatCurrency(valContrato));
+        setElementText('fin-costo-personal',   w.proyectosAPI.formatCurrency(costPersonal));
         setElementText('fin-costo-materiales', w.proyectosAPI.formatCurrency(costMateriales));
-        setElementText('fin-costo-total', w.proyectosAPI.formatCurrency(costTotal));
-        setElementText('fin-utilidad-neta', w.proyectosAPI.formatCurrency(utilidad));
-        setElementText('fin-margen-rentabilidad', `${margen.toFixed(2)}%`);
+        setElementText('fin-costo-total',      w.proyectosAPI.formatCurrency(costTotal));
+        setElementText('fin-utilidad-neta',    w.proyectosAPI.formatCurrency(utilidad));
 
-        const cardUtilidad = d.querySelector('#fin-card-utilidad');
-        const cardMargen = d.querySelector('#fin-card-margen');
-        if (cardUtilidad && cardMargen) {
-            cardUtilidad.className = 'card finance-card border';
-            cardMargen.className = 'card finance-card border';
+        // Badge margen con color dinamico segun rentabilidad
+        const margenBadge = d.querySelector('#fin-margen-rentabilidad');
+        if (margenBadge) {
+            margenBadge.textContent = `${margen.toFixed(2)}%`;
+            margenBadge.className   = 'badge';
+            margenBadge.classList.add(utilidad > 0 ? 'bg-success' : utilidad < 0 ? 'bg-danger' : 'bg-secondary');
+        }
 
-            if (utilidad > 0) {
-                cardUtilidad.classList.add('bg-success-subtle', 'border-success');
-                cardMargen.classList.add('bg-success-subtle', 'border-success');
-            } else if (utilidad < 0) {
-                cardUtilidad.classList.add('bg-danger-subtle', 'border-danger');
-                cardMargen.classList.add('bg-danger-subtle', 'border-danger');
-            } else {
-                cardUtilidad.classList.add('bg-light');
-                cardMargen.classList.add('bg-light');
-            }
+        // 5. Informe Ejecutivo de Cierre (Fase 4)
+        initInformeCierre();
+    }
+
+    /**
+     * Actualiza el panel de Cotizacion vinculada segun la factura seleccionada (Fase 1)
+     * Lee el data-cotizacion-uuid de la <option> seleccionada y muestra/oculta el panel.
+     */
+    function actualizarPanelCotizacion(selectEl) {
+        const panelVinculada   = d.querySelector('#panel-cotizacion-vinculada');
+        const panelSin         = d.querySelector('#panel-sin-cotizacion');
+        const numeroDisplay    = d.querySelector('#cotizacion-numero-display');
+        const uuidDisplay      = d.querySelector('#cotizacion-uuid-display');
+
+        if (!panelVinculada || !panelSin) return;
+
+        const opt = selectEl.options[selectEl.selectedIndex];
+        const cotizacionNumero = opt ? (opt.getAttribute('data-cotizacion-numero') || '') : '';
+        const cotizacionUuid   = opt ? (opt.getAttribute('data-cotizacion-uuid')   || '') : '';
+
+        panelVinculada.classList.add('d-none');
+        panelSin.classList.add('d-none');
+
+        if (!selectEl.value) return;
+
+        if (cotizacionNumero || cotizacionUuid) {
+            if (numeroDisplay) numeroDisplay.textContent = cotizacionNumero ? `Cotización ${cotizacionNumero}` : 'Cotización vinculada';
+            if (uuidDisplay)   uuidDisplay.textContent   = cotizacionUuid || '';
+            panelVinculada.classList.remove('d-none');
+        } else {
+            panelSin.classList.remove('d-none');
         }
     }
 
     /**
-     * Cargar centros de costos de forma asíncrona
+     * Cargar centros de costos de forma asincrona (Fase 4 - legacy)
      */
     async function cargarCentrosCostos(selectElement) {
         if (!w.proyectosAPI || typeof w.proyectosAPI.fetchCentrosCostos !== 'function') {
@@ -485,6 +746,51 @@
 
         selectElement.innerHTML = html;
         console.log(`${MOD} ${facturas.length} centros de costos cargados`);
+    }
+
+    /**
+     * Cargar servicios disponibles desde Inventario y poblar el select
+     */
+    async function cargarServicios() {
+        const selectServicio = d.querySelector('#proyecto-servicio-asociado-select');
+        if (!selectServicio) return;
+
+        const res = await w.http('GET', '/api/v1/inventario/servicios/');
+        if (!res.ok) {
+            console.error(`${MOD} Error al cargar servicios:`, res);
+            return;
+        }
+
+        // Manejar ambas estructuras: paginated (results) o array directo
+        let servicios = [];
+        if (res.data && res.data.results) {
+            servicios = res.data.results;  // DRF paginated
+        } else if (Array.isArray(res.data)) {
+            servicios = res.data;  // Array directo
+        }
+
+        const selectedUuid = selectServicio.getAttribute('data-selected-uuid');
+        servicios.forEach(servicio => {
+            // ⚠️ UUID-Safe: El campo 'id' contiene el UUID (source='uuid' en serializer)
+            // El campo 'pk' contiene el PK entero de la BD
+            const servicioUuid = servicio.id;  // Este es el UUID en la respuesta del API
+            if (!servicioUuid) {
+                console.warn(`${MOD} Servicio sin UUID:`, servicio);
+                return;
+            }
+
+            const option = d.createElement('option');
+            option.value = servicioUuid;  // UUID string, nunca undefined
+            option.textContent = servicio.nombre || `Servicio ${servicioUuid}`;
+
+            if (selectedUuid && selectedUuid === servicioUuid) {
+                option.selected = true;
+            }
+
+            selectServicio.appendChild(option);
+        });
+
+        console.log(`${MOD} Servicios cargados: ${servicios.length}`);
     }
 
     /**
@@ -525,10 +831,38 @@
         syncSelectInitial('proyecto-responsable-operativo-select', currentProyecto.responsable_operativo_id);
         syncSelectInitial('proyecto-responsable-administrativo-select', currentProyecto.responsable_administrativo_id);
 
-        const CCSelect = d.querySelector('#proyecto-factura-costo');
-        if (CCSelect && currentProyecto.factura_costo_id) {
-            CCSelect.setAttribute('data-initial-value', currentProyecto.factura_costo_id);
-            cargarCentrosCostos(CCSelect);
+        // Sincronizar selector de Servicio Asociado (UUID-Safe)
+        const servicioSelectEl = d.querySelector('#proyecto-servicio-asociado-select');
+        const servicioInput = d.querySelector('#proyecto-servicio-asociado');
+        if (servicioSelectEl && servicioInput) {
+            const servicioUuid = currentProyecto.servicio_asociado_id;
+            // ⚠️ UUID-Safe: solo asignar si es un UUID válido (36 caracteres con guiones)
+            if (servicioUuid && typeof servicioUuid === 'string' && servicioUuid.length === 36) {
+                servicioSelectEl.setAttribute('data-selected-uuid', servicioUuid);
+                servicioSelectEl.value = servicioUuid;
+                servicioInput.value = servicioUuid;
+            } else {
+                // Limpiar valores inválidos
+                servicioSelectEl.value = '';
+                servicioInput.value = '';
+            }
+        }
+
+        // Sincronizar selector de Factura de Venta — API retorna 'factura_costo' (sin _id)
+        const facturaVentaSelectEl = d.querySelector('#proyecto-factura-venta-select');
+        const facturaIdInput       = d.querySelector('#proyecto-factura-costo-id');
+        const facturaNumeroInput   = d.querySelector('#proyecto-factura-costo-numero');
+        const facturaCostaVal      = currentProyecto.factura_costo; // integer PK o null
+        if (facturaVentaSelectEl && facturaCostaVal) {
+            facturaVentaSelectEl.value = facturaCostaVal;
+            // Sync hidden inputs desde la opción seleccionada
+            const opt = facturaVentaSelectEl.options[facturaVentaSelectEl.selectedIndex];
+            if (opt && opt.value) {
+                if (facturaIdInput)     facturaIdInput.value     = opt.value;
+                if (facturaNumeroInput && !facturaNumeroInput.value)
+                    facturaNumeroInput.value = opt.getAttribute('data-numero') || '';
+            }
+            actualizarPanelCotizacion(facturaVentaSelectEl);
         }
 
         // Renderizar candados y navegar al Step de la fase actual
@@ -544,8 +878,18 @@
 
     /**
      * Configurar todos los event listeners del editor
+     * ⚠️ Ejecuta una ÚNICA VEZ para evitar acumulación de listeners
      */
     function initEditorEvents() {
+        if (editorEventsInitialized) {
+            console.log(`${MOD} Listeners ya inicializados, saltando...`);
+            return;
+        }
+        editorEventsInitialized = true;
+
+        // Cargar servicios disponibles para el select
+        cargarServicios();
+
         const form = d.querySelector('#form-proyecto');
         if (!form) {
             console.warn(`${MOD} Formulario #form-proyecto no encontrado`);
@@ -590,51 +934,107 @@
 
         // Clientes
         setupSelectorSync('proyecto-cliente-select', 'proyecto-cliente-id', 'proyecto-cliente-nombre', /^(.+?)\s*\(/);
-        
+
         // Responsables por fases
         setupSelectorSync('proyecto-responsable-comercial-select', 'proyecto-responsable-comercial-id', 'proyecto-responsable-comercial-nombre');
         setupSelectorSync('proyecto-responsable-tecnico-select', 'proyecto-responsable-tecnico-id', 'proyecto-responsable-tecnico-nombre');
         setupSelectorSync('proyecto-responsable-operativo-select', 'proyecto-responsable-operativo-id', 'proyecto-responsable-operativo-nombre');
         setupSelectorSync('proyecto-responsable-administrativo-select', 'proyecto-responsable-administrativo-id', 'proyecto-responsable-administrativo-nombre');
 
-        // Factura (Centro de Costos)
-        const CCSelect = form.querySelector('#proyecto-factura-costo');
-        const CCIdInput = form.querySelector('#proyecto-factura-costo-id');
-        const CCNumeroInput = form.querySelector('#proyecto-factura-costo-numero');
+        // === Servicio Asociado (UUID-Safe) — Fase 0 ===
+        const servicioSelect = form.querySelector('#proyecto-servicio-asociado-select');
+        const servicioInput = form.querySelector('#proyecto-servicio-asociado');
+        if (servicioSelect && servicioInput) {
+            // Inicializar correctamente en caso de que servicioInput tenga "undefined"
+            const initialValue = servicioInput.value;
+            if (!initialValue || initialValue === 'undefined' || initialValue === 'None') {
+                servicioInput.value = '';
+            }
 
-        if (CCSelect) {
-            cargarCentrosCostos(CCSelect);
-            CCSelect.addEventListener('change', (e) => {
-                if (e.target.value) {
-                    const selectedOption = e.target.options[e.target.selectedIndex];
-                    if (selectedOption) {
-                        if (CCIdInput) CCIdInput.value = e.target.value;
-                        const numero = selectedOption.getAttribute('data-numero');
-                        if (numero && CCNumeroInput) {
-                            CCNumeroInput.value = numero;
-                        }
-                    }
+            servicioSelect.addEventListener('change', (e) => {
+                // ⚠️ UUID-Safe: solo asignar UUID válido, NUNCA "undefined"
+                const selectedValue = e.target.value || '';
+                if (selectedValue && selectedValue !== 'undefined') {
+                    servicioInput.value = selectedValue;
                 } else {
-                    if (CCIdInput) CCIdInput.value = '';
-                    if (CCNumeroInput) CCNumeroInput.value = '';
+                    servicioInput.value = '';
                 }
             });
         }
 
-        // 3. Slider de avance
-        const slider = form.querySelector('#proyecto-porcentaje-avance');
-        const bubble = form.querySelector('#porcentaje-avance-bubble');
-        if (slider && bubble) {
-            slider.addEventListener('input', (e) => {
-                bubble.textContent = `${e.target.value}%`;
+        // === Sincronizar estado_tarea (Step 0 y Step 4 comparten el mismo campo) ===
+        const estadoStep0 = form.querySelector('#proyecto-estado');
+        const estadoStep4 = form.querySelector('#proyecto-estado-tarea');
+        if (estadoStep0 && estadoStep4) {
+            estadoStep0.addEventListener('change', () => { estadoStep4.value = estadoStep0.value; });
+            estadoStep4.addEventListener('change', () => { estadoStep0.value = estadoStep4.value; });
+        }
+
+        // === Factura de Venta (Fase 1) — DOM Shield + Panel Cotizacion ===
+        const facturaVentaSelect = form.querySelector('#proyecto-factura-venta-select');
+        const facturaIdInput = form.querySelector('#proyecto-factura-costo-id');
+        const facturaNumeroInput = form.querySelector('#proyecto-factura-costo-numero');
+
+        if (facturaVentaSelect) {
+            // Inicializar panel al cargar (si hay factura preseleccionada)
+            actualizarPanelCotizacion(facturaVentaSelect);
+
+            facturaVentaSelect.addEventListener('change', (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                if (e.target.value && selectedOption) {
+                    if (facturaIdInput) facturaIdInput.value = e.target.value;
+                    const numero = selectedOption.getAttribute('data-numero') || selectedOption.text.trim();
+                    if (facturaNumeroInput) facturaNumeroInput.value = numero;
+                } else {
+                    if (facturaIdInput) facturaIdInput.value = '';
+                    if (facturaNumeroInput) facturaNumeroInput.value = '';
+                }
+                actualizarPanelCotizacion(e.target);
             });
         }
 
-        // 4. Stepper click nodes
+        // Factura legacy Fase 4 (Centro de Costos)
+        const CCSelect = form.querySelector('#proyecto-factura-costo:not(#proyecto-factura-venta-select)');
+        if (CCSelect) {
+            cargarCentrosCostos(CCSelect);
+            CCSelect.addEventListener('change', (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                if (e.target.value && selectedOption) {
+                    if (facturaIdInput) facturaIdInput.value = e.target.value;
+                    const numero = selectedOption.getAttribute('data-numero');
+                    if (numero && facturaNumeroInput) facturaNumeroInput.value = numero;
+                } else {
+                    if (facturaIdInput) facturaIdInput.value = '';
+                    if (facturaNumeroInput) facturaNumeroInput.value = '';
+                }
+            });
+        }
+
+        // 3. Slider de avance (Fase 4 - Informe Ejecutivo)
+        const slider = form.querySelector('#proyecto-porcentaje-avance');
+        const bubble = form.querySelector('#porcentaje-avance-bubble');
+        const display = form.querySelector('#porcentaje-avance-display');
+        if (slider) {
+            slider.addEventListener('input', (e) => {
+                if (bubble) bubble.textContent = `${e.target.value}%`;
+                if (display) display.textContent = `${e.target.value}%`;
+            });
+        }
+
+        // 3.5. Presupuesto Manual (v3.5.2) - Botones y listeners (delegados para evitar duplicados)
+
+        // 4. Stepper click nodes (SOLO permitir si NO está locked)
         const nodes = d.querySelectorAll('#offcanvas-proyecto .step-node');
         nodes.forEach(node => {
             node.addEventListener('click', () => {
                 const stepIdx = parseInt(node.getAttribute('data-step'));
+                // Validación: solo permitir navegar a fases UNLOCKED (no tienen clase 'locked')
+                if (node.classList.contains('locked')) {
+                    if (w.SintelFeedback && typeof w.SintelFeedback.warning === 'function') {
+                        w.SintelFeedback.warning(`Fase ${stepIdx} bloqueada. Completa la fase anterior primero.`);
+                    }
+                    return;
+                }
                 irAStep(stepIdx);
             });
         });
@@ -651,10 +1051,35 @@
 
         const btnNext = d.querySelector('#btn-wizard-next');
         if (btnNext) {
-            btnNext.addEventListener('click', () => {
-                if (currentStep < 4) {
-                    irAStep(currentStep + 1);
+            btnNext.addEventListener('click', async () => {
+                if (currentStep >= 4) return;
+
+                // Validar campos requeridos del step actual
+                if (currentStep === 0) {
+                    const nombre = d.querySelector('#proyecto-nombre')?.value?.trim();
+                    if (!nombre) {
+                        const fb = d.querySelector('#form-proyecto-feedback');
+                        if (fb) {
+                            fb.classList.remove('d-none');
+                            fb.textContent = 'El nombre del proyecto es obligatorio para continuar.';
+                        }
+                        d.querySelector('#proyecto-nombre')?.focus();
+                        return;
+                    }
                 }
+
+                // Guardar silenciosamente antes de avanzar al siguiente paso
+                const uuid = d.querySelector('#proyecto-uuid')?.value;
+                if (uuid) {
+                    btnNext.disabled = true;
+                    btnNext.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Guardando...';
+                    const saved = await guardarProyecto(true);
+                    btnNext.disabled = false;
+                    btnNext.innerHTML = 'Continuar<i class="bi bi-arrow-right ms-1"></i>';
+                    if (saved === false) return; // Detener si el guardado falló
+                }
+
+                irAStep(currentStep + 1);
             });
         }
 
@@ -667,16 +1092,48 @@
             });
         }
 
-        // 6. Limpieza al cerrar offcanvas
+        // 6. Event listeners centralizados en offcanvas (delegados para evitar duplicados)
         const offcanvasEl = d.querySelector('#offcanvas-proyecto');
-        if (offcanvasEl) {
+        if (offcanvasEl && !presupuestoListenersInitialized) {
+            // Click delegado: Presupuesto agregar botón (ejecuta solo UNA VEZ globalmente)
+            offcanvasEl.addEventListener('click', (e) => {
+                if (e.target?.id === 'btn-agregar-presupuesto') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    w.Sintel.ProyectosPresupuesto.agregar();
+                }
+            });
+
+            offcanvasEl.addEventListener('keypress', (e) => {
+                if (['pres-categoria', 'pres-descripcion', 'pres-cantidad', 'pres-valor-unitario'].includes(e.target?.id) && e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    w.Sintel.ProyectosPresupuesto.agregar();
+                }
+            });
+
+            // Click delegado: Tareas Diarias agregar botón
+            offcanvasEl.addEventListener('click', (e) => {
+                if (e.target?.id === 'btn-agregar-tarea') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    w.Sintel.TareasDiarias.agregar();
+                }
+            });
+
+            // Limpieza al cerrar offcanvas
             offcanvasEl.addEventListener('hidden.bs.offcanvas', () => {
                 const errorContainer = d.querySelector('#form-proyecto-feedback');
                 if (errorContainer) {
                     errorContainer.classList.add('d-none');
                     errorContainer.textContent = '';
                 }
+                // Reset flags para siguiente apertura
+                editorEventsInitialized = false;
+                presupuestoListenersInitialized = false;
             });
+
+            presupuestoListenersInitialized = true;
         }
 
         console.log(`${MOD} Event listeners del editor configurados`);
@@ -769,6 +1226,387 @@
             }
         });
     }
+
+    // ============================================================================
+    // MÓDULO: Presupuesto Manual (v3.5.2)
+    // ============================================================================
+    const ProyectosPresupuesto = {
+        _items: [],
+        _proyectoUuid: null,
+
+        async init(proyectoUuid, enCierre = false) {
+            if (!proyectoUuid) return;
+            this._proyectoUuid = proyectoUuid;
+
+            // Cargar items desde API
+            const resp = await w.proyectosAPI.presupuesto.list(proyectoUuid);
+            if (!resp.ok) {
+                console.error(`${MOD} Error al cargar presupuesto:`, resp);
+                this._items = [];
+            } else {
+                this._items = resp.data.results || resp.data || [];
+            }
+
+            this._render(enCierre);
+            this._refreshResumen();
+        },
+
+        _render(enCierre = false) {
+            const tbody = d.getElementById('tbody-presupuesto');
+            if (!tbody) return;
+
+            if (this._items.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-3">
+                            <small><i class="bi bi-info-circle me-1"></i>Sin ítems aún. Agrega costos planeados.</small>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let html = '';
+            this._items.forEach(item => {
+                const categDisplay = item.categoria_display || item.categoria;
+                const btnEliminar = enCierre ? '' : `
+                    <button type="button" class="btn btn-xs btn-outline-danger"
+                            onclick="window.Sintel.ProyectosPresupuesto.eliminar('${item.id}')"
+                            title="Eliminar">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                `;
+                html += `
+                    <tr data-id="${item.id}">
+                        <td>${categDisplay}</td>
+                        <td><small>${item.descripcion || '—'}</small></td>
+                        <td style="text-align: center;"><small>${item.cantidad}</small></td>
+                        <td style="text-align: right;"><small>${w.proyectosAPI.formatCurrency(item.valor_unitario)}</small></td>
+                        <td style="text-align: right;"><strong>${w.proyectosAPI.formatCurrency(item.subtotal)}</strong></td>
+                        <td>${btnEliminar}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        },
+
+        async agregar() {
+            const categoria = d.getElementById('pres-categoria')?.value;
+            const descripcion = d.getElementById('pres-descripcion')?.value || '';
+            const cantidad = parseFloat(d.getElementById('pres-cantidad')?.value || 1);
+            const valorUnitario = parseFloat(d.getElementById('pres-valor-unitario')?.value || 0);
+
+            if (!categoria) {
+                w.SintelFeedback?.error('Selecciona una categoría');
+                return;
+            }
+            if (valorUnitario <= 0) {
+                w.SintelFeedback?.error('El valor unitario debe ser mayor a 0');
+                return;
+            }
+
+            const data = {
+                proyecto_uuid: this._proyectoUuid,
+                categoria: categoria,
+                descripcion: descripcion,
+                cantidad: cantidad,
+                valor_unitario: valorUnitario
+            };
+
+            const resp = await w.proyectosAPI.presupuesto.create(data);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al agregar ítem de presupuesto');
+                return;
+            }
+
+            w.SintelFeedback?.success('Ítem agregado');
+            await this.init(this._proyectoUuid, currentProyecto?.fase_actual === 'CIERRE');
+
+            // Limpiar formulario
+            d.getElementById('pres-descripcion').value = '';
+            d.getElementById('pres-cantidad').value = '1';
+            d.getElementById('pres-valor-unitario').value = '';
+            d.getElementById('pres-categoria').value = '';
+        },
+
+        async eliminar(itemId) {
+            if (!confirm('¿Eliminar este ítem de presupuesto?')) return;
+
+            const resp = await w.proyectosAPI.presupuesto.delete(itemId);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al eliminar ítem');
+                return;
+            }
+
+            w.SintelFeedback?.success('Ítem eliminado');
+            await this.init(this._proyectoUuid, currentProyecto?.fase_actual === 'CIERRE');
+        },
+
+        _refreshResumen() {
+            // BASE: valor_contrato_proyectado es la base de todos los calculos
+            const total    = this._items.reduce((sum, item) => sum + (parseFloat(item.subtotal) || 0), 0);
+            const contrato = parseFloat(currentProyecto?.valor_contrato_proyectado || 0);
+            // utilidad_planeada = valor_contrato - costo_planeado_total
+            const utilidad = contrato - total;
+            // margen_planeado % = utilidad_planeada / valor_contrato * 100
+            const margen   = contrato > 0 ? (utilidad / contrato * 100) : 0;
+
+            const setResumen = (id, val) => { const el = d.getElementById(id); if (el) el.textContent = val; };
+            setResumen('pres-resumen-contrato', w.proyectosAPI.formatCurrency(contrato));
+            setResumen('pres-resumen-costos',   w.proyectosAPI.formatCurrency(total));
+            setResumen('pres-resumen-utilidad', w.proyectosAPI.formatCurrency(utilidad));
+
+            // Margen % con color dinamico
+            const margenEl = d.getElementById('pres-resumen-margen');
+            if (margenEl) {
+                margenEl.textContent = `${margen.toFixed(1)}%`;
+                margenEl.className   = 'fw-bold';
+                margenEl.classList.add(utilidad > 0 ? 'text-success' : utilidad < 0 ? 'text-danger' : 'text-muted');
+            }
+
+            // Sincronizar Fase 4 con _items ya cargados (resuelve race condition)
+            initInformeCierre();
+        }
+    };
+
+    if (!w.Sintel) w.Sintel = {};
+    w.Sintel.ProyectosPresupuesto = ProyectosPresupuesto;
+
+    // ============================================================================
+    // FIN MÓDULO PRESUPUESTO
+    // ============================================================================
+
+    // ============================================================================
+    // MÓDULO TAREAS DIARIAS (v3.5.3)
+    // ============================================================================
+
+    const TareasDiarias = {
+        _tareas: [],
+        _proyectoUuid: null,
+
+        async init(proyectoUuid, proyecto, enCierre) {
+            if (!proyectoUuid || !proyecto) return;
+            this._proyectoUuid = proyectoUuid;
+
+            // Mostrar período del proyecto
+            const periodoEl = d.getElementById('tareas-periodo-display');
+            if (periodoEl) {
+                const inicio = proyecto.fecha_inicio ? new Date(proyecto.fecha_inicio).toLocaleDateString('es-CO') : '--';
+                const fin = proyecto.fecha_fin_estimada ? new Date(proyecto.fecha_fin_estimada).toLocaleDateString('es-CO') : '--';
+                periodoEl.textContent = `${inicio} a ${fin}`;
+            }
+
+            // Cargar tareas desde API
+            const resp = await w.proyectosAPI.tareasDiarias.list(proyectoUuid);
+            if (!resp.ok) {
+                console.error(`${MOD} Error al cargar tareas:`, resp);
+                this._tareas = [];
+            } else {
+                this._tareas = resp.data.results || resp.data || [];
+            }
+
+            this._render(enCierre);
+            this._refreshResumen();
+        },
+
+        _render(enCierre = false) {
+            const container = d.getElementById('tareas-timeline-container');
+            if (!container) return;
+
+            if (this._tareas.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <small>Sin tareas aún. Agrega tareas para esta fase.</small>
+                    </div>
+                `;
+                return;
+            }
+
+            // Agrupar por fecha_inicio
+            const tareasAgrupadas = {};
+            this._tareas.forEach(tarea => {
+                if (!tareasAgrupadas[tarea.fecha_inicio]) {
+                    tareasAgrupadas[tarea.fecha_inicio] = [];
+                }
+                tareasAgrupadas[tarea.fecha_inicio].push(tarea);
+            });
+
+            // Renderizar timeline
+            let html = '<div class="timeline">';
+            Object.keys(tareasAgrupadas).sort().forEach(fechaInicio => {
+                const tareasDelPeriodo = tareasAgrupadas[fechaInicio];
+                const fechaObj = new Date(fechaInicio);
+                const fechaDisplay = fechaObj.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
+
+                html += `<div class="timeline-day mb-3">
+                    <div class="fw-bold text-primary mb-2">${fechaDisplay}</div>`;
+
+                tareasDelPeriodo.forEach(tarea => {
+                    const estadoBadge = this._getEstadoBadge(tarea.estado);
+                    const prioridadClase = this._getPrioridadClase(tarea.prioridad);
+                    const btnCambiarEstado = enCierre ? '' : `
+                        <button type="button" class="btn btn-xs btn-outline-secondary"
+                                onclick="window.Sintel.TareasDiarias.mostrarMenuEstado('${tarea.id}')"
+                                title="Cambiar estado">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                    `;
+                    const btnEliminar = enCierre ? '' : `
+                        <button type="button" class="btn btn-xs btn-outline-danger"
+                                onclick="window.Sintel.TareasDiarias.eliminar('${tarea.id}')"
+                                title="Eliminar">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    `;
+
+                    const rango = tarea.fecha_fin !== tarea.fecha_inicio
+                        ? `${tarea.fecha_inicio} — ${tarea.fecha_fin}`
+                        : tarea.fecha_inicio;
+
+                    html += `
+                        <div class="card mb-2 border-${prioridadClase} border-opacity-25" data-tarea-id="${tarea.id}">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1 text-dark">${tarea.titulo}</h6>
+                                        <small class="text-muted d-block"><strong>${rango}</strong></small>
+                                        ${tarea.descripcion ? `<small class="text-muted d-block">${tarea.descripcion}</small>` : ''}
+                                        <small class="text-muted d-block mt-1">
+                                            ${tarea.asignado_a ? `Asignado: ${tarea.asignado_a}` : 'Sin asignar'}
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        ${estadoBadge}
+                                    </div>
+                                </div>
+                                ${tarea.notas_progreso ? `<small class="text-muted d-block mt-2"><em>${tarea.notas_progreso}</em></small>` : ''}
+                                <div class="gap-1 mt-2">
+                                    ${btnCambiarEstado}
+                                    ${btnEliminar}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        },
+
+        _getEstadoBadge(estado) {
+            const badges = {
+                'PENDIENTE': '<span class="badge bg-secondary">Pendiente</span>',
+                'EN_PROCESO': '<span class="badge bg-warning text-dark">En Proceso</span>',
+                'COMPLETADA': '<span class="badge bg-success">Completada</span>',
+                'CANCELADA': '<span class="badge bg-danger">Cancelada</span>'
+            };
+            return badges[estado] || '<span class="badge bg-light text-dark">Desconocido</span>';
+        },
+
+        _getPrioridadClase(prioridad) {
+            const clases = {
+                'BAJA': 'info',
+                'NORMAL': 'secondary',
+                'ALTA': 'danger'
+            };
+            return clases[prioridad] || 'secondary';
+        },
+
+        mostrarMenuEstado(tareaId) {
+            const estados = ['PENDIENTE', 'EN_PROCESO', 'COMPLETADA', 'CANCELADA'];
+            const nuevoEstado = prompt('Nuevo estado:\n' + estados.join(', '), 'EN_PROCESO');
+            if (nuevoEstado && estados.includes(nuevoEstado)) {
+                this.cambiarEstado(tareaId, nuevoEstado);
+            } else if (nuevoEstado) {
+                w.SintelFeedback?.error('Estado inválido. Opciones: ' + estados.join(', '));
+            }
+        },
+
+        async cambiarEstado(tareaId, nuevoEstado) {
+            const resp = await w.proyectosAPI.tareasDiarias.cambiarEstado(tareaId, nuevoEstado);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al cambiar estado');
+                return;
+            }
+            w.SintelFeedback?.success('Estado actualizado');
+            await this.init(this._proyectoUuid, currentProyecto, currentProyecto?.fase_actual === 'CIERRE');
+        },
+
+        async agregar() {
+            const fechaInicio = d.getElementById('tareas-fecha-inicio')?.value;
+            const fechaFin = d.getElementById('tareas-fecha-fin')?.value || fechaInicio;
+            const titulo = d.getElementById('tareas-titulo')?.value;
+            const prioridad = d.getElementById('tareas-prioridad')?.value || 'NORMAL';
+
+            if (!fechaInicio || !titulo) {
+                w.SintelFeedback?.error('Fecha de inicio y título son requeridos');
+                return;
+            }
+
+            if (fechaInicio > fechaFin) {
+                w.SintelFeedback?.error('La fecha de inicio debe ser anterior o igual a la fecha de fin');
+                return;
+            }
+
+            const data = {
+                proyecto_uuid: this._proyectoUuid,
+                fecha_inicio: fechaInicio,
+                fecha_fin: fechaFin,
+                titulo: titulo,
+                prioridad: prioridad
+            };
+
+            const resp = await w.proyectosAPI.tareasDiarias.create(data);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al crear tarea');
+                return;
+            }
+
+            w.SintelFeedback?.success('Tarea creada');
+            d.getElementById('tareas-fecha-inicio').value = '';
+            d.getElementById('tareas-fecha-fin').value = '';
+            d.getElementById('tareas-titulo').value = '';
+            d.getElementById('tareas-prioridad').value = 'NORMAL';
+            await this.init(this._proyectoUuid, currentProyecto);
+        },
+
+        async eliminar(tareaId) {
+            if (!confirm('¿Eliminar esta tarea?')) return;
+
+            const resp = await w.proyectosAPI.tareasDiarias.delete(tareaId);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al eliminar tarea');
+                return;
+            }
+
+            w.SintelFeedback?.success('Tarea eliminada');
+            await this.init(this._proyectoUuid, currentProyecto, currentProyecto?.fase_actual === 'CIERRE');
+        },
+
+        _refreshResumen() {
+            const conteos = { 'PENDIENTE': 0, 'EN_PROCESO': 0, 'COMPLETADA': 0, 'CANCELADA': 0 };
+            this._tareas.forEach(tarea => {
+                if (conteos.hasOwnProperty(tarea.estado)) {
+                    conteos[tarea.estado]++;
+                }
+            });
+
+            d.getElementById('tareas-resumen-pendiente').textContent = conteos['PENDIENTE'];
+            d.getElementById('tareas-resumen-en-proceso').textContent = conteos['EN_PROCESO'];
+            d.getElementById('tareas-resumen-completada').textContent = conteos['COMPLETADA'];
+            d.getElementById('tareas-resumen-cancelada').textContent = conteos['CANCELADA'];
+        }
+    };
+
+    w.Sintel.TareasDiarias = TareasDiarias;
+
+    // ============================================================================
+    // FIN MÓDULO TAREAS DIARIAS
+    // ============================================================================
 
     w.ProyectosEditorModule = {
         init,

@@ -39,7 +39,7 @@ class CotizacionEditorTemplateView(CotizacionTemplateView):
                 context['cotizacion'] = CotizacionSelector.get_detail_by_uuid(uuid, empresa.id).get()
                 context['is_draft'] = False
             except Cotizacion.DoesNotExist:
-                raise Http404("Cotización no encontrada")
+                raise Http404("Cotizacion no encontrada")
         else:
             context['cotizacion'] = None
             context['is_draft'] = True
@@ -56,21 +56,21 @@ class CotizacionEditorDraftView(CotizacionEditorTemplateView):
         return context
 
 class ConfiguracionCrearOffcanvasView(CotizacionTemplateView):
-    """Vista para offcanvas de creación de plantilla."""
+    """Vista para offcanvas de creacion de plantilla."""
     template_name = 'tenant/cotizaciones/offcanvas_plantilla_crear.html'
 
 class ConfiguracionEditarOffcanvasView(CotizacionTemplateView):
-    """Vista para offcanvas de edición de plantilla."""
+    """Vista para offcanvas de edicion de plantilla."""
     template_name = 'tenant/cotizaciones/offcanvas_plantilla_editar.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        config_id = kwargs.get('id')
-        if config_id:
+        config_uuid = kwargs.get('uuid')
+        if config_uuid:
             empresa = self._resolve_empresa()
-            context['configuracion'] = CotizacionSelector.get_configuracion_by_id(config_id, empresa.id)
+            context['configuracion'] = CotizacionSelector.get_configuracion_by_uuid(config_uuid, empresa.id)
             if not context['configuracion']:
-                raise Http404("Configuración no encontrada")
+                raise Http404("Configuracion no encontrada")
         return context
 
 class ConfiguracionListOffcanvasView(CotizacionTemplateView):
@@ -89,16 +89,16 @@ class ConfiguracionVerOffcanvasView(CotizacionTemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        config_id = kwargs.get('id')
-        if config_id:
+        config_uuid = kwargs.get('uuid')
+        if config_uuid:
             empresa = self._resolve_empresa()
-            context['configuracion'] = CotizacionSelector.get_configuracion_by_id(config_id, empresa.id)
+            context['configuracion'] = CotizacionSelector.get_configuracion_by_uuid(config_uuid, empresa.id)
             if not context['configuracion']:
-                raise Http404("Configuración no encontrada")
+                raise Http404("Configuracion no encontrada")
         return context
 
 class CotizacionDetalleOffcanvasView(CotizacionTemplateView):
-    """Vista para offcanvas de detalle de cotización."""
+    """Vista para offcanvas de detalle de cotizacion."""
     template_name = 'tenant/cotizaciones/offcanvas_detalle_cotizacion.html'
 
     def get_context_data(self, **kwargs):
@@ -109,5 +109,5 @@ class CotizacionDetalleOffcanvasView(CotizacionTemplateView):
             try:
                 context['cotizacion'] = CotizacionSelector.get_detail_by_uuid(uuid, empresa.id).get()
             except Cotizacion.DoesNotExist:
-                raise Http404("Cotización no encontrada")
+                raise Http404("Cotizacion no encontrada")
         return context

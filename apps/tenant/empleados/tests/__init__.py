@@ -1,3 +1,0 @@
-"""
-Tests para empleados.
-"""

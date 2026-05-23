@@ -89,3 +89,63 @@ class QuickActionSerializer(serializers.Serializer):
     icon = serializers.CharField(read_only=True, required=False)
     color = serializers.CharField(read_only=True, required=False)
     required_role = serializers.CharField(read_only=True, required=False)
+
+
+# --- Serializers v3.9.4 --- Pull Model DTOs ---
+
+
+class WidgetFacturasSerializer(serializers.Serializer):
+    """Serializer para métricas de Facturas (WidgetFacturasDTO)."""
+    total_facturas = serializers.IntegerField()
+    facturas_pendientes = serializers.IntegerField()
+    facturas_vencidas = serializers.IntegerField()
+    ingresos_mes = serializers.DecimalField(max_digits=15, decimal_places=2)
+    ingresos_promedio = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+
+class WidgetInventarioSerializer(serializers.Serializer):
+    """Serializer para métricas de Inventario (WidgetInventarioDTO)."""
+    total_productos = serializers.IntegerField()
+    productos_bajo_stock = serializers.IntegerField()
+    movimientos_mes = serializers.IntegerField()
+    valor_inventario = serializers.DecimalField(max_digits=15, decimal_places=2)
+    rotacion_promedio = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+
+class WidgetEmpleadosSerializer(serializers.Serializer):
+    """Serializer para métricas de Empleados (WidgetEmpleadosDTO)."""
+    total_empleados = serializers.IntegerField()
+    empleados_activos = serializers.IntegerField()
+    nominas_pendientes = serializers.IntegerField()
+    total_nómina_mes = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+
+class WidgetGastosSerializer(serializers.Serializer):
+    """Serializer para métricas de Gastos (WidgetGastosDTO)."""
+    total_gastos_mes = serializers.DecimalField(max_digits=15, decimal_places=2)
+    gastos_pendientes = serializers.IntegerField()
+    gastos_vencidos = serializers.IntegerField()
+    gasto_promedio = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+
+class WidgetProyectosSerializer(serializers.Serializer):
+    """Serializer para métricas de Proyectos (WidgetProyectosDTO)."""
+    total_proyectos = serializers.IntegerField()
+    proyectos_activos = serializers.IntegerField()
+    tareas_pendientes = serializers.IntegerField()
+    tareas_vencidas = serializers.IntegerField()
+
+
+class DashboardMetricasSerializer(serializers.Serializer):
+    """
+    Serializer principal para DashboardMetricasDTO v3.9.4.
+    Contrato canónico para métricas consolidadas (Pull Model).
+    """
+    empresa_nombre = serializers.CharField()
+    empresa_nit = serializers.CharField()
+    fecha_actualizacion = serializers.DateTimeField()
+    facturas = WidgetFacturasSerializer()
+    inventario = WidgetInventarioSerializer()
+    empleados = WidgetEmpleadosSerializer()
+    gastos = WidgetGastosSerializer(required=False, allow_null=True)
+    proyectos = WidgetProyectosSerializer(required=False, allow_null=True)

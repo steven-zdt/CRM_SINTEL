@@ -14,7 +14,7 @@ Referencia: https://www.django-rest-framework.org/api-guide/serializers/
 from rest_framework import serializers
 
 from apps.tenant.core.api.mixins import NormalizationMixin
-from apps.tenant.empresa.models import Empresa, MailInboxConfig
+from apps.tenant.empresa.models import Empresa, MailInboxConfig, Sede, Area
 
 
 class EmpresaListSerializer(serializers.ModelSerializer):
@@ -494,3 +494,135 @@ class MailInboxConfigTestConnectionSerializer(serializers.Serializer):
             })
         
         return attrs
+
+
+class SedeListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sede
+        fields = (
+            'id',
+            'uuid',
+            'nombre',
+            'direccion',
+            'telefono',
+            'encargado_nombre',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+
+class SedeDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sede
+        fields = (
+            'id',
+            'uuid',
+            'nombre',
+            'direccion',
+            'telefono',
+            'encargado_nombre',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+
+
+class SedeUpsertSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sede
+        fields = (
+            'nombre',
+            'direccion',
+            'telefono',
+            'encargado_nombre',
+        )
+        extra_kwargs = {
+            'nombre': {'required': True},
+            'direccion': {'required': False, 'allow_blank': True},
+            'telefono': {'required': False, 'allow_blank': True},
+            'encargado_nombre': {'required': False, 'allow_blank': True},
+        }
+
+    def validate_nombre(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("El nombre de la sede es obligatorio.")
+        return value.strip()
+
+
+class AreaListSerializer(serializers.ModelSerializer):
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True)
+    sede_uuid = serializers.UUIDField(source='sede.uuid', read_only=True)
+
+    class Meta:
+        model = Area
+        fields = (
+            'id',
+            'uuid',
+            'sede',
+            'sede_uuid',
+            'sede_nombre',
+            'nombre',
+            'codigo_funcionamiento',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+
+class AreaDetailSerializer(serializers.ModelSerializer):
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True)
+    sede_uuid = serializers.UUIDField(source='sede.uuid', read_only=True)
+
+    class Meta:
+        model = Area
+        fields = (
+            'id',
+            'uuid',
+            'sede',
+            'sede_uuid',
+            'sede_nombre',
+            'nombre',
+            'codigo_funcionamiento',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+
+
+class AreaUpsertSerializer(serializers.ModelSerializer):
+    sede = serializers.PrimaryKeyRelatedField(
+        queryset=Sede.objects.none(),
+        required=True,
+        help_text="ID de la sede a la que pertenece el area"
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        empresa_id = self.context.get('empresa_id')
+        if empresa_id:
+            self.fields['sede'].queryset = Sede.objects.filter(empresa_id=empresa_id)
+        else:
+            self.fields['sede'].queryset = Sede.objects.all()
+
+    class Meta:
+        model = Area
+        fields = (
+            'sede',
+            'nombre',
+            'codigo_funcionamiento',
+        )
+        extra_kwargs = {
+            'nombre': {'required': True},
+            'codigo_funcionamiento': {'required': True},
+        }
+
+    def validate_nombre(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("El nombre del area es obligatorio.")
+        return value.strip()
+
+    def validate_codigo_funcionamiento(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("El codigo de funcionamiento es obligatorio.")
+        return value.strip()

@@ -27,7 +27,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='documentosoporte',
             name='numero_documento_proveedor',
-            field=models.CharField(blank=True, db_index=True, help_text='Número de la factura o documento de referencia del proveedor', max_length=100, null=True, verbose_name='Número Documento Proveedor'),
+            field=models.CharField(blank=True, db_index=True, help_text='Numero de la factura o documento de referencia del proveedor', max_length=100, null=True, verbose_name='Numero Documento Proveedor'),
         ),
         migrations.AddIndex(
             model_name='documentosoporte',

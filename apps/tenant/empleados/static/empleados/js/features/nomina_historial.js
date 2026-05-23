@@ -1,7 +1,8 @@
+// @ts-nocheck
 /**
  * Nomina Historial Module - Feature: Historial de Nóminas
  * ⚠️ Feature-Sliced Architecture v2.61.8
- * 
+ *
  * Namespace: window.Sintel.Empleados.NominaHistorial
  */
 (function(w, d) {
@@ -10,6 +11,14 @@
     const MOD = '[NominaHistorial]';
     const API_BASE = '/api/v1/empleados/';
     const CONTAINER_ID = 'offcanvas-container-nominas';
+
+    const COP = (val) => {
+        const n = parseFloat(val) || 0;
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+        }).format(n);
+    };
+    const monedaCelda = (cell) => COP(cell.getValue());
 
     /**
      * Abrir historial de nóminas
@@ -66,47 +75,101 @@
         const url = `${API_BASE}devengos/?empleado=${empleadoId}`;
         
         const columns = [
-            { title: "Periodo", field: "periodo_mes", width: 120 },
-            { 
-                title: "Fecha Pago", 
-                field: "fecha_pago", 
-                width: 140,
+            {
+                title: 'Período',
+                field: 'fecha_inicio',
+                width: 190,
+                hozAlign: 'center',
                 formatter: (cell) => {
-                    const val = cell.getValue();
-                    return val ? new Date(val).toLocaleDateString('es-CO') : '-';
+                    const data = cell.getRow().getData();
+                    const fi = data.fecha_inicio;
+                    const ff = data.fecha_fin;
+                    if (fi && ff) {
+                        return `<div class="small lh-sm fw-semibold">${fi}</div>
+                                <div class="small text-muted lh-sm">al ${ff}</div>`;
+                    }
+                    return `<span class="small">${data.periodo_mes || '—'}</span>`;
                 }
             },
-            { title: "Días", field: "dias_laborados", width: 80 },
-            { 
-                title: "Salario Base", 
-                field: "salario_base", 
-                formatter: "money", 
-                formatterParams: { symbol: "$", decimal: ".", thousand: "," } 
-            },
-            { 
-                title: "Neto Pagar", 
-                field: "neto_pagar", 
-                cssClass: "fw-bold text-primary",
-                formatter: "money", 
-                formatterParams: { symbol: "$", decimal: ".", thousand: "," } 
-            },
-            { 
-                title: "Estado", 
-                field: "anulado", 
-                formatter: (cell) => cell.getValue() ? '<span class="badge bg-danger">Anulado</span>' : '<span class="badge bg-success">Activo</span>'
+            {
+                title: 'Días',
+                field: 'dias_laborados',
+                width: 65,
+                hozAlign: 'center',
+                formatter: (cell) => {
+                    const v = parseFloat(cell.getValue()) || 0;
+                    return `<span class="badge bg-primary-subtle text-primary border border-primary-subtle">${v}</span>`;
+                }
             },
             {
-                title: "Acciones",
-                hozAlign: "center",
+                title: 'Fecha Pago',
+                field: 'fecha_pago',
+                width: 130,
+                hozAlign: 'center',
+                formatter: (cell) => {
+                    const val = cell.getValue();
+                    return val ? new Date(val + 'T00:00:00').toLocaleDateString('es-CO') : '—';
+                }
+            },
+            {
+                title: 'Salario Base',
+                field: 'salario_base',
+                width: 140,
+                hozAlign: 'right',
+                headerHozAlign: 'right',
+                formatter: monedaCelda,
+            },
+            {
+                title: 'H.E. y Recargos',
+                field: 'valor_horas_extras',
+                width: 120,
+                hozAlign: 'right',
+                headerHozAlign: 'right',
+                formatter: (cell) => {
+                    const v = parseFloat(cell.getValue()) || 0;
+                    return v > 0
+                        ? `<span class="text-warning fw-semibold">${COP(v)}</span>`
+                        : '<span class="text-muted">—</span>';
+                }
+            },
+            {
+                title: 'Neto a Pagar',
+                field: 'neto_pagar',
+                width: 140,
+                hozAlign: 'right',
+                headerHozAlign: 'right',
+                formatter: (cell) => {
+                    const data    = cell.getRow().getData();
+                    const anulado = data.anulado;
+                    if (anulado) {
+                        return `<span class="text-decoration-line-through text-muted small">${COP(cell.getValue())}</span>
+                                <span class="badge bg-danger ms-1">Anulada</span>`;
+                    }
+                    return `<strong class="text-success">${COP(cell.getValue())}</strong>`;
+                }
+            },
+            {
+                title: 'Estado',
+                field: 'anulado',
+                width: 90,
+                hozAlign: 'center',
+                formatter: (cell) => cell.getValue()
+                    ? '<span class="badge bg-danger">Anulado</span>'
+                    : '<span class="badge bg-success">Activo</span>'
+            },
+            {
+                title: 'Acciones',
+                width: 80,
+                hozAlign: 'center',
                 headerSort: false,
                 formatter: (cell) => {
                     const data = cell.getRow().getData();
-                    if (data.anulado) return '-';
-                    return `
-                        <button class="btn btn-sm btn-outline-danger" onclick="window.Sintel.Empleados.NominaHistorial.anular(${data.id})">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    `;
+                    if (data.anulado) return '—';
+                    return `<button class="btn btn-sm btn-outline-danger"
+                                    onclick="window.Sintel.Empleados.NominaHistorial.anular(${data.id})"
+                                    title="Anular nómina">
+                                <i class="bi bi-slash-circle"></i>
+                            </button>`;
                 }
             }
         ];

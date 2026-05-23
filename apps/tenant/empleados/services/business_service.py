@@ -7,7 +7,7 @@ WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 - Todas las funciones son @staticmethod.
 """
 import logging
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 
 from django.db import transaction
@@ -22,6 +22,40 @@ from apps.tenant.empleados.services.crud_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constantes monetarias — SSoT para toda la lógica de nómina
+# ---------------------------------------------------------------------------
+MONEY_Q = Decimal('0.01')          # Cuantizador COP: 2 decimales
+_DIAS_MENSUALES = Decimal('30')     # Base comercial Colombia (mes = 30 días)
+_HORAS_MENSUALES = Decimal('200')   # Ley 2101/2021: jornada mensual de referencia
+
+
+def _to_decimal(value, *, allow_negative: bool = False) -> Decimal:
+    """
+    Convierte cualquier valor numérico entrante a Decimal sin trampa de float.
+
+    Regla de oro: SIEMPRE usar str(value) como puente para evitar
+    la imprecisión binaria de float (ej. float(0.1) → 0.100000000000000005...).
+
+    Args:
+        value: int, float, str, Decimal o None.
+        allow_negative: si False (default), aplica max(0, resultado).
+
+    Returns:
+        Decimal seguro, nunca lanza excepción.
+    """
+    try:
+        if isinstance(value, Decimal):
+            result = value
+        else:
+            result = Decimal(str(value)) if value is not None else Decimal('0.00')
+    except Exception:
+        result = Decimal('0.00')
+
+    if not allow_negative:
+        return max(Decimal('0.00'), result)
+    return result
 
 
 class EmpleadoBusinessService:
@@ -294,14 +328,19 @@ class DevengoBusinessService:
             otros_devengos=otros_devengos,
             prestamos=prestamos,
             descuentos_operativos=data.get('descuentos_operativos', Decimal('0')),
+            horas_extras_diurnas=data.get('horas_extras_diurnas', 0),
+            horas_extras_nocturnas=data.get('horas_extras_nocturnas', 0),
+            recargo_nocturno_horas=data.get('recargo_nocturno_horas', 0),
+            recargo_festivo_horas=data.get('recargo_festivo_horas', 0),
         )
 
         # Preparar datos finales
-        data['salario_base'] = Decimal(calculo['salario_base'])
+        data['salario_base']       = Decimal(calculo['salario_base'])
         data['auxilio_transporte'] = Decimal(calculo['auxilio_transporte'])
-        data['salud_empleado'] = Decimal(calculo['salud_empleado'])
-        data['pension_empleado'] = Decimal(calculo['pension_empleado'])
-        data['neto_pagar'] = Decimal(calculo['neto_pagar'])
+        data['valor_horas_extras'] = Decimal(calculo['valor_horas_extras'])
+        data['salud_empleado']     = Decimal(calculo['salud_empleado'])
+        data['pension_empleado']   = Decimal(calculo['pension_empleado'])
+        data['neto_pagar']         = Decimal(calculo['neto_pagar'])
 
         # Crear o actualizar
         if instance:
@@ -351,7 +390,11 @@ class NominaCalculationService:
         otros_devengos=0,
         prestamos=0,
         descuentos_operativos=0,
-        empresa_id: int = None
+        empresa_id: int = None,
+        horas_extras_diurnas=0,
+        horas_extras_nocturnas=0,
+        recargo_nocturno_horas=0,
+        recargo_festivo_horas=0,
     ) -> dict:
         """
         Calcula liquidacion de nomina segun normativa colombiana.
@@ -364,89 +407,194 @@ class NominaCalculationService:
         if contrato.estado != 'ACTIVO' or not contrato.activo:
             raise ValueError("No se puede calcular nomina para un contrato inactivo")
 
-        # Normalizar dias
+        # ---------------------------------------------------------------
+        # SANITIZACIÓN DE ENTRADAS — Fase 1: todos a Decimal seguro
+        # _to_decimal() usa str(value) como puente: evita float trap.
+        # allow_negative=False garantiza que ninguna hora/descuento sea < 0.
+        # ---------------------------------------------------------------
         try:
-            dias_laborados = Decimal(str(dias_laborados))
-        except (ValueError, TypeError):
+            dias_laborados = _to_decimal(dias_laborados)
+        except Exception:
             raise ValueError("Los dias laborados deben ser un numero valido")
 
-        if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('30'):
-            raise ValueError("Los dias laborados deben estar entre 0.5 y 30")
+        if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('31'):
+            raise ValueError("Los dias laborados deben estar entre 0.5 y 31")
 
-        # Constantes normativa
-        HORAS_MENSUALES = Decimal('200')  # 46 horas * 4.33 semanas
-        DIAS_MENSUALES = Decimal('30')
+        # Salario y auxilio vienen de DecimalField — igual pasan por _to_decimal
+        # para homogeneizar el tipo y proteger contra None inesperado.
+        salario_mensual = _to_decimal(contrato.salario_mensual)
+        auxilio_mensual = _to_decimal(contrato.auxilio_transporte)
+
+        # GUARDIA FASE 2: salario_mensual nunca debe ser 0 para evitar cálculos absurdos.
+        # El modelo ya tiene MinValueValidator(0.01), pero defensa en profundidad.
+        if salario_mensual <= Decimal('0'):
+            raise ValidationError({
+                'salario_mensual': 'El salario mensual debe ser mayor a cero.'
+            })
+
+        # Parámetros opcionales: horas y descuentos deben ser >= 0
+        h_extra_diurnas   = _to_decimal(horas_extras_diurnas)
+        h_extra_nocturnas = _to_decimal(horas_extras_nocturnas)
+        h_rec_nocturno    = _to_decimal(recargo_nocturno_horas)
+        h_rec_festivo     = _to_decimal(recargo_festivo_horas)
+        otros             = _to_decimal(otros_devengos)
+        p_prestamos       = _to_decimal(prestamos)
+        p_descuentos      = _to_decimal(descuentos_operativos)
+
+        # ---------------------------------------------------------------
+        # TOPES DE HORAS EXTRAS — FASE 4: prevenir ingresos absurdos
+        # CST art. 168: max 2h extras/día → ~62h/mes en la práctica.
+        # Aplicamos 80h/tipo como tope generoso que atrapa errores de
+        # digitación (ej. "800" en vez de "8").
+        # ---------------------------------------------------------------
+        _MAX_HE_POR_TIPO = Decimal('80')
+        _MAX_HE_TOTAL    = Decimal('200')   # No más de un mes completo en H.E.
+
+        _he_map = {
+            'horas_extras_diurnas':   h_extra_diurnas,
+            'horas_extras_nocturnas': h_extra_nocturnas,
+            'recargo_nocturno_horas': h_rec_nocturno,
+            'recargo_festivo_horas':  h_rec_festivo,
+        }
+        for campo_he, val_he in _he_map.items():
+            if val_he > _MAX_HE_POR_TIPO:
+                raise ValidationError({
+                    campo_he: (
+                        f'Las horas ingresadas ({val_he}h) superan el tope por tipo '
+                        f'({_MAX_HE_POR_TIPO}h). Verifique el valor.'
+                    )
+                })
+
+        total_he = h_extra_diurnas + h_extra_nocturnas + h_rec_nocturno + h_rec_festivo
+        if total_he > _MAX_HE_TOTAL:
+            raise ValidationError({
+                'horas_extras': (
+                    f'El total de horas extras y recargos ({total_he}h) supera el '
+                    f'maximo permitido de {_MAX_HE_TOTAL}h por periodo.'
+                )
+            })
+
+        # VALOR HORA BASE — SSoT para salario proporcional por horas Y para H.E.
+        # Ley 2101/2021: base mensual = 200 horas (jornada semanal 42h × 4.76 sem/mes ≈ 200h)
+        # _HORAS_MENSUALES = 200 (constante, nunca cero → sin riesgo de ZeroDivisionError)
+        valor_hora_base = salario_mensual / _HORAS_MENSUALES
 
         # 1. SALARIO BASE PROPORCIONAL
-        salario_mensual = Decimal(str(contrato.salario_mensual))
+        # Modo horas: aplica cuando se registran horas efectivas (ej. contratos part-time)
+        # Modo días: base comercial 30 días/mes (norma general Colombia)
+        # _DIAS_MENSUALES = 30 (constante, nunca cero → sin riesgo de ZeroDivisionError)
+        h_trabajadas = _to_decimal(horas_trabajadas) if horas_trabajadas is not None else Decimal('0')
 
-        if horas_trabajadas is not None and horas_trabajadas > 0:
-            valor_hora = salario_mensual / HORAS_MENSUALES
-            salario_base = valor_hora * Decimal(str(horas_trabajadas))
+        # TOPE: horas_trabajadas no puede superar la jornada mensual legal
+        if h_trabajadas > _HORAS_MENSUALES:
+            raise ValidationError({
+                'horas_trabajadas': (
+                    f'Las horas trabajadas ({h_trabajadas}h) superan la jornada mensual '
+                    f'maxima de {_HORAS_MENSUALES}h (Ley 2101/2021).'
+                )
+            })
+
+        if h_trabajadas > Decimal('0'):
+            salario_base = valor_hora_base * h_trabajadas
         else:
-            factor = dias_laborados / DIAS_MENSUALES
-            salario_base = salario_mensual * factor
+            salario_base = salario_mensual * (dias_laborados / _DIAS_MENSUALES)
 
         # 2. AUXILIO DE TRANSPORTE
-        auxilio_transporte = Decimal('0')
-        if contrato.tipo != 'PRESTACION':
-            auxilio_mensual = Decimal(str(contrato.auxilio_transporte or 0))
-            if auxilio_mensual > 0:
-                factor = dias_laborados / DIAS_MENSUALES
-                auxilio_transporte = auxilio_mensual * factor
+        # Normativa: contratos PRESTACION no tienen auxilio (art. 2 Ley 1393/2010).
+        # Se fuerza a 0 explícitamente para blindar el cálculo del IBC.
+        if contrato.tipo == 'PRESTACION' or auxilio_mensual <= Decimal('0'):
+            auxilio_transporte = Decimal('0')
+        else:
+            auxilio_transporte = auxilio_mensual * (dias_laborados / _DIAS_MENSUALES)
 
         # 3. IBC (Ingreso Base de Cotizacion)
-        ibc = salario_base  # NO incluye auxilio de transporte
+        # Normativa: el auxilio de transporte NO integra salario ni hace parte del IBC.
+        # (art. 30 Ley 100/1993 — excluido expresamente)
+        ibc = salario_base   # ← SOLO salario_base, NUNCA + auxilio_transporte
 
-        # 4. DEDUCCIONES DE LEY (4% cada una)
-        salud_empleado = Decimal('0')
+        # 4. DEDUCCIONES DE LEY (empleado: 4% salud + 4% pensión sobre IBC)
+        # Solo aplica para contratos laborales; PRESTACION no cotiza por el empleador.
+        salud_empleado   = Decimal('0')
         pension_empleado = Decimal('0')
+        if contrato.tipo in ('FIJO', 'INDEF', 'OBRA'):
+            salud_empleado   = ibc * Decimal('0.04')   # art. 204 Ley 100/1993
+            pension_empleado = ibc * Decimal('0.04')   # art. 20 Ley 100/1993
 
-        if contrato.tipo in ['FIJO', 'INDEF', 'OBRA']:
-            salud_empleado = ibc * Decimal('0.04')
-            pension_empleado = ibc * Decimal('0.04')
+        # 5. HORAS EXTRAS Y RECARGOS (Decreto 2663/1950 — arts. 168, 170, 179 CST)
+        # valor_hora_base ya calculado arriba (SSoT, sin recalcular).
+        # Factores (sobre valor_hora_base):
+        #   H.E. Diurna    × 1.25  (+25% art. 168 CST)
+        #   H.E. Nocturna  × 1.75  (+75% art. 168 CST)
+        #   Rec. Nocturno  × 0.35  (+35% extra sobre hora ordinaria, art. 168 CST)
+        #   Rec. Festivo   × 1.75  (política empresa — homologado a H.E. nocturna)
+        valor_horas_extras = (
+            h_extra_diurnas   * Decimal('1.25') +
+            h_extra_nocturnas * Decimal('1.75') +
+            h_rec_nocturno    * Decimal('0.35') +
+            h_rec_festivo     * Decimal('1.75')
+        ) * valor_hora_base
 
-        # 5. NETO A PAGAR
-        devengos = salario_base + auxilio_transporte + Decimal(str(otros_devengos))
-        deducciones = (
-            salud_empleado + pension_empleado +
-            Decimal(str(prestamos)) + Decimal(str(descuentos_operativos))
-        )
-        neto_pagar = devengos - deducciones
+        # 6. NETO A PAGAR
+        devengos    = salario_base + auxilio_transporte + valor_horas_extras + otros
+        deducciones = salud_empleado + pension_empleado + p_prestamos + p_descuentos
+        neto_pagar  = devengos - deducciones
 
-        if neto_pagar < 0:
-            logger.warning(f"[NominaCalc] Neto negativo: {neto_pagar} para contrato {contrato.id}")
+        # FASE 4: neto negativo es un error de negocio, no solo una advertencia.
+        # El operador debe ajustar descuentos o registrar descuentos parciales
+        # en varios periodos antes de que el sistema persista datos incoherentes.
+        if neto_pagar < Decimal('0'):
+            raise ValidationError({
+                'neto_pagar': (
+                    f'El neto a pagar no puede ser negativo '
+                    f'(devengos: {devengos.quantize(MONEY_Q)}, '
+                    f'deducciones: {deducciones.quantize(MONEY_Q)}). '
+                    f'Reduzca los descuentos o distribuya en varios periodos.'
+                )
+            })
 
+        # Cuantizar SOLO en el retorno (no en intermedios para no acumular error de redondeo)
         return {
-            "salario_base": str(salario_base.quantize(Decimal('0.01'))),
-            "auxilio_transporte": str(auxilio_transporte.quantize(Decimal('0.01'))),
-            "ibc": str(ibc.quantize(Decimal('0.01'))),
-            "salud_empleado": str(salud_empleado.quantize(Decimal('0.01'))),
-            "pension_empleado": str(pension_empleado.quantize(Decimal('0.01'))),
-            "neto_pagar": str(neto_pagar.quantize(Decimal('0.01')))
+            "salario_base":       str(salario_base.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "auxilio_transporte": str(auxilio_transporte.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "ibc":                str(ibc.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "valor_horas_extras": str(valor_horas_extras.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "salud_empleado":     str(salud_empleado.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "pension_empleado":   str(pension_empleado.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "neto_pagar":         str(neto_pagar.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
         }
 
     @staticmethod
     def calcular_nomina_dinamica(contrato, dias_laborados, horas_extras=0, otros_devengos=0):
-        """Calculo alternativo con horas extras (v2.95)."""
-        valor_hora = Decimal(contrato.salario_mensual) / Decimal(220)
-        total_horas = Decimal(dias_laborados) * Decimal(8)
+        """
+        Calculo alternativo basado en horas (v2.95 — legacy).
+        Alineado a Ley 2101/2021: valor_hora = salario_mensual / 200h.
+        """
+        salario_mensual = _to_decimal(contrato.salario_mensual)
+        dias            = _to_decimal(dias_laborados)
+        h_extras        = _to_decimal(horas_extras)
+        otros           = _to_decimal(otros_devengos)
+
+        valor_hora   = salario_mensual / _HORAS_MENSUALES       # 200h (Ley 2101/2021)
+        total_horas  = dias * Decimal('8')                       # 8h/día
         salario_base = valor_hora * total_horas
 
-        auxilio = Decimal(0)
+        auxilio = Decimal('0')
         if contrato.tipo != 'PRESTACION':
-            auxilio = (Decimal(contrato.auxilio_transporte) / 30) * Decimal(dias_laborados)
+            auxilio_mensual = _to_decimal(contrato.auxilio_transporte)
+            if auxilio_mensual > Decimal('0'):
+                auxilio = auxilio_mensual * (dias / _DIAS_MENSUALES)
 
-        salud = pension = Decimal(0)
-        if contrato.tipo in ['FIJO', 'INDEF', 'OBRA']:
-            salud = salario_base * Decimal('0.04')
-            pension = salario_base * Decimal('0.04')
+        salud = pension = Decimal('0')
+        if contrato.tipo in ('FIJO', 'INDEF', 'OBRA'):
+            salud    = salario_base * Decimal('0.04')
+            pension  = salario_base * Decimal('0.04')
 
-        neto = (salario_base + auxilio + Decimal(otros_devengos)) - (salud + pension)
+        valor_he = h_extras * valor_hora * Decimal('1.25')      # H.E. diurnas por defecto
+        neto = (salario_base + auxilio + valor_he + otros) - (salud + pension)
 
         return {
-            "salario_base": str(salario_base.quantize(Decimal('0.01'))),
-            "salud_empleado": str(salud.quantize(Decimal('0.01'))),
-            "pension_empleado": str(pension.quantize(Decimal('0.01'))),
-            "neto_pagar": str(neto.quantize(Decimal('0.01')))
+            "salario_base":    str(salario_base.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "salud_empleado":  str(salud.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "pension_empleado":str(pension.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "neto_pagar":      str(neto.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
         }

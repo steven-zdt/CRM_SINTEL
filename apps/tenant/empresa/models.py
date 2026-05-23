@@ -7,6 +7,7 @@ Modelos de empresa por tenant.
 - django-tenants maneja automáticamente el aislamiento por esquema
 - No es necesario filtrar manualmente por tenant_id
 """
+import uuid as uuid_module
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -454,3 +455,98 @@ class MailInboxConfig(SintelTenantBaseModel):
         if self.provider == "gmail":
             return f"{self.nombre} (Gmail: {self.email_address or self.imap_username})"
         return f"{self.nombre} ({self.imap_username}@{self.imap_host}:{self.imap_port}/{self.imap_mailbox})"
+
+
+class Sede(SintelTenantBaseModel):
+    """
+    Sedes o sucursales de la empresa.
+    """
+    empresa = models.ForeignKey(
+        'empresa.Empresa',
+        on_delete=models.CASCADE,
+        related_name='sedes',
+        verbose_name=_('Empresa'),
+        null=False,
+        blank=False,
+        db_index=True,
+    )
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+    nombre = models.CharField(max_length=150, verbose_name=_('Nombre'))
+    direccion = models.CharField(max_length=255, verbose_name=_('Direccion'), blank=True, default="")
+    telefono = models.CharField(max_length=50, verbose_name=_('Telefono'), blank=True, default="")
+    encargado_nombre = models.CharField(max_length=150, verbose_name=_('Nombre del Encargado'), blank=True, default="")
+
+    class Meta:
+        verbose_name = _('Sede')
+        verbose_name_plural = _('Sedes')
+        ordering = ['nombre']
+        db_table = 'empresa_sede'
+        indexes = [
+            models.Index(fields=["empresa"]),
+            models.Index(fields=["uuid"]),
+            models.Index(fields=["nombre"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['empresa', 'nombre'],
+                name='unique_sede_nombre_per_empresa'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.nombre}"
+
+
+class Area(SintelTenantBaseModel):
+    """
+    Areas o departamentos operativos dentro de una Sede.
+    """
+    empresa = models.ForeignKey(
+        'empresa.Empresa',
+        on_delete=models.CASCADE,
+        related_name='areas',
+        verbose_name=_('Empresa'),
+        null=False,
+        blank=False,
+        db_index=True,
+    )
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+    sede = models.ForeignKey(
+        Sede,
+        on_delete=models.CASCADE,
+        related_name='areas',
+        verbose_name=_('Sede'),
+        help_text=_('Sede a la que pertenece esta area')
+    )
+    nombre = models.CharField(max_length=150, verbose_name=_('Nombre'))
+    codigo_funcionamiento = models.CharField(
+        max_length=50,
+        verbose_name=_('Codigo de Funcionamiento'),
+        help_text=_('Codigo unico identificador del area dentro de la sede')
+    )
+
+    class Meta:
+        verbose_name = _('Area')
+        verbose_name_plural = _('Areas')
+        ordering = ['nombre']
+        db_table = 'empresa_area'
+        indexes = [
+            models.Index(fields=["empresa"]),
+            models.Index(fields=["uuid"]),
+            models.Index(fields=["nombre"]),
+            models.Index(fields=["codigo_funcionamiento"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sede', 'nombre'],
+                name='unique_area_nombre_per_sede'
+            ),
+            models.UniqueConstraint(
+                fields=['sede', 'codigo_funcionamiento'],
+                name='unique_area_codigo_per_sede'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.sede.nombre})"
+

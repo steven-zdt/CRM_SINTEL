@@ -17,15 +17,31 @@
     {# ⚠️ Contenedor de feedback para UIManager (manejo de errores 400) #}
     <div id="form-contrato-crear-feedback" class="alert d-none mb-3" role="alert"></div>
     
-    {# ⚠️ Formulario puramente declarativo - El éxito se maneja en contrato_editor.js #}
-    <form id="form-contrato-crear" method="POST" onsubmit="return false;" enctype="multipart/form-data"
-          hx-post="/api/v1/empleados/contratos/"
-          hx-target="#grid-empleados" 
-          hx-swap="none"
-          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-          hx-on::htmx:response-error="window.UIManager && window.UIManager.handleError && window.UIManager.handleError(event.detail, '[contratos.form]', {errorContainerSelector: '#form-contrato-crear-feedback'})">
+    {# Formulario declarativo — HTMX esta en el boton de guardar para que htmx:afterRequest #}
+    {# dispare con target=button (no form), permitiendo deteccion confiable en contrato_editor.js #}
+    <form id="form-contrato-crear" onsubmit="return false;" enctype="multipart/form-data">
       {% csrf_token %}
-      <input type="hidden" id="contrato-crear-empleado-id" name="empleado" value="{% if empleado %}{{ empleado.id }}{% endif %}">
+      {% if modo_independiente %}
+        <div class="mb-4">
+          <label for="contrato-crear-empleado-id" class="form-label text-danger fw-bold">Empleado *</label>
+          {% if empleados_disponibles %}
+          <select class="form-select" id="contrato-crear-empleado-id" name="empleado" required>
+            <option value="">Seleccione un empleado...</option>
+            {% for emp in empleados_disponibles %}
+              <option value="{{ emp.id }}">{{ emp.numero_documento }} - {{ emp.primer_nombre }} {{ emp.primer_apellido }}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <div class="alert alert-warning py-2 mb-0">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Todos los empleados activos ya tienen un contrato activo asignado.
+          </div>
+          <input type="hidden" id="contrato-crear-empleado-id" name="empleado" value="">
+          {% endif %}
+        </div>
+      {% else %}
+        <input type="hidden" id="contrato-crear-empleado-id" name="empleado" value="{{ empleado.id }}">
+      {% endif %}
       
       {# Tipo y Estado #}
       <div class="mb-4">
@@ -105,9 +121,20 @@
           </div>
           <div class="col-md-6">
             <label for="contrato-crear-auxilio_transporte" class="form-label">Auxilio de Transporte (COP)</label>
-            <input type="number" class="form-control" id="contrato-crear-auxilio_transporte" name="auxilio_transporte" 
+            <input type="number" class="form-control" id="contrato-crear-auxilio_transporte" name="auxilio_transporte"
                    value="0" step="0.01" min="0">
             <small class="form-text text-muted">Valor en Pesos Colombianos</small>
+          </div>
+          <div class="col-md-6">
+            <label for="contrato-crear-horas_semanales" class="form-label text-danger fw-bold">Jornada Semanal *</label>
+            <select class="form-select" id="contrato-crear-horas_semanales" name="horas_semanales" required>
+              <option value="42" selected>42 h/semana — Estándar Colombia 2026</option>
+              <option value="40">40 h/semana</option>
+              <option value="44">44 h/semana</option>
+              <option value="48">48 h/semana</option>
+              <option value="36">36 h/semana</option>
+            </select>
+            <small class="form-text text-muted">Ley 2101/2021 — base para cálculo de H.E. y recargos</small>
           </div>
           <div class="col-md-12">
             <label for="contrato-crear-prestamos_empresa" class="form-label">Préstamos de la Empresa (COP)</label>
@@ -141,7 +168,15 @@
       <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
         <i class="bi bi-x-lg me-1"></i>Cancelar
       </button>
-      <button type="submit" class="btn btn-success" id="btn-guardar-contrato-crear" form="form-contrato-crear">
+      <button type="button" class="btn btn-success" id="btn-guardar-contrato-crear"
+              hx-post="/api/v1/empleados/contratos/"
+              hx-target="#offcanvas-container-contratos"
+              hx-swap="none"
+              hx-include="#form-contrato-crear"
+              hx-encoding="multipart/form-data"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              hx-on::htmx:before-request="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\'></span>Guardando...';"
+              hx-on::htmx:response-error="window.UIManager&&window.UIManager.handleError&&window.UIManager.handleError(event.detail,'[contratos.crear]',{errorContainerSelector:'#form-contrato-crear-feedback'});">
         <i class="bi bi-check-lg me-1"></i>Crear Contrato
       </button>
     </div>

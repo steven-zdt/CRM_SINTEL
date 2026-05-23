@@ -26,24 +26,30 @@ class ValidateALLOWED_HOSTSMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
-        self.allowed_hosts = set(settings.ALLOWED_HOSTS)
-        # Compilar patterns para matching (Django permite wildcards)
-        self.allowed_patterns = [h for h in self.allowed_hosts if '*' in h]
-        self.allowed_exact = [h for h in self.allowed_hosts if '*' not in h]
 
     def _host_matches(self, host):
         """Verifica si host coincide con ALLOWED_HOSTS (con soporte para wildcards)."""
+        allowed_hosts = set(settings.ALLOWED_HOSTS)
+        
+        if '*' in allowed_hosts:
+            return True
+
         # Remover puerto si está presente
         host_only = host.split(":")[0] if ":" in host else host
 
-        # Chequeo exacto
-        if host_only in self.allowed_exact:
-            return True
-
-        # Chequeo con patterns (ej: *.sintel.com)
-        for pattern in self.allowed_patterns:
-            if fnmatch.fnmatch(host_only, pattern):
+        for allowed_host in allowed_hosts:
+            if allowed_host == '*':
                 return True
+            if allowed_host.startswith('.'):
+                # .sintel.com matches sintel.com and test.sintel.com
+                if host_only == allowed_host[1:] or host_only.endswith(allowed_host):
+                    return True
+            elif '*' in allowed_host:
+                if fnmatch.fnmatch(host_only, allowed_host):
+                    return True
+            else:
+                if host_only == allowed_host:
+                    return True
 
         return False
 
@@ -60,6 +66,7 @@ class ValidateALLOWED_HOSTSMiddleware:
 
         # Validar contra ALLOWED_HOSTS
         if not self._host_matches(http_host):
+            print(f"DEBUG ALLOWED_HOSTS: {settings.ALLOWED_HOSTS}")
             security_logger.warning(
                 f"🚨 BLOCKED: Invalid Host header '{http_host}' not in ALLOWED_HOSTS | "
                 f"Path: {request.path} | IP: {self._get_client_ip(request)}"

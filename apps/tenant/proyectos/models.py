@@ -96,10 +96,21 @@ class Proyecto(SintelTenantBaseModel):
         help_text=_('Factura que actúa como centro de costos para este proyecto')
     )
     factura_costo_numero = models.CharField(
-        _('Número Factura (Snapshot)'), max_length=50, blank=True, 
+        _('Número Factura (Snapshot)'), max_length=50, blank=True,
         help_text=_("Snapshot del número de la factura para evitar FK en listados")
     )
-    
+
+    # --- VÍNCULO CON INVENTARIO (Pull Model / DSV) ---
+    servicio_asociado = models.ForeignKey(
+        'tenant_inventario.Servicio',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='proyectos_ejecucion',
+        verbose_name=_('Servicio Asociado'),
+        help_text=_('Servicio del catálogo/portafolio vinculado a este proyecto (DSV: debe pertenecer a empresa_id)')
+    )
+
     valor_contrato_proyectado = models.DecimalField(_('Valor Contrato Proyectado'), max_digits=15, decimal_places=2, default=0)
 
     # --- RESPONSABLES (WORKFLOW - Referencias Desacopladas) ---
@@ -141,6 +152,11 @@ class Proyecto(SintelTenantBaseModel):
     costo_materiales_real = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
     utilidad_estimada = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
     margen_rentabilidad = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
+
+    # --- INDICADORES PLANEADOS (v3.5.2 — Presupuesto Manual) ---
+    costo_planeado_total = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Suma de ItemPresupuestoProyecto — Zero Waste caché'))
+    utilidad_planeada = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('valor_contrato - costo_planeado_total'))
+    margen_planeado = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text=_('utilidad_planeada / valor_contrato * 100'))
 
     # --- ENTREGABLES FINALES ---
     porcentaje_avance = models.PositiveIntegerField(_('Porcentaje Avance'), default=0)
@@ -313,3 +329,187 @@ class ItemPedido(SintelTenantBaseModel):
 
     def __str__(self):
         return f"{self.cantidad} {self.unidad_medida} - {self.nombre_material}"
+
+
+class ItemPresupuestoProyecto(SintelTenantBaseModel):
+    """
+    Línea de Presupuesto Manual para Fase 2 (Planeación).
+    Permite desglosar costos planeados por categoría.
+
+    Patrón: 1-a-N sobre Proyecto.
+    Service Layer gestiona recálculo de totales en proyecto padre.
+    DSV (Double Semantic Verification) valida empresa_id.
+    """
+    class Categoria(models.TextChoices):
+        MANO_OBRA = 'MANO_OBRA', _('Mano de Obra')
+        EQUIPOS = 'EQUIPOS', _('Equipos')
+        MATERIALES = 'MATERIALES', _('Materiales')
+
+    # --- Relaciones ---
+    proyecto = models.ForeignKey(
+        Proyecto,
+        on_delete=models.CASCADE,
+        related_name='items_presupuesto',
+        verbose_name=_('Proyecto')
+    )
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name='items_presupuesto',
+        verbose_name=_('Empresa'),
+        help_text=_('DSV: valida que item pertenezca al tenant')
+    )
+
+    # --- Datos del Ítem ---
+    categoria = models.CharField(
+        _('Categoría'),
+        max_length=20,
+        choices=Categoria.choices,
+        help_text=_('Mano de Obra, Equipos o Materiales')
+    )
+    descripcion = models.CharField(
+        _('Descripción'),
+        max_length=300,
+        blank=True,
+        help_text=_('Ej: Instalación de cableado, Alquiler de grúa, etc.')
+    )
+    cantidad = models.DecimalField(
+        _('Cantidad'),
+        max_digits=10,
+        decimal_places=2,
+        default=1,
+        help_text=_('Cantidad planeada')
+    )
+    valor_unitario = models.DecimalField(
+        _('Valor Unitario'),
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        help_text=_('Valor por unidad')
+    )
+    subtotal = models.DecimalField(
+        _('Subtotal'),
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        help_text=_('cantidad × valor_unitario (calculado en service layer)')
+    )
+
+    class Meta:
+        verbose_name = _('Item de Presupuesto')
+        verbose_name_plural = _('Ítems de Presupuesto')
+        ordering = ['categoria', 'id']
+        indexes = [
+            models.Index(fields=['proyecto']),
+            models.Index(fields=['empresa']),
+            models.Index(fields=['categoria']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_categoria_display()} - {self.descripcion} ({self.cantidad})"
+
+
+class TareaDiariaProyecto(SintelTenantBaseModel):
+    """
+    Seguimiento de Tareas Diarias (Fase 3 - Ejecución) v3.5.4
+
+    Permite registrar tareas por período (fecha_inicio a fecha_fin) asociadas a un proyecto.
+    Validaciones críticas:
+    - fecha_inicio <= fecha_fin (rango coherente)
+    - [fecha_inicio, fecha_fin] DEBE intersectar con [proyecto.fecha_inicio, proyecto.fecha_fin_estimada]
+    - Si proyecto.fase_actual == 'CIERRE', tareas son inmutables (read-only)
+    - DSV: empresa_id DEBE coincidir con proyecto.empresa_id
+
+    Patrón: 1-a-N sobre Proyecto.
+    Service Layer gestiona validaciones y persistencia.
+    """
+    class Estado(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', _('Pendiente')
+        EN_PROCESO = 'EN_PROCESO', _('En Proceso')
+        COMPLETADA = 'COMPLETADA', _('Completada')
+        CANCELADA = 'CANCELADA', _('Cancelada')
+
+    class Prioridad(models.TextChoices):
+        BAJA = 'BAJA', _('Baja')
+        NORMAL = 'NORMAL', _('Normal')
+        ALTA = 'ALTA', _('Alta')
+
+    # --- Relaciones ---
+    proyecto = models.ForeignKey(
+        Proyecto,
+        on_delete=models.CASCADE,
+        related_name='tareas_diarias',
+        verbose_name=_('Proyecto')
+    )
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name='tareas_diarias',
+        verbose_name=_('Empresa'),
+        help_text=_('DSV: valida que tarea pertenezca al tenant')
+    )
+
+    # --- Datos de la Tarea ---
+    fecha_inicio = models.DateField(
+        _('Fecha Inicio'),
+        help_text=_('Primer día de la tarea. DEBE estar entre fecha_inicio y fecha_fin_estimada del proyecto')
+    )
+    fecha_fin = models.DateField(
+        _('Fecha Fin'),
+        help_text=_('Último día de la tarea. DEBE ser >= fecha_inicio y dentro del rango del proyecto')
+    )
+    titulo = models.CharField(
+        _('Título'),
+        max_length=200,
+        help_text=_('Descripción breve de la tarea')
+    )
+    descripcion = models.TextField(
+        _('Descripción'),
+        blank=True,
+        help_text=_('Detalles completos de la tarea')
+    )
+    estado = models.CharField(
+        _('Estado'),
+        max_length=20,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE
+    )
+    prioridad = models.CharField(
+        _('Prioridad'),
+        max_length=20,
+        choices=Prioridad.choices,
+        default=Prioridad.NORMAL
+    )
+
+    # --- Seguimiento ---
+    asignado_a = models.CharField(
+        _('Asignado a'),
+        max_length=150,
+        blank=True,
+        help_text=_('Snapshot del nombre del empleado (no FK)')
+    )
+    notas_progreso = models.TextField(
+        _('Notas de Progreso'),
+        blank=True,
+        help_text=_('Actualizaciones diarias sobre la ejecución')
+    )
+
+    class Meta:
+        verbose_name = _('Tarea Diaria')
+        verbose_name_plural = _('Tareas Diarias')
+        ordering = ['fecha_inicio', 'created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['proyecto', 'fecha_inicio', 'titulo'],
+                name='unique_tarea_por_proyecto_fecha_inicio_titulo'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['proyecto', 'fecha_inicio']),
+            models.Index(fields=['empresa', 'estado']),
+            models.Index(fields=['fecha_inicio']),
+        ]
+
+    def __str__(self):
+        rango = f"{self.fecha_inicio}" if self.fecha_inicio == self.fecha_fin else f"{self.fecha_inicio} — {self.fecha_fin}"
+        return f"[{rango}] {self.titulo} - {self.get_estado_display()}"

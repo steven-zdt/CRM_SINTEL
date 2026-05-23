@@ -2,9 +2,13 @@ from typing import Any
 from django.db import transaction
 
 from apps.tenant.perfil.models import TenantProfile
-from apps.tenant.empresa.models import Empresa
+from apps.tenant.empresa.models import Empresa, Sede, Area
 
-from .crud_service import crear_empresa_db, actualizar_empresa_db, get_empresa_data
+from .crud_service import (
+    crear_empresa_db, actualizar_empresa_db, get_empresa_data,
+    crear_sede_db, actualizar_sede_db, eliminar_sede_db,
+    crear_area_db, actualizar_area_db, eliminar_area_db
+)
 
 
 class EmpresaService:
@@ -47,3 +51,57 @@ def crear_empresa(data: dict) -> Empresa:
 
 def actualizar_empresa(data: dict) -> Empresa:
     return EmpresaService.update_empresa(data)
+
+
+class SedeService:
+    """
+    Business Service para Sede. Orquesta validaciones y reglas de negocio sobre las primitivas CRUD.
+    """
+    @staticmethod
+    @transaction.atomic
+    def crear_sede(empresa_id: int, data: dict) -> Sede:
+        return crear_sede_db(empresa_id, data)
+
+    @staticmethod
+    @transaction.atomic
+    def actualizar_sede(empresa_id: int, uuid_str: str, data: dict) -> Sede:
+        # Recuperar sede con verificación anti-IDOR (empresa_id)
+        sede = Sede.objects.filter(empresa_id=empresa_id, uuid=uuid_str).first()
+        if not sede:
+            raise Sede.DoesNotExist("Sede no encontrada o no pertenece a la empresa.")
+        return actualizar_sede_db(sede, data)
+
+    @staticmethod
+    @transaction.atomic
+    def eliminar_sede(empresa_id: int, uuid_str: str) -> None:
+        # Recuperar sede con verificación anti-IDOR (empresa_id)
+        sede = Sede.objects.filter(empresa_id=empresa_id, uuid=uuid_str).first()
+        if not sede:
+            raise Sede.DoesNotExist("Sede no encontrada o no pertenece a la empresa.")
+        eliminar_sede_db(sede)
+
+
+class AreaService:
+    """
+    Business Service para Area. Orquesta validaciones y reglas de negocio sobre las primitivas CRUD.
+    """
+    @staticmethod
+    @transaction.atomic
+    def crear_area(empresa_id: int, data: dict) -> Area:
+        return crear_area_db(empresa_id, data)
+
+    @staticmethod
+    @transaction.atomic
+    def actualizar_area(empresa_id: int, uuid_str: str, data: dict) -> Area:
+        area = Area.objects.filter(empresa_id=empresa_id, uuid=uuid_str).first()
+        if not area:
+            raise Area.DoesNotExist("Area no encontrada o no pertenece a la empresa.")
+        return actualizar_area_db(area, data)
+
+    @staticmethod
+    @transaction.atomic
+    def eliminar_area(empresa_id: int, uuid_str: str) -> None:
+        area = Area.objects.filter(empresa_id=empresa_id, uuid=uuid_str).first()
+        if not area:
+            raise Area.DoesNotExist("Area no encontrada o no pertenece a la empresa.")
+        eliminar_area_db(area)

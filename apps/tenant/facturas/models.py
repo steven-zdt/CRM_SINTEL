@@ -137,7 +137,14 @@ class Factura(SintelTenantBaseModel):
         null=True,
         blank=True,
         db_index=True,
-        help_text=_("UUID de cotización vinculada (soft reference, permite orfandad)")
+        help_text=_("UUID de cotizacion vinculada (soft reference, permite orfandad)")
+    )
+    # Snapshot numero cotizacion (v3.10.1) — Evita N+1 en listado Tabulator
+    cotizacion_numero = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text=_("Numero de la cotizacion vinculada (snapshot para Zero Waste queries)")
     )
 
     # DIAN / QR / CUFE y autorización
@@ -810,6 +817,8 @@ MANUAL_EDITABLE_FIELDS = [
     'estado_pago',
     'cuenta_contable_uuid',
     'orden_compra',
+    'cotizacion_uuid',
+    'cotizacion_numero',
 ]
 
 XML_IMMUTABLE_FIELDS = {

@@ -1,0 +1,327 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+django: version: 5.2.13, settings: config.settings (from env)
+rootdir: C:\Users\Administrator\Documents\crm_sintel
+configfile: pyproject.toml
+plugins: anyio-4.13.0, Faker-40.13.0, asyncio-1.3.0, django-4.12.0, json-report-1.5.0, metadata-3.1.1, xdist-3.8.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 5 items / 4 deselected / 1 selected
+
+apps\tenant\empleados\tests\test_devengos_api_smoke.py F                 [100%]
+
+================================== FAILURES ===================================
+_______________________ test_empleados_disponibles_api ________________________
+
+client = <django.test.client.Client object at 0x00000123310EDA90>
+admin_user = <User: admin@test.local>
+tenant = <Client: testtenant - Test Tenant>
+tenant_factory = <function tenant_factory.<locals>._factory at 0x00000123394FF110>
+
+    @pytest.mark.django_db
+    def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
+        """
+        Test para verificar el endpoint de empleados disponibles para un periodo.
+        """
+        # 1. Crear empleados y contratos en el tenant 1
+        with schema_context(tenant.schema_name):
+            from apps.tenant.empresa.models import Empresa
+            from apps.tenant.empleados.models import Contrato
+            empresa1 = Empresa.objects.first()
+    
+            # Empleado 1: Disponible (sin devengos en el periodo)
+            e1 = Empleado.objects.create(
+                tipo_documento="CC",
+                numero_documento="1111111111",
+                primer_nombre="Juan",
+                primer_apellido="Disponible",
+                email="juan.dispo@example.com",
+                fecha_ingreso="2024-01-01",
+                empresa=empresa1,
+                eps="EPS004",
+                afp="AFP001",
+                arl="ARL002"
+            )
+            c1 = Contrato.objects.create(
+                empresa=empresa1, empleado=e1, tipo="INDEF", fecha_inicio="2024-01-01", salario_mensual=Decimal("1500000.00"), cargo="Analista"
+            )
+    
+            # Empleado 2: Ocupado (con devengo en el periodo)
+            e2 = Empleado.objects.create(
+                tipo_documento="CC",
+                numero_documento="2222222222",
+                primer_nombre="Pedro",
+                primer_apellido="Ocupado",
+                email="pedro.ocupado@example.com",
+                fecha_ingreso="2024-01-01",
+                empresa=empresa1,
+                eps="EPS004",
+                afp="AFP001",
+                arl="ARL002"
+            )
+            c2 = Contrato.objects.create(
+                empresa=empresa1, empleado=e2, tipo="INDEF", fecha_inicio="2024-01-01", salario_mensual=Decimal("2500000.00"), cargo="Senior"
+            )
+    
+            # Crear devengo para e2 en Febrero 2026
+            Devengo.objects.create(
+                empresa=empresa1,
+                empleado=e2,
+                contrato=c2,
+                periodo_mes="2026-02",
+                fecha_pago="2026-02-28",
+                salario_base=Decimal("2500000.00"),
+                auxilio_transporte=Decimal("0.00"),
+                salud_empleado=Decimal("100000.00"),
+                pension_empleado=Decimal("100000.00"),
+                neto_pagar=Decimal("2300000.00")
+            )
+    
+        # 2. Login y peticion al endpoint
+        client.force_login(admin_user)
+    
+        # 2a. Validacion de parametros requeridos
+        resp = client.get(
+            "/api/v1/empleados/devengos/empleados-disponibles/",
+            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        )
+        assert resp.status_code == 400
+        assert "fecha_inicio y fecha_fin son requeridos" in resp.json()["error"]
+    
+        # 2b. Validacion de fechas invalidas
+        resp = client.get(
+            "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=invalid-date&fecha_fin=2026-02-28",
+            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        )
+        assert resp.status_code == 400
+        assert "Formato de fecha invalido" in resp.json()["error"]
+    
+        # 2c. Validacion de rango de fecha incorrecto
+        resp = client.get(
+            "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-28&fecha_fin=2026-02-01",
+            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        )
+        assert resp.status_code == 400
+        assert "fecha_inicio no puede ser mayor que fecha_fin" in resp.json()["error"]
+    
+        # 2d. Peticion valida - Deben retornar Juan y no Pedro
+        resp = client.get(
+            "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-01&fecha_fin=2026-02-28",
+            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+>       assert len(data) == 1
+E       AssertionError: assert 2 == 1
+E        +  where 2 = len([{'id': 1, 'nombre_completo': 'Juan Disponible', 'numero_documento': '1111111111', 'primer_apellido': 'Disponible', ...}, {'id': 2, 'nombre_completo': 'Pedro Ocupado', 'numero_documento': '2222222222', 'primer_apellido': 'Ocupado', ...}])
+
+apps\tenant\empleados\tests\test_devengos_api_smoke.py:416: AssertionError
+---------------------------- Captured stderr call -----------------------------
+[INFO] apps.public.tenants.middleware_urlconf: OK: TenantSecurityAndURLConfMiddleware inicializado | Public schema: public | Allowed public domains: ['0.0.0.0', '127.0.0.1', '192.168.2.15', 'localhost', 'sintel.com', 'testserver']
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_parser.register_parsers: Parsers de cotizaciones registrados correctamente
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_ingest.app_router: app_parser_registered
+[INFO] apps.services.document_parser.register_parsers: Parsers de facturas registrados correctamente
+[INFO] apps.services.document_ingest.validations: validator_registered_cotizaciones_override
+[INFO] config.api_urls: OK: URLs de contabilidad registradas correctamente: /api/v1/contabilidad/
+[INFO] config.api_urls: OK: URLs de inventario registradas correctamente: /api/v1/inventario/
+[INFO] config.api_urls:    - Categorías: GET /api/v1/inventario/categorias/ (DataTables client-side)
+[INFO] config.api_urls:    - Productos: GET /api/v1/inventario/productos/ (Tabulator v2.40)
+[INFO] config.api_urls:    - Servicios: GET /api/v1/inventario/servicios/ (Tabulator v2.40)
+[INFO] config.api_urls:    - Activos: GET /api/v1/inventario/activos/ (Tabulator v2.40)
+[INFO] config.api_urls:    - Movimientos: GET /api/v1/inventario/movimientos/ (Tabulator v2.40)
+[INFO] apps.tenant.empleados.api.urls: OK: URLs de empleados configuradas correctamente
+[INFO] apps.tenant.empleados.api.urls: OK: URLs generadas: 50 patrones
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/$ -> contrato-list
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos\.(?P<format>[a-z0-9]+)/?$ -> contrato-list
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/render-offcanvas/crear/$ -> contrato-render-offcanvas-crear
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-crear
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<uuid>[^/.]+)/$ -> contrato-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> contrato-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<uuid>[^/.]+)/cancelar/$ -> contrato-cancelar
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<uuid>[^/.]+)/cancelar\.(?P<format>[a-z0-9]+)/?$ -> contrato-cancelar
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<uuid>[^/.]+)/render-offcanvas/detalle/$ -> contrato-render-offcanvas-detalle
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<uuid>[^/.]+)/render-offcanvas/detalle\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-detalle
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<uuid>[^/.]+)/render-offcanvas/editar/$ -> contrato-render-offcanvas-editar
+[INFO] apps.tenant.empleados.api.urls:    - ^contratos/(?P<uuid>[^/.]+)/render-offcanvas/editar\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-editar
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/$ -> devengo-list
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos\.(?P<format>[a-z0-9]+)/?$ -> devengo-list
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/empleados-disponibles/$ -> devengo-empleados-disponibles
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/empleados-disponibles\.(?P<format>[a-z0-9]+)/?$ -> devengo-empleados-disponibles
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/preview-calculo/$ -> devengo-preview-calculo
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/preview-calculo\.(?P<format>[a-z0-9]+)/?$ -> devengo-preview-calculo
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/previsualizar/$ -> devengo-previsualizar
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/previsualizar\.(?P<format>[a-z0-9]+)/?$ -> devengo-previsualizar
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/render-offcanvas/crear/$ -> devengo-render-offcanvas-crear
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> devengo-render-offcanvas-crear
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/ultima-nomina/$ -> devengo-ultima-nomina
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/ultima-nomina\.(?P<format>[a-z0-9]+)/?$ -> devengo-ultima-nomina
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/ultimo-periodo/$ -> devengo-ultimo-periodo
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/ultimo-periodo\.(?P<format>[a-z0-9]+)/?$ -> devengo-ultimo-periodo
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/verificar-periodo/$ -> devengo-verificar-periodo
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/verificar-periodo\.(?P<format>[a-z0-9]+)/?$ -> devengo-verificar-periodo
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<uuid>[^/.]+)/$ -> devengo-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> devengo-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<uuid>[^/.]+)/anular/$ -> devengo-anular
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<uuid>[^/.]+)/anular\.(?P<format>[a-z0-9]+)/?$ -> devengo-anular
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<uuid>[^/.]+)/asignar-cuenta/$ -> devengo-asignar-cuenta-contable
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<uuid>[^/.]+)/asignar-cuenta\.(?P<format>[a-z0-9]+)/?$ -> devengo-asignar-cuenta-contable
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<uuid>[^/.]+)/render-offcanvas/detalle/$ -> devengo-render-offcanvas-detalle
+[INFO] apps.tenant.empleados.api.urls:    - ^devengos/(?P<uuid>[^/.]+)/render-offcanvas/detalle\.(?P<format>[a-z0-9]+)/?$ -> devengo-render-offcanvas-detalle
+[INFO] apps.tenant.empleados.api.urls:    - ^$ -> empleado-list
+[INFO] apps.tenant.empleados.api.urls:    - ^\.(?P<format>[a-z0-9]+)/?$ -> empleado-list
+[INFO] apps.tenant.empleados.api.urls:    - ^gestor-offcanvas/$ -> empleado-gestor-offcanvas
+[INFO] apps.tenant.empleados.api.urls:    - ^gestor-offcanvas\.(?P<format>[a-z0-9]+)/?$ -> empleado-gestor-offcanvas
+[INFO] apps.tenant.empleados.api.urls:    - ^summary/$ -> empleado-summary
+[INFO] apps.tenant.empleados.api.urls:    - ^summary\.(?P<format>[a-z0-9]+)/?$ -> empleado-summary
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<uuid>[^/.]+)/$ -> empleado-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> empleado-detail
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<uuid>[^/.]+)/contrato-disponible/$ -> empleado-contrato-disponible
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<uuid>[^/.]+)/contrato-disponible\.(?P<format>[a-z0-9]+)/?$ -> empleado-contrato-disponible
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<uuid>[^/.]+)/historial-nominas/$ -> empleado-historial-nominas
+[INFO] apps.tenant.empleados.api.urls:    - ^(?P<uuid>[^/.]+)/historial-nominas\.(?P<format>[a-z0-9]+)/?$ -> empleado-historial-nominas
+[INFO] apps.tenant.empleados.api.urls:    -  -> api-root
+[INFO] apps.tenant.empleados.api.urls:    - <drf_format_suffix:format> -> api-root
+[INFO] apps.tenant.gastos.api.urls: OK: GastoViewSet y ResolucionDIANViewSet registrados en el router de gastos
+[INFO] apps.tenant.proveedores.api.urls: OK: ProveedorViewSet registrado correctamente. URLs generadas: 14
+[INFO] apps.tenant.proveedores.api.urls:    - ^$ -> proveedor-list
+[INFO] apps.tenant.proveedores.api.urls:    - ^\.(?P<format>[a-z0-9]+)/?$ -> proveedor-list
+[INFO] apps.tenant.proveedores.api.urls:    - ^gestor-offcanvas/$ -> proveedor-gestor-offcanvas
+[INFO] apps.tenant.proveedores.api.urls:    - ^gestor-offcanvas\.(?P<format>[a-z0-9]+)/?$ -> proveedor-gestor-offcanvas
+[INFO] apps.tenant.proveedores.api.urls:    - ^render-offcanvas/crear/$ -> proveedor-render-offcanvas-crear
+[INFO] apps.tenant.proveedores.api.urls:    - ^render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> proveedor-render-offcanvas-crear
+[INFO] apps.tenant.proveedores.api.urls:    - ^render-offcanvas/detalle/$ -> proveedor-render-offcanvas-detalle
+[INFO] apps.tenant.proveedores.api.urls:    - ^render-offcanvas/detalle\.(?P<format>[a-z0-9]+)/?$ -> proveedor-render-offcanvas-detalle
+[INFO] apps.tenant.proveedores.api.urls:    - ^render-offcanvas/editar/$ -> proveedor-render-offcanvas-editar
+[INFO] apps.tenant.proveedores.api.urls:    - ^render-offcanvas/editar\.(?P<format>[a-z0-9]+)/?$ -> proveedor-render-offcanvas-editar
+[INFO] apps.tenant.proveedores.api.urls:    - ^(?P<uuid>[^/.]+)/$ -> proveedor-detail
+[INFO] apps.tenant.proveedores.api.urls:    - ^(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> proveedor-detail
+[INFO] apps.tenant.proveedores.api.urls:    -  -> api-root
+[INFO] apps.tenant.proveedores.api.urls:    - <drf_format_suffix:format> -> api-root
+[INFO] apps.tenant.clientes.api.urls: [OK] ClienteViewSet registrado correctamente. URLs generadas: 26
+[INFO] apps.tenant.proyectos.api.urls: [OK] ProyectoViewSet (v3.3) registrado correctamente. URLs generadas: 20
+[INFO] config.api_urls: OK: URLs de empleados registradas correctamente: /api/v1/empleados/
+[INFO] config.api_urls: OK: URLs de gastos registradas correctamente: /api/v1/gastos/
+[INFO] config.api_urls: OK: URLs de proveedores registradas correctamente: /api/v1/proveedores/
+[INFO] config.api_urls: OK: URLs de clientes registradas correctamente: /api/v1/clientes/
+[INFO] config.api_urls: OK: URLs API de cotizaciones registradas correctamente: /api/v1/cotizaciones/
+[INFO] config.api_urls: OK: URLs de proyectos registradas correctamente: /api/v1/proyectos/
+[WARNING] django.request: Bad Request: /api/v1/empleados/devengos/empleados-disponibles/
+[WARNING] django.request: Bad Request: /api/v1/empleados/devengos/empleados-disponibles/
+[WARNING] django.request: Bad Request: /api/v1/empleados/devengos/empleados-disponibles/
+------------------------------ Captured log call ------------------------------
+INFO     apps.public.tenants.middleware_urlconf:middleware_urlconf.py:75 OK: TenantSecurityAndURLConfMiddleware inicializado | Public schema: public | Allowed public domains: ['0.0.0.0', '127.0.0.1', '192.168.2.15', 'localhost', 'sintel.com', 'testserver']
+INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
+INFO     apps.services.document_parser.register_parsers:register_parsers.py:28 Parsers de cotizaciones registrados correctamente
+INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
+INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
+INFO     apps.services.document_parser.register_parsers:register_parsers.py:42 Parsers de facturas registrados correctamente
+INFO     apps.services.document_ingest.validations:router.py:58 validator_registered_cotizaciones_override
+INFO     config.api_urls:api_urls.py:81 OK: URLs de contabilidad registradas correctamente: /api/v1/contabilidad/
+INFO     config.api_urls:api_urls.py:92 OK: URLs de inventario registradas correctamente: /api/v1/inventario/
+INFO     config.api_urls:api_urls.py:93    - Categorías: GET /api/v1/inventario/categorias/ (DataTables client-side)
+INFO     config.api_urls:api_urls.py:94    - Productos: GET /api/v1/inventario/productos/ (Tabulator v2.40)
+INFO     config.api_urls:api_urls.py:95    - Servicios: GET /api/v1/inventario/servicios/ (Tabulator v2.40)
+INFO     config.api_urls:api_urls.py:96    - Activos: GET /api/v1/inventario/activos/ (Tabulator v2.40)
+INFO     config.api_urls:api_urls.py:97    - Movimientos: GET /api/v1/inventario/movimientos/ (Tabulator v2.40)
+INFO     apps.tenant.empleados.api.urls:urls.py:28 OK: URLs de empleados configuradas correctamente
+INFO     apps.tenant.empleados.api.urls:urls.py:30 OK: URLs generadas: 50 patrones
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/$ -> contrato-list
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos\.(?P<format>[a-z0-9]+)/?$ -> contrato-list
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/render-offcanvas/crear/$ -> contrato-render-offcanvas-crear
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-crear
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/(?P<uuid>[^/.]+)/$ -> contrato-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> contrato-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/(?P<uuid>[^/.]+)/cancelar/$ -> contrato-cancelar
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/(?P<uuid>[^/.]+)/cancelar\.(?P<format>[a-z0-9]+)/?$ -> contrato-cancelar
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/(?P<uuid>[^/.]+)/render-offcanvas/detalle/$ -> contrato-render-offcanvas-detalle
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/(?P<uuid>[^/.]+)/render-offcanvas/detalle\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-detalle
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/(?P<uuid>[^/.]+)/render-offcanvas/editar/$ -> contrato-render-offcanvas-editar
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^contratos/(?P<uuid>[^/.]+)/render-offcanvas/editar\.(?P<format>[a-z0-9]+)/?$ -> contrato-render-offcanvas-editar
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/$ -> devengo-list
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos\.(?P<format>[a-z0-9]+)/?$ -> devengo-list
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/empleados-disponibles/$ -> devengo-empleados-disponibles
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/empleados-disponibles\.(?P<format>[a-z0-9]+)/?$ -> devengo-empleados-disponibles
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/preview-calculo/$ -> devengo-preview-calculo
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/preview-calculo\.(?P<format>[a-z0-9]+)/?$ -> devengo-preview-calculo
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/previsualizar/$ -> devengo-previsualizar
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/previsualizar\.(?P<format>[a-z0-9]+)/?$ -> devengo-previsualizar
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/render-offcanvas/crear/$ -> devengo-render-offcanvas-crear
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> devengo-render-offcanvas-crear
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/ultima-nomina/$ -> devengo-ultima-nomina
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/ultima-nomina\.(?P<format>[a-z0-9]+)/?$ -> devengo-ultima-nomina
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/ultimo-periodo/$ -> devengo-ultimo-periodo
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/ultimo-periodo\.(?P<format>[a-z0-9]+)/?$ -> devengo-ultimo-periodo
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/verificar-periodo/$ -> devengo-verificar-periodo
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/verificar-periodo\.(?P<format>[a-z0-9]+)/?$ -> devengo-verificar-periodo
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/(?P<uuid>[^/.]+)/$ -> devengo-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> devengo-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/(?P<uuid>[^/.]+)/anular/$ -> devengo-anular
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/(?P<uuid>[^/.]+)/anular\.(?P<format>[a-z0-9]+)/?$ -> devengo-anular
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/(?P<uuid>[^/.]+)/asignar-cuenta/$ -> devengo-asignar-cuenta-contable
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/(?P<uuid>[^/.]+)/asignar-cuenta\.(?P<format>[a-z0-9]+)/?$ -> devengo-asignar-cuenta-contable
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/(?P<uuid>[^/.]+)/render-offcanvas/detalle/$ -> devengo-render-offcanvas-detalle
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^devengos/(?P<uuid>[^/.]+)/render-offcanvas/detalle\.(?P<format>[a-z0-9]+)/?$ -> devengo-render-offcanvas-detalle
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^$ -> empleado-list
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^\.(?P<format>[a-z0-9]+)/?$ -> empleado-list
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^gestor-offcanvas/$ -> empleado-gestor-offcanvas
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^gestor-offcanvas\.(?P<format>[a-z0-9]+)/?$ -> empleado-gestor-offcanvas
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^summary/$ -> empleado-summary
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^summary\.(?P<format>[a-z0-9]+)/?$ -> empleado-summary
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^(?P<uuid>[^/.]+)/$ -> empleado-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> empleado-detail
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^(?P<uuid>[^/.]+)/contrato-disponible/$ -> empleado-contrato-disponible
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^(?P<uuid>[^/.]+)/contrato-disponible\.(?P<format>[a-z0-9]+)/?$ -> empleado-contrato-disponible
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^(?P<uuid>[^/.]+)/historial-nominas/$ -> empleado-historial-nominas
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - ^(?P<uuid>[^/.]+)/historial-nominas\.(?P<format>[a-z0-9]+)/?$ -> empleado-historial-nominas
+INFO     apps.tenant.empleados.api.urls:urls.py:34    -  -> api-root
+INFO     apps.tenant.empleados.api.urls:urls.py:34    - <drf_format_suffix:format> -> api-root
+INFO     apps.tenant.gastos.api.urls:urls.py:32 OK: GastoViewSet y ResolucionDIANViewSet registrados en el router de gastos
+INFO     apps.tenant.proveedores.api.urls:urls.py:24 OK: ProveedorViewSet registrado correctamente. URLs generadas: 14
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^$ -> proveedor-list
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^\.(?P<format>[a-z0-9]+)/?$ -> proveedor-list
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^gestor-offcanvas/$ -> proveedor-gestor-offcanvas
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^gestor-offcanvas\.(?P<format>[a-z0-9]+)/?$ -> proveedor-gestor-offcanvas
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^render-offcanvas/crear/$ -> proveedor-render-offcanvas-crear
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^render-offcanvas/crear\.(?P<format>[a-z0-9]+)/?$ -> proveedor-render-offcanvas-crear
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^render-offcanvas/detalle/$ -> proveedor-render-offcanvas-detalle
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^render-offcanvas/detalle\.(?P<format>[a-z0-9]+)/?$ -> proveedor-render-offcanvas-detalle
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^render-offcanvas/editar/$ -> proveedor-render-offcanvas-editar
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^render-offcanvas/editar\.(?P<format>[a-z0-9]+)/?$ -> proveedor-render-offcanvas-editar
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^(?P<uuid>[^/.]+)/$ -> proveedor-detail
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - ^(?P<uuid>[^/.]+)\.(?P<format>[a-z0-9]+)/?$ -> proveedor-detail
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    -  -> api-root
+INFO     apps.tenant.proveedores.api.urls:urls.py:26    - <drf_format_suffix:format> -> api-root
+INFO     apps.tenant.clientes.api.urls:urls.py:26 [OK] ClienteViewSet registrado correctamente. URLs generadas: 26
+INFO     apps.tenant.proyectos.api.urls:urls.py:29 [OK] ProyectoViewSet (v3.3) registrado correctamente. URLs generadas: 20
+INFO     config.api_urls:api_urls.py:120 OK: URLs de empleados registradas correctamente: /api/v1/empleados/
+INFO     config.api_urls:api_urls.py:128 OK: URLs de gastos registradas correctamente: /api/v1/gastos/
+INFO     config.api_urls:api_urls.py:137 OK: URLs de proveedores registradas correctamente: /api/v1/proveedores/
+INFO     config.api_urls:api_urls.py:145 OK: URLs de clientes registradas correctamente: /api/v1/clientes/
+INFO     config.api_urls:api_urls.py:155 OK: URLs API de cotizaciones registradas correctamente: /api/v1/cotizaciones/
+INFO     config.api_urls:api_urls.py:163 OK: URLs de proyectos registradas correctamente: /api/v1/proyectos/
+============================== warnings summary ===============================
+config\settings.py:714
+  C:\Users\Administrator\Documents\crm_sintel\config\settings.py:714: UserWarning: WARNING: JWT_SECRET_KEY no configurada. Generada automáticamente para desarrollo. En producción, configura JWT_SECRET_KEY en variables de entorno.
+    warnings.warn(
+
+apps\tenant\inventario\models.py:341
+  C:\Users\Administrator\Documents\crm_sintel\apps\tenant\inventario\models.py:341: RemovedInDjango60Warning: CheckConstraint.check is deprecated in favor of `.condition`.
+    models.CheckConstraint(
+
+apps/tenant/empleados/tests/test_devengos_api_smoke.py::test_empleados_disponibles_api
+  C:\Users\Administrator\Documents\crm_sintel\apps\tenant\inventario\migrations\0006_movimientoinventario_activo_fijo_and_more.py:67: RemovedInDjango60Warning: CheckConstraint.check is deprecated in favor of `.condition`.
+    constraint=models.CheckConstraint(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED apps/tenant/empleados/tests/test_devengos_api_smoke.py::test_empleados_disponibles_api
+================ 1 failed, 4 deselected, 3 warnings in 23.78s =================

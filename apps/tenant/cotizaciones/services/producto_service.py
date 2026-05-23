@@ -64,7 +64,7 @@ class ProductoBusinessService:
             if instance:
                 exists = exists.exclude(pk=instance.pk)
             if exists.exists():
-                raise ValueError(f"El código {codigo} ya está en uso.")
+                raise ValueError(f"El codigo {codigo} ya esta en uso.")
         
         if instance:
             return ProductoCRUDService.actualizar(instance, data)

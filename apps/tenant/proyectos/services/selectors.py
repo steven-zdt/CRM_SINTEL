@@ -21,8 +21,10 @@ LIST_FIELDS = [
     'proveedor_id', 'proveedor_nombre',
     'valor_contrato_proyectado', 'costo_mano_obra_real', 'costo_materiales_real',
     'utilidad_estimada', 'margen_rentabilidad',
+    'costo_planeado_total', 'utilidad_planeada', 'margen_planeado',
     'porcentaje_avance', 'fecha_cierre_real',
     'factura_costo_id', 'factura_costo_numero',
+    'servicio_asociado_id',
     'created_at', 'updated_at',
     'empresa_id'
 ]
@@ -43,7 +45,7 @@ def qs_list(empresa_id, search=None):
     """
     qs = Proyecto.objects.filter(
         empresa_id=empresa_id
-    ).select_related('factura_costo').only(*LIST_FIELDS)
+    ).select_related('factura_costo', 'servicio_asociado').only(*LIST_FIELDS)
 
     if search:
         qs = qs.filter(
@@ -60,12 +62,14 @@ def qs_detail(empresa_id, uuid):
     QuerySet de detalle con relaciones prefetch. Retorna None si no existe
     (el ViewSet lanza NotFound al recibir None).
     Filtra por uuid (no pk) para cumplir M-001 del Roadmap M3.
+    v3.5.2: Agregado prefetch_related('items_presupuesto') para Zero Waste.
     """
     return Proyecto.objects.filter(
         empresa_id=empresa_id,
         uuid=uuid
-    ).only(*DETAIL_FIELDS).select_related('factura_costo').prefetch_related(
+    ).only(*DETAIL_FIELDS).select_related('factura_costo', 'servicio_asociado').prefetch_related(
         'equipo_trabajo',
         'pedidos',
-        'pedidos__items'
+        'pedidos__items',
+        'items_presupuesto'
     ).first()

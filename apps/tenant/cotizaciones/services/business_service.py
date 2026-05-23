@@ -9,21 +9,23 @@ from ..models import Cotizacion
 from .crud_service import CotizacionCRUDService
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
+from .pdf_export_service import CotizacionPDFExportService
+from .item_service import CotizacionItemBusinessService
 
 logger = logging.getLogger(__name__)
 
 def _generar_pdf_sincronizado(cotizacion, empresa):
-    """Genera PDF de forma síncrona después de guardar cotización."""
+    """Genera PDF de forma sincrona despues de guardar cotizacion."""
     try:
-        from .pdf_export_service import CotizacionPDFExportService
         pdf_bytes = CotizacionPDFExportService.generar_pdf_publico(cotizacion, empresa)
         if pdf_bytes:
-            logger.info(f"[PDF] Generado para cotización {cotizacion.uuid}")
+            logger.info(f"[PDF] Generado para cotizacion {cotizacion.uuid}")
             return pdf_bytes
         else:
-            logger.warning(f"[PDF] Falló generación para cotización {cotizacion.uuid}")
+            logger.warning(f"[PDF] Fallo generacion para cotizacion {cotizacion.uuid}")
     except Exception as e:
         logger.error(f"[PDF] Error generando PDF para {cotizacion.uuid}: {str(e)}", exc_info=True)
+
 
 class CotizacionService:
     MONEY_Q = Decimal("0.01")
@@ -55,6 +57,23 @@ class CotizacionService:
             if configuracion_input.empresa_id != empresa_id:
                 raise ValueError("configuracion does not belong to tenant empresa")
             return configuracion_input
+
+        if not configuracion_input:
+            configuracion = ConfiguracionCotizacion.objects.filter(empresa_id=empresa_id, es_activo=True).first()
+            if not configuracion:
+                configuracion = ConfiguracionCotizacion.objects.filter(empresa_id=empresa_id).first()
+            if not configuracion:
+                configuracion = ConfiguracionCotizacion.objects.create(
+                    empresa_id=empresa_id,
+                    nombre_configuracion="Perfil General",
+                    es_activo=True,
+                    dias_validez=15,
+                    prefijo_secuencia="COT-",
+                    sufijo_secuencia="",
+                    semilla_inicial=1,
+                    ultimo_numero=0
+                )
+            return configuracion
 
         configuracion_id = int(configuracion_input)
         configuracion = ConfiguracionCotizacion.objects.filter(id=configuracion_id, empresa_id=empresa_id).first()
@@ -108,7 +127,6 @@ class CotizacionService:
         Sincroniza los items de la cotizacion (crea, actualiza o elimina).
         Matching: preferencia por uuid (si viene en payload), fallback a id.
         """
-        from .item_service import CotizacionItemBusinessService
 
         # 1. Mapear items existentes por uuid y por id
         existing_by_uuid = {}
@@ -166,7 +184,7 @@ class CotizacionService:
             **header_fields,
         )
 
-        # Sincronizar ítems
+        # Sincronizar items
         if items_data:
             cls._sync_items(cotizacion, items_data)
 
@@ -216,7 +234,7 @@ class CotizacionService:
     @transaction.atomic
     def actualizar_cotizacion(cls, instance, datos):
         """
-        Actualiza los campos de cabecera y los ítems de la cotización.
+        Actualiza los campos de cabecera y los items de la cotizacion.
         Genera PDF sincronizado con datos guardados.
         """
         items_data = datos.pop('items', None)
@@ -239,10 +257,10 @@ class CotizacionService:
                 else:
                     update_data[field] = val
 
-        # Aplicar cambios vía CRUD a la cabecera
+        # Aplicar cambios via CRUD a la cabecera
         updated_instance = CotizacionCRUDService.update_cotizacion(instance, **update_data)
 
-        # Sincronizar ítems si vienen en el payload
+        # Sincronizar items si vienen en el payload
         if items_data is not None:
             cls._sync_items(updated_instance, items_data)
 

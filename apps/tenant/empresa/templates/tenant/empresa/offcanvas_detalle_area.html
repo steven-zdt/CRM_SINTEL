@@ -1,0 +1,40 @@
+{# offcanvas_detalle_area.html - Vista DETALLE de Area v4.2 (FSD §7.1) #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-area-detalle"
+     aria-labelledby="offcanvas-area-detalle-label" style="width: 480px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-area-detalle-label">
+      <i class="bi bi-diagram-3-fill me-2 text-primary"></i>Detalle de Area
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    {% if area %}
+    <div class="d-flex align-items-center mb-4 p-3 bg-light rounded border">
+      <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center me-3"
+           style="width:50px;height:50px;font-size:1.4rem;">
+        <i class="bi bi-diagram-3 text-info"></i>
+      </div>
+      <div>
+        <h6 class="mb-0 fw-bold">{{ area.nombre }}</h6>
+        <small class="text-muted">{{ area.codigo_funcionamiento }}</small>
+      </div>
+    </div>
+
+    <dl class="row g-2 small">
+      <dt class="col-5 text-muted">Nombre</dt>
+      <dd class="col-7 fw-semibold">{{ area.nombre }}</dd>
+
+      <dt class="col-5 text-muted">Codigo</dt>
+      <dd class="col-7"><code>{{ area.codigo_funcionamiento }}</code></dd>
+
+      <dt class="col-5 text-muted">Sede</dt>
+      <dd class="col-7">{{ area.sede.nombre|default:"—" }}</dd>
+    </dl>
+    {% else %}
+    <div class="alert alert-warning">No se encontro informacion del area.</div>
+    {% endif %}
+  </div>
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">Cerrar</button>
+  </div>
+</div>

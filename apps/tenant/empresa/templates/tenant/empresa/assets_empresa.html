@@ -17,13 +17,17 @@
 {# Feature 2: Editor y Offcanvas #}
 <script src="{% static 'empresa/js/features/empresa_editor.js' %}"></script>
 
-{# BLOQUE 3: Archivos del módulo MailInboxConfig (opcional) #}
-{# ⚠️ ORDEN CRÍTICO: mailinbox.api.js DEBE cargarse ANTES de mailinbox.page.js #}
-{# mailinbox.page.js depende de window.mailinboxAPI definido en mailinbox.api.js #}
-<script src="{% static 'core/js/mailinbox/mailinbox.api.js' %}"></script>
-<script src="{% static 'core/js/mailinbox/mailinbox.page.js' %}"></script>
-{# ⚠️ v2.60: Offcanvas para MailInboxConfig (HTMX-Driven) #}
-<script src="{% static 'core/js/mailinbox/mailinbox_offcanvas.js' %}"></script>
+{# Feature 3: Sede #}
+<script src="{% static 'empresa/js/features/sede_list.js' %}"></script>
+<script src="{% static 'empresa/js/features/sede_editor.js' %}"></script>
+
+{# Feature 4: Area #}
+<script src="{% static 'empresa/js/features/area_list.js' %}"></script>
+<script src="{% static 'empresa/js/features/area_editor.js' %}"></script>
+
+{# Feature 5: MailInboxConfig (FSD §7.2 — modulo independiente) #}
+<script src="{% static 'empresa/js/features/mailinboxconfig_list.js' %}"></script>
+<script src="{% static 'empresa/js/features/mailinboxconfig_editor.js' %}"></script>
 
 {# ⚠️ v2.60: HTMX afterSwap - Refrescar tablas cuando se recargue el contenido #}
 <script>
@@ -33,13 +37,22 @@
             // Si se recargó el contenedor de empresa, refrescar Tabulator
             if (event.detail.target.id === 'ui-empresa-list' || 
                 event.detail.target.closest('#ui-empresa-list')) {
-                if (window.EmpresaListModule && typeof window.EmpresaListModule.refresh === 'function') {
+                requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
+                        if (window.EmpresaListModule && typeof window.EmpresaListModule.refresh === 'function') {
                             window.EmpresaListModule.refresh();
-                        });
+                        }
+                        if (window.SedeListModule && typeof window.SedeListModule.refresh === 'function') {
+                            window.SedeListModule.refresh();
+                        }
+                        if (window.AreaListModule && typeof window.AreaListModule.refresh === 'function') {
+                            window.AreaListModule.refresh();
+                        }
+                        if (window.MailInboxConfigListModule && typeof window.MailInboxConfigListModule.refresh === 'function') {
+                            window.MailInboxConfigListModule.refresh();
+                        }
                     });
-                }
+                });
             }
         });
     }

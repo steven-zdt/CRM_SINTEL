@@ -1,1 +1,1 @@
-# Comandos de gestión para cotizaciones
+# Comandos de gestion para cotizaciones

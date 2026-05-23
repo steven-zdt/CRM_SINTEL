@@ -66,6 +66,9 @@ class EmpresaViewSetTests(TenantAPITestCase):
     
     def test_create_empresa(self):
         """Test: POST /api/v1/empresas/ crea nueva empresa."""
+        # Cambiar singleton_key a 99 en lugar de borrarla para evitar ProtectedError por FKs
+        Empresa.objects.filter(singleton_key=1).update(singleton_key=99)
+        
         # Incluir todos los campos requeridos del modelo
         data = {
             'razon_social': 'Nueva Empresa S.A.S.',
@@ -193,3 +196,36 @@ class EmpresaViewSetTests(TenantAPITestCase):
         # Verificar que tenant2 sí ve su empresa (el modelo separa nit y dv)
         with schema_context('tenant2'):
             self.assertTrue(Empresa.objects.filter(nit='800111111').exists())
+
+    def test_empresa_sedes_areas_relationship(self):
+        """Test: Validar que una Empresa pueda acceder a sus Sedes y Areas directamente."""
+        from apps.tenant.empresa.models import Sede, Area
+        
+        # Usar la empresa activa de configuracion
+        empresa = self.empresa1
+        
+        # Crear sede de prueba
+        sede = Sede.objects.create(
+            empresa=empresa,
+            nombre='Sede Principal Test',
+            direccion='Calle Falsa 123',
+            telefono='555-1234',
+            encargado_nombre='Juan Perez'
+        )
+        
+        # Crear area de prueba
+        area = Area.objects.create(
+            empresa=empresa,
+            sede=sede,
+            nombre='Area de Tecnologia Test',
+            codigo_funcionamiento='TECH-01'
+        )
+        
+        # 1. Validar que la Empresa acceda a la Sede directamente
+        self.assertIn(sede, list(empresa.sedes.all()))
+        
+        # 2. Validar que la Empresa acceda al Area directamente
+        self.assertIn(area, list(empresa.areas.all()))
+        
+        # 3. Validar la relacion bidireccional Sede -> Area
+        self.assertIn(area, list(sede.areas.all()))

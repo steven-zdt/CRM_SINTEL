@@ -44,15 +44,15 @@ class ExtractorNomina(AbstractExtractor):
         registros = Devengo.objects.filter(
             empresa_id=self.empresa_id,
             anulado=False,
+            cuenta_contable_uuid__isnull=False,  # Solo devengos con cuenta PUC asignada
         ).exclude(
             id__in=nomina_contabilizada,
         ).select_related('empleado').only(
             'id', 'fecha_pago', 'periodo_mes',
             'salario_base', 'auxilio_transporte', 'otros_devengos',
             'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
-            'neto_pagar',
+            'neto_pagar', 'cuenta_contable_uuid',
             'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido',
-            'empleado__cuenta_contable_uuid',
         )
 
         return [self._mapear_a_dto(r) for r in registros]
@@ -122,16 +122,13 @@ class ExtractorNomina(AbstractExtractor):
                 lado='HABER'
             ))
 
-        # 3. Neto a Pagar (HABER - Pasivo) — cuenta_contable_uuid del empleado como hint
-        cuenta_empleado_hint = (
-            str(nomina.empleado.cuenta_contable_uuid)
-            if nomina.empleado.cuenta_contable_uuid else None
-        )
+        # 3. Neto a Pagar (HABER - Pasivo) — cuenta_contable_uuid del Devengo (SSoT Fase1)
+        cuenta_devengo_hint = str(nomina.cuenta_contable_uuid) if nomina.cuenta_contable_uuid else None
         lineas.append(LineaTransaccion(
             concepto='PASIVO_NOMINA_POR_PAGAR',
             monto=nomina.neto_pagar,
             lado='HABER',
-            cuenta_hint=cuenta_empleado_hint,
+            cuenta_hint=cuenta_devengo_hint,
         ))
 
         return TransaccionEconomica(
@@ -151,11 +148,18 @@ class ExtractorNomina(AbstractExtractor):
     def get_documentos_enriquecidos(self, empresa_id: int, fecha_inicio: date, fecha_fin: date) -> List[DocumentoEnriquecido]:
         from apps.tenant.contabilidad.models import AsientoContable
         
-        # 1. Obtener devengos del periodo
+        # 1. Obtener devengos del periodo (anulado=False para el Libro Diario activo)
         registros = Devengo.objects.filter(
             empresa_id=empresa_id,
+            anulado=False,
             fecha_pago__range=(fecha_inicio, fecha_fin)
-        ).select_related('empleado').order_by('fecha_pago', 'id')
+        ).select_related('empleado').only(
+            'id', 'uuid', 'fecha_pago', 'periodo_mes',
+            'salario_base', 'auxilio_transporte', 'otros_devengos',
+            'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
+            'neto_pagar', 'cuenta_contable_uuid',
+            'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido',
+        ).order_by('fecha_pago', 'id')
         
         # 2. Mapear asientos
         asientos = {
@@ -173,11 +177,11 @@ class ExtractorNomina(AbstractExtractor):
             asiento = asientos.get(('Devengo', r.id))
             
             cuentas_asignadas = []
-            if r.empleado.cuenta_contable_uuid:
-                cod, nom = CuentaContableSelector.resolve_label_by_uuid(r.empleado.cuenta_contable_uuid, empresa_id)
+            if r.cuenta_contable_uuid:
+                cod, nom = CuentaContableSelector.resolve_label_by_uuid(r.cuenta_contable_uuid, empresa_id)
                 cuentas_asignadas.append(CuentaAsignada(
                     concepto='Pasivo Nómina (Haber)',
-                    uuid=str(r.empleado.cuenta_contable_uuid),
+                    uuid=str(r.cuenta_contable_uuid),
                     codigo_puc=cod,
                     nombre=nom,
                     monto=r.neto_pagar

@@ -32,4 +32,16 @@ from .business_service import (
     orchestrate_update_proyecto
 )
 
+from .presupuesto_service import (
+    PresupuestoBusinessService,
+    ITEM_FIELDS as PRESUPUESTO_ITEM_FIELDS
+)
+
+from .tareas_service import (
+    TareasDiariasCRUDService,
+    TareasDiariasBusinessService,
+    TareasDiariasSelector,
+    TAREA_FIELDS
+)
+
 from .api_mixins import ProyectoServiceMixin

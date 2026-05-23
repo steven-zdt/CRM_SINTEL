@@ -16,7 +16,7 @@ User = get_user_model()
 @override_settings(DEBUG=True)
 def test_creacion_gasto_completo_persistencia(client, tenant1):
     """
-    Validación de Fase 9: Verifica que el flujo de creación consolidado
+    Validacion de Fase 9: Verifica que el flujo de creacion consolidado
     en GastoBusinessService funcione correctamente y persista todos los datos.
     """
     with schema_context(tenant1.schema_name):
@@ -24,11 +24,11 @@ def test_creacion_gasto_completo_persistencia(client, tenant1):
         user = User.objects.create_user(username="auditor", email="auditor@sintel.com", password="password")
         TenantProfile.objects.create(user=user, empresa=emp, rol="ADMIN")
         
-        # Crear membresía en esquema público (Bridge)
+        # Crear membresia en esquema publico (Bridge)
         with schema_context('public'):
             TenantMembership.objects.create(client=tenant1, user=user, rol="ADMIN")
         
-        # 2. Crear Resolución DIAN
+        # 2. Crear Resolucion DIAN
         res = ResolucionDIAN.objects.create(
             empresa=emp,
             numero_resolucion="187640000001",
@@ -61,10 +61,10 @@ def test_creacion_gasto_completo_persistencia(client, tenant1):
                 "total": 95310.00  # 100000 - 4000 - 690 = 95310
             },
             "descripcion": "Gasto de prueba Fase 9",
-            "observaciones": "Validación de persistencia y documento soporte"
+            "observaciones": "Validacion de persistencia y documento soporte"
         }
 
-        # 3. Ejecutar Petición
+        # 3. Ejecutar Peticion
         client.force_login(user)
         response = client.post(
             "/api/v1/gastos/",
@@ -87,8 +87,8 @@ def test_creacion_gasto_completo_persistencia(client, tenant1):
         assert ds.consecutivo == 1
         assert ds.prefijo == "SETT"
         assert ds.subtotal == Decimal("100000.00")
-        assert ds.retefuente == Decimal("4000.00")
-        assert ds.reteica == Decimal("690.00")
+        assert ds.total_retefuente == Decimal("4000.00")
+        assert ds.total_reteica == Decimal("690.00")
         assert ds.total == Decimal("95310.00")
         assert ds.numero_documento == "SETT 1"
         assert ds.empresa == emp
@@ -96,17 +96,17 @@ def test_creacion_gasto_completo_persistencia(client, tenant1):
 @pytest.mark.django_db
 @override_settings(DEBUG=True)
 def test_error_resolucion_vencida(client, tenant1):
-    """Verifica que el sistema rechace documentos fuera de la vigencia de la resolución."""
+    """Verifica que el sistema rechace documentos fuera de la vigencia de la resolucion."""
     with schema_context(tenant1.schema_name):
         emp = Empresa.objects.first()
         user = User.objects.create_user(username="auditor_fail", email="fail@sintel.com", password="password")
         TenantProfile.objects.create(user=user, empresa=emp, rol="ADMIN")
         
-        # Crear membresía en esquema público (Bridge)
+        # Crear membresia en esquema publico (Bridge)
         with schema_context('public'):
             TenantMembership.objects.create(client=tenant1, user=user, rol="ADMIN")
         
-        # Resolución vencida (en el pasado)
+        # Resolucion vencida (en el pasado)
         res = ResolucionDIAN.objects.create(
             empresa=emp,
             numero_resolucion="VENCIDA",
@@ -129,7 +129,7 @@ def test_error_resolucion_vencida(client, tenant1):
         payload = {
             "documento_soporte": {
                 "resolucion": res.id,
-                "fecha": "2026-05-06", # Fecha actual, resolución vieja
+                "fecha": "2026-05-06", # Fecha actual, resolucion vieja
                 "proveedor": prov.id,
                 "subtotal": 100,
                 "total": 100

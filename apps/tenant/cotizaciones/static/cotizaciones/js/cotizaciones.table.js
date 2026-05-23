@@ -172,12 +172,18 @@
       if (!_table || typeof _table.redraw !== 'function') return;
       var gridEl = _table.element || d.querySelector(GRID_ID);
       if (!gridEl || gridEl.offsetParent === null) return;
+      // Validar si la tabla terminó su construcción antes de redibujar
+      if (_table.modules && _table.modules.layout && !_table.tableBuilt) return;
 
       try {
         // requestAnimationFrame asegura que el layout esté completo antes de redraw
         requestAnimationFrame(function () {
           if (_table && typeof _table.redraw === 'function') {
-            _table.redraw(true);
+            try {
+              _table.redraw(true);
+            } catch(e) {
+              console.warn(MOD + ' Error interno en redraw:', e);
+            }
           }
         });
       } catch (e) {

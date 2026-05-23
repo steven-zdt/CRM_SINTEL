@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Contrato Editor Module - Feature: Gestión de Contratos
  * ⚠️ Feature-Sliced Architecture v2.61.8
@@ -55,23 +56,52 @@
     /**
      * Listener para activar offcanvas tras inyección HTMX
      */
+    function _mostrarOffcanvasSeguro(el) {
+        if (!el || !w.bootstrap?.Offcanvas) return;
+        d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+        d.body.classList.remove('overflow-hidden', 'modal-open');
+        d.body.style.overflow = '';
+        d.body.style.paddingRight = '';
+        const oc = bootstrap.Offcanvas.getOrCreateInstance(el);
+        oc.show();
+    }
+
+    /**
+     * Agrega validacion HTML5 al boton de guardar via htmx:configRequest.
+     * Cancela el request si el form no pasa checkValidity().
+     */
+    function setupButtonValidation(offcanvasEl) {
+        const form = offcanvasEl.querySelector('form');
+        const btn  = offcanvasEl.querySelector(
+            '#btn-guardar-contrato-crear, #btn-guardar-contrato-editar'
+        );
+        if (!form || !btn) return;
+
+        btn.addEventListener('htmx:configRequest', function(e) {
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                e.preventDefault();
+            }
+        });
+    }
+
     function setupOffcanvasLoadListener() {
         d.body.addEventListener('htmx:afterSettle', function(evt) {
             const target = evt.detail.target;
             if (!target || target.id !== CONTAINER_ID) return;
 
             const offcanvasEl = target.querySelector('.offcanvas');
-            if (offcanvasEl && window.bootstrap) {
-                console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
-                const bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                bsOffcanvas.show();
+            if (!offcanvasEl) return;
 
-                // Inicializar lógica del formulario tras apertura
-                const form = offcanvasEl.querySelector('form');
-                if (form) {
-                    setTimeout(() => initForm(form.id), 100);
-                }
+            console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
+            _mostrarOffcanvasSeguro(offcanvasEl);
+
+            const form = offcanvasEl.querySelector('form');
+            if (form) {
+                setTimeout(() => initForm(form.id), 100);
             }
+
+            setupButtonValidation(offcanvasEl);
         });
     }
 
@@ -113,30 +143,43 @@
     }
 
     /**
-     * Handler global para respuestas exitosas de HTMX en contratos
+     * Handler global para botones de guardar contrato.
+     * Detecta por button ID (no form ID) — el boton lleva hx-post/hx-patch directamente.
      */
     d.body.addEventListener('htmx:afterRequest', function(evt) {
         const target = evt.target;
-        const isContratoForm = target.id === 'form-contrato-crear' || target.id === 'form-contrato-editar';
-        
-        if (evt.detail.successful && isContratoForm) {
-            // 1. Cerrar Offcanvas
-            const offcanvasEl = d.querySelector('.offcanvas.show');
-            if (offcanvasEl) {
-                bootstrap.Offcanvas.getInstance(offcanvasEl)?.hide();
-            }
+        const isContratoBtn =
+            target.id === 'btn-guardar-contrato-crear' ||
+            target.id === 'btn-guardar-contrato-editar';
 
-            // 2. Notificar éxito
-            let msg = 'Operación realizada correctamente';
-            try {
-                const resp = JSON.parse(evt.detail.xhr.response);
-                if (resp.message) msg = resp.message;
-            } catch(e) {}
-            window.UIManager?.notifySuccess(msg);
+        if (!isContratoBtn) return;
 
-            // 3. Recargar tabla
-            window.Sintel.Empleados.EmpleadoList?.reload();
+        // Siempre restaurar el boton (exito o error)
+        const esCrear = target.id === 'btn-guardar-contrato-crear';
+        target.disabled = false;
+        target.innerHTML = esCrear
+            ? '<i class="bi bi-check-lg me-1"></i>Crear Contrato'
+            : '<i class="bi bi-check-lg me-1"></i>Actualizar Contrato';
+
+        if (!evt.detail.successful) return;
+
+        // 1. Cerrar Offcanvas
+        const offcanvasEl = d.querySelector('.offcanvas.show');
+        if (offcanvasEl) {
+            bootstrap.Offcanvas.getInstance(offcanvasEl)?.hide();
         }
+
+        // 2. Notificar exito
+        let msg = esCrear ? 'Contrato creado correctamente' : 'Contrato actualizado correctamente';
+        try {
+            const resp = JSON.parse(evt.detail.xhr.response);
+            if (resp.message) msg = resp.message;
+        } catch(_) {}
+        window.UIManager?.notifySuccess(msg);
+
+        // 3. Recargar tablas
+        window.Sintel.Empleados.ContratoList?.reload();
+        window.Sintel.Empleados.EmpleadoList?.reload();
     });
 
     // Inicializar listeners

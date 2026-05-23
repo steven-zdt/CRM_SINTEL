@@ -28,7 +28,7 @@ class ServicioSerializer(serializers.ModelSerializer):
 
 
 class CotizacionItemNestedSerializer(serializers.ModelSerializer):
-    """Items embebidos en CotizacionSerializer. Sin campo cotizacion — lo asigna el servicio."""
+    """Items embebidos en CotizacionSerializer. Sin campo cotizacion - lo asigna el servicio."""
     id = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
@@ -71,13 +71,31 @@ class CotizacionListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
+    """Campo relacionado que acepta UUID publico o PK interno en formularios legacy."""
+
+    def to_internal_value(self, data):
+        if data in (None, ''):
+            if self.allow_null:
+                return None
+            self.fail('required')
+        data_str = str(data)
+        if not data_str.isdigit():
+            queryset = self.get_queryset()
+            try:
+                return queryset.get(uuid=data_str)
+            except (TypeError, ValueError, queryset.model.DoesNotExist):
+                self.fail('does_not_exist', pk_value=data)
+        return super().to_internal_value(data)
+
+
 class CotizacionSerializer(serializers.ModelSerializer):
     items = CotizacionItemNestedSerializer(many=True, required=False)
     cliente_nombre = serializers.ReadOnlyField(source='cliente.nombre_comercial')
     configuracion_nombre = serializers.ReadOnlyField(source='configuracion.nombre_configuracion')
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
-    cliente = serializers.PrimaryKeyRelatedField(queryset=Cliente.objects.none())
-    configuracion = serializers.PrimaryKeyRelatedField(queryset=ConfiguracionCotizacion.objects.none())
+    cliente = UUIDOrPKRelatedField(queryset=Cliente.objects.none())
+    configuracion = UUIDOrPKRelatedField(queryset=ConfiguracionCotizacion.objects.none())
 
     class Meta:
         model = Cotizacion
@@ -99,10 +117,10 @@ class CotizacionSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        empresa = self.context.get('empresa')
         request = self.context.get('request')
-        if not request:
-            return
-        empresa = resolve_tenant_empresa(request)
+        if not empresa and request:
+            empresa = resolve_tenant_empresa(request)
         if not empresa:
             return
         self.fields['cliente'].queryset = Cliente.objects.filter(empresa_id=empresa.id, activo=True)

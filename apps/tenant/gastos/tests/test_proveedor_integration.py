@@ -42,7 +42,7 @@ class TestProveedorIntegration:
                 razon_social=f"Proveedor {username}",
                 numero_documento=f"999{username}",
                 tipo_documento="NIT",
-                is_active=True
+                activo=True
             )
             return user, empresa, resolucion, proveedor
 
@@ -120,7 +120,7 @@ class TestProveedorIntegration:
         
         with schema_context(tenant1.schema_name):
             DocumentoSoporte.objects.create(
-                empresa=empresa, resolucion_dian=res, prefijo="G", consecutivo=1,
+                empresa=empresa, resolucion_dian=res, consecutivo=1,
                 fecha="2026-05-01", proveedor=prov,
                 subtotal=1000, total=1000,
                 descripcion="Gasto con Proveedor"
