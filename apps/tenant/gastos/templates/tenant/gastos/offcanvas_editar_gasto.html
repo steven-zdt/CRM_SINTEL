@@ -155,11 +155,11 @@
                             <div class="col-md-6">
                                 <label for="retefuente_select" class="form-label small">Retefuente</label>
                                 <select class="form-select form-select-sm" id="retefuente_select">
-                                    <option value="0.00">0% - Sin Retefuente</option>
-                                    <option value="0.04">4% - Servicios (Declarantes)</option>
-                                    <option value="0.06">6% - Servicios (No Declarantes)</option>
-                                    <option value="0.10">10% - Honorarios y Consultoria (No declarante)</option>
-                                    <option value="0.11">11% - Honorarios y Consultoria (Declarante)</option>
+                                    <option value="0.00" {% if not retenciones_fracciones.RETEFUENTE or retenciones_fracciones.RETEFUENTE == '0.00' %}selected{% endif %}>0% - Sin Retefuente</option>
+                                    <option value="0.04" {% if retenciones_fracciones.RETEFUENTE == '0.04' %}selected{% endif %}>4% - Servicios (Declarantes)</option>
+                                    <option value="0.06" {% if retenciones_fracciones.RETEFUENTE == '0.06' %}selected{% endif %}>6% - Servicios (No Declarantes)</option>
+                                    <option value="0.10" {% if retenciones_fracciones.RETEFUENTE == '0.10' %}selected{% endif %}>10% - Honorarios y Consultoria (No declarante)</option>
+                                    <option value="0.11" {% if retenciones_fracciones.RETEFUENTE == '0.11' %}selected{% endif %}>11% - Honorarios y Consultoria (Declarante)</option>
                                 </select>
                                 <div class="mt-2 p-2 bg-light rounded">
                                     <div class="d-flex justify-content-between">
@@ -168,15 +168,15 @@
                                     </div>
                                     <strong id="retefuente_display" class="d-block mt-1">$0.00</strong>
                                 </div>
-                                <input type="hidden" id="retefuente_porcentaje" value="{{ instance.retefuente_porcentaje|default:0 }}">
+                                <input type="hidden" id="retefuente_porcentaje" value="{{ retenciones_fracciones.RETEFUENTE|default:'0.00' }}">
                             </div>
                             <div class="col-md-6">
                                 <label for="reteica_select" class="form-label small">ReteICA</label>
                                 <select class="form-select form-select-sm" id="reteica_select">
-                                    <option value="0.00">0% - Exento</option>
-                                    <option value="0.0069">0.69%</option>
-                                    <option value="0.00966">0.966%</option>
-                                    <option value="0.01104">1.104%</option>
+                                    <option value="0.00" {% if not retenciones_fracciones.RETEICA or retenciones_fracciones.RETEICA == '0.00' %}selected{% endif %}>0% - Exento</option>
+                                    <option value="0.0069" {% if retenciones_fracciones.RETEICA == '0.0069' %}selected{% endif %}>0.69%</option>
+                                    <option value="0.00966" {% if retenciones_fracciones.RETEICA == '0.00966' %}selected{% endif %}>0.966%</option>
+                                    <option value="0.01104" {% if retenciones_fracciones.RETEICA == '0.01104' %}selected{% endif %}>1.104%</option>
                                 </select>
                                 <div class="mt-2 p-2 bg-light rounded">
                                     <div class="d-flex justify-content-between">
@@ -185,7 +185,7 @@
                                     </div>
                                     <strong id="reteica_display" class="d-block mt-1">$0.00</strong>
                                 </div>
-                                <input type="hidden" id="reteica_porcentaje" value="{{ instance.reteica_porcentaje|default:0 }}">
+                                <input type="hidden" id="reteica_porcentaje" value="{{ retenciones_fracciones.RETEICA|default:'0.00' }}">
                             </div>
                         </div>
                     </div>

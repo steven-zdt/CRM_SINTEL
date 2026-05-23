@@ -189,10 +189,33 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
 
         instance = get_object_or_404(DocumentoSoporte, uuid=uuid_val, empresa_id=empresa_id)
+
+        # Pull Model (ADR-001 / §28): retenciones viven en tabla Retencion, no en campos deprecated
+        retenciones_fracciones = {}
+        try:
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+            _zero_keys = {'0.00', '0', '0.0'}
+            _choices_map = {}
+            for fraction_str, _ in (DocumentoSoporte.RETEFUENTE_CHOICES + DocumentoSoporte.RETEICA_CHOICES):
+                if fraction_str not in _zero_keys:
+                    pct_norm = (Decimal(fraction_str) * Decimal('100')).normalize()
+                    _choices_map[pct_norm] = fraction_str
+            for r in RetencionesService.listar_retenciones_por_documento(
+                documento_origen_app='gastos',
+                documento_origen_modelo='DocumentoSoporte',
+                documento_origen_id=instance.id,
+            ):
+                if r.tipo in ('RETEFUENTE', 'RETEICA', 'RETEIVA'):
+                    pct_norm = Decimal(str(r.porcentaje)).normalize()
+                    retenciones_fracciones[r.tipo] = _choices_map.get(pct_norm, '0.00')
+        except Exception:
+            pass
+
         context = {
             'instance': instance,
             'offcanvas_id': 'offcanvas-gasto-editar',
-            'mode': 'edit'
+            'mode': 'edit',
+            'retenciones_fracciones': retenciones_fracciones,
         }
         return Response(context, template_name='tenant/gastos/offcanvas_editar_gasto.html')
 
