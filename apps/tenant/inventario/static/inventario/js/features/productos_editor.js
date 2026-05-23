@@ -33,6 +33,21 @@
     // ⚠️ v2.61.3: Flag para prevenir doble envío
     let _guardandoProducto = false;
 
+    // §28: Pre-carga el label de una cuenta contable en el input de busqueda por UUID
+    async function _preCargarLabelCuenta(inputSel, uuidSel) {
+        const uuidEl = d.querySelector(uuidSel);
+        const textEl = d.querySelector(inputSel);
+        if (!uuidEl?.value || !textEl || textEl.value.trim()) return;
+        try {
+            const res = await w.Sintel.Inventario.API.getCuentaByUuid(uuidEl.value);
+            if (res.ok && res.data) {
+                const list = Array.isArray(res.data) ? res.data : (res.data.results || []);
+                const cta = list[0];
+                if (cta) textEl.value = `${cta.codigo} - ${cta.nombre}`;
+            }
+        } catch (_) {}
+    }
+
     /**
      * Recolectar datos del formulario de producto
      * ⚠️ v2.61.3: Recolecta TODOS los campos del formulario, incluyendo numéricos
@@ -432,6 +447,7 @@
                     resultsSelector: '#producto-cuenta-inventario-resultados',
                     uuidSelector: '#producto-cuenta-inventario-uuid'
                 });
+                _preCargarLabelCuenta('#producto-cuenta-inventario-busqueda', '#producto-cuenta-inventario-uuid');
             }
             // Cuenta Costo de Ventas (Resultado - Estado de Resultados)
             if (d.querySelector('#producto-cuenta-costo-busqueda')) {
@@ -440,6 +456,7 @@
                     resultsSelector: '#producto-cuenta-costo-resultados',
                     uuidSelector: '#producto-cuenta-costo-uuid'
                 });
+                _preCargarLabelCuenta('#producto-cuenta-costo-busqueda', '#producto-cuenta-costo-uuid');
             }
         }
 

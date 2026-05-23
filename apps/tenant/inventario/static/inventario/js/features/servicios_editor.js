@@ -28,6 +28,21 @@
     // ⚠️ v2.61.3: Flag para prevenir doble envío
     let _guardandoServicio = false;
 
+    // §28: Pre-carga el label de una cuenta contable en el input de busqueda por UUID
+    async function _preCargarLabelCuenta(inputSel, uuidSel) {
+        const uuidEl = d.querySelector(uuidSel);
+        const textEl = d.querySelector(inputSel);
+        if (!uuidEl?.value || !textEl || textEl.value.trim()) return;
+        try {
+            const res = await w.Sintel.Inventario.API.getCuentaByUuid(uuidEl.value);
+            if (res.ok && res.data) {
+                const list = Array.isArray(res.data) ? res.data : (res.data.results || []);
+                const cta = list[0];
+                if (cta) textEl.value = `${cta.codigo} - ${cta.nombre}`;
+            }
+        } catch (_) {}
+    }
+
     /**
      * Recolectar datos del formulario de servicio
      * @returns {Object|null} Datos del servicio o null si hay error
@@ -306,6 +321,7 @@
                     resultsSelector: '#servicio-cuenta-ingreso-resultados',
                     uuidSelector: '#servicio-cuenta-ingreso-uuid'
                 });
+                _preCargarLabelCuenta('#servicio-cuenta-ingreso-busqueda', '#servicio-cuenta-ingreso-uuid');
             }
         }
     }

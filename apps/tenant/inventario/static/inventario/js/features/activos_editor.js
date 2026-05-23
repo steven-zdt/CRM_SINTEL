@@ -25,6 +25,21 @@
     const FEEDBACK_ID = '#form-activo-feedback';
     const OFFCANVAS_ID = '#offcanvas-activos';
 
+    // §28: Pre-carga el label de una cuenta contable en el input de busqueda por UUID
+    async function _preCargarLabelCuenta(inputSel, uuidSel) {
+        const uuidEl = d.querySelector(uuidSel);
+        const textEl = d.querySelector(inputSel);
+        if (!uuidEl?.value || !textEl || textEl.value.trim()) return;
+        try {
+            const res = await w.Sintel.Inventario.API.getCuentaByUuid(uuidEl.value);
+            if (res.ok && res.data) {
+                const list = Array.isArray(res.data) ? res.data : (res.data.results || []);
+                const cta = list[0];
+                if (cta) textEl.value = `${cta.codigo} - ${cta.nombre}`;
+            }
+        } catch (_) {}
+    }
+
     /**
      * Recolectar datos del formulario de activo
      * @returns {Object|null} Datos del activo o null si hay error
@@ -266,6 +281,7 @@
                     uuidSelector: '#activo-cuenta-activo-uuid',
                     codigoPrefix: '15'
                 });
+                _preCargarLabelCuenta('#activo-cuenta-activo-busqueda', '#activo-cuenta-activo-uuid');
             }
             // v3.5 Dual Accounting: Cuenta Depreciacion (Gasto/Acumulada) — Código 51 (Gastos)
             if (d.querySelector('#activo-cuenta-depreciacion-busqueda')) {
@@ -275,6 +291,7 @@
                     uuidSelector: '#activo-cuenta-depreciacion-uuid',
                     codigoPrefix: '51'
                 });
+                _preCargarLabelCuenta('#activo-cuenta-depreciacion-busqueda', '#activo-cuenta-depreciacion-uuid');
             }
         }
     }
