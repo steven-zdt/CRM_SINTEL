@@ -80,28 +80,40 @@
             {
                 title: 'Empleado',
                 field: 'empleado_nombre',
-                minWidth: 160,
+                minWidth: 180,
                 headerFilter: 'input',
-                formatter: (cell) => cell.getValue() || '—',
+                formatter: (cell) => {
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-person text-primary me-2"></i><span class="fw-semibold">${val}</span>`;
+                },
             },
             {
-                title: 'Tipo',
+                title: 'Tipo Contrato',
                 field: 'tipo',
-                width: 130,
+                width: 140,
                 hozAlign: 'center',
                 headerHozAlign: 'center',
                 formatter: (cell) => {
                     const val  = cell.getValue() || '';
                     const disp = cell.getRow().getData().tipo_display || val;
-                    return `<span class="badge ${tipoBadge(val)} px-2">${disp}</span>`;
+                    const icon = val === 'INDEFINIDO' ? '<i class="bi bi-infinite"></i>' :
+                                 val === 'FIJO' ? '<i class="bi bi-hourglass"></i>' :
+                                 val === 'OBRA' ? '<i class="bi bi-briefcase"></i>' :
+                                 val === 'PRESTACION' ? '<i class="bi bi-person-check"></i>' : '';
+                    return `<span class="badge ${tipoBadge(val)} px-2">${icon} ${disp}</span>`;
                 },
             },
             {
                 title: 'Inicio',
                 field: 'fecha_inicio',
-                width: 100,
+                width: 110,
                 hozAlign: 'center',
-                formatter: (cell) => cell.getValue() || '—',
+                formatter: (cell) => {
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-calendar-event text-success me-1"></i><span class="small">${val}</span>`;
+                },
             },
             {
                 title: 'Fin',
@@ -111,29 +123,36 @@
                 formatter: (cell) => {
                     const data = cell.getRow().getData();
                     if (data.tipo === 'INDEFINIDO' || !cell.getValue()) {
-                        return '<span class="text-muted fst-italic small">Indefinido</span>';
+                        return '<span class="badge bg-light text-dark"><i class="bi bi-infinite me-1"></i>Indefinido</span>';
                     }
-                    return cell.getValue();
+                    return `<i class="bi bi-calendar-x text-danger me-1"></i><span class="small">${cell.getValue()}</span>`;
                 },
             },
             {
                 title: 'Salario',
                 field: 'salario_mensual',
-                width: 130,
+                width: 140,
                 hozAlign: 'right',
                 headerHozAlign: 'right',
-                formatter: (cell) => COP(cell.getValue()),
+                formatter: (cell) => {
+                    const val = cell.getValue();
+                    if (!val || val === 0) return '<span class="text-muted">—</span>';
+                    return `<span class="text-success fw-semibold"><i class="bi bi-cash-coin me-1"></i>${COP(val)}</span>`;
+                },
             },
             {
                 title: 'Estado',
                 field: 'estado',
-                width: 110,
+                width: 130,
                 hozAlign: 'center',
                 headerHozAlign: 'center',
                 formatter: (cell) => {
                     const val  = cell.getValue() || '';
                     const disp = cell.getRow().getData().estado_display || val;
-                    return `<span class="badge ${estadoBadge(val)} px-2">${disp}</span>`;
+                    const icon = val === 'ACTIVO' ? '<i class="bi bi-check-circle me-1"></i>' :
+                                 val === 'INACTIVO' ? '<i class="bi bi-pause-circle me-1"></i>' :
+                                 val === 'CANCELADO' ? '<i class="bi bi-x-circle me-1"></i>' : '';
+                    return `<span class="badge ${estadoBadge(val)} px-2">${icon}${disp}</span>`;
                 },
             },
             {

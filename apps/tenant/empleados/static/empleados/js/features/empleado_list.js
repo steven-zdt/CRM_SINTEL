@@ -90,14 +90,56 @@
             },
             { title: "Estado",
               field: "estado",
-              width: 95,
+              width: 110,
+              hozAlign: "center",
               formatter: (cell) => {
                 const estado = cell.getValue();
-                const cls = estado === 'ACTIVO' ? 'bg-success' : estado === 'RETIRADO' ? 'bg-danger' : 'bg-secondary';
-                return `<span class="badge ${cls}">${estado || 'N/A'}</span>`;
+                let icon = '';
+                let cls = 'bg-secondary';
+                if (estado === 'ACTIVO') {
+                  icon = '<i class="bi bi-check-circle me-1"></i>';
+                  cls = 'bg-success';
+                } else if (estado === 'RETIRADO') {
+                  icon = '<i class="bi bi-x-circle me-1"></i>';
+                  cls = 'bg-danger';
+                }
+                return `<span class="badge ${cls}">${icon}${estado || 'N/A'}</span>`;
               }
             },
-            { title: "Ingreso", field: "fecha_ingreso", width: 100 },
+            { title: "Ingreso",
+              field: "fecha_ingreso",
+              width: 110,
+              formatter: (cell) => {
+                const val = cell.getValue();
+                if (!val) return '<span class="text-muted">—</span>';
+                return `<i class="bi bi-calendar-event text-primary me-1"></i><span class="small">${val}</span>`;
+              }
+            },
+            {
+              title: "Cargo",
+              field: "cargo",
+              minWidth: 140,
+              formatter: (cell) => {
+                const val = cell.getValue();
+                if (!val) return '<span class="text-muted">—</span>';
+                return `<i class="bi bi-briefcase text-info me-1"></i><span>${val}</span>`;
+              }
+            },
+            {
+              title: "Contacto",
+              field: "email",
+              minWidth: 180,
+              formatter: (cell) => {
+                const email = cell.getValue();
+                const data = cell.getRow().getData();
+                const telefono = data.telefono || '';
+                let html = '';
+                if (email) html += `<i class="bi bi-envelope text-info me-1"></i><span class="small">${email}</span>`;
+                if (telefono) html += `<br/><i class="bi bi-telephone text-success me-1"></i><span class="small">${telefono}</span>`;
+                if (!email && !telefono) html = '<span class="text-muted">—</span>';
+                return html;
+              }
+            },
             {
                 title: 'Acciones',
                 width: 110,

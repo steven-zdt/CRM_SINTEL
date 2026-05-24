@@ -96,21 +96,25 @@
             {
                 title: 'Empleado',
                 field: 'empleado_nombre',
-                minWidth: 170,
+                minWidth: 190,
                 headerFilter: 'input',
                 formatter: (cell) => {
                     const data = cell.getRow().getData();
                     const nom  = cell.getValue() || '—';
                     const doc  = data.empleado_documento || '';
-                    return `<div class="fw-semibold lh-sm">${nom}</div>
-                            <div class="small text-muted">${doc}</div>`;
+                    return `<div class="fw-semibold lh-sm"><i class="bi bi-person text-primary me-2"></i>${nom}</div>
+                            <div class="small text-muted"><code>${doc || '—'}</code></div>`;
                 },
             },
             {
                 title: 'Cargo',
                 field: 'contrato_cargo',
-                minWidth: 130,
-                formatter: (cell) => `<span class="small">${cell.getValue() || '—'}</span>`,
+                minWidth: 150,
+                formatter: (cell) => {
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-briefcase text-info me-1"></i><span class="small">${val}</span>`;
+                },
                 headerFilter: 'input',
             },
 
@@ -118,7 +122,7 @@
             {
                 title: 'Período',
                 field: 'fecha_inicio',
-                width: 200,
+                width: 220,
                 hozAlign: 'center',
                 headerHozAlign: 'center',
                 headerFilter: 'input',
@@ -128,21 +132,21 @@
                     const ff   = data.fecha_fin;
                     const pm   = data.periodo_mes || '';
                     if (fi && ff) {
-                        return `<div class="small lh-sm fw-semibold">${fi}</div>
-                                <div class="small text-muted lh-sm">al ${ff}</div>`;
+                        return `<div class="small lh-sm"><i class="bi bi-calendar-range text-success me-1"></i><span class="fw-semibold">${fi}</span></div>
+                                <div class="small text-muted lh-sm">al <span class="fw-semibold">${ff}</span></div>`;
                     }
-                    return `<span class="small">${pm || '—'}</span>`;
+                    return `<span class="small"><i class="bi bi-calendar text-secondary me-1"></i>${pm || '—'}</span>`;
                 },
             },
             {
-                title: 'Días',
+                title: 'Días Laborados',
                 field: 'dias_laborados',
-                width: 65,
+                width: 100,
                 hozAlign: 'center',
                 headerHozAlign: 'center',
                 formatter: (cell) => {
                     const v = parseFloat(cell.getValue()) || 0;
-                    return `<span class="badge bg-primary-subtle text-primary border border-primary-subtle">${v}</span>`;
+                    return `<span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-calendar-check me-1"></i>${v}</span>`;
                 },
             },
 
@@ -150,22 +154,25 @@
             {
                 title: 'Salario Base',
                 field: 'salario_base',
-                width: 130,
+                width: 150,
                 hozAlign: 'right',
                 headerHozAlign: 'right',
-                formatter: monedaCelda,
+                formatter: (cell) => {
+                    const val = parseFloat(cell.getValue()) || 0;
+                    return `<i class="bi bi-coin text-primary me-1"></i><span class="fw-semibold">${COP(val)}</span>`;
+                },
             },
             {
                 title: 'H.E. y Recargos',
                 field: 'valor_horas_extras',
-                width: 120,
+                width: 140,
                 hozAlign: 'right',
                 headerHozAlign: 'right',
                 formatter: (cell) => {
                     const v = parseFloat(cell.getValue()) || 0;
-                    return v > 0
-                        ? `<span class="text-warning fw-semibold">${COP(v)}</span>`
-                        : '<span class="text-muted">—</span>';
+                    if (v > 0)
+                        return `<i class="bi bi-lightning text-warning me-1"></i><span class="text-warning fw-semibold">${COP(v)}</span>`;
+                    return '<span class="text-muted">—</span>';
                 },
             },
 
@@ -173,17 +180,18 @@
             {
                 title: 'Neto a Pagar',
                 field: 'neto_pagar',
-                width: 140,
+                width: 160,
                 hozAlign: 'right',
                 headerHozAlign: 'right',
                 formatter: (cell) => {
                     const data    = cell.getRow().getData();
                     const anulado = data.anulado;
+                    const val = COP(cell.getValue());
                     if (anulado) {
-                        return `<span class="text-decoration-line-through text-muted small">${COP(cell.getValue())}</span>
-                                <span class="badge bg-danger ms-1">Anulada</span>`;
+                        return `<span class="text-decoration-line-through text-muted small">${val}</span>
+                                <span class="badge bg-danger ms-1"><i class="bi bi-slash-circle me-1"></i>Anulada</span>`;
                     }
-                    return `<strong class="text-success">${COP(cell.getValue())}</strong>`;
+                    return `<strong class="text-success"><i class="bi bi-check-circle-fill me-1"></i>${val}</strong>`;
                 },
             },
 
