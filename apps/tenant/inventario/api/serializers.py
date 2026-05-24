@@ -10,6 +10,7 @@ WARNING: SINTEL v2.60: Sincronización Arquitectónica
 from django.core.exceptions import ValidationError
 from rest_framework import serializers
 
+from apps.tenant.api.utils import NormalizationMixin as BaseMixin
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.inventario.models import (
     ActivoFijo,
@@ -24,12 +25,11 @@ from apps.tenant.inventario.models import (
 
 
 # ==============================================================================
-# NORMALIZATION MIXIN (Zero Trust)
+# EXTENDED NORMALIZATION MIXIN (Module-specific enhancements)
 # ==============================================================================
-class NormalizationMixin:
+class NormalizationMixin(BaseMixin):
     """
-    WARNING: v2.60: Mixin para normalización de datos de entrada (Zero Trust).
-    Sanitiza strings y valida tipos de datos antes de persistir.
+    WARNING: v2.60: Extiende mixin base con normalizaciones específicas de Inventario.
     """
     def _get_empresa_id(self):
         """WARNING: Zero Trust: Resuelve el ID de empresa de forma segura."""
@@ -37,29 +37,14 @@ class NormalizationMixin:
         empresa_id = self.context.get('empresa_id')
         if empresa_id:
             return empresa_id
-            
+
         # 2. Fallback: Empresa Singleton del Tenant
         from apps.tenant.empresa.models import Empresa
         empresa = Empresa.objects.only('id').first()
         if empresa:
             return empresa.id
-        
-        raise serializers.ValidationError("No se pudo identificar la configuración de Empresa para este tenant.")
 
-    def normalize_data(self, attrs):
-        """
-        Normaliza datos de entrada:
-        - Strings: strip() para eliminar espacios
-        - Decimales: Convierte a Decimal si es necesario
-        - Booleanos: Convierte a bool explícito
-        """
-        for key, value in attrs.items():
-            if isinstance(value, str):
-                attrs[key] = value.strip()
-            elif value is None and key in ['categoria', 'producto', 'servicio']:
-                # Permitir None para ForeignKeys opcionales
-                pass
-        return attrs
+        raise serializers.ValidationError("No se pudo identificar la configuración de Empresa para este tenant.")
 
 
 class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):

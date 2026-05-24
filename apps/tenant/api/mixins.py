@@ -74,3 +74,72 @@ class SintelServiceMixin:
                 raise AttributeError(f"{self.__class__.__name__} debe definir service_class.")
             self._service_inst = self.service_class()
         return self._service_inst
+
+
+class BaseServiceMixin:
+    """
+    # CANONICAL: BaseServiceMixin — Consolidado para 14+ api_mixins.py modules
+
+    Proporciona acceso estándar a Selectors, CRUDService, BusinessService.
+    Requiere que ViewSet defina:
+    - selector_class: Clase selector para consultas
+    - crud_service_class: Clase CRUD service para persistencia
+    - business_service_class: Clase business service para lógica
+
+    Requiere que ViewSet herede de SintelDSVMixin (para get_empresa_id()).
+
+    Uso:
+        class GastoViewSet(BaseServiceMixin, SintelDSVMixin, ViewSet):
+            selector_class = GastoSelector
+            crud_service_class = GastoCRUDService
+            business_service_class = GastoBusinessService
+    """
+
+    selector_class = None
+    crud_service_class = None
+    business_service_class = None
+
+    def _get_empresa_id_seguro(self) -> Optional[int]:
+        """
+        Obtiene empresa_id con fallback al singleton del esquema tenant.
+        Utilizado cuando self.get_empresa_id() falla (ej: durante testing).
+        """
+        try:
+            return self.get_empresa_id()
+        except Exception:
+            empresa = self._get_empresa()
+            return empresa.id if empresa else None
+
+    def _get_empresa(self) -> Optional[Empresa]:
+        """Helper para obtener Empresa actual con fallback seguro."""
+        try:
+            empresa_id = self.get_empresa_id()
+            return Empresa.objects.filter(id=empresa_id).first()
+        except Exception:
+            # Fallback final: Empresa singleton del tenant actual
+            return Empresa.objects.only('id').first()
+
+    def get_qs_list(self):
+        """
+        Retorna queryset de lista usando selector.
+        Soporta parámetro ?search= para búsquedas fulltext.
+        """
+        if self.selector_class is None:
+            raise NotImplementedError(f"{self.__class__.__name__} debe definir selector_class")
+
+        empresa_id = self._get_empresa_id_seguro()
+        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        return self.selector_class.get_list(empresa_id, search=search)
+
+    def get_qs_detail(self):
+        """
+        Retorna queryset de detalle usando selector.
+        Filtra por lookup_field (típicamente 'uuid' o 'pk').
+        """
+        if self.selector_class is None:
+            raise NotImplementedError(f"{self.__class__.__name__} debe definir selector_class")
+
+        empresa_id = self._get_empresa_id_seguro()
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field or 'pk'
+        lookup_value = self.kwargs.get(lookup_url_kwarg)
+        return self.selector_class.get_detail(empresa_id, lookup_value)

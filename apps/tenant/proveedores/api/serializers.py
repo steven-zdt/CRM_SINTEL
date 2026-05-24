@@ -11,17 +11,17 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
 from rest_framework import serializers
 
+from apps.tenant.api.utils import NormalizationMixin
 from ..models import Proveedor
 from ..services import DETAIL_FIELDS, LIST_FIELDS
 
 
 # ==============================================================================
-# NORMALIZATION MIXIN (Zero Trust)
+# EXTENDED NORMALIZATION MIXIN (Module-specific enhancements)
 # ==============================================================================
-class NormalizationMixin:
+class ProveedorNormalizationMixin(NormalizationMixin):
     """
-    Mixin para normalización de datos de entrada (Zero Trust).
-    Sanitiza strings y valida tipos de datos antes de persistir.
+    Extiende NormalizationMixin canónico con métodos específicos de Proveedores.
     """
     def _get_empresa_id(self):
         """Resuelve el ID de empresa de forma segura (Zero Trust)."""
@@ -29,41 +29,14 @@ class NormalizationMixin:
         empresa_id = self.context.get('empresa_id')
         if empresa_id:
             return empresa_id
-            
+
         # 2. Fallback: Empresa Singleton del Tenant
         from apps.tenant.empresa.models import Empresa
         empresa = Empresa.objects.only('id').first()
         if empresa:
             return empresa.id
-        
-        raise serializers.ValidationError("No se pudo identificar la configuración de Empresa para este tenant.")
 
-    def normalize_data(self, attrs):
-        """
-        Normaliza datos de entrada:
-        - Strings: strip() para eliminar espacios
-        - Email: Validación de formato
-        - Números: Conversión a tipos correctos
-        """
-        for key, value in attrs.items():
-            if isinstance(value, str):
-                # Strip de espacios en blanco
-                attrs[key] = value.strip()
-                
-                # Validación de email si el campo es email_contacto
-                if key == 'email_contacto' and value:
-                    try:
-                        EmailValidator()(value.strip())
-                    except DjangoValidationError:
-                        raise serializers.ValidationError({
-                            'email_contacto': ['El formato del email no es válido.']
-                        })
-                
-                # Convertir a mayúsculas campos específicos (opcional, según necesidad)
-                if key in ['tipo_persona', 'tipo_documento', 'regimen_tributario', 'tipo_cuenta']:
-                    attrs[key] = value.strip().upper()
-                    
-        return attrs
+        raise serializers.ValidationError("No se pudo identificar la configuración de Empresa para este tenant.")
 
 
 class ProveedorListSerializer(serializers.ModelSerializer):
@@ -124,7 +97,7 @@ class ProveedorListSerializer(serializers.ModelSerializer):
         return 'Activo' if obj.activo else 'Inactivo'
 
 
-class ProveedorDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
+class ProveedorDetailSerializer(ProveedorNormalizationMixin, serializers.ModelSerializer):
     """
     Serializer completo para DETALLE/EDICIÓN de Proveedores.
     Campos alineados con DETAIL_FIELDS de services.py.

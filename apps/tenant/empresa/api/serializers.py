@@ -13,7 +13,7 @@ Referencia: https://www.django-rest-framework.org/api-guide/serializers/
 """
 from rest_framework import serializers
 
-from apps.tenant.core.api.mixins import NormalizationMixin
+from apps.tenant.api.utils import NormalizationMixin
 from apps.tenant.empresa.models import Empresa, MailInboxConfig, Sede, Area
 
 

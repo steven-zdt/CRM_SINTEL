@@ -9,6 +9,7 @@ Serializers para Proyectos v3.3 - Alineado con Modelo, Tabulator y Zero Trust (v
 """
 from rest_framework import serializers
 
+from apps.tenant.api.utils import NormalizationMixin
 from apps.tenant.proyectos.models import AsignacionPersonal, ItemPedido, PedidoProyecto, Proyecto, ItemPresupuestoProyecto, TareaDiariaProyecto
 
 
@@ -55,18 +56,6 @@ class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
 
         # Es un PK entero — usar el método parent
         return super().to_internal_value(data)
-
-
-class NormalizationMixin:
-    """
-    Mixin para normalización de datos de entrada (Zero Trust).
-    Implementación local para garantizar arquitectura Stand-Alone.
-    """
-    def normalize_data(self, attrs):
-        for key, value in attrs.items():
-            if isinstance(value, str):
-                attrs[key] = value.strip()
-        return attrs
 
 class ProyectoListSerializer(serializers.ModelSerializer):
     """

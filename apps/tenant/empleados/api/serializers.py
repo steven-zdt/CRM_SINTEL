@@ -7,10 +7,12 @@ WARNING: SINTEL v2.60: Sincronizacion Arquitectonica
 - Separacion List/Detail: ListSerializer para tablas, DetailSerializer para formularios
 - Campos Explicitos: PROHIBIDO __all__, usar campos explicitos alineados con LIST_FIELDS y DETAIL_FIELDS
 """
+from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
 from rest_framework import serializers
 
+from apps.tenant.api.utils import NormalizationMixin as BaseMixin
 
 class NullableUUIDField(serializers.UUIDField):
     """UUIDField que convierte cadena vacía en None (útil con FormData/HTMX)."""
@@ -27,55 +29,45 @@ from ..models import Contrato, Devengo, Empleado
 
 
 # ==============================================================================
-# NORMALIZATION MIXIN (Zero Trust)
+# EXTENDED NORMALIZATION MIXIN (Module-specific enhancements)
 # ==============================================================================
-class NormalizationMixin:
+class NormalizationMixin(BaseMixin):
     """
-    WARNING: v2.60: Mixin para normalizacion de datos de entrada (Zero Trust).
-    Sanitiza strings y valida tipos de datos antes de persistir.
+    WARNING: v2.60: Extiende mixin base con normalizaciones específicas de Empleados.
     """
     def normalize_data(self, attrs):
         """
-        Normaliza datos de entrada:
-        - Strings: strip() para eliminar espacios
-        - Documentos: upper() para normalizar formato
-        - Emails: Validacion de formato
-        - Nombres: Capitalizacion apropiada
-        - Decimales: Normalizar a Decimal para campos numericos (dias_laborados, etc.)
+        Extiende normalize_data canónico con:
+        - Capitalización de nombres
+        - Validación de email
+        - Normalización de decimales (dias_laborados)
         """
-        from decimal import Decimal, InvalidOperation
-        
+        # Llamar al método base para normalización estándar
+        attrs = super().normalize_data(attrs)
+
         for key, value in attrs.items():
             if isinstance(value, str):
-                # Strip espacios
-                attrs[key] = value.strip()
-                
-                # Normalizar documentos y codigos a mayusculas
-                if key in ['numero_documento', 'tipo_documento', 'tipo', 'estado', 'cargo']:
-                    attrs[key] = attrs[key].upper()
-                
-                # Validar formato de email
-                if key == 'email' and attrs[key]:
-                    try:
-                        EmailValidator()(attrs[key])
-                    except DjangoValidationError:
-                        raise serializers.ValidationError({key: ['El formato del email no es valido.']})
-                
                 # Capitalizar nombres (primer letra mayuscula, resto minusculas)
                 if key in ['primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido', 'cargo']:
-                    if attrs[key]:
-                        attrs[key] = attrs[key].title()
-            
-            # WARNING: v2.60: Normalizar campos decimales (dias_laborados permite decimales 0.1-30)
+                    if value:
+                        attrs[key] = value.title()
+
+                # Validar formato de email (redundante con validate_email, pero mantenido para seguridad)
+                if key == 'email' and value:
+                    try:
+                        EmailValidator()(value)
+                    except DjangoValidationError:
+                        raise serializers.ValidationError({key: ['El formato del email no es válido.']})
+
+            # Normalizar campos decimales (dias_laborados permite decimales 0.1-30)
             if key in ['dias_laborados'] and value is not None:
-                from decimal import Decimal, InvalidOperation
                 try:
                     attrs[key] = Decimal(str(value))
                 except (ValueError, InvalidOperation, TypeError):
                     raise serializers.ValidationError({
-                        key: [f'El campo {key} debe ser un numero valido (permite decimales, ej: 15.5).']
+                        key: [f'El campo {key} debe ser un número válido (permite decimales, ej: 15.5).']
                     })
-        
+
         return attrs
 
     def _get_empresa_id(self):
