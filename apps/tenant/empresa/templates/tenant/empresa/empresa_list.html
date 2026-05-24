@@ -1,8 +1,110 @@
 {% load static %}
-{# empresa_list.html - Módulo Empresa v2.65 - Sedes y Áreas como tabs independientes #}
+{# empresa_list.html - Módulo Empresa v3.10.0 - Presentación mejorada con paneles de resumen #}
 {# SINGLETON: Empresa es singleton (0-1 registros por tenant) #}
-<div id="ui-empresa-list" class="ui-module ui-empresa">
 
+<style>
+  .empresa-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border-radius: 0.5rem;
+  }
+  .empresa-header h1 {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  .empresa-header .subtitle {
+    font-size: 0.95rem;
+    opacity: 0.9;
+  }
+  .empresa-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+  }
+  .stat-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+  }
+  .stat-card .stat-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+  .stat-card .stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 0.5rem;
+  }
+  .stat-card .stat-icon {
+    font-size: 2.5rem;
+    opacity: 0.1;
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .stat-card {
+    position: relative;
+  }
+</style>
+
+<div id="ui-empresa-list" class="ui-module ui-empresa h-100 d-flex flex-column" role="region" aria-label="Módulo de Empresa">
+
+  <!-- Header mejorado -->
+  <div class="empresa-header">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <h1><i class="bi bi-building me-2"></i>Gestión de Empresa</h1>
+        <p class="subtitle mb-0">Datos centrales, sedes y áreas de la organización</p>
+      </div>
+      <button class="btn btn-light btn-sm"
+              hx-get="/api/v1/empresas/gestor-offcanvas/"
+              hx-target="#offcanvas-container-empresa"
+              hx-swap="innerHTML"
+              hx-on::after-settle="if(event.detail.successful !== false){ sintelAbrirOffcanvasEmpresa('offcanvas-empresa'); }">
+        <i class="bi bi-pencil me-1"></i>Editar Datos
+      </button>
+    </div>
+  </div>
+
+  <!-- Panel de estadísticas -->
+  <div class="empresa-stats" id="panel-resumen-empresa">
+    <div class="stat-card">
+      <div class="stat-label">Sedes Registradas</div>
+      <div class="stat-value" id="total-sedes">0</div>
+      <i class="bi bi-geo-alt stat-icon"></i>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Áreas/Departamentos</div>
+      <div class="stat-value" id="total-areas">0</div>
+      <i class="bi bi-diagram-3 stat-icon"></i>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Buzones de Email</div>
+      <div class="stat-value" id="total-buzones">0</div>
+      <i class="bi bi-envelope stat-icon"></i>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Estado Fiscal</div>
+      <div class="stat-value"><span class="badge bg-success">Activo</span></div>
+      <i class="bi bi-check-circle stat-icon"></i>
+    </div>
+  </div>
+
+  <!-- Tabs de navegación mejorados -->
   <ul class="nav nav-pills mb-4" id="empresa-subnav" role="tablist">
     <li class="nav-item" role="presentation">
       <button class="nav-link active" id="empresa-datos-tab" data-bs-toggle="tab" data-bs-target="#subtab-datos"
@@ -24,22 +126,16 @@
     </li>
   </ul>
 
-  <div class="tab-content" id="empresa-tab-content">
+  <div class="tab-content flex-grow-1" id="empresa-tab-content">
 
     <!-- Tab 1: Datos de Empresa + Buzones -->
     <div class="tab-pane fade show active" id="subtab-datos" role="tabpanel" aria-labelledby="empresa-datos-tab">
       <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-header d-flex justify-content-between align-items-center bg-light">
           <h5 class="card-title mb-0">
-            <i class="bi bi-building"></i> Mi Empresa
+            <i class="bi bi-building text-primary"></i> Datos Centrales
           </h5>
-          <button class="btn btn-sm btn-primary"
-                  hx-get="/api/v1/empresas/gestor-offcanvas/"
-                  hx-target="#offcanvas-container-empresa"
-                  hx-swap="innerHTML"
-                  hx-on::after-settle="if(event.detail.successful !== false){ sintelAbrirOffcanvasEmpresa('offcanvas-empresa'); }">
-            <i class="bi bi-pencil me-1"></i>Gestionar
-          </button>
+          <small class="text-muted">Información registrada de la empresa</small>
         </div>
         <div class="card-body">
           <div id="feedback-empresa-list" class="alert d-none" role="alert" aria-live="polite"></div>
@@ -59,8 +155,8 @@
 
     <!-- Tab 2: Sedes -->
     <div class="tab-pane fade" id="subtab-sedes" role="tabpanel" aria-labelledby="empresa-sedes-tab">
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card shadow-sm border-0">
+        <div class="card-header d-flex justify-content-between align-items-center bg-light">
           <h5 class="card-title mb-0">
             <i class="bi bi-geo-fill text-primary me-2"></i>Sedes (Sucursales)
           </h5>
@@ -74,7 +170,7 @@
         </div>
         <div class="card-body">
           <div class="mb-3">
-            <input type="text" id="search-sede" class="form-control" placeholder="Buscar por nombre, dirección o encargado...">
+            <input type="text" id="search-sede" class="form-control" placeholder="Buscar por nombre, dirección, ciudad o encargado...">
           </div>
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">
@@ -87,8 +183,8 @@
 
     <!-- Tab 3: Áreas -->
     <div class="tab-pane fade" id="subtab-areas" role="tabpanel" aria-labelledby="empresa-areas-tab">
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card shadow-sm border-0">
+        <div class="card-header d-flex justify-content-between align-items-center bg-light">
           <h5 class="card-title mb-0">
             <i class="bi bi-diagram-3-fill text-success me-2"></i>Áreas (Departamentos)
           </h5>
@@ -102,7 +198,7 @@
         </div>
         <div class="card-body">
           <div class="mb-3">
-            <input type="text" id="search-area" class="form-control" placeholder="Buscar por nombre, código o sede...">
+            <input type="text" id="search-area" class="form-control" placeholder="Buscar por nombre, código, sede o responsable...">
           </div>
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">

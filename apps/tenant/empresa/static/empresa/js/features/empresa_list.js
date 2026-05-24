@@ -40,49 +40,59 @@
                     const rowData = cell.getRow().getData();
                     const nit = rowData.nit ? String(rowData.nit).trim() : '';
                     const dv = rowData.dv ? String(rowData.dv).trim() : '';
-                    if (!nit) return '---';
-                    return dv ? `${nit}-${dv}` : nit;
+                    if (!nit) return '<span class="text-muted">—</span>';
+                    const nitFull = dv ? `${nit}-${dv}` : nit;
+                    return `<code class="text-muted">${nitFull}</code>`;
                 },
                 width: 150
             },
             {
                 title: "Razón Social",
                 field: "razon_social",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<span class="fw-semibold text-dark">${val}</span>`;
                 },
                 minWidth: 250
             },
             {
                 title: "Dirección",
                 field: "direccion",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-geo-alt text-primary me-1"></i><span class="small">${val}</span>`;
                 },
                 minWidth: 200
             },
             {
                 title: "Teléfono",
                 field: "telefono",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-telephone text-success me-1"></i><span>${val}</span>`;
                 },
-                width: 150
+                width: 140,
+                hozAlign: "center"
             },
             {
                 title: "Email",
                 field: "email_contacto",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-envelope text-info me-1"></i><span class="small">${val}</span>`;
                 },
-                width: 200
+                minWidth: 180
             },
             {
                 title: "Acciones",
                 formatter: function(cell) {
                     const rowData = cell.getRow().getData();
                     const id = rowData.id;
-                    
+
                     return `
                         <div class="btn-group btn-group-sm" role="group">
                             <button type="button" class="btn btn-outline-primary btn-edit-empresa" data-id="${id}" title="Editar Empresa">
@@ -135,9 +145,46 @@
         if (table) {
             w.SintelEmpresaTables['empresa'] = table;
             console.log(`${MOD} Tabulator inicializado y guardado en SintelEmpresaTables`);
+
+            // ⚠️ v3.10.0: Actualizar resumen cuando carguen datos
+            if (typeof table.on === 'function') {
+                table.on('dataLoaded', function() {
+                    console.log(`${MOD} Datos cargados, actualizando resumen...`);
+                    actualizarResumenEmpresa();
+                });
+            }
         }
 
         return table;
+    }
+
+    // Actualizar panel de resumen de empresa
+    function actualizarResumenEmpresa() {
+        try {
+            // Cargar datos de Sedes y Áreas
+            const sedesTable = w.SintelEmpresaTables && w.SintelEmpresaTables['sede'];
+            const areasTable = w.SintelEmpresaTables && w.SintelEmpresaTables['area'];
+
+            let totalSedes = 0;
+            let totalAreas = 0;
+
+            if (sedesTable && typeof sedesTable.getData === 'function') {
+                totalSedes = sedesTable.getData().length;
+            }
+
+            if (areasTable && typeof areasTable.getData === 'function') {
+                totalAreas = areasTable.getData().length;
+            }
+
+            // Actualizar elementos del DOM
+            const sedesEl = d.getElementById('total-sedes');
+            const areasEl = d.getElementById('total-areas');
+
+            if (sedesEl) sedesEl.textContent = totalSedes;
+            if (areasEl) areasEl.textContent = totalAreas;
+        } catch (err) {
+            console.warn(`${MOD} Error actualizando resumen:`, err);
+        }
     }
 
     // Event Delegation para acciones del Grid

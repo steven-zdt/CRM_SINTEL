@@ -26,36 +26,45 @@
     function getColumns() {
         return [
             {
-                title: "Nombre Sede",
+                title: "Sede",
                 field: "nombre",
                 formatter: function(cell) {
-                    return cell.getValue() || '---';
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-geo-alt-fill text-primary me-2"></i><span class="fw-semibold">${val}</span>`;
                 },
-                minWidth: 180
+                minWidth: 200
             },
             {
-                title: "Direccion",
+                title: "Dirección",
                 field: "direccion",
                 formatter: function(cell) {
-                    return cell.getValue() || '---';
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-house text-secondary me-1"></i><span class="small">${val}</span>`;
                 },
-                minWidth: 180
+                minWidth: 220
             },
             {
-                title: "Telefono",
+                title: "Teléfono",
                 field: "telefono",
                 formatter: function(cell) {
-                    return cell.getValue() || '---';
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-telephone text-success me-1"></i><span class="text-monospace">${val}</span>`;
                 },
-                width: 120
+                width: 140,
+                hozAlign: "center"
             },
             {
                 title: "Encargado",
                 field: "encargado_nombre",
                 formatter: function(cell) {
-                    return cell.getValue() || '---';
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">Sin asignar</span>';
+                    return `<i class="bi bi-person text-info me-1"></i><span>${val}</span>`;
                 },
-                width: 150
+                minWidth: 160
             },
             {
                 title: "Acciones",
@@ -65,7 +74,7 @@
                     const uuid = rowData.uuid;
                     return `
                         <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-edit-sede" data-id="${id}" title="Editar Sede">
+                            <button type="button" class="btn btn-outline-primary btn-edit-sede" data-uuid="${uuid}" title="Editar Sede">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <button type="button" class="btn btn-outline-danger btn-delete-sede" data-uuid="${uuid}" title="Eliminar Sede">
@@ -112,12 +121,12 @@
             if (btnEdit) {
                 e.preventDefault();
                 e.stopPropagation();
-                const id = btnEdit.getAttribute('data-id');
+                const uuid = btnEdit.getAttribute('data-uuid');
                 const originalHTML = btnEdit.innerHTML;
                 btnEdit.disabled = true;
                 btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    await htmx.ajax('GET', `/api/v1/empresas/sedes/render-offcanvas/?id=${id}`, {
+                    await htmx.ajax('GET', `/api/v1/empresas/sedes/render-offcanvas/?uuid=${uuid}`, {
                         target: '#offcanvas-container-sede',
                         swap: 'innerHTML'
                     });

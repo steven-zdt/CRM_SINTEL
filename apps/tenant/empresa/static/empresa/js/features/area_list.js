@@ -26,28 +26,45 @@
     function getColumns() {
         return [
             {
-                title: "Nombre Area",
+                title: "Área / Departamento",
                 field: "nombre",
                 formatter: function(cell) {
-                    return cell.getValue() || '---';
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-diagram-3 text-success me-2"></i><span class="fw-semibold">${val}</span>`;
                 },
-                minWidth: 180
+                minWidth: 200
             },
             {
-                title: "Codigo Funcionamiento",
+                title: "Código",
                 field: "codigo_funcionamiento",
                 formatter: function(cell) {
-                    return cell.getValue() || '---';
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<code class="bg-light px-2 py-1 rounded small">${val}</code>`;
                 },
-                width: 180
+                width: 140,
+                hozAlign: "center"
             },
             {
                 title: "Sede",
                 field: "sede_nombre",
                 formatter: function(cell) {
-                    return cell.getValue() || '---';
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">—</span>';
+                    return `<i class="bi bi-geo-alt text-primary me-1"></i><span class="small">${val}</span>`;
                 },
                 minWidth: 180
+            },
+            {
+                title: "Responsable",
+                field: "responsable_nombre",
+                formatter: function(cell) {
+                    const val = cell.getValue();
+                    if (!val) return '<span class="text-muted">Sin asignar</span>';
+                    return `<i class="bi bi-person-fill text-info me-1"></i><span>${val}</span>`;
+                },
+                minWidth: 160
             },
             {
                 title: "Acciones",
@@ -57,10 +74,10 @@
                     const uuid = rowData.uuid;
                     return `
                         <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-edit-area" data-id="${id}" title="Editar Area">
+                            <button type="button" class="btn btn-outline-primary btn-edit-area" data-uuid="${uuid}" title="Editar Área">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-area" data-uuid="${uuid}" title="Eliminar Area">
+                            <button type="button" class="btn btn-outline-danger btn-delete-area" data-uuid="${uuid}" title="Eliminar Área">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
@@ -104,12 +121,12 @@
             if (btnEdit) {
                 e.preventDefault();
                 e.stopPropagation();
-                const id = btnEdit.getAttribute('data-id');
+                const uuid = btnEdit.getAttribute('data-uuid');
                 const originalHTML = btnEdit.innerHTML;
                 btnEdit.disabled = true;
                 btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    await htmx.ajax('GET', `/api/v1/empresas/areas/render-offcanvas/?id=${id}`, {
+                    await htmx.ajax('GET', `/api/v1/empresas/areas/render-offcanvas/?uuid=${uuid}`, {
                         target: '#offcanvas-container-area',
                         swap: 'innerHTML'
                     });
