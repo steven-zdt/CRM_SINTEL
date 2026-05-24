@@ -1,10 +1,11 @@
 """
-API Mixins para Proyectos v3.5 - Inyeccion de servicios en ViewSets.
+API Mixins para Proyectos v3.5 - Inyeccion de servicios en ViewSets (v3.10.1).
 
-WARNING: SINTEL v3.5: Arquitectura Service Layer Modular.
-- Inyecta acceso estandarizado a Selectors, CRUDService y BusinessService.
-- Usa get_empresa_id() de SintelDSVMixin para Zero Trust.
+SINTEL v3.10.1: Arquitectura Service Layer Modular.
+- Hereda de BaseServiceMixin (canonical, consolidado)
+- Mantiene solo métodos service_* específicos de Proyectos
 """
+from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.proyectos.services.selectors import (
     LIST_FIELDS,
     DETAIL_FIELDS,
@@ -22,11 +23,10 @@ from apps.tenant.proyectos.services.crud_service import (
 )
 
 
-class ProyectoServiceMixin:
+class ProyectoServiceMixin(BaseServiceMixin):
     """
     Service mixin para Proyecto ViewSet.
-    Inyecta acceso a Selectors y BusinessService.
-    Requiere que el ViewSet herede de SintelDSVMixin (para get_empresa_id).
+    Hereda de BaseServiceMixin para get_empresa_id(), _get_empresa(), etc.
     """
 
     def get_qs_list(self):
@@ -49,9 +49,3 @@ class ProyectoServiceMixin:
     def service_actualizar_proyecto(self, proyecto, data):
         """Actualiza proyecto usando business service."""
         return orchestrate_update_proyecto(proyecto, data)
-
-    def _get_empresa(self):
-        """Helper para obtener empresa actual."""
-        from apps.tenant.empresa.models import Empresa
-        empresa_id = self.get_empresa_id()
-        return Empresa.objects.filter(id=empresa_id).first()

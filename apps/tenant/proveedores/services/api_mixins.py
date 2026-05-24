@@ -1,11 +1,11 @@
 """
-API Mixins para Proveedores - Inyección de servicios en ViewSets.
+API Mixins para Proveedores - Inyección de servicios en ViewSets (v3.10.1).
 
-WARNING: SINTEL v3.5: Arquitectura Service Layer Modular.
-- Este archivo contiene mixins específicos para cada modelo.
-- Inyectan acceso estandarizado a Selectors, CRUDService y BusinessService.
-- Usan get_empresa_id() de SintelDSVMixin para Zero Trust.
+SINTEL v3.10.1: Arquitectura Service Layer Modular.
+- Hereda de BaseServiceMixin (canonical, consolidado)
+- Mantiene properties y service_* methods específicos de Proveedores
 """
+from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.proveedores.services.selectors import (
     ProveedorSelector,
     LIST_FIELDS,
@@ -19,11 +19,10 @@ from apps.tenant.proveedores.services.crud_service import (
 )
 
 
-class ProveedorServiceMixin:
+class ProveedorServiceMixin(BaseServiceMixin):
     """
     Service mixin para Proveedor ViewSet.
-    Inyecta acceso a Selectors y BusinessService.
-    Requiere que el ViewSet herede de SintelDSVMixin (para get_empresa_id).
+    Hereda de BaseServiceMixin para get_qs_list(), get_qs_detail(), etc.
     """
 
     selector_class = ProveedorSelector
@@ -42,15 +41,8 @@ class ProveedorServiceMixin:
     def proveedor_crud(self):
         return self.crud_service_class()
 
-
-    def get_qs_list(self):
-        """Retorna queryset de lista usando selector."""
-        empresa_id = self.get_empresa_id()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
-        return self.selector_class.get_list(empresa_id, search=search)
-
     def get_qs_detail(self):
-        """Retorna queryset de detalle usando selector."""
+        """Sobrescribe para usar get_by_id en lugar de get_detail."""
         empresa_id = self.get_empresa_id()
         pk = self.kwargs.get('pk')
         return self.selector_class.get_by_id(empresa_id, pk)
@@ -76,9 +68,3 @@ class ProveedorServiceMixin:
             proveedor_uuid=proveedor_uuid,
             tipo_documento=tipo_documento
         )
-
-    def _get_empresa(self):
-        """Helper para obtener empresa actual."""
-        from apps.tenant.empresa.models import Empresa
-        empresa_id = self.get_empresa_id()
-        return Empresa.objects.filter(id=empresa_id).first()

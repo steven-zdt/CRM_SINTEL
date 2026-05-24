@@ -1,12 +1,13 @@
 """
-API Mixins para Clientes - Inyeccion de servicios en ViewSets.
+API Mixins para Clientes - Inyeccion de servicios en ViewSets (v3.10.1).
 
-SINTEL v3.5: Arquitectura Service Layer Modular.
-- Inyecta acceso estandarizado a Selectors, CRUDService y BusinessService.
-- Usa get_empresa_id() de SintelDSVMixin para Zero Trust.
+SINTEL v3.10.1: Arquitectura Service Layer Modular.
+- Hereda de BaseServiceMixin (canonical, consolidado)
+- Mantiene properties y service_* methods específicos de Clientes
 """
 import logging
 
+from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.clientes.services.selectors import (
     ClienteSelector,
     ContactoSelector,
@@ -24,11 +25,10 @@ from apps.tenant.clientes.services.crud_service import (
 logger = logging.getLogger(__name__)
 
 
-class ClienteServiceMixin:
+class ClienteServiceMixin(BaseServiceMixin):
     """
     Service mixin para Cliente ViewSet.
-    Inyecta acceso a Selectors y BusinessService.
-    Requiere que el ViewSet herede de SintelDSVMixin (para get_empresa_id).
+    Hereda de BaseServiceMixin para get_qs_list(), get_qs_detail(), etc.
     """
 
     selector_class = ClienteSelector
@@ -49,13 +49,13 @@ class ClienteServiceMixin:
 
     def get_qs_list(self):
         """Retorna queryset de lista usando selector."""
-        empresa_id = self.get_empresa_id() if hasattr(self, 'get_empresa_id') else (self.get_empresa().id if hasattr(self, 'get_empresa') else None)
+        empresa_id = self._get_empresa_id_seguro()
         search = self.request.query_params.get('search') if hasattr(self, 'request') else None
         return self.selector_class.get_cliente_list(empresa_id, search=search)
 
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
-        empresa_id = self.get_empresa_id() if hasattr(self, 'get_empresa_id') else (self.get_empresa().id if hasattr(self, 'get_empresa') else None)
+        empresa_id = self._get_empresa_id_seguro()
         uuid_val = self.kwargs.get('uuid')
         return self.selector_class.get_cliente_detail(empresa_id, uuid_val)
 
@@ -65,17 +65,11 @@ class ClienteServiceMixin:
         cliente, _ = svc.registrar_cliente_completo(empresa_id, data, contactos_raw)
         return cliente
 
-    def _get_empresa(self):
-        """Helper para obtener empresa actual."""
-        from apps.tenant.empresa.models import Empresa
-        empresa_id = self.get_empresa_id() if hasattr(self, 'get_empresa_id') else (self.get_empresa().id if hasattr(self, 'get_empresa') else None)
-        return Empresa.objects.filter(id=empresa_id).first()
 
-
-class ContactoClienteServiceMixin:
+class ContactoClienteServiceMixin(BaseServiceMixin):
     """
     Service mixin para ContactoCliente ViewSet.
-    Inyecta acceso a ContactoSelector.
+    Hereda de BaseServiceMixin para _get_empresa_id_seguro(), etc.
     """
 
     selector_class = ContactoSelector
@@ -91,7 +85,7 @@ class ContactoClienteServiceMixin:
 
     def get_qs_contactos(self, cliente_id=None):
         """Retorna queryset de contactos usando selector."""
-        empresa_id = self.get_empresa_id() if hasattr(self, 'get_empresa_id') else (self.get_empresa().id if hasattr(self, 'get_empresa') else None)
+        empresa_id = self._get_empresa_id_seguro()
         return self.selector_class.get_contacto_list(empresa_id, cliente_id=cliente_id)
 
 

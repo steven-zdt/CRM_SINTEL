@@ -1,11 +1,11 @@
 """
-API Mixins para Contabilidad - Inyección de servicios en ViewSets.
+API Mixins para Contabilidad - Inyección de servicios en ViewSets (v3.10.1).
 
-WARNING: SINTEL v3.5: Arquitectura Service Layer Modular.
-- Este archivo contiene mixins específicos para cada modelo.
-- Inyectan acceso estandarizado a Selectors, CRUDService y BusinessService.
-- Usan get_empresa_id() de SintelDSVMixin para Zero Trust.
+SINTEL v3.10.1: Arquitectura Service Layer Modular.
+- Hereda de BaseServiceMixin (canonical, consolidado)
+- Mantiene solo métodos service_* específicos de Contabilidad
 """
+from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.contabilidad.services.selectors import (
     CuentaSelector,
     AsientoSelector,
@@ -20,11 +20,10 @@ from apps.tenant.contabilidad.services.crud_service import (
 )
 
 
-class CuentaServiceMixin:
+class CuentaServiceMixin(BaseServiceMixin):
     """
     Service mixin para CuentaContable ViewSet.
-    Inyecta acceso a Selectors y BusinessService.
-    Requiere que el ViewSet herede de SintelDSVMixin (para get_empresa_id).
+    Hereda de BaseServiceMixin para get_qs_list(), get_qs_detail(), etc.
     """
 
     selector_class = CuentaSelector
@@ -32,21 +31,17 @@ class CuentaServiceMixin:
     crud_service_class = ContabilidadCRUDService
 
     def get_qs_list(self):
-        """Retorna queryset de lista usando selector."""
+        """Sobrescribe para agregar parámetro tipo."""
         empresa_id = self.get_empresa_id()
         search = self.request.query_params.get('search') if hasattr(self, 'request') else None
         tipo = self.request.query_params.get('tipo') if hasattr(self, 'request') else None
         return self.selector_class.get_list(empresa_id, search=search, tipo=tipo)
 
-    def get_qs_detail(self):
-        """Retorna queryset de detalle usando selector."""
-        empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
 
-
-class AsientoServiceMixin:
+class AsientoServiceMixin(BaseServiceMixin):
     """
     Service mixin para AsientoContable ViewSet.
+    Hereda de BaseServiceMixin para get_qs_list(), get_qs_detail(), etc.
     """
 
     selector_class = AsientoSelector
@@ -54,16 +49,11 @@ class AsientoServiceMixin:
     crud_service_class = ContabilidadCRUDService
 
     def get_qs_list(self):
-        """Retorna queryset de lista usando selector."""
+        """Sobrescribe para agregar parámetro estado."""
         empresa_id = self.get_empresa_id()
         search = self.request.query_params.get('search') if hasattr(self, 'request') else None
         estado = self.request.query_params.get('estado') if hasattr(self, 'request') else None
         return self.selector_class.get_list(empresa_id, search=search, estado=estado)
-
-    def get_qs_detail(self):
-        """Retorna queryset de detalle usando selector."""
-        empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
 
     def service_crear_asiento(self, serializer):
         """Crea asiento usando business service."""
@@ -74,41 +64,28 @@ class AsientoServiceMixin:
         )
 
 
-class PeriodoServiceMixin:
+class PeriodoServiceMixin(BaseServiceMixin):
     """
     Service mixin para PeriodoContable ViewSet.
+    Hereda de BaseServiceMixin para get_qs_list(), get_qs_detail(), etc.
     """
 
     selector_class = PeriodoSelector
     business_service_class = ContabilidadBusinessService
     crud_service_class = ContabilidadCRUDService
 
-    def get_qs_list(self):
-        """Retorna queryset de lista usando selector."""
-        empresa_id = self.get_empresa_id()
-        return self.selector_class.get_list(empresa_id)
 
-    def get_qs_detail(self):
-        """Retorna queryset de detalle usando selector."""
-        empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))
-
-
-class MovimientoServiceMixin:
+class MovimientoServiceMixin(BaseServiceMixin):
     """
     Service mixin para MovimientoContable ViewSet.
+    Hereda de BaseServiceMixin para get_qs_list(), get_qs_detail(), etc.
     """
 
     selector_class = MovimientoSelector
     crud_service_class = ContabilidadCRUDService
 
     def get_qs_list(self):
-        """Retorna queryset de lista usando selector."""
+        """Sobrescribe para agregar parámetro asiento."""
         empresa_id = self.get_empresa_id()
         asiento_id = self.request.query_params.get('asiento') if hasattr(self, 'request') else None
         return self.selector_class.get_list(empresa_id, asiento_id=asiento_id)
-
-    def get_qs_detail(self):
-        """Retorna queryset de detalle usando selector."""
-        empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get('pk'))

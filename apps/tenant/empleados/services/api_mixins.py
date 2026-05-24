@@ -1,11 +1,11 @@
 """
-API Mixins para Empleados - Inyeccion de servicios en ViewSets.
+API Mixins para Empleados - Inyeccion de servicios en ViewSets (v3.10.1).
 
-WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
-- Este archivo contiene mixins especificos para cada modelo.
-- Inyectan acceso estandarizado a Selectors, CRUDService y BusinessService.
-- Usan get_empresa_id() de SintelDSVMixin para Zero Trust.
+SINTEL v3.10.1: Arquitectura Service Layer Modular.
+- Hereda de BaseServiceMixin (canonical, consolidado)
+- Mantiene solo métodos service_* específicos de Empleados
 """
+from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.empleados.services.selectors import (
     ContratoSelector,
     DevengoSelector,
@@ -20,11 +20,10 @@ from apps.tenant.empleados.services.business_service import (
 )
 
 
-class EmpleadoServiceMixin:
+class EmpleadoServiceMixin(BaseServiceMixin):
     """
     Service mixin para Empleado ViewSet.
-    Inyecta acceso a Selectors y BusinessService.
-    Requiere que el ViewSet herede de SintelDSVMixin (para get_empresa_id).
+    Hereda de BaseServiceMixin para get_qs_list(), get_qs_detail(), etc.
     """
 
     # Instancias de servicios (pueden ser sobrescritas en subclasses)
@@ -33,18 +32,6 @@ class EmpleadoServiceMixin:
     devengo_selector = DevengoSelector
     business_service_class = EmpleadoBusinessService
     summary_selector_class = NominaSummarySelector
-
-    def get_qs_list(self):
-        """Retorna queryset de lista usando selector."""
-        empresa_id = self.get_empresa_id()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
-        return self.selector_class.get_list(empresa_id, search=search)
-
-    def get_qs_detail(self):
-        """Retorna queryset de detalle usando selector."""
-        empresa_id = self.get_empresa_id()
-        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'uuid')
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
     def service_crear_empleado(self, serializer):
         """Crea empleado usando business service."""
@@ -70,23 +57,18 @@ class EmpleadoServiceMixin:
             return None
         return self.summary_selector_class.get_summary(empresa_id)
 
-    def _get_empresa(self):
-        """Helper para obtener empresa actual de forma segura."""
-        from apps.tenant.api.utils import resolve_tenant_empresa
-        return resolve_tenant_empresa(self.request, self)
 
-
-class ContratoServiceMixin:
+class ContratoServiceMixin(BaseServiceMixin):
     """
     Service mixin para Contrato ViewSet.
-    Inyecta acceso a Selectors y BusinessService.
+    Hereda de BaseServiceMixin para get_empresa_id(), etc.
     """
 
     selector_class = ContratoSelector
     business_service_class = ContratoBusinessService
 
     def get_qs_list(self):
-        """Retorna queryset de lista usando selector."""
+        """Sobrescribe para agregar parámetro empleado."""
         empresa_id = self.get_empresa_id()
         search = self.request.query_params.get('search') if hasattr(self, 'request') else None
         empleado_id = self.request.query_params.get('empleado') if hasattr(self, 'request') else None
@@ -96,12 +78,6 @@ class ContratoServiceMixin:
             except (TypeError, ValueError):
                 empleado_id = None
         return self.selector_class.get_list(empresa_id, search=search, empleado_id=empleado_id)
-
-    def get_qs_detail(self):
-        """Retorna queryset de detalle usando selector."""
-        empresa_id = self.get_empresa_id()
-        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'uuid')
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
     def get_empleado_by_id(self, empleado_id):
         """Obtiene empleado por PK recibido en payload validando tenant."""
@@ -120,10 +96,10 @@ class ContratoServiceMixin:
         return self.business_service_class.preparar_datos_contrato(data)
 
 
-class DevengoServiceMixin:
+class DevengoServiceMixin(BaseServiceMixin):
     """
     Service mixin para Devengo ViewSet.
-    Inyecta acceso a Selectors, BusinessService y calculos de nomina.
+    Hereda de BaseServiceMixin para get_empresa_id(), etc.
     """
 
     selector_class = DevengoSelector
@@ -131,7 +107,7 @@ class DevengoServiceMixin:
     calculation_service_class = NominaCalculationService
 
     def get_qs_list(self):
-        """Retorna queryset de lista usando selector."""
+        """Sobrescribe para agregar parámetros empleado y periodo_mes."""
         empresa_id = self.get_empresa_id()
         search = self.request.query_params.get('search') if hasattr(self, 'request') else None
         empleado_id = self.request.query_params.get('empleado') if hasattr(self, 'request') else None
@@ -149,12 +125,6 @@ class DevengoServiceMixin:
             empleado_id=empleado_id,
             periodo_mes=periodo_mes
         )
-
-    def get_qs_detail(self):
-        """Retorna queryset de detalle usando selector."""
-        empresa_id = self.get_empresa_id()
-        lookup_kwarg = getattr(self, 'lookup_url_kwarg', 'uuid')
-        return self.selector_class.get_detail(empresa_id, self.kwargs.get(lookup_kwarg))
 
     def get_historial_qs(self, empleado_id: int):
         """Retorna queryset de historial de nominas de un empleado."""

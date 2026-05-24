@@ -1,11 +1,15 @@
 """
-API Mixins for ConfiguracionCotizacion v2.62.0.
+API Mixins for ConfiguracionCotizacion (v3.10.1).
+
+SINTEL v3.10.1: Arquitectura Service Layer Modular.
+- Hereda de BaseServiceMixin (canonical, consolidado)
+- Mantiene solo métodos service_* específicos de ConfiguracionCotizacion
 """
-from apps.tenant.api.mixins import SintelDSVMixin
+from apps.tenant.api.mixins import BaseServiceMixin
 from .selectors import ConfiguracionSelector
 from .business_service import ConfiguracionBusinessService
 
-class ConfiguracionServiceMixin(SintelDSVMixin):
+class ConfiguracionServiceMixin(BaseServiceMixin):
     selector_class = ConfiguracionSelector
     business_service_class = ConfiguracionBusinessService
 
@@ -19,8 +23,7 @@ class ConfiguracionServiceMixin(SintelDSVMixin):
 
     def service_crear_configuracion(self, serializer):
         """Crea configuracion usando business service."""
-        from apps.tenant.empresa.models import Empresa
-        empresa = Empresa.objects.filter(id=self.get_empresa_id()).only('id').first()
+        empresa = self._get_empresa()
         return self.business_service_class.crear_configuracion(
             empresa=empresa,
             datos=serializer.validated_data,

@@ -1,6 +1,11 @@
 """
-API Mixins para Cotizaciones - Inyeccion de servicios en ViewSets.
+API Mixins para Cotizaciones - Inyeccion de servicios en ViewSets (v3.10.1).
+
+SINTEL v3.10.1: Arquitectura Service Layer Modular.
+- Hereda de BaseServiceMixin (canonical, consolidado)
+- Mantiene solo métodos service_* específicos de Cotizaciones
 """
+from apps.tenant.api.mixins import BaseServiceMixin
 from .business_service import CotizacionService
 from .selectors import CotizacionSelector
 from .crud_service import CotizacionCRUDService
@@ -11,7 +16,7 @@ from .servicio_service import ServicioServiceMixin
 from .item_service import CotizacionItemServiceMixin
 # Configuracion se importa directamente en __init__.py desde el modulo configuracion
 
-class CotizacionServiceMixin:
+class CotizacionServiceMixin(BaseServiceMixin):
     selector_class = CotizacionSelector
     business_service_class = CotizacionService
     crud_service_class = CotizacionCRUDService
@@ -28,8 +33,7 @@ class CotizacionServiceMixin:
         return self.selector_class.get_detail(None, empresa_id)
 
     def service_crear_cotizacion(self, serializer):
-        from apps.tenant.empresa.models import Empresa
-        empresa = Empresa.objects.filter(id=self.get_empresa_id()).only('id').first()
+        empresa = self._get_empresa()
         return self.business_service_class.crear_preforma(
             empresa=empresa,
             datos=serializer.validated_data,
