@@ -1,0 +1,70 @@
+{# offcanvas_abono_cartera.html - Cartera payment registration #}
+{# ZERO JS IN HTML: JS handlers in clientes.list.js / cartera_list.js #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-abono-cartera" aria-labelledby="offcanvas-abono-cartera-label">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvas-abono-cartera-label">
+      <i class="bi bi-cash-coin me-2"></i>Registrar Abono
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="abono-cartera-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <div class="card mb-3 border-0 bg-light">
+      <div class="card-body">
+        <h6 class="card-subtitle mb-2 text-muted">Informacion de la Obligacion</h6>
+        <div class="row g-2 small">
+          <div class="col-6">
+            <span class="text-muted">Factura:</span>
+            <div class="fw-bold text-dark">{{ cartera.numero_factura }}</div>
+          </div>
+          <div class="col-6">
+            <span class="text-muted">Fecha Vto:</span>
+            <div class="text-dark">{{ cartera.fecha_vencimiento|date:"Y-m-d" }}</div>
+          </div>
+          <div class="col-12">
+            <span class="text-muted">Cliente:</span>
+            <div class="text-dark text-truncate">{{ cliente.razon_social }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-4 text-center">
+        <div class="text-muted small">Total</div>
+        <div class="fs-6 fw-semibold text-dark">${{ cartera.valor_total }}</div>
+      </div>
+      <div class="col-4 text-center border-start border-end">
+        <div class="text-muted small">Pagado</div>
+        <div class="fs-6 fw-semibold text-success">${{ cartera.valor_pagado }}</div>
+      </div>
+      <div class="col-4 text-center">
+        <div class="text-muted small">Saldo</div>
+        <div class="fs-6 fw-semibold text-danger" id="abono-saldo-actual">${{ cartera.saldo }}</div>
+      </div>
+    </div>
+
+    <form id="form-abono-cartera" data-cartera-uuid="{{ cartera.uuid }}">
+      <div class="mb-3">
+        <label for="abono-monto" class="form-label">Monto del Abono *</label>
+        <div class="input-group">
+          <span class="input-group-text">$</span>
+          <input type="number" class="form-control form-control-lg fw-bold text-primary" id="abono-monto" name="monto"
+                 min="0.01" max="{{ cartera.saldo }}" step="0.01" required placeholder="0.00">
+        </div>
+        <div class="form-text text-muted">Ingrese un monto menor o igual al saldo actual.</div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">
+          <i class="bi bi-x-lg me-1"></i>Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm" id="btn-guardar-abono">
+          <i class="bi bi-check-circle me-1"></i>Aplicar Pago
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

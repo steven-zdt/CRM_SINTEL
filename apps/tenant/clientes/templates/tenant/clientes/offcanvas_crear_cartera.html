@@ -1,0 +1,101 @@
+{# offcanvas_crear_cartera.html — Registrar nueva obligación de Cuentas por Cobrar #}
+{# ZERO inline JS — lógica en clientes.cartera.js #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-crear-cartera"
+     aria-labelledby="offcanvas-crear-cartera-label"
+     style="width: min(96vw, 540px);">
+
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-crear-cartera-label">
+      <i class="bi bi-receipt-cutoff text-primary me-2"></i>Nueva Obligación (Cuentas por Cobrar)
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+
+  <div class="offcanvas-body">
+    <div id="cartera-crear-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="form-crear-cartera" onsubmit="return false;">
+      {% csrf_token %}
+
+      {# Cliente #}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Cliente *</label>
+        {% if cliente %}
+          <div class="input-group">
+            <span class="input-group-text bg-light"><i class="bi bi-person-check text-success"></i></span>
+            <input type="text" class="form-control bg-light" readonly
+                   value="{{ cliente.razon_social }} — {{ cliente.numero_documento }}">
+            <input type="hidden" id="cartera-cliente-id" name="cliente" value="{{ cliente.id }}">
+          </div>
+        {% else %}
+          <select class="form-select" id="cartera-cliente-id" name="cliente" required>
+            <option value="" disabled selected>— Seleccione un cliente —</option>
+          </select>
+          <div class="form-text">Cargando clientes...</div>
+        {% endif %}
+      </div>
+
+      <div class="row g-3">
+        {# Número de factura #}
+        <div class="col-md-6">
+          <label for="cartera-numero-factura" class="form-label fw-semibold">N° Factura *</label>
+          <input type="text" class="form-control" id="cartera-numero-factura" name="numero_factura"
+                 required maxlength="50" placeholder="Ej: FV-001234">
+        </div>
+        {# UUID Factura (soft reference) #}
+        <div class="col-md-6">
+          <label for="cartera-factura-uuid" class="form-label">UUID Factura <span class="text-muted">(opcional)</span></label>
+          <input type="text" class="form-control font-monospace" id="cartera-factura-uuid" name="factura_uuid"
+                 placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                 pattern="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}">
+          <div class="form-text">Referencia soft a la factura en el sistema.</div>
+        </div>
+        {# Fecha emisión #}
+        <div class="col-md-6">
+          <label for="cartera-fecha-emision" class="form-label fw-semibold">Fecha Emisión *</label>
+          <input type="date" class="form-control" id="cartera-fecha-emision" name="fecha_emision" required>
+        </div>
+        {# Fecha vencimiento #}
+        <div class="col-md-6">
+          <label for="cartera-fecha-vencimiento" class="form-label fw-semibold">Fecha Vencimiento *</label>
+          <input type="date" class="form-control" id="cartera-fecha-vencimiento" name="fecha_vencimiento" required>
+        </div>
+        {# Valor total #}
+        <div class="col-md-6">
+          <label for="cartera-valor-total" class="form-label fw-semibold">Valor Total *</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" class="form-control" id="cartera-valor-total" name="valor_total"
+                   required min="0.01" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        {# Valor pagado inicial #}
+        <div class="col-md-6">
+          <label for="cartera-valor-pagado" class="form-label">Abono Inicial <span class="text-muted">(opcional)</span></label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" class="form-control" id="cartera-valor-pagado" name="valor_pagado"
+                   min="0" step="0.01" placeholder="0.00" value="0">
+          </div>
+        </div>
+        {# Observaciones #}
+        <div class="col-12">
+          <label for="cartera-observaciones" class="form-label">Observaciones</label>
+          <textarea class="form-control" id="cartera-observaciones" name="observaciones"
+                    rows="2" maxlength="500" placeholder="Notas adicionales sobre esta obligación..."></textarea>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+        <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">
+          <i class="bi bi-x-lg me-1"></i>Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary btn-sm px-4" id="btn-guardar-cartera">
+          <i class="bi bi-check-circle me-1"></i>Registrar Obligación
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
