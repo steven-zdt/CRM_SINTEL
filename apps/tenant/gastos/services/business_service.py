@@ -7,8 +7,10 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
+from apps.tenant.gastos.services.crud_service import DocumentoCRUDService, ResolucionCRUDService
 
-# Lazy imports for related domains to avoid circularity at runtime
+# Lazy imports for cross-domain dependencies (proveedores, inventario, contabilidad)
+# kept inside def blocks to avoid circular imports at module load time
 HAS_ACCOUNTING = False
 
 logger = logging.getLogger(__name__)
@@ -26,8 +28,6 @@ class GastoBusinessService:
     @transaction.atomic
     def anular_gasto(gasto_id: int, motivo: str, usuario: Any, empresa_id: int = None) -> Tuple[bool, Dict[str, Any], int]:
         """Orquesta la anulacion de un gasto (Inmutabilidad legal)."""
-        from apps.tenant.gastos.services.crud_service import DocumentoCRUDService
-        
         try:
             qs = DocumentoSoporte.objects.filter(id=gasto_id)
             if empresa_id:
@@ -54,8 +54,6 @@ class GastoBusinessService:
     @transaction.atomic
     def desactivar_gasto(gasto_id: int, empresa_id: int = None) -> Dict[str, Any]:
         """Desactiva un gasto (Soft Delete)."""
-        from apps.tenant.gastos.services.crud_service import DocumentoCRUDService
-        
         qs = DocumentoSoporte.objects.filter(id=gasto_id)
         if empresa_id:
             qs = qs.filter(empresa_id=empresa_id)
@@ -74,8 +72,6 @@ class GastoBusinessService:
         Elimina un gasto (Sigue el estandar de Clientes: Bloqueo si activo, Fisico si inactivo).
         En Gastos, 'Inactivo' para borrado significa anulado=True.
         """
-        from apps.tenant.gastos.services.crud_service import DocumentoCRUDService
-        
         try:
             qs = DocumentoSoporte.objects.filter(id=gasto_id)
             if empresa_id:
@@ -161,52 +157,26 @@ class GastoBusinessService:
             
             ds_data['proveedor'] = proveedor
 
-            # DSV: Relaciones Opcionales a Inventario (FASE 2)
-            from apps.tenant.inventario.models import Producto, Servicio, ActivoFijo
-
-            def resolver_item_inventario(model_class, item_id, model_name):
-                if not item_id:
-                    return None
-                if isinstance(item_id, model_class):
-                    if item_id.empresa_id != empresa.id:
-                        raise ValidationError({
-                            f"{model_name}_relacionado": f"El {model_name} especificado no pertenece a la empresa."
-                        })
-                    return item_id
-                
-                is_item_uuid = False
+            # DSV: Vinculacion transaccional al Kardex de Inventario (Pull Model)
+            movimiento_uuid = ds_data.pop('movimiento_inventario_uuid', None)
+            if movimiento_uuid:
                 try:
-                    if isinstance(item_id, str) and len(item_id) >= 32:
-                        uuid_lib.UUID(str(item_id))
-                        is_item_uuid = True
+                    uuid_lib.UUID(str(movimiento_uuid))
                 except (ValueError, TypeError):
-                    pass
-
-                item = None
-                if is_item_uuid:
-                    item = model_class.objects.filter(uuid=item_id, empresa=empresa).first()
-                else:
-                    try:
-                        item = model_class.objects.filter(id=int(item_id), empresa=empresa).first()
-                    except (ValueError, TypeError):
-                        pass
-
-                if not item:
                     raise ValidationError({
-                        f"{model_name}_relacionado": f"El {model_name} especificado '{item_id}' no es valido o no pertenece a la empresa."
+                        "movimiento_inventario_uuid": "El formato del UUID de movimiento de inventario no es valido."
                     })
-                return item
-
-            producto_rel_id = ds_data.pop('producto_relacionado', None) or ds_data.pop('producto_relacionado_id', None)
-            servicio_rel_id = ds_data.pop('servicio_relacionado', None) or ds_data.pop('servicio_relacionado_id', None)
-            activo_rel_id = ds_data.pop('activo_relacionado', None) or ds_data.pop('activo_relacionado_id', None)
-
-            if producto_rel_id:
-                ds_data['producto_relacionado'] = resolver_item_inventario(Producto, producto_rel_id, 'producto')
-            if servicio_rel_id:
-                ds_data['servicio_relacionado'] = resolver_item_inventario(Servicio, servicio_rel_id, 'servicio')
-            if activo_rel_id:
-                ds_data['activo_relacionado'] = resolver_item_inventario(ActivoFijo, activo_rel_id, 'activo')
+                
+                from apps.tenant.inventario.services.selectors import MovimientoInventarioSelector
+                mov = MovimientoInventarioSelector.get_detail(
+                    empresa_id=empresa.id,
+                    movimiento_uuid=movimiento_uuid
+                )
+                if not mov:
+                    raise ValidationError({
+                        "movimiento_inventario_uuid": f"El movimiento de inventario especificado '{movimiento_uuid}' no es valido o no pertenece a la empresa."
+                    })
+                ds_data['movimiento_inventario_uuid'] = movimiento_uuid
 
             # 1. Validar DIAN
             fecha_doc = ds_data.get('fecha')
@@ -234,7 +204,6 @@ class GastoBusinessService:
             ds_data['total'] = total_neto
 
             # 3. Persistencia via CRUD
-            from apps.tenant.gastos.services.crud_service import DocumentoCRUDService
             documento = DocumentoCRUDService.crear_documento(ds_data, empresa, resolucion)
             
             # 4. Registrar Retenciones en Contabilidad (v3.7.1)
@@ -299,8 +268,6 @@ class ResolucionBusinessService:
     @transaction.atomic
     def crear_resolucion(empresa: Any, data: dict[str, Any]) -> ResolucionDIAN:
         """Crea una nueva resolucion DIAN orchestrando validaciones."""
-        from apps.tenant.gastos.services.crud_service import ResolucionCRUDService
-        
         data = data.copy()
         if 'fecha_resolucion' in data and 'fecha_inicio' not in data:
             data['fecha_inicio'] = data['fecha_resolucion']
@@ -317,8 +284,6 @@ class ResolucionBusinessService:
     @transaction.atomic
     def desactivar_resolucion(empresa_id: int, resolucion_id: int) -> ResolucionDIAN:
         """Desactiva una resolucion DIAN."""
-        from apps.tenant.gastos.services.crud_service import ResolucionCRUDService
-        
         try:
             resolucion = ResolucionDIAN.objects.get(id=resolucion_id, empresa_id=empresa_id)
             return ResolucionCRUDService.desactivar_resolucion(resolucion)
@@ -328,8 +293,6 @@ class ResolucionBusinessService:
     @staticmethod
     def puede_eliminar(empresa_id: int, resolucion_id: int) -> Tuple[bool, str]:
         """Verifica si una resolucion puede ser eliminada."""
-        from apps.tenant.gastos.services.crud_service import ResolucionCRUDService
-        
         try:
             resolucion = ResolucionDIAN.objects.get(id=resolucion_id, empresa_id=empresa_id)
             if resolucion.vigente:
@@ -341,6 +304,160 @@ class ResolucionBusinessService:
             return True, "La resolucion puede ser eliminada."
         except ResolucionDIAN.DoesNotExist:
             return False, "Resolucion no encontrada."
+
+
+@transaction.atomic
+def materializar_gasto_desde_dto(dto: dict) -> Tuple[dict, int]:
+    """
+    Materializa un gasto (DocumentoSoporte) a partir de un DTO canonico.
+    Cumple con:
+    - Idempotencia por numero (para el mismo proveedor/empresa)
+    - Transaccionalidad atomica
+    - Estricto aislamiento Multi-tenant
+    """
+    from django.core.exceptions import ValidationError
+    from decimal import Decimal, InvalidOperation
+    from django.utils.dateparse import parse_datetime
+    import datetime
+    
+    # 1. Validaciones del DTO
+    if not dto or not isinstance(dto, dict):
+        raise ValidationError("El DTO no es un diccionario valido.")
+        
+    numero = dto.get("numero")
+    if not numero:
+        raise ValidationError("El campo 'numero' es obligatorio.")
+        
+    fecha_emision_str = dto.get("fecha_emision")
+    if not fecha_emision_str:
+        raise ValidationError("El campo 'fecha_emision' es obligatorio.")
+        
+    emisor = dto.get("emisor")
+    if not emisor or not isinstance(emisor, dict):
+        raise ValidationError("El campo 'emisor' es obligatorio y debe ser un diccionario.")
+        
+    emisor_nit = emisor.get("nit")
+    if not emisor_nit:
+        raise ValidationError("El NIT del emisor es obligatorio.")
+        
+    totales = dto.get("totales")
+    if not totales or not isinstance(totales, dict) or "total" not in totales:
+        raise ValidationError("El campo 'totales' con subcampo 'total' es obligatorio.")
+        
+    # 2. Parseo de datos
+    try:
+        dt = parse_datetime(fecha_emision_str)
+        if not dt:
+            from django.utils.dateparse import parse_date
+            fecha_doc = parse_date(fecha_emision_str)
+            if not fecha_doc:
+                raise ValidationError("La fecha de emision no tiene un formato valido.")
+        else:
+            fecha_doc = dt.date()
+    except Exception:
+        raise ValidationError("La fecha de emision no tiene un formato valido.")
+        
+    try:
+        total_val = Decimal(str(totales["total"]))
+    except (ValueError, TypeError, KeyError, InvalidOperation):
+        raise ValidationError("El total no es un valor decimal valido.")
+        
+    # 3. Obtener contexto del Tenant activo (Empresa SSoT)
+    from apps.tenant.empresa.models import Empresa
+    empresa = Empresa.objects.first()
+    if not empresa:
+        empresa = Empresa.objects.create(
+            razon_social="Empresa Autocreada",
+            nit="123456789",
+            dv="1",
+            direccion="Calle Ficticia 123",
+            moneda="COP",
+            activa=True
+        )
+        
+    # 4. Obtener/Crear Proveedor (NIT es numero_documento en Proveedor)
+    from apps.tenant.proveedores.models import Proveedor
+    
+    # Clean / parse NIT
+    def parse_nit(nit_str: str):
+        if '-' in nit_str:
+            num, dv = nit_str.rsplit('-', 1)
+            return num.strip(), dv.strip()
+        return nit_str.strip(), None
+        
+    doc_num, dv = parse_nit(emisor_nit)
+    
+    proveedor = Proveedor.objects.filter(
+        empresa=empresa,
+        numero_documento=doc_num
+    ).first()
+    
+    if not proveedor:
+        razon_social = emisor.get("razon_social") or f"Proveedor {doc_num}"
+        proveedor = Proveedor.objects.create(
+            empresa=empresa,
+            numero_documento=doc_num,
+            digito_verificacion=dv,
+            razon_social=razon_social,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            regimen_tributario="ORDINARIO",
+            activo=True
+        )
+        
+    # 5. Idempotencia: Verificar si el gasto ya fue materializado
+    from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
+    existing = DocumentoSoporte.objects.filter(
+        empresa=empresa,
+        proveedor=proveedor,
+        numero_documento_proveedor=numero,
+        anulado=False
+    ).first()
+    
+    if existing:
+        return {
+            "id": existing.id,
+            "numero": numero,
+            "created": False
+        }, 200
+        
+    # 6. Obtener/Crear Resolucion DIAN
+    resolucion = ResolucionDIAN.objects.filter(empresa=empresa, vigente=True).first()
+    if not resolucion:
+        resolucion = ResolucionDIAN.objects.create(
+            empresa=empresa,
+            numero_resolucion="999999",
+            rango_desde=1,
+            rango_hasta=100000,
+            fecha_resolucion=datetime.date(2025, 1, 1),
+            fecha_inicio=datetime.date(2025, 1, 1),
+            fecha_fin=datetime.date(2035, 1, 1),
+            vigente=True,
+            prefijo="GAS",
+            consecutivo=1
+        )
+        
+    # 7. Persistir DocumentoSoporte usando CRUDService
+    categoria = dto.get("categoria") or "OTROS_GASTOS"
+    
+    ds_data = {
+        "proveedor": proveedor,
+        "numero_documento_proveedor": numero,
+        "fecha": fecha_doc,
+        "subtotal": total_val,
+        "total": total_val,
+        "descripcion": f"Materializado desde DTO - {categoria}",
+        "categoria_contable": None
+    }
+    
+    documento = DocumentoCRUDService.crear_documento(ds_data, empresa, resolucion)
+    
+    return {
+        "id": documento.id,
+        "numero": numero,
+        "created": True
+    }, 201
+
 
 
 

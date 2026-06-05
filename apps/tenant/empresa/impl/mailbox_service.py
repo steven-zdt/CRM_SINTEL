@@ -12,6 +12,8 @@ from typing import Any
 from django.core.paginator import Paginator
 from django.db import transaction
 
+from apps.tenant.empresa.models import MailInboxConfig
+
 
 def list_mailbox_configs(page: int = 1, page_size: int = 20) -> dict[str, Any]:
     """
@@ -24,8 +26,6 @@ def list_mailbox_configs(page: int = 1, page_size: int = 20) -> dict[str, Any]:
     Returns:
         dict: DTO con resultados paginados
     """
-    from apps.tenant.empresa.models import MailInboxConfig
-    
     qs = MailInboxConfig.objects.only(
         'id', 'nombre', 'provider', 'email_address',
         'host', 'port', 'protocol', 'ssl', 'username',

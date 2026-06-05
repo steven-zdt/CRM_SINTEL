@@ -1,32 +1,8 @@
 {% load static %}
 
-{# assets_contactos.html - Assets del módulo ContactoCliente v2.61.4 #}
-{# Feature-Sliced Design: Modularización independiente de Clientes #}
-{# ORDEN CRÍTICO: Assets core ya están cargados en workspace.html #}
+{# assets_contactos.html - Assets del modulo ContactoCliente v3.10.4 #}
+{# Feature-Sliced Design: Centralizacion en modulo de Clientes #}
+{# ORDEN CRITICO: Assets core ya estan cargados en workspace.html #}
 
-{# BLOQUE 1: API Wrapper - Capa de Datos #}
-<script src="{% static 'clientes/js/contactos/contacto_cliente_api.js' %}"></script>
-
-{# BLOQUE 2: Feature-Sliced Architecture v2.61.4 #}
-{# Feature 1: Utilidades compartidas #}
-<script src="{% static 'clientes/js/contactos/contacto_cliente_utils.js' %}"></script>
-
-{# Feature 2: Manejo de formularios #}
-<script src="{% static 'clientes/js/contactos/contacto_cliente_form.js' %}"></script>
-
-{# Feature 3: Orquestador principal (Tabulator + HTMX) #}
-<script src="{% static 'clientes/js/contactos/contacto_cliente_main.js' %}"></script>
-
-{# BLOQUE 3: Recargar tabla cuando se guarde un contacto (event-driven) #}
-<script>
-    if (typeof htmx !== 'undefined') {
-        document.addEventListener('htmx:afterSwap', function(event) {
-            // Si se recargó el off canvas de contacto, refrescar tabla
-            if (event.detail.target.id === 'offcanvas-contacto-cliente' || 
-                event.detail.target.closest('#offcanvas-contacto-cliente')) {
-                // El evento 'contactoGuardado' lo dispara contacto_cliente_form.js
-                // La tabla se recargará automáticamente vía listener en contacto_cliente_main.js
-            }
-        });
-    }
-</script>
+{# BLOQUE 1: Centralized JavaScript Bundle #}
+<script src="{% static 'clientes/js/clientes.contactos.js' %}"></script>

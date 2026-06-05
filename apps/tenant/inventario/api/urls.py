@@ -50,12 +50,4 @@ urlpatterns = [
 # - Búsqueda: ?search=texto
 # - Filtrado por empresa (automático, SSoT)
 #
-# ENDPOINTS DEPRECATED (Legacy DataTables Server-Side):
-# -----------------------------------------------------
-# POST /api/v1/inventario/productos/dt/     - WARNING: DEPRECATED v2.40 (usar GET /productos/)
-# POST /api/v1/inventario/servicios/dt/      - WARNING: DEPRECATED v2.40 (usar GET /servicios/)
-# POST /api/v1/inventario/activos/dt/        - WARNING: DEPRECATED v2.40 (usar GET /activos/)
-# POST /api/v1/inventario/movimientos/dt/    - WARNING: DEPRECATED v2.40 (usar GET /movimientos/)
-#
-# Estos endpoints se mantienen por compatibilidad temporal pero serán eliminados en v2.50.
 # El frontend Tabulator Factory consume directamente los endpoints GET estándar.

@@ -1,155 +1,93 @@
 {% load static %}
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Ejecutivo - {{ empresa.nombre }}</title>
-    <link rel="stylesheet" href="{% static 'bootstrap/5.3.2/bootstrap.min.css' %}">
-    <link rel="stylesheet" href="{% static 'bootstrap-icons/bootstrap-icons.min.css' %}">
-    <style>
-        body {
-            background-color: #f8f9fa;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        }
-        .dashboard-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            border-radius: 0.5rem;
-        }
-        .dashboard-header h1 {
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-        .dashboard-header .subtitle {
-            font-size: 0.95rem;
-            opacity: 0.9;
-        }
-        .metric {
-            padding: 0.5rem 0;
-        }
-        .metric p {
-            margin: 0;
-        }
-        .card {
-            border: none;
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-        .card-header {
-            font-weight: 600;
-            padding: 1rem;
-        }
-        .placeholder-wave {
-            display: block;
-        }
-        .placeholder {
-            height: 200px;
-            background: linear-gradient(90deg, #f3f3f3 25%, #e0e0e0 50%, #f3f3f3 75%);
-            background-size: 200% 100%;
-            animation: loading 1.5s infinite;
-            border-radius: 0.25rem;
-        }
-        @keyframes loading {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-        .timestamp {
-            font-size: 0.85rem;
-            color: #6c757d;
-        }
-        .widget-container {
-            min-height: 300px;
-        }
-    </style>
-</head>
-<body>
-<div class="container-fluid py-4">
-    <!-- Header -->
-    <div class="dashboard-header">
-        <div class="row align-items-center">
-            <div class="col-md-8">
-                <h1><i class="bi bi-speedometer2 me-2"></i>Centro de Comando Ejecutivo</h1>
-                <p class="subtitle mb-0">{{ empresa.nombre }} — NIT: {{ empresa.nit }}</p>
-            </div>
-            <div class="col-md-4 text-md-end">
-                <small class="timestamp">
-                    <i class="bi bi-clock-history me-1"></i>
-                    Última actualización: <span id="dashboard-timestamp">—</span>
-                </small>
-            </div>
-        </div>
-    </div>
+{# Dashboard Ejecutivo — Partial para Workspace v3.9.5 #}
+{# No incluir DOCTYPE ni <html>/<body> — se usa dentro del workspace #}
 
-    <!-- Error Container -->
-    <div id="dashboard-error"></div>
+<style>
+.dashboard-kpi-icon {
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px; font-size: 1.35rem; flex-shrink: 0;
+}
+.dashboard-metric-box {
+    background: var(--bs-body-bg, #f8f9fa);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    text-align: center;
+}
+.dashboard-metric-box .metric-val  { font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
+.dashboard-metric-box .metric-lbl  { font-size: 0.72rem; color: #6c757d; white-space: nowrap; }
+.dashboard-widget-card {
+    border: none !important;
+    border-radius: 14px !important;
+    box-shadow: 0 1px 6px rgba(0,0,0,.07) !important;
+    transition: box-shadow .2s, transform .2s;
+}
+.dashboard-widget-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,.12) !important;
+    transform: translateY(-2px);
+}
+.dashboard-widget-placeholder {
+    background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: dash-shimmer 1.4s infinite;
+    border-radius: 14px;
+    min-height: 160px;
+}
+@keyframes dash-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+#btn-refresh-dashboard { transition: transform .3s; }
+#btn-refresh-dashboard.spinning i { animation: dash-spin .7s linear infinite; }
+@keyframes dash-spin { to { transform: rotate(360deg); } }
+</style>
 
-    <!-- Widgets Grid (Responsive: 1 col mobile, 3 cols desktop) -->
-    <div class="row g-3">
-        <!-- Widget: Facturación -->
-        <div class="col-12 col-md-6 col-lg-4">
-            <div id="widget-facturas" class="widget-container">
-                <div class="placeholder-wave">
-                    <div class="placeholder"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Widget: Inventario -->
-        <div class="col-12 col-md-6 col-lg-4">
-            <div id="widget-inventario" class="widget-container">
-                <div class="placeholder-wave">
-                    <div class="placeholder"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Widget: Empleados -->
-        <div class="col-12 col-md-6 col-lg-4">
-            <div id="widget-empleados" class="widget-container">
-                <div class="placeholder-wave">
-                    <div class="placeholder"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Extra Widgets (si existen) -->
-    <div class="row g-3 mt-2">
-        <!-- Widget: Gastos -->
-        <div class="col-12 col-md-6 col-lg-4" id="widget-gastos-container" style="display: none;">
-            <div id="widget-gastos" class="widget-container">
-                <div class="placeholder-wave">
-                    <div class="placeholder"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Widget: Proyectos -->
-        <div class="col-12 col-md-6 col-lg-4" id="widget-proyectos-container" style="display: none;">
-            <div id="widget-proyectos" class="widget-container">
-                <div class="placeholder-wave">
-                    <div class="placeholder"></div>
-                </div>
-            </div>
-        </div>
-    </div>
+{# ── Header ───────────────────────────────────────────────────────── #}
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-2">
+  <div>
+    <h4 class="mb-1 fw-bold">
+      <i class="bi bi-speedometer2 text-primary me-2"></i>Centro de Comando Ejecutivo
+    </h4>
+    <p class="text-muted small mb-0" id="dashboard-empresa-info">
+      <i class="bi bi-building me-1"></i>Cargando empresa...
+    </p>
+  </div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <small class="text-muted" id="dashboard-timestamp">
+      <i class="bi bi-clock-history me-1"></i>—
+    </small>
+    <button class="btn btn-outline-primary btn-sm" id="btn-refresh-dashboard" title="Actualizar métricas">
+      <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+    </button>
+  </div>
 </div>
 
-<!-- Scripts -->
-<script src="{% static 'bootstrap/5.3.2/bootstrap.bundle.min.js' %}"></script>
-<script src="{% static 'dashboard/js/dashboard.api.js' %}"></script>
-<script src="{% static 'dashboard/js/features/dashboard_main.js' %}"></script>
+{# ── Error container ───────────────────────────────────────────────── #}
+<div id="dashboard-error"></div>
 
-<script>
-    // Log de inicialización
-    console.log('[Dashboard] Template cargado correctamente');
-    console.log('[Dashboard] API endpoint:', window.Sintel?.Dashboard?.API?.dashboard?.metricas);
-</script>
-</body>
-</html>
+{# ── Widgets fila 1: Facturas · Inventario · Empleados ─────────────── #}
+<div class="row g-3 mb-3">
+  <div class="col-12 col-sm-6 col-xl-4">
+    <div id="widget-facturas" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl-4">
+    <div id="widget-inventario" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl-4">
+    <div id="widget-empleados" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  </div>
+</div>
+
+{# ── Widgets fila 2: Gastos · Proyectos · Clientes ───────────────── #}
+<div class="row g-3">
+  <div class="col-12 col-md-4">
+    <div id="widget-gastos" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div id="widget-proyectos" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div id="widget-clientes" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  </div>
+</div>

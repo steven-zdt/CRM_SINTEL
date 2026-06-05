@@ -266,125 +266,145 @@
                     // data contiene objetos serializados, los convertimos a arrays para las columnas
                     if (json.data && Array.isArray(json.data)) {
                         return json.data.map(function(tenant) {
-                            // Formato: [id, schema_name, nombre, dominio, admin, created_on, on_trial, estado, vence, acciones]
-                            // Badge de estado con diseño moderno
-                            const estadoBadge = tenant.is_active 
-                                ? '<span class="badge-active inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>Activo</span>'
-                                : '<span class="badge-inactive inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>Inactivo</span>';
-                            
-                            // Badge de Trial con diseño moderno
-                            const trialBadge = tenant.on_trial 
-                                ? '<span class="badge-trial badge-trial-yes inline-flex items-center"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path></svg>Trial</span>'
-                                : '<span class="badge-trial badge-trial-no inline-flex items-center"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>Activo</span>';
-                            
-                            // Botón de toggle activar/desactivar con iconos
-                            const toggleBtn = tenant.is_active
-                                ? `<button class="btn-toggle-active inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-semibold rounded-lg text-white bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-sm transition-all duration-200" data-id="${tenant.id}" data-current-state="${tenant.is_active}" title="Suspender tenant">
-                                    <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
-                                    </svg>
-                                    Desactivar
-                                   </button>`
-                                : `<button class="btn-toggle-active inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-semibold rounded-lg text-white bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm transition-all duration-200" data-id="${tenant.id}" data-current-state="${tenant.is_active}" title="Activar tenant">
-                                    <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                    </svg>
-                                    Activar
-                                   </button>`;
-                            
-                            // Botón de eliminar: solo visible si is_active=False Y no es el tenant público
-                            let deleteBtn = '';
-                            const isPublicTenant = tenant.schema_name === 'public';
-                            
-                            if (isPublicTenant) {
-                                // PROHIBIDO: Ocultar botón de eliminar para tenant público
-                                deleteBtn = `<button class="btn-delete-disabled inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-semibold rounded-lg text-gray-400 bg-gray-50 cursor-not-allowed" disabled title="Prohibido: el esquema público no puede eliminarse">
-                                    <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                    Eliminar
-                                   </button>`;
-                            } else if (!tenant.is_active) {
-                                deleteBtn = `<button class="btn-delete inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-semibold rounded-lg text-white bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-sm transition-all duration-200" data-id="${tenant.id}" data-schema="${tenant.schema_name || ''}" title="Eliminar permanentemente (irreversible)">
-                                    <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                    </svg>
-                                    Eliminar
-                                   </button>`;
-                            } else {
-                                deleteBtn = `<button class="btn-delete-disabled inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-semibold rounded-lg text-gray-400 bg-gray-50 cursor-not-allowed" disabled title="Debes suspender el tenant (is_active=False) antes de eliminarlo">
-                                    <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                    Eliminar
-                                   </button>`;
+
+                            // ── helpers ──────────────────────────────────────────────
+                            function relativeDate(iso) {
+                                if (!iso) return null;
+                                const d = new Date(iso);
+                                const diffMs = Date.now() - d.getTime();
+                                const diffDays = Math.floor(diffMs / 86400000);
+                                if (diffDays === 0) return 'hoy';
+                                if (diffDays === 1) return 'ayer';
+                                if (diffDays < 30) return `hace ${diffDays}d`;
+                                if (diffDays < 365) return `hace ${Math.floor(diffDays/30)}m`;
+                                return `hace ${Math.floor(diffDays/365)}a`;
                             }
-                            
-                            // Botón de editar con icono
-                            const editBtn = `<button class="btn-edit inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-semibold rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-all duration-200" data-id="${tenant.id}" title="Editar tenant">
-                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                </svg>
-                                Editar
-                               </button>`;
-                            
-                            // Formatear fecha de creación
-                            const createdDate = tenant.created_on 
-                                ? new Date(tenant.created_on).toLocaleDateString('es-ES', { 
-                                    year: 'numeric', 
-                                    month: 'short', 
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })
-                                : '-';
-                            
-                            // Formatear fecha de vencimiento
-                            const paidUntil = tenant.paid_until 
-                                ? new Date(tenant.paid_until).toLocaleDateString('es-ES', { 
-                                    year: 'numeric', 
-                                    month: 'short', 
-                                    day: 'numeric'
-                                  })
-                                : '<span class="text-gray-400">-</span>';
-                            
-                            // Schema name con estilo de código
-                            const schemaDisplay = tenant.schema_name 
-                                ? `<code class="text-xs font-mono bg-gray-100 px-2 py-1 rounded text-indigo-700">${tenant.schema_name}</code>`
-                                : '-';
-                            
-                            // Función para construir URL del tenant
-                            function buildTenantUrl(domain) {
-                                if (!domain) return null;
-                                // En dev: http://; en prod podrías detectar window.location.protocol === 'https:' y usar https://
-                                const protocol = window.location.protocol === 'https:' ? 'https://' : 'http://';
-                                return `${protocol}${domain}/`;
+
+                            function absoluteDate(iso) {
+                                if (!iso) return null;
+                                return new Date(iso).toLocaleDateString('es-ES', {
+                                    year: 'numeric', month: 'short', day: 'numeric'
+                                });
                             }
-                            
-                            // Renderizar dominio como enlace clicable
-                            let domainDisplay = '<span class="text-gray-400 italic">sin dominio</span>';
+
+                            const protocol = window.location.protocol === 'https:' ? 'https://' : 'http://';
+
+                            // ── badges ───────────────────────────────────────────────
+                            const estadoBadge = tenant.is_active
+                                ? `<span class="badge-active inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>Activo</span>`
+                                : `<span class="badge-inactive inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-red-400 inline-block"></span>Inactivo</span>`;
+
+                            const trialBadge = tenant.on_trial
+                                ? `<span class="badge-trial badge-trial-yes inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path></svg>Trial</span>`
+                                : `<span class="badge-trial badge-trial-no inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>Pago</span>`;
+
+                            // ── owner / activation ───────────────────────────────────
+                            let ownerDisplay = '<span class="text-gray-400 text-xs italic">sin owner</span>';
+                            if (tenant.owner_email) {
+                                const activBadge = tenant.owner_activated === true
+                                    ? `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-medium">
+                                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>Activo</span>`
+                                    : `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-xs font-medium">
+                                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>Pendiente</span>`;
+                                ownerDisplay = `<div class="flex flex-col gap-1">
+                                    <span class="text-xs text-gray-700 font-medium truncate max-w-[160px]" title="${tenant.owner_email}">${tenant.owner_email}</span>
+                                    ${activBadge}
+                                </div>`;
+                            }
+
+                            // ── dominio ──────────────────────────────────────────────
+                            let domainDisplay = '<span class="text-gray-400 italic text-xs">sin dominio</span>';
                             if (tenant.primary_domain) {
-                                const tenantUrl = buildTenantUrl(tenant.primary_domain);
-                                domainDisplay = `<a href="${tenantUrl}" target="_blank" rel="noopener noreferrer" class="text-indigo-600 hover:text-indigo-800 hover:underline font-medium inline-flex items-center transition-colors duration-200">
-                                    <span>${tenant.primary_domain}</span>
-                                    <svg class="w-4 h-4 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                const tenantUrl = `${protocol}${tenant.primary_domain}/`;
+                                domainDisplay = `<a href="${tenantUrl}" target="_blank" rel="noopener noreferrer"
+                                    class="text-indigo-600 hover:text-indigo-800 hover:underline text-xs font-medium inline-flex items-center gap-1 transition-colors duration-200">
+                                    <span class="truncate max-w-[140px]" title="${tenant.primary_domain}">${tenant.primary_domain}</span>
+                                    <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                                     </svg>
                                 </a>`;
                             }
-                            
+
+                            // ── fechas ───────────────────────────────────────────────
+                            const createdRel = relativeDate(tenant.created_on);
+                            const createdAbs = absoluteDate(tenant.created_on);
+                            const createdDisplay = createdRel
+                                ? `<span class="text-xs text-gray-600" title="${createdAbs}">${createdRel}</span>`
+                                : '<span class="text-gray-400 text-xs">-</span>';
+
+                            let paidUntilDisplay = '<span class="text-gray-400 text-xs">-</span>';
+                            if (tenant.paid_until) {
+                                const d = new Date(tenant.paid_until);
+                                const daysLeft = Math.floor((d - Date.now()) / 86400000);
+                                const abs = absoluteDate(tenant.paid_until);
+                                if (daysLeft < 0) {
+                                    paidUntilDisplay = `<span class="text-xs font-medium text-red-600" title="${abs}">Venció (${abs})</span>`;
+                                } else if (daysLeft <= 7) {
+                                    paidUntilDisplay = `<span class="text-xs font-medium text-amber-600" title="${abs}">${daysLeft}d restantes</span>`;
+                                } else {
+                                    paidUntilDisplay = `<span class="text-xs text-gray-600" title="${abs}">${abs}</span>`;
+                                }
+                            }
+
+                            // ── schema display ────────────────────────────────────────
+                            const schemaDisplay = tenant.schema_name
+                                ? `<code class="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-indigo-700">${tenant.schema_name}</code>`
+                                : '-';
+
+                            // ── botones de acción ────────────────────────────────────
+                            const isPublicTenant = tenant.schema_name === 'public';
+
+                            // Toggle tenant (ícono only para reducir ancho)
+                            const toggleBtn = tenant.is_active
+                                ? `<button class="btn-toggle-active btn-icon-action bg-red-50 hover:bg-red-100 text-red-600 border border-red-200" data-id="${tenant.id}" data-current-state="${tenant.is_active}" title="Suspender tenant">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+                                   </button>`
+                                : `<button class="btn-toggle-active btn-icon-action bg-green-50 hover:bg-green-100 text-green-600 border border-green-200" data-id="${tenant.id}" data-current-state="${tenant.is_active}" title="Activar tenant">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                   </button>`;
+
+                            const editBtn = `<button class="btn-edit btn-icon-action bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200" data-id="${tenant.id}" title="Editar tenant">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                               </button>`;
+
+                            // Activar: solo si no-public Y owner NO activado aún
+                            let activarBtn = '';
+                            if (!isPublicTenant && tenant.owner_activated === false) {
+                                activarBtn = `<button class="btn-manual-activate btn-icon-action bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200" data-id="${tenant.id}" data-nombre="${(tenant.nombre || '').replace(/"/g, '&quot;')}" data-email="${tenant.owner_email || ''}" title="Activacion manual de emergencia">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                                   </button>`;
+                            }
+
+                            let deleteBtn = '';
+                            if (isPublicTenant) {
+                                deleteBtn = `<button class="btn-icon-action opacity-30 cursor-not-allowed bg-gray-50 border border-gray-200 text-gray-400" disabled title="El esquema publico no puede eliminarse">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                   </button>`;
+                            } else if (!tenant.is_active) {
+                                deleteBtn = `<button class="btn-delete btn-icon-action bg-red-50 hover:bg-red-100 text-red-700 border border-red-200" data-id="${tenant.id}" data-schema="${tenant.schema_name || ''}" title="Eliminar permanentemente">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                   </button>`;
+                            } else {
+                                deleteBtn = `<button class="btn-icon-action opacity-30 cursor-not-allowed bg-gray-50 border border-gray-200 text-gray-400" disabled title="Suspende el tenant antes de eliminarlo">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                   </button>`;
+                            }
+
                             return [
-                                `<span class="font-semibold text-gray-900">#${tenant.id || '-'}</span>`,
+                                `<span class="text-xs font-mono text-gray-400">#${tenant.id || '-'}</span>`,
                                 schemaDisplay,
-                                `<span class="font-medium text-gray-900">${tenant.nombre || '-'}</span>`,
-                                domainDisplay,  // Dominio con enlace clicable
-                                '<span class="text-gray-500">-</span>',  // Admin (se puede agregar si está en serializer)
-                                `<span class="text-gray-600">${createdDate}</span>`,
+                                `<span class="font-semibold text-gray-900 text-sm">${tenant.nombre || '-'}</span>`,
+                                domainDisplay,
+                                ownerDisplay,
+                                createdDisplay,
                                 trialBadge,
                                 estadoBadge,
-                                paidUntil,
-                                // Botones de acción en contenedor flex
-                                `<div class="flex items-center gap-2">${toggleBtn}${editBtn}${deleteBtn}</div>`
+                                paidUntilDisplay,
+                                `<div class="flex items-center gap-1.5">${toggleBtn}${editBtn}${activarBtn}${deleteBtn}</div>`
                             ];
                         });
                     }
@@ -403,22 +423,16 @@
                 }
             },
             columns: [
-                { data: 0, title: 'ID', orderable: true, searchable: false, className: 'text-center' },
-                { data: 1, title: 'Schema', orderable: true, searchable: true },
-                { data: 2, title: 'Empresa', orderable: true, searchable: true },
+                { data: 0, title: 'ID',      orderable: true,  searchable: false, className: 'text-center' },
+                { data: 1, title: 'Schema',  orderable: true,  searchable: true  },
+                { data: 2, title: 'Empresa', orderable: true,  searchable: true  },
                 { data: 3, title: 'Dominio', orderable: false, searchable: false },
-                { data: 4, title: 'Admin', orderable: false, searchable: false },
-                { data: 5, title: 'Creado', orderable: true, searchable: false },
-                { data: 6, title: 'Trial', orderable: true, searchable: false, className: 'text-center' },
-                { data: 7, title: 'Estado', orderable: true, searchable: false, className: 'text-center' },
-                { data: 8, title: 'Vence', orderable: true, searchable: false },
-                { 
-                    data: 9, 
-                    title: 'Acciones',
-                    orderable: false,
-                    searchable: false,
-                    className: 'text-center'
-                }
+                { data: 4, title: 'Admin',   orderable: false, searchable: true  },
+                { data: 5, title: 'Creado',  orderable: true,  searchable: false },
+                { data: 6, title: 'Plan',    orderable: true,  searchable: false, className: 'text-center' },
+                { data: 7, title: 'Estado',  orderable: true,  searchable: false, className: 'text-center' },
+                { data: 8, title: 'Vence',   orderable: true,  searchable: false },
+                { data: 9, title: 'Acciones', orderable: false, searchable: false, className: 'text-center' },
             ],
             order: [[5, 'desc']], // Ordenar por fecha de creación descendente
             pageLength: 25,
@@ -543,18 +557,212 @@
         });
 
         // Toggle activar/desactivar tenant
-        // Usar la URL base de la API de tenants, no la URL de DataTables
         const tenantsApiUrl = '/api/public/v1/tenants/';
         jQuery('#dt-tenants').on('click', '.btn-toggle-active', function() {
             const tenantId = jQuery(this).data('id');
             const currentState = jQuery(this).data('current-state');
             const action = currentState ? 'desactivar' : 'activar';
-            
+
             if (confirm(`¿Estás seguro de que deseas ${action} este tenant?`)) {
                 toggleTenantActive(tenantId, tenantsApiUrl);
             }
         });
 
+        // Activación manual de emergencia
+        jQuery('#dt-tenants').on('click', '.btn-manual-activate', function() {
+            const tenantId = jQuery(this).data('id');
+            const nombre = jQuery(this).data('nombre') || 'Tenant';
+            const email = jQuery(this).data('email') || '';
+            openActivacionModal(tenantId, nombre, email);
+        });
+
+    }
+
+    // ============================================
+    // MODAL: ACTIVACION MANUAL DE EMERGENCIA
+    // ============================================
+
+    let _activacionTenantId = null;
+
+    function openActivacionModal(tenantId, nombre, email) {
+        _activacionTenantId = tenantId;
+
+        const subtitle = document.getElementById('modal-activacion-subtitle');
+        if (subtitle) subtitle.textContent = nombre + (email ? ` — ${email}` : '');
+
+        // Reset estado
+        const linkResult = document.getElementById('link-result');
+        if (linkResult) linkResult.classList.add('hidden');
+        const urlDisplay = document.getElementById('activation-url-display');
+        if (urlDisplay) urlDisplay.value = '';
+        const passErr = document.getElementById('password-error');
+        if (passErr) { passErr.textContent = ''; passErr.classList.add('hidden'); }
+        const pw = document.getElementById('input-password');
+        const pwc = document.getElementById('input-password-confirm');
+        if (pw) pw.value = '';
+        if (pwc) pwc.value = '';
+
+        // Activar tab "Generar Link" por defecto
+        switchActivacionTab('link');
+
+        document.getElementById('modal-activacion').classList.remove('hidden');
+    }
+
+    function closeActivacionModal() {
+        document.getElementById('modal-activacion').classList.add('hidden');
+        _activacionTenantId = null;
+    }
+
+    function switchActivacionTab(tab) {
+        const tabLink = document.getElementById('tab-link');
+        const tabPw = document.getElementById('tab-password');
+        const panelLink = document.getElementById('panel-link');
+        const panelPw = document.getElementById('panel-password');
+        if (!tabLink || !tabPw || !panelLink || !panelPw) return;
+
+        if (tab === 'link') {
+            tabLink.classList.add('border-amber-500', 'text-amber-600', 'font-semibold');
+            tabLink.classList.remove('border-transparent', 'text-gray-500');
+            tabPw.classList.remove('border-amber-500', 'text-amber-600', 'font-semibold');
+            tabPw.classList.add('border-transparent', 'text-gray-500');
+            panelLink.classList.remove('hidden');
+            panelPw.classList.add('hidden');
+        } else {
+            tabPw.classList.add('border-amber-500', 'text-amber-600', 'font-semibold');
+            tabPw.classList.remove('border-transparent', 'text-gray-500');
+            tabLink.classList.remove('border-amber-500', 'text-amber-600', 'font-semibold');
+            tabLink.classList.add('border-transparent', 'text-gray-500');
+            panelPw.classList.remove('hidden');
+            panelLink.classList.add('hidden');
+        }
+    }
+
+    async function generarLinkActivacion() {
+        if (!_activacionTenantId) return;
+        const btn = document.getElementById('btn-generar-link');
+        btn.disabled = true;
+        btn.textContent = 'Generando...';
+
+        try {
+            const resp = await fetch(`/api/public/v1/tenants/${_activacionTenantId}/manual-activate/`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            const data = await resp.json();
+
+            if (resp.status === 409) {
+                showNotification(data.detail || 'El usuario ya activo su cuenta.', 'warning');
+                closeActivacionModal();
+                return;
+            }
+            if (!resp.ok) {
+                showNotification(data.detail || 'Error generando el link.', 'error');
+                return;
+            }
+
+            const urlDisplay = document.getElementById('activation-url-display');
+            const linkResult = document.getElementById('link-result');
+            if (urlDisplay) urlDisplay.value = data.activation_url || '';
+            if (linkResult) linkResult.classList.remove('hidden');
+            if (urlDisplay) urlDisplay.select();
+
+        } catch (err) {
+            showNotification('Error de red al generar el link.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<svg class="w-4 h-4 mr-1.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>Generar Link de Activacion';
+        }
+    }
+
+    function copiarLink() {
+        const urlDisplay = document.getElementById('activation-url-display');
+        if (!urlDisplay || !urlDisplay.value) return;
+        navigator.clipboard.writeText(urlDisplay.value).then(() => {
+            const btn = document.getElementById('btn-copy-link');
+            if (btn) {
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<svg class="w-4 h-4 mr-1 inline" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>Copiado!';
+                btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+                btn.classList.add('bg-green-500');
+                setTimeout(() => {
+                    btn.innerHTML = orig;
+                    btn.classList.remove('bg-green-500');
+                    btn.classList.add('bg-amber-500', 'hover:bg-amber-600');
+                }, 2000);
+            }
+        }).catch(() => {
+            urlDisplay.select();
+            document.execCommand('copy');
+            showNotification('Link copiado al portapapeles.', 'success');
+        });
+    }
+
+    async function establecerContrasena() {
+        if (!_activacionTenantId) return;
+
+        const pw = document.getElementById('input-password').value;
+        const pwc = document.getElementById('input-password-confirm').value;
+        const errEl = document.getElementById('password-error');
+
+        errEl.classList.add('hidden');
+        errEl.textContent = '';
+
+        if (!pw) { errEl.textContent = 'Ingresa una contrasena.'; errEl.classList.remove('hidden'); return; }
+        if (pw.length < 8) { errEl.textContent = 'Minimo 8 caracteres.'; errEl.classList.remove('hidden'); return; }
+        if (pw !== pwc) { errEl.textContent = 'Las contrasenas no coinciden.'; errEl.classList.remove('hidden'); return; }
+
+        const btn = document.getElementById('btn-set-password');
+        btn.disabled = true;
+        btn.textContent = 'Guardando...';
+
+        try {
+            const resp = await fetch(`/api/public/v1/tenants/${_activacionTenantId}/admin-set-password/`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({ password: pw }),
+            });
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                errEl.textContent = data.detail || 'Error estableciendo contrasena.';
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            showNotification(`Contrasena establecida para ${data.user_email}. El owner ya puede ingresar.`, 'success');
+            closeActivacionModal();
+
+        } catch (err) {
+            errEl.textContent = 'Error de red. Intenta de nuevo.';
+            errEl.classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<svg class="w-4 h-4 mr-1.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>Establecer Contrasena y Activar';
+        }
+    }
+
+    // Wire modal events (deferred to DOMContentLoaded)
+    function initActivacionModal() {
+        const closeBtn = document.getElementById('modal-activacion-close');
+        const backdrop = document.getElementById('modal-activacion-backdrop');
+        const tabLink = document.getElementById('tab-link');
+        const tabPw = document.getElementById('tab-password');
+        const btnGenerar = document.getElementById('btn-generar-link');
+        const btnCopy = document.getElementById('btn-copy-link');
+        const btnSet = document.getElementById('btn-set-password');
+
+        if (closeBtn) closeBtn.addEventListener('click', closeActivacionModal);
+        if (backdrop) backdrop.addEventListener('click', closeActivacionModal);
+        if (tabLink) tabLink.addEventListener('click', () => switchActivacionTab('link'));
+        if (tabPw) tabPw.addEventListener('click', () => switchActivacionTab('password'));
+        if (btnGenerar) btnGenerar.addEventListener('click', generarLinkActivacion);
+        if (btnCopy) btnCopy.addEventListener('click', copiarLink);
+        if (btnSet) btnSet.addEventListener('click', establecerContrasena);
+
+        // ESC para cerrar
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeActivacionModal();
+        });
     }
 
     // ============================================
@@ -843,7 +1051,8 @@
         initTable: initTenantsTable,
         initForm: initTenantForm,
         deleteTenant: deleteTenant,
-        toggleActive: toggleTenantActive
+        toggleActive: toggleTenantActive,
+        openActivacionModal: openActivacionModal,
     };
 
     // Auto-inicializar si hay elementos en la página
@@ -861,6 +1070,9 @@
             const apiOnboardUrl = form.dataset.apiOnboardUrl || '/api/public/v1/tenants/onboard/';
             initTenantForm(apiOnboardUrl);
         }
+
+        // Inicializar modal de activación manual
+        initActivacionModal();
     });
 
 })();

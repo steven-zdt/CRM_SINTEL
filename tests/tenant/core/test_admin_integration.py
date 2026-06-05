@@ -1,7 +1,7 @@
 """
 Test de integración para verificar que el admin de tenant NO muestra modelos públicos.
 
-Simula el acceso real a http://cliente.sintel.com:8000/admin/
+Simula el acceso real a http://{schema}.sintel.com:8000/admin/
 """
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model

@@ -1,18 +1,34 @@
-¡Bienvenido a {{ tenant_name }}!
+Activa tu cuenta en {{ tenant_name }} - SINTEL
+=====================================================
 
 Hola {{ user.first_name|default:user.email }},
 
-Has sido invitado como administrador principal de {{ tenant_name }} en SINTEL.
+Has sido designado como administrador principal del espacio de trabajo
+"{{ tenant_name }}" en SINTEL.
 
-Para activar tu cuenta y establecer tu contraseña, visita el siguiente enlace:
+ENLACE DE ACTIVACION (haz clic o copia en tu navegador):
+{{ activate_url }}
 
-{{ activation_url }}
+---
+DATOS DE ACCESO
+---
+Empresa / Workspace : {{ tenant_name }}
+Tu email            : {{ user.email }}
+Enlace activacion   : {{ activate_url }}
+Login (post-activ.) : {{ login_url }}
 
-Accede al sitio del tenant:
-{{ login_url }}
+---
+COMO ACTIVAR TU CUENTA:
+1. Abre el enlace de activacion de arriba
+2. Crea tu contrasena de acceso (minimo 8 caracteres)
+3. Seras redirigido a tu espacio de trabajo en {{ tenant_name }}
 
-Importante: Este enlace expirará en 24 horas. Si no activas tu cuenta en ese tiempo, 
-contacta al administrador para recibir una nueva invitación.
+---
+IMPORTANTE: El enlace expira en 48 horas y es de un solo uso.
+Si no activas a tiempo, solicita uno nuevo en {{ contact_email }}.
+
+Si no esperabas este correo, puedes ignorarlo de forma segura.
 
 ---
 © 2026 SINTEL. Todos los derechos reservados.
+Contacto: {{ contact_email }}

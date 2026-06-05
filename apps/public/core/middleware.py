@@ -1,5 +1,7 @@
 """
-Middleware para manejar redirecciones HTTPS -> HTTP en desarrollo y headers de seguridad.
+Middleware para manejar redirecciones HTTPS -> HTTP en desarrollo y headers de seguridad (v3.10.4).
+
+[WARNING] REGLA 0: Cero caracteres especiales o emojis. Solo ASCII.
 """
 
 import logging
@@ -16,12 +18,12 @@ security_logger = logging.getLogger("security.tenants")
 
 class ValidateALLOWED_HOSTSMiddleware:
     """
-    Valida ALLOWED_HOSTS EXPLÍCITAMENTE sin pasar por request.get_host().
+    Valida ALLOWED_HOSTS EXPLICITAMENTE sin pasar por request.get_host().
 
     Si el Host header no coincide con ALLOWED_HOSTS, retorna 400 Bad Request inmediatamente.
     Esto previene que bots/exploradores lleguen a Django URL resolution y generen logs 404 confusos.
 
-    POSICIÓN: Debe ser UNO DE LOS PRIMEROS middleware (después de SessionMiddleware).
+    POSICION: Debe ser UNO DE LOS PRIMEROS middleware (despues de SessionMiddleware).
     """
 
     def __init__(self, get_response):
@@ -34,7 +36,7 @@ class ValidateALLOWED_HOSTSMiddleware:
         if '*' in allowed_hosts:
             return True
 
-        # Remover puerto si está presente
+        # Remover puerto si esta presente
         host_only = host.split(":")[0] if ":" in host else host
 
         for allowed_host in allowed_hosts:
@@ -55,21 +57,24 @@ class ValidateALLOWED_HOSTSMiddleware:
 
     def __call__(self, request):
         """Valida Host header antes de dejar que llegue a Django."""
-        http_host = request.META.get("HTTP_HOST", "")
+        http_host = request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME", "")
 
         if not http_host:
             # Sin Host header: rechazar
             security_logger.warning(
-                f"🚨 BLOCKED: No Host header | Path: {request.path} | IP: {self._get_client_ip(request)}"
+                "[BLOCKED] No Host header | Path: %s | IP: %s",
+                request.path,
+                self._get_client_ip(request)
             )
             return HttpResponseBadRequest("Invalid request: missing Host header")
 
         # Validar contra ALLOWED_HOSTS
         if not self._host_matches(http_host):
-            print(f"DEBUG ALLOWED_HOSTS: {settings.ALLOWED_HOSTS}")
             security_logger.warning(
-                f"🚨 BLOCKED: Invalid Host header '{http_host}' not in ALLOWED_HOSTS | "
-                f"Path: {request.path} | IP: {self._get_client_ip(request)}"
+                "[BLOCKED] Invalid Host header '%s' not in ALLOWED_HOSTS | Path: %s | IP: %s",
+                http_host,
+                request.path,
+                self._get_client_ip(request)
             )
             return HttpResponseBadRequest("Invalid Host header")
 
@@ -88,12 +93,12 @@ class ForceNoPortMiddleware:
     Middleware que normaliza el HTTP_HOST eliminando el puerto antes de que
     django-tenants intente resolver el inquilino.
 
-    WARNING: ESTÁNDAR: Puerto 80 (HTTP) - Sin puertos explícitos
-    - Los dominios en la BD NUNCA tienen puerto (ej: cliente.localhost, cliente.sintel.com)
+    WARNING: ESTANDAR: Puerto 80 (HTTP) - Sin puertos explicitos
+    - Los dominios en la BD NUNCA tienen puerto (ej: {schema}.localhost, {schema}.sintel.com)
     - El navegador puede enviar :8000, pero Django lo ignora
     - Este middleware garantiza que django-tenants siempre busque strings limpios
 
-    Posición crítica: Debe ejecutarse DESPUÉS de SessionMiddleware y
+    Posicion critica: Debe ejecutarse DESPUES de SessionMiddleware y
     ANTES de django_tenants.middleware.main.TenantMainMiddleware.
     """
 
@@ -102,17 +107,17 @@ class ForceNoPortMiddleware:
 
     def __call__(self, request):
         """
-        Normaliza HTTP_HOST eliminando el puerto antes de la resolución del tenant.
+        Normaliza HTTP_HOST eliminando el puerto antes de la resolucion del tenant.
 
         Ejemplo:
-        - Entrada: HTTP_HOST = "cliente.localhost:8000"
-        - Salida: HTTP_HOST = "cliente.localhost"
+        - Entrada: HTTP_HOST = "{schema}.localhost:8000"
+        - Salida: HTTP_HOST = "{schema}.localhost"
 
         NOTA: Accedemos directamente a META['HTTP_HOST'] para evitar que Django valide
-        ALLOWED_HOSTS prematuramente. La validación ocurrirá en TenantSecurityAndURLConfMiddleware.
+        ALLOWED_HOSTS prematuramente. La validacion ocurrira en TenantSecurityAndURLConfMiddleware.
         """
         # Obtener el host actual del META (puede incluir puerto)
-        # NO usar request.get_host() porque activa validación ALLOWED_HOSTS prematuramente
+        # NO usar request.get_host() porque activa validacion ALLOWED_HOSTS prematuramente
         host = request.META.get("HTTP_HOST", "")
 
         # Separar dominio del puerto (split por ':')
@@ -121,7 +126,7 @@ class ForceNoPortMiddleware:
             domain_only = host.split(":")[0]
             # Sobrescribir HTTP_HOST en request.META
             request.META["HTTP_HOST"] = domain_only
-            # También actualizar SERVER_NAME si existe
+            # Tambien actualizar SERVER_NAME si existe
             if "SERVER_NAME" in request.META:
                 request.META["SERVER_NAME"] = domain_only
 
@@ -132,12 +137,12 @@ class HTTPSRedirectMiddleware:
     """
     Middleware que redirige HTTPS a HTTP en modo desarrollo.
 
-    Solo se activa cuando DEBUG=True para evitar problemas en producción.
+    Solo se activa cuando DEBUG=True para evitar problemas en produccion.
 
-    WARNING: LIMITACIÓN: Si el navegador intenta una conexión SSL/TLS directa,
+    WARNING: LIMITACION: Si el navegador intenta una conexion SSL/TLS directa,
     el servidor HTTP no puede procesarla y falla antes de que este middleware
     pueda intervenir. En ese caso, el usuario debe:
-    1. Usar HTTP explícitamente: http://tupapi.com (NO https://) - puerto 80 implícito
+    1. Usar HTTP explicitamente: http://{schema}.sintel.com (NO https://) - puerto 80 implicito
     2. Limpiar HSTS del navegador: chrome://net-internals/#hsts
     """
 
@@ -147,7 +152,7 @@ class HTTPSRedirectMiddleware:
     def __call__(self, request):
         # Solo en modo desarrollo
         if settings.DEBUG:
-            # Verificar si la petición viene por HTTPS
+            # Verificar si la peticion viene por HTTPS
             # Django detecta HTTPS mediante headers del proxy o request.is_secure()
             is_https = (
                 request.is_secure()
@@ -166,10 +171,10 @@ class HTTPSRedirectMiddleware:
         if settings.DEBUG:
             # Cross-Origin-Opener-Policy: Permitir en desarrollo (el navegador requiere HTTPS o localhost)
             # Para desarrollo con dominios arbitrarios, usamos 'unsafe-none' o simplemente no lo configuramos
-            # El navegador mostrará una advertencia, pero no bloqueará la funcionalidad
+            # El navegador mostrara una advertencia, pero no bloqueara la funcionalidad
             if "Cross-Origin-Opener-Policy" not in response:
                 # Solo establecer si el origen es localhost o 127.0.0.1
-                # Acceder directamente a META para evitar validación ALLOWED_HOSTS prematura
+                # Acceder directamente a META para evitar validacion ALLOWED_HOSTS prematura
                 http_host = request.META.get("HTTP_HOST", "")
                 host = http_host.split(":")[0] if http_host else ""
                 if host in ["localhost", "127.0.0.1"]:
@@ -183,11 +188,11 @@ class CSRFTrustedOriginMiddleware:
     """
     Middleware para permitir dominios arbitrarios en desarrollo.
 
-    En desarrollo (DEBUG=True), agrega automáticamente el dominio de la request
-    a CSRF_TRUSTED_ORIGINS si no está ya presente.
+    En desarrollo (DEBUG=True), agrega automaticamente el dominio de la request
+    a CSRF_TRUSTED_ORIGINS si no esta ya presente.
 
-    WARNING: IMPORTANTE: Solo funciona en DEBUG=True. En producción, se requiere
-    lista explícita en CSRF_TRUSTED_ORIGINS.
+    WARNING: IMPORTANTE: Solo funciona en DEBUG=True. En produccion, se requiere
+    lista explicita en CSRF_TRUSTED_ORIGINS.
 
     Este middleware debe ejecutarse ANTES de CsrfViewMiddleware para que
     Django pueda validar correctamente el token CSRF.
@@ -198,17 +203,17 @@ class CSRFTrustedOriginMiddleware:
 
     def __call__(self, request):
         if settings.DEBUG:
-            # WARNING: v2.30: ForceNoPortMiddleware ya modificó HTTP_HOST, pero HTTP_ORIGIN
-            # viene del navegador y puede incluir el puerto. Usar HTTP_ORIGIN si está presente.
+            # WARNING: v2.30: ForceNoPortMiddleware ya modifico HTTP_HOST, pero HTTP_ORIGIN
+            # viene del navegador y puede incluir el puerto. Usar HTTP_ORIGIN si esta presente.
             http_origin = request.META.get("HTTP_ORIGIN")
 
             if http_origin:
-                # El navegador envió HTTP_ORIGIN (puede incluir puerto)
+                # El navegador envio HTTP_ORIGIN (puede incluir puerto)
                 # Agregar directamente a CSRF_TRUSTED_ORIGINS
                 if http_origin not in settings.CSRF_TRUSTED_ORIGINS:
                     settings.CSRF_TRUSTED_ORIGINS.append(http_origin)
 
-                # También agregar variantes sin puerto y con puerto alternativo
+                # Tambien agregar variantes sin puerto y con puerto alternativo
                 from urllib.parse import urlparse
 
                 parsed = urlparse(http_origin)
@@ -216,20 +221,20 @@ class CSRFTrustedOriginMiddleware:
                 port = parsed.port
                 scheme = parsed.scheme
 
-                # Sin puerto (puerto 80/443 implícito)
+                # Sin puerto (puerto 80/443 implicito)
                 origin_no_port = f"{scheme}://{host}"
                 if origin_no_port not in settings.CSRF_TRUSTED_ORIGINS:
                     settings.CSRF_TRUSTED_ORIGINS.append(origin_no_port)
 
-                # Con puerto si está presente
+                # Con puerto si esta presente
                 if port:
                     origin_with_port = f"{scheme}://{host}:{port}"
                     if origin_with_port not in settings.CSRF_TRUSTED_ORIGINS:
                         settings.CSRF_TRUSTED_ORIGINS.append(origin_with_port)
             else:
                 # Si no hay HTTP_ORIGIN, construir desde HTTP_HOST
-                # (ForceNoPortMiddleware ya eliminó el puerto, pero podemos inferirlo)
-                # Acceder directamente a META para evitar validación ALLOWED_HOSTS prematura
+                # (ForceNoPortMiddleware ya elimino el puerto, pero podemos inferirlo)
+                # Acceder directamente a META para evitar validacion ALLOWED_HOSTS prematura
                 http_host = request.META.get("HTTP_HOST", "")
                 host = http_host.split(":")[0] if http_host else ""
                 scheme = "https" if request.is_secure() else "http"
@@ -244,7 +249,7 @@ class CSRFTrustedOriginMiddleware:
                 if "SERVER_PORT" in request.META:
                     try:
                         port = int(request.META["SERVER_PORT"])
-                        # Solo agregar si no es el puerto estándar (80/443)
+                        # Solo agregar si no es el puerto estandar (80/443)
                         if port not in (80, 443):
                             origin_with_port = f"{scheme}://{host}:{port}"
                             if origin_with_port not in settings.CSRF_TRUSTED_ORIGINS:
@@ -252,7 +257,7 @@ class CSRFTrustedOriginMiddleware:
                     except (ValueError, TypeError):
                         pass
 
-                # Establecer HTTP_ORIGIN si no está presente
+                # Establecer HTTP_ORIGIN si no esta presente
                 if "HTTP_ORIGIN" not in request.META:
                     if port and port not in (80, 443):
                         request.META["HTTP_ORIGIN"] = f"{scheme}://{host}:{port}"
@@ -282,20 +287,20 @@ _logging_context = threading.local()
 
 class RequestContextLogFilter(logging.Filter):
     """
-    Filtro de logging que añade request_id y schema_name a los LogRecords.
+    Filtro de logging que anade request_id y schema_name a los LogRecords.
 
-    WARNING: IMPORTANTE: Este filtro siempre añade los campos (con "-" si no están disponibles).
+    WARNING: IMPORTANTE: Este filtro siempre anade los campos (con "-" si no estan disponibles).
     - Compatible con formatters que incluyen %(request_id)s (siempre existe)
     - Compatible con formatters que no los incluyen (no rompe)
     - El formatter por defecto NO usa estos campos (evita errores en arranque/import-time)
     """
 
     def filter(self, record):
-        # Obtener valores del thread-local (si están disponibles)
+        # Obtener valores del thread-local (si estan disponibles)
         request_id = getattr(_logging_context, "request_id", None)
         schema_name = getattr(_logging_context, "schema_name", None)
 
-        # Siempre añadir al record (con fallback a "-" si no están disponibles)
+        # Siempre anadir al record (con fallback a "-" si no estan disponibles)
         # Esto permite que formatters opcionales como "verbose_with_context" funcionen
         # pero el formatter por defecto ("brief"/"simple") no los usa
         record.request_id = request_id if request_id else "-"
@@ -308,7 +313,7 @@ class RequestContextMiddleware(MiddlewareMixin):
     """
     Middleware que genera request_id y adjunta schema_name a los logs.
 
-    WARNING: POSICIÓN: Debe ejecutarse después de TenantMainMiddleware para tener acceso a request.tenant.
+    WARNING: POSICION: Debe ejecutarse despues de TenantMainMiddleware para tener acceso a request.tenant.
     """
 
     def process_request(self, request):
@@ -321,14 +326,14 @@ class RequestContextMiddleware(MiddlewareMixin):
         _logging_context.request_id = rid
 
     def process_view(self, request, view_func, view_args, view_kwargs):
-        """Adjunta filtros al root logger y añade schema_name al contexto."""
-        # Adjunta filtros al root logger (si no están)
+        """Adjunta filtros al root logger y anade schema_name al contexto."""
+        # Adjunta filtros al root logger (si no estan)
         root_logger = logging.getLogger()
         for h in root_logger.handlers:
             if not any(isinstance(f, RequestContextLogFilter) for f in h.filters):
                 h.addFilter(RequestContextLogFilter())
 
-        # Añade schema_name al contexto si está disponible
+        # Anade schema_name al contexto si esta disponible
         schema_name = "-"
         if hasattr(request, "tenant") and request.tenant:
             schema_name = getattr(request.tenant, "schema_name", "-")
@@ -348,10 +353,10 @@ class RequestContextMiddleware(MiddlewareMixin):
 
 class DebugNoCSRFMiddleware:
     """
-    En DEBUG mode, desactiva la verificación CSRF para permitir desarrollo sin
+    En DEBUG mode, desactiva la verificacion CSRF para permitir desarrollo sin
     tener que enviar tokens CSRF en requests DELETE, POST, PUT, PATCH.
 
-    SOLO para desarrollo. En producción (DEBUG=False), el CSRF middleware
+    SOLO para desarrollo. En produccion (DEBUG=False), el CSRF middleware
     funciona normalmente.
     """
 
@@ -361,6 +366,6 @@ class DebugNoCSRFMiddleware:
     def __call__(self, request):
         from django.conf import settings
         if settings.DEBUG:
-            # Marcar request como si ya pasó CSRF
+            # Marcar request como si ya paso CSRF
             request._dont_enforce_csrf_checks = True
         return self.get_response(request)

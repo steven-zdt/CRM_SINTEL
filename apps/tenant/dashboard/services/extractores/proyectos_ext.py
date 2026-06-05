@@ -1,72 +1,44 @@
 """
-Extractor de Proyectos para Dashboard v3.9.4
-Pull Model: Consulta selectors.py de proyectos, nunca importa models.py
-Zero-Waste: Usa .aggregate() para métricas.
+Extractor de Proyectos para Dashboard v3.9.5 — datos reales.
+Pull Model: usa qs_list de proyectos. No importa models.py directamente.
+Modelo Proyecto usa: fase_actual y estado_tarea (no campo 'estado').
 """
-from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.tenant.dashboard.services.dtos import WidgetProyectosDTO
 
 
 class ProyectosExtractor:
-    """Extrae métricas de Proyectos sin acoplamiento."""
 
     @staticmethod
     def extraer_metricas(empresa_id: int) -> WidgetProyectosDTO:
-        """
-        Extrae métricas de Proyectos usando selectors.py
-        Incluye estado de proyectos y tareas.
-
-        Args:
-            empresa_id: ID de la empresa (Double Semantic Verification)
-
-        Returns:
-            WidgetProyectosDTO con métricas consolidadas
-        """
         try:
-            from apps.tenant.proyectos.services.selectors import ProyectosSelectors
+            from apps.tenant.proyectos.services.selectors import qs_list
 
-            # Obtener queryset base (Proyectos)
-            qs_proyectos = ProyectosSelectors.qs_por_empresa(empresa_id)
+            qs = qs_list(empresa_id)
+            total_proyectos = qs.count()
 
-            # Métrica 1: Total de proyectos
-            total_proyectos = qs_proyectos.count()
+            # Activos = estado_tarea no finalizado (FASES no tiene COMPLETADO ni CANCELADO)
+            proyectos_activos = qs.exclude(estado_tarea='COMPLETADO').count()
 
-            # Métrica 2: Proyectos activos (estado != COMPLETADO)
-            proyectos_activos = qs_proyectos.exclude(
-                estado__in=['COMPLETADO', 'CANCELADO']
+            # Tareas en progreso/pendientes (campo estado_tarea en Proyecto)
+            tareas_pendientes = qs.filter(
+                estado_tarea__in=['PENDIENTE', 'EN_PROCESO']
             ).count()
 
-            # Métrica 3 & 4: Tareas pendientes y vencidas
-            try:
-                qs_tareas = ProyectosSelectors.qs_tareas_por_empresa(empresa_id)
-                hoy = timezone.now().date()
-
-                tareas_pendientes = qs_tareas.filter(
-                    estado__in=['PENDIENTE', 'EN_PROGRESO']
-                ).count()
-
-                tareas_vencidas = qs_tareas.filter(
-                    estado__in=['PENDIENTE', 'EN_PROGRESO'],
-                    fecha_fin__lt=hoy
-                ).count()
-            except:
-                tareas_pendientes = 0
-                tareas_vencidas = 0
+            # Proyectos con fecha fin estimada vencida y aún activos
+            hoy = timezone.now().date()
+            tareas_vencidas = qs.filter(
+                fecha_fin_estimada__lt=hoy,
+                estado_tarea__in=['PENDIENTE', 'EN_PROCESO'],
+            ).count()
 
             return WidgetProyectosDTO(
                 total_proyectos=total_proyectos,
                 proyectos_activos=proyectos_activos,
                 tareas_pendientes=tareas_pendientes,
-                tareas_vencidas=tareas_vencidas
+                tareas_vencidas=tareas_vencidas,
             )
 
-        except Exception as e:
-            # Retornar valores por defecto si hay error
-            return WidgetProyectosDTO(
-                total_proyectos=0,
-                proyectos_activos=0,
-                tareas_pendientes=0,
-                tareas_vencidas=0
-            )
+        except Exception:
+            return WidgetProyectosDTO(0, 0, 0, 0)

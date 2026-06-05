@@ -1,19 +1,50 @@
 """
 Business Service para Proyectos v3.5 - Business Logic Layer
 
-WARNING: SINTEL v3.5: Capa de Lógica de Negocio y Orquestación
-- SSoT: Única fuente de verdad para reglas de negocio
-- Zero Trust: Validación semántica y de empresa_id
-- Resiliencia: Gestión de snapshots desacoplada
+WARNING: SINTEL v3.5: Capa de Logica de Negocio y Orquestacion
+- SSoT: unica fuente de verdad para reglas de negocio
+- Zero Trust: Validacion semantica y de empresa_id
+- Resiliencia: Gestion de snapshots desacoplada
 """
+from datetime import date
 from decimal import Decimal
 from django.db import models, transaction
 from django.db.models import F, Sum
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.empresa.models import Empresa
-from ..models import Proyecto, AsignacionPersonal, ItemPedido
-from .crud_service import save_proyecto, delete_proyecto
+from ..models import Proyecto, AsignacionPersonal, ItemPedido, TareaCorta
+from .crud_service import save_proyecto, delete_proyecto, save_tarea_corta, delete_tarea_corta
+
+try:
+    from apps.tenant.clientes.models import Cliente as _Cliente
+except ImportError:
+    _Cliente = None
+
+try:
+    from apps.tenant.empleados.models import Empleado as _Empleado
+except ImportError:
+    _Empleado = None
+
+try:
+    from apps.tenant.facturas.models import Factura as _Factura
+except ImportError:
+    _Factura = None
+
+try:
+    from apps.tenant.proveedores.models import Proveedor as _Proveedor
+except ImportError:
+    _Proveedor = None
+
+try:
+    from apps.tenant.inventario.models import Servicio as _Servicio
+except ImportError:
+    _Servicio = None
+
+try:
+    from apps.tenant.perfil.models import TenantProfile as _TenantProfile
+except ImportError:
+    _TenantProfile = None
 
 # ==============================================================================
 # INDICADORES FINANCIEROS (P&L)
@@ -61,7 +92,7 @@ def calcular_indicadores_financieros(proyecto):
     else:
         margen_rentabilidad = Decimal('0.00')
     
-    # Actualización optimizada vía crud_service
+    # Actualizacion optimizada via crud_service
     proyecto.costo_mano_obra_real = costo_mano_obra
     proyecto.costo_materiales_real = costo_materiales
     proyecto.utilidad_estimada = utilidad_estimada
@@ -81,7 +112,7 @@ def calcular_indicadores_financieros(proyecto):
     }
 
 # ==============================================================================
-# GENERACIÓN DE CÓDIGO ÚNICO
+# GENERACIoN DE CoDIGO uNICO
 # ==============================================================================
 
 def generar_codigo_proyecto(empresa):
@@ -91,8 +122,6 @@ def generar_codigo_proyecto(empresa):
     esa empresa+anio, de forma que sea determinista. El UniqueConstraint
     del modelo actua como red de seguridad ante colisiones concurrentes.
     """
-    from datetime import date
-
     year = date.today().year
     prefix = f'PRJ-{year}-'
 
@@ -121,8 +150,9 @@ def asignar_snapshot_cliente(proyecto, cliente_id=None, cliente_nombre=None):
     """
     if cliente_id:
         try:
-            from apps.tenant.clientes.models import Cliente
-            cliente = Cliente.objects.filter(
+            if _Cliente is None:
+                raise ImportError
+            cliente = _Cliente.objects.filter(
                 id=cliente_id, empresa_id=proyecto.empresa_id
             ).only('razon_social').first()
             if not cliente:
@@ -138,15 +168,19 @@ def asignar_snapshot_cliente(proyecto, cliente_id=None, cliente_nombre=None):
 
 def asignar_snapshot_responsable(proyecto, responsable_id=None, responsable_nombre=None, fase=None):
     """
-    Resuelve y asigna al responsable en memoria según la fase.
+    Resuelve y asigna al responsable en memoria segun la fase.
     """
     if not fase:
         fase = proyecto.fase_actual
     
     if responsable_id and not responsable_nombre:
         try:
-            from apps.tenant.empleados.models import Empleado
-            empleado = Empleado.objects.filter(id=responsable_id).first()
+            if _Empleado is None:
+                raise ImportError
+            empleado = _Empleado.objects.filter(
+                id=responsable_id,
+                empresa_id=proyecto.empresa_id
+            ).only('id', 'primer_nombre', 'primer_apellido').first()
             if empleado:
                 responsable_nombre = getattr(empleado, 'nombre_completo', str(empleado))
         except ImportError:
@@ -173,19 +207,21 @@ def asignar_snapshot_responsable(proyecto, responsable_id=None, responsable_nomb
 
 def asignar_snapshot_factura(proyecto, factura_id=None, factura_numero=None):
     """
-    Resuelve el número de la factura de manera segura y lo asigna en memoria.
+    Resuelve el numero de la factura de manera segura y lo asigna en memoria.
     """
     if not factura_id:
         if factura_numero:
             proyecto.factura_costo_numero = factura_numero
         return
 
-    # SINTEL v3.5: Robustez Extrema (ID vs Instancia) - Evita TypeError si Django ya resolvió el FK
+    # SINTEL v3.5: Robustez Extrema (ID vs Instancia) - Evita TypeError si Django ya resolvio el FK
     try:
-        from apps.tenant.facturas.models import Factura
-        
+        if _Factura is None:
+            raise ImportError
         # Si ya es una instancia (o tiene .id), lo tratamos como tal
         if hasattr(factura_id, 'id'):
+            if getattr(factura_id, 'empresa_id', None) != proyecto.empresa_id:
+                return
             proyecto.factura_costo = factura_id
             if not factura_numero:
                 proyecto.factura_costo_numero = getattr(factura_id, 'numero', '')
@@ -194,7 +230,10 @@ def asignar_snapshot_factura(proyecto, factura_id=None, factura_numero=None):
             proyecto.factura_costo_id = factura_id
             if not factura_numero:
                 # Usar filter().only() para Zero Waste
-                factura = Factura.objects.filter(id=factura_id).only('numero').first()
+                factura = _Factura.objects.filter(
+                    id=factura_id,
+                    empresa_id=proyecto.empresa_id
+                ).only('id', 'numero', 'empresa_id').first()
                 if factura:
                     proyecto.factura_costo_numero = factura.numero
     except (ImportError, ValueError, TypeError, Exception):
@@ -208,8 +247,9 @@ def asignar_snapshot_proveedor(proyecto, proveedor_id=None, proveedor_nombre=Non
     """
     if proveedor_id:
         try:
-            from apps.tenant.proveedores.models import Proveedor
-            proveedor = Proveedor.objects.filter(
+            if _Proveedor is None:
+                raise ImportError
+            proveedor = _Proveedor.objects.filter(
                 id=proveedor_id, empresa_id=proyecto.empresa_id
             ).only('razon_social').first()
             if not proveedor:
@@ -225,15 +265,16 @@ def asignar_snapshot_proveedor(proyecto, proveedor_id=None, proveedor_nombre=Non
 
 def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
     """
-    Validación DSV (Double Semantic Verification) para servicio_asociado.
+    Validacion DSV (Double Semantic Verification) para servicio_asociado.
     Garantiza que el servicio pertenezca exactamente a la empresa del proyecto.
-    Lanza ValidationError si falla la validación.
+    Lanza ValidationError si falla la validacion.
     """
     if not servicio_asociado:
-        return  # None o no enviado es válido
+        return  # None o no enviado es valido
 
     try:
-        from apps.tenant.inventario.models import Servicio
+        if _Servicio is None:
+            raise ImportError
 
         # Si es instancia, verificar que la empresa coincida
         if hasattr(servicio_asociado, 'empresa_id'):
@@ -245,9 +286,15 @@ def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
                 )
         else:
             # Si es un ID/UUID, consultar la BD con DSV
-            servicio = Servicio.objects.filter(
-                id=servicio_asociado,
-                empresa_id=proyecto.empresa_id
+            lookup = {'empresa_id': proyecto.empresa_id}
+            servicio_str = str(servicio_asociado)
+            if '-' in servicio_str:
+                lookup['uuid'] = servicio_str
+            else:
+                lookup['id'] = servicio_asociado
+
+            servicio = _Servicio.objects.filter(
+                **lookup
             ).only('id', 'empresa_id').first()
 
             if not servicio:
@@ -256,7 +303,7 @@ def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
                     f'o pertenece a otro tenant.'
                 )
     except ImportError:
-        # Si inventario no está disponible, no validar
+        # Si inventario no esta disponible, no validar
         pass
     except ValidationError:
         raise  # Re-lanzar ValidationError
@@ -269,38 +316,38 @@ def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable
     """
     fases_validas = ['BORRADOR', 'INICIO', 'PLANEACION', 'EJECUCION', 'CIERRE']
     if nueva_fase not in fases_validas:
-        raise ValidationError(f'Fase inválida: {nueva_fase}')
+        raise ValidationError(f'Fase invalida: {nueva_fase}')
     
     proyecto.fase_actual = nueva_fase
     if responsable_id or responsable_nombre:
         asignar_snapshot_responsable(proyecto, responsable_id, responsable_nombre, nueva_fase)
 
 # ==============================================================================
-# ORQUESTACIÓN CRUD (v3.5)
+# ORQUESTACIoN CRUD (v3.5)
 # ==============================================================================
 
 @transaction.atomic
 def orchestrate_create_proyecto(empresa, data):
     """
-    Orquestador para la creación de proyectos con lógica de negocio.
+    Orquestador para la creacion de proyectos con logica de negocio.
     """
     if not empresa or not isinstance(empresa, Empresa):
-        raise ValidationError({'empresa': 'Empresa inválida o no proporcionada.'})
+        raise ValidationError({'empresa': 'Empresa invalida o no proporcionada.'})
     
-    # ⚠️ Generar o validar código único
+    # WARNING: Generar o validar codigo unico
     codigo = data.get('codigo', None)
     
-    # [SHIELD] Normalizar código: quitar espacios en blanco
+    # [SHIELD] Normalizar codigo: quitar espacios en blanco
     if codigo:
         codigo = str(codigo).strip()
     
     if not codigo:
-        # Si no hay código, generar uno automáticamente
+        # Si no hay codigo, generar uno automaticamente
         data['codigo'] = generar_codigo_proyecto(empresa)
     else:
-        # Validar que el código no exista ya
+        # Validar que el codigo no exista ya
         if Proyecto.objects.filter(empresa=empresa, codigo=codigo).exists():
-            raise ValidationError({'codigo': f'El código "{codigo}" ya está registrado para otro proyecto.'})
+            raise ValidationError({'codigo': f'El codigo "{codigo}" ya esta registrado para otro proyecto.'})
         data['codigo'] = codigo
     
     cliente_id = data.pop('cliente_id', None)
@@ -336,23 +383,23 @@ def orchestrate_create_proyecto(empresa, data):
 @transaction.atomic
 def orchestrate_update_proyecto(proyecto, data):
     """
-    Orquestador para la actualización de proyectos con lógica de negocio.
+    Orquestador para la actualizacion de proyectos con logica de negocio.
     """
     if not proyecto or not proyecto.empresa:
-        raise ValidationError({'proyecto': 'Proyecto inválido o sin empresa asociada.'})
+        raise ValidationError({'proyecto': 'Proyecto invalido o sin empresa asociada.'})
     
-    # ⚠️ Validar código único si se está actualizando
+    # WARNING: Validar codigo unico si se esta actualizando
     codigo = data.get('codigo', None)
     if codigo is not None:
         codigo = str(codigo).strip()
         if codigo != proyecto.codigo and Proyecto.objects.filter(
             empresa=proyecto.empresa, codigo=codigo
         ).exclude(id=proyecto.id).exists():
-            raise ValidationError({'codigo': f'El código "{codigo}" ya existe para otro proyecto.'})
+            raise ValidationError({'codigo': f'El codigo "{codigo}" ya existe para otro proyecto.'})
         
-        # [SHIELD] Asegurar que el código vacío se maneje según la regla de negocio
+        # [SHIELD] Asegurar que el codigo vacio se maneje segun la regla de negocio
         if not codigo and not proyecto.codigo:
-             # Si no hay código previo y se envía vacío, generar uno
+             # Si no hay codigo previo y se envia vacio, generar uno
              data['codigo'] = generar_codigo_proyecto(proyecto.empresa)
         else:
              data['codigo'] = codigo
@@ -393,3 +440,125 @@ def orchestrate_update_proyecto(proyecto, data):
     proyecto = save_proyecto(proyecto)
     calcular_indicadores_financieros(proyecto)
     return proyecto
+
+
+# ==============================================================================
+# TAREAS CORTAS BUSINESS SERVICE (v3.10.0)
+# ==============================================================================
+
+class TareasCortasBusinessService:
+    """
+    Logica de negocio para la gestion de Tareas Cortas v3.10.0.
+    Responsable de:
+    - Validacion de rango de fechas (coherencia interna).
+    - DSV (Double Semantic Verification) para empresa, cliente y empleado.
+    """
+
+    @staticmethod
+    def _validar_fechas(fecha_inicio, fecha_fin):
+        """
+        Valida que fecha_inicio <= fecha_fin.
+        """
+        if fecha_inicio > fecha_fin:
+            raise ValidationError(
+                f"La fecha de inicio ({fecha_inicio}) no puede ser posterior a la fecha de fin ({fecha_fin})."
+            )
+
+    @staticmethod
+    def _validar_empresa_dsv(entidad, empresa, nombre='entidad'):
+        """
+        Valida que una entidad relacionada pertenezca a la misma empresa (DSV).
+        """
+        if entidad and entidad.empresa_id != empresa.id:
+            raise ValidationError(
+                f"El {nombre} seleccionado no pertenece a la empresa actual (DSV fallo)."
+            )
+
+    @staticmethod
+    @transaction.atomic
+    def crear_tarea_corta(empresa, empleado, fecha_inicio, fecha_fin, titulo, cliente=None, descripcion='', prioridad='NORMAL', notas_progreso=''):
+        """
+        Crea una nueva TareaCorta con logica de negocio.
+        """
+        if not cliente:
+            raise ValidationError("La tarea corta requiere un cliente destino.")
+        if not empleado:
+            raise ValidationError("La tarea corta requiere un empleado asignado.")
+
+        TareasCortasBusinessService._validar_empresa_dsv(cliente, empresa, 'cliente')
+        TareasCortasBusinessService._validar_empresa_dsv(empleado, empresa, 'empleado')
+
+        TareasCortasBusinessService._validar_fechas(fecha_inicio, fecha_fin)
+
+        tarea = TareaCorta(
+            empresa=empresa,
+            cliente=cliente,
+            empleado=empleado,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            titulo=titulo,
+            descripcion=descripcion,
+            prioridad=prioridad,
+            notas_progreso=notas_progreso,
+            estado='PENDIENTE'
+        )
+
+        save_tarea_corta(tarea)
+        return tarea
+
+    @staticmethod
+    @transaction.atomic
+    def actualizar_tarea_corta(tarea_corta, data):
+        """
+        Actualiza los campos editables de una TareaCorta.
+        """
+        permitidos = ['fecha_inicio', 'fecha_fin', 'titulo', 'descripcion', 'prioridad', 'notas_progreso', 'cliente', 'empleado']
+
+        if 'cliente' in data:
+            cliente = data['cliente']
+            if not cliente:
+                raise ValidationError("La tarea corta requiere un cliente destino.")
+            TareasCortasBusinessService._validar_empresa_dsv(cliente, tarea_corta.empresa, 'cliente')
+            tarea_corta.cliente = cliente
+
+        if 'empleado' in data:
+            empleado = data['empleado']
+            if not empleado:
+                raise ValidationError("La tarea corta requiere un empleado asignado.")
+            TareasCortasBusinessService._validar_empresa_dsv(empleado, tarea_corta.empresa, 'empleado')
+            tarea_corta.empleado = empleado
+
+        for key in permitidos:
+            if key in data and key not in ('cliente', 'empleado'):
+                setattr(tarea_corta, key, data[key])
+
+        if 'fecha_inicio' in data or 'fecha_fin' in data:
+            TareasCortasBusinessService._validar_fechas(
+                tarea_corta.fecha_inicio,
+                tarea_corta.fecha_fin
+            )
+
+        save_tarea_corta(tarea_corta)
+        return tarea_corta
+
+    @staticmethod
+    @transaction.atomic
+    def cambiar_estado_tarea_corta(tarea_corta, nuevo_estado):
+        """
+        Cambia el estado de una TareaCorta.
+        """
+        if nuevo_estado not in dict(TareaCorta.Estado.choices):
+            raise ValidationError(f"Estado invalido: {nuevo_estado}")
+
+        tarea_corta.estado = nuevo_estado
+        save_tarea_corta(tarea_corta)
+        return tarea_corta
+
+    @staticmethod
+    @transaction.atomic
+    def eliminar_tarea_corta(tarea_corta):
+        """
+        Elimina una TareaCorta.
+        """
+        delete_tarea_corta(tarea_corta)
+        return True

@@ -1,7 +1,7 @@
 # Auditoría Flujo Completo — Módulo Cotizaciones
 
-**Versión auditada:** v3.9.3  
-**Fecha:** 2026-05-23  
+**Versión auditada:** v3.10.3  
+**Fecha:** 2026-05-25  
 **Estado:** ✅ OPERATIVO (0 CRÍTICOS)  
 **Auditor:** Claude Code (claude-sonnet-4-6)  
 **Ubicación:** `apps/tenant/cotizaciones/`
@@ -409,7 +409,7 @@
 | FK a `perfil.TenantProfile` | ✅ | No hay FKs incorrectas |
 | No imports de `apps.public.*` | ✅ | Solo importa de tenant apps |
 | Permisos de `apps.tenant.api.permissions` | ✅ | `IsTenantMember`, `IsTenantAdminOrReadOnly` |
-| Imports globales (no dentro de `def`) | ⚠️ | `business_service.py` usa imports locales en algunos métodos — no crítico pero revisar |
+| Imports globales (no dentro de `def`) | ✅ | Corregido v3.10.3: `viewsets.py` + `pdf_export_service.py` + `configuracion/serializers.py`; `item_service.py` mantiene lazy justificado (circular) |
 | `resolve_tenant_empresa` en serializer | ✅ | Fix v3.7.5 aplicado |
 
 ---
@@ -474,6 +474,22 @@ class CotizacionItemNestedSerializer(serializers.ModelSerializer):
 
 ---
 
+## 7b. Fixes Aplicados en v3.10.3 (2026-05-25)
+
+### F5: Imports globales — 3 archivos corregidos
+
+**Causa:** AGENTS.md regla "imports SIEMPRE globales, NUNCA dentro de def" violada en 3 archivos.
+
+| Archivo | Import movido a global |
+|---------|----------------------|
+| `api/viewsets.py` | `from ..services.business_service import CotizacionService` (en `recalcular()`) |
+| `services/pdf_export_service.py` | `from .item_service import CotizacionItemSelector` (en `preparar_contexto()`) |
+| `configuracion/serializers.py` | `from apps.tenant.empresa.models import Empresa` (en `validate()`) |
+
+**Excepción justificada:** `item_service.py` mantiene 2 lazy imports de `CotizacionService` — circular con `business_service.py` que importa `CotizacionItemBusinessService` desde `item_service.py`.
+
+---
+
 ## 8. Deuda Técnica
 
 | ID | Archivo | Severidad | Descripción |
@@ -483,7 +499,7 @@ class CotizacionItemNestedSerializer(serializers.ModelSerializer):
 | DEUDA-03 | `api/pagination.py` | BAJA | ✅ RESUELTO (Eliminado) |
 | DEUDA-04 | `facturas_prueba/` | BAJA | ✅ RESUELTO (Eliminado) |
 | DEUDA-05 | `list.html` + `list_cotizaciones.html` | BAJA | ✅ RESUELTO (Redundancia eliminada) |
-| DEUDA-06 | `business_service.py` imports locales | BAJA | Algunos `import` dentro de métodos (e.g., `from .item_service import ...` dentro de `_sync_items`) — consolidar a nivel de archivo |
+| DEUDA-06 | imports locales en servicios | BAJA | ✅ RESUELTO v3.10.3: `viewsets.py` (CotizacionService), `pdf_export_service.py` (CotizacionItemSelector), `configuracion/serializers.py` (Empresa) movidos a global. `item_service.py` lazy justificado (mutual circular con business_service) |
 | DEUDA-07 | `ui_views.py` params de URL | BAJA | ✅ RESUELTO (Actualizado a UUID) |
 
 ---

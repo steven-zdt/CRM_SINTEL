@@ -384,12 +384,18 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            raise CommandError(
+                "PeligRO CRITICO: Este comando es destructivo y no puede ejecutarse "
+                "en un entorno de produccion (DEBUG=False)."
+            )
+
         cantidad = options["cantidad"]
         con_datos = options.get("con_datos", False)
         inicio = options.get("inicio", 1)
         skip_existing = options.get("skip_existing", False)
 
-        self.stdout.write(self.style.SUCCESS(f"🚀 Iniciando generación de {cantidad} tenants..."))
+        self.stdout.write(self.style.SUCCESS(f"Iniciando generacion de {cantidad} tenants..."))
         self.stdout.write("=" * 80)
 
         if con_datos:
@@ -413,7 +419,7 @@ class Command(BaseCommand):
                     password="Admin123!",
                     first_name="Admin",
                     last_name="Base",
-                    is_staff=True,
+                    is_staff=False,   # Owner de tenant prueba — no staff del sistema
                     is_active=True,
                 )
                 self.stdout.write(
@@ -463,7 +469,7 @@ class Command(BaseCommand):
                             password="Admin123!",
                             first_name="Admin",
                             last_name=f"Tenant{tenant_index:03d}",
-                            is_staff=True,
+                            is_staff=False,   # Owner de tenant prueba — no staff del sistema
                             is_active=True,
                         )
                 except Exception:
@@ -537,8 +543,6 @@ class Command(BaseCommand):
         # Guardar estadísticas en archivo
         import json
         import os
-
-        from django.conf import settings
 
         stats_file = os.path.join(settings.BASE_DIR, "tenants_prueba_stats.json")
         with open(stats_file, "w") as f:

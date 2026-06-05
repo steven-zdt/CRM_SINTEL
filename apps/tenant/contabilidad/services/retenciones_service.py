@@ -35,21 +35,21 @@ class RetencionesService:
         nit: Optional[str],
         tipo_tercero: str,
         naturaleza: str = 'VENTA',
-        empresa_id: Optional[int] = None,
+        empresa_id: int = None,
     ) -> Dict[str, Any]:
         """
         Obtiene configuración de retenciones para un tercero específico.
 
         Lógica:
-        1. Busca configuración específica por (tipo_tercero, nit, naturaleza)
-        2. Si no existe, busca default (tipo_tercero, nit=None, naturaleza)
+        1. Busca configuración específica por (tipo_tercero, nit, naturaleza, empresa_id)
+        2. Si no existe, busca default (tipo_tercero, nit=None, naturaleza, empresa_id)
         3. Si no existe default, retorna dict con todos los ceros
 
         Args:
             nit: NIT del tercero (normalizado: sin puntos ni guiones)
             tipo_tercero: 'CLIENTE', 'PROVEEDOR', 'EMPLEADO'
             naturaleza: 'VENTA', 'COMPRA'
-            empresa_id: ID de empresa (para contexto, no usado en filtro)
+            empresa_id: ID de empresa (requerido para Zero-Trust)
 
         Returns:
             Dict con estructura:
@@ -62,6 +62,9 @@ class RetencionesService:
                 'reteiva_porcentaje': Decimal,
             }
         """
+        if not empresa_id:
+            raise ValueError("empresa_id is required for Zero-Trust tenant isolation")
+
         if not nit or not tipo_tercero:
             return {
                 'aplica_retefuente': False,
@@ -87,6 +90,7 @@ class RetencionesService:
         # Buscar retenciones específicas por NIT
         for tipo_ret in ['RETEFUENTE', 'RETEICA', 'RETEIVA']:
             config = ConfiguracionRetenciones.objects.filter(
+                empresa_id=empresa_id,
                 tipo_tercero=tipo_tercero,
                 naturaleza=naturaleza,
                 tipo_retencion=tipo_ret,
@@ -97,6 +101,7 @@ class RetencionesService:
             if not config:
                 # Buscar default (nit_tercero=None)
                 config = ConfiguracionRetenciones.objects.filter(
+                    empresa_id=empresa_id,
                     tipo_tercero=tipo_tercero,
                     naturaleza=naturaleza,
                     tipo_retencion=tipo_ret,
@@ -150,6 +155,7 @@ class RetencionesService:
         aplicada_por_proveedor: bool = False,
         notas: str = '',
         empresa: Any = None,
+        empresa_id: Optional[int] = None,
         **kwargs
     ) -> Retencion:
         """
@@ -166,10 +172,16 @@ class RetencionesService:
             aplicada_por_cliente: Si es requerida por el cliente
             aplicada_por_proveedor: Si es requerida por el proveedor
             notas: Notas de auditoría
+            empresa: Instancia de Empresa (opcional)
+            empresa_id: ID de Empresa (opcional)
 
         Returns:
             Retencion creada (sin guardar si quieres hacer cambios)
         """
+        ret_empresa_id = empresa_id or (empresa.id if empresa else None)
+        if not ret_empresa_id:
+            raise ValueError("empresa or empresa_id is required for Zero-Trust tenant isolation")
+
         monto = kwargs.get('monto')
         if monto is None:
             monto = RetencionesService.calcular_monto_retencion(tipo, porcentaje, base)
@@ -178,6 +190,7 @@ class RetencionesService:
 
         retencion = Retencion(
             empresa=empresa,
+            empresa_id=ret_empresa_id,
             tipo=tipo,
             porcentaje=Decimal(str(porcentaje)),
             base=Decimal(str(base)),
@@ -202,6 +215,7 @@ class RetencionesService:
         documento_origen_id: int = None,
         base: Decimal = None,
         empresa: Any = None,
+        empresa_id: Optional[int] = None,
         **kwargs
     ) -> List[Retencion]:
         """
@@ -223,10 +237,16 @@ class RetencionesService:
             documento_origen_modelo: ej: 'Factura'
             documento_origen_id: ID del documento
             base: Monto base (si hay porcentajes pero no montos)
+            empresa: Instancia de Empresa (opcional)
+            empresa_id: ID de Empresa (opcional)
 
         Returns:
             Lista de Retencion creadas
         """
+        ret_empresa_id = empresa_id or (empresa.id if empresa else None)
+        if not ret_empresa_id:
+            raise ValueError("empresa or empresa_id is required for Zero-Trust tenant isolation")
+
         retenciones = []
         r_dict = retenciones_dict if retenciones_dict is not None else kwargs.get('ret_dict', {})
         doc_app = documento_origen_app or kwargs.get('documento_origen_app')
@@ -273,6 +293,7 @@ class RetencionesService:
                     documento_origen_modelo=doc_modelo,
                     documento_origen_id=doc_id,
                     empresa=empresa,
+                    empresa_id=ret_empresa_id,
                 )
                 retenciones.append(retencion)
 
@@ -283,6 +304,7 @@ class RetencionesService:
         documento_origen_app: str,
         documento_origen_modelo: str,
         documento_origen_id: int,
+        empresa_id: int,
         incluir_reversadas: bool = False,
     ) -> List[Retencion]:
         """
@@ -292,12 +314,17 @@ class RetencionesService:
             documento_origen_app: ej: 'facturas'
             documento_origen_modelo: ej: 'Factura'
             documento_origen_id: ID del documento
+            empresa_id: ID de empresa (requerido para Zero-Trust)
             incluir_reversadas: Si False, excluye reversadas
 
         Returns:
             Lista de Retencion
         """
+        if not empresa_id:
+            raise ValueError("empresa_id is required for Zero-Trust tenant isolation")
+
         qs = Retencion.objects.filter(
+            empresa_id=empresa_id,
             documento_origen_app=documento_origen_app,
             documento_origen_modelo=documento_origen_modelo,
             documento_origen_id=documento_origen_id,
@@ -313,6 +340,7 @@ class RetencionesService:
         documento_origen_app: str,
         documento_origen_modelo: str,
         documento_origen_id: int,
+        empresa_id: int,
         tipo: Optional[str] = None,
     ) -> Decimal:
         """
@@ -322,12 +350,17 @@ class RetencionesService:
             documento_origen_app: ej: 'facturas'
             documento_origen_modelo: ej: 'Factura'
             documento_origen_id: ID del documento
+            empresa_id: ID de empresa (requerido para Zero-Trust)
             tipo: Si se especifica, solo suma ese tipo (RETEFUENTE, RETEICA, RETEIVA)
 
         Returns:
             Total retenido (Decimal)
         """
+        if not empresa_id:
+            raise ValueError("empresa_id is required for Zero-Trust tenant isolation")
+
         qs = Retencion.objects.filter(
+            empresa_id=empresa_id,
             documento_origen_app=documento_origen_app,
             documento_origen_modelo=documento_origen_modelo,
             documento_origen_id=documento_origen_id,
@@ -347,6 +380,7 @@ class RetencionesService:
         documento_reversada_modelo: str = None,
         documento_reversada_id: int = None,
         empresa: Any = None,
+        empresa_id: Optional[int] = None,
         **kwargs
     ) -> 'Retencion':
         """
@@ -357,6 +391,8 @@ class RetencionesService:
             documento_reversada_app: App del documento que reversa (ej: 'facturas')
             documento_reversada_modelo: Modelo que reversa (ej: 'NotaCredito')
             documento_reversada_id: ID del documento que reversa
+            empresa: Instancia de Empresa (opcional)
+            empresa_id: ID de Empresa (opcional)
 
         Returns:
             Nueva Retencion de reversal
@@ -364,9 +400,14 @@ class RetencionesService:
         if retencion.reversada:
             raise ValueError('Retencion ya está reversada')
 
+        ret_empresa_id = empresa_id or (empresa.id if empresa else None) or retencion.empresa_id
+        if not ret_empresa_id:
+            raise ValueError("empresa or empresa_id is required for Zero-Trust tenant isolation")
+
         # Crear retención de reversal (monto negativo)
         retencion_reversal = Retencion(
             empresa=empresa or retencion.empresa,
+            empresa_id=ret_empresa_id,
             tipo=retencion.tipo,
             porcentaje=-retencion.porcentaje,  # Negativo para reversal
             base=retencion.base,
@@ -390,17 +431,21 @@ class RetencionesService:
         return retencion_reversal
 
     @staticmethod
-    def obtener_retencion_por_uuid(uuid: str) -> Optional[Retencion]:
+    def obtener_retencion_por_uuid(uuid: str, empresa_id: int) -> Optional[Retencion]:
         """
         Obtiene una retención por su UUID.
 
         Args:
             uuid: UUID de la retención
+            empresa_id: ID de empresa (requerido para Zero-Trust)
 
         Returns:
             Retencion o None
         """
+        if not empresa_id:
+            raise ValueError("empresa_id is required for Zero-Trust tenant isolation")
+
         try:
-            return Retencion.objects.get(uuid=uuid)
+            return Retencion.objects.get(uuid=uuid, empresa_id=empresa_id)
         except Retencion.DoesNotExist:
             return None

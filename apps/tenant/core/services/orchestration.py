@@ -146,8 +146,6 @@ def get_contabilidad_resumen(tenant, user=None) -> dict[str, Any]:
         Dict con estadísticas de contabilidad
     """
     try:
-        from django.db.models import Sum
-
         from apps.tenant.contabilidad.models import (
             AsientoContable,
             CuentaContable,

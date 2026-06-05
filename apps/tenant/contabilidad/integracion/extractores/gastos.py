@@ -3,9 +3,9 @@ from typing import List
 from decimal import Decimal
 from datetime import date
 
+from apps.tenant.contabilidad.models import AsientoContable
 from apps.tenant.gastos.models import DocumentoSoporte
 from .base import AbstractExtractor, DocumentoEnriquecido, CuentaAsignada, MovimientoResumen
-from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
 from ..dtos import (
     TransaccionEconomica,
     TipoTransaccion,
@@ -26,8 +26,6 @@ class ExtractorGastos(AbstractExtractor):
         """
         Extract non-journalized DocumentoSoporte records.
         """
-        from apps.tenant.contabilidad.models import AsientoContable
-
         ya_contabilizados = set(
             AsientoContable.objects.filter(
                 empresa_id=self.empresa_id,
@@ -43,12 +41,12 @@ class ExtractorGastos(AbstractExtractor):
         ).exclude(
             id__in=ya_contabilizados,
         ).select_related('proveedor', 'resolucion_dian').only(
-            'id', 'fecha', 'subtotal', 'retefuente', 'retefuente_porcentaje',
-            'reteica', 'reteica_porcentaje', 'total', 'consecutivo',
+            'id', 'fecha', 'subtotal', 'total', 'consecutivo',
+            # retefuente/reteica_porcentaje eliminados en v3.7.1 Pull Model
+            # usar doc.total_retefuente / doc.total_reteica (@property → Retencion table)
             'resolucion_dian__prefijo',
             'observaciones', 'proveedor__numero_documento', 'proveedor__razon_social',
-            'proveedor__cuenta_contable_uuid',
-            'proveedor_id', 'categoria_contable', 'cuenta_gasto_uuid',
+            'proveedor_id', 'categoria_contable', 'empresa_id',
         )
 
         return [self._mapear_a_dto(doc) for doc in documentos]
@@ -68,34 +66,27 @@ class ExtractorGastos(AbstractExtractor):
         # Build lines
         lineas = []
 
-        # 1. Main expense line (DEBIT) — cuenta_gasto_uuid como hint si esta configurado
+        # 1. Main expense line (DEBIT) — ReglaContable resuelve cuenta via categoria_contable
         concepto_gasto = doc.categoria_contable or 'GASTO_GENERAL'
-        cuenta_gasto_hint = str(doc.cuenta_gasto_uuid) if doc.cuenta_gasto_uuid else None
         lineas.append(LineaTransaccion(
             concepto=concepto_gasto,
             monto=doc.subtotal,
             lado='DEBE',
-            cuenta_hint=cuenta_gasto_hint,
         ))
 
-        # 2. Retentions (CREDIT) — leer desde campo DEPRECATED que aun existe en DB
-        retefuente = doc.retefuente or Decimal('0')
-        reteica = doc.reteica or Decimal('0')
+        # 2. Retentions (CREDIT) — Pull Model v3.7.1: leer desde Retencion via @property
+        retefuente = doc.total_retefuente or Decimal('0')
+        reteica = doc.total_reteica or Decimal('0')
         if retefuente > 0:
             lineas.append(LineaTransaccion(concepto='RETEFUENTE', monto=retefuente, lado='HABER'))
         if reteica > 0:
             lineas.append(LineaTransaccion(concepto='RETEICA', monto=reteica, lado='HABER'))
 
-        # 3. Balancing line (CREDIT) — cuenta_contable_uuid del Proveedor como hint
-        cuenta_proveedor_hint = (
-            str(doc.proveedor.cuenta_contable_uuid)
-            if doc.proveedor.cuenta_contable_uuid else None
-        )
+        # 3. Balancing line (CREDIT) — ReglaContable resuelve cuenta via NIT proveedor
         lineas.append(LineaTransaccion(
             concepto='PASIVO_COMPRA_GASTO',
             monto=doc.total,
             lado='HABER',
-            cuenta_hint=cuenta_proveedor_hint,
         ))
 
         return TransaccionEconomica(
@@ -114,8 +105,6 @@ class ExtractorGastos(AbstractExtractor):
         )
 
     def get_documentos_enriquecidos(self, empresa_id: int, fecha_inicio: date, fecha_fin: date) -> List[DocumentoEnriquecido]:
-        from apps.tenant.contabilidad.models import AsientoContable
-        
         # 1. Obtener todos los documentos del periodo
         documentos = DocumentoSoporte.objects.filter(
             empresa_id=empresa_id,
@@ -137,27 +126,7 @@ class ExtractorGastos(AbstractExtractor):
         for doc in documentos:
             asiento = asientos.get(('DocumentoSoporte', doc.id))
             
-            # Resolver cuentas "hint" (lo que el documento propone)
             cuentas_asignadas = []
-            if doc.cuenta_gasto_uuid:
-                cod, nom = CuentaContableSelector.resolve_label_by_uuid(doc.cuenta_gasto_uuid, empresa_id)
-                cuentas_asignadas.append(CuentaAsignada(
-                    concepto='Gasto (Debe)',
-                    uuid=str(doc.cuenta_gasto_uuid),
-                    codigo_puc=cod,
-                    nombre=nom,
-                    monto=doc.subtotal
-                ))
-            
-            if doc.proveedor.cuenta_contable_uuid:
-                cod, nom = CuentaContableSelector.resolve_label_by_uuid(doc.proveedor.cuenta_contable_uuid, empresa_id)
-                cuentas_asignadas.append(CuentaAsignada(
-                    concepto='Pasivo Proveedor (Haber)',
-                    uuid=str(doc.proveedor.cuenta_contable_uuid),
-                    codigo_puc=cod,
-                    nombre=nom,
-                    monto=doc.total
-                ))
 
             # Construir DTO
             dto = DocumentoEnriquecido(

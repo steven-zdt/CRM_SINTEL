@@ -23,12 +23,16 @@
         subTabsInitialized: {
             empleados: false,
             contratos: false,
-            nominas: false
+            nominas: false,
+            resoluciones: false,
+            liquidaciones: false
         },
         subTabsPending: {
             empleados: false,
             contratos: false,
-            nominas: false
+            nominas: false,
+            resoluciones: false,
+            liquidaciones: false
         }
     };
 
@@ -67,6 +71,33 @@
                 });
             });
         }
+
+        // Boton Nueva Resolucion (Tab Resoluciones)
+        const btnResolucion = d.getElementById('btn-nueva-resolucion');
+        if (btnResolucion && !btnResolucion.dataset.bound) {
+            btnResolucion.dataset.bound = '1';
+            btnResolucion.addEventListener('click', () => {
+                if (w.Sintel?.Empleados?.ResolucionEditor) {
+                    w.Sintel.Empleados.ResolucionEditor.open();
+                } else {
+                    console.error('[empleados:module] ResolucionEditor no cargado');
+                }
+            });
+        }
+
+        // Boton Nueva Liquidacion (Tab Liquidaciones) — pasa empleado_uuid del Master
+        const btnLiquidacion = d.getElementById('btn-nueva-liquidacion');
+        if (btnLiquidacion && !btnLiquidacion.dataset.bound) {
+            btnLiquidacion.dataset.bound = '1';
+            btnLiquidacion.addEventListener('click', () => {
+                if (w.Sintel?.Empleados?.LiquidacionEditor) {
+                    const empUuid = btnLiquidacion.dataset.empleadoUuid || '';
+                    w.Sintel.Empleados.LiquidacionEditor.open(empUuid);
+                } else {
+                    console.error('[empleados:module] LiquidacionEditor no cargado');
+                }
+            });
+        }
     }
 
     // ── Sub-tabs ───────────────────────────────────────────────────────────────
@@ -76,11 +107,15 @@
             // Ya inicializado, recargar datos en lugar de recrear
             if (tabName === 'empleados' && w.Sintel.Empleados.EmpleadoList) {
                 w.Sintel.Empleados.EmpleadoList.reload();
-                w.Sintel.Empleados.EmpleadoList.loadSummary('#empleados-summary');
+                w.Sintel.Empleados.EmpleadoList.loadSummary('#panel-resumen-empleados');
             } else if (tabName === 'contratos' && w.Sintel.Empleados.ContratoList) {
                 w.Sintel.Empleados.ContratoList.reload();
             } else if (tabName === 'nominas' && w.Sintel.Empleados.NominaList) {
                 w.Sintel.Empleados.NominaList.reload();
+            } else if (tabName === 'resoluciones' && w.Sintel.Empleados.ResolucionList) {
+                w.Sintel.Empleados.ResolucionList.reload();
+            } else if (tabName === 'liquidaciones' && w.Sintel.Empleados.LiquidacionList) {
+                w.Sintel.Empleados.LiquidacionList.reload();
             }
             return;
         }
@@ -97,25 +132,37 @@
         const grid           = d.querySelector(gridId);
         const spinner        = d.querySelector(spinnerSel);
 
+        // Mostrar grid antes de inicializar Tabulator para que pueda medir dimensiones correctamente
+        if (grid)    grid.style.display    = 'block';
         if (spinner) spinner.style.display = 'block';
-        if (grid)    grid.style.display    = 'none';
 
         try {
             if (tabName === 'empleados' && w.Sintel.Empleados.EmpleadoList) {
                 await w.Sintel.Empleados.EmpleadoList.init(gridId);
-                await w.Sintel.Empleados.EmpleadoList.loadSummary('#empleados-summary');
+                await w.Sintel.Empleados.EmpleadoList.loadSummary('#panel-resumen-empleados');
                 state.subTabsInitialized.empleados = true;
 
             } else if (tabName === 'contratos' && w.Sintel.Empleados.ContratoList) {
                 await w.Sintel.Empleados.ContratoList.init(gridId);
                 state.subTabsInitialized.contratos = true;
+                setTimeout(() => w.Sintel.Empleados.ContratoList.redraw?.(), 50);
 
             } else if (tabName === 'nominas' && w.Sintel.Empleados.NominaList) {
                 await w.Sintel.Empleados.NominaList.init(gridId);
                 state.subTabsInitialized.nominas = true;
-            }
+                setTimeout(() => w.Sintel.Empleados.NominaList.redraw?.(), 50);
 
-            if (grid) grid.style.display = 'block';
+            } else if (tabName === 'resoluciones' && w.Sintel.Empleados.ResolucionList) {
+                await w.Sintel.Empleados.ResolucionList.init(gridId);
+                state.subTabsInitialized.resoluciones = true;
+                setTimeout(() => w.Sintel.Empleados.ResolucionList.redraw?.(), 50);
+
+            } else if (tabName === 'liquidaciones' && w.Sintel.Empleados.LiquidacionList) {
+                // Master-Detail: no usa #grid-liquidaciones, gestiona sus propios grids
+                await w.Sintel.Empleados.LiquidacionList.init();
+                state.subTabsInitialized.liquidaciones = true;
+                setTimeout(() => w.Sintel.Empleados.LiquidacionList.redraw?.(), 50);
+            }
         } catch (err) {
             console.error(`${MOD} Error inicializando tab "${tabName}":`, err);
         } finally {

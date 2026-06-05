@@ -5,12 +5,29 @@ Serializers para Proyectos v3.3 - Alineado con Modelo, Tabulator y Zero Trust (v
 - Serializers alineados con el modelo actual (v3.3)
 - Campos optimizados para Tabulator Factory v2.40 (List vs Detail)
 - Soporte para snapshots de clientes y responsables
-- [SHIELD] Zero Trust: Implementación de NormalizationMixin obligatoria para inputs
+- [SHIELD] Zero Trust: Implementacion de NormalizationMixin obligatoria para inputs
 """
+import sys
+
 from rest_framework import serializers
 
 from apps.tenant.api.utils import NormalizationMixin
-from apps.tenant.proyectos.models import AsignacionPersonal, ItemPedido, PedidoProyecto, Proyecto, ItemPresupuestoProyecto, TareaDiariaProyecto
+from apps.tenant.empresa.models import Sede
+from apps.tenant.proyectos.models import (
+    AsignacionPersonal,
+    ItemPedido,
+    PedidoProyecto,
+    Proyecto,
+    ItemPresupuestoProyecto,
+    TareaDiariaProyecto,
+    TareaCorta,
+)
+from apps.tenant.perfil.models import TenantProfile
+
+try:
+    from apps.tenant.facturas.services.business_service import FacturaInterAppAPI as _FacturaInterAppAPI
+except ImportError:
+    _FacturaInterAppAPI = None
 
 
 # ==============================================================================
@@ -38,29 +55,28 @@ class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
 
         data_str = str(data).strip()
 
-        # ⚠️ UUID-Safe: Detectar si es UUID (tiene guiones) o PK entero
+        # WARNING: UUID-Safe: Detectar si es UUID (tiene guiones) o PK entero
         if '-' in data_str and not data_str.isdigit():
-            # Es un UUID — buscar por uuid field
+            # Es un UUID - buscar por uuid field
             queryset = self.get_queryset()
             try:
                 obj = queryset.get(uuid=data_str)
                 return obj
             except Exception as e:
                 # Manejar tanto DoesNotExist como otros errores
-                import sys
                 print(
                     f"[DEBUG] UUID lookup failed: uuid='{data_str}', error={type(e).__name__}: {e}",
                     file=sys.stderr
                 )
                 self.fail('does_not_exist', pk_value=data)
 
-        # Es un PK entero — usar el método parent
+        # Es un PK entero - usar el metodo parent
         return super().to_internal_value(data)
 
 class ProyectoListSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para listado Tabulator v3.3.
-    Mínima exposición de datos (Need-to-Know) y sin campos anidados pesados.
+    Minima exposicion de datos (Need-to-Know) y sin campos anidados pesados.
     
     # WARNING: Campos alineados con proyectos.page.js:
     - id, codigo, nombre, tipo_servicio_display, estado_display
@@ -74,6 +90,7 @@ class ProyectoListSerializer(serializers.ModelSerializer):
     # Snapshots (campos desacoplados)
     cliente_nombre = serializers.CharField(read_only=True)
     responsable_actual_nombre = serializers.CharField(read_only=True)
+    responsable_empleado_uuid = serializers.UUIDField(read_only=True, allow_null=True)
     proveedor_nombre = serializers.CharField(read_only=True)
     servicio_nombre = serializers.CharField(source='servicio_asociado.nombre', read_only=True, allow_null=True)
 
@@ -85,33 +102,39 @@ class ProyectoListSerializer(serializers.ModelSerializer):
     cotizacion_numero      = serializers.CharField(source='factura_costo.cotizacion_numero',  read_only=True)
     cotizacion_uuid        = serializers.UUIDField( source='factura_costo.cotizacion_uuid',    read_only=True)
 
+    # DT-SEDE-03: sede para KPIs por sede
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+
     class Meta:
         model = Proyecto
         fields = [
-            # Campos básicos (Tabulator)
+            # Campos basicos (Tabulator)
             'id', 'uuid', 'codigo', 'nombre', 'tipo_servicio', 'tipo_servicio_display',
             'fase_actual', 'fase_actual_display', 'estado_tarea', 'estado_display',
             'fecha_inicio', 'fecha_fin_estimada', 'fecha_fin_prevista',
 
             # Snapshots
             'cliente_id', 'cliente_nombre',
-            'responsable_actual_id', 'responsable_actual_nombre',
+            'responsable_actual_id', 'responsable_actual_nombre', 'responsable_empleado_uuid',
             'proveedor_id', 'proveedor_nombre',
 
-            # Vínculos
+            # Vinculos
             'factura_costo', 'factura_costo_numero',
             'cotizacion_numero', 'cotizacion_uuid',
             'servicio_asociado_id', 'servicio_nombre',
-            
+
+            # Sede (DT-SEDE-03)
+            'sede_nombre',
+
             # Financieros
             'valor_contrato_proyectado',
             'costo_planeado_total', 'utilidad_planeada', 'margen_planeado',
             'costo_mano_obra_real', 'costo_materiales_real',
             'costo_total', 'utilidad_estimada', 'margen_rentabilidad',
-            
+
             # Progreso
             'porcentaje_avance', 'fecha_cierre_real',
-            
+
             # Timestamps
             'created_at', 'updated_at',
         ]
@@ -129,7 +152,7 @@ class ProyectoListSerializer(serializers.ModelSerializer):
 class AsignacionPersonalSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     Serializer para asignaciones de personal al proyecto.
-    [SHIELD] Zero Trust: Aplica normalización de datos en el input.
+    [SHIELD] Zero Trust: Aplica normalizacion de datos en el input.
     """
     rol_display = serializers.CharField(source='get_rol_display', read_only=True)
 
@@ -144,10 +167,10 @@ class AsignacionPersonalSerializer(NormalizationMixin, serializers.ModelSerializ
         read_only_fields = ['id', 'costo_total_asignacion']
 
     def validate(self, attrs):
-        """# WARNING: Zero Trust: Normalización estricta antes de persistir."""
+        """# WARNING: Zero Trust: Normalizacion estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         
-        # Validación de negocio: No permitir asignaciones en proyectos en fase de CIERRE
+        # Validacion de negocio: No permitir asignaciones en proyectos en fase de CIERRE
         proyecto = attrs.get('proyecto') or (self.instance.proyecto if self.instance else None)
         if not proyecto and self.context:
             proyecto = self.context.get('proyecto')
@@ -166,7 +189,7 @@ class AsignacionPersonalSerializer(NormalizationMixin, serializers.ModelSerializ
 class ItemPedidoSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     Serializer para items de pedido.
-    [SHIELD] Zero Trust: Aplica normalización de strings numéricos.
+    [SHIELD] Zero Trust: Aplica normalizacion de strings numericos.
     """
     subtotal = serializers.SerializerMethodField()
 
@@ -183,7 +206,7 @@ class ItemPedidoSerializer(NormalizationMixin, serializers.ModelSerializer):
         return obj.cantidad * obj.precio_unitario
 
     def validate(self, attrs):
-        """# WARNING: Zero Trust: Normalización estricta antes de persistir."""
+        """# WARNING: Zero Trust: Normalizacion estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
 
@@ -191,7 +214,7 @@ class ItemPedidoSerializer(NormalizationMixin, serializers.ModelSerializer):
 class PedidoProyectoSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     Serializer para pedidos de recursos del proyecto.
-    [SHIELD] Zero Trust: Aplica normalización estricta de inputs.
+    [SHIELD] Zero Trust: Aplica normalizacion estricta de inputs.
     """
     items = ItemPedidoSerializer(many=True, read_only=True)
     tipo_recurso_display = serializers.CharField(source='get_tipo_recurso_display', read_only=True)
@@ -212,11 +235,11 @@ class PedidoProyectoSerializer(NormalizationMixin, serializers.ModelSerializer):
 
     def validate(self, attrs):
         """
-        # WARNING: Zero Trust: Normalización estricta y validación de reglas de negocio.
+        # WARNING: Zero Trust: Normalizacion estricta y validacion de reglas de negocio.
         """
         attrs = self.normalize_data(attrs)
         
-        # Validación de negocio: No permitir pedidos en proyectos cerrados
+        # Validacion de negocio: No permitir pedidos en proyectos cerrados
         proyecto = attrs.get('proyecto') or (self.instance.proyecto if self.instance else None)
         if not proyecto and self.context:
             proyecto = self.context.get('proyecto')
@@ -233,7 +256,7 @@ class PedidoProyectoSerializer(NormalizationMixin, serializers.ModelSerializer):
 
 class ItemPresupuestoSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
-    Serializer para ítems de presupuesto planeado (v3.5.2).
+    Serializer para items de presupuesto planeado (v3.5.2).
     Usado en endpoint independiente /api/v1/proyectos/items-presupuesto/
     y anidado en ProyectoDetailSerializer.
 
@@ -250,7 +273,7 @@ class ItemPresupuestoSerializer(NormalizationMixin, serializers.ModelSerializer)
         read_only_fields = ['id', 'empresa_id', 'subtotal']
 
     def validate(self, attrs):
-        """Zero Trust: Normalización de datos."""
+        """Zero Trust: Normalizacion de datos."""
         attrs = self.normalize_data(attrs)
         return attrs
 
@@ -260,7 +283,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     Serializer completo para detalle de proyecto v3.3 y operaciones Write.
     
     # WARNING: Incluye todas las relaciones y campos calculados. Excluye datos pesados en listados.
-    [SHIELD] Zero Trust: Aplica normalización de datos.
+    [SHIELD] Zero Trust: Aplica normalizacion de datos.
     """
     # Display fields
     tipo_servicio_display = serializers.CharField(source='get_tipo_servicio_display', read_only=True)
@@ -276,14 +299,24 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     costo_total = serializers.SerializerMethodField()
     indicadores_financieros = serializers.SerializerMethodField()
     
-    # Snapshots (información desacoplada)
+    # Snapshots (informacion desacoplada)
     cliente_info = serializers.SerializerMethodField()
     responsables_info = serializers.SerializerMethodField()
     proveedor_info = serializers.SerializerMethodField()
     servicio_nombre = serializers.CharField(source='servicio_asociado.nombre', read_only=True, allow_null=True)
     servicio_asociado_uuid = serializers.CharField(source='servicio_asociado.uuid', read_only=True, allow_null=True)
-    servicio_asociado = UUIDOrPKRelatedField(queryset=None, required=False, allow_null=True)
+    movimiento_inventario_uuid = serializers.UUIDField(required=False, allow_null=True)
+    movimiento_referencia = serializers.DictField(read_only=True, allow_null=True)
     cotizacion_info = serializers.SerializerMethodField()
+
+    # DT-SEDE-03: sede para KPIs por sede
+    sede = UUIDOrPKRelatedField(
+        queryset=Sede.objects.none(),
+        required=False,
+        allow_null=True,
+        help_text='UUID de la sede donde se ejecuta el proyecto (opcional)',
+    )
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
 
     class Meta:
         model = Proyecto
@@ -295,8 +328,9 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'costo_planeado_total', 'utilidad_planeada', 'margen_planeado',
         ]
         extra_kwargs = {
-            # Configuración Write-Only para evitar redundancia en la respuesta JSON
-            # (La lectura se realiza vía cliente_info y responsables_info)
+            # Configuracion Write-Only para evitar redundancia en la respuesta JSON
+            # (La lectura se realiza via cliente_info y responsables_info)
+            'servicio_asociado': {'read_only': True},
             'cliente_id': {'write_only': True},
             'cliente_nombre': {'write_only': True},
             'proveedor_id': {'write_only': True},
@@ -314,39 +348,39 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         }
 
     def __init__(self, *args, **kwargs):
-        """Inicializa y filtra queryset de servicio_asociado por empresa_id."""
         super().__init__(*args, **kwargs)
-
-        # Poblar queryset del campo servicio_asociado
-        if 'servicio_asociado' in self.fields:
-            try:
-                from apps.tenant.inventario.models import Servicio
-                empresa_id = self.context.get('empresa_id')
-                if empresa_id:
-                    self.fields['servicio_asociado'].queryset = Servicio.objects.filter(
-                        empresa_id=empresa_id
-                    )
-                else:
-                    self.fields['servicio_asociado'].queryset = Servicio.objects.none()
-            except ImportError:
-                self.fields['servicio_asociado'].queryset = Servicio.objects.none()
+        empresa_id = self.context.get('empresa_id') or (
+            self.context.get('request') and getattr(self.context['request'], 'empresa_id', None)
+        )
+        if empresa_id and 'sede' in self.fields:
+            self.fields['sede'].queryset = Sede.objects.filter(
+                empresa_id=empresa_id
+            ).only('id', 'uuid', 'nombre')
 
     def get_cotizacion_info(self, obj):
         """Resuelve la cotizacion vinculada via Factura.cotizacion_uuid (Zero-Waste)."""
-        if not obj.factura_costo_id:
+        if not obj.factura_costo_id or _FacturaInterAppAPI is None:
             return None
         try:
-            from apps.tenant.facturas.services.business_service import FacturaInterAppAPI
-            return FacturaInterAppAPI.resolve_cotizacion(factura_id=obj.factura_costo_id)
+            return _FacturaInterAppAPI.resolve_cotizacion(factura_id=obj.factura_costo_id)
         except Exception:
             return None
 
     def validate(self, attrs):
         """
-        # WARNING: Zero Trust: Limpieza y normalización de todos los datos ingresados.
+        # WARNING: Zero Trust: Limpieza y normalizacion de todos los datos ingresados.
         Phase-based validation: Only require responsables for their designated phase and later.
+        DT-SEDE-03: DSV. sede.empresa_id debe coincidir con empresa_id del contexto.
         """
         attrs = self.normalize_data(attrs)
+
+        # DSV sede (DT-SEDE-03)
+        sede = attrs.get('sede')
+        empresa_id = self.context.get('empresa_id')
+        if sede and empresa_id and sede.empresa_id != empresa_id:
+            raise serializers.ValidationError(
+                {'sede': 'La sede seleccionada no pertenece a esta empresa.'}
+            )
 
         # Get the project's current phase (from instance if updating, from attrs if creating)
         proyecto = self.instance if self.instance else None
@@ -458,7 +492,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         }
 
     def get_cliente_info(self, obj):
-        """Información del cliente (snapshot)."""
+        """Informacion del cliente (snapshot)."""
         if obj.cliente_id:
             return {
                 "id": obj.cliente_id,
@@ -467,7 +501,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         return None
 
     def get_responsables_info(self, obj):
-        """Información de todos los responsables por fase (snapshots)."""
+        """Informacion de todos los responsables por fase (snapshots)."""
         return {
             "comercial": {
                 "id": obj.responsable_comercial_id,
@@ -492,7 +526,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         }
 
     def get_proveedor_info(self, obj):
-        """Información del proveedor (snapshot)."""
+        """Informacion del proveedor (snapshot)."""
         if obj.proveedor_id:
             return {
                 "id": obj.proveedor_id,
@@ -506,7 +540,7 @@ class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):
     Serializer para tareas diarias (v3.5.4).
     Usado en endpoint independiente /api/v1/proyectos/tareas-diarias/
 
-    Soporta tareas con período [fecha_inicio, fecha_fin].
+    Soporta tareas con periodo [fecha_inicio, fecha_fin].
 
     [SHIELD] Zero Trust: DSV mediante empresa_id en contexto.
     Validaciones integradas contra fechas del proyecto y fase CIERRE.
@@ -525,7 +559,7 @@ class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):
 
     def validate(self, attrs):
         """
-        Zero Trust: Validación integrada de fechas y fase CIERRE.
+        Zero Trust: Validacion integrada de fechas y fase CIERRE.
         """
         attrs = self.normalize_data(attrs)
 
@@ -548,10 +582,82 @@ class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):
                     f"La fecha de fin de la tarea no puede ser posterior a la fecha fin del proyecto ({proyecto.fecha_fin_estimada})"
                 )
 
-        # Validar que proyecto NO esté en CIERRE
+        # Validar que proyecto NO este en CIERRE
         if proyecto and proyecto.fase_actual == 'CIERRE':
             raise serializers.ValidationError(
                 "No se pueden crear, modificar o eliminar tareas en proyectos en fase de CIERRE"
             )
 
         return attrs
+
+
+class TareaCortaSerializer(NormalizationMixin, serializers.ModelSerializer):
+    """
+    Serializer para tareas cortas v3.10.0.
+    Alineado con Tabulator, UUID Lookups y Zero Trust.
+    Vinculado a Cliente y Empleado como SSoT de asignacion.
+    """
+    from apps.tenant.clientes.models import Cliente as _Cliente
+    from apps.tenant.empleados.models import Empleado as _Empleado
+
+    cliente_uuid = serializers.UUIDField(source='cliente.uuid', read_only=True, allow_null=True)
+    cliente = UUIDOrPKRelatedField(
+        queryset=_Cliente.objects.only(
+            'id', 'uuid', 'empresa_id', 'razon_social', 'numero_documento'
+        ),
+        required=True,
+        write_only=True
+    )
+    cliente_nombre = serializers.SerializerMethodField(read_only=True)
+    cliente_info = serializers.SerializerMethodField(read_only=True)
+    empleado_uuid = serializers.UUIDField(source='empleado.uuid', read_only=True, allow_null=True)
+    empleado = UUIDOrPKRelatedField(
+        queryset=_Empleado.objects.only(
+            'id', 'uuid', 'empresa_id', 'primer_nombre', 'primer_apellido'
+        ),
+        required=True,
+        write_only=True
+    )
+    empleado_nombre = serializers.SerializerMethodField(read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    prioridad_display = serializers.CharField(source='get_prioridad_display', read_only=True)
+
+    class Meta:
+        model = TareaCorta
+        fields = [
+            'id', 'uuid',
+            'cliente_uuid', 'cliente', 'cliente_nombre', 'cliente_info',
+            'empleado_uuid', 'empleado', 'empleado_nombre',
+            'fecha_inicio', 'fecha_fin', 'titulo', 'descripcion',
+            'estado', 'estado_display', 'prioridad', 'prioridad_display',
+            'notas_progreso', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'uuid',
+            'cliente_uuid', 'cliente_nombre', 'cliente_info',
+            'empleado_uuid', 'empleado_nombre',
+            'estado_display', 'prioridad_display', 'created_at', 'updated_at'
+        ]
+
+    def get_cliente_nombre(self, obj):
+        if obj.cliente:
+            return obj.cliente.razon_social
+        return None
+
+    def get_cliente_info(self, obj):
+        if not obj.cliente:
+            return None
+        return {
+            'uuid': str(obj.cliente.uuid),
+            'razon_social': obj.cliente.razon_social,
+            'numero_documento': obj.cliente.numero_documento,
+            'label': obj.cliente.razon_social,
+        }
+
+    def get_empleado_nombre(self, obj):
+        if obj.empleado:
+            partes = [obj.empleado.primer_nombre, obj.empleado.primer_apellido]
+            return ' '.join(p for p in partes if p).strip() or None
+        return None
+
+

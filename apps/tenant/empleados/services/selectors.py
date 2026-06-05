@@ -1,11 +1,14 @@
 """
-Selectores de Empleados - Consultas GET optimizadas (read-only).
+Selectors de Empleados - Consultas GET optimizadas (read-only).
 
 WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 - Este archivo contiene SOLO consultas de lectura optimizadas.
 - Todas las funciones son @staticmethod.
 - Usa .only() para cargar solo campos necesarios (Zero Waste).
 """
+from datetime import date
+from decimal import Decimal
+
 from django.db.models import Count, Exists, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -21,23 +24,31 @@ from apps.tenant.empleados.models import Contrato, Devengo, Empleado
 EMPLEADO_LIST_FIELDS = (
     'id', 'uuid', 'tipo_documento', 'numero_documento', 'primer_nombre', 'primer_apellido',
     'segundo_nombre', 'segundo_apellido', 'estado', 'fecha_ingreso', 'empresa_id', 'foto',
+    'email', 'telefono', 'sede', 'area', 'resolucion_dian',
+)
+
+_SEDE_AREA_TRAVERSALS = (
+    'sede__id', 'sede__uuid', 'sede__nombre',
+    'area__id', 'area__uuid', 'area__nombre',
 )
 
 CONTRATO_LIST_FIELDS = (
-    'id', 'uuid', 'empleado', 'empleado__id', 'empleado__uuid',
-    'empleado__primer_nombre', 'empleado__primer_apellido',
+    'id', 'uuid', 'empleado',
     'tipo', 'fecha_inicio', 'fecha_fin', 'salario_mensual', 'auxilio_transporte',
     'cargo', 'estado', 'activo', 'empresa_id', 'horas_semanales',
+)
+
+_CONTRATO_LIST_EMPLEADO_TRAVERSALS = (
+    'empleado__id', 'empleado__uuid',
+    'empleado__primer_nombre', 'empleado__primer_apellido',
 )
 
 DEVENGO_LIST_FIELDS = (
     'id', 'uuid', 'empresa_id',
     # Empleado (cross-model via select_related)
-    'empleado', 'empleado__id', 'empleado__uuid',
-    'empleado__tipo_documento', 'empleado__numero_documento',
-    'empleado__primer_nombre', 'empleado__primer_apellido',
+    'empleado',
     # Contrato (cross-model via select_related)
-    'contrato', 'contrato__id', 'contrato__uuid', 'contrato__tipo', 'contrato__cargo', 'contrato__salario_mensual',
+    'contrato',
     # Nómina — período y fechas
     'periodo_mes', 'fecha_inicio', 'fecha_fin', 'fecha_pago', 'dias_laborados',
     # Devengos
@@ -47,33 +58,49 @@ DEVENGO_LIST_FIELDS = (
     'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
     # Totales y estado
     'neto_pagar', 'anulado',
-    # Mapeo contable (SSoT: Devengo es la entidad contable)
-    'cuenta_contable_uuid',
+)
+
+_DEVENGO_LIST_TRAVERSALS = (
+    'empleado__id', 'empleado__uuid',
+    'empleado__tipo_documento', 'empleado__numero_documento',
+    'empleado__primer_nombre', 'empleado__primer_apellido',
+    'contrato__id', 'contrato__uuid', 'contrato__tipo', 'contrato__cargo', 'contrato__salario_mensual',
 )
 
 # Campos completos para DETALLE (formularios de edicion)
 EMPLEADO_DETAIL_FIELDS = (
-    'id', 'uuid', 'empresa', 'empresa__id', 'tipo_documento', 'numero_documento',
+    'id', 'uuid', 'empresa', 'tipo_documento', 'numero_documento',
     'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
     'email', 'telefono', 'eps', 'afp', 'arl', 'nivel_riesgo_arl',
     'estado', 'fecha_ingreso', 'fecha_retiro', 'foto',
+    'sede', 'area', 'resolucion_dian',
+)
+
+_EMPLEADO_DETAIL_TRAVERSALS = (
+    'empresa__id',
+    'sede__id', 'sede__uuid', 'sede__nombre',
+    'area__id', 'area__uuid', 'area__nombre',
+    'resolucion_dian__id', 'resolucion_dian__uuid',
+    'resolucion_dian__numero_resolucion', 'resolucion_dian__prefijo', 'resolucion_dian__vigente',
 )
 
 CONTRATO_DETAIL_FIELDS = (
-    'id', 'uuid', 'empresa', 'empresa__id', 'empleado', 'empleado__id', 'empleado__uuid',
-    'empleado__primer_nombre', 'empleado__primer_apellido',
+    'id', 'uuid', 'empresa', 'empleado',
     'tipo', 'fecha_inicio', 'fecha_fin', 'salario_mensual', 'auxilio_transporte',
     'prestamos_empresa', 'cargo', 'archivo_pdf', 'estado', 'activo', 'horas_semanales',
 )
 
-DEVENGO_DETAIL_FIELDS = (
-    'id', 'uuid', 'empresa', 'empresa__id',
-    # Empleado
-    'empleado', 'empleado__id', 'empleado__uuid',
-    'empleado__tipo_documento', 'empleado__numero_documento',
+_CONTRATO_DETAIL_TRAVERSALS = (
+    'empresa__id', 'empleado__id', 'empleado__uuid',
     'empleado__primer_nombre', 'empleado__primer_apellido',
+)
+
+DEVENGO_DETAIL_FIELDS = (
+    'id', 'uuid', 'empresa',
+    # Empleado
+    'empleado',
     # Contrato
-    'contrato', 'contrato__id', 'contrato__uuid', 'contrato__tipo', 'contrato__salario_mensual',
+    'contrato',
     # Nómina
     'periodo_mes', 'fecha_inicio', 'fecha_fin', 'fecha_pago', 'dias_laborados',
     # Devengos
@@ -83,8 +110,14 @@ DEVENGO_DETAIL_FIELDS = (
     'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
     # Totales, notas y estado
     'observaciones', 'neto_pagar', 'anulado',
-    # Mapeo contable
-    'cuenta_contable_uuid',
+)
+
+_DEVENGO_DETAIL_TRAVERSALS = (
+    'empresa__id',
+    'empleado__id', 'empleado__uuid',
+    'empleado__tipo_documento', 'empleado__numero_documento',
+    'empleado__primer_nombre', 'empleado__primer_apellido',
+    'contrato__id', 'contrato__uuid', 'contrato__tipo', 'contrato__salario_mensual',
 )
 
 
@@ -123,11 +156,21 @@ class EmpleadoSelector:
             ).values('uuid')[:1]
         )
 
+        cargo = Subquery(
+            Contrato.objects.filter(
+                empleado_id=OuterRef('pk'),
+                activo=True,
+                estado='ACTIVO',
+                empresa_id=empresa_id,
+            ).values('cargo')[:1]
+        )
+
         qs = Empleado.objects.filter(empresa_id=empresa_id).annotate(
             tiene_contrato_activo=Exists(has_contract),
             tiene_nominas_registradas=Exists(has_payroll),
             contrato_activo_uuid=contrato_activo_uuid,
-        ).only(*EMPLEADO_LIST_FIELDS)
+            cargo=cargo,
+        ).select_related('sede', 'area').only(*EMPLEADO_LIST_FIELDS, *_SEDE_AREA_TRAVERSALS)
 
         if search:
             qs = qs.filter(
@@ -145,7 +188,7 @@ class EmpleadoSelector:
         """QuerySet optimizado para DETALLE de Empleado."""
         return Empleado.objects.filter(
             empresa_id=empresa_id, uuid=empleado_uuid
-        ).select_related('empresa').only(*EMPLEADO_DETAIL_FIELDS).get()
+        ).select_related('empresa', 'sede', 'area').only(*EMPLEADO_DETAIL_FIELDS, *_EMPLEADO_DETAIL_TRAVERSALS).get()
 
     @staticmethod
     def get_by_id(empresa_id: int, empleado_id: int):
@@ -186,7 +229,6 @@ class EmpleadoSelector:
         Retorna los empleados de la empresa con contrato activo que NO
         tienen nominas registradas (no anuladas) solapadas con el rango dado.
         """
-        from datetime import date
         if isinstance(fecha_inicio, str):
             fecha_inicio = date.fromisoformat(fecha_inicio)
         if isinstance(fecha_fin, str):
@@ -206,7 +248,6 @@ class EmpleadoSelector:
                 periodo_mes__lte=end_month
             )
         ).values_list('empleado_id', flat=True)
-
 
         has_contract = Contrato.objects.filter(
             empleado_id=OuterRef('pk'),
@@ -235,7 +276,7 @@ class ContratoSelector:
         """QuerySet optimizado para LISTAR Contratos."""
         qs = Contrato.objects.filter(empresa_id=empresa_id).select_related(
             'empleado'
-        ).only(*CONTRATO_LIST_FIELDS)
+        ).only(*CONTRATO_LIST_FIELDS, *_CONTRATO_LIST_EMPLEADO_TRAVERSALS)
 
         if empleado_id:
             qs = qs.filter(empleado_id=empleado_id)
@@ -254,14 +295,14 @@ class ContratoSelector:
         """QuerySet optimizado para DETALLE de Contrato."""
         return Contrato.objects.filter(
             empresa_id=empresa_id, uuid=contrato_uuid
-        ).select_related('empresa', 'empleado').only(*CONTRATO_DETAIL_FIELDS).get()
+        ).select_related('empresa', 'empleado').only(*CONTRATO_DETAIL_FIELDS, *_CONTRATO_DETAIL_TRAVERSALS).get()
 
     @staticmethod
     def get_by_id(empresa_id: int, contrato_id: int):
         """Obtiene un contrato por PK interno solo para payloads validados."""
         return Contrato.objects.filter(
             empresa_id=empresa_id, pk=contrato_id
-        ).select_related('empleado').only(*CONTRATO_DETAIL_FIELDS).get()
+        ).select_related('empleado').only(*CONTRATO_DETAIL_FIELDS, *_CONTRATO_DETAIL_TRAVERSALS).get()
 
     @staticmethod
     def get_activo_for_empleado(empresa_id: int, empleado_id: int):
@@ -271,7 +312,7 @@ class ContratoSelector:
             empleado_id=empleado_id,
             estado='ACTIVO',
             activo=True,
-        ).select_related('empleado').only(*CONTRATO_DETAIL_FIELDS).first()
+        ).select_related('empleado').only(*CONTRATO_DETAIL_FIELDS, *_CONTRATO_DETAIL_TRAVERSALS).first()
 
 
 class DevengoSelector:
@@ -282,7 +323,7 @@ class DevengoSelector:
         """QuerySet optimizado para LISTAR Devengos/Nominas."""
         qs = Devengo.objects.filter(empresa_id=empresa_id).select_related(
             'empleado', 'contrato'
-        ).only(*DEVENGO_LIST_FIELDS)
+        ).only(*DEVENGO_LIST_FIELDS, *_DEVENGO_LIST_TRAVERSALS)
 
         if empleado_id:
             qs = qs.filter(empleado_id=empleado_id)
@@ -304,7 +345,7 @@ class DevengoSelector:
         """QuerySet optimizado para DETALLE de Devengo."""
         return Devengo.objects.filter(
             empresa_id=empresa_id, uuid=devengo_uuid
-        ).select_related('empresa', 'empleado', 'contrato').only(*DEVENGO_DETAIL_FIELDS).get()
+        ).select_related('empresa', 'empleado', 'contrato').only(*DEVENGO_DETAIL_FIELDS, *_DEVENGO_DETAIL_TRAVERSALS).get()
 
     @staticmethod
     def get_historial(empleado_id: int, empresa_id: int, search: str = None):
@@ -312,7 +353,7 @@ class DevengoSelector:
         qs = Devengo.objects.filter(
             empresa_id=empresa_id,
             empleado_id=empleado_id
-        ).select_related('empleado', 'contrato').only(*DEVENGO_LIST_FIELDS)
+        ).select_related('empleado', 'contrato').only(*DEVENGO_LIST_FIELDS, *_DEVENGO_LIST_TRAVERSALS)
 
         if search:
             qs = qs.filter(
@@ -339,7 +380,7 @@ class DevengoSelector:
             empresa_id=empresa_id,
             empleado_id=empleado_id,
             anulado=False,
-        ).select_related('empleado', 'contrato').only(*DEVENGO_LIST_FIELDS).order_by(
+        ).select_related('empleado', 'contrato').only(*DEVENGO_LIST_FIELDS, *_DEVENGO_LIST_TRAVERSALS).order_by(
             '-fecha_pago', '-periodo_mes'
         ).first()
 
@@ -359,7 +400,6 @@ class NominaSummarySelector:
             anulado=False
         ).only('id', 'neto_pagar')
 
-        from decimal import Decimal
         totales = qs_mes.aggregate(
             total_neto=Coalesce(Sum('neto_pagar'), Decimal('0.00')),
             count_pagos=Count('id')
@@ -391,3 +431,4 @@ DETAIL_FIELDS = {
     'contrato': CONTRATO_DETAIL_FIELDS,
     'devengo': DEVENGO_DETAIL_FIELDS,
 }
+

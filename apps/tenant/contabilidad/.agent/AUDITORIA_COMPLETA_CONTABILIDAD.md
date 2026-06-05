@@ -1,9 +1,11 @@
-# AUDITORIA COMPLETA — CONTABILIDAD APP v3.7.8
+# AUDITORIA COMPLETA - CONTABILIDAD APP v3.9.1
 
-**Fecha de auditoría:** 2026-05-19 (actualizado — Libro Diario sincronizado con AsientoContable)
-**Estado:** ✅ Implementado y Funcional — Pista Manual + Asientos + Periodos CRUD + Libro Diario operativo
+**Fecha de auditoria:** 2026-05-25 (validado contra codigo local)
+**Estado:** Implementado y funcional con deuda tecnica documentada
 **Arquitectura:** Feature-Sliced Design (FSD) + Service Layer
 **Compliance:** AGENTS.md + NIIF PYMES Colombia
+
+> Nota de auditoria 2026-05-25: este documento fue contrastado con `models.py`, `api/viewsets.py`, `api/serializers.py`, `api/urls.py`, `services/`, `integracion/`, `tasks.py`, `templates/`, `static/` y `tests/`. Los conteos y estados inferiores reflejan el codigo local actual, no solo la intencion historica.
 
 
 ## 📑 Documentación Especializada (SSoT)
@@ -84,6 +86,18 @@ El modo manual **no depende de `ReglaContable`**: el usuario provee la cuenta PU
 - Tipos: IVA, RETEFUENTE, RETEICA, SALUD, PENSION, ARL, CAJA, ICBF, SENA, etc.
 - Soporte art. 114-1 ET: exoneración parafiscales (`exonerado`, `base_minima_uvt`)
 
+### ConfiguracionRetenciones
+- Configuracion por tenant para retenciones por tipo de tercero, NIT opcional y tipo de retencion.
+- Permite reglas especificas por tercero y reglas fallback generales.
+- Campo clave: `cuenta_retencion` apunta a `CuentaContable` para contabilizacion posterior.
+- Expuesto por API en `/api/v1/contabilidad/configuraciones-retenciones/`.
+
+### Retencion
+- Registro materializado de retenciones aplicadas a documentos origen (`Factura`, `NotaCredito`, `ItemFactura`, `DocumentoSoporte`, etc.).
+- Campos de trazabilidad: `documento_origen_app`, `documento_origen_modelo`, `documento_origen_id`, `documento_origen_numero`.
+- Soporta reversas mediante campos `reversada`, `documento_reversada_*` y enlace a configuracion aplicada.
+- Expuesto por API en `/api/v1/contabilidad/retenciones/` y consultable por tercero/documento.
+
 ---
 
 ## 3. CAPA DE SERVICIOS
@@ -92,6 +106,8 @@ El modo manual **no depende de `ReglaContable`**: el usuario provee la cuenta PU
 selectors.py      →  Queries optimizadas (.only, .select_related). SSoT de field sets.
 crud_service.py   →  Persistencia @transaction.atomic. Sin lógica de negocio.
 business_service.py → Validaciones de dominio + orquestación. DSV anti-IDOR.
+retenciones_service.py → Reglas de retenciones materializadas y reversas.
+api_mixins.py      → Mixins por modelo para inyectar selectors/business/crud.
 ```
 
 ### Métodos clave de `ContabilidadBusinessService`
@@ -102,6 +118,9 @@ business_service.py → Validaciones de dominio + orquestación. DSV anti-IDOR.
 | `contabilizar_documento_manual(empresa_id, dto)` | **Flujo On-Demand** — recibe `ComprobanteManualDTO` |
 | `aprobar_asiento(asiento_id)` | Cambia BORRADOR → APROBADO validando cuadratura |
 | `buscar_catalogo_niif_por_tipo(tipo, search)` | Búsqueda NIIF para el buscador del offcanvas |
+| `sincronizar_cuentas_plan(empresa_id)` | Materializa `CatalogoMaestroNIIF` faltante en `CuentaContable` |
+| `ejecutar_integracion_completa(empresa_id)` | Punto de entrada para tareas Celery/backfill de extractores |
+| `sugerir_lineas_asiento_ia(empresa_id, app_label, ctx)` | Sugiere lineas contables desde contexto del documento |
 
 ### Métodos clave de `ContabilidadCRUDService`
 
@@ -110,12 +129,22 @@ business_service.py → Validaciones de dominio + orquestación. DSV anti-IDOR.
 | `crear_asiento(empresa_id, data, movimientos)` | Persiste asiento desde flujo automático/API |
 | `crear_asiento_manual(empresa_id, data, movimientos)` | **Flujo On-Demand** — soporta `documento_origen_*`, usa `debe_total`/`haber_total` |
 
+### Métodos clave de `RetencionesService`
+
+| Método | Propósito |
+|--------|-----------|
+| `obtener_retenciones_desde_tercero()` | Resuelve configuraciones aplicables por tercero y tipo de documento |
+| `calcular_monto_retencion()` | Calcula monto segun porcentaje y base |
+| `crear_retencion()` / `crear_retenciones_desde_dict()` | Materializa retenciones en `Retencion` |
+| `listar_retenciones_por_documento()` | Consulta retenciones por documento origen |
+| `reversar_retencion()` | Crea reversa trazable de una retencion existente |
+
 ---
 
 ## 4. CAPA DE INTEGRACIÓN — FLUJO AUTOMÁTICO (Pull Model)
 
 ```
-ExtractorGastos / ExtractorFacturas / ExtractorInventario
+ExtractorGastos / ExtractorFacturas / ExtractorNomina
   → extraer_pendientes() → List[TransaccionEconomica DTO]
   → Contabilizador(empresa_id).contabilizar(dto)
       → _resolver_periodo(fecha)
@@ -283,7 +312,7 @@ modelo = serializers.ChoiceField(choices=['Factura', 'DocumentoSoporte', '<Model
 
 ### Contexto
 
-A partir de v3.7.1, **contabilidad es responsable única de determinar contrapartidas** para todos los documentos origen. Las apps source (facturas, gastos, empleados, inventario, proveedores, clientes) solo proporcionan:
+A partir de v3.9.2, **contabilidad no mapea directamente productos ni movimientos de inventario**. Las apps source (facturas, gastos, empleados, proveedores, clientes) solo proporcionan:
 - UUID de cuenta principal (opaco, sin FK)
 - Metadatos del documento (fecha, tercero, montos)
 
@@ -301,7 +330,7 @@ Todas las apps siguen el mismo patrón:
 |-----|-----------------|------------------|
 | `clientes.Cliente` | `cuenta_contable_uuid` | Cartera (CxC) |
 | `facturas.Factura` | `cuenta_contable_uuid` | Ingresos/Compras |
-| `inventario.Producto` | 3x `cuenta_*_uuid` | Inventario + Gasto |
+| `inventario.Producto` | 3x `cuenta_*_uuid` | Fuera de Contabilidad Pendientes; mapeo centralizado en Inventario / Movimientos Recientes |
 | `empleados.Devengo` | `cuenta_contable_uuid` | Nómina |
 | `proveedores.Proveedor` | `cuenta_contable_uuid` | CxP |
 | `gastos.DocumentoSoporte` | `cuenta_gasto_uuid` | Gastos/Egresos |
@@ -403,6 +432,8 @@ class ExtractorGastos(AbstractExtractor):
 
 ### Nueva tabla: `ReglasOrquestacion`
 
+> Estado 2026-05-25: `ReglasOrquestacion` no existe en el codigo local. El bloque inferior es propuesta de arquitectura futura y debe adaptarse antes de implementarse: al ser modelo tenant debe heredar de `SintelTenantBaseModel`, no de `models.Model`, y debe respetar la estructura autorizada de migrations/service layer.
+
 ```python
 # apps/tenant/contabilidad/models.py (futuro)
 
@@ -491,11 +522,19 @@ POST       /api/v1/contabilidad/periodos-contables/
 GET        /api/v1/contabilidad/catalogo-niif/
 GET        /api/v1/contabilidad/catalogo-niif/buscar-por-tipo/?tipo=GASTO&search=PERSONAL
 GET        /api/v1/contabilidad/tipos-comprobante/
+GET        /api/v1/contabilidad/libro-diario/
+GET/POST   /api/v1/contabilidad/retenciones/
+GET/PATCH  /api/v1/contabilidad/retenciones/{uuid}/
+GET        /api/v1/contabilidad/retenciones/obtener-por-tercero/
+GET        /api/v1/contabilidad/retenciones/obtener-por-documento/
+GET/POST   /api/v1/contabilidad/configuraciones-retenciones/
+GET/PATCH  /api/v1/contabilidad/configuraciones-retenciones/{uuid}/
 
 # FLUJO ON-DEMAND (nuevo v3.6)
 GET        /api/v1/contabilidad/pendientes/
 GET        /api/v1/contabilidad/pendientes/render-offcanvas/?app=&modelo=&id=
 POST       /api/v1/contabilidad/pendientes/contabilizar-manual/
+POST       /api/v1/contabilidad/pendientes/asistente-ia/
 ```
 
 ### Seguridad
@@ -571,22 +610,24 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 
 | Componente | Ruta | Estado |
 |-----------|------|--------|
-| Modelos | `models.py` | ✅ 7 modelos |
+| Modelos | `models.py` | 10 modelos: Catalogo, Cuenta, TipoComprobante, Asiento, Movimiento, Periodo, Regla, Tarifa, ConfiguracionRetenciones, Retencion |
 | Selectors | `services/selectors.py` | ✅ Pendientes + `APP_ORIGEN_PREFIJOS` + `filtrar_cuentas_por_app_origen()` |
 | CRUD Service | `services/crud_service.py` | ✅ `crear_asiento_manual()` con `tipo_comprobante_ref_id` |
-| Business Service | `services/business_service.py` | ✅ `contabilizar_documento_manual()` + TipoComprobante numero |
-| API Viewsets | `api/viewsets.py` | ✅ 7 ViewSets — `ReglaContable` importado, `app_origen` filter |
+| Business Service | `services/business_service.py` | ✅ `contabilizar_documento_manual()` + TipoComprobante numero + integracion completa + asistente IA |
+| Retenciones Service | `services/retenciones_service.py` | ✅ Pull Model de retenciones, materializacion y reversas |
+| API Viewsets | `api/viewsets.py` | 10 ViewSets: cuentas, asientos, movimientos, periodos, catalogo, tipos, pendientes, libro diario, retenciones, configuraciones |
 | API Serializers | `api/serializers.py` | ✅ `ContabilizarManualInputSerializer` con `tipo_comprobante_id` |
-| API URLs | `api/urls.py` | ✅ Router `pendientes` registrado |
+| API URLs | `api/urls.py` | ✅ Router DRF con `pendientes`, `libro-diario`, `retenciones`, `configuraciones-retenciones` |
 | DTOs | `integracion/dtos.py` | ✅ `LineaManual` + `ComprobanteManualDTO` con `tipo_comprobante_id` |
 | Contabilizador | `integracion/contabilizador.py` | ✅ Flujo automático |
 | Resolvedor | `integracion/resolver.py` | ✅ cuenta_hint > ReglaContable |
 | Validadores | `integracion/validadores.py` | ✅ Cuadratura, periodo, vacío |
 | Excepciones | `integracion/excepciones.py` | ✅ Jerarquía completa |
-| Templates | `templates/tenant/contabilidad/` | ✅ 26 archivos |
-| Static JS | `static/contabilidad/js/` | ✅ 13 archivos — `TabulatorFactory` en pendiente_list.js |
-| Migraciones | `migrations/` | ✅ 5 migraciones aplicadas |
-| Mgmt Commands | `management/commands/` | ✅ `poblar_catalogo_niif`, `seed_reglas_contables` |
+| Extractores | `integracion/extractores/` | gastos, facturas, nomina; inventario se consume por Movimientos Recientes, no por extractor directo |
+| Templates | `templates/tenant/contabilidad/` | 31 archivos HTML bajo ruta tenant |
+| Static JS | `static/contabilidad/js/` | 14 archivos JS por dominio: asiento, cuenta, periodo, pendiente, libro, reporte |
+| Migraciones | `migrations/` | 7 migraciones presentes (`0001` a `0007`) |
+| Mgmt Commands | `management/commands/` | `poblar_catalogo_niif`, `seed_reglas_contables`, `backfill_contabilidad`, `migrate_retenciones` |
 | Catálogo NIIF | DB (home, cliente) | ✅ 124 cuentas maestras |
 | CuentaContable nivel-6 | DB (home, cliente) | ✅ 54 cuentas seeded desde CatalogoMaestroNIIF |
 | TipoComprobante | DB (home, cliente) | ✅ 6 tipos: CE, RC, GN, ND, NC, NOM |
@@ -597,22 +638,33 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 
 | Estándar | Estado |
 |----------|--------|
-| Feature-Sliced Design | ✅ |
-| Service Layer (selector → CRUD → business) | ✅ |
-| Multi-Tenant (django-tenants) | ✅ |
-| Zero-Waste Queries (.only, .select_related) | ✅ |
-| API-First Design (DRF ViewSets) | ✅ |
-| Double Semantic Verification (DSV) | ✅ |
-| NIIF PYMES Colombia (PUC nivel 6) | ✅ |
-| Inmutabilidad (Períodos Cerrados) | ✅ |
-| Idempotencia (documento_origen_*) | ✅ |
-| Transacciones atómicas (@transaction.atomic) | ✅ |
-| Partida Doble estricta | ✅ |
-| UUID lookup (no exponer PK) | ✅ |
-| No emojis en .py (SyntaxError prevention) | ✅ |
-| empresa_id en toda query tenant | ✅ |
-| TabulatorFactory obligatorio (cero new Tabulator()) | ✅ |
-| AGENTS.md Compliance | ✅ |
+| Feature-Sliced Design | OK |
+| Service Layer (selector -> CRUD -> business) | OK, con deuda puntual en ViewSets que aun persisten directamente |
+| Multi-Tenant (django-tenants) | OK |
+| Zero-Waste Queries (.only, .select_related) | Parcial: ver hallazgos AUD-2026-05-25 |
+| API-First Design (DRF ViewSets) | OK |
+| Double Semantic Verification (DSV) | OK en endpoints principales; revisar acciones auxiliares en cada cambio |
+| NIIF PYMES Colombia (PUC nivel 6) | OK en flujo automatico; manual permite cuenta activa aunque no sea nivel 6 por decision v3.7.5 |
+| Inmutabilidad (Periodos Cerrados) | OK |
+| Idempotencia (documento_origen_*) | OK |
+| Transacciones atomicas (@transaction.atomic) | OK en persistencia principal |
+| Partida Doble estricta | OK |
+| UUID lookup (no exponer PK) | OK en ViewSets BaseTenantViewSet; `LibroDiarioViewSet` es read-only sin lookup |
+| No emojis en .py (SyntaxError prevention) | Validado con `py_compile` en archivos modificados |
+| empresa_id en toda query tenant | Parcial: hallazgos en comandos/scripts y queries legacy |
+| TabulatorFactory obligatorio (cero new Tabulator()) | OK en modulos inspeccionados |
+| AGENTS.md Compliance | Parcial con deuda tecnica documentada |
+
+### Hallazgos de auditoria 2026-05-25
+
+| ID | Severidad | Archivo | Hallazgo | Accion recomendada |
+|----|-----------|---------|----------|--------------------|
+| AUD-CONT-001 | Alta | `api/viewsets.py` | Corregido 2026-05-25: `TipoComprobanteViewSet.get_queryset()` usa `TipoComprobanteSelector` con `only()` y filtro por `empresa_id`. | Revalidar en pruebas API. |
+| AUD-CONT-002 | Media | `api/viewsets.py` | Corregido 2026-05-25: `CatalogoMaestroNIIFViewSet.get_queryset()` mantiene `prefetch_related()` pero agrega `only()` en rama detalle. | Revalidar si el serializer requiere campos adicionales. |
+| AUD-CONT-003 | Media | `services/business_service.py` | Corregido 2026-05-25: `_obtener_o_crear_cuenta()` consulta `CatalogoMaestroNIIF` y `Empresa` con campos minimos. | Revalidar flujo manual de cuenta auto-creada. |
+| AUD-CONT-004 | Media | `management/commands/migrate_retenciones.py` | Corregido 2026-05-25: elimina `.all()`, usa `only()`, `select_related()`, `iterator()` y asigna `empresa_id` en `Retencion`. | Revalidar command con `--dry-run`. |
+| AUD-CONT-005 | Baja | `api/datatables.py` | No expuesto: `api/urls.py` mantiene endpoints DataTables comentados/eliminados. | Remover archivo legacy en una tarea de limpieza autorizada. |
+| AUD-CONT-006 | Baja | `scratch/` | No productivo: scripts permanecen fuera de rutas de ejecucion. | Mantener como tooling o mover fuera de la app en limpieza futura. |
 
 ---
 
@@ -620,13 +672,14 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 
 | App Origen | Campo Principal | Contrapartida | Flujo Manual | Cuentas Disponibles |
 |-----------|-----------------|---------------|-------------|-------------------|
-| `facturas.Factura` | `cuenta_contable_uuid` | **Contabilidad orquesta** | ✅ Activo (4) | 14 (prefijos 1305, 4135…) |
-| `gastos.DocumentoSoporte` | `cuenta_gasto_uuid` | **Contabilidad orquesta** | ✅ Activo (1) | 25 (prefijos 2335, 5110…) |
-| `empleados.Devengo` | `cuenta_contable_uuid` | **Contabilidad orquesta** | ✅ Activo | 13 (prefijos 5105, 2370…) |
-| `inventario.Producto` | 3x `cuenta_*_uuid` | **Contabilidad orquesta** | ✅ Activo | 6 (prefijos 1435, 6135…) |
-| `proveedores.Proveedor` | `cuenta_contable_uuid` | **Contabilidad orquesta** | ✅ Activo | 25 (prefijos 2335, 5110…) |
-| `clientes.Cliente` | `cuenta_contable_uuid` | **Contabilidad orquesta** | ✅ Activo | 14 (prefijos 1305, 4135…) |
-| `cotizaciones.*` | — | — | ⏳ 4 pasos (ver §5.3) | — |
+| `facturas.Factura` | `cuenta_contable_uuid` | Contabilidad orquesta | Activo en `pendientes` y extractores | 14 (prefijos 1305, 4135...) |
+| `facturas.NotaCredito` | trazabilidad desde factura | Contabilidad orquesta | Activo en extractor automatico | 14 (prefijos 1305, 4135...) |
+| `gastos.DocumentoSoporte` | `cuenta_gasto_uuid` | Contabilidad orquesta | Activo en `pendientes` y extractores | 25 (prefijos 2335, 5110...) |
+| `empleados.Devengo` | `cuenta_contable_uuid` | Contabilidad orquesta | Activo en `pendientes` y extractor nomina | 13 (prefijos 5105, 2370...) |
+| `inventario.Movimientos Recientes` | `get_movimientos_timeline()` | Inventario / Movimientos Recientes | Activo en `pendientes` via agregado; modelos `MovimientoInventario` / `HistorialServicio` | 6 (prefijos 1435, 6135...) |
+| `proveedores.Proveedor` | `cuenta_contable_uuid` | Solo como tercero/cuenta origen | No registrado como documento pendiente directo | 25 (prefijos 2335, 5110...) |
+| `clientes.Cliente` | `cuenta_contable_uuid` | Solo como tercero/cuenta origen | No registrado como documento pendiente directo | 14 (prefijos 1305, 4135...) |
+| `cotizaciones.*` | - | - | Pendiente: requiere 4 pasos (ver §5.3) | - |
 
 ### Arquitectura de Orquestación (v3.7.1)
 
@@ -647,7 +700,63 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 | `TipoComprobante` activos | 6 (CE, RC, GN, ND, NC, NOM) |
 | `AsientoContable` creados | 3 |
 | `ReglaContable` activas | 0 (flujo manual no las requiere) |
-| `ReglasOrquestacion` (nuevo) | 0 (tablaCreada pero vacía — próxima iteración) |
+
+---
+
+## 12. BOUNDARY GARANTIZADO — CONTABILIDAD <-> EMPLEADOS (v3.10.2)
+
+**Regla:** Contabilidad SOLO puede consumir datos de Empleados a traves del modelo `Devengo` (nominas).
+No esta permitido importar ni consultar `Empleado`, `Contrato` ni ningun otro modelo de la app empleados.
+
+### Contrato de la unica via permitida
+
+```
+Contabilidad                           Empleados
+-----------                            ---------
+integracion/extractores/nomina.py  ─→  Devengo (solo via FK empleado para nombre/documento)
+services/selectors.py               ─→  Devengo (get_documento_pendiente, qs_nominas_pendientes)
+```
+
+### Auditoria de Imports (2026-05-25)
+
+| Archivo contabilidad | Import de empleados | Modelo | Estado |
+|---------------------|---------------------|--------|--------|
+| `integracion/extractores/nomina.py` | `from apps.tenant.empleados.models import Devengo` | `Devengo` | PERMITIDO |
+| `services/selectors.py` — `get_documento_pendiente()` | `from apps.tenant.empleados.models import Devengo` | `Devengo` | PERMITIDO |
+| `services/selectors.py` — `qs_nominas_pendientes()` | `from apps.tenant.empleados.models import Devengo` | `Devengo` | PERMITIDO |
+| ~~`services/selectors.py` — `get_tercero_movimiento()`~~ | ~~`from apps.tenant.empleados.models import Empleado`~~ | ~~`Empleado`~~ | **ELIMINADO v3.10.2** |
+
+### Violaciones corregidas en v3.10.2
+
+**VIO-001 — HIGH** (`selectors.py:606-608`):
+- Funcion `get_tercero_movimiento()` tenia rama `tipo_tercero == 'EMPLEADO'` que importaba
+  y consultaba `Empleado` directamente, saltando la frontera Pull Model.
+- Adicionalmente, el codigo era incorrecto: accedia a campos `nombre` y `nit` que no existen
+  en el modelo `Empleado` (habria lanzado `AttributeError` en tiempo de ejecucion).
+- **Correccion:** rama `EMPLEADO` eliminada. La funcion ahora solo maneja CLIENTE y PROVEEDOR.
+
+**VIO-002 — LOW** (`selectors.py:503-505`):
+- `get_documento_pendiente()` cargaba `select_related('contrato')` y `.only('contrato__salario_mensual')`
+  sin que ningun codigo downstream consumiera esos datos (inspeccion completa de callers confirmada).
+- **Correccion:** `select_related('contrato')` y `'contrato__salario_mensual'` eliminados.
+  La query ahora solo hace `select_related('empleado')` y carga unicamente campos de `Devengo` + `Empleado`.
+
+### Estado final del boundary (verificado 2026-05-25)
+
+```python
+# Grep de verificacion (resultado: 0 matches)
+# from apps.tenant.empleados.models import (Empleado|Contrato)
+# en apps/tenant/contabilidad/**
+```
+
+| Modelo empleados | Acceso desde contabilidad | Permitido |
+|-----------------|--------------------------|-----------|
+| `Devengo` | Via `from apps.tenant.empleados.models import Devengo` en extractor y selectors | SI |
+| `Empleado` | Acceso indirecto solo via `Devengo.empleado` (select_related, no import directo) | SI (lectura de FK para nombre/documento) |
+| `Contrato` | Ningun acceso — eliminado en VIO-002 | NO (boundary garantizado) |
+
+**Compliance Pull Model: GARANTIZADO** — 0 violaciones activas.
+| `ReglasOrquestacion` | No existe en `models.py` local; permanece como propuesta futura |
 
 ### Apps Source Status (Auditoría §18 - v3.7.1)
 
@@ -1102,6 +1211,213 @@ Parámetros soportados por `LibroDiarioAPI.list(params)`:
 
 ---
 
-**Auditoría completada:** 2026-05-19 (v3.7.8 — Libro Diario sincronizado con AsientoContable)
-**Próxima revisión:** Tras implementar ExtractorGastos y `ReglasOrquestacion`
+### 12.10 Revalidacion documental v3.9.1 - 2026-05-25
+
+La auditoria fue revalidada contra el arbol local de `apps/tenant/contabilidad` y se actualizaron:
+
+| Area | Resultado 2026-05-25 |
+|------|----------------------|
+| Modelos | 10 clases tenant verificadas, incluyendo `ConfiguracionRetenciones` y `Retencion` |
+| API | Router incluye `libro-diario`, `retenciones` y `configuraciones-retenciones` |
+| Integracion | Extractores activos para gastos, facturas y nomina; inventario se consume desde Movimientos Recientes |
+| Manual On-Demand | `ContabilizarManualInputSerializer` acepta `facturas`, `gastos`, `empleados`, `inventario`; para inventario solo admite documentos provenientes del timeline |
+| Libro Diario | Opera como lectura directa de `AsientoContable` por periodo/fechas |
+| Retenciones | Pull Model materializado en `RetencionesService` y endpoints dedicados |
+| Deuda tecnica | `AUD-CONT-001` a `AUD-CONT-004` corregidos; `AUD-CONT-005` y `AUD-CONT-006` quedan como limpieza legacy no productiva |
+| `ReglasOrquestacion` | No existe en codigo local; queda solo como propuesta futura |
+
+### 12.11 Contrato Inventario / Movimientos Recientes - 2026-05-25
+
+Se implemento la migracion de busqueda contable de Inventario al agregado `Movimientos Recientes`:
+
+| Area | Resultado |
+|------|-----------|
+| Fuente unica | Contabilidad consume `apps.tenant.inventario.services.selectors.get_movimientos_timeline()` |
+| Prohibicion aplicada | Contabilidad no consulta `Producto`, `Servicio`, `ActivoFijo`, `MovimientoInventario.objects` ni `HistorialServicio.objects` |
+| Timeline | Inventario expone `documento_id` y `modelo_origen` (`MovimientoInventario` o `HistorialServicio`) |
+| Pendientes | `/api/v1/contabilidad/pendientes/` vuelve a incluir `INVENTARIO` desde el timeline |
+| Offcanvas manual | `render-offcanvas` recupera el documento de inventario por timeline, no por modelo fuente |
+| Idempotencia | `AsientoContable.documento_origen_*` usa `app_label='inventario'`, `modelo_origen` y `documento_id` |
+| Extractor legacy | `ExtractorInventario` permanece como no-op para compatibilidad de imports historicos |
+
+**Auditoria completada:** 2026-05-25 (v3.9.1 - validada contra codigo local)
+**Proxima revision:** Revalidar pruebas API/command y planificar limpieza legacy de `api/datatables.py` y `scratch/`.
+
+---
+
+## 13. ACTUALIZACION AUDITORIA v3.10.x — 2026-06-04
+
+### 13.1 Estado Global del Modulo
+
+**Version auditada:** v3.10.x (sincronizada con stack Sintel v4.8.0 Nominas Master-Detail)
+**Fecha:** 2026-06-04
+**Auditado por:** Revision profunda del arbol local `apps/tenant/contabilidad/`
+
+| Indicador | Valor |
+|-----------|-------|
+| ViewSets activos | 10 (`CuentaContable`, `AsientoContable`, `MovimientoContable`, `PeriodoContable`, `CatalogoMaestroNIIF`, `TipoComprobante`, `DocumentosPendientes`, `LibroDiario`, `Retencion`, `ConfiguracionRetenciones`) |
+| Endpoints API registrados en router | 10 prefijos en `api/urls.py` |
+| Modelos tenant | 10 (todos heredan `SintelTenantBaseModel`) |
+| Servicios | `business_service.py`, `crud_service.py`, `selectors.py`, `retenciones_service.py` |
+| Extractores activos | 4: `base.py`, `facturas.py`, `gastos.py`, `nomina.py`; `inventario.py` = no-op (timeline) |
+| Tests presentes | 6 archivos en `tests/` |
+| Tareas Celery | 2 (`ejecutar_integracion_contable_task`, `integracion_contable_global_task`) |
+| Migraciones | 7 (`0001` a `0007`) |
+| Estado general | ESTABLE — sin deuda critica activa |
+
+---
+
+### 13.2 Hallazgos Nuevos (2026-06-04)
+
+#### NUEVO-001 — Celery Tasks verificadas
+
+**Archivo:** `tasks.py`
+
+Se confirman dos tareas Celery tenant-aware:
+
+| Tarea | Alcance | Patron |
+|-------|---------|--------|
+| `ejecutar_integracion_contable_task(schema_name)` | Un tenant | ETL completo via `ContabilidadBusinessService.ejecutar_integracion_completa()` |
+| `integracion_contable_global_task()` | Todos los tenants | Broadcast: recorre `TenantModel` y encola la tarea individual |
+
+**Observacion:** `ejecutar_integracion_contable_task` no tiene `max_retries` ni DLQ definidos. Aunque el error se captura y se loguea, no persiste en `FailedTenantTask`. Esto viola la regla AGENTS.md §11.3 (Tolerancia a Fallos y DLQ). Estado: **DEUDA TECNICA NUEVA**.
+
+#### NUEVO-002 — Endpoint Asistente IA documentado
+
+**Archivo:** `api/viewsets.py` — `DocumentosPendientesViewSet.asistente_ia()`
+
+Endpoint confirmado:
+```
+POST /api/v1/contabilidad/pendientes/asistente-ia/
+```
+
+Recibe datos del documento pendiente (numero, subtotal, impuestos, total, tercero) y devuelve lineas de asiento sugeridas via `service.sugerir_lineas_asiento_ia()`. El contador revisa y confirma antes de llamar a `contabilizar-manual/`. Estado: **DOCUMENTADO, NO AUDITADO en profundidad** (validar `sugerir_lineas_asiento_ia` en `business_service.py`).
+
+#### NUEVO-003 — `LibroDiarioViewSet` no hereda de `BaseTenantViewSet`
+
+**Archivo:** `api/viewsets.py:1226`
+
+```python
+class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.ViewSet):
+```
+
+Hereda de `viewsets.ViewSet` (DRF base) en lugar de `BaseTenantViewSet`. Esto significa:
+- No aplica `lookup_field = "uuid"` heredado (no relevante: no tiene acciones `detail=True`).
+- Dual-Auth (`JWTAuthentication, SessionAuthentication`) no se hereda automaticamente desde `BaseTenantViewSet`.
+- `permission_classes = [IsTenantMember]` esta declarado explicitamente (correcto).
+
+**Riesgo:** Si `BaseTenantViewSet` anade logica critica de autenticacion o auditoria en el futuro, `LibroDiarioViewSet` no la heredara. Estado: **DEUDA TECNICA MENOR — Aceptado por ser read-only sin lookup**.
+
+#### NUEVO-004 — `ConfiguracionRetencionesViewSet` usa `lookup_field = 'id'`
+
+**Archivo:** `api/viewsets.py:1071`
+
+```python
+lookup_field = 'id'
+lookup_url_kwarg = 'id'
+```
+
+Viola la regla AGENTS.md §14.6 (UUID como Lookup Field). Expone el PK entero en URLs publicas (`/configuraciones-retenciones/1/`). Estado: **DEUDA TECNICA MENOR** — Migrar a `uuid` requiere migracion de modelo y actualizacion de frontend.
+
+#### NUEVO-005 — `RetencionesService.listar_retenciones_por_documento` sin filtro `empresa_id`
+
+**Archivo:** `services/retenciones_service.py:300-309`
+
+```python
+qs = Retencion.objects.filter(
+    documento_origen_app=documento_origen_app,
+    documento_origen_modelo=documento_origen_modelo,
+    documento_origen_id=documento_origen_id,
+)
+```
+
+La consulta no filtra por `empresa_id`. Aunque `django-tenants` garantiza aislamiento por esquema, la ausencia del filtro viola AGENTS.md §4.4 (Zero-Trust SaaS — filtrar siempre por empresa). Estado: **DEUDA TECNICA — DSV incompleto**.
+
+#### NUEVO-006 — `obtener_retenciones_desde_tercero` sin filtro `empresa_id`
+
+**Archivo:** `services/retenciones_service.py:89-105`
+
+Las queries a `ConfiguracionRetenciones.objects.filter(...)` no incluyen `empresa_id`. Mismo patron que NUEVO-005. Estado: **DEUDA TECNICA — DSV incompleto**.
+
+---
+
+### 13.3 Boundary Contabilidad - Empleados (Post v3.10.2, Auditado 2026-06-04)
+
+Estado confirmado: **GARANTIZADO — 0 violaciones activas**.
+
+Cambios desde v3.9.1 que afectan este boundary:
+- El modulo Nominas fue refactorizado a Master-Detail (v4.8.0) en `apps/tenant/empleados/`.
+- Los selectors de `contabilidad` que consumen `Devengo` (`qs_nominas_pendientes`, `get_documento_pendiente`) no fueron modificados — boundary intacto.
+- El ViewSet `DevengoViewSet` en empleados agrego filtro `?empleado_uuid=` para el Detail panel; esto no afecta la integracion con contabilidad.
+
+---
+
+### 13.4 Integracion Nomina con Pull Model (v4.8.0)
+
+**Cambio en empleados:** `DevengoViewSet.get_queryset()` ahora soporta `?empleado_uuid=` para el panel Detail del Master-Detail.
+
+**Impacto en contabilidad:**
+- `qs_nominas_pendientes(empresa_id)` consulta `Devengo.objects.filter(empresa_id=empresa_id, contabilizado=False).only(...)` — sin cambios necesarios.
+- `get_documento_pendiente('empleados', 'Devengo', id, empresa_id)` — sin cambios.
+- El campo `contabilizado` en `Devengo` sigue siendo el flag de idempotencia para el Pull Model.
+
+**Estado:** Sin accion requerida. Integracion funcional.
+
+---
+
+### 13.5 Inventario: Confirmacion del Contrato Timeline (2026-06-04)
+
+Verificado que `ExtractorInventario` en `integracion/extractores/inventario.py` es un no-op (743 bytes). El flujo real se realiza a traves de `qs_inventario_movimientos_recientes_pendientes(empresa_id)` que invoca `get_movimientos_timeline()` del selector de inventario.
+
+El `DocumentosPendientesViewSet.list()` procesea los items del timeline de inventario correctamente usando los helpers `_decimal_from_value()` y `_date_from_timeline()` para manejar la estructura de diccionario en lugar de modelo ORM.
+
+**Estado:** Funcional. No requiere accion.
+
+---
+
+### 13.6 Tabla de Deuda Tecnica Actualizada (2026-06-04)
+
+| ID | Severidad | Archivo | Hallazgo | Estado | Accion recomendada |
+|----|-----------|---------|----------|--------|--------------------|
+| AUD-CONT-001 | Alta | `api/viewsets.py` | TipoComprobanteViewSet con `only()` y filtro empresa_id | CERRADO 2026-05-25 | - |
+| AUD-CONT-002 | Media | `api/viewsets.py` | CatalogoMaestroNIIFViewSet con `only()` | CERRADO 2026-05-25 | - |
+| AUD-CONT-003 | Media | `services/business_service.py` | `_obtener_o_crear_cuenta()` con campos minimos | CERRADO 2026-05-25 | - |
+| AUD-CONT-004 | Media | `management/commands/migrate_retenciones.py` | `.all()` y asignacion `empresa_id` | CERRADO 2026-05-25 | - |
+| AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | ABIERTO | Remover en limpieza autorizada |
+| AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | ABIERTO | Mover fuera de la app |
+| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | NUEVO 2026-06-04 | Agregar `max_retries`, `autoretry_for`, y fallback a `FailedTenantTask` |
+| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | NUEVO 2026-06-04 | Agregar `empresa_id` en `listar_retenciones_por_documento` y `obtener_retenciones_desde_tercero` |
+| AUD-CONT-009 | Baja | `api/viewsets.py:1071` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` | NUEVO 2026-06-04 | Migrar a UUID lookup (requiere migracion) |
+| AUD-CONT-010 | Baja | `api/viewsets.py:1226` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | NUEVO 2026-06-04 | Evaluar si Dual-Auth se requiere; migrar si se agregan acciones mutables |
+| AUD-CONT-011 | Info | `api/viewsets.py:1022` | Endpoint `/pendientes/asistente-ia/` presente pero sin pruebas automatizadas | NUEVO 2026-06-04 | Agregar test de integracion para el endpoint IA |
+
+---
+
+### 13.7 Compliance AGENTS.md (2026-06-04)
+
+| Estandar | Estado |
+|----------|--------|
+| Feature-Sliced Design | CONFORME |
+| Service Layer (selector → CRUD → business) | CONFORME con excepciones puntuales documentadas |
+| Multi-Tenant (django-tenants) | CONFORME |
+| Zero-Waste Queries (.only, .select_related) | PARCIAL — `RetencionesService` sin `.only()` en algunos metodos |
+| API-First Design (DRF ViewSets) | CONFORME |
+| Double Semantic Verification (DSV) | PARCIAL — `RetencionesService` sin `empresa_id` (AUD-CONT-008) |
+| NIIF PYMES Colombia (PUC nivel 6) | CONFORME en flujo automatico; flexible en manual |
+| Inmutabilidad (Periodos Cerrados) | CONFORME |
+| Idempotencia (`documento_origen_*`) | CONFORME |
+| Transacciones atomicas | CONFORME en persistencia principal |
+| Partida Doble estricta (cuadratura) | CONFORME |
+| UUID lookup (no exponer PK) | PARCIAL — `ConfiguracionRetencionesViewSet` usa `id` (AUD-CONT-009) |
+| No emojis en .py | CONFORME — validado con `py_compile` |
+| empresa_id en toda query tenant | PARCIAL — `RetencionesService` pendiente (AUD-CONT-008) |
+| TabulatorFactory obligatorio | CONFORME en modulos inspeccionados |
+| Celery con DLQ y reintentos | NO CONFORME — AUD-CONT-007 |
+| Cero archivos .py no autorizados | CONFORME — estructura services/ canononica |
+| Re-exports explicitos en `__init__.py` | CONFORME — sin wildcard imports |
+
+---
+
+**Auditoria actualizada:** 2026-06-04 (v3.10.x — post Nominas Master-Detail v4.8.0)
+**Proxima revision:** Cerrar AUD-CONT-007 (Celery DLQ) y AUD-CONT-008 (RetencionesService empresa_id) como prioridad media antes del siguiente sprint de produccion.
 

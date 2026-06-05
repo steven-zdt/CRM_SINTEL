@@ -109,9 +109,16 @@
   const offcanvasEl = document.getElementById('offcanvas-cuenta-detalle');
   
   if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
-    const offcanvasInstance = window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-    offcanvasInstance.show();
-    console.log('[Contabilidad] Offcanvas detalle cuenta activado');
+    // UIManager gestiona dispose + backdrops + show (AGENTS.md §26)
+    if (window.UIManager && typeof window.UIManager.handleOffcanvas === 'function') {
+      window.UIManager.handleOffcanvas(offcanvasEl, 'show');
+    } else {
+      var _p = window.bootstrap.Offcanvas.getInstance(offcanvasEl);
+      if (_p) _p.dispose();
+      document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+      document.body.style.overflow = '';
+      new window.bootstrap.Offcanvas(offcanvasEl).show();
+    }
   } else {
     console.error('[Contabilidad] No se pudo activar offcanvas detalle cuenta');
   }

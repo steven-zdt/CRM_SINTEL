@@ -33,12 +33,12 @@ def test_list_facturas_returns_200():
         }
     )
     
-    # Crear dominio para el tenant (simulando home.sintel.com)
-    domain_name = "home.sintel.com"
+    # Dominio generado dinamicamente desde el schema_name del tenant de prueba
+    domain_name = f"{schema_name}.sintel.local"
     Domain.objects.get_or_create(
         domain=domain_name,
         tenant=tenant,
-        defaults={"is_primary": True}
+        defaults={"is_primary": True},
     )
     
     # Crear factura de prueba en el esquema del tenant

@@ -8,14 +8,14 @@ This replaces the hardcoded MAPEO_CUENTAS dictionary with a database-driven look
 """
 
 import re
+from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
+from django.db import models
+
+from ..models import CuentaContable, ReglaContable, TarifaImpuesto
 from .excepciones import ReglaContableNoDefinidaError, TarifaNoVigenteError
-
-if TYPE_CHECKING:
-    from datetime import date
-    from ..models import ReglaContable, TarifaImpuesto
 
 # Matches RFC 4122 UUID format (version-agnostic)
 _UUID_RE = re.compile(
@@ -73,7 +73,6 @@ class ResolverCuentas:
             hint_str = str(cuenta_hint)
             if _UUID_RE.match(hint_str):
                 # cuenta_hint es UUID de CuentaContable — resolver a codigo PUC
-                from ..models import CuentaContable
                 row = CuentaContable.objects.filter(
                     empresa_id=self.empresa_id,
                     uuid=hint_str,
@@ -84,8 +83,6 @@ class ResolverCuentas:
             else:
                 # Codigo PUC directo (ej: '130505') — usar sin lookup adicional
                 return hint_str
-
-        from ..models import ReglaContable
 
         key = (tipo_transaccion, concepto)
         if key in self._cache_reglas:
@@ -109,7 +106,7 @@ class ResolverCuentas:
     def resolver_tarifa(
         self,
         tipo_impuesto: str,
-        fecha: 'date'
+        fecha: date,
     ) -> Decimal:
         """
         Resolve tax rate for a specific date.
@@ -129,9 +126,6 @@ class ResolverCuentas:
         Raises:
             TarifaNoVigenteError: If no rate found for date
         """
-        from ..models import TarifaImpuesto
-        from datetime import date as date_class
-
         key = (tipo_impuesto, fecha)
         if key in self._cache_tarifas:
             return self._cache_tarifas[key]
@@ -158,7 +152,7 @@ class ResolverCuentas:
         self,
         tipo: str,  # CAJA, ICBF, SENA, ARL
         salario_base: Decimal,
-        fecha: 'date'
+        fecha: date,
     ) -> Decimal:
         """
         Resolve employer payroll tax with exoneration logic (art. 114-1 ET).
@@ -174,9 +168,6 @@ class ResolverCuentas:
         Returns:
             Tax rate (0 if exonerated, otherwise configured rate)
         """
-        from ..models import TarifaImpuesto
-        from django.utils.timezone import now as tz_now
-
         # Get current SMMLV (simplified: hardcode 2026 value)
         # TODO: Link to salary_master.SMMLVHistorico
         SMMLV_2026 = Decimal('1315000')  # Colombian 2026 minimum monthly salary
@@ -187,6 +178,3 @@ class ResolverCuentas:
 
         return self.resolver_tarifa(tipo, fecha)
 
-
-# Import models for query building
-from django.db import models

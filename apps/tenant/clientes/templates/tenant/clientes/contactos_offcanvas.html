@@ -87,7 +87,7 @@
         {# Los contactos se inyectarán dinámicamente aquí mediante JS o HTMX #}
         {% if contactos %}
           {% for contacto in contactos %}
-          <div class="card mb-2 contacto-item-card" data-contacto-id="{{ contacto.id }}">
+          <div class="card mb-2 contacto-item-card" data-contacto-id="{{ contacto.uuid }}">
             <div class="card-body p-3">
               <div class="d-flex justify-content-between align-items-start">
                 <div class="flex-grow-1">
@@ -109,12 +109,12 @@
                   {% endif %}
                 </div>
                 <div class="btn-group btn-group-sm">
-                  <button type="button" class="btn btn-outline-primary btn-editar-contacto" 
-                          data-contacto-id="{{ contacto.id }}" title="Editar Contacto">
+                  <button type="button" class="btn btn-outline-primary btn-editar-contacto"
+                          data-contacto-id="{{ contacto.uuid }}" title="Editar Contacto">
                     <i class="bi bi-pencil"></i>
                   </button>
-                  <button type="button" class="btn btn-outline-danger btn-eliminar-contacto" 
-                          data-contacto-id="{{ contacto.id }}" title="Eliminar Contacto">
+                  <button type="button" class="btn btn-outline-danger btn-eliminar-contacto"
+                          data-contacto-id="{{ contacto.uuid }}" title="Eliminar Contacto">
                     <i class="bi bi-trash"></i>
                   </button>
                 </div>

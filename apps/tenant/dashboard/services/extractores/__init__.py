@@ -8,6 +8,8 @@ from .inventario_ext import InventarioExtractor
 from .empleados_ext import EmpleadosExtractor
 from .gastos_ext import GastosExtractor
 from .proyectos_ext import ProyectosExtractor
+from .clientes_ext import ClientesExtractor
+from .sedes_ext import SedesExtractor
 
 __all__ = [
     'FacturasExtractor',
@@ -15,4 +17,6 @@ __all__ = [
     'EmpleadosExtractor',
     'GastosExtractor',
     'ProyectosExtractor',
+    'ClientesExtractor',
+    'SedesExtractor',
 ]

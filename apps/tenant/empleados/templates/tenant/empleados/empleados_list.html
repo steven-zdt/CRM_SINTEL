@@ -9,20 +9,24 @@
     margin-bottom: 2rem;
     border-radius: 0.5rem;
   }
+
   .empleados-header h1 {
     font-weight: 700;
     margin-bottom: 0.5rem;
   }
+
   .empleados-header .subtitle {
     font-size: 0.95rem;
     opacity: 0.9;
   }
+
   .empleados-stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1rem;
     margin-bottom: 2rem;
   }
+
   .stat-card {
     background: white;
     border: 1px solid #e0e0e0;
@@ -31,10 +35,12 @@
     transition: all 0.3s ease;
     position: relative;
   }
+
   .stat-card:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     transform: translateY(-2px);
   }
+
   .stat-card .stat-label {
     font-size: 0.85rem;
     color: #6c757d;
@@ -42,12 +48,14 @@
     font-weight: 600;
     margin-bottom: 0.5rem;
   }
+
   .stat-card .stat-value {
     font-size: 1.75rem;
     font-weight: 700;
     color: #212529;
     margin-bottom: 0.5rem;
   }
+
   .stat-card .stat-icon {
     font-size: 2.5rem;
     opacity: 0.1;
@@ -56,9 +64,16 @@
     top: 50%;
     transform: translateY(-50%);
   }
+
+  #empleados-tab-content .tab-pane.active {
+    display: flex !important;
+    flex-direction: column;
+    flex-grow: 1;
+  }
 </style>
 
-<div id="ui-empleados-list" class="ui-module ui-empleados h-100 d-flex flex-column" role="region" aria-label="Módulo de Empleados">
+<div id="ui-empleados-list" class="ui-module ui-empleados h-100 d-flex flex-column" role="region"
+  aria-label="Módulo de Empleados">
 
   <!-- Header mejorado -->
   <div class="empleados-header">
@@ -67,12 +82,6 @@
         <h1><i class="bi bi-people me-2"></i>Gestión de Empleados</h1>
         <p class="subtitle mb-0">Empleados, contratos, nóminas y seguridad social</p>
       </div>
-      <button class="btn btn-light btn-sm"
-              hx-get="/api/v1/empleados/gestor-offcanvas/?tipo=empleado"
-              hx-target="#offcanvas-container-empleados"
-              hx-swap="innerHTML">
-        <i class="bi bi-plus-lg me-1"></i>Nuevo Empleado
-      </button>
     </div>
   </div>
 
@@ -104,8 +113,17 @@
     <div class="card-header bg-light border-bottom">
       <ul class="nav nav-tabs card-header-tabs" id="empleados-tabs" role="tablist">
         <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-resoluciones" data-bs-toggle="tab" data-bs-target="#tab-pane-resoluciones"
+            type="button" role="tab" aria-controls="tab-pane-resoluciones" aria-selected="false">
+            <i class="bi bi-file-earmark-lock2 me-2"></i>Resoluciones DIAN
+            <span data-module="resoluciones" data-loading-icon class="ms-2 d-none">
+              <i class="bi bi-hourglass-split"></i>
+            </span>
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
           <button class="nav-link active" id="tab-empleados" data-bs-toggle="tab" data-bs-target="#tab-pane-empleados"
-                  type="button" role="tab" aria-controls="tab-pane-empleados" aria-selected="true">
+            type="button" role="tab" aria-controls="tab-pane-empleados" aria-selected="true">
             <i class="bi bi-people me-2"></i>Empleados
             <span data-module="empleados" data-loading-icon class="ms-2 d-none">
               <i class="bi bi-hourglass-split"></i>
@@ -114,7 +132,7 @@
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="tab-contratos" data-bs-toggle="tab" data-bs-target="#tab-pane-contratos"
-                  type="button" role="tab" aria-controls="tab-pane-contratos" aria-selected="false">
+            type="button" role="tab" aria-controls="tab-pane-contratos" aria-selected="false">
             <i class="bi bi-file-text me-2"></i>Contratos
             <span data-module="contratos" data-loading-icon class="ms-2 d-none">
               <i class="bi bi-hourglass-split"></i>
@@ -123,9 +141,19 @@
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="tab-nominas" data-bs-toggle="tab" data-bs-target="#tab-pane-nominas"
-                  type="button" role="tab" aria-controls="tab-pane-nominas" aria-selected="false">
+            type="button" role="tab" aria-controls="tab-pane-nominas" aria-selected="false">
             <i class="bi bi-cash-coin me-2"></i>Nóminas
             <span data-module="nominas" data-loading-icon class="ms-2 d-none">
+              <i class="bi bi-hourglass-split"></i>
+            </span>
+          </button>
+        </li>
+
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-liquidaciones" data-bs-toggle="tab" data-bs-target="#tab-pane-liquidaciones"
+            type="button" role="tab" aria-controls="tab-pane-liquidaciones" aria-selected="false">
+            <i class="bi bi-calculator me-2"></i>Liquidaciones
+            <span data-module="liquidaciones" data-loading-icon class="ms-2 d-none">
               <i class="bi bi-hourglass-split"></i>
             </span>
           </button>
@@ -133,117 +161,328 @@
       </ul>
     </div>
 
-    <div class="card-body flex-grow-1 d-flex flex-column">
+    <div class="card-body flex-grow-1 d-flex flex-column pt-0">
       <div class="tab-content flex-grow-1" id="empleados-tab-content">
 
-      {# TAB 1: EMPLEADOS #}
-      <div class="tab-pane fade show active d-flex flex-column" id="tab-pane-empleados" role="tabpanel"
-           aria-labelledby="tab-empleados" tabindex="0">
+        {# TAB 1: EMPLEADOS #}
+        <div class="tab-pane fade show active" id="tab-pane-empleados" role="tabpanel" aria-labelledby="tab-empleados"
+          tabindex="0">
 
-        {# Toolbar mejorado #}
-        <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom" data-module="empleados">
-          <input type="text"
-                 id="search-empleado"
-                 class="form-control form-control-sm"
-                 placeholder="Buscar por nombre, cédula, correo, cargo..."
-                 style="max-width: 400px;"
-                 data-module="empleados"
-                 data-search-input>
-        </div>
-
-        {# Spinner #}
-        <div data-spinner="empleados" class="text-center py-5 flex-grow-1" style="display: none;">
-          <div class="spinner-border" role="status">
-            <span class="visually-hidden">Cargando...</span>
+          {# Toolbar mejorado #}
+          <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
+            data-module="empleados">
+            <input type="text" id="search-empleado" class="form-control form-control-sm"
+              placeholder="Buscar por nombre, cédula, correo, cargo..." style="max-width: 400px;"
+              data-module="empleados" data-search-input>
+            <button class="btn btn-primary btn-sm ms-2" hx-get="/api/v1/empleados/gestor-offcanvas/?tipo=empleado"
+              hx-target="#offcanvas-container-empleados" hx-swap="innerHTML">
+              <i class="bi bi-plus-lg me-1"></i>Nuevo Empleado
+            </button>
           </div>
-          <p class="mt-2 text-muted">Inicializando tabla de empleados...</p>
+
+          {# Spinner #}
+          <div data-spinner="empleados" class="text-center py-5 flex-grow-1" style="display: none;">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2 text-muted">Inicializando tabla de empleados...</p>
+          </div>
+
+          {# Grid Container #}
+          <div id="grid-empleados" data-grid="empleados" class="w-100 flex-grow-1"
+            style="display: none; max-width: 100%; overflow-x: auto;"></div>
+
+          {# Empty State #}
+          <div data-empty-state="empleados" class="text-center py-5 flex-grow-1" style="display: none;">
+            <p class="text-muted">
+              <i class="bi bi-inbox"></i> No hay empleados registrados
+            </p>
+          </div>
         </div>
 
-        {# Grid Container #}
-        <div id="grid-empleados" data-grid="empleados" style="display: none;" class="flex-grow-1"></div>
+        {# TAB 2: CONTRATOS #}
+        <div class="tab-pane fade" id="tab-pane-contratos" role="tabpanel" aria-labelledby="tab-contratos" tabindex="0">
 
-        {# Empty State #}
-        <div data-empty-state="empleados" class="text-center py-5 flex-grow-1" style="display: none;">
-          <p class="text-muted">
-            <i class="bi bi-inbox"></i> No hay empleados registrados
-          </p>
+          {# Toolbar mejorado #}
+          <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
+            data-module="contratos">
+            <input type="text" id="search-contrato" class="form-control form-control-sm"
+              placeholder="Buscar por empleado, tipo, estado, fecha..." style="max-width: 400px;"
+              data-module="contratos" data-search-input>
+            <button class="btn btn-primary btn-sm ms-2" id="btn-nuevo-contrato">
+              <i class="bi bi-plus-lg me-1"></i>Nuevo Contrato
+            </button>
+          </div>
+
+          {# Spinner #}
+          <div data-spinner="contratos" class="text-center py-5 flex-grow-1" style="display: none;">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2 text-muted">Inicializando tabla de contratos...</p>
+          </div>
+
+          {# Grid Container #}
+          <div id="grid-contratos" data-grid="contratos" class="w-100 flex-grow-1"
+            style="display: none; max-width: 100%; overflow-x: auto;"></div>
+
+          {# Empty State #}
+          <div data-empty-state="contratos" class="text-center py-5 flex-grow-1" style="display: none;">
+            <p class="text-muted">
+              <i class="bi bi-inbox"></i> No hay contratos registrados
+            </p>
+          </div>
+        </div>
+
+        {# TAB 3: NOMINAS — Master-Detail v4.8.0 #}
+        <div class="tab-pane fade" id="tab-pane-nominas" role="tabpanel" aria-labelledby="tab-nominas" tabindex="0">
+
+          {# Toolbar #}
+          <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+            <h6 class="mb-0 text-muted fw-semibold">
+              <i class="bi bi-cash-coin me-1 text-primary"></i>Nóminas (Devengos)
+            </h6>
+            <button class="btn btn-primary btn-sm disabled" id="btn-nueva-nomina"
+                    disabled title="Seleccione un empleado primero">
+              <i class="bi bi-plus-circle me-1"></i>Nueva Nómina
+            </button>
+          </div>
+
+          {# Split-pane Master-Detail #}
+          <div class="d-flex" style="gap: 0; min-height: 480px; border: 1px solid var(--bs-border-color); border-radius: 0.5rem; overflow: hidden;">
+
+            {# PANEL IZQUIERDO — Master: lista de empleados #}
+            <div style="width: 280px; min-width: 220px; border-right: 1px solid var(--bs-border-color); background: var(--bs-body-bg); display: flex; flex-direction: column;">
+              <div class="px-3 pt-3 pb-2 border-bottom" style="background: var(--bs-tertiary-bg);">
+                <p class="mb-1 small fw-semibold text-muted text-uppercase" style="letter-spacing:.05em;">
+                  <i class="bi bi-people-fill me-1"></i>Empleados
+                </p>
+                <input type="text" id="search-nomina-master"
+                       class="form-control form-control-sm"
+                       placeholder="Filtrar empleado...">
+              </div>
+              <div id="nomina-master-grid" style="flex: 1; overflow-y: auto;"></div>
+            </div>
+
+            {# PANEL DERECHO — Detail: histórico del empleado seleccionado #}
+            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+
+              {# Header Detail #}
+              <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between"
+                   style="background: var(--bs-tertiary-bg); min-height: 46px;">
+                <span id="nomina-detail-header" class="small fw-semibold text-muted">
+                  <i class="bi bi-clock-history me-1"></i>Historial de nóminas
+                </span>
+              </div>
+
+              {# Placeholder vacío #}
+              <div id="nomina-detail-placeholder"
+                   class="d-flex flex-column align-items-center justify-content-center text-center text-muted py-5"
+                   style="flex: 1;">
+                <i class="bi bi-person-lines-fill fs-1 mb-3 opacity-25"></i>
+                <p class="mb-0 small">Seleccione un empleado<br>para ver su historial de nóminas</p>
+              </div>
+
+              {# Grid Detail (oculto hasta seleccionar) #}
+              <div id="nomina-detail-grid" style="flex: 1; display: none; overflow: hidden;"></div>
+
+            </div>{# /detail panel #}
+          </div>{# /split-pane #}
+
+        </div>{# /tab-pane-nominas #}
+
+        {# TAB 4: RESOLUCIONES DIAN #}
+        <div class="tab-pane fade" id="tab-pane-resoluciones" role="tabpanel" aria-labelledby="tab-resoluciones"
+          tabindex="0">
+
+          {# Toolbar mejorado #}
+          <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
+            data-module="resoluciones">
+            <input type="text" id="search-resolucion" class="form-control form-control-sm"
+              placeholder="Buscar por número de resolución..." style="max-width: 400px;" data-module="resoluciones"
+              data-search-input>
+            <button class="btn btn-primary btn-sm ms-2" id="btn-nueva-resolucion">
+              <i class="bi bi-plus-lg me-1"></i>Nueva Resolución
+            </button>
+          </div>
+
+          {# Spinner #}
+          <div data-spinner="resoluciones" class="text-center py-5 flex-grow-1" style="display: none;">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2 text-muted">Inicializando tabla de resoluciones...</p>
+          </div>
+
+          {# Grid Container #}
+          <div id="grid-resoluciones" data-grid="resoluciones" class="w-100 flex-grow-1"
+            style="display: none; max-width: 100%; overflow-x: auto;"></div>
+
+          {# Empty State #}
+          <div data-empty-state="resoluciones" class="text-center py-5 flex-grow-1" style="display: none;">
+            <p class="text-muted">
+              <i class="bi bi-inbox"></i> No hay resoluciones registradas
+            </p>
+          </div>
+        </div>
+
+        {# TAB 5: LIQUIDACIONES — Master-Detail Layout #}
+        <div class="tab-pane fade" id="tab-pane-liquidaciones" role="tabpanel" aria-labelledby="tab-liquidaciones"
+          tabindex="0">
+
+          {# CSS scoped al tab — Master-Detail split + Tabulator styling #}
+          <style>
+            #tab-pane-liquidaciones .liq-master-detail {
+              display: flex;
+              gap: 10px;
+              height: 520px;
+              min-height: 380px;
+            }
+            #tab-pane-liquidaciones .liq-master-panel {
+              flex: 0 0 260px;
+              min-width: 200px;
+              display: flex;
+              flex-direction: column;
+              border: 1px solid #dee2e6;
+              border-radius: 8px;
+              overflow: hidden;
+              background: #fff;
+            }
+            #tab-pane-liquidaciones .liq-master-header {
+              background: #f8f9fa;
+              border-bottom: 1px solid #dee2e6;
+              padding: 8px 10px;
+            }
+            #tab-pane-liquidaciones #liq-master-grid {
+              flex: 1;
+              overflow-y: auto;
+            }
+            #tab-pane-liquidaciones .liq-detail-panel {
+              flex: 1;
+              display: none;
+              flex-direction: column;
+              border: 1px solid #dee2e6;
+              border-radius: 8px;
+              overflow: hidden;
+              background: #fff;
+            }
+            #tab-pane-liquidaciones .liq-detail-header {
+              background: #f0f7ff;
+              border-bottom: 1px solid #dee2e6;
+              padding: 8px 12px;
+            }
+            #tab-pane-liquidaciones #liq-detail-grid {
+              flex: 1;
+              overflow-y: auto;
+            }
+            #tab-pane-liquidaciones .liq-detail-placeholder {
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              border: 1px solid #dee2e6;
+              border-radius: 8px;
+              background: #fafafa;
+              color: #adb5bd;
+            }
+            #tab-pane-liquidaciones .tabulator {
+              font-size: .82rem;
+              border: none !important;
+            }
+            #tab-pane-liquidaciones .tabulator .tabulator-header {
+              background: #f8f9fa;
+              border-bottom: 2px solid #dee2e6;
+            }
+            #tab-pane-liquidaciones .tabulator .tabulator-col {
+              background: #f8f9fa !important;
+              padding: 5px 8px !important;
+            }
+            #tab-pane-liquidaciones .tabulator .tabulator-col-title {
+              font-size: .7rem;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: .04em;
+              color: #6c757d;
+            }
+            #tab-pane-liquidaciones .tabulator .tabulator-cell {
+              padding: 5px 8px !important;
+              border-bottom: 1px solid #f0f0f0;
+              vertical-align: middle;
+            }
+            #tab-pane-liquidaciones .tabulator .tabulator-row:hover {
+              background: #e8f4fd !important;
+            }
+            #tab-pane-liquidaciones .tabulator-master .tabulator-row.tabulator-selected,
+            #tab-pane-liquidaciones .tabulator-master .tabulator-row:focus {
+              background: #dceefb !important;
+            }
+            #tab-pane-liquidaciones .btn-group-sm .btn {
+              font-size: .68rem;
+            }
+          </style>
+
+          {# Toolbar #}
+          <div class="d-flex justify-content-between align-items-center mb-2 pt-1 gap-2 flex-wrap">
+            <button class="btn btn-primary btn-sm" id="btn-nueva-liquidacion" disabled>
+              <i class="bi bi-calculator me-1"></i>Nueva Liquidación
+            </button>
+          </div>
+
+          {# Filtros rápidos por tipo — afectan al panel Detail #}
+          <div class="d-flex gap-1 mb-2 flex-wrap align-items-center" id="filtros-tipo-liquidacion"
+            style="padding:5px 6px; background:#fafafa; border-radius:6px; border:1px solid #dee2e6;">
+            <span class="text-muted ms-1 me-1"
+              style="font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;">Tipo:</span>
+            <button class="btn btn-xs btn-outline-dark active" data-filtro-liq-tipo=""
+              style="font-size:.68rem;padding:2px 7px;">Todos</button>
+            <button class="btn btn-xs btn-outline-info" data-filtro-liq-tipo="PRIMA_SERVICIOS"
+              style="font-size:.68rem;padding:2px 7px;"><i class="bi bi-award me-1"></i>Prima</button>
+            <button class="btn btn-xs btn-outline-warning" data-filtro-liq-tipo="CESANTIAS"
+              style="font-size:.68rem;padding:2px 7px;"><i class="bi bi-piggy-bank me-1"></i>Cesant.</button>
+            <button class="btn btn-xs btn-outline-success" data-filtro-liq-tipo="VACACIONES"
+              style="font-size:.68rem;padding:2px 7px;"><i class="bi bi-sun me-1"></i>Vacac.</button>
+            <button class="btn btn-xs btn-outline-danger" data-filtro-liq-tipo="LIQUIDACION_DEFINITIVA"
+              style="font-size:.68rem;padding:2px 7px;"><i class="bi bi-file-earmark-break me-1"></i>Liq.</button>
+          </div>
+
+          {# Master-Detail Split Layout #}
+          <div class="liq-master-detail">
+
+            {# MASTER: lista de empleados #}
+            <div class="liq-master-panel">
+              <div class="liq-master-header d-flex align-items-center gap-2">
+                <i class="bi bi-people-fill text-primary" style="font-size:.9rem;"></i>
+                <span class="fw-semibold" style="font-size:.78rem;">EMPLEADOS</span>
+                <div class="input-group input-group-sm ms-auto" style="max-width:120px;">
+                  <input type="text" id="search-liq-empleado" class="form-control py-0"
+                    placeholder="Buscar..." style="font-size:.72rem;">
+                </div>
+              </div>
+              <div id="liq-master-grid" class="tabulator-master" style="flex:1;"></div>
+            </div>
+
+            {# DETAIL: historial de liquidaciones del empleado seleccionado #}
+            <div id="liq-detail-panel" class="liq-detail-panel">
+              <div class="liq-detail-header d-flex align-items-center gap-2 flex-wrap">
+                <i class="bi bi-file-earmark-text text-primary" style="font-size:.9rem;"></i>
+                <div>
+                  <div id="liq-detail-title" class="fw-semibold" style="font-size:.82rem;line-height:1.2;">Empleado</div>
+                  <div id="liq-detail-subtitle" class="text-muted" style="font-size:.7rem;"></div>
+                </div>
+              </div>
+              <div id="liq-detail-grid" style="flex:1;"></div>
+            </div>
+
+            {# PLACEHOLDER: cuando no hay empleado seleccionado #}
+            <div id="liq-detail-placeholder" class="liq-detail-placeholder">
+              <i class="bi bi-arrow-left-circle" style="font-size:2rem; opacity:.35;"></i>
+              <p class="mt-2 small mb-0" style="font-size:.78rem;">Selecciona un empleado<br>para ver sus liquidaciones</p>
+            </div>
+
+          </div>{# /liq-master-detail #}
         </div>
       </div>
-
-      {# TAB 2: CONTRATOS #}
-      <div class="tab-pane fade d-flex flex-column" id="tab-pane-contratos" role="tabpanel"
-           aria-labelledby="tab-contratos" tabindex="0">
-
-        {# Toolbar mejorado #}
-        <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom" data-module="contratos">
-          <input type="text"
-                 id="search-contrato"
-                 class="form-control form-control-sm"
-                 placeholder="Buscar por empleado, tipo, estado, fecha..."
-                 style="max-width: 400px;"
-                 data-module="contratos"
-                 data-search-input>
-          <button class="btn btn-primary btn-sm ms-2" id="btn-nuevo-contrato">
-            <i class="bi bi-plus-lg me-1"></i>Nuevo Contrato
-          </button>
-        </div>
-
-        {# Spinner #}
-        <div data-spinner="contratos" class="text-center py-5 flex-grow-1" style="display: none;">
-          <div class="spinner-border" role="status">
-            <span class="visually-hidden">Cargando...</span>
-          </div>
-          <p class="mt-2 text-muted">Inicializando tabla de contratos...</p>
-        </div>
-
-        {# Grid Container #}
-        <div id="grid-contratos" data-grid="contratos" style="display: none;" class="flex-grow-1"></div>
-
-        {# Empty State #}
-        <div data-empty-state="contratos" class="text-center py-5 flex-grow-1" style="display: none;">
-          <p class="text-muted">
-            <i class="bi bi-inbox"></i> No hay contratos registrados
-          </p>
-        </div>
-      </div>
-
-      {# TAB 3: NOMINAS #}
-      <div class="tab-pane fade d-flex flex-column" id="tab-pane-nominas" role="tabpanel"
-           aria-labelledby="tab-nominas" tabindex="0">
-
-        {# Toolbar mejorado #}
-        <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom" data-module="nominas">
-          <input type="text"
-                 id="search-nomina"
-                 class="form-control form-control-sm"
-                 placeholder="Buscar por empleado, período, estado..."
-                 style="max-width: 400px;"
-                 data-module="nominas"
-                 data-search-input>
-          <button class="btn btn-primary btn-sm ms-2" id="btn-nueva-nomina">
-            <i class="bi bi-cash-coin me-1"></i>Registrar Nómina
-          </button>
-        </div>
-
-        {# Spinner #}
-        <div data-spinner="nominas" class="text-center py-5 flex-grow-1" style="display: none;">
-          <div class="spinner-border" role="status">
-            <span class="visually-hidden">Cargando...</span>
-          </div>
-          <p class="mt-2 text-muted">Inicializando tabla de nóminas...</p>
-        </div>
-
-        {# Grid Container #}
-        <div id="grid-nominas" data-grid="nominas" style="display: none;" class="flex-grow-1"></div>
-
-        {# Empty State #}
-        <div data-empty-state="nominas" class="text-center py-5 flex-grow-1" style="display: none;">
-          <p class="text-muted">
-            <i class="bi bi-inbox"></i> No hay nóminas registradas
-          </p>
-        </div>
-      </div>
-    </div>
     </div>
   </div>
 </div>
@@ -252,56 +491,9 @@
 <div id="offcanvas-container-empleados"></div>
 <div id="offcanvas-container-contratos"></div>
 <div id="offcanvas-container-nominas"></div>
+<div id="offcanvas-container-resoluciones"></div>
+<div id="offcanvas-container-liquidaciones"></div>
 
-{# Offcanvas: Asignar Cuenta Contable a Devengo #}
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-asignar-cuenta-devengo"
-     aria-labelledby="oc-cuenta-label" data-bs-backdrop="static" style="width:420px;">
-  <div class="offcanvas-header border-bottom">
-    <h6 class="offcanvas-title fw-bold" id="oc-cuenta-label">
-      <i class="bi bi-journal-check me-2 text-success"></i>Asignar Cuenta Contable
-    </h6>
-    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
-  </div>
-  <div class="offcanvas-body">
-
-    {# Info del Devengo #}
-    <div class="card bg-light border-0 rounded-3 mb-4 p-3">
-      <div class="row g-2 small">
-        <div class="col-12">
-          <span class="text-muted">Empleado:</span>
-          <strong id="oc-cuenta-empleado" class="ms-1">—</strong>
-        </div>
-        <div class="col-6">
-          <span class="text-muted">Período:</span>
-          <strong id="oc-cuenta-periodo" class="ms-1">—</strong>
-        </div>
-        <div class="col-6 text-end">
-          <span class="text-muted">Neto:</span>
-          <strong id="oc-cuenta-neto" class="ms-1 text-success">—</strong>
-        </div>
-      </div>
-    </div>
-
-    {# Buscador #}
-    <input type="hidden" id="oc-cuenta-devengo-uuid">
-    <input type="hidden" id="oc-cuenta-uuid-selected">
-
-    <label class="form-label fw-semibold">
-      <i class="bi bi-search me-1"></i>Buscar Cuenta PUC
-    </label>
-    <input type="text" id="oc-cuenta-busqueda" class="form-control mb-2"
-           placeholder="Código o nombre (ej: 2505, salarios...)">
-    <div id="oc-cuenta-resultados" class="list-group mb-3" style="max-height:220px;overflow-y:auto;"></div>
-
-    <div id="oc-cuenta-label-selected" class="text-muted small mb-3 fst-italic"></div>
-
-    <div class="d-grid">
-      <button id="btn-guardar-cuenta-devengo" type="button" class="btn btn-success">
-        <i class="bi bi-check-lg me-1"></i>Guardar
-      </button>
-    </div>
-  </div>
-</div>
 
 {# Modal de Confirmacion Eliminar #}
 <div class="modal fade" id="confirmarEliminarModal" tabindex="-1" aria-hidden="true">

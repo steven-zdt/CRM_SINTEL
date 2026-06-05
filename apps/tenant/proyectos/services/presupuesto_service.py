@@ -1,10 +1,10 @@
 """
-Presupuesto Manual Service (v3.5.2) — Fase 2 Planeación
+Presupuesto Manual Service (v3.5.2) - Fase 2 Planeacion
 
-Service Layer para gestión de presupuesto planeado (ItemPresupuestoProyecto).
-Patrón: 1-a-N ítems sobre Proyecto, con recálculo automático de totales en caché.
+Service Layer para gestion de presupuesto planeado (ItemPresupuestoProyecto).
+Patron: 1-a-N items sobre Proyecto, con recalculo automatico de totales en cache.
 
-Sigue patrón de cotizaciones.services.item_service.
+Sigue patron de cotizaciones.services.item_service.
 """
 from decimal import Decimal
 from django.db import models, transaction
@@ -26,13 +26,13 @@ ITEM_FIELDS = [
 
 
 # ==============================================================================
-# CRUD SERVICE — Persistencia (v3.5.2)
+# CRUD SERVICE - Persistencia (v3.5.2)
 # ==============================================================================
 
 class PresupuestoCRUDService:
     """
     Persistencia de ItemPresupuestoProyecto.
-    Métodos transaccionales @transaction.atomic.
+    Metodos transaccionales @transaction.atomic.
     """
 
     @staticmethod
@@ -49,23 +49,23 @@ class PresupuestoCRUDService:
 
 
 # ==============================================================================
-# BUSINESS SERVICE — Lógica de Negocio (v3.5.2)
+# BUSINESS SERVICE - Logica de Negocio (v3.5.2)
 # ==============================================================================
 
 class PresupuestoBusinessService:
     """
-    Lógica de negocio: validación, cálculos, y orquestación.
+    Logica de negocio: validacion, calculos, y orquestacion.
     Responsable de:
-    - DSV (Double Semantic Verification) — validar empresa_id
-    - Bloqueo de edición en Fase CIERRE
-    - Cálculo automático de subtotales
-    - Recálculo de indicadores en proyecto padre
+    - DSV (Double Semantic Verification) - validar empresa_id
+    - Bloqueo de edicion en Fase CIERRE
+    - Calculo automatico de subtotales
+    - Recalculo de indicadores en proyecto padre
     """
 
     @staticmethod
     def _calcular_subtotal(item):
         """
-        Calcula subtotal = cantidad × valor_unitario.
+        Calcula subtotal = cantidad x valor_unitario.
         Modifica item en memoria (no persiste).
         """
         item.subtotal = (item.cantidad or Decimal('0.00')) * (item.valor_unitario or Decimal('0.00'))
@@ -78,7 +78,7 @@ class PresupuestoBusinessService:
         - utilidad_planeada = valor_contrato - costo_planeado_total
         - margen_planeado = utilidad / valor_contrato * 100
 
-        Persiste los 3 campos caché en BD.
+        Persiste los 3 campos cache en BD.
         """
         total = ItemPresupuestoProyecto.objects.filter(
             proyecto=proyecto,
@@ -119,7 +119,7 @@ class PresupuestoBusinessService:
         """
         if proyecto.fase_actual == 'CIERRE':
             raise ValidationError(
-                "No se puede agregar ítems de presupuesto en fase Cierre"
+                "No se puede agregar items de presupuesto en fase Cierre"
             )
 
         item = ItemPresupuestoProyecto(
@@ -150,7 +150,7 @@ class PresupuestoBusinessService:
         """
         if item.proyecto.fase_actual == 'CIERRE':
             raise ValidationError(
-                "No se puede editar ítems de presupuesto en fase Cierre"
+                "No se puede editar items de presupuesto en fase Cierre"
             )
 
         for key, value in data.items():
@@ -172,12 +172,12 @@ class PresupuestoBusinessService:
 
         Flujo:
         - Guarda referencia a proyecto padre
-        - Persiste eliminación
+        - Persiste eliminacion
         - Recalcula proyecto padre
         """
         if item.proyecto.fase_actual == 'CIERRE':
             raise ValidationError(
-                "No se puede eliminar ítems de presupuesto en fase Cierre"
+                "No se puede eliminar items de presupuesto en fase Cierre"
             )
 
         proyecto = item.proyecto

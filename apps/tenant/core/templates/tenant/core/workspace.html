@@ -39,6 +39,7 @@
       </div>
     </div>
     <ul class="nav flex-column" id="nav">
+      <li class="nav-item"><a href="#dashboard" data-tab="dashboard" class="nav-link"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a></li>
       <li class="nav-item"><a href="#empresa" data-tab="empresa" class="nav-link"><i class="bi bi-building me-2"></i>Empresa <span class="badge bg-info ms-auto">SSoT</span></a></li>
       {# Módulo de Proyectos alineado con lógica de costos v2.80 #}
       <li class="nav-item"><a href="#proyectos" data-tab="proyectos" class="nav-link"><i class="bi bi-kanban me-2"></i>Proyectos</a></li>
@@ -52,6 +53,7 @@
       {# Módulo de Cotizaciones v2.60 - DNA Dinámico #}
       <li class="nav-item"><a href="#cotizaciones" data-tab="cotizaciones" class="nav-link"><i class="bi bi-file-earmark-text me-2"></i>Cotizaciones</a></li>
       <li class="nav-item"><a href="#gastos" data-tab="gastos" class="nav-link"><i class="bi bi-cash-stack me-2"></i>Gastos</a></li>
+      <li class="nav-item"><a href="#bancos" data-tab="bancos" class="nav-link"><i class="bi bi-bank me-2"></i>Bancos</a></li>
       <hr class="mx-3 my-2 text-white-50">
       <li class="nav-item"><a href="#perfil" data-tab="perfil" class="nav-link"><i class="bi bi-person-circle me-2"></i>Mi Perfil</a></li>
     </ul>
@@ -67,6 +69,11 @@
       {# [STANDARD] Universal UI Connect: Inyección modular de aplicaciones refactorizadas #}
       {# Cada módulo debe residir en su propia section[id="tab-<name>"] para gestión de visibilidad por workspace.js #}
       
+      {# Módulo Dashboard Ejecutivo v3.9.5 #}
+      <section id="tab-dashboard" class="workspace-tab" style="display: none;">
+        {% include 'tenant/dashboard/list_dashboard.html' %}
+      </section>
+
       {# Módulo Empresa (REFERENCIA GOLDEN v2.61.4) #}
       <section id="tab-empresa" class="workspace-tab" style="display: none;">
         {% include 'tenant/empresa/empresa_list.html' %}
@@ -102,6 +109,11 @@
       <section id="tab-gastos" class="workspace-tab" style="display: none;">
         {% include 'tenant/gastos/list.html' %}
         <div id="offcanvas-container-gastos"></div>
+      </section>
+
+      {# Módulo Bancos v3.5 - Feature-Sliced Architecture #}
+      <section id="tab-bancos" class="workspace-tab" style="display: none;">
+        {% include 'tenant/bancos/list.html' %}
       </section>
 
       {# Módulo Cotizaciones v3.5 - Feature-Sliced Architecture #}
@@ -262,6 +274,7 @@
   {% include 'tenant/cotizaciones/assets_cotizaciones.html' %}
   {% include 'tenant/dashboard/assets_dashboard.html' %}
   {% include 'tenant/proveedores/assets_proveedores.html' %}
+  {% include 'tenant/bancos/assets_bancos.html' %}
   {# ⚠️ v2.60: Spinner global para indicadores HTMX #}
   <div id="spinner" class="htmx-indicator position-fixed top-50 start-50 translate-middle" style="z-index: 9999; display: none;">
     <div class="spinner-border text-primary" role="status">

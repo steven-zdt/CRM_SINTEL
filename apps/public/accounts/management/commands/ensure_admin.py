@@ -1,43 +1,37 @@
+"""
+Verifica que exista al menos un superusuario activo en el sistema.
+
+Este comando NO crea usuarios — solo verifica su existencia y alerta si no hay ninguno.
+El unico proceso autorizado para crear el superusuario del sistema es:
+
+    python manage.py createsuperuser [--tenant <schema_name>]
+
+Si no hay superusuario, muestra un aviso pero no crea nada automaticamente
+(crearlo sin asociar al tenant correcto seria incoherente con la arquitectura).
+"""
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = "Crea/asegura el superusuario de Django Admin de forma idempotente."
+    help = "Verifica que exista al menos un superusuario activo del sistema."
 
-    # Username reservado para el superusuario de dev — no colisiona con usuarios de tenant
-    DEV_USERNAME = "sintel_dev"
-    DEV_EMAIL = "dev@sintel.local"
-    DEV_PASSWORD = "admin123"
-
-    def handle(self, *args, **options):
+    def handle(self, *args, **options) -> None:
         User = get_user_model()
 
-        try:
-            admin = User.objects.get(username=self.DEV_USERNAME)
-            created = False
-        except User.DoesNotExist:
-            admin = User(username=self.DEV_USERNAME, email=self.DEV_EMAIL)
-            created = True
-
-        needs_save = created
-        if not admin.is_staff:
-            admin.is_staff = True
-            needs_save = True
-        if not admin.is_superuser:
-            admin.is_superuser = True
-            needs_save = True
-
-        if created:
-            admin.set_password(self.DEV_PASSWORD)
-            admin.save()
-            self.stdout.write(self.style.SUCCESS(
-                f"Superusuario de dev creado (user: {self.DEV_USERNAME} / pass: {self.DEV_PASSWORD})"
-            ))
-        elif needs_save:
-            admin.save()
-            self.stdout.write(self.style.WARNING(
-                f"Superusuario '{self.DEV_USERNAME}' corregido (flags is_staff/is_superuser restaurados)"
-            ))
+        admins = User.objects.filter(is_staff=True, is_superuser=True, is_active=True)
+        if admins.exists():
+            for u in admins:
+                self.stdout.write(
+                    self.style.SUCCESS(f"Superusuario activo: {u.email} (id={u.id})")
+                )
         else:
-            self.stdout.write(f"Superusuario '{self.DEV_USERNAME}' ya existe y esta correcto")
+            self.stdout.write(self.style.ERROR(
+                "ALERTA: No hay superusuarios activos en el sistema.\n"
+                "Crea uno con:\n"
+                "  python manage.py createsuperuser --tenant <schema_name>\n"
+                "Donde <schema_name> es el schema_name del tenant al que deseas asociar el admin.\n"
+                "Consulta los tenants disponibles con:\n"
+                "  python manage.py shell -c \"from apps.public.tenants.models import Client; "
+                "[print(c.schema_name) for c in Client.objects.exclude(schema_name='public')]\""
+            ))

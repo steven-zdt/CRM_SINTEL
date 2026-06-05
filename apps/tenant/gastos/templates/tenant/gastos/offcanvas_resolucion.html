@@ -30,11 +30,19 @@
 
     <div class="row">
       <div class="col-md-6 mb-3">
-        <label for="fecha_resolucion" class="form-label">Fecha Emision</label>
+        <label for="fecha_resolucion" class="form-label">Fecha Emisión *</label>
         <input type="date" class="form-control" id="fecha_resolucion" name="fecha_resolucion" value="{{ instance.fecha_resolucion|date:'Y-m-d' }}" required>
       </div>
       <div class="col-md-6 mb-3">
-        <label for="fecha_fin" class="form-label">Fecha Fin</label>
+        <label for="fecha_inicio" class="form-label">Fecha Inicio Aplicación</label>
+        <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio"
+               value="{% if instance.fecha_inicio %}{{ instance.fecha_inicio|date:'Y-m-d' }}{% else %}{% now "Y-m-d" %}{% endif %}">
+        <div class="form-text">Por defecto: hoy</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label for="fecha_fin" class="form-label">Fecha Fin *</label>
         <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" value="{{ instance.fecha_fin|date:'Y-m-d' }}" required>
       </div>
     </div>

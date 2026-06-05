@@ -16,6 +16,7 @@ Variables de entorno:
 """
 
 import os
+import re
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -23,6 +24,12 @@ from django_tenants.utils import schema_context
 
 from apps.public.tenants.models import Client, Domain
 from apps.public.tenants.utils import normalize_domain, validate_fqdn
+
+
+def _is_valid_ipv4(host: str) -> bool:
+    if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', host):
+        return False
+    return all(0 <= int(p) <= 255 for p in host.split('.'))
 
 
 class Command(BaseCommand):
@@ -99,9 +106,11 @@ class Command(BaseCommand):
                     # Normalizar dominio
                     normalized = normalize_domain(domain_str)
 
-                    # Validar FQDN (permitir localhost y 127.0.0.1 para desarrollo)
-                    if normalized not in ("localhost", "127.0.0.1") and not validate_fqdn(
-                        normalized
+                    # Validar FQDN (permitir localhost, IPs locales y 127.0.0.1 para desarrollo)
+                    if (
+                        normalized not in ("localhost", "127.0.0.1")
+                        and not _is_valid_ipv4(normalized)
+                        and not validate_fqdn(normalized)
                     ):
                         self.stdout.write(
                             self.style.WARNING(

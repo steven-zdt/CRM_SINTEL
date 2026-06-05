@@ -24,13 +24,18 @@ from .selectors import (
 
 from .business_service import (
     KardexService,
-    IngestaService,
     CategoriaItemServiceMixin,
     ProductoServiceMixin,
     ServicioServiceMixin,
     ActivoFijoServiceMixin,
     MovimientoServiceMixin,
     HistorialServiceMixin,
+)
+
+from .ingesta_service import (
+    IngestaService,
+    materializar_inventario_desde_dto,
+    materializar_carga_masiva_productos,
 )
 
 from .crud_service import (

@@ -1,5 +1,5 @@
 /**
- * inventario.api.js - Wrapper de API Inventario v2.60
+ * inventario.api.js - Wrapper de API Inventario v2.61
  * ⚠️ Aislamiento Gradual: Capa de Datos - Retorna siempre {ok, status, data}
  * ⚠️ Refactorizado para seguir el patrón de empleados.api.js
  * Manejo de peticiones HTTP para el módulo de Inventario.
@@ -103,18 +103,6 @@
         const base = await getApiBase();
         return w.http('GET', `${base}/productos/${id}/kardex/`);
       },
-      // ⚠️ REGLA MANDATORIA: Endpoint para DataTables CLIENT-SIDE (serverSide: false)
-      // Retorna URL resuelta como string (nunca Promise)
-      dt: async () => {
-        const base = await getApiBase();
-        const url = `${base}/productos/dt/`;
-        // ⚠️ CRÍTICO: Validar que sea string, no Promise
-        if (typeof url !== 'string') {
-          console.error('[inventario.api] dt() retornó no-string:', typeof url);
-          return API_BASE_FALLBACK + '/productos/dt/';
-        }
-        return url;
-      }
     },
 
     // --- SERVICIOS ---
@@ -139,15 +127,6 @@
         const base = await getApiBase();
         return w.http('DELETE', `${base}/servicios/${id}/`);
       },
-      dt: async () => {
-        const base = await getApiBase();
-        const url = `${base}/servicios/dt/`;
-        if (typeof url !== 'string') {
-          console.error('[inventario.api] dt() retornó no-string:', typeof url);
-          return API_BASE_FALLBACK + '/servicios/dt/';
-        }
-        return url;
-      }
     },
 
     // --- ACTIVOS FIJOS ---
@@ -171,15 +150,6 @@
       delete: async (id) => {
         const base = await getApiBase();
         return w.http('DELETE', `${base}/activos/${id}/`);
-      },
-      dt: async () => {
-        const base = await getApiBase();
-        const url = `${base}/activos/dt/`;
-        if (typeof url !== 'string') {
-          console.error('[inventario.api] dt() retornó no-string:', typeof url);
-          return API_BASE_FALLBACK + '/activos/dt/';
-        }
-        return url;
       },
       // ⚠️ v2.40: Endpoint optimizado para Client-Side DataTables (array JSON simple)
       list_all: async () => {
@@ -207,17 +177,18 @@
         const base = await getApiBase();
         return w.http('POST', `${base}/movimientos/`, payload);
       },
-      // ⚠️ v2.40: Endpoint para DataTables SERVER-SIDE
-      dt: async () => {
+      update: async (id, payload) => {
         const base = await getApiBase();
-        const url = `${base}/movimientos/dt/`;
-        if (typeof url !== 'string') {
-          console.error('[inventario.api] dt() retornó no-string:', typeof url);
-          return API_BASE_FALLBACK + '/movimientos/dt/';
-        }
-        return url;
-      }
-      // No hay update/delete por integridad de Kardex
+        return w.http('PATCH', `${base}/movimientos/${id}/`, payload);
+      },
+      delete: async (id) => {
+        const base = await getApiBase();
+        return w.http('DELETE', `${base}/movimientos/${id}/`);
+      },
+      timeline: async (params = {}) => {
+        const base = await getApiBase();
+        return w.http('GET', buildUrlWithParams(`${base}/movimientos/timeline/`, params));
+      },
     },
 
     // --- HISTORIAL SERVICIOS ---
@@ -263,44 +234,7 @@
         const base = await getApiBase();
         return w.http('GET', `${base}/categorias/${id}/resumen/`);
       },
-      dt: async () => {
-        const base = await getApiBase();
-        const url = `${base}/categorias/dt/`;
-        if (typeof url !== 'string') {
-          console.error('[inventario.api] dt() retornó no-string:', typeof url);
-          return API_BASE_FALLBACK + '/categorias/dt/';
-        }
-        return url;
-      }
     },
-    
-    // --- INTEGRACIÓN CONTABLE v3.5 ---
-    searchCuentas: async (query, options = {}) => {
-      /**
-       * ⚠️ v3.5: Busca cuentas contables filtradas para inventario.
-       * Consume el selector de contabilidad via Gateway Directo.
-       * @param {string} query - Texto de búsqueda (código o nombre)
-       * @param {Object} options - Opciones { codigoPrefix: '15' | '51', ... }
-       */
-      const params = {
-        search: query,
-        app_origen: 'inventario',
-        activa: 'true'
-      };
-
-      // Filtrar por prefijo de código si se especifica
-      if (options.codigoPrefix) {
-        params.codigo_prefix = options.codigoPrefix;
-      }
-
-      return w.http('GET', buildUrlWithParams('/api/v1/contabilidad/cuentas-contables/', params));
-    },
-    getCuentaByUuid: async (uuid) => {
-      /**
-       * ⚠️ v3.5: Obtiene detalle de una cuenta por UUID.
-       */
-      return w.http('GET', `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}`);
-    }
   };
 
   // Deprecated fallback (for gradual migration)

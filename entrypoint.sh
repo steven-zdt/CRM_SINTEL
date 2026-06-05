@@ -87,10 +87,6 @@ if [ "$ARGS_STR" = "python manage.py runserver 0.0.0.0:8000" ] || \
     python manage.py ensure_public_domains --primary "${PUBLIC_PRIMARY_DOMAIN}" || exit 1
     echo "✅ Tenant público y dominios garantizados"
 
-    echo "👤 Garantizando superusuario admin..."
-    python manage.py ensure_admin || echo "⚠️  ensure_admin tuvo advertencias (no fatal)"
-    echo "✅ Superusuario dev garantizado (user: sintel_dev / pass: admin123)"
-
     echo "📦 Recolectando archivos estáticos..."
     python manage.py collectstatic --noinput --clear 2>&1 | tail -5 || echo "⚠️  collectstatic tuvo advertencias (no fatal)"
     echo "✅ Archivos estáticos recolectados"

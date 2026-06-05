@@ -79,7 +79,7 @@
                 formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
                     return cell.getValue() || '---';
                 },
-                width: 120,
+                width: 110,
                 headerFilter: "input"
             },
             {
@@ -88,7 +88,7 @@
                 formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
                     return cell.getValue() || '---';
                 },
-                minWidth: 250,
+                minWidth: 140,
                 headerFilter: "input"
             },
             {
@@ -97,16 +97,16 @@
                 formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
                     return cell.getValue() || '<span class="text-muted">Sin categoría</span>';
                 },
-                width: 150,
+                width: 130,
                 headerFilter: "input"
             },
             {
-                title: "Precio de Venta",
+                title: "Precio Venta",
                 field: "precio_venta",
                 formatter: function(cell) {
                     return formatearMoneda(cell.getValue());
                 },
-                width: 140,
+                width: 130,
                 hozAlign: "right",
                 sorter: "number"
             },
@@ -120,7 +120,7 @@
                     }
                     return '<span class="badge bg-secondary">Inactivo</span>';
                 },
-                width: 100,
+                width: 90,
                 hozAlign: "center"
             },
             {
@@ -140,11 +140,10 @@
                         </div>
                     `;
                 },
-                width: 120,
+                width: 100,
                 headerSort: false,
                 resizable: false,
                 hozAlign: "center",
-                responsive: 0,
                 frozen: true
             }
         ];
@@ -174,8 +173,6 @@
             paginationMode: "remote",
             paginationSize: 10,
             paginationSizeSelector: [10, 25, 50, 100],
-            layout: "fitColumns",
-            responsiveLayout: "hide",
             placeholder: "No hay servicios registrados",
             locale: "es"
         };

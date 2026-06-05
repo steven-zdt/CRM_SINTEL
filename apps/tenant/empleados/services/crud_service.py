@@ -64,6 +64,11 @@ class EmpleadoCRUDService:
         if contratos_count > 0:
             contratos_qs.delete()
 
+        # Desvincular tareas cortas de proyectos (FK nullable, PROTECT)
+        from django.apps import apps as django_apps
+        TareaCorta = django_apps.get_model('tenant_proyectos', 'TareaCorta')
+        TareaCorta.objects.filter(empleado_id=empleado_id).update(empleado=None)
+
         empleado.delete()
 
         logger.info(

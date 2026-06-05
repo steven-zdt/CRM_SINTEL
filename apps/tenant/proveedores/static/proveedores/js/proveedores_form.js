@@ -18,17 +18,14 @@
     'reteica_porcentaje',
     'reteiva_porcentaje'
   ];
-  const NULLABLE_FIELDS = [
-    'cuenta_contable_uuid'
-  ];
+  const NULLABLE_FIELDS = [];
 
   /**
    * Abrir Offcanvas vía HTMX (v2.61.7 - Resiliente)
    */
   async function openOffcanvas(id) {
     let container = d.querySelector(CONTAINER_ID);
-    
-    // Auto-healing: Si el contenedor no existe, lo creamos
+
     if (!container) {
       console.warn(`${MOD} Contenedor ${CONTAINER_ID} no encontrado. Creando...`);
       container = d.createElement('div');
@@ -36,16 +33,27 @@
       d.body.appendChild(container);
     }
 
-    const url = id 
-      ? `${API_URL}render-offcanvas/editar/?id=${id}` 
+    const url = id
+      ? `${API_URL}render-offcanvas/editar/?id=${id}`
       : `${API_URL}render-offcanvas/crear/`;
 
     console.log(`${MOD} Cargando formulario desde: ${url}`);
-    
-    return htmx.ajax('GET', url, {
-      target: CONTAINER_ID,
-      swap: 'innerHTML'
-    });
+    return htmx.ajax('GET', url, { target: CONTAINER_ID, swap: 'innerHTML' });
+  }
+
+  /**
+   * Abrir Offcanvas en modo detalle (con tabs Información + Facturas de Compra).
+   */
+  async function openDetalle(id) {
+    let container = d.querySelector(CONTAINER_ID);
+    if (!container) {
+      container = d.createElement('div');
+      container.id = CONTAINER_ID.substring(1);
+      d.body.appendChild(container);
+    }
+    const url = `${API_URL}render-offcanvas/detalle/?id=${id}`;
+    console.log(`${MOD} Cargando detalle desde: ${url}`);
+    return htmx.ajax('GET', url, { target: CONTAINER_ID, swap: 'innerHTML' });
   }
 
   /**
@@ -66,28 +74,126 @@
         bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
       }
 
-      // 2. Configurar validaciones y eventos
-      configurarEventos(offcanvasEl);
+      // 2. Detectar modo: detalle (data-proveedor-uuid presente) vs crear/editar
+      const isDetalle = !!offcanvasEl.dataset.proveedorUuid;
 
-      // v3.5+ - Inicializar búsqueda dinámica de Cuenta Contable con actualización en cascada
-      if (typeof Sintel.Proveedores.Utils?.setupCuentaAutocomplete === 'function') {
-          Sintel.Proveedores.Utils.setupCuentaAutocomplete({
-              inputId: 'proveedor-cuenta_contable_label',
-              hiddenId: 'proveedor-cuenta_contable_uuid',
-              resultsId: 'proveedor-cuenta-resultados',
-              cascadeTriggers: [
-                  'proveedor-tipo_persona',       // Tipo persona (NATURAL/JURIDICA)
-                  'proveedor-tipo_documento',     // Tipo documento (NIT/CC/CE)
-                  'proveedor-regimen_tributario', // Régimen tributario (ORDINARIO/SIMPLIFICADO)
-                  'proveedor-responsable_iva',    // Estado fiscal: responsable de IVA
-                  'proveedor-gran_contribuyente', // Estado fiscal: gran contribuyente
-                  'proveedor-autoretenedor',      // Estado fiscal: autoretenedor
-                  'proveedor-es_retenedor'        // Estado fiscal: agente retenedor
-              ]
-          });
+      if (isDetalle) {
+        // Modo detalle: inicializar tab de historial de facturas de compra
+        initHistorialCompras(offcanvasEl);
+      } else {
+        // Modo crear/editar: configurar formulario
+        configurarEventos(offcanvasEl);
       }
     }
   });
+
+  // ── Historial Facturas de Compra ─────────────────────────────────────────
+
+  /**
+   * Inicializa el tab de Facturas de Compra (lazy: carga al mostrar el tab).
+   */
+  function initHistorialCompras(offcanvasEl) {
+    const uuid = offcanvasEl.dataset.proveedorUuid;
+    if (!uuid) return;
+
+    const tabBtn = offcanvasEl.querySelector('#tab-compras-btn');
+    if (!tabBtn || tabBtn.dataset.historialBound) return;
+    tabBtn.dataset.historialBound = 'true';
+
+    // Filtros de estado (chips)
+    const filtroContainer = offcanvasEl.querySelector('#historial-compras-filtros-estado');
+    if (filtroContainer) {
+      filtroContainer.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-compras-estado]');
+        if (!btn) return;
+        filtroContainer.querySelectorAll('[data-compras-estado]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _cargarHistorialCompras(uuid, btn.dataset.comprasEstado);
+      });
+    }
+
+    // Carga lazy al activar el tab
+    tabBtn.addEventListener('shown.bs.tab', () => {
+      const estadoActivo = filtroContainer?.querySelector('[data-compras-estado].active')?.dataset.comprasEstado || '';
+      _cargarHistorialCompras(uuid, estadoActivo);
+    });
+  }
+
+  /**
+   * Carga (o recarga) la grilla de Facturas de Compra filtrando por proveedor_uuid.
+   */
+  function _cargarHistorialCompras(uuid, estado) {
+    let url = `/api/v1/facturas/?proveedor_uuid=${uuid}&naturaleza=COMPRA`;
+    if (estado) url += `&estado=${encodeURIComponent(estado)}`;
+
+    if (w.SintelProveedoresTables?.historialCompras) {
+      try { w.SintelProveedoresTables.historialCompras.destroy(); } catch (_) {}
+      w.SintelProveedoresTables.historialCompras = null;
+    }
+
+    const COLS = [
+      {
+        title: 'Número', field: 'numero', width: 130,
+        formatter: (cell) => `<span class="fw-semibold small">${cell.getValue() || '—'}</span>`,
+      },
+      {
+        title: 'Fecha', field: 'fecha_emision', width: 100,
+        formatter: (cell) => {
+          const v = cell.getValue();
+          return v ? new Date(v).toLocaleDateString('es-CO') : '—';
+        },
+      },
+      {
+        title: 'Estado', field: 'estado', width: 110, hozAlign: 'center',
+        formatter: (cell) => {
+          const MAP = { ACEPTADA: 'success', ENVIADA: 'warning', ANULADA: 'danger', BORRADOR: 'secondary', RECHAZADA: 'danger' };
+          const v = cell.getValue() || '';
+          return `<span class="badge bg-${MAP[v] || 'secondary'}">${v}</span>`;
+        },
+      },
+      {
+        title: 'Emisor', field: 'emisor_razon_social', minWidth: 180,
+        formatter: (cell) => `<span class="small">${cell.getValue() || '—'}</span>`,
+      },
+      {
+        title: 'Total', field: 'total', width: 140, hozAlign: 'right',
+        formatter: (cell) => {
+          const v = parseFloat(cell.getValue()) || 0;
+          return `<span class="fw-semibold text-success small">${v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</span>`;
+        },
+      },
+    ];
+
+    if (!w.TabulatorFactory) {
+      console.error(`${MOD} TabulatorFactory no disponible`);
+      return;
+    }
+
+    const t = w.TabulatorFactory.create('#historial-compras-grid', url, COLS, { ajaxSorting: true });
+    if (!w.SintelProveedoresTables) w.SintelProveedoresTables = {};
+    w.SintelProveedoresTables.historialCompras = t;
+
+    t.on('dataLoaded', (data) => _actualizarKPIsCompras(data));
+  }
+
+  /**
+   * Actualiza los KPI cards del historial con los datos de la página cargada.
+   */
+  function _actualizarKPIsCompras(rows) {
+    const total = rows.length;
+    const monto = rows.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
+    const pendiente = rows
+      .filter(r => r.estado === 'ENVIADA' || r.estado === 'BORRADOR')
+      .reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
+
+    const fmt = (v) => v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+    const el = (id) => d.getElementById(id);
+    if (el('ckpi-total'))    el('ckpi-total').textContent    = total;
+    if (el('ckpi-monto'))    el('ckpi-monto').textContent    = fmt(monto);
+    if (el('ckpi-pendiente')) el('ckpi-pendiente').textContent = fmt(pendiente);
+  }
+
+  // ── Formulario ───────────────────────────────────────────────────────────
 
   function buildPayload(form) {
     const payload = {};
@@ -139,6 +245,9 @@
     const form = container.querySelector('form');
     if (!form) return;
 
+    // Guard: evitar registrar listeners duplicados si htmx:afterSettle dispara múltiples veces
+    if (form.dataset.configured === 'true') return;
+    form.dataset.configured = 'true';
 
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
@@ -254,7 +363,8 @@
   w.Sintel.Proveedores = w.Sintel.Proveedores || {};
   w.Sintel.Proveedores.Form = {
     openOffcanvas: openOffcanvas,
-    eliminar: eliminar
+    openDetalle: openDetalle,
+    eliminar: eliminar,
   };
 
 })(window, document);

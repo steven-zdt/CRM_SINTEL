@@ -38,7 +38,7 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
             fecha="2026-05-01", proveedor=prov1,
             subtotal=1000, total=1000,
             descripcion="Gasto T1",
-            categoria_contable="GASTOS_ADMINISTRATIVOS"
+            categoria_contable="ARRENDAMIENTOS"
         )
 
     # 2. Setup Tenant 2
@@ -74,7 +74,7 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
                 fecha="2026-05-01", proveedor=prov2,
                 subtotal=100, total=100,
                 descripcion=f"Gasto T2-{i}",
-                categoria_contable="GASTOS_VENTAS"
+                categoria_contable="SERVICIOS_PUBLICOS"
             )
 
         g2 = DocumentoSoporte.objects.create(
@@ -82,7 +82,7 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
             fecha="2026-05-01", proveedor=prov2,
             subtotal=2000, total=2000,
             descripcion="Gasto T2",
-            categoria_contable="GASTOS_VENTAS"
+            categoria_contable="SERVICIOS_PUBLICOS"
         )
 
     # 3. Validar Aislamiento en Listado
@@ -95,15 +95,15 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
     ids = [item['descripcion'] for item in results]
     assert "Gasto T1" in ids
     assert "Gasto T2" not in ids
-
+    
     # 4. Validar Prevencion de IDOR (Acceso Directo)
-    resp = client.get(f"/api/v1/gastos/{g2.id}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.com")
+    resp = client.get(f"/api/v1/gastos/{g2.uuid}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.com")
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     # 5. Validar Aislamiento en Creacion (Prevencion de IDOR en FKs)
     payload = {
         "descripcion": "Intento IDOR",
-        "categoria_contable": "GASTOS_ADMINISTRATIVOS",
+        "categoria_contable": "ARRENDAMIENTOS",
         "documento_soporte": {
             "fecha": "2026-05-06",
             "subtotal": 500,

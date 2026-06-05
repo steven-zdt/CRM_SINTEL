@@ -34,7 +34,7 @@ def build_migrate_schemas_args(tenants_env: str) -> list:
 @pytest.mark.parametrize('tenants_env,expected_args', [
     ('all', ['migrate_schemas', '--tenant', '--fake-initial']),
     ('mi_empresa', ['migrate_schemas', '--schema', 'mi_empresa', '--fake-initial']),
-    ('cliente', ['migrate_schemas', '--schema', 'cliente', '--fake-initial']),
+    ('test_schema_01', ['migrate_schemas', '--schema', 'test_schema_01', '--fake-initial']),
 ])
 def test_build_migrate_schemas_args(tenants_env, expected_args):
     """Verifica que build_migrate_schemas_args construye los argumentos correctos."""

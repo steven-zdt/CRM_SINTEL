@@ -1,3 +1,3 @@
 """
-App de Proyectos - Gestión de proyectos por tenant.
+App de Proyectos - Gestion de proyectos por tenant.
 """

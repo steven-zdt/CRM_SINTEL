@@ -2,24 +2,40 @@
 Tests de humo para validar DELETE /api/v1/facturas/{id}/ sin error 500.
 """
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
+from django.db import connection
 
+from apps.public.tenants.models import Domain
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
+from apps.tenant.perfil.models import RolTenant, TenantProfile
+from tests.tenant.base_test import SintelTenantTestCase
 
 
-class FacturaDeleteAPITests(TenantTestCase):
+class FacturaDeleteAPITests(SintelTenantTestCase):
     """Tests para validar DELETE de facturas con mapeo correcto de errores."""
     
     def setUp(self):
         super().setUp()
+        self.tenant_host = f"{self.tenant.schema_name}.sintel.local"
+        connection.set_schema_to_public()
+        Domain.objects.update_or_create(
+            domain=self.tenant_host,
+            defaults={"tenant": self.tenant, "is_primary": True},
+        )
+        connection.set_schema(self.tenant.schema_name)
+
         # Crear empresa del tenant (SSoT)
-        Empresa.objects.create(
+        self.empresa = Empresa.objects.create(
             razon_social="SINTEL",
             nit="901123299",
             dv="1",
             direccion="Calle 123",
             telefono="3001234567"
+        )
+        TenantProfile.objects.update_or_create(
+            user=self.user,
+            empresa=self.empresa,
+            defaults={"rol": RolTenant.ADMIN, "cargo": "Admin"},
         )
         
         # Crear factura de prueba
@@ -38,8 +54,8 @@ class FacturaDeleteAPITests(TenantTestCase):
     
     def test_delete_ok(self):
         """Valida que DELETE exitoso retorna 204."""
-        url = reverse("factura-detail", args=[self.f.id])  # /api/v1/facturas/{id}/
-        resp = self.client.delete(url)
+        url = reverse("factura-detail", args=[self.f.uuid])
+        resp = self.api_client.delete(url, HTTP_HOST=self.tenant_host)
         
         self.assertEqual(resp.status_code, 204, "DELETE exitoso debe retornar 204")
         self.assertFalse(
@@ -49,8 +65,8 @@ class FacturaDeleteAPITests(TenantTestCase):
     
     def test_delete_404(self):
         """Valida que DELETE de factura inexistente retorna 404."""
-        url = reverse("factura-detail", args=[999999])
-        resp = self.client.delete(url)
+        url = reverse("factura-detail", args=["00000000-0000-0000-0000-000000000000"])
+        resp = self.api_client.delete(url, HTTP_HOST=self.tenant_host)
         
         self.assertEqual(resp.status_code, 404, "DELETE de factura inexistente debe retornar 404")
     
@@ -63,8 +79,8 @@ class FacturaDeleteAPITests(TenantTestCase):
             application_response_xml="<ApplicationResponse>...</ApplicationResponse>"
         )
         
-        url = reverse("factura-detail", args=[self.f.id])
-        resp = self.client.delete(url)
+        url = reverse("factura-detail", args=[self.f.uuid])
+        resp = self.api_client.delete(url, HTTP_HOST=self.tenant_host)
         
         self.assertEqual(resp.status_code, 204, "DELETE debe funcionar con anexos (CASCADE)")
         self.assertFalse(
@@ -75,8 +91,8 @@ class FacturaDeleteAPITests(TenantTestCase):
     def test_delete_respuesta_formato(self):
         """Valida que las respuestas de error tienen formato JSON correcto."""
         # Test 404 (DRF maneja automáticamente)
-        url = reverse("factura-detail", args=[999999])
-        resp = self.client.delete(url)
+        url = reverse("factura-detail", args=["00000000-0000-0000-0000-000000000000"])
+        resp = self.api_client.delete(url, HTTP_HOST=self.tenant_host)
         
         self.assertEqual(resp.status_code, 404)
         # DRF puede retornar 404 sin cuerpo o con {"detail": "Not found."}
@@ -91,8 +107,8 @@ class FacturaDeleteAPITests(TenantTestCase):
         así que no deberíamos tener ProtectedError en condiciones normales.
         Este test valida que el mapeo funciona si ocurriera.
         """
-        url = reverse("factura-detail", args=[self.f.id])
-        resp = self.client.delete(url)
+        url = reverse("factura-detail", args=[self.f.uuid])
+        resp = self.api_client.delete(url, HTTP_HOST=self.tenant_host)
         
         # Asegurar que no retorna 500
         self.assertNotEqual(

@@ -166,7 +166,7 @@
                     const data = cell.getRow().getData();
                     if (data.anulado) return '—';
                     return `<button class="btn btn-sm btn-outline-danger"
-                                    onclick="window.Sintel.Empleados.NominaHistorial.anular(${data.id})"
+                                    onclick="window.Sintel.Empleados.NominaHistorial.anular('${data.uuid}')"
                                     title="Anular nómina">
                                 <i class="bi bi-slash-circle"></i>
                             </button>`;

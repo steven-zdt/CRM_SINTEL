@@ -2,12 +2,12 @@
 Modelo de Proyectos v3.3 - Stand-Alone Module (SSoT Strict)
 -------------------------------------------------------------------
 ARQUITECTURA V2.40 (Zero-Coupling con otras apps de negocio):
-- [OK] ÚNICA dependencia externa: apps.tenant.empresa.models.Empresa (SSoT)
+- [OK] uNICA dependencia externa: apps.tenant.empresa.models.Empresa (SSoT)
 - [ERROR] NO hay ForeignKeys a Clientes, Proveedores, Empleados o Inventario.
-- [OK] Uso estricto del Patrón "Snapshot" (ID referencial + CharField) para que
-     el módulo no se rompa si otros servicios no están disponibles.
-- [OK] Modelo Anémico: Solo estructura de datos. Toda validación de IDs 
-     y cálculos financieros vivirán en services.py.
+- [OK] Uso estricto del Patron "Snapshot" (ID referencial + CharField) para que
+     el modulo no se rompa si otros servicios no estan disponibles.
+- [OK] Modelo Anemico: Solo estructura de datos. Toda validacion de IDs 
+     y calculos financieros viviran en services.py.
 -------------------------------------------------------------------
 """
 
@@ -17,38 +17,38 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.tenant.core.models import SintelTenantBaseModel  # [v2.61.4] Herencia SSoT
-from apps.tenant.empresa.models import Empresa  # ÚNICA Dependencia Externa (SSoT)
+from apps.tenant.empresa.models import Empresa  # uNICA Dependencia Externa (SSoT)
 
 
 class Proyecto(SintelTenantBaseModel):
     """
     Entidad Maestra de Proyectos.
-    Funciona autónomamente almacenando snapshots de los responsables y clientes.
+    Funciona autonomamente almacenando snapshots de los responsables y clientes.
     """
     TIPO_SERVICIO = [
         ('PROYECTO_INTEGRAL', _('Proyecto Integral')),
-        ('INSTALACION', _('Instalación Técnica')),
+        ('INSTALACION', _('Instalacion Tecnica')),
         ('MANTENIMIENTO', _('Mantenimiento')),
-        ('SUPERVISION', _('Supervisión/Interventoría')),
-        ('CONSULTORIA', _('Consultoría')),
+        ('SUPERVISION', _('Supervision/Interventoria')),
+        ('CONSULTORIA', _('Consultoria')),
     ]
 
     FASES = [
         ('BORRADOR', _('0. Borrador / Oportunidad')),
         ('INICIO', _('1. Inicio (Comercial y Legal)')),
-        ('PLANEACION', _('2. Planeación (Diseño y Técnica)')),
-        ('EJECUCION', _('3. Ejecución (Operativa)')),
+        ('PLANEACION', _('2. Planeacion (Diseno y Tecnica)')),
+        ('EJECUCION', _('3. Ejecucion (Operativa)')),
         ('CIERRE', _('4. Cierre (Administrativa)')),
     ]
     
     ESTADO_TAREA = [
-        ('PENDIENTE', _('Pendiente de Gestión')),
+        ('PENDIENTE', _('Pendiente de Gestion')),
         ('EN_PROCESO', _('En Proceso')),
         ('DETENIDO', _('Detenido / Bloqueado')),
         ('COMPLETADO', _('Fase Finalizada')),
     ]
 
-    # UUID Lookup Field (AGENTS.md §14 — expone UUID en URLs, no pk secuencial)
+    # UUID Lookup Field (AGENTS.md section 14 - expone UUID en URLs, no pk secuencial)
     uuid = models.UUIDField(
         default=uuid_module.uuid4,
         unique=True,
@@ -56,7 +56,7 @@ class Proyecto(SintelTenantBaseModel):
         db_index=True,
     )
 
-    # --- SSoT (Vínculo Estricto Obligatorio v2.40) ---
+    # --- SSoT (Vinculo Estricto Obligatorio v2.40) ---
     empresa = models.ForeignKey(
         Empresa, 
         on_delete=models.PROTECT, 
@@ -65,11 +65,11 @@ class Proyecto(SintelTenantBaseModel):
         help_text=_('SSoT Empresa propietaria')
     )
 
-    # --- DATOS BÁSICOS ---
+    # --- DATOS BaSICOS ---
     nombre = models.CharField(_('Nombre del Proyecto'), max_length=200)
-    codigo = models.CharField(_('Código'), max_length=50, blank=True)
+    codigo = models.CharField(_('Codigo'), max_length=50, blank=True)
     tipo_servicio = models.CharField(_('Tipo de Servicio'), max_length=30, choices=TIPO_SERVICIO, default='PROYECTO_INTEGRAL')
-    descripcion = models.TextField(_('Descripción'), blank=True)
+    descripcion = models.TextField(_('Descripcion'), blank=True)
 
     # --- RELACIONES DESACOPLADAS (Loose Coupling / Snapshots) ---
     cliente_id = models.IntegerField(
@@ -83,7 +83,7 @@ class Proyecto(SintelTenantBaseModel):
     
     factura_ref = models.CharField(
         _('Referencia Factura'), max_length=50, blank=True, 
-        help_text=_("Número o Código de la factura asociada")
+        help_text=_("Numero o Codigo de la factura asociada")
     )
     
     factura_costo = models.ForeignKey(
@@ -93,14 +93,14 @@ class Proyecto(SintelTenantBaseModel):
         blank=True,
         related_name='proyectos_asociados',
         verbose_name=_('Factura (Centro de Costos)'),
-        help_text=_('Factura que actúa como centro de costos para este proyecto')
+        help_text=_('Factura que actua como centro de costos para este proyecto')
     )
     factura_costo_numero = models.CharField(
-        _('Número Factura (Snapshot)'), max_length=50, blank=True,
-        help_text=_("Snapshot del número de la factura para evitar FK en listados")
+        _('Numero Factura (Snapshot)'), max_length=50, blank=True,
+        help_text=_("Snapshot del numero de la factura para evitar FK en listados")
     )
 
-    # --- VÍNCULO CON INVENTARIO (Pull Model / DSV) ---
+    # --- ViNCULO CON INVENTARIO (Pull Model / DSV) ---
     servicio_asociado = models.ForeignKey(
         'tenant_inventario.Servicio',
         on_delete=models.PROTECT,
@@ -108,7 +108,12 @@ class Proyecto(SintelTenantBaseModel):
         blank=True,
         related_name='proyectos_ejecucion',
         verbose_name=_('Servicio Asociado'),
-        help_text=_('Servicio del catálogo/portafolio vinculado a este proyecto (DSV: debe pertenecer a empresa_id)')
+        help_text=_('Servicio del catalogo/portafolio (campo legacy, no usar en formularios nuevos)')
+    )
+    movimiento_inventario_uuid = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        verbose_name=_('Movimiento de Inventario'),
+        help_text=_('UUID del MovimientoInventario vinculado (Soft Reference Kardex).')
     )
 
     valor_contrato_proyectado = models.DecimalField(_('Valor Contrato Proyectado'), max_digits=15, decimal_places=2, default=0)
@@ -117,10 +122,10 @@ class Proyecto(SintelTenantBaseModel):
     responsable_comercial_id = models.IntegerField(null=True, blank=True, help_text=_("ID referencial comercial (Fase: Inicio)"))
     responsable_comercial_nombre = models.CharField(max_length=150, blank=True, help_text=_('Snapshot responsable comercial'))
     
-    responsable_tecnico_id = models.IntegerField(null=True, blank=True, help_text=_("ID referencial técnico (Fase: Planeación)"))
-    responsable_tecnico_nombre = models.CharField(max_length=150, blank=True, help_text=_('Snapshot responsable técnico'))
+    responsable_tecnico_id = models.IntegerField(null=True, blank=True, help_text=_("ID referencial tecnico (Fase: Planeacion)"))
+    responsable_tecnico_nombre = models.CharField(max_length=150, blank=True, help_text=_('Snapshot responsable tecnico'))
     
-    responsable_operativo_id = models.IntegerField(null=True, blank=True, help_text=_("ID referencial operativo (Fase: Ejecución)"))
+    responsable_operativo_id = models.IntegerField(null=True, blank=True, help_text=_("ID referencial operativo (Fase: Ejecucion)"))
     responsable_operativo_nombre = models.CharField(max_length=150, blank=True, help_text=_('Snapshot responsable operativo'))
     
     responsable_administrativo_id = models.IntegerField(null=True, blank=True, help_text=_("ID referencial administrativo (Fase: Cierre)"))
@@ -139,7 +144,7 @@ class Proyecto(SintelTenantBaseModel):
         help_text=_("Snapshot del nombre del proveedor para evitar FK")
     )
 
-    # --- DOCUMENTACIÓN ---
+    # --- DOCUMENTACIoN ---
     contrato_archivo = models.FileField(upload_to='proyectos/contratos/', null=True, blank=True)
     acta_inicio_archivo = models.FileField(upload_to='proyectos/actas/', null=True, blank=True)
     cronograma_archivo = models.FileField(upload_to='proyectos/cronogramas/', null=True, blank=True)
@@ -147,14 +152,14 @@ class Proyecto(SintelTenantBaseModel):
     fecha_inicio = models.DateField(_('Fecha de Inicio'), null=True, blank=True)
     fecha_fin_estimada = models.DateField(_('Fecha Fin Estimada'), null=True, blank=True)
     
-    # --- INDICADORES FINANCIEROS (Modelo Anémico) ---
+    # --- INDICADORES FINANCIEROS (Modelo Anemico) ---
     costo_mano_obra_real = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
     costo_materiales_real = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
     utilidad_estimada = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
     margen_rentabilidad = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
 
-    # --- INDICADORES PLANEADOS (v3.5.2 — Presupuesto Manual) ---
-    costo_planeado_total = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Suma de ItemPresupuestoProyecto — Zero Waste caché'))
+    # --- INDICADORES PLANEADOS (v3.5.2 - Presupuesto Manual) ---
+    costo_planeado_total = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Suma de ItemPresupuestoProyecto - Zero Waste cache'))
     utilidad_planeada = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('valor_contrato - costo_planeado_total'))
     margen_planeado = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text=_('utilidad_planeada / valor_contrato * 100'))
 
@@ -167,7 +172,20 @@ class Proyecto(SintelTenantBaseModel):
     # --- ESTADO ---
     fase_actual = models.CharField(_('Fase Actual'), max_length=20, choices=FASES, default='BORRADOR')
     estado_tarea = models.CharField(_('Estado de Tarea'), max_length=20, choices=ESTADO_TAREA, default='PENDIENTE')
-    
+
+    # Sede: vinculacion para indicadores y KPIs por sede (DT-SEDE-03).
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='proyectos',
+        verbose_name=_('Sede'),
+        help_text=_('Sede de la empresa donde se ejecuta el proyecto. '
+                    'Opcional: si no se asigna aplica a toda la empresa.'),
+        db_index=True,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -179,13 +197,45 @@ class Proyecto(SintelTenantBaseModel):
             models.UniqueConstraint(fields=["empresa", "codigo"], condition=models.Q(codigo__gt=''), name="uniq_proyecto_codigo_empresa")
         ]
         indexes = [
-            # v3.5: Los índices base (empresa, created_at) vienen de SintelTenantBaseModel.
-            # Solo añadimos índices específicos de la lógica de negocio de Proyectos.
+            # v3.5: Los indices base (empresa, created_at) vienen de SintelTenantBaseModel.
+            # Solo anadimos indices especificos de la logica de negocio de Proyectos.
             models.Index(fields=["empresa", "fase_actual"]),
             models.Index(fields=["empresa", "cliente_id"]),
             models.Index(fields=["responsable_actual_id"]),
             models.Index(fields=["proveedor_id"]),
         ]
+
+    @property
+    def movimiento_referencia(self):
+        if not self.movimiento_inventario_uuid:
+            return None
+        try:
+            from apps.tenant.inventario.services.selectors import MovimientoInventarioSelector
+            mov = MovimientoInventarioSelector.get_detail(
+                empresa_id=self.empresa_id,
+                movimiento_uuid=self.movimiento_inventario_uuid
+            )
+            item_nombre = ""
+            item_codigo = ""
+            item_tipo = ""
+            if mov.producto:
+                item_nombre = mov.producto.nombre
+                item_codigo = mov.producto.codigo
+                item_tipo = "PRODUCTO"
+            elif mov.activo_fijo:
+                item_nombre = mov.activo_fijo.nombre
+                item_codigo = mov.activo_fijo.codigo
+                item_tipo = "ACTIVO_FIJO"
+            return {
+                'tipo': mov.tipo,
+                'tipo_display': mov.get_tipo_display(),
+                'item_tipo': item_tipo,
+                'item_nombre': item_nombre,
+                'item_codigo': item_codigo,
+                'cantidad': float(mov.cantidad or 0),
+            }
+        except Exception:
+            return None
 
     def __str__(self):
         return f"{self.nombre} ({self.codigo})"
@@ -194,10 +244,10 @@ class Proyecto(SintelTenantBaseModel):
 class AsignacionPersonal(SintelTenantBaseModel):
     """
     Registro de Talento Humano asignado al proyecto.
-    Desacoplado del módulo de Empleados.
+    Desacoplado del modulo de Empleados.
     """
     ROLES = [
-        ('TECNICO', _('Técnico Operativo')),
+        ('TECNICO', _('Tecnico Operativo')),
         ('AYUDANTE', _('Ayudante / Auxiliar')),
         ('RESIDENTE', _('Ingeniero Residente')),
         ('SISOMA', _('Inspector SST')),
@@ -212,8 +262,8 @@ class AsignacionPersonal(SintelTenantBaseModel):
     
     rol = models.CharField(_('Rol'), max_length=20, choices=ROLES, default='TECNICO')
     
-    fecha_asignacion = models.DateField(_('Fecha Asignación'))
-    fecha_fin_asignacion = models.DateField(_('Fecha Fin Asignación'), null=True, blank=True)
+    fecha_asignacion = models.DateField(_('Fecha Asignacion'))
+    fecha_fin_asignacion = models.DateField(_('Fecha Fin Asignacion'), null=True, blank=True)
     
     # --- Financieros ---
     horas_totales_registradas = models.DecimalField(_('Horas Totales'), max_digits=10, decimal_places=2, default=0)
@@ -223,7 +273,7 @@ class AsignacionPersonal(SintelTenantBaseModel):
     activo = models.BooleanField(_('Activo'), default=True)
 
     class Meta:
-        verbose_name = _("Asignación Personal")
+        verbose_name = _("Asignacion Personal")
         verbose_name_plural = _("Equipo de Trabajo")
         indexes = [
             # v3.5: Index base en empresa provisto por SintelTenantBaseModel.
@@ -275,7 +325,7 @@ class PedidoProyecto(SintelTenantBaseModel):
     fuente_suministro = models.CharField(_('Fuente de Suministro'), max_length=20, choices=FUENTE, default='PROVEEDOR')
     
     # --- Referencias Desacopladas ---
-    proveedor_id = models.IntegerField(_('ID Proveedor'), null=True, blank=True, help_text=_("ID referencial si existe módulo de proveedores"))
+    proveedor_id = models.IntegerField(_('ID Proveedor'), null=True, blank=True, help_text=_("ID referencial si existe modulo de proveedores"))
     proveedor_nombre = models.CharField(_('Nombre Proveedor/Tienda'), max_length=200, blank=True, help_text=_("Snapshot del proveedor"))
     empleado_encargado_nombre = models.CharField(_('Encargado'), max_length=150, blank=True, help_text=_("Quien gestiona el recurso"))
 
@@ -300,7 +350,7 @@ class PedidoProyecto(SintelTenantBaseModel):
 
 class ItemPedido(SintelTenantBaseModel):
     """
-    Detalle de línea de pedido. Estrictamente datos, sin relaciones a Inventario.
+    Detalle de linea de pedido. Estrictamente datos, sin relaciones a Inventario.
     """
     pedido = models.ForeignKey(PedidoProyecto, on_delete=models.CASCADE, related_name='items')
     
@@ -333,11 +383,11 @@ class ItemPedido(SintelTenantBaseModel):
 
 class ItemPresupuestoProyecto(SintelTenantBaseModel):
     """
-    Línea de Presupuesto Manual para Fase 2 (Planeación).
-    Permite desglosar costos planeados por categoría.
+    Linea de Presupuesto Manual para Fase 2 (Planeacion).
+    Permite desglosar costos planeados por categoria.
 
-    Patrón: 1-a-N sobre Proyecto.
-    Service Layer gestiona recálculo de totales en proyecto padre.
+    Patron: 1-a-N sobre Proyecto.
+    Service Layer gestiona recalculo de totales en proyecto padre.
     DSV (Double Semantic Verification) valida empresa_id.
     """
     class Categoria(models.TextChoices):
@@ -360,18 +410,18 @@ class ItemPresupuestoProyecto(SintelTenantBaseModel):
         help_text=_('DSV: valida que item pertenezca al tenant')
     )
 
-    # --- Datos del Ítem ---
+    # --- Datos del item ---
     categoria = models.CharField(
-        _('Categoría'),
+        _('Categoria'),
         max_length=20,
         choices=Categoria.choices,
         help_text=_('Mano de Obra, Equipos o Materiales')
     )
     descripcion = models.CharField(
-        _('Descripción'),
+        _('Descripcion'),
         max_length=300,
         blank=True,
-        help_text=_('Ej: Instalación de cableado, Alquiler de grúa, etc.')
+        help_text=_('Ej: Instalacion de cableado, Alquiler de grua, etc.')
     )
     cantidad = models.DecimalField(
         _('Cantidad'),
@@ -392,12 +442,12 @@ class ItemPresupuestoProyecto(SintelTenantBaseModel):
         max_digits=15,
         decimal_places=2,
         default=0,
-        help_text=_('cantidad × valor_unitario (calculado en service layer)')
+        help_text=_('cantidad x valor_unitario (calculado en service layer)')
     )
 
     class Meta:
         verbose_name = _('Item de Presupuesto')
-        verbose_name_plural = _('Ítems de Presupuesto')
+        verbose_name_plural = _('items de Presupuesto')
         ordering = ['categoria', 'id']
         indexes = [
             models.Index(fields=['proyecto']),
@@ -411,16 +461,16 @@ class ItemPresupuestoProyecto(SintelTenantBaseModel):
 
 class TareaDiariaProyecto(SintelTenantBaseModel):
     """
-    Seguimiento de Tareas Diarias (Fase 3 - Ejecución) v3.5.4
+    Seguimiento de Tareas Diarias (Fase 3 - Ejecucion) v3.5.4
 
-    Permite registrar tareas por período (fecha_inicio a fecha_fin) asociadas a un proyecto.
-    Validaciones críticas:
+    Permite registrar tareas por periodo (fecha_inicio a fecha_fin) asociadas a un proyecto.
+    Validaciones criticas:
     - fecha_inicio <= fecha_fin (rango coherente)
     - [fecha_inicio, fecha_fin] DEBE intersectar con [proyecto.fecha_inicio, proyecto.fecha_fin_estimada]
     - Si proyecto.fase_actual == 'CIERRE', tareas son inmutables (read-only)
     - DSV: empresa_id DEBE coincidir con proyecto.empresa_id
 
-    Patrón: 1-a-N sobre Proyecto.
+    Patron: 1-a-N sobre Proyecto.
     Service Layer gestiona validaciones y persistencia.
     """
     class Estado(models.TextChoices):
@@ -452,19 +502,19 @@ class TareaDiariaProyecto(SintelTenantBaseModel):
     # --- Datos de la Tarea ---
     fecha_inicio = models.DateField(
         _('Fecha Inicio'),
-        help_text=_('Primer día de la tarea. DEBE estar entre fecha_inicio y fecha_fin_estimada del proyecto')
+        help_text=_('Primer dia de la tarea. DEBE estar entre fecha_inicio y fecha_fin_estimada del proyecto')
     )
     fecha_fin = models.DateField(
         _('Fecha Fin'),
-        help_text=_('Último día de la tarea. DEBE ser >= fecha_inicio y dentro del rango del proyecto')
+        help_text=_('ultimo dia de la tarea. DEBE ser >= fecha_inicio y dentro del rango del proyecto')
     )
     titulo = models.CharField(
-        _('Título'),
+        _('Titulo'),
         max_length=200,
-        help_text=_('Descripción breve de la tarea')
+        help_text=_('Descripcion breve de la tarea')
     )
     descripcion = models.TextField(
-        _('Descripción'),
+        _('Descripcion'),
         blank=True,
         help_text=_('Detalles completos de la tarea')
     )
@@ -491,7 +541,7 @@ class TareaDiariaProyecto(SintelTenantBaseModel):
     notas_progreso = models.TextField(
         _('Notas de Progreso'),
         blank=True,
-        help_text=_('Actualizaciones diarias sobre la ejecución')
+        help_text=_('Actualizaciones diarias sobre la ejecucion')
     )
 
     class Meta:
@@ -511,5 +561,126 @@ class TareaDiariaProyecto(SintelTenantBaseModel):
         ]
 
     def __str__(self):
-        rango = f"{self.fecha_inicio}" if self.fecha_inicio == self.fecha_fin else f"{self.fecha_inicio} — {self.fecha_fin}"
+        rango = f"{self.fecha_inicio}" if self.fecha_inicio == self.fecha_fin else f"{self.fecha_inicio} - {self.fecha_fin}"
         return f"[{rango}] {self.titulo} - {self.get_estado_display()}"
+
+    @property
+    def fecha(self):
+        """Alias legacy de lectura para integraciones anteriores a fecha_inicio/fecha_fin."""
+        return self.fecha_inicio
+
+
+class TareaCorta(SintelTenantBaseModel):
+    """
+    Seguimiento de Tareas Cortas v3.10.0
+
+    Permite registrar tareas de corta duracion dirigidas a un cliente y
+    asignadas a un empleado.
+    Validaciones criticas:
+    - fecha_inicio <= fecha_fin (rango coherente)
+    - DSV: empresa_id DEBE coincidir con cliente.empresa_id y empleado.empresa_id
+    """
+    class Estado(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', _('Pendiente')
+        EN_PROCESO = 'EN_PROCESO', _('En Proceso')
+        COMPLETADA = 'COMPLETADA', _('Completada')
+        CANCELADA = 'CANCELADA', _('Cancelada')
+
+    class Prioridad(models.TextChoices):
+        BAJA = 'BAJA', _('Baja')
+        NORMAL = 'NORMAL', _('Normal')
+        ALTA = 'ALTA', _('Alta')
+
+    # UUID Lookup Field (AGENTS.md)
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
+    # --- Relaciones ---
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name='tareas_cortas',
+        verbose_name=_('Empresa'),
+        help_text=_('DSV: valida que tarea pertenezca al tenant')
+    )
+    empleado = models.ForeignKey(
+        'tenant_empleados.Empleado',
+        on_delete=models.PROTECT,
+        related_name='tareas_cortas',
+        verbose_name=_('Empleado'),
+        null=True,
+        blank=True,
+        help_text=_('Empleado asignado a la tarea corta')
+    )
+    cliente = models.ForeignKey(
+        'tenant_clientes.Cliente',
+        on_delete=models.SET_NULL,
+        related_name='tareas_cortas',
+        verbose_name=_('Cliente'),
+        null=True,
+        blank=True,
+        help_text=_('Cliente destino de la tarea corta')
+    )
+
+    # --- Datos de la Tarea ---
+    fecha_inicio = models.DateField(
+        _('Fecha Inicio'),
+        help_text=_('Primer dia de la tarea.')
+    )
+    fecha_fin = models.DateField(
+        _('Fecha Fin'),
+        help_text=_('Ultimo dia de la tarea. DEBE ser >= fecha_inicio')
+    )
+    titulo = models.CharField(
+        _('Titulo'),
+        max_length=200,
+        help_text=_('Descripcion breve de la tarea')
+    )
+    descripcion = models.TextField(
+        _('Descripcion'),
+        blank=True,
+        help_text=_('Detalles completos de la tarea')
+    )
+    estado = models.CharField(
+        _('Estado'),
+        max_length=20,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE
+    )
+    prioridad = models.CharField(
+        _('Prioridad'),
+        max_length=20,
+        choices=Prioridad.choices,
+        default=Prioridad.NORMAL
+    )
+    notas_progreso = models.TextField(
+        _('Notas de Progreso'),
+        blank=True,
+        help_text=_('Notas de avance de la tarea')
+    )
+
+    class Meta:
+        verbose_name = _('Tarea Corta')
+        verbose_name_plural = _('Tareas Cortas')
+        ordering = ['fecha_inicio', 'created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['cliente', 'empleado', 'fecha_inicio', 'titulo'],
+                name='unique_tarea_corta_por_cliente_empleado_fecha_titulo'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['cliente', 'fecha_inicio']),
+            models.Index(fields=['empleado', 'fecha_inicio']),
+            models.Index(fields=['empresa', 'estado']),
+            models.Index(fields=['fecha_inicio']),
+        ]
+
+    def __str__(self):
+        rango = f"{self.fecha_inicio}" if self.fecha_inicio == self.fecha_fin else f"{self.fecha_inicio} - {self.fecha_fin}"
+        return f"[{rango}] {self.titulo} - {self.get_estado_display()}"
+

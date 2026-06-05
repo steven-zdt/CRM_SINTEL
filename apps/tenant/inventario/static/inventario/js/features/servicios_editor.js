@@ -28,20 +28,7 @@
     // ⚠️ v2.61.3: Flag para prevenir doble envío
     let _guardandoServicio = false;
 
-    // §28: Pre-carga el label de una cuenta contable en el input de busqueda por UUID
-    async function _preCargarLabelCuenta(inputSel, uuidSel) {
-        const uuidEl = d.querySelector(uuidSel);
-        const textEl = d.querySelector(inputSel);
-        if (!uuidEl?.value || !textEl || textEl.value.trim()) return;
-        try {
-            const res = await w.Sintel.Inventario.API.getCuentaByUuid(uuidEl.value);
-            if (res.ok && res.data) {
-                const list = Array.isArray(res.data) ? res.data : (res.data.results || []);
-                const cta = list[0];
-                if (cta) textEl.value = `${cta.codigo} - ${cta.nombre}`;
-            }
-        } catch (_) {}
-    }
+
 
     /**
      * Recolectar datos del formulario de servicio
@@ -62,13 +49,15 @@
             descripcion: formData.get('descripcion')?.trim() || '',
             precio_venta: parseFloat(formData.get('precio_venta') || '0') || 0,
             activo: formData.get('activo') === 'on' || formData.get('activo') === 'true',
-            // v3.5: campo renombrado a cuenta_ingreso_uuid
-            cuenta_ingreso_uuid: d.querySelector('#servicio-cuenta-ingreso-uuid')?.value || null
         };
 
         // Validación básica
         if (!payload.codigo || !payload.nombre) {
             mostrarError('Los campos Código y Nombre son requeridos.');
+            return null;
+        }
+        if (payload.codigo.length > 64) {
+            mostrarError('El Código no puede superar 64 caracteres.');
             return null;
         }
 
@@ -303,28 +292,16 @@
         if (form) {
             const selectCategoria = form.querySelector('#servicio-categoria');
             if (selectCategoria) {
-                const servicioId = obtenerServicioId();
-                // Si es edición, obtener la categoría del servicio
-                if (servicioId) {
-                    // La categoría ya viene en el template, solo cargar opciones
-                    cargarCategorias();
-                } else {
-                    // Si es creación, cargar categorías sin selección
-                    cargarCategorias();
-                }
+                // Leer el UUID de categoría actual (data-attr del template) para re-seleccionar tras JS load
+                const categoriaUuid = selectCategoria.dataset.categoriaUuid || null;
+                cargarCategorias(categoriaUuid);
             }
 
-            // v3.5: Inicializar buscador cuenta de ingreso
-            if (d.querySelector('#servicio-cuenta-ingreso-busqueda')) {
-                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
-                    inputSelector: '#servicio-cuenta-ingreso-busqueda',
-                    resultsSelector: '#servicio-cuenta-ingreso-resultados',
-                    uuidSelector: '#servicio-cuenta-ingreso-uuid'
-                });
-                _preCargarLabelCuenta('#servicio-cuenta-ingreso-busqueda', '#servicio-cuenta-ingreso-uuid');
-            }
+
         }
     }
+
+
 
     // ⚠️ Exposición global del módulo
     if (!w.ServiciosEditor) {
@@ -337,9 +314,91 @@
         };
     }
 
+    // ── Historial Servicio ────────────────────────────────────────────────────
+
+    async function initHistorialServicio() {
+        const form = d.querySelector('#form-historial-servicio');
+        if (!form || form.getAttribute('data-init') === 'true') return;
+        form.setAttribute('data-init', 'true');
+
+        // Poblar select de servicios activos
+        const select = form.querySelector('#historial-servicio-select');
+        if (select && select.options.length <= 1) {
+            try {
+                const res = await w.http('GET', '/api/v1/inventario/servicios/?activo=true&page_size=200');
+                if (res.ok && res.data) {
+                    const items = res.data.results || res.data;
+                    items.forEach(function(s) {
+                        const opt = d.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = `${s.codigo ? s.codigo + ' — ' : ''}${s.nombre}`;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (_) {}
+        }
+
+        // Guardar historial
+        const btnGuardar = form.querySelector('#btn-guardar-historial');
+        if (btnGuardar) {
+            btnGuardar.addEventListener('click', async function() {
+                const errorDiv = d.querySelector('#form-historial-feedback');
+                if (errorDiv) { errorDiv.classList.add('d-none'); errorDiv.textContent = ''; }
+
+                if (!form.checkValidity()) { form.reportValidity(); return; }
+
+                const fd = new FormData(form);
+                const payload = {
+                    servicio: fd.get('servicio') || null,
+                    fecha_registro: fd.get('fecha_registro') || null,
+                    cantidad: parseFloat(fd.get('cantidad') || '0') || 0,
+                    valor_cobrado: parseFloat(fd.get('valor_cobrado') || '0') || 0,
+                    origen_referencia: fd.get('origen_referencia')?.trim() || null,
+                    observaciones: fd.get('observaciones')?.trim() || null,
+                };
+                if (!payload.servicio) {
+                    if (errorDiv) { errorDiv.textContent = 'Seleccione un servicio.'; errorDiv.classList.remove('d-none'); }
+                    return;
+                }
+
+                const original = btnGuardar.innerHTML;
+                btnGuardar.disabled = true;
+                btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Registrando...';
+
+                const res = await w.http('POST', '/api/v1/inventario/historial-servicios/', payload);
+
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = original;
+
+                if (!res.ok) {
+                    const msg = res.data?.detail || res.data?.non_field_errors?.[0] || JSON.stringify(res.data) || 'Error al registrar';
+                    if (errorDiv) { errorDiv.textContent = msg; errorDiv.classList.remove('d-none'); }
+                    return;
+                }
+
+                if (w.SintelFeedback) w.SintelFeedback.success('Historial registrado correctamente');
+
+                // Cerrar offcanvas de historial
+                const offEl = d.getElementById('offcanvas-historial-servicio');
+                if (offEl && w.bootstrap?.Offcanvas) {
+                    const inst = bootstrap.Offcanvas.getInstance(offEl);
+                    if (inst) inst.hide();
+                }
+
+                // Recargar tabla si está disponible
+                if (w.ServiciosList && typeof w.ServiciosList.recargar === 'function') {
+                    w.ServiciosList.recargar();
+                }
+            });
+        }
+    }
+
     // ⚠️ HTMX: Reinicializar cuando se carga el offcanvas
     if (typeof htmx !== 'undefined') {
         d.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target.id === 'offcanvas-container-historial-servicio') {
+                setTimeout(initHistorialServicio, 50);
+            }
             if (event.detail.target.id === 'offcanvas-container-servicios') {
                 // ⚠️ v2.61.3: Limpiar el flag para permitir la reinicialización del editor
                 const form = d.querySelector(FORM_ID);

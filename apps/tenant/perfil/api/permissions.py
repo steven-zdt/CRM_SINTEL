@@ -18,6 +18,7 @@ from apps.tenant.api.permissions import (  # noqa: F401
     _get_perfil,
     _resolve_empresa,
 )
+from apps.tenant.core.services.membership import check_primary_admin
 
 # Acciones disponibles por rol (SSoT para serializers y guards de UI)
 ROLE_ACTIONS: dict[str, list[str]] = {
@@ -70,7 +71,6 @@ def get_permissions_context(perfil, user=None) -> dict:
 
     if is_admin and user is not None:
         try:
-            from apps.tenant.core.services.membership import check_primary_admin
             is_owner = check_primary_admin(user.pk)
         except Exception:
             is_owner = False
@@ -82,6 +82,7 @@ def get_permissions_context(perfil, user=None) -> dict:
         'can_create_profiles': is_admin,
         'is_owner': is_owner,
         'rol': perfil.rol,
+        'user_id': perfil.user_id,
     }
 
 

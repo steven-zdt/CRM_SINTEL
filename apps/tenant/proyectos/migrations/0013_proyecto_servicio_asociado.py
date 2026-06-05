@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
             name="servicio_asociado",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Servicio del catálogo/portafolio vinculado a este proyecto (DSV: debe pertenecer a empresa_id)",
+                help_text="Servicio del catalogo/portafolio vinculado a este proyecto (DSV: debe pertenecer a empresa_id)",
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="proyectos_ejecucion",

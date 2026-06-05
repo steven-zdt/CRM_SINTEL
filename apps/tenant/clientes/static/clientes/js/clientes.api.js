@@ -21,6 +21,7 @@
   
   const CLIENTES_BASE = '/api/v1/clientes';
   const CONTACTOS_BASE = '/api/v1/clientes/contactos';
+  const CARTERA_BASE = '/api/v1/clientes/cartera';
 
   // ⚠️ Inmutable APIs
   if (!w.clientesAPI) {
@@ -66,8 +67,22 @@
     });
   }
 
+  if (!w.carteraAPI) {
+    w.carteraAPI = Object.freeze({
+      list: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        const url = query ? `${CARTERA_BASE}/?${query}` : `${CARTERA_BASE}/`;
+        return w.http('GET', url);
+      },
+      get: (id) => w.http('GET', `${CARTERA_BASE}/${id}/`),
+      kpis: () => w.http('GET', `${CARTERA_BASE}/kpis/`),
+      registrarAbono: (id, payload) => w.http('POST', `${CARTERA_BASE}/${id}/registrar-abono/`, payload)
+    });
+  }
+
   w.AppCliente.api = w.clientesAPI;
   w.AppCliente.contactosApi = w.contactosAPI;
+  w.AppCliente.carteraApi = w.carteraAPI;
   
-  console.log('[clientes.api] ✅ clientesAPI y contactosAPI inmutables inicializados');
+  console.log('[clientes.api] ✅ clientesAPI, contactosAPI y carteraAPI inmutables inicializados');
 })(window);

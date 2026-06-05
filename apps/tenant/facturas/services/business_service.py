@@ -16,8 +16,10 @@ from decimal import Decimal
 from typing import Any
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
+from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito, MANUAL_EDITABLE_FIELDS, XML_IMMUTABLE_FIELDS
@@ -37,6 +39,16 @@ from apps.tenant.empresa.services import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def clean_nit(nit_str):
+    if not nit_str:
+        return ""
+    nit_str = str(nit_str).strip()
+    nit_str = nit_str.replace(".", "")
+    if "-" in nit_str:
+        nit_str = nit_str.split("-")[0]
+    return re.sub(r'[^a-zA-Z0-9]', '', nit_str)
 
 
 class FacturaBusinessService:
@@ -96,6 +108,7 @@ class FacturaBusinessService:
                 nit=cliente_nit_normalized,
                 tipo_tercero='CLIENTE',
                 naturaleza='VENTA',
+                empresa_id=empresa_id,
             )
 
             return {
@@ -143,6 +156,7 @@ class FacturaBusinessService:
                 nit=proveedor_nit_normalized,
                 tipo_tercero='PROVEEDOR',
                 naturaleza='COMPRA',
+                empresa_id=empresa_id,
             )
 
             return {
@@ -165,11 +179,13 @@ class FacturaBusinessService:
             }
 
     @staticmethod
+    @transaction.atomic
     def guardar_desde_dto(
         dto: dict[str, Any], 
         xml_text: str = None,
         file_bytes: bytes = None,
-        file_type: str = 'xml'
+        file_type: str = 'xml',
+        empresa_id: int = None
     ) -> tuple[dict[str, Any], int]:
         """
         Persiste factura desde DTO canonico (v3.5).
@@ -177,10 +193,25 @@ class FacturaBusinessService:
         Soporta el DTO del pipeline universal (nested: emisor.nit, totales.subtotal, etc.)
         y el DTO legacy (flat: emisor_nit, subtotal, etc.).
         """
-        try:
-            empresa_config = get_empresa_emisor_data()
-        except EmpresaNotConfiguredError as ex:
-            return {"error": "empresa_no_configurada", "message": str(ex)}, 422
+        while isinstance(dto.get("dto"), dict):
+            dto = dto["dto"]
+
+        # Obtener instancia de empresa
+        if empresa_id:
+            try:
+                empresa_instance = Empresa.objects.get(id=empresa_id)
+            except Empresa.DoesNotExist:
+                return {"error": "empresa_not_found", "message": "La empresa no existe."}, 404
+        else:
+            try:
+                empresa_config = get_empresa_emisor_data()
+                empresa_instance = Empresa.objects.get(
+                    nit=FacturaBusinessService.normalize_document_number(empresa_config.get("nit"))
+                )
+            except (EmpresaNotConfiguredError, Empresa.DoesNotExist):
+                empresa_instance = Empresa.objects.first()
+                if not empresa_instance:
+                    return {"error": "empresa_no_configurada", "message": "No hay ninguna empresa configurada."}, 422
 
         # --- Helpers para leer nested O flat ---
         emisor = dto.get("emisor", {}) if isinstance(dto.get("emisor"), dict) else {}
@@ -188,6 +219,9 @@ class FacturaBusinessService:
         totales = dto.get("totales", {}) if isinstance(dto.get("totales"), dict) else {}
         identificadores = dto.get("identificadores", {}) if isinstance(dto.get("identificadores"), dict) else {}
         autorizacion = dto.get("autorizacion", {}) if isinstance(dto.get("autorizacion"), dict) else {}
+        doc_type = dto.get("document_type") or dto.get("type") or dto.get("tipo") or ""
+        doc_type_normalized = str(doc_type).lower()
+        is_credit_note = "creditnote" in doc_type_normalized or doc_type_normalized in {"nc", "nota_credito"}
 
         # Extraer y normalizar
         numero = FacturaBusinessService.normalize_document_number(dto.get("numero"))
@@ -199,28 +233,41 @@ class FacturaBusinessService:
         )
 
         # Validacion de campos obligatorios
-        if not numero or not emisor_nit or not receptor_nit:
+        if not numero or (not is_credit_note and (not emisor_nit or not receptor_nit)):
             return {"error": "missing_required_fields", "message": "Numero, NIT Emisor y NIT Receptor son obligatorios."}, 422
 
-        # Determinar naturaleza
-        naturaleza = FacturaBusinessService._resolver_naturaleza(emisor_nit, empresa_config.get("nit"))
+        # Validar pertenencia del NIT (DIAN) - Fase 1
+        nit_empresa_limpio = clean_nit(empresa_instance.nit)
+        emisor_nit_limpio = clean_nit(emisor_nit)
+        receptor_nit_limpio = clean_nit(receptor_nit)
+
+        if nit_empresa_limpio != emisor_nit_limpio and nit_empresa_limpio != receptor_nit_limpio:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            raise DjangoValidationError("El NIT de la empresa actual no coincide con el emisor ni con el receptor del documento.")
+
+        # Determinar naturaleza usando empresa_instance.nit
+        naturaleza = FacturaBusinessService._resolver_naturaleza(emisor_nit, empresa_instance.nit)
 
         # Cascading Security
-        if naturaleza == Factura.Naturaleza.COMPRA:
-            nit_tenant = FacturaBusinessService.normalize_document_number(empresa_config.get("nit"))
+        if naturaleza == Factura.Naturaleza.COMPRA and not is_credit_note:
+            nit_tenant = FacturaBusinessService.normalize_document_number(empresa_instance.nit)
             if receptor_nit != nit_tenant:
                 return {
                     "error": "document_not_for_tenant",
                     "message": f"Documento dirigido a tercero (NIT receptor: {receptor_nit}). No pertenece a este tenant."
                 }, 422
 
-        # Empresa instance
-        try:
-            empresa_instance = Empresa.objects.get(
-                nit=FacturaBusinessService.normalize_document_number(empresa_config.get("nit"))
-            )
-        except Empresa.DoesNotExist:
-            return {"error": "empresa_not_found", "message": "La empresa no existe."}, 404
+        cliente_uuid = None
+        proveedor_uuid = None
+        emisor_razon_social = emisor.get("razon_social") or dto.get("emisor_razon_social", "")
+        emisor_direccion = emisor.get("direccion") or dto.get("emisor_direccion", "")
+        emisor_email = emisor.get("email") or dto.get("emisor_email", "")
+        emisor_telefono = emisor.get("telefono") or dto.get("emisor_telefono", "")
+        emisor_actividad_ciiu = emisor.get("actividad_ciiu") or dto.get("emisor_actividad_ciiu", "")
+        receptor_razon_social = receptor.get("razon_social") or dto.get("receptor_razon_social", "")
+        receptor_direccion = receptor.get("direccion") or dto.get("receptor_direccion", "")
+        receptor_email = receptor.get("email") or dto.get("receptor_email", "")
+        receptor_telefono = receptor.get("telefono") or dto.get("receptor_telefono", "")
 
         cufe = (
             identificadores.get("cufe")
@@ -228,7 +275,6 @@ class FacturaBusinessService:
             or identificadores.get("uuid")
             or dto.get("cufe", "")
         )
-
         # --- VINCULACIÓN DE NOTA DE CRÉDITO (Fase 7) ---
         if dto.get("tipo") == "NC":
             ref_cufe = dto.get("ref_factura_cufe")
@@ -256,10 +302,56 @@ class FacturaBusinessService:
 
         # Idempotencia por CUFE
         if cufe:
+            if is_credit_note:
+                nota_existente = NotaCredito.objects.filter(
+                    cude=cufe, empresa=empresa_instance
+                ).only("id", "uuid", "numero", "cude", "empresa_id").first()
+                if nota_existente:
+                    return {
+                        "id": nota_existente.id,
+                        "uuid": str(nota_existente.uuid),
+                        "numero": nota_existente.numero,
+                        "cude": nota_existente.cude,
+                        "created": False,
+                        "error": "duplicate",
+                        "message": "Nota credito ya existe.",
+                    }, 200
+
             factura_existente = Factura.objects.filter(
                 cufe=cufe, empresa=empresa_instance
-            ).only('id', 'uuid', 'numero', 'naturaleza', 'cufe').first()
+            ).only('id', 'uuid', 'numero', 'naturaleza', 'cufe', 'empresa_id', 'cliente_uuid', 'proveedor_uuid').first()
             if factura_existente:
+                if factura_existente.naturaleza == Factura.Naturaleza.VENTA and not factura_existente.cliente_uuid:
+                    from apps.tenant.clientes.services.business_service import ClienteBusinessService
+                    try:
+                        cliente, _ = ClienteBusinessService.resolver_o_crear_desde_factura_venta(
+                            empresa_id=empresa_instance.id,
+                            receptor_nit=receptor_nit,
+                            receptor_razon_social=receptor_razon_social,
+                            receptor_email=receptor_email,
+                            receptor_telefono=receptor_telefono,
+                            receptor_direccion=receptor_direccion,
+                        )
+                    except DRFValidationError as exc:
+                        return {"error": "cliente_required", "message": str(exc.detail)}, 422
+                    FacturaCRUDService.actualizar(factura_existente, {"cliente_uuid": cliente.uuid})
+
+                if factura_existente.naturaleza == Factura.Naturaleza.COMPRA and not factura_existente.proveedor_uuid:
+                    from apps.tenant.proveedores.services.business_service import ProveedorBusinessService
+                    try:
+                        proveedor, _ = ProveedorBusinessService.resolver_o_crear_desde_factura_compra(
+                            empresa_id=empresa_instance.id,
+                            emisor_nit=emisor_nit,
+                            emisor_razon_social=emisor_razon_social,
+                            emisor_email=emisor_email,
+                            emisor_telefono=emisor_telefono,
+                            emisor_direccion=emisor_direccion,
+                            emisor_actividad_ciiu=emisor_actividad_ciiu,
+                        )
+                    except DRFValidationError as exc:
+                        return {"error": "proveedor_required", "message": str(exc.detail)}, 422
+                    FacturaCRUDService.actualizar(factura_existente, {"proveedor_uuid": proveedor.uuid})
+
                 return {
                     "id": factura_existente.id,
                     "uuid": str(factura_existente.uuid),
@@ -284,8 +376,7 @@ class FacturaBusinessService:
         fecha_vencimiento = parse_date(fecha_vencimiento_raw) if isinstance(fecha_vencimiento_raw, str) else fecha_vencimiento_raw
 
         # Determinar tipo de factura
-        doc_type = dto.get("document_type", "")
-        if "creditnote" in doc_type.lower():
+        if is_credit_note:
             tipo = Factura.TipoFactura.NC
         elif "debitnote" in doc_type.lower():
             tipo = Factura.TipoFactura.ND
@@ -294,6 +385,59 @@ class FacturaBusinessService:
 
         # Estado: importadas se marcan como ACEPTADA
         estado = dto.get("estado") or Factura.Estado.ACEPTADA
+
+        factura_original_para_nc = None
+        if tipo == Factura.TipoFactura.NC:
+            referencia_dto = dto.get("referencia", {})
+            ref_cufe = referencia_dto.get("cufe") or dto.get("ref_factura_cufe")
+            ref_numero = referencia_dto.get("numero") or dto.get("ref_factura_numero")
+
+            if ref_cufe:
+                factura_original_para_nc = Factura.objects.filter(
+                    cufe=ref_cufe, empresa=empresa_instance
+                ).only("id", "numero", "cufe", "empresa_id").first()
+
+            if not factura_original_para_nc and ref_numero:
+                factura_original_para_nc = Factura.objects.filter(
+                    numero=ref_numero, empresa=empresa_instance
+                ).only("id", "numero", "cufe", "empresa_id").first()
+
+            if not factura_original_para_nc:
+                return {"error": "missing_invoice", "message": "Factura original no encontrada."}, 422
+
+            if NotaCredito.objects.filter(factura=factura_original_para_nc, empresa=empresa_instance).exists():
+                logger.warning(f"[facturas:nc] Intento de duplicar NC para factura {factura_original_para_nc.numero}")
+                return {"error": "already_has_nc", "message": "La factura ya tiene nota credito."}, 422
+
+        if naturaleza == Factura.Naturaleza.VENTA:
+            from apps.tenant.clientes.services.business_service import ClienteBusinessService
+            try:
+                cliente, _ = ClienteBusinessService.resolver_o_crear_desde_factura_venta(
+                    empresa_id=empresa_instance.id,
+                    receptor_nit=receptor_nit,
+                    receptor_razon_social=receptor_razon_social,
+                    receptor_email=receptor_email,
+                    receptor_telefono=receptor_telefono,
+                    receptor_direccion=receptor_direccion,
+                )
+            except DRFValidationError as exc:
+                return {"error": "cliente_required", "message": str(exc.detail)}, 422
+            cliente_uuid = cliente.uuid
+        elif naturaleza == Factura.Naturaleza.COMPRA:
+            from apps.tenant.proveedores.services.business_service import ProveedorBusinessService
+            try:
+                proveedor, _ = ProveedorBusinessService.resolver_o_crear_desde_factura_compra(
+                    empresa_id=empresa_instance.id,
+                    emisor_nit=emisor_nit,
+                    emisor_razon_social=emisor_razon_social,
+                    emisor_email=emisor_email,
+                    emisor_telefono=emisor_telefono,
+                    emisor_direccion=emisor_direccion,
+                    emisor_actividad_ciiu=emisor_actividad_ciiu,
+                )
+            except DRFValidationError as exc:
+                return {"error": "proveedor_required", "message": str(exc.detail)}, 422
+            proveedor_uuid = proveedor.uuid
 
         # Construir factura_data con TODOS los campos del modelo
         factura_data = {
@@ -326,6 +470,8 @@ class FacturaBusinessService:
             "receptor_direccion": receptor.get("direccion") or dto.get("receptor_direccion", ""),
             "receptor_email": receptor.get("email") or dto.get("receptor_email", ""),
             "receptor_telefono": receptor.get("telefono") or dto.get("receptor_telefono", ""),
+            "cliente_uuid": cliente_uuid,
+            "proveedor_uuid": proveedor_uuid,
             # Totales
             "moneda": totales.get("moneda") or dto.get("moneda", "COP"),
             "subtotal": totales.get("subtotal") or dto.get("subtotal", 0),
@@ -361,15 +507,27 @@ class FacturaBusinessService:
 
         factura = FacturaCRUDService.crear(factura_data, anexos_data)
 
+        # Guardar impuestos desglosados - Fase 2
+        from apps.tenant.facturas.models import FacturaImpuesto
+        for imp_dto in dto.get("impuestos_desglosados", []):
+            FacturaImpuesto.objects.create(
+                factura=factura,
+                empresa=empresa_instance,
+                tipo_impuesto=imp_dto.get("tipo_impuesto"),
+                porcentaje=Decimal(str(imp_dto.get("porcentaje") or 0)),
+                base_imponible=Decimal(str(imp_dto.get("base_imponible") or 0)),
+                valor_impuesto=Decimal(str(imp_dto.get("valor_impuesto") or 0))
+            )
+
         # v3.7.1: Persistir retenciones en Contabilidad.Retencion (Pull Model)
         from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
-        for tipo, clave in [('RETEFUENTE', 'retefuente'), ('RETEICA', 'reteica'), ('RETEIVA', 'reteiva')]:
+        for tipo_retencion, clave in [('RETEFUENTE', 'retefuente'), ('RETEICA', 'reteica'), ('RETEIVA', 'reteiva')]:
             monto_raw = totales.get(clave) or dto.get(clave, 0)
             monto = Decimal(str(monto_raw)) if monto_raw else Decimal('0')
             if monto > Decimal('0'):
                 RetencionesService.crear_retencion(
                     empresa=empresa_instance,
-                    tipo=tipo,
+                    tipo=tipo_retencion,
                     monto=monto,
                     documento_origen_app='facturas',
                     documento_origen_modelo='Factura',
@@ -380,33 +538,35 @@ class FacturaBusinessService:
         if tipo == Factura.TipoFactura.NC:
             referencia_dto = dto.get("referencia", {})
             ref_cufe = referencia_dto.get("cufe") or dto.get("ref_factura_cufe")
+            factura_original = factura_original_para_nc
             
-            # Intentar localizar la factura original para referencia informativa
-            factura_original = None
-            if ref_cufe:
-                factura_original = Factura.objects.filter(cufe=ref_cufe, empresa=empresa_instance).first()
-            
-            if not factura_original and dto.get("ref_factura_numero"):
-                factura_original = Factura.objects.filter(numero=dto.get("ref_factura_numero"), empresa=empresa_instance).first()
-
-            # [VALIDACIÓN] Idempotencia: No permitir dos NCs para la misma factura si ya existe el vínculo
-            if factura_original and NotaCredito.objects.filter(ref_factura_cufe=factura_original.cufe).exists():
-                 logger.warning(f"[facturas:nc] Intento de duplicar NC para factura {factura_original.numero}")
-                 # Opcional: Podríamos retornar error aquí si queremos ser estrictos 1:1
-            
-            # Crear registro de extensión NotaCredito vinculado al documento 'factura' (que es la NC)
-            NotaCredito.objects.create(
+            nota = NotaCredito.objects.create(
                 empresa=empresa_instance,
-                factura=factura, # Vínculo OneToOne con el documento NC
-                cude=cufe, 
+                factura=factura_original,
+                numero=numero,
+                cude=cufe,
+                fecha_emision=fecha_emision,
+                moneda=totales.get("moneda") or dto.get("moneda", "COP"),
+                subtotal=Decimal(str(totales.get("subtotal") or dto.get("subtotal") or 0)),
+                impuestos=Decimal(str(totales.get("impuestos") or dto.get("impuestos") or 0)),
+                total=Decimal(str(totales.get("total") or dto.get("total") or 0)),
                 motivo=dto.get("motivo") or referencia_dto.get("motivo") or "Anulación/Ajuste de factura",
-                ref_factura_numero=factura_original.numero if factura_original else (dto.get("ref_factura_numero") or ""),
-                ref_factura_cufe=factura_original.cufe if factura_original else (ref_cufe or ""),
+                ref_factura_numero=factura_original.numero,
+                ref_factura_cufe=factura_original.cufe,
                 retefuente=Decimal(str(totales.get("retefuente") or 0)),
                 reteica=Decimal(str(totales.get("reteica") or 0)),
                 reteiva=Decimal(str(totales.get("reteiva") or 0)),
+                xml_content=xml_text or "",
             )
             logger.info(f"[facturas:nc] Nota de Crédito {factura.numero} persistida y vinculada a referencia {ref_cufe}")
+            return {
+                "id": nota.id,
+                "uuid": str(nota.uuid),
+                "numero": nota.numero,
+                "cude": nota.cude,
+                "created": True,
+                "message": "Nota credito creada exitosamente.",
+            }, 201
 
         # Crear items
         for item in dto.get("items", []):
@@ -542,16 +702,8 @@ class FacturaBusinessService:
             val = data[field]
 
             # Sanitizar "" -> None para fechas y UUID
-            if field in {'fecha_vencimiento', 'payment_due_date', 'cuenta_contable_uuid'} and val == "":
+            if val == "":
                 val = None
-
-            # DSV para cuenta contable
-            if field == 'cuenta_contable_uuid' and val:
-                from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-                if not CuentaContableSelector.exists_by_uuid(val, empresa_id):
-                    raise ValidationError({
-                        "cuenta_contable_uuid": "La cuenta contable no existe o no pertenece a la empresa."
-                    })
 
             # DSV para cotizacion + auto-sync snapshot (v3.10.1)
             if field == 'cotizacion_uuid' and val:
@@ -573,7 +725,74 @@ class FacturaBusinessService:
         if not update_data:
             return factura
 
+        # ── Validacion de estado_pago vs conciliacion bancaria (v3.11.0) ────────
+        nuevo_estado_pago = update_data.get('estado_pago')
+        if nuevo_estado_pago:
+            medio = update_data.get('medio_pago_codigo', factura.medio_pago_codigo)
+            es_efectivo = (medio == '10')  # DIAN codigo '10' = Efectivo
+
+            if not es_efectivo:
+                total_bancos  = factura.total_pagado_bancos
+                saldo_pend    = factura.saldo_pendiente
+
+                if nuevo_estado_pago == 'PAGADA' and saldo_pend > 0:
+                    raise ValidationError({
+                        "estado_pago": (
+                            f"La factura no esta 100% conciliada en bancos. "
+                            f"Solo puede marcarse como PAGO_PARCIAL. "
+                            f"Diferencia pendiente: ${saldo_pend:,.2f}"
+                        )
+                    })
+
+                if nuevo_estado_pago in ('PAGADA', 'PAGO_PARCIAL') and total_bancos == 0:
+                    raise ValidationError({
+                        "estado_pago": (
+                            "No hay conciliaciones bancarias asociadas a esta factura. "
+                            "El estado debe ser NO_PAGADA."
+                        )
+                    })
+
         return FacturaCRUDService.actualizar(factura, update_data)
+
+    @staticmethod
+    def vincular_cliente(factura: Factura, cliente_uuid: str | None, empresa_id: int) -> Factura:
+        """Vincula un cliente existente a una factura de venta."""
+        from rest_framework.exceptions import ValidationError
+        from apps.tenant.facturas.services.selectors import ClienteBridge
+
+        if factura.empresa_id != empresa_id:
+            raise ValidationError({"detail": "La factura no pertenece a la empresa activa."})
+
+        if factura.naturaleza != Factura.Naturaleza.VENTA:
+            raise ValidationError({"cliente_uuid": "Solo las facturas de venta pueden vincularse a clientes."})
+
+        if not cliente_uuid:
+            raise ValidationError({"cliente_uuid": "Una factura de venta debe tener un cliente vinculado."})
+
+        if not ClienteBridge.exists_by_uuid(cliente_uuid, empresa_id):
+            raise ValidationError({"cliente_uuid": "El cliente no existe o no pertenece a la empresa."})
+
+        return FacturaCRUDService.actualizar(factura, {"cliente_uuid": cliente_uuid})
+
+    @staticmethod
+    def vincular_proveedor(factura: Factura, proveedor_uuid: str | None, empresa_id: int) -> Factura:
+        """Vincula un proveedor existente a una factura de compra."""
+        from rest_framework.exceptions import ValidationError
+        from apps.tenant.facturas.services.selectors import ProveedorBridge
+
+        if factura.empresa_id != empresa_id:
+            raise ValidationError({"detail": "La factura no pertenece a la empresa activa."})
+
+        if factura.naturaleza != Factura.Naturaleza.COMPRA:
+            raise ValidationError({"proveedor_uuid": "Solo las facturas de compra pueden vincularse a proveedores."})
+
+        if not proveedor_uuid:
+            raise ValidationError({"proveedor_uuid": "Una factura de compra debe tener un proveedor vinculado."})
+
+        if not ProveedorBridge.exists_by_uuid(proveedor_uuid, empresa_id):
+            raise ValidationError({"proveedor_uuid": "El proveedor no existe o no pertenece a la empresa."})
+
+        return FacturaCRUDService.actualizar(factura, {"proveedor_uuid": proveedor_uuid})
 
 
 
@@ -675,6 +894,55 @@ class FacturaInterAppAPI:
             cotizacion_uuid=str(factura.cotizacion_uuid),
             empresa_id=None  # Sin empresa_id para acceso abierto
         )
+
+    @staticmethod
+    def recalcular_estado_pago_automatico(factura_uuid) -> bool:
+        """
+        [v3.11.0] Disparo cross-app desde Bancos tras conciliar una transaccion.
+
+        Reglas:
+        - Solo actua si medio_pago_codigo != '10' (no Efectivo).
+        - saldo_pendiente == 0  → PAGADA
+        - total_pagado_bancos > 0 pero saldo_pendiente > 0 → PAGO_PARCIAL
+        - total_pagado_bancos == 0 → NO_PAGADA
+
+        Returns True si el estado fue modificado, False si no cambio o es efectivo.
+        """
+        import logging
+        log = logging.getLogger(__name__)
+
+        try:
+            factura = Factura.objects.only(
+                'id', 'uuid', 'empresa_id', 'estado_pago',
+                'medio_pago_codigo', 'total',
+            ).get(uuid=factura_uuid)
+        except Factura.DoesNotExist:
+            log.warning("[BancosIntegracion] factura_uuid=%s no encontrada", factura_uuid)
+            return False
+
+        if factura.medio_pago_codigo == '10':
+            return False  # Efectivo: el usuario controla el estado manualmente
+
+        total_bancos = factura.total_pagado_bancos
+        saldo        = factura.saldo_pendiente
+
+        if saldo <= 0 and total_bancos > 0:
+            nuevo = 'PAGADA'
+        elif total_bancos > 0 and saldo > 0:
+            nuevo = 'PAGO_PARCIAL'
+        else:
+            nuevo = 'NO_PAGADA'
+
+        if factura.estado_pago == nuevo:
+            return False
+
+        factura.estado_pago = nuevo
+        factura.save(update_fields=['estado_pago'])
+        log.info(
+            "[BancosIntegracion] Factura uuid=%s estado_pago actualizado a %s",
+            factura_uuid, nuevo
+        )
+        return True
 
 
 class FacturaService:

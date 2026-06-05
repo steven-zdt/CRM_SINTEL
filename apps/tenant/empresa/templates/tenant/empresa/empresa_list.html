@@ -74,7 +74,7 @@
               hx-get="/api/v1/empresas/gestor-offcanvas/"
               hx-target="#offcanvas-container-empresa"
               hx-swap="innerHTML"
-              hx-on::after-settle="if(event.detail.successful !== false){ sintelAbrirOffcanvasEmpresa('offcanvas-empresa'); }">
+              hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvasEmpresa('offcanvas-empresa'); }">
         <i class="bi bi-pencil me-1"></i>Editar Datos
       </button>
     </div>
@@ -164,7 +164,7 @@
                   hx-get="/api/v1/empresas/sedes/render-offcanvas/"
                   hx-target="#offcanvas-container-sede"
                   hx-swap="innerHTML"
-                  hx-on::after-settle="if(event.detail.successful !== false){ sintelAbrirOffcanvasEmpresa('offcanvas-sede'); }">
+                  hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvasEmpresa('offcanvas-sede'); }">
             <i class="bi bi-plus-circle me-1"></i>Nueva Sede
           </button>
         </div>
@@ -174,7 +174,7 @@
           </div>
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-              <div id="grid-sede" style="min-height: 300px;"></div>
+              <div id="grid-sede" style="min-height: 300px; min-width: 0; overflow: hidden;"></div>
             </div>
           </div>
         </div>
@@ -192,7 +192,7 @@
                   hx-get="/api/v1/empresas/areas/render-offcanvas/"
                   hx-target="#offcanvas-container-area"
                   hx-swap="innerHTML"
-                  hx-on::after-settle="if(event.detail.successful !== false){ sintelAbrirOffcanvasEmpresa('offcanvas-area'); }">
+                  hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvasEmpresa('offcanvas-area'); }">
             <i class="bi bi-plus-circle me-1"></i>Nueva Área
           </button>
         </div>
@@ -222,10 +222,16 @@
 <script>
 (function() {
     window.sintelAbrirOffcanvasEmpresa = function(id) {
-        document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
-        document.body.classList.remove('overflow-hidden', 'modal-open');
         var el = document.getElementById(id);
-        if (el && window.bootstrap && window.bootstrap.Offcanvas) {
+        if (!el) return;
+        // Delegar a UIManager (gestiona dispose + backdrops + show — AGENTS.md §26)
+        if (window.UIManager && typeof window.UIManager.handleOffcanvas === 'function') {
+            window.UIManager.handleOffcanvas(el, 'show');
+        } else {
+            // Fallback: dispose + cleanup + crear nueva instancia
+            document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+            document.body.classList.remove('overflow-hidden', 'modal-open');
+            document.body.style.overflow = '';
             var prev = bootstrap.Offcanvas.getInstance(el);
             if (prev) prev.dispose();
             new bootstrap.Offcanvas(el).show();

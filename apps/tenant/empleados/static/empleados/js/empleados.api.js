@@ -45,7 +45,6 @@
             crearOffcanvas: '/api/v1/empleados/devengos/render-offcanvas/crear/',
             infoEmpleado: (empleadoId) => `/api/v1/empleados/devengos/info-empleado/?empleado=${empleadoId}`,
             anular: (id) => `/api/v1/empleados/devengos/${id}/anular/`,
-            asignarCuenta: (id) => `/api/v1/empleados/devengos/${id}/asignar-cuenta/`,
             ultimoPeriodo: (empleadoId) =>
                 `/api/v1/empleados/devengos/ultimo-periodo/?empleado=${empleadoId}`,
             verificarPeriodo: (empleadoId, periodoMes, dias, fechaInicio, fechaFin) => {
@@ -56,12 +55,28 @@
             },
             empleadosDisponibles: (fechaInicio, fechaFin) =>
                 `/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`,
+            empleadosConNominas: (search) =>
+                `/api/v1/empleados/devengos/empleados-con-nominas/${search ? '?search=' + encodeURIComponent(search) : ''}`,
         },
-
-        // Contabilidad (Vínculos)
-        contabilidad: {
-            search: (query) => `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(query || '')}&app_origen=empleados&activa=true&solo_auxiliares=true`,
-            getByUuid: (uuid) => `/api/v1/contabilidad/cuentas-contables/?uuid=${uuid}&app_origen=empleados&activa=true`
+        // Resoluciones DIAN
+        resoluciones: {
+            list:            '/api/v1/empleados/resoluciones-dian/',
+            detail:          (uuid) => `/api/v1/empleados/resoluciones-dian/${uuid}/`,
+            crearOffcanvas:  '/api/v1/empleados/resoluciones-dian/render-offcanvas/crear/',
+        },
+        // Liquidaciones de Prestaciones
+        liquidaciones: {
+            list:            '/api/v1/empleados/liquidaciones-prestaciones/',
+            detail:          (uuid) => `/api/v1/empleados/liquidaciones-prestaciones/${uuid}/`,
+            crearOffcanvas:  '/api/v1/empleados/liquidaciones-prestaciones/render-offcanvas/crear/',
+            simular:         (contratoUuid, fechaCorte, tipoLiq) => {
+                const p = new URLSearchParams({
+                    contrato_uuid:    contratoUuid || '',
+                    fecha_corte:      fechaCorte   || '',
+                    tipo_liquidacion: tipoLiq      || 'LIQUIDACION_DEFINITIVA',
+                });
+                return `/api/v1/empleados/liquidaciones-prestaciones/simular/?${p.toString()}`;
+            },
         }
     };
 
@@ -118,15 +133,7 @@
     window.Sintel.Empleados.getHeaders = getHeaders;
     window.Sintel.Empleados.request = request;
 
-    /**
-     * [v3.5] Obtiene el detalle de una cuenta contable por UUID
-     */
-    window.Sintel.Empleados.API.getCuentaByUuid = async (uuid) => {
-        if (!uuid) return { ok: false, data: null };
-        const url = API.contabilidad.getByUuid(uuid);
-        return await request(url);
-    };
-    
+
     /**
      * Obtiene la lista de empleados disponibles para un período sin nóminas cruzadas.
      */

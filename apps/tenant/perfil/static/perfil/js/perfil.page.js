@@ -42,7 +42,7 @@
       },
       { 
         title: "Departamento", 
-        field: "departamento", 
+        field: "departamento_nombre", 
         width: 150,
         formatter: function(cell) {
           const val = cell.getValue();
@@ -90,15 +90,18 @@
         headerSort: false,
         formatter: function(cell) {
           var data = cell.getRow().getData();
-          var id = data.id;
+          var id = data.uuid || data.id;  // [RULE 14] Prefer UUID; fallback to PK for legacy rows
           // Usar requestorContext (precargado via /me/) como SSoT de permisos.
           // Fallback a available_actions por fila si el contexto no cargo aun.
           var actions = (requestorContext._actions && requestorContext._actions.length > 0)
             ? requestorContext._actions
             : (Array.isArray(data.available_actions) ? data.available_actions : []);
           var canEdit = actions.length === 0 || actions.includes('edit');
-          var canDelete = actions.includes('delete');
           var canAssignRol = actions.includes('assign_rol');
+          // [SEG-5] Prohibir auto-eliminacion: esconder boton si la fila es el propio usuario
+          var isSelf = requestorContext.user_id != null && data.user_id != null
+            && Number(data.user_id) === Number(requestorContext.user_id);
+          var canDelete = actions.includes('delete') && !isSelf;
           
           var html = '<div class="btn-group btn-group-sm" role="group">';
           
@@ -145,10 +148,10 @@
           e.stopPropagation();
           
           const action = btn.getAttribute('data-action');
-          const id = parseInt(btn.getAttribute('data-id'), 10);
+          const id = btn.getAttribute('data-id');  // [RULE 3] UUID string — prohibido parseInt() en UUIDs
           
-          if (!id || isNaN(id)) {
-            console.warn(`[${MOD}.page] ID no válido:`, id);
+          if (!id) {
+            console.warn(`[${MOD}.page] ID no valido:`, id);
             return;
           }
           
@@ -221,6 +224,8 @@
       requestorContext = myProfile.permissions_context || {};
       requestorContext._actions = Array.isArray(myProfile.available_actions)
         ? myProfile.available_actions : [];
+      // Almacenar user_id del solicitante para comparacion per-fila en getColumns()
+      requestorContext.user_id = myProfile.user_id || null;
       // Exponer en el namespace global para consumo por otros modulos (settings panel, etc.)
       w.Sintel = w.Sintel || {};
       w.Sintel.Perfil = w.Sintel.Perfil || {};

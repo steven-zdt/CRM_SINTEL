@@ -16,6 +16,7 @@ WARNING: FLUJO SECUENCIAL (Máquina de Estados):
 2. Contrato (requiere Empleado, habilita botón "Registrar Nómina")
 3. Devengo/Nómina (requiere Contrato ACTIVO, habilita botón "Historial")
 """
+import datetime
 import uuid
 from decimal import Decimal
 
@@ -82,7 +83,35 @@ class Empleado(SintelTenantBaseModel):
     fecha_ingreso = models.DateField()
     fecha_retiro = models.DateField(null=True, blank=True)
 
+    # Sede y Area (FASE 1: Capa de Datos)
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.SET_NULL,
+        related_name='empleados',
+        null=True,
+        blank=True,
+        verbose_name=_('Sede'),
+    )
+    area = models.ForeignKey(
+        'empresa.Area',
+        on_delete=models.SET_NULL,
+        related_name='empleados',
+        null=True,
+        blank=True,
+        verbose_name=_('Area'),
+    )
 
+    # Resolución DIAN para nómina electrónica (DSPNE)
+    # SET_NULL para no bloquear eliminación de resoluciones históricas
+    resolucion_dian = models.ForeignKey(
+        'ResolucionDIAN',
+        on_delete=models.SET_NULL,
+        related_name='empleados_asignados',
+        null=True,
+        blank=True,
+        verbose_name=_('Resolución DIAN Nómina Electrónica'),
+        help_text=_('Resolución DIAN asignada para generar documentos de nómina electrónica (DSPNE).'),
+    )
 
     class Meta:
         verbose_name = _('Empleado')
@@ -320,14 +349,6 @@ class Devengo(SintelTenantBaseModel):
     neto_pagar = models.DecimalField(max_digits=12, decimal_places=2, editable=False, help_text="Neto a pagar en COP")
     anulado = models.BooleanField(default=False, help_text="Nómina anulada (no se puede editar)")
     
-    
-    # Mapeo Contable (v3.5.0)
-    cuenta_contable_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
-        help_text="Cuenta PUC nivel 6 (Salarios/Prestaciones por pagar)"
-    )
-    
     class Meta:
         verbose_name = _('Nómina')
         verbose_name_plural = _('Nóminas')
@@ -361,3 +382,161 @@ class Devengo(SintelTenantBaseModel):
 
     def __str__(self):
         return f"Nómina {self.periodo_mes} | {self.empleado.nombre_completo}"
+
+
+class ResolucionDIAN(SintelTenantBaseModel):
+    """
+    Resolucion DIAN para Nomina Electronica.
+    """
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='resoluciones_dian_empleados')
+
+    numero_resolucion = models.CharField(
+        max_length=50,
+        db_index=True,
+        verbose_name='Numero Resolucion DIAN'
+    )
+    rango_desde = models.IntegerField(
+        validators=[MinValueValidator(1)],
+        verbose_name='Rango Desde'
+    )
+    rango_hasta = models.IntegerField(
+        validators=[MinValueValidator(1)],
+        verbose_name='Rango Hasta'
+    )
+    fecha_resolucion = models.DateField(
+        verbose_name='Fecha de Emision',
+        help_text='Fecha en la que la DIAN emitio la resolucion'
+    )
+    fecha_inicio = models.DateField(
+        verbose_name='Fecha Inicio Aplicacion',
+        help_text='Fecha desde la cual se empezara a usar en el sistema',
+        default=datetime.date.today
+    )
+    fecha_fin = models.DateField(
+        verbose_name='Fecha Final Aplicacion',
+        help_text='Fecha de vencimiento de la resolucion'
+    )
+    clave_tecnica = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True
+    )
+    vigente = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name='Vigente (Prestablecida)',
+        help_text='Solo una resolucion puede estar vigente para ser usada por defecto.'
+    )
+    prefijo = models.CharField(max_length=10, verbose_name='Prefijo')
+    consecutivo = models.IntegerField(
+        db_index=True,
+        editable=False,
+        verbose_name='Siguiente Consecutivo',
+        default=1,
+        help_text='Se inicializa automaticamente desde rango_desde al crear la resolucion.'
+    )
+
+    def formar_consecutivo(self, numero):
+        """Une prefijo y numero para formar el identificador del documento."""
+        return f"{self.prefijo}-{numero}"
+
+    class Meta:
+        verbose_name = 'Resolucion DIAN'
+        verbose_name_plural = 'Resoluciones DIAN'
+        ordering = ['-vigente', '-fecha_resolucion']
+        indexes = [
+            models.Index(fields=['empresa', 'vigente']),
+        ]
+
+    def save(self, *args, **kwargs):
+        # Al crear, inicializar consecutivo en rango_desde para que los numeros
+        # de documento queden dentro del rango autorizado por la DIAN.
+        if not self.pk and (self.consecutivo is None or self.consecutivo < self.rango_desde):
+            self.consecutivo = self.rango_desde
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.prefijo} {self.rango_desde}-{self.rango_hasta} (Vence: {self.fecha_fin})"
+
+    def esta_dentro_de_fecha(self, fecha_referencia=None):
+        if fecha_referencia is None:
+            fecha_referencia = datetime.date.today()
+        if isinstance(fecha_referencia, str):
+            try:
+                from django.utils.dateparse import parse_date
+                parsed = parse_date(fecha_referencia)
+                if parsed:
+                    fecha_referencia = parsed
+                else:
+                    return False
+            except Exception:
+                return False
+        return self.fecha_inicio <= fecha_referencia <= self.fecha_fin
+
+
+class TransmisionNominaDIAN(SintelTenantBaseModel):
+    """
+    Transmision de Nomina Electronica a la DIAN.
+    """
+    ESTADOS = [
+        ('PENDIENTE', 'Pendiente'),
+        ('ACEPTADO', 'Aceptado'),
+        ('RECHAZADO', 'Rechazado'),
+    ]
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='transmisiones_nomina')
+
+    devengo = models.OneToOneField(Devengo, on_delete=models.CASCADE, related_name='transmision')
+    resolucion = models.ForeignKey(ResolucionDIAN, on_delete=models.PROTECT, related_name='transmisiones')
+
+    numero_documento = models.CharField(max_length=64, db_index=True)
+    cune = models.CharField(max_length=128, db_index=True, blank=True, null=True)
+    estado_dian = models.CharField(max_length=20, choices=ESTADOS, default='PENDIENTE')
+
+    xml_enviado = models.TextField(blank=True, null=True)
+    xml_respuesta = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Transmision Nomina DIAN'
+        verbose_name_plural = 'Transmisiones Nomina DIAN'
+
+
+class LiquidacionPrestacion(SintelTenantBaseModel):
+    """
+    Liquidacion de prestaciones sociales (Primas, Cesantias, Vacaciones, Liquidacion Definitiva).
+    """
+    TIPOS = [
+        ('PRIMA_SERVICIOS', 'Prima de Servicios'),
+        ('CESANTIAS', 'Cesantias'),
+        ('VACACIONES', 'Vacaciones'),
+        ('LIQUIDACION_DEFINITIVA', 'Liquidacion Definitiva'),
+    ]
+    ESTADOS = [
+        ('PROYECTADO', 'Proyectado'),
+        ('PAGADO', 'Pagado'),
+    ]
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='liquidaciones_prestaciones')
+
+    empleado = models.ForeignKey(Empleado, on_delete=models.PROTECT, related_name='liquidaciones')
+    contrato = models.ForeignKey(Contrato, on_delete=models.PROTECT, related_name='liquidaciones')
+
+    tipo_liquidacion = models.CharField(max_length=30, choices=TIPOS)
+    fecha_corte = models.DateField()
+    dias_base_calculo = models.IntegerField()
+    base_salarial = models.DecimalField(max_digits=14, decimal_places=2)
+    valor_total = models.DecimalField(max_digits=14, decimal_places=2)
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='PROYECTADO')
+    desglose_conceptos = models.JSONField(null=True, blank=True)
+    observaciones = models.TextField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Liquidacion de Prestacion'
+        verbose_name_plural = 'Liquidaciones de Prestaciones'
+        indexes = [
+            models.Index(fields=['empresa', 'empleado']),
+        ]

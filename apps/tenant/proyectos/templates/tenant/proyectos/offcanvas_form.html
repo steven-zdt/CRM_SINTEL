@@ -179,6 +179,7 @@
 
     <form id="form-proyecto" method="POST" enctype="multipart/form-data" class="flex-grow-1 overflow-auto pe-2" onsubmit="return false;">
       <input type="hidden" id="proyecto-uuid" name="uuid" value="{% if proyecto %}{{ proyecto.uuid }}{% endif %}">
+      <input type="hidden" id="proyecto-historial-uuid" name="historial_uuid" value="{% if historial_prefill %}{{ historial_prefill.uuid }}{% endif %}">
       
       <!-- STEP 0: Borrador / Oportunidad -->
       <div class="step-pane active" id="pane-step-0">
@@ -230,14 +231,18 @@
           </div>
 
           <div class="col-md-12">
-            <label for="proyecto-servicio-asociado-select" class="form-label text-danger fw-bold">Servicio del Catálogo *</label>
-            <select class="form-select border-primary" id="proyecto-servicio-asociado-select">
-              <option value="">-- Seleccionar servicio --</option>
-            </select>
-            {# ⚠️ UUID-Safe: No usar undefined en el value — siempre string válido o vacío #}
-            <input type="hidden" id="proyecto-servicio-asociado" name="servicio_asociado"
-                   value="{% if proyecto and proyecto.servicio_asociado_id and proyecto.servicio_asociado %}{{ proyecto.servicio_asociado.uuid }}{% else %}{% endif %}">
-            <div class="form-text text-muted">Servicio del portafolio/catálogo de la empresa.</div>
+            <label for="proyecto-movimiento-inventario-search" class="form-label fw-bold">Movimiento de Inventario (Opcional)</label>
+            <div class="position-relative">
+              <input type="text" class="form-control" id="proyecto-movimiento-inventario-search"
+                     placeholder="Buscar por producto, activo, código..." autocomplete="off"
+                     {% if proyecto and proyecto.movimiento_referencia %}
+                     data-current-label="{{ proyecto.movimiento_referencia.item_tipo|default:'' }}: {{ proyecto.movimiento_referencia.item_nombre|default:'' }} ({{ proyecto.movimiento_referencia.tipo_display|default:'' }})"
+                     {% endif %}>
+              <input type="hidden" id="proyecto-movimiento-inventario-uuid" name="movimiento_inventario_uuid"
+                     value="{{ proyecto.movimiento_inventario_uuid|default:'' }}">
+              <div id="proyecto-movimiento-inventario-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1060;"></div>
+            </div>
+            <div class="form-text text-muted">Vincule este proyecto a un movimiento del Kardex de inventario.</div>
           </div>
 
           <div class="col-12">
@@ -928,3 +933,16 @@
     </form>
   </div>
 </div>
+
+{% if historial_prefill %}
+<script>
+  window._proyectoPrefill = {
+    historial_uuid: "{{ historial_prefill.uuid }}",
+    nombre: "{{ historial_prefill.servicio.nombre|escapejs }}",
+    servicio_uuid: "{{ historial_prefill.servicio.uuid }}",
+    servicio_nombre: "{{ historial_prefill.servicio.nombre|escapejs }}",
+    cliente_referencia: "{{ historial_prefill.cliente_referencia|escapejs }}",
+    valor_contrato: "{{ historial_prefill.valor_cobrado }}"
+  };
+</script>
+{% endif %}

@@ -1,7 +1,46 @@
-{# offcanvas_crear_perfil.html - Template dedicado para creacion de perfil segun FSD #}
-{# [INFO] AGENTS.md: Arquitectura Feature-Sliced Design - Template dedicado para creacion #}
+{# offcanvas_crear_perfil.html - FSD: Nuevo Usuario + Perfil con selectors buscables #}
+<style>
+/* ---- Pill Picker (Vanilla, sin dependencias) ---- */
+.sintel-picker { border: 1px solid #ced4da; border-radius: 6px; background: #fff; }
+.sintel-picker.is-invalid { border-color: #dc3545; }
+.sintel-picker-search {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 6px 8px; min-height: 42px; align-items: center; cursor: text;
+}
+.sintel-picker-search input {
+  border: none; outline: none; flex: 1; min-width: 120px;
+  font-size: .875rem; background: transparent;
+}
+.sintel-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #0d6efd; color: #fff; border-radius: 20px;
+  padding: 2px 10px; font-size: .8rem; white-space: nowrap;
+}
+.sintel-pill-remove {
+  cursor: pointer; font-weight: bold; opacity: .8; background: none;
+  border: none; color: #fff; padding: 0 2px; line-height: 1;
+}
+.sintel-pill-remove:hover { opacity: 1; }
+.sintel-dropdown {
+  display: none; position: absolute; z-index: 1060; width: 100%;
+  max-height: 220px; overflow-y: auto;
+  border: 1px solid #ced4da; border-top: none;
+  border-radius: 0 0 6px 6px; background: #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}
+.sintel-dropdown.open { display: block; }
+.sintel-dropdown-item {
+  padding: 7px 12px; cursor: pointer; font-size: .875rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+.sintel-dropdown-item:hover { background: #f0f4ff; }
+.sintel-dropdown-item.selected { background: #e6eeff; color: #0d6efd; font-weight: 500; }
+.sintel-dropdown-empty { padding: 8px 12px; color: #6c757d; font-size: .8rem; font-style: italic; }
+.sintel-picker-wrap { position: relative; }
+</style>
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-perfil-crear" aria-labelledby="offcanvas-perfil-crear-label" style="width: 90%; max-width: 600px;">
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-perfil-crear"
+     aria-labelledby="offcanvas-perfil-crear-label" style="width: 90%; max-width: 640px;">
   <div class="offcanvas-header border-bottom bg-light">
     <h5 class="offcanvas-title" id="offcanvas-perfil-crear-label">
       <i class="bi bi-person-plus me-2"></i>Nuevo Usuario + Perfil
@@ -13,35 +52,32 @@
 
     <form id="form-perfil-crear" method="POST" onsubmit="return false;">
 
-      {# Relacion con Empresa #}
+      {# ---- Empresa ---- #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
           <i class="bi bi-building me-2"></i>Empresa Asociada
         </h6>
-        <div class="row g-3">
-          <div class="col-12">
-            <label for="perfil-empresa-select" class="form-label fw-bold text-danger">Empresa *</label>
-            {# Selector visible - DOM Shield: no tiene name para evitar envio doble #}
-            <select class="form-select" id="perfil-empresa-select" required>
-              <option value="">-- Selecciona una empresa --</option>
-              {% for empresa in empresas %}
-                <option value="{{ empresa.id }}"
-                  data-nit="{{ empresa.nit }}"
-                  data-nombre="{{ empresa.razon_social }}">
-                  {{ empresa.razon_social }} &mdash; NIT {{ empresa.nit }}
-                </option>
-              {% empty %}
-                <option value="" disabled>No hay empresas registradas en este tenant</option>
-              {% endfor %}
-            </select>
-            {# DOM Shield: hidden input que recibe el FK real (empresa_id) #}
-            <input type="hidden" id="perfil-empresa-id" name="empresa_id" value="">
-            <div class="form-text">La empresa a la que pertenecera el perfil del usuario.</div>
-          </div>
+        <div class="col-12">
+          <label for="perfil-empresa-select" class="form-label fw-bold text-danger">Empresa *</label>
+          {# DOM Shield: sin name #}
+          <select class="form-select" id="perfil-empresa-select"
+                  {% if empresas|length <= 1 %}disabled{% endif %}>
+            {% for empresa in empresas %}
+              <option value="{{ empresa.id }}"
+                data-nit="{{ empresa.nit }}"
+                {% if forloop.first %}selected{% endif %}>
+                {{ empresa.razon_social }} &mdash; NIT {{ empresa.nit }}
+              </option>
+            {% empty %}
+              <option value="" disabled>No hay empresas registradas</option>
+            {% endfor %}
+          </select>
+          {# DOM Shield: hidden real #}
+          <input type="hidden" id="perfil-empresa-id" name="empresa_id" value="">
         </div>
       </div>
 
-      {# Datos del Usuario #}
+      {# ---- Datos del Usuario ---- #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
           <i class="bi bi-person me-2"></i>Datos del Usuario
@@ -67,12 +103,12 @@
             <label for="perfil-username" class="form-label fw-bold">Username</label>
             <input type="text" class="form-control" id="perfil-username" name="username"
                    placeholder="Se genera automaticamente">
-            <div class="form-text">Opcional. Si se deja vacio, se genera desde el email.</div>
+            <div class="form-text">Opcional. Se genera desde el email si se omite.</div>
           </div>
         </div>
       </div>
 
-      {# Datos del Perfil Corporativo #}
+      {# ---- Datos Corporativos ---- #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
           <i class="bi bi-briefcase me-2"></i>Datos Corporativos
@@ -84,39 +120,117 @@
                    placeholder="Ej: Gerente Comercial">
           </div>
           <div class="col-md-6">
-            <label for="perfil-departamento" class="form-label">Departamento</label>
-            <input type="text" class="form-control" id="perfil-departamento" name="departamento"
-                   placeholder="Ej: Ventas">
-          </div>
-          <div class="col-md-6">
             <label for="perfil-telefono" class="form-label">Telefono Corporativo</label>
             <input type="text" class="form-control" id="perfil-telefono" name="telefono_corporativo"
                    placeholder="Ej: +57 300 1234567">
           </div>
+
+          {# -- Departamento (searchable single-select) -- #}
+          <div class="col-12">
+            <label class="form-label fw-bold">Departamento</label>
+            <div class="sintel-picker-wrap" id="dept-picker-wrap">
+              <div class="sintel-picker" id="dept-picker" role="combobox"
+                   aria-expanded="false" aria-haspopup="listbox" aria-label="Buscar departamento">
+                <div class="sintel-picker-search">
+                  <span id="dept-pill-container"></span>
+                  <input type="text" id="dept-search-input" placeholder="Buscar departamento..." autocomplete="off">
+                </div>
+              </div>
+              <ul class="sintel-dropdown" id="dept-dropdown" role="listbox">
+                <li class="sintel-dropdown-item" data-uuid="" data-empresa="">-- Sin departamento --</li>
+                {% for dept in departamentos %}
+                  <li class="sintel-dropdown-item"
+                      data-uuid="{{ dept.uuid }}"
+                      data-empresa="{{ dept.empresa_id }}"
+                      data-label="{{ dept.nombre }}">{{ dept.nombre }}</li>
+                {% empty %}
+                  <li class="sintel-dropdown-empty">No hay departamentos</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {# DOM Shield hidden #}
+            <input type="hidden" id="perfil-departamento-uuid" name="departamento_uuid" value="">
+          </div>
+
+          {# -- Sedes (searchable multi-select pill picker) -- #}
+          <div class="col-12">
+            <label class="form-label fw-bold text-danger">Sedes Asignadas *</label>
+            <div class="sintel-picker-wrap" id="sede-picker-wrap">
+              <div class="sintel-picker" id="sede-picker" role="combobox"
+                   aria-expanded="false" aria-haspopup="listbox" aria-multiselectable="true"
+                   aria-label="Buscar y seleccionar sedes">
+                <div class="sintel-picker-search" id="sede-pills-area">
+                  <input type="text" id="sede-search-input" placeholder="Buscar sede..." autocomplete="off">
+                </div>
+              </div>
+              <ul class="sintel-dropdown" id="sede-dropdown" role="listbox">
+                {% for sede in sedes %}
+                  <li class="sintel-dropdown-item"
+                      data-uuid="{{ sede.uuid }}"
+                      data-empresa="{{ sede.empresa_id }}"
+                      data-label="{{ sede.nombre }}">{{ sede.nombre }}</li>
+                {% empty %}
+                  <li class="sintel-dropdown-empty">No hay sedes registradas</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {# DOM Shield: valores reales en hidden inputs generados por JS #}
+            <div id="sedes-hidden-container"></div>
+            <div class="form-text text-muted small">Selecciona una o varias sedes.</div>
+          </div>
+
+          {# -- Areas (searchable multi-select pill picker) -- #}
+          <div class="col-12">
+            <label class="form-label fw-bold">Areas Asignadas</label>
+            <div class="sintel-picker-wrap" id="area-picker-wrap">
+              <div class="sintel-picker" id="area-picker" role="combobox"
+                   aria-expanded="false" aria-haspopup="listbox" aria-multiselectable="true"
+                   aria-label="Buscar y seleccionar areas">
+                <div class="sintel-picker-search" id="area-pills-area">
+                  <input type="text" id="area-search-input" placeholder="Buscar area..." autocomplete="off">
+                </div>
+              </div>
+              <ul class="sintel-dropdown" id="area-dropdown" role="listbox">
+                {% for area in areas %}
+                  <li class="sintel-dropdown-item"
+                      data-uuid="{{ area.uuid }}"
+                      data-empresa="{{ area.empresa_id }}"
+                      data-sede="{{ area.sede.uuid }}"
+                      data-label="{{ area.nombre }} ({{ area.sede.nombre }})">
+                    <span class="fw-medium">{{ area.nombre }}</span>
+                    <small class="text-muted ms-1">— {{ area.sede.nombre }}</small>
+                  </li>
+                {% empty %}
+                  <li class="sintel-dropdown-empty">No hay areas registradas</li>
+                {% endfor %}
+              </ul>
+            </div>
+            <div id="areas-hidden-container"></div>
+            <div class="form-text text-muted small">Opcional. Las areas se filtran segun la sede seleccionada.</div>
+          </div>
+
         </div>
       </div>
 
-      {# Rol del Perfil #}
+      {# ---- Rol ---- #}
       {% if rol_choices %}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
           <i class="bi bi-shield-lock me-2"></i>Rol en el Sistema
         </h6>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label for="perfil-rol" class="form-label">Rol</label>
-            <select class="form-select" id="perfil-rol" name="rol">
-              {% for value, label in rol_choices %}
-                <option value="{{ value }}" {% if value == "OPERADOR" %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
-            <div class="form-text">Nivel de acceso del usuario en este tenant.</div>
-          </div>
+        <div class="col-md-6">
+          <label for="perfil-rol" class="form-label">Rol</label>
+          <select class="form-select" id="perfil-rol" name="rol">
+            {% for value, label in rol_choices %}
+              <option value="{{ value }}" {% if value == "OPERADOR" %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Nivel de acceso del usuario en este tenant.</div>
         </div>
       </div>
       {% endif %}
 
-      {# Botones de Accion #}
+      {# ---- Acciones ---- #}
       <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
         <button type="button" class="btn btn-primary" id="btn-guardar-perfil-crear">
@@ -127,17 +241,302 @@
   </div>
 </div>
 
-{# DOM Shield Script: sincroniza select visible -> hidden field empresa_id #}
 <script>
-(function() {
-  var sel = document.getElementById('perfil-empresa-select');
-  var hid = document.getElementById('perfil-empresa-id');
-  if (sel && hid) {
-    // Sincronizar al cargar si hay una opcion preseleccionada
-    hid.value = sel.value || '';
-    sel.addEventListener('change', function() {
-      hid.value = this.value;
+(function () {
+  'use strict';
+
+  /* ============================================================
+     UTILIDADES PICKER
+     Implementacion Vanilla JS - DOM Shield compliant
+  ============================================================ */
+
+  /**
+   * SinglePicker: selector unico con busqueda (departamento).
+   * @param {object} cfg - { searchInput, dropdown, hiddenInput, picker }
+   */
+  function SinglePicker(cfg) {
+    var search = cfg.searchInput;
+    var dropdown = cfg.dropdown;
+    var hidden = cfg.hiddenInput;
+    var picker = cfg.picker;
+    var pillContainer = cfg.pillContainer;
+    var currentLabel = '';
+
+    function openDropdown() {
+      dropdown.classList.add('open');
+      picker.setAttribute('aria-expanded', 'true');
+    }
+    function closeDropdown() {
+      dropdown.classList.remove('open');
+      picker.setAttribute('aria-expanded', 'false');
+    }
+    function filterItems(q) {
+      var items = dropdown.querySelectorAll('.sintel-dropdown-item');
+      var lower = q.toLowerCase();
+      items.forEach(function (li) {
+        var label = (li.getAttribute('data-label') || li.textContent).toLowerCase();
+        li.style.display = (!lower || label.includes(lower)) ? '' : 'none';
+      });
+    }
+    function selectItem(li) {
+      var uuid = li.getAttribute('data-uuid') || '';
+      var label = li.getAttribute('data-label') || li.textContent.trim();
+      hidden.value = uuid;
+      currentLabel = label;
+      // Update pill
+      if (pillContainer) {
+        if (uuid) {
+          pillContainer.innerHTML =
+            '<span class="sintel-pill">' + label + '</span>';
+        } else {
+          pillContainer.innerHTML = '';
+        }
+      }
+      search.value = '';
+      filterItems('');
+      closeDropdown();
+    }
+
+    // Sync empresa filter
+    this.filterByEmpresa = function (empresaId) {
+      var items = dropdown.querySelectorAll('.sintel-dropdown-item');
+      items.forEach(function (li) {
+        var emp = li.getAttribute('data-empresa');
+        if (!emp || !empresaId || emp === empresaId) {
+          li.style.display = '';
+        } else {
+          li.style.display = 'none';
+          // Deselect if active
+          if (li.getAttribute('data-uuid') === hidden.value) {
+            hidden.value = '';
+            if (pillContainer) pillContainer.innerHTML = '';
+          }
+        }
+      });
+    };
+
+    search.addEventListener('focus', openDropdown);
+    search.addEventListener('input', function () {
+      filterItems(this.value);
+      openDropdown();
+    });
+    dropdown.querySelectorAll('.sintel-dropdown-item').forEach(function (li) {
+      li.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        selectItem(li);
+      });
+    });
+    document.addEventListener('click', function (e) {
+      if (!picker.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
     });
   }
+
+  /**
+   * MultiPicker: selector multiple con busqueda y pills (sedes, areas).
+   */
+  function MultiPicker(cfg) {
+    var search = cfg.searchInput;
+    var dropdown = cfg.dropdown;
+    var hiddenContainer = cfg.hiddenContainer;
+    var picker = cfg.picker;
+    var pillsArea = cfg.pillsArea;
+    var hiddenName = cfg.hiddenName;
+    var selected = {};  // uuid -> label
+
+    function openDropdown() {
+      dropdown.classList.add('open');
+      picker.setAttribute('aria-expanded', 'true');
+    }
+    function closeDropdown() {
+      dropdown.classList.remove('open');
+      picker.setAttribute('aria-expanded', 'false');
+    }
+    function renderHiddens() {
+      hiddenContainer.innerHTML = '';
+      Object.keys(selected).forEach(function (uuid) {
+        var inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = hiddenName;
+        inp.value = uuid;
+        hiddenContainer.appendChild(inp);
+      });
+    }
+    function renderPills() {
+      // Remove old pills (keep input)
+      var oldPills = pillsArea.querySelectorAll('.sintel-pill');
+      oldPills.forEach(function (p) { p.remove(); });
+      Object.keys(selected).forEach(function (uuid) {
+        var pill = document.createElement('span');
+        pill.className = 'sintel-pill';
+        pill.innerHTML =
+          selected[uuid] +
+          '<button type="button" class="sintel-pill-remove" data-uuid="' + uuid + '" aria-label="Quitar">&times;</button>';
+        pillsArea.insertBefore(pill, search);
+      });
+    }
+    function updateDropdownState() {
+      dropdown.querySelectorAll('.sintel-dropdown-item').forEach(function (li) {
+        var uuid = li.getAttribute('data-uuid');
+        if (selected[uuid]) li.classList.add('selected');
+        else li.classList.remove('selected');
+      });
+    }
+    function addItem(uuid, label) {
+      if (!uuid || selected[uuid]) return;
+      selected[uuid] = label;
+      renderPills();
+      renderHiddens();
+      updateDropdownState();
+    }
+    function removeItem(uuid) {
+      delete selected[uuid];
+      renderPills();
+      renderHiddens();
+      updateDropdownState();
+    }
+    function filterItems(q) {
+      var items = dropdown.querySelectorAll('.sintel-dropdown-item');
+      var lower = q.toLowerCase();
+      items.forEach(function (li) {
+        if (li._hidden) { li.style.display = 'none'; return; }
+        var label = (li.getAttribute('data-label') || li.textContent).toLowerCase();
+        li.style.display = (!lower || label.includes(lower)) ? '' : 'none';
+      });
+    }
+
+    // External: filter by empresa
+    this.filterByEmpresa = function (empresaId) {
+      dropdown.querySelectorAll('.sintel-dropdown-item').forEach(function (li) {
+        var emp = li.getAttribute('data-empresa');
+        if (!emp || !empresaId || emp === empresaId) {
+          li._hidden = false;
+          li.style.display = '';
+        } else {
+          li._hidden = true;
+          li.style.display = 'none';
+          var uuid = li.getAttribute('data-uuid');
+          if (selected[uuid]) removeItem(uuid);
+        }
+      });
+    };
+
+    // External: filter areas by selected sede uuids
+    this.filterBySedes = function (sedeUuids) {
+      dropdown.querySelectorAll('.sintel-dropdown-item').forEach(function (li) {
+        var sedeUuid = li.getAttribute('data-sede');
+        if (!sedeUuid) return;
+        if (sedeUuids.length === 0 || sedeUuids.includes(sedeUuid)) {
+          li._hidden = false;
+          li.style.display = '';
+        } else {
+          li._hidden = true;
+          li.style.display = 'none';
+          var uuid = li.getAttribute('data-uuid');
+          if (selected[uuid]) removeItem(uuid);
+        }
+      });
+    };
+
+    // External: get selected uuids array
+    this.getSelected = function () { return Object.keys(selected); };
+
+    search.addEventListener('focus', openDropdown);
+    search.addEventListener('input', function () {
+      filterItems(this.value);
+      openDropdown();
+    });
+    dropdown.querySelectorAll('.sintel-dropdown-item').forEach(function (li) {
+      li.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        var uuid = li.getAttribute('data-uuid');
+        var label = li.getAttribute('data-label') || li.textContent.trim();
+        if (selected[uuid]) removeItem(uuid);
+        else addItem(uuid, label);
+        search.value = '';
+        filterItems('');
+      });
+    });
+    pillsArea.addEventListener('click', function (e) {
+      var btn = e.target.closest('.sintel-pill-remove');
+      if (btn) removeItem(btn.getAttribute('data-uuid'));
+    });
+    document.addEventListener('click', function (e) {
+      if (!picker.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
+    });
+  }
+
+  /* ============================================================
+     INICIALIZACION
+  ============================================================ */
+  var empSel = document.getElementById('perfil-empresa-select');
+  var empHid = document.getElementById('perfil-empresa-id');
+
+  // Sync empresa hidden al cargar
+  if (empSel && empHid) {
+    empHid.value = empSel.value || '';
+    empSel.addEventListener('change', function () {
+      empHid.value = this.value;
+      var empId = String(this.value);
+      deptPicker.filterByEmpresa(empId);
+      sedePicker.filterByEmpresa(empId);
+      areaPicker.filterByEmpresa(empId);
+    });
+  }
+
+  // Departamento (single)
+  var deptPicker = new SinglePicker({
+    searchInput:   document.getElementById('dept-search-input'),
+    dropdown:      document.getElementById('dept-dropdown'),
+    hiddenInput:   document.getElementById('perfil-departamento-uuid'),
+    picker:        document.getElementById('dept-picker'),
+    pillContainer: document.getElementById('dept-pill-container'),
+  });
+
+  // Sedes (multi)
+  var sedePicker = new MultiPicker({
+    searchInput:     document.getElementById('sede-search-input'),
+    dropdown:        document.getElementById('sede-dropdown'),
+    hiddenContainer: document.getElementById('sedes-hidden-container'),
+    picker:          document.getElementById('sede-picker'),
+    pillsArea:       document.getElementById('sede-pills-area'),
+    hiddenName:      'sedes_uuids',
+  });
+
+  // Areas (multi)
+  var areaPicker = new MultiPicker({
+    searchInput:     document.getElementById('area-search-input'),
+    dropdown:        document.getElementById('area-dropdown'),
+    hiddenContainer: document.getElementById('areas-hidden-container'),
+    picker:          document.getElementById('area-picker'),
+    pillsArea:       document.getElementById('area-pills-area'),
+    hiddenName:      'areas_uuids',
+  });
+
+  // Filtrar areas cuando cambian las sedes seleccionadas
+  document.getElementById('sede-picker').addEventListener('click', function () {
+    setTimeout(function () {
+      areaPicker.filterBySedes(sedePicker.getSelected());
+    }, 50);
+  });
+
+  // Filtro inicial por empresa por defecto
+  var initialEmpId = empHid ? String(empHid.value) : '';
+  if (initialEmpId) {
+    deptPicker.filterByEmpresa(initialEmpId);
+    sedePicker.filterByEmpresa(initialEmpId);
+    areaPicker.filterByEmpresa(initialEmpId);
+  }
+
+  /* ============================================================
+     OVERRIDE collectFormData para incluir pickers
+     Expuesto en window para que perfil.modals.js lo consuma
+  ============================================================ */
+  window._perfilCrearGetExtras = function () {
+    return {
+      sedes_uuids: sedePicker.getSelected(),
+      areas_uuids: areaPicker.getSelected(),
+    };
+  };
+
 })();
 </script>

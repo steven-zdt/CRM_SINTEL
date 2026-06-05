@@ -99,7 +99,31 @@
                 <p id="view_cufe" class="form-control-plaintext border-bottom mb-0 font-monospace small text-break">-</p>
             </div>
 
-            {# Cotización vinculada #}
+            {# Desglose de Impuestos #}
+            <div class="col-12 mt-3" id="view_impuestos_desglosados_section">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-percent me-2"></i>Desglose de Impuestos
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead>
+                            <tr class="table-light">
+                                <th>Tipo de Impuesto</th>
+                                <th class="text-end">Porcentaje</th>
+                                <th class="text-end">Base Imponible</th>
+                                <th class="text-end">Valor Impuesto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="view_impuestos_desglosados_body">
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">No se reportaron impuestos desglosados</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# Cotizacion vinculada #}
             <div class="col-12 mt-3">
                 <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
                     <i class="bi bi-link-45deg me-2"></i>Cotización vinculada

@@ -38,11 +38,8 @@
             cargarProveedores(form)
         ]);
 
-        // Inicializar buscador de cuentas (v3.7.1)
-        initCuentaSearch(form);
-
-        // Inicializar selectores de inventario
-        initInventarioSelects(form);
+        // Inicializar buscador de movimientos de inventario (Pull Model v3.8+)
+        initMovimientoSearch(form);
 
         // ── Eventos para Valores Financieros (Input editable) ────────────────
         const subtotalInput = form.querySelector('#subtotal');
@@ -306,15 +303,6 @@
     }
 
     function collectData(form) {
-        let gastoUuidVal = form.querySelector('#cuenta_gasto_uuid')?.value;
-
-        // Validate UUID format - if it's just a number or invalid, set to null
-        if (gastoUuidVal && gastoUuidVal.length < 32) {
-            gastoUuidVal = null;
-        }
-
-        const tipoRelacion = form.querySelector('#tipo_relacion_inventario')?.value || 'NINGUNO';
-
         return {
             resolucion_dian: form.querySelector('#resolucion')?.value,
             fecha: form.querySelector('#fecha')?.value,
@@ -325,99 +313,8 @@
             observaciones: form.querySelector('#observaciones')?.value,
             subtotal: parseFloat(form.querySelector('#subtotal')?.value) || 0,
             total: parseFloat(form.querySelector('#total')?.value) || 0,
-            cuenta_gasto_uuid: gastoUuidVal || null,
-            producto_relacionado: tipoRelacion === 'PRODUCTO' ? (form.querySelector('#producto_relacionado')?.value || null) : null,
-            servicio_relacionado: tipoRelacion === 'SERVICIO' ? (form.querySelector('#servicio_relacionado')?.value || null) : null,
-            activo_relacionado: tipoRelacion === 'ACTIVO_FIJO' ? (form.querySelector('#activo_relacionado')?.value || null) : null
+            movimiento_inventario_uuid: form.querySelector('#movimiento_inventario_uuid')?.value || null,
         };
-    }
-
-    /**
-     * Inicializa el buscador de cuentas contables (v3.7.1)
-     */
-    function initCuentaSearch(form) {
-        const searchInput = form.querySelector('#cuenta_gasto_search');
-        const uuidInput = form.querySelector('#cuenta_gasto_uuid');
-        const suggestions = form.querySelector('#cuenta-gasto-suggestions');
-
-        if (!searchInput || !uuidInput || !suggestions) return;
-
-        // Si ya hay un UUID (Edición), cargar el nombre
-        if (uuidInput.value && !searchInput.value) {
-            getCuentaByUuid(uuidInput.value).then(cuenta => {
-                if (cuenta) searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
-            });
-        }
-
-        let debounceTimer;
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(debounceTimer);
-            const query = e.target.value.trim();
-
-            if (query.length < 2) {
-                suggestions.classList.add('d-none');
-                return;
-            }
-
-            debounceTimer = setTimeout(async () => {
-                try {
-                    const url = window.Sintel.Gastos.API.contabilidad.searchCuentas(query);
-                    const response = await fetch(url, { headers: window.Sintel.Gastos.getHeaders() });
-                    const result = await response.json();
-                    const cuentas = result.results || [];
-                    renderSuggestions(cuentas, suggestions, searchInput, uuidInput);
-                } catch (err) {
-                    console.error('[GastoEditor] Error buscando cuentas:', err);
-                }
-            }, 300);
-        });
-
-        // Cerrar sugerencias al hacer click fuera
-        document.addEventListener('click', (e) => {
-            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
-                suggestions.classList.add('d-none');
-            }
-        });
-    }
-
-    function renderSuggestions(cuentas, container, searchInput, uuidInput) {
-        if (cuentas.length === 0) {
-            container.innerHTML = '<div class="list-group-item small text-muted">No se encontraron cuentas</div>';
-        } else {
-            container.innerHTML = cuentas.map(c => `
-                <button type="button" class="list-group-item list-group-item-action small py-2" 
-                        data-uuid="${c.id}" data-label="${c.codigo} - ${c.nombre}">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span><strong>${c.codigo}</strong> - ${c.nombre}</span>
-                        <span class="badge bg-light text-muted">${c.tipo_display || ''}</span>
-                    </div>
-                </button>
-            `).join('');
-        }
-
-        container.classList.remove('d-none');
-
-        container.querySelectorAll('button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                searchInput.value = btn.dataset.label;
-                uuidInput.value = btn.dataset.uuid;
-                container.classList.add('d-none');
-            });
-        });
-    }
-
-    async function getCuentaByUuid(uuid) {
-        try {
-            const url = window.Sintel.Gastos.API.contabilidad.getCuentaByUuid(uuid);
-            const response = await fetch(url, { headers: window.Sintel.Gastos.getHeaders() });
-            if (!response.ok) return null;
-            const data = await response.json();
-            const results = data.results || data;
-            return Array.isArray(results) ? results[0] : results;
-        } catch (err) {
-            console.warn('[GastoEditor] No se pudo recuperar detalle de cuenta:', uuid);
-            return null;
-        }
     }
 
     /**
@@ -505,194 +402,81 @@
     }
 
     /**
-     * Gestión e inicialización de selectores de inventario (Fase 4 - Trazabilidad).
+     * Buscador de movimientos de inventario (Pull Model v3.8+).
+     * Reemplaza initInventarioSelects + cargarProductos/Servicios/Activos.
      */
-    async function cargarProductos(form) {
-        const select = form.querySelector('#producto_relacionado');
-        if (!select) return;
-        const currentValue = select.dataset.selected || select.dataset.value || select.value;
+    function initMovimientoSearch(form) {
+        const searchInput = form.querySelector('#movimiento_inventario_search');
+        const uuidInput = form.querySelector('#movimiento_inventario_uuid');
+        const suggestions = form.querySelector('#movimiento-inventario-suggestions');
 
-        try {
-            const preOption = select.querySelector(`option[value="${currentValue}"]`);
-            const preText = preOption ? preOption.textContent : null;
+        if (!searchInput || !uuidInput || !suggestions) return;
 
-            const response = await fetch(window.Sintel.Gastos.API.inventario.productos, {
-                headers: window.Sintel.Gastos.getHeaders()
-            });
-            const result = await response.json();
-            const items = Array.isArray(result) ? result : (result.results || []);
+        const currentLabel = searchInput.dataset.currentLabel;
+        if (currentLabel && uuidInput.value && !searchInput.value) {
+            searchInput.value = currentLabel;
+        }
 
-            select.innerHTML = '<option value="">Seleccione producto...</option>';
-            let found = false;
-            items.forEach(item => {
-                const opt = document.createElement('option');
-                opt.value = item.id;
-                opt.textContent = `${item.codigo || ''} - ${item.nombre}`;
-                if (item.id?.toString() === currentValue?.toString()) {
-                    opt.selected = true;
-                    found = true;
+        let debounceTimer;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const url = window.Sintel.Gastos.API.inventario.searchMovimientos(query);
+                    const response = await fetch(url, { headers: window.Sintel.Gastos.getHeaders() });
+                    const result = await response.json();
+                    renderMovimientoSuggestions(result.results || [], suggestions, searchInput, uuidInput);
+                } catch (err) {
+                    console.error('[GastoEditor] Error buscando movimientos:', err);
                 }
-                select.appendChild(opt);
-            });
-
-            if (currentValue && !found && preText) {
-                const opt = document.createElement('option');
-                opt.value = currentValue;
-                opt.textContent = preText;
-                opt.selected = true;
-                select.appendChild(opt);
-            }
-        } catch (e) {
-            console.error('[GastoEditor] Error productos:', e);
-        }
-    }
-
-    async function cargarServicios(form) {
-        const select = form.querySelector('#servicio_relacionado');
-        if (!select) return;
-        const currentValue = select.dataset.selected || select.dataset.value || select.value;
-
-        try {
-            const preOption = select.querySelector(`option[value="${currentValue}"]`);
-            const preText = preOption ? preOption.textContent : null;
-
-            const response = await fetch(window.Sintel.Gastos.API.inventario.servicios, {
-                headers: window.Sintel.Gastos.getHeaders()
-            });
-            const result = await response.json();
-            const items = Array.isArray(result) ? result : (result.results || []);
-
-            select.innerHTML = '<option value="">Seleccione servicio...</option>';
-            let found = false;
-            items.forEach(item => {
-                const opt = document.createElement('option');
-                opt.value = item.id;
-                opt.textContent = `${item.codigo || ''} - ${item.nombre}`;
-                if (item.id?.toString() === currentValue?.toString()) {
-                    opt.selected = true;
-                    found = true;
-                }
-                select.appendChild(opt);
-            });
-
-            if (currentValue && !found && preText) {
-                const opt = document.createElement('option');
-                opt.value = currentValue;
-                opt.textContent = preText;
-                opt.selected = true;
-                select.appendChild(opt);
-            }
-        } catch (e) {
-            console.error('[GastoEditor] Error servicios:', e);
-        }
-    }
-
-    async function cargarActivos(form) {
-        const select = form.querySelector('#activo_relacionado');
-        if (!select) return;
-        const currentValue = select.dataset.selected || select.dataset.value || select.value;
-
-        try {
-            const preOption = select.querySelector(`option[value="${currentValue}"]`);
-            const preText = preOption ? preOption.textContent : null;
-
-            const response = await fetch(window.Sintel.Gastos.API.inventario.activos, {
-                headers: window.Sintel.Gastos.getHeaders()
-            });
-            const result = await response.json();
-            const items = Array.isArray(result) ? result : (result.results || []);
-
-            select.innerHTML = '<option value="">Seleccione activo fijo...</option>';
-            let found = false;
-            items.forEach(item => {
-                const opt = document.createElement('option');
-                opt.value = item.id;
-                opt.textContent = `${item.codigo || ''} - ${item.nombre}`;
-                if (item.id?.toString() === currentValue?.toString()) {
-                    opt.selected = true;
-                    found = true;
-                }
-                select.appendChild(opt);
-            });
-
-            if (currentValue && !found && preText) {
-                const opt = document.createElement('option');
-                opt.value = currentValue;
-                opt.textContent = preText;
-                opt.selected = true;
-                select.appendChild(opt);
-            }
-        } catch (e) {
-            console.error('[GastoEditor] Error activos fijos:', e);
-        }
-    }
-
-    function initInventarioSelects(form) {
-        const tipoRelacionSelect = form.querySelector('#tipo_relacion_inventario');
-        if (!tipoRelacionSelect) return;
-
-        const wrapperProducto = form.querySelector('#wrapper_producto_relacionado');
-        const wrapperServicio = form.querySelector('#wrapper_servicio_relacionado');
-        const wrapperActivo = form.querySelector('#wrapper_activo_relacionado');
-
-        const selectProducto = form.querySelector('#producto_relacionado');
-        const selectServicio = form.querySelector('#servicio_relacionado');
-        const selectActivo = form.querySelector('#activo_relacionado');
-
-        function ocultarTodos() {
-            if (wrapperProducto) wrapperProducto.classList.add('d-none');
-            if (wrapperServicio) wrapperServicio.classList.add('d-none');
-            if (wrapperActivo) wrapperActivo.classList.add('d-none');
-        }
-
-        tipoRelacionSelect.addEventListener('change', async function() {
-            const tipo = this.value;
-            ocultarTodos();
-
-            // Limpiar valores seleccionados al ocultar
-            if (selectProducto) selectProducto.value = '';
-            if (selectServicio) selectServicio.value = '';
-            if (selectActivo) selectActivo.value = '';
-
-            if (tipo === 'PRODUCTO') {
-                if (wrapperProducto) wrapperProducto.classList.remove('d-none');
-                await cargarProductos(form);
-            } else if (tipo === 'SERVICIO') {
-                if (wrapperServicio) wrapperServicio.classList.remove('d-none');
-                await cargarServicios(form);
-            } else if (tipo === 'ACTIVO_FIJO') {
-                if (wrapperActivo) wrapperActivo.classList.remove('d-none');
-                await cargarActivos(form);
-            }
+            }, 300);
         });
 
-        // Lógica de detección de valores preexistentes (Modo Edición)
-        const valProd = selectProducto?.dataset.selected;
-        const valServ = selectServicio?.dataset.selected;
-        const valAct = selectActivo?.dataset.selected;
+        searchInput.addEventListener('change', () => {
+            if (!searchInput.value.trim()) uuidInput.value = '';
+        });
 
-        const isValid = (val) => val && val !== 'None' && val !== 'null' && val !== 'undefined' && val.trim() !== '';
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
+    }
 
-        if (isValid(valProd)) {
-            tipoRelacionSelect.value = 'PRODUCTO';
-            if (wrapperProducto) wrapperProducto.classList.remove('d-none');
-            cargarProductos(form);
-        } else if (isValid(valServ)) {
-            tipoRelacionSelect.value = 'SERVICIO';
-            if (wrapperServicio) wrapperServicio.classList.remove('d-none');
-            cargarServicios(form);
-        } else if (isValid(valAct)) {
-            tipoRelacionSelect.value = 'ACTIVO_FIJO';
-            if (wrapperActivo) wrapperActivo.classList.remove('d-none');
-            cargarActivos(form);
+    function renderMovimientoSuggestions(items, container, searchInput, uuidInput) {
+        if (items.length === 0) {
+            container.innerHTML = '<div class="list-group-item small text-muted">No se encontraron movimientos</div>';
         } else {
-            tipoRelacionSelect.value = 'NINGUNO';
-            ocultarTodos();
+            container.innerHTML = items.map(m => {
+                const label = `${m.item_tipo || ''}: ${m.item_nombre || ''} (${m.tipo_display || m.tipo || ''})`;
+                const sub = m.item_codigo ? `Cod: ${m.item_codigo} · Cant: ${m.cantidad || ''}` : `Cant: ${m.cantidad || ''}`;
+                return `<button type="button" class="list-group-item list-group-item-action small py-2"
+                            data-uuid="${m.id}" data-label="${label}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><strong>${m.item_nombre || ''}</strong> — ${m.tipo_display || m.tipo || ''}</span>
+                        <span class="badge bg-light text-muted">${m.item_tipo || ''}</span>
+                    </div>
+                    <small class="text-muted">${sub}</small>
+                </button>`;
+            }).join('');
         }
+        container.classList.remove('d-none');
+        container.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                searchInput.value = btn.dataset.label;
+                uuidInput.value = btn.dataset.uuid;
+                container.classList.add('d-none');
+            });
+        });
     }
 
     // Exportar
-    window.Sintel.Gastos.Editor = { init, cargarResoluciones, calcularTotales, initInventarioSelects, cargarProductos, cargarServicios, cargarActivos };
+    window.Sintel.Gastos.Editor = { init, cargarResoluciones, calcularTotales, initMovimientoSearch };
 
     // Inicialización HTMX
     document.body.addEventListener('htmx:afterSettle', (evt) => {

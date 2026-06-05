@@ -70,8 +70,8 @@ class CotizacionItemBusinessService:
     @classmethod
     @transaction.atomic
     def registrar(cls, empresa_id, data, instance=None):
-        from .business_service import CotizacionService
-        
+        from .business_service import CotizacionService  # WARNING: IMPORT LAZY — circular: business_service imports CotizacionItemBusinessService from this module
+
         cantidad = Decimal(str(data.get('cantidad') or 0))
         costo = Decimal(str(data.get('costo_unitario') or 0))
         utilidad = Decimal(str(data.get('porcentaje_utilidad') or 0))
@@ -100,7 +100,7 @@ class CotizacionItemBusinessService:
     @classmethod
     @transaction.atomic
     def eliminar_item(cls, instance):
-        from .business_service import CotizacionService
+        from .business_service import CotizacionService  # WARNING: IMPORT LAZY — circular
         cotizacion_id = instance.cotizacion_id
         CotizacionItemCRUDService.eliminar(instance)
         CotizacionService.calcular_totales(cotizacion_id)

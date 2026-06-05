@@ -15,9 +15,9 @@ class Migration(migrations.Migration):
             name="factura_costo_numero",
             field=models.CharField(
                 blank=True,
-                help_text="Snapshot del número de la factura para evitar FK en listados",
+                help_text="Snapshot del numero de la factura para evitar FK en listados",
                 max_length=50,
-                verbose_name="Número Factura (Snapshot)",
+                verbose_name="Numero Factura (Snapshot)",
             ),
         ),
     ]

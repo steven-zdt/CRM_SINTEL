@@ -1,15 +1,35 @@
-# 1. Ignorar absolutamente todo en la raíz
-
-
-# 2. Excepciones: Carpetas y archivos que SÍ se van a subir
-!/documentacion/arquitectura_general.md
-!/apps/
-!/config/
-!/.gitignore
-
-# 3. Reglas de limpieza internas (por si acaso dentro de apps o config hay basura)
+# Python / Django
 __pycache__/
 *.py[cod]
 *$py.class
 *.sqlite3
+*.log
 .env
+
+# Entornos y caches locales
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Artefactos generados localmente
+staticfiles/
+media/
+scratch/
+brain/
+ARTIFACTS/
+
+# Salidas temporales de pruebas y depuracion
+pytest_*.txt
+pytest_*.log
+test_*.txt
+test_*.log
+debug_*.txt
+step*_prompt.txt
+user_prompt.txt
+temp_*.py
+
+# Configuracion local de asistentes/IDEs
+.claude/settings.local.json

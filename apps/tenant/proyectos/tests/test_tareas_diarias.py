@@ -2,7 +2,7 @@
 Tests para Tareas Diarias (v3.5.3)
 
 Cubre:
-1. Validación de fechas (dentro/fuera de rango)
+1. Validacion de fechas (dentro/fuera de rango)
 2. DSV (Double Semantic Verification - multi-tenant isolation)
 3. Bloqueo de operaciones en fase CIERRE
 4. API endpoints (CRUD + cambiar-estado)
@@ -26,7 +26,7 @@ from rest_framework.exceptions import ValidationError
 
 @pytest.mark.django_db
 class TestTareasDiariasBusinessService:
-    """Tests para la lógica de negocio de tareas diarias."""
+    """Tests para la logica de negocio de tareas diarias."""
 
     @pytest.fixture(autouse=True)
     def setup(self, tenant1):
@@ -46,7 +46,7 @@ class TestTareasDiariasBusinessService:
             )
 
     def test_crear_tarea_dentro_rango_fechas(self, tenant1):
-        """✅ Crear tarea con fecha válida (dentro de rango)."""
+        """[OK] Crear tarea con fecha valida (dentro de rango)."""
         with schema_context(tenant1.schema_name):
             fecha = self.proyecto.fecha_inicio + timedelta(days=5)
             tarea = TareasDiariasBusinessService.crear_tarea(
@@ -54,7 +54,7 @@ class TestTareasDiariasBusinessService:
                 proyecto=self.proyecto,
                 fecha=fecha,
                 titulo='Tarea Test',
-                descripcion='Descripción test',
+                descripcion='Descripcion test',
                 prioridad='NORMAL'
             )
 
@@ -64,7 +64,7 @@ class TestTareasDiariasBusinessService:
             assert tarea.titulo == 'Tarea Test'
 
     def test_crear_tarea_fecha_anterior_inicio(self, tenant1):
-        """❌ Crear tarea con fecha ANTES de fecha_inicio."""
+        """[ERROR] Crear tarea con fecha ANTES de fecha_inicio."""
         with schema_context(tenant1.schema_name):
             fecha_invalida = self.proyecto.fecha_inicio - timedelta(days=1)
 
@@ -73,11 +73,11 @@ class TestTareasDiariasBusinessService:
                     empresa=self.empresa,
                     proyecto=self.proyecto,
                     fecha=fecha_invalida,
-                    titulo='Tarea Inválida'
+                    titulo='Tarea Invalida'
                 )
 
     def test_crear_tarea_fecha_posterior_fin(self, tenant1):
-        """❌ Crear tarea con fecha DESPUÉS de fecha_fin_estimada."""
+        """[ERROR] Crear tarea con fecha DESPUeS de fecha_fin_estimada."""
         with schema_context(tenant1.schema_name):
             fecha_invalida = self.proyecto.fecha_fin_estimada + timedelta(days=1)
 
@@ -86,11 +86,11 @@ class TestTareasDiariasBusinessService:
                     empresa=self.empresa,
                     proyecto=self.proyecto,
                     fecha=fecha_invalida,
-                    titulo='Tarea Inválida'
+                    titulo='Tarea Invalida'
                 )
 
     def test_dsv_tarea_otro_empresa(self, tenant1, tenant2):
-        """❌ DSV: Rechaza crear tarea con empresa distinta a la del proyecto."""
+        """[ERROR] DSV: Rechaza crear tarea con empresa distinta a la del proyecto."""
         with schema_context(tenant1.schema_name):
             empresa1 = Empresa.objects.first()
 
@@ -107,7 +107,7 @@ class TestTareasDiariasBusinessService:
                 )
 
     def test_bloqueo_cierre_crear_tarea(self, tenant1):
-        """❌ Bloqueo: No permite crear tarea si proyecto está en CIERRE."""
+        """[ERROR] Bloqueo: No permite crear tarea si proyecto esta en CIERRE."""
         with schema_context(tenant1.schema_name):
             self.proyecto.fase_actual = 'CIERRE'
             self.proyecto.save()
@@ -121,7 +121,7 @@ class TestTareasDiariasBusinessService:
                 )
 
     def test_bloqueo_cierre_cambiar_estado(self, tenant1):
-        """❌ Bloqueo: No permite cambiar estado si proyecto está en CIERRE."""
+        """[ERROR] Bloqueo: No permite cambiar estado si proyecto esta en CIERRE."""
         with schema_context(tenant1.schema_name):
             tarea = TareasDiariasBusinessService.crear_tarea(
                 empresa=self.empresa,
@@ -137,7 +137,7 @@ class TestTareasDiariasBusinessService:
                 TareasDiariasBusinessService.cambiar_estado_tarea(tarea, 'EN_PROCESO')
 
     def test_bloqueo_cierre_eliminar_tarea(self, tenant1):
-        """❌ Bloqueo: No permite eliminar tarea si proyecto está en CIERRE."""
+        """[ERROR] Bloqueo: No permite eliminar tarea si proyecto esta en CIERRE."""
         with schema_context(tenant1.schema_name):
             tarea = TareasDiariasBusinessService.crear_tarea(
                 empresa=self.empresa,
@@ -153,7 +153,7 @@ class TestTareasDiariasBusinessService:
                 TareasDiariasBusinessService.eliminar_tarea(tarea)
 
     def test_cambiar_estado_transicion_valida(self, tenant1):
-        """✅ Cambiar estado: PENDIENTE → EN_PROCESO → COMPLETADA."""
+        """[OK] Cambiar estado: PENDIENTE -> EN_PROCESO -> COMPLETADA."""
         with schema_context(tenant1.schema_name):
             tarea = TareasDiariasBusinessService.crear_tarea(
                 empresa=self.empresa,
@@ -173,10 +173,10 @@ class TestTareasDiariasBusinessService:
             assert tarea.estado == 'COMPLETADA'
 
     def test_unique_constraint_tarea_fecha_titulo(self, tenant1):
-        """❌ Unique constraint: No permite dos tareas con mismo proyecto, fecha y título."""
+        """[ERROR] Unique constraint: No permite dos tareas con mismo proyecto, fecha y titulo."""
         with schema_context(tenant1.schema_name):
             fecha = self.proyecto.fecha_inicio + timedelta(days=5)
-            titulo = 'Tarea Única'
+            titulo = 'Tarea unica'
 
             # Crear primera tarea
             TareasDiariasBusinessService.crear_tarea(
@@ -186,7 +186,7 @@ class TestTareasDiariasBusinessService:
                 titulo=titulo
             )
 
-            # Intentar crear segunda tarea idéntica
+            # Intentar crear segunda tarea identica
             from django.db import IntegrityError
             with pytest.raises(IntegrityError):
                 TareasDiariasBusinessService.crear_tarea(
@@ -220,7 +220,7 @@ class TestTareaDiariaAPI(APITestCase):
         )
 
     def test_api_get_tareas_por_proyecto_200(self):
-        """✅ GET /api/v1/proyectos/tareas-diarias/?proyecto_uuid=<uuid> retorna 200."""
+        """[OK] GET /api/v1/proyectos/tareas-diarias/?proyecto_uuid=<uuid> retorna 200."""
         # Crear una tarea
         TareasDiariasBusinessService.crear_tarea(
             empresa=self.empresa,
@@ -236,7 +236,7 @@ class TestTareaDiariaAPI(APITestCase):
         assert 'results' in response.data or isinstance(response.data, list)
 
     def test_api_post_crear_tarea_201(self):
-        """✅ POST /api/v1/proyectos/tareas-diarias/ con datos válidos retorna 201."""
+        """[OK] POST /api/v1/proyectos/tareas-diarias/ con datos validos retorna 201."""
         data = {
             'proyecto_uuid': str(self.proyecto.uuid),
             'fecha': str(self.proyecto.fecha_inicio_real + timedelta(days=2)),
@@ -250,7 +250,7 @@ class TestTareaDiariaAPI(APITestCase):
         assert TareaDiariaProyecto.objects.filter(titulo='Tarea Creada por API').exists()
 
     def test_api_post_crear_tarea_fecha_invalida_400(self):
-        """❌ POST con fecha fuera de rango retorna 400."""
+        """[ERROR] POST con fecha fuera de rango retorna 400."""
         data = {
             'proyecto_uuid': str(self.proyecto.uuid),
             'fecha': str(self.proyecto.fecha_fin_estimada + timedelta(days=10)),
@@ -262,7 +262,7 @@ class TestTareaDiariaAPI(APITestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_api_post_cambiar_estado_200(self):
-        """✅ POST /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/ retorna 200."""
+        """[OK] POST /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/ retorna 200."""
         tarea = TareasDiariasBusinessService.crear_tarea(
             empresa=self.empresa,
             proyecto=self.proyecto,
@@ -280,7 +280,7 @@ class TestTareaDiariaAPI(APITestCase):
         assert tarea.estado == 'EN_PROCESO'
 
     def test_api_delete_tarea_204(self):
-        """✅ DELETE /api/v1/proyectos/tareas-diarias/<id>/ retorna 204."""
+        """[OK] DELETE /api/v1/proyectos/tareas-diarias/<id>/ retorna 204."""
         tarea = TareasDiariasBusinessService.crear_tarea(
             empresa=self.empresa,
             proyecto=self.proyecto,

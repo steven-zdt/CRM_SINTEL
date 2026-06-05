@@ -105,6 +105,8 @@
 
         const uuid = d.querySelector('#proyecto-uuid')?.value;
         const offcanvasEl = d.querySelector('#offcanvas-proyecto');
+        const historialUuid = d.querySelector('#proyecto-historial-uuid')?.value;
+        const isCreation = !uuid;
 
         // Error Boundary: Guardar estado original del botón
         const btnGuardar = d.querySelector('#btn-wizard-save');
@@ -146,6 +148,26 @@
 
         // Guardar estado actual
         currentProyecto = res.data;
+
+        // Vinculación automática si es creación y viene de historial de servicio (v3.9.7)
+        if (isCreation && currentProyecto?.uuid && historialUuid) {
+            console.log(`${MOD} Vinculando nuevo proyecto ${currentProyecto.uuid} con historial ${historialUuid}`);
+            const vincularRes = await w.http('POST', '/api/v1/proyectos/vincular-proyecto/', {
+                proyecto_uuid: currentProyecto.uuid,
+                historial_uuid: historialUuid
+            });
+            if (vincularRes.ok) {
+                console.log(`${MOD} Vinculación exitosa`);
+                if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
+                    w.SintelFeedback.success('Proyecto creado y vinculado al historial de servicio correctamente');
+                }
+            } else {
+                console.error(`${MOD} Error al vincular proyecto:`, vincularRes);
+                if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
+                    w.SintelFeedback.error('Proyecto creado, pero falló la vinculación automática');
+                }
+            }
+        }
 
         // Limpiar errores si el guardado es exitoso
         const errorContainer = d.querySelector('#form-proyecto-feedback');
@@ -796,48 +818,77 @@
     }
 
     /**
-     * Cargar servicios disponibles desde Inventario y poblar el select
+     * Buscador de movimientos de inventario (Pull Model v3.8+).
+     * Reemplaza cargarServicios() y el select de servicio_asociado.
      */
-    async function cargarServicios() {
-        const selectServicio = d.querySelector('#proyecto-servicio-asociado-select');
-        if (!selectServicio) return;
+    function initMovimientoSearch() {
+        const searchInput = d.querySelector('#proyecto-movimiento-inventario-search');
+        const uuidInput = d.querySelector('#proyecto-movimiento-inventario-uuid');
+        const suggestions = d.querySelector('#proyecto-movimiento-inventario-suggestions');
 
-        const res = await w.http('GET', '/api/v1/inventario/servicios/');
-        if (!res.ok) {
-            console.error(`${MOD} Error al cargar servicios:`, res);
-            return;
+        if (!searchInput || !uuidInput || !suggestions) return;
+
+        const currentLabel = searchInput.dataset.currentLabel;
+        if (currentLabel && uuidInput.value && !searchInput.value) {
+            searchInput.value = currentLabel;
         }
 
-        // Manejar ambas estructuras: paginated (results) o array directo
-        let servicios = [];
-        if (res.data && res.data.results) {
-            servicios = res.data.results;  // DRF paginated
-        } else if (Array.isArray(res.data)) {
-            servicios = res.data;  // Array directo
-        }
-
-        const selectedUuid = selectServicio.getAttribute('data-selected-uuid');
-        servicios.forEach(servicio => {
-            // ⚠️ UUID-Safe: El campo 'id' contiene el UUID (source='uuid' en serializer)
-            // El campo 'pk' contiene el PK entero de la BD
-            const servicioUuid = servicio.id;  // Este es el UUID en la respuesta del API
-            if (!servicioUuid) {
-                console.warn(`${MOD} Servicio sin UUID:`, servicio);
+        let debounceTimer;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+                suggestions.classList.add('d-none');
                 return;
             }
-
-            const option = d.createElement('option');
-            option.value = servicioUuid;  // UUID string, nunca undefined
-            option.textContent = servicio.nombre || `Servicio ${servicioUuid}`;
-
-            if (selectedUuid && selectedUuid === servicioUuid) {
-                option.selected = true;
-            }
-
-            selectServicio.appendChild(option);
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const url = w.proyectosAPI.searchMovimientos(query);
+                    const res = await w.http('GET', url);
+                    const items = (res.data && res.data.results) ? res.data.results : [];
+                    renderMovimientoSuggestions(items, suggestions, searchInput, uuidInput);
+                } catch (err) {
+                    console.error(`${MOD} Error buscando movimientos:`, err);
+                }
+            }, 300);
         });
 
-        console.log(`${MOD} Servicios cargados: ${servicios.length}`);
+        searchInput.addEventListener('change', () => {
+            if (!searchInput.value.trim()) uuidInput.value = '';
+        });
+
+        d.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
+    }
+
+    function renderMovimientoSuggestions(items, container, searchInput, uuidInput) {
+        if (items.length === 0) {
+            container.innerHTML = '<div class="list-group-item small text-muted">No se encontraron movimientos</div>';
+        } else {
+            container.innerHTML = items.map(m => {
+                const label = `${m.item_tipo || ''}: ${m.item_nombre || ''} (${m.tipo_display || m.tipo || ''})`;
+                const sub = m.item_codigo ? `Cod: ${m.item_codigo} · Cant: ${m.cantidad || ''}` : `Cant: ${m.cantidad || ''}`;
+                return `<button type="button" class="list-group-item list-group-item-action small py-2"
+                            data-uuid="${m.id}" data-label="${label}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><strong>${m.item_nombre || ''}</strong> — ${m.tipo_display || m.tipo || ''}</span>
+                        <span class="badge bg-light text-muted">${m.item_tipo || ''}</span>
+                    </div>
+                    <small class="text-muted">${sub}</small>
+                </button>`;
+            }).join('');
+        }
+        container.classList.remove('d-none');
+        container.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                searchInput.value = btn.dataset.label;
+                uuidInput.value = btn.dataset.uuid;
+                container.classList.add('d-none');
+            });
+        });
     }
 
     /**
@@ -878,20 +929,20 @@
         syncSelectInitial('proyecto-responsable-operativo-select', currentProyecto.responsable_operativo_id);
         syncSelectInitial('proyecto-responsable-administrativo-select', currentProyecto.responsable_administrativo_id);
 
-        // Sincronizar selector de Servicio Asociado (UUID-Safe)
-        const servicioSelectEl = d.querySelector('#proyecto-servicio-asociado-select');
-        const servicioInput = d.querySelector('#proyecto-servicio-asociado');
-        if (servicioSelectEl && servicioInput) {
-            const servicioUuid = currentProyecto.servicio_asociado_uuid;
-            // ⚠️ UUID-Safe: solo asignar si es un UUID válido (36 caracteres con guiones)
-            if (servicioUuid && typeof servicioUuid === 'string' && servicioUuid.length === 36) {
-                servicioSelectEl.setAttribute('data-selected-uuid', servicioUuid);
-                servicioSelectEl.value = servicioUuid;
-                servicioInput.value = servicioUuid;
+        // Sincronizar buscador de Movimiento de Inventario (Pull Model v3.8+)
+        const movSearchInput = d.querySelector('#proyecto-movimiento-inventario-search');
+        const movUuidInput = d.querySelector('#proyecto-movimiento-inventario-uuid');
+        if (movSearchInput && movUuidInput) {
+            const movUuid = currentProyecto.movimiento_inventario_uuid;
+            const movRef = currentProyecto.movimiento_referencia;
+            if (movUuid && typeof movUuid === 'string' && movUuid.length === 36) {
+                movUuidInput.value = movUuid;
+                if (movRef && !movSearchInput.value) {
+                    movSearchInput.value = `${movRef.item_tipo || ''}: ${movRef.item_nombre || ''} (${movRef.tipo_display || ''})`;
+                }
             } else {
-                // Limpiar valores inválidos
-                servicioSelectEl.value = '';
-                servicioInput.value = '';
+                movUuidInput.value = '';
+                movSearchInput.value = '';
             }
         }
 
@@ -934,6 +985,28 @@
     }
 
     /**
+     * Aplica los valores de pre-llenado provenientes del historial del servicio (v3.9.7)
+     */
+    function aplicarPrefill(prefill) {
+        if (!prefill) return;
+        console.log(`${MOD} Aplicando prefill desde historial de servicio:`, prefill);
+        
+        const nombreInput = d.querySelector('#proyecto-nombre');
+        if (nombreInput) nombreInput.value = prefill.nombre || '';
+        
+        const valorInput = d.querySelector('#proyecto-valor-contrato-proyectado');
+        if (valorInput) {
+            valorInput.value = prefill.valor_contrato || '0';
+        } else {
+            const valorInputAlt = d.querySelector('#proyecto-valor');
+            if (valorInputAlt) valorInputAlt.value = prefill.valor_contrato || '0';
+        }
+
+        const historialInput = d.querySelector('#proyecto-historial-uuid');
+        if (historialInput) historialInput.value = prefill.historial_uuid || '';
+    }
+
+    /**
      * Configurar todos los event listeners del editor
      * ⚠️ Ejecuta una ÚNICA VEZ para evitar acumulación de listeners
      */
@@ -944,8 +1017,8 @@
         }
         editorEventsInitialized = true;
 
-        // Cargar servicios disponibles para el select
-        cargarServicios();
+        // Inicializar buscador de movimientos de inventario (Pull Model v3.8+)
+        initMovimientoSearch();
 
         const form = d.querySelector('#form-proyecto');
         if (!form) {
@@ -1210,6 +1283,10 @@
                 currentProyecto = null;
                 irAStep(0);
                 renderStepLocks();
+                if (window._proyectoPrefill) {
+                    aplicarPrefill(window._proyectoPrefill);
+                    window._proyectoPrefill = null;
+                }
             }
         } else {
             const observer = new MutationObserver((mutations) => {
@@ -1224,6 +1301,10 @@
                                 currentProyecto = null;
                                 irAStep(0);
                                 renderStepLocks();
+                                if (window._proyectoPrefill) {
+                                    aplicarPrefill(window._proyectoPrefill);
+                                    window._proyectoPrefill = null;
+                                }
                             }
                             observer.disconnect();
                         }
@@ -1257,13 +1338,15 @@
         init();
     }
 
+    // htmx:afterSettle garantiza DOM estable — no usar afterSwap (AGENTS.md §26 + skill htmx.md §12)
     if (typeof htmx !== 'undefined') {
-        d.addEventListener('htmx:afterSwap', (event) => {
-            if (event.detail.target.id === 'offcanvas-container-proyectos') {
+        d.addEventListener('htmx:afterSettle', (event) => {
+            const targetId = event.detail.target.id;
+            if (targetId === 'offcanvas-container-proyectos' || targetId === 'offcanvas-container-movimientos') {
                 const offcanvasEl = d.getElementById('offcanvas-proyecto');
                 if (offcanvasEl) {
                     initEditorEvents();
-                    
+
                     const uuid = d.querySelector('#proyecto-uuid')?.value;
                     if (uuid) {
                         cargarDetallesProyecto(uuid);
@@ -1271,14 +1354,21 @@
                         currentProyecto = null;
                         irAStep(0);
                         renderStepLocks();
+                        if (window._proyectoPrefill) {
+                            aplicarPrefill(window._proyectoPrefill);
+                            window._proyectoPrefill = null;
+                        }
                     }
 
                     if (w.UIManager?.handleOffcanvas) {
                         w.UIManager.handleOffcanvas(offcanvasEl, 'show');
                     } else if (typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+                        // Fallback: dispose + create (NUNCA getOrCreateInstance — §26)
+                        const prev = bootstrap.Offcanvas.getInstance(offcanvasEl);
+                        if (prev) prev.dispose();
+                        d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+                        new bootstrap.Offcanvas(offcanvasEl).show();
                     }
-                    console.log(`${MOD} Offcanvas abierto y detalles cargados tras HTMX swap`);
                 }
             }
         });

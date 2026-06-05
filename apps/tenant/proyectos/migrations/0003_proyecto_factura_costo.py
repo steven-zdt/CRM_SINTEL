@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
             name="factura_costo",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Factura que actúa como centro de costos para este proyecto",
+                help_text="Factura que actua como centro de costos para este proyecto",
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="proyectos_asociados",

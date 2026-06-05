@@ -50,12 +50,12 @@ SEDE_LIST_FIELDS = (
 
 SEDE_DETAIL_FIELDS = SEDE_LIST_FIELDS
 
+# Campos validos para Meta.fields Y para .only() — solo atributos directos del modelo.
+# NUNCA strings con __ aqui (AGENTS.md §30 Zero-Collision Pattern).
 AREA_LIST_FIELDS = (
     "id",
     "uuid",
-    "sede__id",
-    "sede__uuid",
-    "sede__nombre",
+    "sede_id",          # FK id autogenerado — valido en ambos contextos
     "nombre",
     "codigo_funcionamiento",
     "created_at",
@@ -63,6 +63,9 @@ AREA_LIST_FIELDS = (
 )
 
 AREA_DETAIL_FIELDS = AREA_LIST_FIELDS
+
+# Traversals ORM SOLO para .only() — nunca en Meta.fields de serializer (AGENTS.md §30)
+_SEDE_AREA_TRAVERSALS = ("sede__id", "sede__uuid", "sede__nombre")
 
 
 class EmpresaSelector:
@@ -118,7 +121,9 @@ class AreaSelector:
     @staticmethod
     def get_list(empresa_id, search=None):
         """Retorna listado optimizado de areas con relacion de sede."""
-        qs = Area.objects.filter(empresa_id=empresa_id).select_related('sede').only(*AREA_LIST_FIELDS)
+        qs = Area.objects.filter(empresa_id=empresa_id).select_related('sede').only(
+            *AREA_LIST_FIELDS, *_SEDE_AREA_TRAVERSALS
+        )
         if search:
             qs = qs.filter(
                 Q(nombre__icontains=search) |
@@ -130,5 +135,7 @@ class AreaSelector:
     @staticmethod
     def get_by_uuid(empresa_id, uuid):
         """Retorna una area especifica por su UUID."""
-        return Area.objects.filter(empresa_id=empresa_id, uuid=uuid).select_related('sede').only(*AREA_DETAIL_FIELDS).first()
+        return Area.objects.filter(empresa_id=empresa_id, uuid=uuid).select_related('sede').only(
+            *AREA_DETAIL_FIELDS, *_SEDE_AREA_TRAVERSALS
+        ).first()
 

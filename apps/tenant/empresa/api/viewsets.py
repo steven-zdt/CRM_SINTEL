@@ -13,20 +13,28 @@ ViewSets y vistas auxiliares para la app empresa.
 import logging
 from functools import cached_property
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from django.template.exceptions import TemplateDoesNotExist
+from django.template.loader import render_to_string
 from rest_framework import permissions, status, viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import SAFE_METHODS
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from apps.config.api.pagination import StandardResultsSetPagination
-from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
+from apps.services.maildigester.connection_test import maildigester_test_connection
+from apps.services.security.crypto import decrypt_password
 from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.empresa.api.serializers import (
     EmpresaDetailSerializer,
@@ -43,7 +51,13 @@ from apps.tenant.empresa.api.serializers import (
     AreaDetailSerializer,
     AreaUpsertSerializer,
 )
-from apps.tenant.empresa.models import Empresa, MailInboxConfig, Sede, Area
+from apps.tenant.empresa.choices.regimen import get_regimen_choices
+from apps.tenant.empresa.choices.responsabilidad_rut import get_responsabilidad_rut_choices
+from apps.tenant.empresa.choices.segmento_dian import get_segmento_dian_choices
+from apps.tenant.empresa.models import Area, Empresa, MailInboxConfig, Sede
+from apps.tenant.empresa.services.business_service import AreaService, SedeService, actualizar_empresa, crear_empresa
+from apps.tenant.empresa.services.crud_service import qs_list
+from apps.tenant.empresa.services.selectors import AreaSelector, SedeSelector
 
 log = logging.getLogger("empresa.api")
 log_mailinbox = logging.getLogger("mailinbox.api")
@@ -96,9 +110,6 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         
         Flag DEV: Si ALLOW_EMPRESA_POST_DIRECT=True, permite POST en desarrollo.
         """
-        from django.conf import settings
-        from rest_framework.permissions import SAFE_METHODS
-        
         # Métodos seguros siempre permitidos
         if request.method in SAFE_METHODS:
             return True
@@ -141,8 +152,6 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         # WARNING: v2.40: Soporta filtrado por ?search= para Tabulator.
         # WARNING: PERFORMANCE BIBLE: Usa .only() para optimizar queries.
         """
-        from apps.tenant.empresa.services.crud_service import qs_list
-        
         # Obtener parámetro de búsqueda
         search = self.request.query_params.get('search', None)
         
@@ -339,8 +348,6 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         Returns:
             Template HTML renderizado con contexto de la empresa
         """
-        from django.shortcuts import get_object_or_404
-        
         # # WARNING: Zero Trust: Obtener empresa del tenant actual (singleton)
         empresa = None
         id_instancia = request.query_params.get('id')
@@ -398,7 +405,6 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         
         # # WARNING: Service Layer: Usar servicio para actualizar o crear
-        from apps.tenant.empresa.services.business_service import actualizar_empresa, crear_empresa
         if empresa:
             empresa_result = actualizar_empresa(serializer.validated_data)
         else:
@@ -448,7 +454,6 @@ class EmpresaViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         
         # 4. Inyectar Lógica de Negocio vía Service Layer
-        from apps.tenant.empresa.services.business_service import actualizar_empresa, crear_empresa
         
         try:
             if empresa:
@@ -674,10 +679,6 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
         Returns:
             tuple: (ok: bool, reason: str | None)
         """
-        from rest_framework.permissions import SAFE_METHODS
-
-        from apps.tenant.api.permissions import IsTenantAdmin
-        
         user = request.user
         if not (user and user.is_authenticated):
             return False, "Usuario no autenticado."
@@ -790,13 +791,6 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
         # WARNING: ZERO WASTE: Solo carga campos necesarios para el formulario.
         # WARNING: MANEJO DE ERRORES: Retorna HTML con error_handler.html incluido para mostrar errores.
         """
-        import logging
-
-        from django.template.exceptions import TemplateDoesNotExist
-        from django.template.loader import render_to_string
-        
-        logger = logging.getLogger(__name__)
-        
         config_id = request.query_params.get('id')
         instance = None
         error_message = None
@@ -844,7 +838,6 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
             logger.debug(f"[render_offcanvas] Template renderizado exitosamente, tamaño: {len(html)} caracteres")
             # # WARNING: IMPORTANTE: Retornar HTML directamente sin TemplateHTMLRenderer
             # TemplateHTMLRenderer requiere template_name en la respuesta, pero nosotros ya renderizamos el HTML
-            from django.http import HttpResponse
             return HttpResponse(html, content_type='text/html')
         except TemplateDoesNotExist as e:
             # # WARNING: ERROR DE TEMPLATE: Si el template no existe, retornar error estructurado con error_handler
@@ -873,7 +866,6 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
                 </div>
             </div>
             """
-            from django.http import HttpResponse
             return HttpResponse(error_html, content_type='text/html', status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             # # WARNING: ERROR GENERAL: Capturar cualquier error inesperado en el renderizado
@@ -902,7 +894,6 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
                 </div>
             </div>
             """
-            from django.http import HttpResponse
             return HttpResponse(error_html, content_type='text/html', status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=False, methods=['post'], url_path='test-connection', url_name='test-connection')
@@ -953,7 +944,6 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
         
         # Llamar al servicio desacoplado
         try:
-            from apps.services.maildigester.connection_test import maildigester_test_connection
             ok, message = maildigester_test_connection(config)
             
             if ok:
@@ -985,7 +975,6 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         
         # Desencriptar password real
-        from apps.services.security.crypto import decrypt_password
         try:
             raw_pass = instance.imap_password or instance.password
             if not raw_pass:
@@ -1008,7 +997,6 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
         }
         
         try:
-            from apps.services.maildigester.connection_test import maildigester_test_connection
             ok, message = maildigester_test_connection(config)
             
             if ok:
@@ -1041,10 +1029,6 @@ def form_metadata(request):
     # WARNING: AUTONOMÍA: Usa choices locales desde apps/tenant/empresa/choices/
     """
     try:
-        from apps.tenant.empresa.choices.regimen import get_regimen_choices
-        from apps.tenant.empresa.choices.responsabilidad_rut import get_responsabilidad_rut_choices
-        from apps.tenant.empresa.choices.segmento_dian import get_segmento_dian_choices
-        
         # Construir metadata desde choices locales
         regimenes = [{"codigo": codigo, "nombre": nombre} for codigo, nombre in get_regimen_choices()]
         segmentos = [{"value": codigo, "label": nombre} for codigo, nombre in get_segmento_dian_choices()]
@@ -1143,7 +1127,6 @@ class SedeViewSet(BaseTenantViewSet):
         search = self.request.query_params.get('search', None)
 
         if self.action == 'list':
-            from apps.tenant.empresa.services.selectors import SedeSelector
             return SedeSelector.get_list(empresa_id, search=search)
         else:
             return Sede.objects.filter(empresa_id=empresa_id)
@@ -1154,7 +1137,6 @@ class SedeViewSet(BaseTenantViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        from apps.tenant.empresa.services.business_service import SedeService
         try:
             sede = SedeService.crear_sede(empresa_id, serializer.validated_data)
             return Response(
@@ -1171,7 +1153,6 @@ class SedeViewSet(BaseTenantViewSet):
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        from apps.tenant.empresa.services.business_service import SedeService
         try:
             sede = SedeService.actualizar_sede(empresa_id, instance.uuid, serializer.validated_data)
             return Response(
@@ -1191,7 +1172,6 @@ class SedeViewSet(BaseTenantViewSet):
         empresa_id = self.get_empresa().id
         instance = self.get_object()
 
-        from apps.tenant.empresa.services.business_service import SedeService
         try:
             SedeService.eliminar_sede(empresa_id, instance.uuid)
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -1200,9 +1180,6 @@ class SedeViewSet(BaseTenantViewSet):
 
     @action(detail=False, methods=['get'], url_path='render-offcanvas', url_name='render-offcanvas')
     def render_offcanvas(self, request: Request, *args, **kwargs) -> Response:
-        from django.template.loader import render_to_string
-        from django.http import HttpResponse
-
         sede_uuid = request.query_params.get('uuid')
         empresa_id = self.get_empresa().id
         instance = None
@@ -1263,7 +1240,6 @@ class AreaViewSet(BaseTenantViewSet):
         search = self.request.query_params.get('search', None)
 
         if self.action == 'list':
-            from apps.tenant.empresa.services.selectors import AreaSelector
             return AreaSelector.get_list(empresa_id, search=search)
         else:
             return Area.objects.filter(sede__empresa_id=empresa_id)
@@ -1274,7 +1250,6 @@ class AreaViewSet(BaseTenantViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        from apps.tenant.empresa.services.business_service import AreaService
         try:
             sede_id = serializer.validated_data['sede'].id
             data = {
@@ -1297,7 +1272,6 @@ class AreaViewSet(BaseTenantViewSet):
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        from apps.tenant.empresa.services.business_service import AreaService
         try:
             sede_id = serializer.validated_data['sede'].id
             data = {
@@ -1323,7 +1297,6 @@ class AreaViewSet(BaseTenantViewSet):
         empresa_id = self.get_empresa().id
         instance = self.get_object()
 
-        from apps.tenant.empresa.services.business_service import AreaService
         try:
             AreaService.eliminar_area(empresa_id, instance.uuid)
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -1332,9 +1305,6 @@ class AreaViewSet(BaseTenantViewSet):
 
     @action(detail=False, methods=['get'], url_path='render-offcanvas', url_name='render-offcanvas')
     def render_offcanvas(self, request: Request, *args, **kwargs) -> Response:
-        from django.template.loader import render_to_string
-        from django.http import HttpResponse
-
         area_uuid = request.query_params.get('uuid')
         empresa_id = self.get_empresa().id
         instance = None
@@ -1346,7 +1316,6 @@ class AreaViewSet(BaseTenantViewSet):
             except Area.DoesNotExist:
                 pass
 
-        from apps.tenant.empresa.services.selectors import SedeSelector
         sedes = SedeSelector.get_list(empresa_id)
 
         context = {

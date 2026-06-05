@@ -113,8 +113,20 @@
   const cuentaId = '{% if cuenta %}{{ cuenta.id }}{% endif %}';
   
   if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
-    const offcanvasInstance = window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-    offcanvasInstance.show();
+    // UIManager gestiona dispose + backdrops + show (AGENTS.md §26)
+    var _shown = false;
+    if (window.UIManager && typeof window.UIManager.handleOffcanvas === 'function') {
+      window.UIManager.handleOffcanvas(offcanvasEl, 'show');
+      _shown = true;
+    }
+    if (!_shown) {
+      var _prev = window.bootstrap.Offcanvas.getInstance(offcanvasEl);
+      if (_prev) _prev.dispose();
+      document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+      document.body.style.overflow = '';
+      new window.bootstrap.Offcanvas(offcanvasEl).show();
+    }
+    var offcanvasInstance = window.bootstrap.Offcanvas.getInstance(offcanvasEl);
     console.log('[Contabilidad] Offcanvas activado:', offcanvasId);
     
     // Inicializar lógica modular

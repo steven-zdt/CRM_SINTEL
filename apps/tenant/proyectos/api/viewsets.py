@@ -2,10 +2,12 @@
 ViewSet para Proyectos v3.5 - Alineado con Tabulator Factory y FSD
 
 WARNING: SINTEL v3.5: API-First & Zero-Coupling
-- DSV Pattern: Inyección de servicios vía ProyectoServiceMixin
+- DSV Pattern: Inyeccion de servicios via ProyectoServiceMixin
 - Zero Trust: Aislamiento estricto por empresa_id
-- Performance: Queries optimizadas (Zero Waste) vía Selectors
+- Performance: Queries optimizadas (Zero Waste) via Selectors
 """
+import logging
+
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -17,14 +19,51 @@ from rest_framework.response import Response
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.empresa.models import Empresa
-from .serializers import ProyectoDetailSerializer, ProyectoListSerializer, ItemPresupuestoSerializer, TareaDiariaSerializer
+from .serializers import ProyectoDetailSerializer, ProyectoListSerializer, ItemPresupuestoSerializer, TareaDiariaSerializer, TareaCortaSerializer
 from .mixins import ProyectoServiceMixin
-from ..models import Proyecto, ItemPresupuestoProyecto, TareaDiariaProyecto
-from ..services import PresupuestoBusinessService, PRESUPUESTO_ITEM_FIELDS, TareasDiariasBusinessService, TareasDiariasSelector, TAREA_FIELDS
+from ..models import Proyecto, ItemPresupuestoProyecto, TareaDiariaProyecto, TareaCorta
+from ..services import (
+    PresupuestoBusinessService, PRESUPUESTO_ITEM_FIELDS,
+    TareasDiariasBusinessService, TareasDiariasSelector, TAREA_FIELDS,
+    TareasCortasBusinessService, TareaCortaSelector, TAREA_CORTA_FIELDS,
+    TareaCortaServiceMixin,
+)
+
+try:
+    from apps.tenant.inventario.models import HistorialServicio as _HistorialServicio
+except ImportError:
+    _HistorialServicio = None
+
+try:
+    from apps.tenant.clientes.models import Cliente as _ClienteProyecto
+except ImportError:
+    _ClienteProyecto = None
+
+try:
+    from apps.tenant.empleados.services.selectors import EmpleadoSelector as _EmpleadoSelector
+except ImportError:
+    _EmpleadoSelector = None
+
+try:
+    from apps.tenant.proveedores.models import Proveedor as _ProveedorProyecto
+except ImportError:
+    _ProveedorProyecto = None
+
+try:
+    from apps.tenant.facturas.services.business_service import FacturaInterAppAPI as _FacturaInterAppAPI
+except ImportError:
+    _FacturaInterAppAPI = None
+
+try:
+    from apps.tenant.cotizaciones.models import Cotizacion as _CotizacionProyecto
+except ImportError:
+    _CotizacionProyecto = None
+
+logger = logging.getLogger(__name__)
 
 class StandardResultsSetPagination(PageNumberPagination):
     """
-    Paginación estándar SaaS para Tabulator.
+    Paginacion estandar SaaS para Tabulator.
     """
     page_size = 10
     page_size_query_param = 'page_size'
@@ -41,7 +80,7 @@ class ProyectoViewSet(
 ):
     """
     ViewSet para Proyectos v3.5.
-    Delegación absoluta al Service Layer modularizado.
+    Delegacion absoluta al Service Layer modularizado.
     """
     queryset = Proyecto.objects.none()
     pagination_class = StandardResultsSetPagination
@@ -57,7 +96,7 @@ class ProyectoViewSet(
     def get_empresa(self):
         empresa = Empresa.objects.only('id').first()
         if not empresa:
-            raise APIException(detail='No se encontró la empresa (SSoT) configurada en este tenant.')
+            raise APIException(detail='No se encontro la empresa (SSoT) configurada en este tenant.')
         return empresa
     
     def get_queryset(self):
@@ -81,7 +120,7 @@ class ProyectoViewSet(
             empresa = self.get_empresa()
             context['empresa_id'] = empresa.id
         except Exception:
-            # Si no hay empresa, dejar context sin empresa_id (será manejado por __init__)
+            # Si no hay empresa, dejar context sin empresa_id (sera manejado por __init__)
             pass
         return context
 
@@ -102,22 +141,19 @@ class ProyectoViewSet(
         }, status=status.HTTP_200_OK)
     
     def create(self, request, *args, **kwargs):
-        import logging
-        logger = logging.getLogger(__name__)
-        
         empresa = self.get_empresa()
         serializer = self.get_serializer(data=request.data)
         
-        # ⚠️ Logging para debug de validación
+        # WARNING: Logging para debug de validacion
         if not serializer.is_valid():
-            logger.error(f"[ProyectoViewSet] Validación fallida: {serializer.errors}")
+            logger.error(f"[ProyectoViewSet] Validacion fallida: {serializer.errors}")
             logger.error(f"[ProyectoViewSet] Datos recibidos: {request.data}")
             return Response(
-                {'detail': 'Datos inválidos', 'errors': serializer.errors},
+                {'detail': 'Datos invalidos', 'errors': serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Orquestación vía Business Service
+        # Orquestacion via Business Service
         try:
             proyecto = self.proyecto_business_service.orchestrate_create_proyecto(
                 empresa, 
@@ -126,7 +162,7 @@ class ProyectoViewSet(
         except ValidationError as e:
             logger.error(f"[ProyectoViewSet] Error de negocio: {e.detail}")
             return Response(
-                {'detail': 'Error de validación de negocio', 'errors': e.detail},
+                {'detail': 'Error de validacion de negocio', 'errors': e.detail},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -201,52 +237,68 @@ class ProyectoViewSet(
 
         if id_instancia:
             proyecto = get_object_or_404(self.get_queryset(), uuid=id_instancia)
-        
+
+        historial_prefill = None
+        historial_uuid = request.query_params.get('historial_uuid')
+        if historial_uuid and not proyecto:
+            try:
+                if _HistorialServicio is None:
+                    raise ImportError
+                historial_prefill = _HistorialServicio.objects.select_related('servicio').get(
+                    uuid=historial_uuid,
+                    empresa_id=empresa.id
+                )
+            except Exception:
+                pass
+
         clientes = []
         try:
-            from apps.tenant.clientes.models import Cliente
-            clientes = Cliente.objects.filter(empresa_id=empresa.id, activo=True).only(
+            if _ClienteProyecto is None:
+                raise ImportError
+            clientes = _ClienteProyecto.objects.filter(empresa_id=empresa.id, activo=True).only(
                 'id', 'razon_social', 'numero_documento'
             ).order_by('razon_social')[:100]
         except ImportError:
             pass
-        
+
         empleados = []
         try:
-            from apps.tenant.empleados.services.selectors import EmpleadoSelector
-            empleados = EmpleadoSelector.get_list(empresa_id=empresa.id).only(
-                'id', 'primer_nombre', 'primer_apellido', 'segundo_nombre', 'segundo_apellido'
-            )[:100]
+            if _EmpleadoSelector is None:
+                raise ImportError
+            empleados = _EmpleadoSelector.get_empleados_activos(empresa_id=empresa.id)[:100]
         except ImportError:
             pass
-            
+
         proveedores = []
         try:
-            from apps.tenant.proveedores.models import Proveedor
-            proveedores = Proveedor.objects.filter(empresa_id=empresa.id, activo=True).only(
+            if _ProveedorProyecto is None:
+                raise ImportError
+            proveedores = _ProveedorProyecto.objects.filter(empresa_id=empresa.id, activo=True).only(
                 'id', 'razon_social', 'numero_documento'
             ).order_by('razon_social')[:100]
         except ImportError:
             pass
-            
+
         facturas_raw = []
         try:
-            from apps.tenant.facturas.services.business_service import FacturaInterAppAPI
+            if _FacturaInterAppAPI is None:
+                raise ImportError
             facturas_raw = list(
-                FacturaInterAppAPI.list_all()
+                _FacturaInterAppAPI.list_all()
                 .only('id', 'numero', 'receptor_razon_social', 'total', 'cotizacion_uuid', 'cotizacion_numero')
                 .order_by('-fecha_emision')[:200]
             )
         except Exception:
             pass
 
-        # Construir mapa cotizacion_uuid → datos enriquecidos (single IN query, Zero-Waste)
+        # Construir mapa cotizacion_uuid -> datos enriquecidos (single IN query, Zero-Waste)
         cotizaciones_map = {}
         uuids_cot = [str(f.cotizacion_uuid) for f in facturas_raw if f.cotizacion_uuid]
         if uuids_cot:
             try:
-                from apps.tenant.cotizaciones.models import Cotizacion
-                cots = Cotizacion.objects.filter(
+                if _CotizacionProyecto is None:
+                    raise ImportError
+                cots = _CotizacionProyecto.objects.filter(
                     uuid__in=uuids_cot
                 ).select_related('cliente').only(
                     'uuid', 'estado', 'total_con_impuestos',
@@ -293,15 +345,45 @@ class ProyectoViewSet(
             'tipos_servicio': Proyecto.TIPO_SERVICIO,
             'fases': Proyecto.FASES,
             'estados_tarea': Proyecto.ESTADO_TAREA,
+            'historial_prefill': historial_prefill,
         }
         
         # [v3.5] Ruta local FSD
         return Response(context, template_name='tenant/proyectos/offcanvas_form.html')
 
+    @action(detail=False, methods=['post'], url_path='vincular-proyecto')
+    def vincular_proyecto(self, request):
+        """
+        [v3.9.7] Vincula un proyecto recien creado con un registro de HistorialServicio.
+        Body: { "proyecto_uuid": "...", "historial_uuid": "..." }
+        """
+        empresa = self.get_empresa()
+        proyecto_uuid = request.data.get('proyecto_uuid')
+        historial_uuid = request.data.get('historial_uuid')
+
+        if not proyecto_uuid or not historial_uuid:
+            return Response(
+                {'detail': 'Los campos "proyecto_uuid" y "historial_uuid" son obligatorios.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Buscar proyecto para validar que exista y pertenezca al tenant (DSV)
+        proyecto = get_object_or_404(Proyecto, uuid=proyecto_uuid, empresa_id=empresa.id)
+
+        # Buscar HistorialServicio en inventario
+        historial = get_object_or_404(_HistorialServicio, uuid=historial_uuid, empresa_id=empresa.id)
+
+        # Establecer la referencia suave
+        historial.proyecto_uuid = proyecto.uuid
+        historial.proyecto_nombre = proyecto.nombre
+        historial.save()
+
+        return Response({'status': 'vinculado_exitosamente'})
+
 
 class ItemPresupuestoViewSet(BaseTenantViewSet):
     """
-    ViewSet para ítems de presupuesto planeado (v3.5.2).
+    ViewSet para items de presupuesto planeado (v3.5.2).
 
     Endpoints:
     - GET    /api/v1/proyectos/items-presupuesto/?proyecto_uuid=<uuid>
@@ -330,7 +412,7 @@ class ItemPresupuestoViewSet(BaseTenantViewSet):
         """Obtiene empresa_id del contexto de request (multi-tenant)."""
         empresa = Empresa.objects.only('id').first()
         if not empresa:
-            raise APIException(detail='No se encontró la empresa configurada en este tenant.')
+            raise APIException(detail='No se encontro la empresa configurada en este tenant.')
         return empresa.id
 
     def _get_proyecto(self, proyecto_uuid):
@@ -345,14 +427,14 @@ class ItemPresupuestoViewSet(BaseTenantViewSet):
 
     def perform_create(self, serializer):
         """
-        Crea un nuevo ítem de presupuesto.
-        Delegación al service para validación y cálculo.
+        Crea un nuevo item de presupuesto.
+        Delegacion al service para validacion y calculo.
         """
         empresa = Empresa.objects.only('id').first()
         proyecto_uuid = self.request.data.get('proyecto_uuid')
         proyecto = self._get_proyecto(proyecto_uuid)
 
-        PresupuestoBusinessService.crear_item(
+        serializer.instance = PresupuestoBusinessService.crear_item(
             empresa=empresa,
             proyecto=proyecto,
             data=serializer.validated_data
@@ -360,8 +442,8 @@ class ItemPresupuestoViewSet(BaseTenantViewSet):
 
     def perform_update(self, serializer):
         """
-        Actualiza un ítem de presupuesto.
-        Delegación al service para validación y cálculo.
+        Actualiza un item de presupuesto.
+        Delegacion al service para validacion y calculo.
         """
         PresupuestoBusinessService.actualizar_item(
             item=self.get_object(),
@@ -370,8 +452,8 @@ class ItemPresupuestoViewSet(BaseTenantViewSet):
 
     def perform_destroy(self, instance):
         """
-        Elimina un ítem de presupuesto.
-        Delegación al service para recálculo de proyecto padre.
+        Elimina un item de presupuesto.
+        Delegacion al service para recalculo de proyecto padre.
         """
         PresupuestoBusinessService.eliminar_item(instance)
 
@@ -387,7 +469,7 @@ class TareaDiariaViewSet(BaseTenantViewSet):
     - DELETE /api/v1/proyectos/tareas-diarias/<id>/
     - POST   /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/
 
-    DSV: Filtrado automático por empresa_id vía BaseTenantViewSet.
+    DSV: Filtrado automatico por empresa_id via BaseTenantViewSet.
     """
     serializer_class = TareaDiariaSerializer
     queryset = TareaDiariaProyecto.objects.none()
@@ -418,7 +500,7 @@ class TareaDiariaViewSet(BaseTenantViewSet):
         """Obtiene empresa_id del contexto de request (multi-tenant)."""
         empresa = Empresa.objects.only('id').first()
         if not empresa:
-            raise APIException(detail='No se encontró la empresa configurada en este tenant.')
+            raise APIException(detail='No se encontro la empresa configurada en este tenant.')
         return empresa.id
 
     def _get_proyecto(self, proyecto_uuid):
@@ -434,13 +516,13 @@ class TareaDiariaViewSet(BaseTenantViewSet):
     def perform_create(self, serializer):
         """
         Crea una nueva tarea diaria.
-        Delegación al service para validaciones y cálculos.
+        Delegacion al service para validaciones y calculos.
         """
         empresa = Empresa.objects.only('id').first()
         proyecto_uuid = self.request.data.get('proyecto_uuid')
         proyecto = self._get_proyecto(proyecto_uuid)
 
-        TareasDiariasBusinessService.crear_tarea(
+        serializer.instance = TareasDiariasBusinessService.crear_tarea(
             empresa=empresa,
             proyecto=proyecto,
             fecha_inicio=serializer.validated_data['fecha_inicio'],
@@ -454,7 +536,7 @@ class TareaDiariaViewSet(BaseTenantViewSet):
     def perform_update(self, serializer):
         """
         Actualiza una tarea diaria.
-        Delegación al service para validaciones.
+        Delegacion al service para validaciones.
         """
         TareasDiariasBusinessService.actualizar_tarea(
             tarea=self.get_object(),
@@ -464,7 +546,7 @@ class TareaDiariaViewSet(BaseTenantViewSet):
     def perform_destroy(self, instance):
         """
         Elimina una tarea diaria.
-        Delegación al service para validaciones.
+        Delegacion al service para validaciones.
         """
         TareasDiariasBusinessService.eliminar_tarea(instance)
 
@@ -472,7 +554,7 @@ class TareaDiariaViewSet(BaseTenantViewSet):
     def cambiar_estado(self, request, id=None):
         """
         POST /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/
-        Cambia el estado de una tarea (PENDIENTE → EN_PROCESO → COMPLETADA, etc).
+        Cambia el estado de una tarea (PENDIENTE -> EN_PROCESO -> COMPLETADA, etc).
 
         Body: { "nuevo_estado": "EN_PROCESO" | "COMPLETADA" | "CANCELADA" }
         """
@@ -494,3 +576,98 @@ class TareaDiariaViewSet(BaseTenantViewSet):
                 {'detail': str(e.detail) if hasattr(e, 'detail') else str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class TareaCortaViewSet(TareaCortaServiceMixin, BaseTenantViewSet):
+    """
+    ViewSet para Tareas Cortas v3.10.0.
+
+    Endpoints:
+    - GET    /api/v1/proyectos/tareas-cortas/?empleado_uuid=<uuid>
+    - GET    /api/v1/proyectos/tareas-cortas/<uuid>/
+    - POST   /api/v1/proyectos/tareas-cortas/
+    - PATCH  /api/v1/proyectos/tareas-cortas/<uuid>/
+    - DELETE /api/v1/proyectos/tareas-cortas/<uuid>/
+    - POST   /api/v1/proyectos/tareas-cortas/<uuid>/cambiar-estado/
+
+    DSV: Filtrado automatico por empresa_id via TareaCortaServiceMixin.
+    """
+    serializer_class = TareaCortaSerializer
+    queryset = TareaCorta.objects.none()
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    lookup_field = 'uuid'
+    lookup_url_kwarg = 'uuid'
+    lookup_value_regex = '[0-9a-f-]{36}'
+
+    def _get_empresa(self):
+        empresa = Empresa.objects.only('id').first()
+        if not empresa:
+            raise APIException(detail='No se encontro la empresa configurada en este tenant.')
+        return empresa
+
+    def get_empresa_id(self):
+        return self._get_empresa().id
+
+    def get_queryset(self):
+        return self.get_qs_list()
+
+    def get_object(self):
+        empresa_id = self.get_empresa_id()
+        uuid = self.kwargs.get('uuid')
+        obj = TareaCortaSelector.get_tarea_corta(empresa_id, uuid)
+        if not obj:
+            raise NotFound('Tarea corta no encontrada o no pertenece a este tenant.')
+        return obj
+
+    def perform_create(self, serializer):
+        empresa = self._get_empresa()
+        cliente = serializer.validated_data.pop('cliente', None)
+        empleado = serializer.validated_data.pop('empleado', None)
+        serializer.instance = TareasCortasBusinessService.crear_tarea_corta(
+            empresa=empresa,
+            cliente=cliente,
+            empleado=empleado,
+            fecha_inicio=serializer.validated_data['fecha_inicio'],
+            fecha_fin=serializer.validated_data['fecha_fin'],
+            titulo=serializer.validated_data['titulo'],
+            descripcion=serializer.validated_data.get('descripcion', ''),
+            prioridad=serializer.validated_data.get('prioridad', 'NORMAL'),
+            notas_progreso=serializer.validated_data.get('notas_progreso', '')
+        )
+
+    def perform_update(self, serializer):
+        TareasCortasBusinessService.actualizar_tarea_corta(
+            tarea_corta=self.get_object(),
+            data=serializer.validated_data
+        )
+
+    def perform_destroy(self, instance):
+        TareasCortasBusinessService.eliminar_tarea_corta(instance)
+
+    @action(detail=True, methods=['post'], url_path='cambiar-estado')
+    def cambiar_estado(self, request, uuid=None):
+        """
+        POST /api/v1/proyectos/tareas-cortas/<uuid>/cambiar-estado/
+        Cambia el estado de una tarea corta.
+
+        Body: { "nuevo_estado": "EN_PROCESO" | "COMPLETADA" | "CANCELADA" }
+        """
+        tarea = self.get_object()
+        nuevo_estado = request.data.get('nuevo_estado')
+
+        if not nuevo_estado:
+            return Response(
+                {'detail': 'El campo "nuevo_estado" es requerido.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            TareasCortasBusinessService.cambiar_estado_tarea_corta(tarea, nuevo_estado)
+            serializer = self.get_serializer(tarea)
+            return Response(serializer.data)
+        except ValidationError as e:
+            return Response(
+                {'detail': str(e.detail) if hasattr(e, 'detail') else str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+

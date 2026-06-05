@@ -1,115 +1,182 @@
 {% load static %}
-{# list.html - Módulo Facturas v2.61.3 #}
-{# ⚠️ v2.40: Migrado a Tabulator Factory - Consume Core API facade (FACTURAS_API_BASE) #}
-{# ⚠️ v2.61.2: Botones sin onclick inline - event delegation (data-action) evita eventos duplicados #}
-{# ⚠️ v2.61.2: Offcanvas de solo lectura - botón "Ver" carga gestor-offcanvas?readonly=true #}
-{# ⚠️ v2.61.2: upload-ubl soporta batch (files[]) + pre-validación CUFE + delegación Celery >10 archivos #}
-{# ⚠️ v2.61.3: Alineado con backend persisted:True y frontend !data.id - sin regresos de 422 #}
+{# list_factura.html — v3.17 Compact UI: tabs Ventas / Compras #}
+{# Skill: tabulator.md §6 — lazy init + redraw en tab oculto     #}
+
+<style>
+  /* ── Tabulator filas compactas (scoped a ui-facturas) ────── */
+  .ui-facturas .tabulator { font-size: 0.82rem; border: none !important; }
+  .ui-facturas .tabulator .tabulator-header { background: #f8f9fa; border-bottom: 2px solid #dee2e6; }
+  .ui-facturas .tabulator .tabulator-col { background: #f8f9fa !important; padding: 6px 8px !important; }
+  .ui-facturas .tabulator .tabulator-col-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #6c757d; }
+  .ui-facturas .tabulator .tabulator-row { min-height: 0 !important; }
+  .ui-facturas .tabulator .tabulator-cell { padding: 5px 8px !important; vertical-align: middle; border-bottom: 1px solid #f0f0f0; }
+  .ui-facturas .tabulator .tabulator-row:hover { background: #f0f7ff !important; }
+  .ui-facturas .tabulator .tabulator-row-even { background: #fafafa; }
+  /* Acciones siempre visibles pero más pequeñas */
+  .ui-facturas .btn-group-sm .btn { padding: 2px 6px; font-size: 0.72rem; }
+  /* Badge compacto */
+  .ui-facturas .badge-sm { font-size: 0.7rem !important; padding: 0.22em 0.5em; }
+  /* Tab sin borde inferior en activo para fusionar con contenido */
+  .ui-facturas .nav-tabs .nav-link.active { background: #fff; border-bottom-color: #fff; }
+  .ui-facturas .tab-content.border { border-color: #dee2e6 !important; }
+</style>
+
 <div id="tab-facturas-content" class="ui-module ui-facturas">
-  <!-- Panel de Totales Netos -->
-  <div class="row mb-4" id="panel-totales-netos">
-    <!-- Card Ventas Netas -->
-    <div class="col-md-6 mb-3">
-      <div class="card h-100 border-success">
-        <div class="card-header bg-success text-white d-flex align-items-center">
-          <i class="bi bi-graph-up-arrow me-2"></i>
-          <strong>Ventas Netas</strong>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title mb-0" id="ventas-total-neto">$0</h3>
-          <p class="text-muted small mb-0 mt-2">Total de facturas de venta</p>
-        </div>
-        <div class="card-footer bg-light">
-          <div class="d-flex justify-content-between small">
-            <span>Subtotal: <strong id="ventas-subtotal-neto">$0</strong></span>
-            <span>IVA: <strong id="ventas-impuestos-neto">$0</strong></span>
+
+  {# ── KPIs compactos ─────────────────────────────────────────────────── #}
+  <div class="row mb-3 g-2" id="panel-totales-netos">
+    <div class="col-6">
+      <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #198754 !important;">
+        <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+          <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
+               style="width:38px;height:38px;">
+            <i class="bi bi-arrow-up-circle-fill text-success" style="font-size:1.1rem;"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Ventas Netas</div>
+            <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;" id="ventas-total-neto">$0</div>
+            <div class="text-muted mt-1" style="font-size:0.7rem;">
+              Sub: <span id="ventas-subtotal-neto">$0</span>&ensp;·&ensp;IVA: <span id="ventas-impuestos-neto">$0</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
-    
-    <!-- Card Compras Netas -->
-    <div class="col-md-6 mb-3">
-      <div class="card h-100 border-primary">
-        <div class="card-header bg-primary text-white d-flex align-items-center">
-          <i class="bi bi-cart-dash me-2"></i>
-          <strong>Compras Netas</strong>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title mb-0" id="compras-total-neto">$0</h3>
-          <p class="text-muted small mb-0 mt-2">Total de facturas de compra</p>
-        </div>
-        <div class="card-footer bg-light">
-          <div class="d-flex justify-content-between small">
-            <span>Subtotal: <strong id="compras-subtotal-neto">$0</strong></span>
-            <span>IVA: <strong id="compras-impuestos-neto">$0</strong></span>
+    <div class="col-6">
+      <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #0d6efd !important;">
+        <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+          <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
+               style="width:38px;height:38px;">
+            <i class="bi bi-arrow-down-circle-fill text-primary" style="font-size:1.1rem;"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Compras Netas</div>
+            <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;" id="compras-total-neto">$0</div>
+            <div class="text-muted mt-1" style="font-size:0.7rem;">
+              Sub: <span id="compras-subtotal-neto">$0</span>&ensp;·&ensp;IVA: <span id="compras-impuestos-neto">$0</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
-    
-    <!-- Texto Legal -->
-    <div class="col-12">
-      <p class="text-muted small text-center mb-0">
-        <i class="bi bi-info-circle"></i> 
-        <em>Valores calculados excluyendo documentos con Nota de Crédito aplicada</em>
-      </p>
-    </div>
-  </div>
-  
-  <!-- Toolbar v2.60: Centralizada con AppFacturas -->
-  <div id="toolbar-facturas" class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Gestión de Facturas</h4>
-    
-    <div class="btn-group" role="group" aria-label="Acciones de Facturas">
-      {# ⚠️ v2.60: Botones con event delegation (data-action) + fallback onclick para compatibilidad #}
-      {# ⚠️ PROPAGACIÓN AL WORKSPACE: Botón "Importar" dispara el Offcanvas que contiene el formulario HTMX #}
-      {# Flujo: Botón → AppFacturas.subirNueva() → cargarOffcanvas() → HTMX GET /api/v1/facturas/gestor-offcanvas/ #}
-      {# ⚠️ v2.61.2: El Offcanvas incluye el formulario con hx-post="/api/v1/facturas/upload-ubl/" y error_handler.html #}
-     
-      <button type="button" 
-              class="btn btn-primary" 
-              id="btn-subir-factura"
-              data-action="subir-factura">
-        <i class="bi bi-cloud-upload"></i> Importar XML / PDF
-      </button>
-
-      {# ⚠️ v2.61.2: Botones sin onclick inline - Solo usan event delegation (data-action) para evitar eventos duplicados #}
-      <button type="button" 
-              class="btn btn-outline-secondary" 
-              id="btn-refresh-facturas"
-              data-action="refresh-facturas">
-        <i class="bi bi-arrow-clockwise"></i> Actualizar
-      </button>
-
-      <button type="button" 
-              class="btn btn-outline-success" 
-              id="btn-sync-mail"
-              data-action="sync-mail">
-        <i class="bi bi-envelope-arrow-down"></i> Sincronizar Buzón
-        <span class="spinner-border spinner-border-sm d-none" id="sync-spinner" role="status" aria-hidden="true"></span>
-      </button>
-    </div>
-  </div>
-  
-  <!-- Feedback -->
-  <div id="feedback-facturas-list" class="alert d-none" role="alert" aria-live="polite"></div>
-  
-  {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
-  <div class="mb-3">
-    <input type="text" id="search-factura" class="form-control" placeholder="Buscar por número, CUFE, emisor o receptor...">
   </div>
 
-  {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
-  <div class="card shadow-sm border-0">
-    <div class="card-body p-0">
-      <div id="grid-facturas" class="flex-grow-1" style="min-height: 400px;"></div>
+  {# ── Toolbar ─────────────────────────────────────────────────────────── #}
+  <div id="toolbar-facturas" class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary btn-sm"
+              id="btn-subir-factura" data-action="subir-factura">
+        <i class="bi bi-cloud-upload me-1"></i>Importar XML / PDF
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              id="btn-refresh-facturas" data-action="refresh-facturas" title="Refrescar">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+      <button type="button" class="btn btn-outline-success btn-sm"
+              id="btn-sync-mail" data-action="sync-mail">
+        <i class="bi bi-envelope-arrow-down me-1"></i>Sincronizar Buzón
+        <span class="spinner-border spinner-border-sm d-none" id="sync-spinner" role="status"></span>
+      </button>
+    </div>
+    <div class="input-group input-group-sm" style="max-width:280px;">
+      <span class="input-group-text bg-white border-end-0">
+        <i class="bi bi-search text-muted" style="font-size:0.8rem;"></i>
+      </span>
+      <input type="text" id="search-factura"
+             class="form-control border-start-0 ps-0"
+             placeholder="Buscar numero, emisor, receptor...">
     </div>
   </div>
+
+  <div id="feedback-facturas-list" class="alert d-none mb-2" role="alert" aria-live="polite"></div>
+
+  {# ── Tabs VENTAS / COMPRAS ────────────────────────────────────────────── #}
+  <ul class="nav nav-tabs mb-0" id="facturas-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active fw-semibold px-3 py-2" id="tab-ventas-btn"
+              data-bs-toggle="tab" data-bs-target="#tab-pane-ventas"
+              type="button" role="tab" aria-selected="true" style="font-size:0.875rem;">
+        <i class="bi bi-arrow-up-circle-fill text-success me-1"></i>Ventas
+        <span class="badge bg-success ms-1 fw-normal" id="badge-count-ventas" style="display:none;font-size:0.65rem;"></span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link fw-semibold px-3 py-2" id="tab-compras-btn"
+              data-bs-toggle="tab" data-bs-target="#tab-pane-compras"
+              type="button" role="tab" aria-selected="false" style="font-size:0.875rem;">
+        <i class="bi bi-arrow-down-circle-fill text-primary me-1"></i>Compras
+        <span class="badge bg-primary ms-1 fw-normal" id="badge-count-compras" style="display:none;font-size:0.65rem;"></span>
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content border border-top-0 rounded-bottom shadow-sm bg-white" id="facturas-tabs-content">
+
+    {# ─── TAB VENTAS ──────────────────────────────────────────────────────── #}
+    <div class="tab-pane fade show active" id="tab-pane-ventas"
+         role="tabpanel" aria-labelledby="tab-ventas-btn">
+
+      {# Filtros rápidos — ventas #}
+      <div class="d-flex gap-1 px-3 pt-2 pb-1 flex-wrap align-items-center border-bottom" id="filtros-pago-ventas"
+           style="background:#fafafa;">
+        <span class="text-muted me-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">Pago:</span>
+        <button class="btn btn-xs btn-outline-dark active" data-filtro-venta-pago=""
+                style="font-size:0.73rem;padding:2px 8px;">Todas</button>
+        <button class="btn btn-xs btn-outline-danger" data-filtro-venta-pago="NO_PAGADA"
+                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-exclamation-circle me-1"></i>Pendientes</button>
+        <button class="btn btn-xs btn-outline-warning" data-filtro-venta-pago="PAGO_PARCIAL"
+                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-clock-history me-1"></i>Parcial</button>
+        <button class="btn btn-xs btn-outline-success" data-filtro-venta-pago="PAGADA"
+                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-check2-all me-1"></i>Pagadas</button>
+      </div>
+
+      {# Grid Ventas #}
+      <div data-spinner="ventas" class="text-center py-4" style="display:none;">
+        <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+        <span class="ms-2 text-muted small">Cargando facturas de venta...</span>
+      </div>
+      <div id="grid-ventas" style="display:none;"></div>
+      <div data-empty-state="ventas" class="text-center py-5" style="display:none;">
+        <i class="bi bi-receipt text-muted" style="font-size:2rem;"></i>
+        <p class="mt-2 text-muted small mb-0">No hay facturas de venta</p>
+      </div>
+    </div>
+
+    {# ─── TAB COMPRAS ─────────────────────────────────────────────────────── #}
+    <div class="tab-pane fade" id="tab-pane-compras"
+         role="tabpanel" aria-labelledby="tab-compras-btn">
+
+      {# Filtros rápidos — compras #}
+      <div class="d-flex gap-1 px-3 pt-2 pb-1 flex-wrap align-items-center border-bottom" id="filtros-pago-compras"
+           style="background:#fafafa;">
+        <span class="text-muted me-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">Pago:</span>
+        <button class="btn btn-xs btn-outline-dark active" data-filtro-compra-pago=""
+                style="font-size:0.73rem;padding:2px 8px;">Todas</button>
+        <button class="btn btn-xs btn-outline-danger" data-filtro-compra-pago="NO_PAGADA"
+                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-exclamation-circle me-1"></i>Pendientes</button>
+        <button class="btn btn-xs btn-outline-warning" data-filtro-compra-pago="PAGO_PARCIAL"
+                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-clock-history me-1"></i>Parcial</button>
+        <button class="btn btn-xs btn-outline-success" data-filtro-compra-pago="PAGADA"
+                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-check2-all me-1"></i>Pagadas</button>
+      </div>
+
+      {# Grid Compras #}
+      <div data-spinner="compras" class="text-center py-4" style="display:none;">
+        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+        <span class="ms-2 text-muted small">Cargando facturas de compra...</span>
+      </div>
+      <div id="grid-compras" style="display:none;"></div>
+      <div data-empty-state="compras" class="text-center py-5" style="display:none;">
+        <i class="bi bi-cart text-muted" style="font-size:2rem;"></i>
+        <p class="mt-2 text-muted small mb-0">No hay facturas de compra</p>
+      </div>
+    </div>
+
+  </div>{# /tab-content #}
 </div>
 
-{# Contenedor HTMX para recibir el HTML del Offcanvas de creacion/detalle #}
+{# Contenedor HTMX para offcanvas #}
 <div id="offcanvas-container-facturas"></div>
 
-{# Offcanvas de facturas pendientes (sincronizacion correo) - siempre en el DOM #}
+{# Offcanvas pendientes correo #}
 {% include 'tenant/facturas/offcanvas_pendientes_factura.html' %}

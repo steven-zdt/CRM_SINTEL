@@ -335,31 +335,19 @@ class ClientViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            from apps.public.tenants.services.invitations import (
-                build_activation_url,
-                generate_invitation_token,
-                send_invitation_email,
-            )
+            from apps.public.core.services.email_service import EmailService
 
-            token = generate_invitation_token(user_id=user.id, tenant_id=client.id)
-            activation_url = build_activation_url(domain.domain, token)
-            sent = send_invitation_email(user, client, activation_url)
+            # SSoT: genera token firmado + URL tenant-especifica internamente
+            sent = EmailService.send_tenant_activation_email(user, client)
 
             if sent:
-                logger.info(
-                    "[RESEND-INVITATION] Enviada: user=%s, tenant=%s",
-                    user.email, client.schema_name,
-                )
+                logger.info("[RESEND-INVITATION] Email encolado: user=%s, tenant=%s", user.email, client.schema_name)
             else:
-                logger.warning(
-                    "[RESEND-INVITATION] Email no enviado: user=%s, tenant=%s | url=%s",
-                    user.email, client.schema_name, activation_url,
-                )
+                logger.warning("[RESEND-INVITATION] Email no enviado: user=%s, tenant=%s", user.email, client.schema_name)
 
             return Response(
                 {
-                    "detail": "Invitacion reenviada.",
-                    "activation_url": activation_url,
+                    "detail": "Email de activacion reenviado al administrador.",
                     "user_email": user.email,
                     "email_sent": sent,
                 },
@@ -375,6 +363,175 @@ class ClientViewSet(viewsets.ModelViewSet):
                 {"detail": f"Error al reenviar invitacion: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    @action(detail=True, methods=["post"], url_path="manual-activate", url_name="manual-activate")
+    def manual_activate(self, request, pk=None):
+        """
+        Genera link de activacion para el admin primario SIN enviar email.
+
+        POST /api/public/v1/tenants/{id}/manual-activate/
+
+        Uso de emergencia cuando el token de invitacion no llego o expiro.
+        El admin puede copiar la URL de activacion y enviarsela al owner por
+        cualquier otro canal (WhatsApp, Slack, etc.).
+
+        Returns 200: {"activation_url", "user_email", "expires_in"}
+        Returns 409: usuario ya activo su cuenta
+        Returns 400: sin admin primario o sin dominio primario
+        """
+        import logging
+
+        from apps.public.tenants.models import TenantMembership
+
+        logger = logging.getLogger(__name__)
+        client = self.get_object()
+
+        membership = (
+            TenantMembership.objects.filter(
+                client=client,
+                is_primary_admin=True,
+                is_active=True,
+            )
+            .select_related("user")
+            .only("user__id", "user__email", "user__password")
+            .first()
+        )
+
+        if not membership:
+            return Response(
+                {"detail": "No se encontro el admin primario del tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = membership.user
+
+        if user.has_usable_password():
+            return Response(
+                {"detail": "El usuario ya activo su cuenta. No necesita activacion."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        domain = Domain.objects.filter(tenant=client, is_primary=True).only("domain").first()
+        if not domain:
+            return Response(
+                {"detail": "El tenant no tiene un dominio primario configurado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from apps.public.tenants.services.invitations import (
+                build_activation_url,
+                generate_invitation_token,
+            )
+
+            token = generate_invitation_token(user_id=user.id, tenant_id=client.id, ttl_hours=48)
+            activation_url = build_activation_url(domain.domain, token)
+
+            logger.info(
+                "[MANUAL-ACTIVATE] URL generada sin email: user=%s, tenant=%s",
+                user.email, client.schema_name,
+            )
+
+            return Response(
+                {
+                    "activation_url": activation_url,
+                    "user_email": user.email,
+                    "expires_in": "48 horas",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(
+                "[MANUAL-ACTIVATE] Error: tenant=%s | %s",
+                client.schema_name, str(e), exc_info=True,
+            )
+            return Response(
+                {"detail": f"Error generando URL de activacion: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    @action(detail=True, methods=["post"], url_path="admin-set-password", url_name="admin-set-password")
+    def admin_set_password(self, request, pk=None):
+        """
+        Establece una contrasena directamente para el owner del tenant.
+
+        POST /api/public/v1/tenants/{id}/admin-set-password/
+        Body: {"password": "..."}
+
+        Activacion de emergencia total — bypassa completamente el flujo de token.
+        El admin elige la contrasena que luego puede compartir con el owner.
+
+        Returns 200: {"detail", "user_email"}
+        Returns 400: contrasena invalida o sin admin primario
+        """
+        import logging
+
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from apps.public.tenants.models import TenantMembership
+
+        logger = logging.getLogger(__name__)
+        client = self.get_object()
+
+        password = request.data.get("password", "").strip()
+        if not password:
+            return Response(
+                {"detail": "Se requiere el campo 'password'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(password) < 8:
+            return Response(
+                {"detail": "La contrasena debe tener al menos 8 caracteres."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        membership = (
+            TenantMembership.objects.filter(
+                client=client,
+                is_primary_admin=True,
+                is_active=True,
+            )
+            .select_related("user")
+            .only("user__id", "user__email", "user__is_active")
+            .first()
+        )
+
+        if not membership:
+            return Response(
+                {"detail": "No se encontro el admin primario del tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = membership.user
+
+        try:
+            validate_password(password, user=user)
+        except DjangoValidationError as ve:
+            return Response(
+                {"detail": " ".join(ve.messages)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(password)
+        user.is_active = True
+        user.save(update_fields=["password", "is_active"])
+
+        logger.warning(
+            "[ADMIN-SET-PASSWORD] Contrasena establecida por admin de consola: "
+            "user=%s, tenant=%s, admin=%s",
+            user.email, client.schema_name, request.user.email,
+        )
+
+        return Response(
+            {
+                "detail": f"Contrasena establecida correctamente para {user.email}.",
+                "user_email": user.email,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def destroy(self, request, *args, **kwargs):
         """

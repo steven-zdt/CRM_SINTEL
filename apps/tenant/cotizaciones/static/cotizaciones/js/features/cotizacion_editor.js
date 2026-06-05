@@ -510,7 +510,10 @@
              btnPdf.href = `/api/v1/cotizaciones/${data.uuid}/exportar-pdf/`;
              btnPdf.classList.remove('d-none');
            }
-           window.history.replaceState({}, '', `/cotizaciones/editor/${data.uuid}/`);
+           // Redirigir al workspace en lugar de exponer la URL del editor interno
+           setTimeout(function () {
+             window.location.href = '/workspace/#cotizaciones';
+           }, 800);
         }
       })
       .catch(function (err) {

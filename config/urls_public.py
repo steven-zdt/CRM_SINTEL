@@ -22,12 +22,9 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
+from rest_framework_simplejwt.views import TokenObtainPairView
 
-from apps.public.core.api.views import LoggedTokenVerifyView
+from apps.public.core.api.views import LoggedTokenVerifyView, SafeTokenRefreshView
 from apps.public.core.views import PublicIndexView
 from config.well_known import chrome_devtools
 
@@ -112,7 +109,7 @@ urlpatterns = [
     # Autenticación JWT (disponible en todos los esquemas)
     # Endpoints: /api/token/ (login), /api/token/refresh/ (refresh), /api/token/verify/ (verify)
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/refresh/', SafeTokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/verify/', LoggedTokenVerifyView.as_view(), name='token_verify'),
     
     # APIs REST públicas (solo en esquema public)

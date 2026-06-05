@@ -133,6 +133,16 @@ except Exception as e:
 
 
 try:
+    urlpatterns.append(path('bancos/', include('apps.tenant.bancos.api.urls')))
+    logger.info("OK: URLs de bancos registradas correctamente: /api/v1/bancos/")
+except (ImportError, AttributeError) as e:
+    logger.error(f"ERROR: ERROR: No se pudieron cargar URLs de bancos: {e}", exc_info=True)
+except Exception as e:
+    logger.error(f"ERROR: ERROR INESPERADO cargando URLs de bancos: {e}", exc_info=True)
+
+
+
+try:
     urlpatterns.append(path('proveedores/', include('apps.tenant.proveedores.api.urls')))
     logger.info("OK: URLs de proveedores registradas correctamente: /api/v1/proveedores/")
 except (ImportError, AttributeError) as e:

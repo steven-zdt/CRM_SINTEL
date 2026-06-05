@@ -5,7 +5,7 @@ import logging
 
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import ClienteViewSet, ContactoClienteViewSet
+from .viewsets import ClienteViewSet, ContactoClienteViewSet, CarteraViewSet
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +14,9 @@ router = DefaultRouter()
 # El orden de registro es importante - las rutas mas especificas deben registrarse antes que las genericas.
 # Si registramos "" antes que "contactos", DRF intentara interpretar 'contactos' como un UUID.
 
-# Registrar primero la ruta especifica para ContactoCliente.
+# Registrar primero la ruta especifica para ContactoCliente y Cartera.
 router.register(r"contactos", ContactoClienteViewSet, basename="contacto")
+router.register(r"cartera", CarteraViewSet, basename="cartera")
 
 # Registrar con prefijo vacio despues de las rutas especificas.
 router.register(r"", ClienteViewSet, basename="cliente")

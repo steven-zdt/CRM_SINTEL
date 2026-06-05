@@ -129,33 +129,62 @@
   </style>
   {# Modal selector de cuentas contables — z-index > offcanvas (1045) #}
   <div class="modal fade" id="modal-selector-cuentas" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header bg-primary text-white py-2">
-          <h6 class="modal-title mb-0 small fw-bold">
-            <i class="bi bi-journals me-2"></i>Cuentas Contables Disponibles
-          </h6>
+          <div class="d-flex align-items-center gap-3 flex-grow-1 me-2">
+            <h6 class="modal-title mb-0 small fw-bold flex-shrink-0">
+              <i class="bi bi-journals me-1"></i>Cuentas Contables
+            </h6>
+            <div class="input-group input-group-sm flex-grow-1" style="max-width:420px">
+              <span class="input-group-text bg-white border-0"><i class="bi bi-search text-primary"></i></span>
+              <input type="text" class="form-control border-0" id="modal-cuenta-buscar"
+                     placeholder="Buscar por código o nombre (mín. 2 caracteres)..." autocomplete="off">
+              <button class="btn btn-outline-light btn-sm" id="modal-cuenta-limpiar" type="button" title="Limpiar">
+                <i class="bi bi-x"></i>
+              </button>
+            </div>
+            <span class="badge bg-light text-primary border ms-auto flex-shrink-0" id="modal-cuentas-count"></span>
+          </div>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body p-2">
-          <div class="input-group input-group-sm mb-2">
-            <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="text" class="form-control" id="modal-cuenta-buscar"
-                   placeholder="Filtrar por código o nombre..." autocomplete="off">
+        <div class="modal-body p-0">
+          {# Filtros por tipo #}
+          <div class="d-flex gap-1 flex-wrap px-3 py-2 border-bottom bg-light">
+            <button class="btn btn-xs btn-outline-secondary active" data-tipo-filter="" style="font-size:.72rem;padding:2px 8px">Todos</button>
+            <button class="btn btn-xs btn-outline-primary"  data-tipo-filter="ACTIVO"     style="font-size:.72rem;padding:2px 8px">Activo</button>
+            <button class="btn btn-xs btn-outline-warning"  data-tipo-filter="PASIVO"     style="font-size:.72rem;padding:2px 8px">Pasivo</button>
+            <button class="btn btn-xs btn-outline-info"     data-tipo-filter="PATRIMONIO" style="font-size:.72rem;padding:2px 8px">Patrimonio</button>
+            <button class="btn btn-xs btn-outline-success"  data-tipo-filter="INGRESO"    style="font-size:.72rem;padding:2px 8px">Ingreso</button>
+            <button class="btn btn-xs btn-outline-danger"   data-tipo-filter="GASTO"      style="font-size:.72rem;padding:2px 8px">Gasto</button>
           </div>
-          <div class="text-muted small mb-2 px-1" id="modal-cuentas-count"></div>
-          <div style="max-height:380px;overflow-y:auto;" id="modal-cuentas-lista">
-            <div class="text-center text-muted small py-3">
-              <span class="spinner-border spinner-border-sm me-1"></span>Cargando...
-            </div>
+          {# Tabla compacta #}
+          <div style="max-height:420px;overflow-y:auto;" id="modal-cuentas-lista">
+            <table class="table table-sm table-hover mb-0 align-middle" id="modal-cuentas-tabla" style="font-size:.8rem">
+              <thead class="table-light sticky-top">
+                <tr>
+                  <th style="width:110px">Código</th>
+                  <th>Nombre</th>
+                  <th style="width:90px">Tipo</th>
+                  <th style="width:60px">Nivel</th>
+                  <th style="width:60px"></th>
+                </tr>
+              </thead>
+              <tbody id="modal-cuentas-tbody">
+                <tr><td colspan="5" class="text-center text-muted py-3">
+                  <span class="spinner-border spinner-border-sm me-1"></span>Cargando...
+                </td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
         <div class="modal-footer py-2 bg-light">
-          <small class="text-muted me-auto">
+          <small class="text-muted me-auto" style="font-size:.72rem">
             <i class="bi bi-info-circle me-1"></i>
-            Para crear nuevas cuentas, ve a <strong>Contabilidad &rsaquo; Cuentas Contables</strong>
+            Cuentas filtradas por origen <strong>{{ app_label }}</strong>.
+            Para agregar cuentas, ve a <strong>Contabilidad › Cuentas Contables</strong>.
           </small>
-          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
         </div>
       </div>
     </div>
@@ -203,7 +232,16 @@
   const cuadraturaBadge = document.getElementById('cuadratura-badge');
 
   if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
-    window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+    // UIManager gestiona dispose + backdrops + show (AGENTS.md §26)
+    if (window.UIManager && typeof window.UIManager.handleOffcanvas === 'function') {
+      window.UIManager.handleOffcanvas(offcanvasEl, 'show');
+    } else {
+      var _p = window.bootstrap.Offcanvas.getInstance(offcanvasEl);
+      if (_p) _p.dispose();
+      document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+      document.body.style.overflow = '';
+      new window.bootstrap.Offcanvas(offcanvasEl).show();
+    }
   }
 
   // Lógica de Previsualización de Comprobante v3.6
@@ -347,132 +385,180 @@
     }
   }
 
-  // ---- SELECTOR DE CUENTAS CONTABLES ----
+  // ---- SELECTOR DE CUENTAS CONTABLES (tabla compacta + búsqueda reactiva) ----
   let _selectorTargetTr = null;
-  let _todasLasCuentas = [];
+  let _todasLasCuentas  = [];
+  let _tipoFiltroActivo = '';
+  let _buscarTimer      = null;
+
+  let _triggerBtn = null;
 
   function abrirSelectorCuentas(tr) {
     _selectorTargetTr = tr;
+    _triggerBtn = tr.querySelector('.btn-select-cuenta');
+
     const modalEl = document.getElementById('modal-selector-cuentas');
     if (!modalEl || typeof bootstrap === 'undefined') return;
 
-    // Mover al <body> para salir del stacking context del offcanvas.
-    // Sin esto, Bootstrap 5 aplica un segundo backdrop que bloquea la pantalla.
-    if (modalEl.parentElement !== document.body) {
-      document.body.appendChild(modalEl);
-    }
+    if (modalEl.parentElement !== document.body) document.body.appendChild(modalEl);
 
-    // backdrop: false — el offcanvas ya provee el dimming; un segundo backdrop
-    // causaría pantalla negra y trampa de foco incorrecta.
     const modalInst = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: false, keyboard: true });
+    modalEl.addEventListener('show.bs.modal', _onModalShow, { once: true });
 
-    modalEl.addEventListener('show.bs.modal', _onModalShow, { once: false });
+    // Restaurar foco al botón de origen al cerrar — evita aria-hidden warning
+    modalEl.addEventListener('hidden.bs.modal', () => {
+      if (_triggerBtn) {
+        _triggerBtn.focus({ preventScroll: true });
+        _triggerBtn = null;
+      }
+    }, { once: true });
+
     modalInst.show();
-
-    const buscarInput = document.getElementById('modal-cuenta-buscar');
-    if (buscarInput) { buscarInput.value = ''; }
   }
 
   function _onModalShow() {
-    cargarCuentasModal('');
     const buscarInput = document.getElementById('modal-cuenta-buscar');
     if (buscarInput) {
-      buscarInput.removeEventListener('input', _onModalSearch);
-      buscarInput.addEventListener('input', _onModalSearch);
-      setTimeout(() => buscarInput.focus(), 300);
+      buscarInput.value = '';
+      buscarInput.removeEventListener('input', _onBuscarInput);
+      buscarInput.addEventListener('input', _onBuscarInput);
+      setTimeout(() => buscarInput.focus(), 280);
+    }
+    const limpiarBtn = document.getElementById('modal-cuenta-limpiar');
+    if (limpiarBtn) {
+      limpiarBtn.onclick = () => {
+        if (buscarInput) buscarInput.value = '';
+        _renderTbody(_todasLasCuentas);
+        _actualizarCount(_todasLasCuentas.length);
+      };
+    }
+    // Filtros por tipo
+    document.querySelectorAll('[data-tipo-filter]').forEach(btn => {
+      btn.onclick = function () {
+        document.querySelectorAll('[data-tipo-filter]').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        _tipoFiltroActivo = this.dataset.tipoFilter;
+        const q = buscarInput?.value.trim() || '';
+        _aplicarFiltros(q, _tipoFiltroActivo);
+      };
+    });
+
+    if (_todasLasCuentas.length === 0) {
+      _cargarDesdeAPI('');
+    } else {
+      _renderTbody(_todasLasCuentas);
+      _actualizarCount(_todasLasCuentas.length);
     }
   }
 
-  function _onModalSearch() {
-    const q = this.value.trim().toLowerCase();
-    renderCuentasModal(_todasLasCuentas.filter(c =>
-      c.codigo.toLowerCase().includes(q) || c.nombre.toLowerCase().includes(q)
-    ));
+  function _onBuscarInput() {
+    clearTimeout(_buscarTimer);
+    const q = this.value.trim();
+    if (q.length === 0) {
+      _aplicarFiltros('', _tipoFiltroActivo);
+      return;
+    }
+    if (q.length < 2) return;
+    // Si el término coincide con caché: filtrar local. Si no, pedir a la API.
+    const local = _todasLasCuentas.filter(c =>
+      c.codigo.toLowerCase().includes(q.toLowerCase()) ||
+      c.nombre.toLowerCase().includes(q.toLowerCase())
+    );
+    if (local.length > 0 || _todasLasCuentas.length < 300) {
+      _aplicarFiltros(q, _tipoFiltroActivo);
+    } else {
+      _buscarTimer = setTimeout(() => _cargarDesdeAPI(q), 300);
+    }
   }
 
-  function cargarCuentasModal(query) {
-    const lista = document.getElementById('modal-cuentas-lista');
-    const countEl = document.getElementById('modal-cuentas-count');
-    if (!lista) return;
+  function _aplicarFiltros(q, tipo) {
+    let lista = _todasLasCuentas;
+    if (q) {
+      const ql = q.toLowerCase();
+      lista = lista.filter(c =>
+        c.codigo.toLowerCase().includes(ql) || c.nombre.toLowerCase().includes(ql)
+      );
+    }
+    if (tipo) lista = lista.filter(c => (c.tipo || '') === tipo);
+    _renderTbody(lista);
+    _actualizarCount(lista.length);
+  }
 
-    lista.innerHTML = '<div class="text-center text-muted small py-3"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</div>';
-
+  function _cargarDesdeAPI(q) {
+    const tbody = document.getElementById('modal-cuentas-tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-1"></span>Buscando...</td></tr>';
     const jwt = window.jwtAuth?.getAccessToken?.() || '';
-    const appOrigenParam = APP_LABEL ? `&app_origen=${encodeURIComponent(APP_LABEL)}` : '';
-    fetch(`${API_CUENTAS}?activa=true&page_size=200&ordering=codigo${appOrigenParam}${query ? '&search=' + encodeURIComponent(query) : ''}`, {
+    const params = new URLSearchParams({ activa: 'true', ordering: 'codigo', page_size: '500' });
+    if (APP_LABEL) params.set('app_origen', APP_LABEL);
+    if (q) params.set('search', q);
+
+    fetch(`${API_CUENTAS}?${params}`, {
       headers: jwt ? { 'Authorization': `Bearer ${jwt}` } : {},
       credentials: 'same-origin',
     })
     .then(r => r.json())
     .then(data => {
-      _todasLasCuentas = data.results || (Array.isArray(data) ? data : []);
-      if (countEl) countEl.textContent = `${_todasLasCuentas.length} cuentas disponibles`;
-      renderCuentasModal(_todasLasCuentas);
+      const cuentas = data.results || (Array.isArray(data) ? data : []);
+      if (!q) _todasLasCuentas = cuentas; // solo cachear carga sin filtro
+      _aplicarFiltros(q, _tipoFiltroActivo);
+      if (!q) _actualizarCount(_todasLasCuentas.length);
     })
     .catch(() => {
-      lista.innerHTML = '<div class="text-center text-danger small py-3">Error al cargar cuentas.</div>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Error al cargar cuentas.</td></tr>';
     });
   }
 
-  function renderCuentasModal(cuentas) {
-    const lista = document.getElementById('modal-cuentas-lista');
-    const countEl = document.getElementById('modal-cuentas-count');
-    if (!lista) return;
-    if (countEl) countEl.textContent = `${cuentas.length} cuenta(s)`;
+  const TIPO_COLOR = { ACTIVO:'primary', PASIVO:'warning', PATRIMONIO:'info', INGRESO:'success', GASTO:'danger' };
 
-    if (!cuentas.length) {
-      lista.innerHTML = '<div class="text-center text-muted small py-3">Sin resultados. Crea cuentas en <strong>Cuentas Contables</strong>.</div>';
+  function _renderTbody(lista) {
+    const tbody = document.getElementById('modal-cuentas-tbody');
+    if (!tbody) return;
+    if (!lista.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3 small">Sin resultados. Ajuste el término de búsqueda o el filtro.</td></tr>';
       return;
     }
+    tbody.innerHTML = lista.map(c => {
+      const cls = TIPO_COLOR[c.tipo] || 'secondary';
+      return `<tr class="btn-elegir-cuenta-row" data-codigo="${c.codigo}" data-nombre="${c.nombre}"
+                  style="cursor:pointer" title="Click para seleccionar">
+        <td class="font-monospace fw-bold text-primary">${c.codigo}</td>
+        <td>${c.nombre}</td>
+        <td><span class="badge bg-${cls} bg-opacity-75" style="font-size:.65rem">${c.tipo || '—'}</span></td>
+        <td class="text-center text-muted">${c.nivel || '—'}</td>
+        <td class="text-center">
+          <button class="btn btn-xs btn-success py-0 px-2 btn-elegir-cuenta" data-codigo="${c.codigo}" data-nombre="${c.nombre}"
+                  style="font-size:.72rem" type="button">
+            <i class="bi bi-check2"></i> Usar
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
 
-    // Agrupar por tipo para mejor UX
-    const grupos = {};
-    cuentas.forEach(c => {
-      const g = c.tipo || 'OTRO';
-      if (!grupos[g]) grupos[g] = [];
-      grupos[g].push(c);
-    });
-
-    const TIPO_LABEL = { ACTIVO: 'Activo', PASIVO: 'Pasivo', PATRIMONIO: 'Patrimonio', INGRESO: 'Ingreso', GASTO: 'Gasto', OTRO: 'Otros' };
-    const TIPO_COLOR = { ACTIVO: 'primary', PASIVO: 'warning', PATRIMONIO: 'info', INGRESO: 'success', GASTO: 'danger', OTRO: 'secondary' };
-
-    let html = '';
-    Object.keys(grupos).sort().forEach(tipo => {
-      const color = TIPO_COLOR[tipo] || 'secondary';
-      html += `<div class="px-1 py-1"><span class="badge bg-${color} mb-1">${TIPO_LABEL[tipo] || tipo}</span></div>`;
-      html += '<div class="list-group list-group-flush mb-2">';
-      grupos[tipo].forEach(c => {
-        html += `<button type="button" class="list-group-item list-group-item-action py-1 px-2 small btn-elegir-cuenta"
-                         data-codigo="${c.codigo}" data-nombre="${c.nombre}">
-                   <span class="fw-bold text-primary">${c.codigo}</span>
-                   <span class="text-muted ms-2">${c.nombre}</span>
-                 </button>`;
-      });
-      html += '</div>';
-    });
-    lista.innerHTML = html;
-
-    lista.querySelectorAll('.btn-elegir-cuenta').forEach(btn => {
-      btn.addEventListener('click', () => {
-        seleccionarDesdeLista(btn.dataset.codigo, btn.dataset.nombre);
+    tbody.querySelectorAll('.btn-elegir-cuenta, .btn-elegir-cuenta-row').forEach(el => {
+      el.addEventListener('click', e => {
+        const t = e.currentTarget;
+        seleccionarDesdeLista(t.dataset.codigo, t.dataset.nombre);
       });
     });
+  }
+
+  function _actualizarCount(n) {
+    const el = document.getElementById('modal-cuentas-count');
+    if (el) el.textContent = `${n} cuenta(s)`;
   }
 
   function seleccionarDesdeLista(codigo, nombre) {
     if (!_selectorTargetTr) return;
-    const searchInput = _selectorTargetTr.querySelector('.cuenta-search');
+    const searchInput  = _selectorTargetTr.querySelector('.cuenta-search');
     const hiddenCodigo = _selectorTargetTr.querySelector('.cuenta-codigo-hidden');
     const nombreDisplay = _selectorTargetTr.querySelector('.cuenta-nombre-display');
 
-    if (searchInput) searchInput.value = `${codigo} - ${nombre}`;
+    if (searchInput)  searchInput.value  = `${codigo} - ${nombre}`;
     if (hiddenCodigo) hiddenCodigo.value = codigo;
     if (nombreDisplay) nombreDisplay.textContent = nombre;
 
     const modalEl = document.getElementById('modal-selector-cuentas');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-      bootstrap.Modal.getInstance(modalEl)?.hide();
-    }
+    if (modalEl && typeof bootstrap !== 'undefined') bootstrap.Modal.getInstance(modalEl)?.hide();
     _selectorTargetTr = null;
     recalcularTotales();
   }
@@ -655,7 +741,7 @@
     })
     .then(res => {
       if (window.notyf) window.notyf.success(`Asiento ${res.numero} generado correctamente.`);
-      window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).hide();
+      const _inst = window.bootstrap.Offcanvas.getInstance(offcanvasEl); if (_inst) _inst.hide();
       document.body.dispatchEvent(new CustomEvent('pendientes:refresh'));
     })
     .catch(err => {

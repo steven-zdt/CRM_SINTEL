@@ -11,10 +11,31 @@ Los choices se definen localmente en apps/tenant/empresa/choices/
 
 Referencia: https://www.django-rest-framework.org/api-guide/serializers/
 """
+from django.utils import timezone
+from django.utils.timesince import timesince
 from rest_framework import serializers
 
+from apps.services.security.crypto import encrypt_password
 from apps.tenant.api.utils import NormalizationMixin
-from apps.tenant.empresa.models import Empresa, MailInboxConfig, Sede, Area
+from apps.tenant.empresa.models import Area, Empresa, MailInboxConfig, Sede
+
+
+class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
+    """Acepta UUID publico o PK entero — patron SINTEL para FK en formularios (AGENTS.md §27)."""
+
+    def to_internal_value(self, data):
+        if data in (None, ''):
+            if self.allow_null:
+                return None
+            self.fail('required')
+        data_str = str(data).strip()
+        if not data_str.isdigit():
+            queryset = self.get_queryset()
+            try:
+                return queryset.get(uuid=data_str)
+            except (TypeError, ValueError, queryset.model.DoesNotExist):
+                self.fail('does_not_exist', pk_value=data)
+        return super().to_internal_value(data)
 
 
 class EmpresaListSerializer(serializers.ModelSerializer):
@@ -241,8 +262,6 @@ class MailInboxConfigListSerializer(serializers.ModelSerializer):
     def get_last_sync_display(self, obj):
         """Última sincronización formateada."""
         if hasattr(obj, 'updated_at') and obj.updated_at:
-            from django.utils import timezone
-            from django.utils.timesince import timesince
             return timesince(obj.updated_at, timezone.now())
         return None
 
@@ -395,7 +414,6 @@ class MailInboxConfigDetailSerializer(serializers.ModelSerializer):
             empresa = request.user.tenant_profile.empresa
         if not empresa:
             # Fallback: Singleton de Empresa en el tenant actual (django-tenants schema isolation)
-            from apps.tenant.empresa.models import Empresa
             empresa = Empresa.objects.only('id').first()
         if not empresa:
             raise serializers.ValidationError({
@@ -404,13 +422,11 @@ class MailInboxConfigDetailSerializer(serializers.ModelSerializer):
         validated_data['empresa'] = empresa
         if 'imap_password' in validated_data and validated_data['imap_password']:
             try:
-                from apps.services.security.crypto import encrypt_password
                 validated_data['imap_password'] = encrypt_password(validated_data['imap_password'])
             except Exception as e:
                 log.error(f"Error cifrando imap_password: {e}")
         if 'smtp_password' in validated_data and validated_data.get('smtp_password'):
             try:
-                from apps.services.security.crypto import encrypt_password
                 validated_data['smtp_password'] = encrypt_password(validated_data['smtp_password'])
             except Exception as e:
                 log.error(f"Error cifrando smtp_password: {e}")
@@ -420,14 +436,12 @@ class MailInboxConfigDetailSerializer(serializers.ModelSerializer):
         """Actualiza configuración cifrando passwords si se proporcionan."""
         if 'imap_password' in validated_data and validated_data['imap_password']:
             try:
-                from apps.services.security.crypto import encrypt_password
                 validated_data['imap_password'] = encrypt_password(validated_data['imap_password'])
             except Exception as e:
                 log.error(f"Error cifrando imap_password: {e}")
         
         if 'smtp_password' in validated_data and validated_data.get('smtp_password'):
             try:
-                from apps.services.security.crypto import encrypt_password
                 validated_data['smtp_password'] = encrypt_password(validated_data['smtp_password'])
             except Exception as e:
                 log.error(f"Error cifrando smtp_password: {e}")
@@ -591,10 +605,11 @@ class AreaDetailSerializer(serializers.ModelSerializer):
 
 
 class AreaUpsertSerializer(serializers.ModelSerializer):
-    sede = serializers.PrimaryKeyRelatedField(
+    # UUIDOrPKRelatedField acepta UUID (patron SINTEL §27) o PK entero (backward compat)
+    sede = UUIDOrPKRelatedField(
         queryset=Sede.objects.none(),
         required=True,
-        help_text="ID de la sede a la que pertenece el area"
+        help_text="UUID de la sede a la que pertenece el area"
     )
 
     def __init__(self, *args, **kwargs):

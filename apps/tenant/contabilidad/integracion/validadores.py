@@ -6,13 +6,9 @@ They're composed into a validation pipeline during materialization.
 """
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
 
+from ..models import PeriodoContable
 from .excepciones import AsientoNoCuadradoError, PeriodoCerradoError
-
-if TYPE_CHECKING:
-    from django.contrib.contenttypes.models import ContentType
-    from ..models import AsientoContable, PeriodoContable
 
 
 def validar_cuadratura(debe: Decimal, haber: Decimal) -> None:
@@ -32,7 +28,7 @@ def validar_cuadratura(debe: Decimal, haber: Decimal) -> None:
         )
 
 
-def validar_periodo_abierto(periodo: 'PeriodoContable') -> None:
+def validar_periodo_abierto(periodo: PeriodoContable) -> None:
     """
     Verify that accounting period is open for new entries.
 

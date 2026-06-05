@@ -1,125 +1,279 @@
-{# clientes_list.html - Clientes & Contactos Module v2.62 #}
+{# clientes_list.html - Clientes & Contactos Module v3.10 #}
 {# ⚠️ ZERO JS IN HTML: All logic in clientes.list.js #}
 
-<div class="card shadow-sm" data-module="clientes">
-  <div class="card-header bg-white">
-    <ul class="nav nav-tabs card-header-tabs" id="clientes-tabs" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="tab-clientes-btn" data-bs-toggle="tab" data-bs-target="#tab-pane-clientes"
-                type="button" role="tab" aria-controls="tab-pane-clientes" aria-selected="true">
-          <i class="bi bi-people me-2"></i>Directorio de Clientes
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="tab-contactos-btn" data-bs-toggle="tab" data-bs-target="#tab-pane-contactos"
-                type="button" role="tab" aria-controls="tab-pane-contactos" aria-selected="false">
-          <i class="bi bi-person-lines-fill me-2"></i>Directorio de Contactos
-        </button>
-      </li>
-    </ul>
+<div class="ui-module ui-clientes" role="region" aria-label="Modulo de Clientes">
+
+  {# === KPIs === #}
+  <div class="row g-3 mb-3" id="clientes-kpis">
+    <div class="col-6 col-md-4 col-xl-2">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+          <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+            <i class="bi bi-people text-primary"></i>
+          </div>
+          <div class="min-w-0">
+            <div id="kpi-cl-total" class="fs-4 fw-bold lh-1 mb-1">-</div>
+            <div class="small text-muted text-truncate">Total</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+          <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+            <i class="bi bi-person-check text-success"></i>
+          </div>
+          <div class="min-w-0">
+            <div id="kpi-cl-activos" class="fs-4 fw-bold lh-1 mb-1">-</div>
+            <div class="small text-muted text-truncate">Activos</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+          <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+            <i class="bi bi-building text-info"></i>
+          </div>
+          <div class="min-w-0">
+            <div id="kpi-cl-juridicas" class="fs-4 fw-bold lh-1 mb-1">-</div>
+            <div class="small text-muted text-truncate">Jurídicas</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+          <div class="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+            <i class="bi bi-person text-secondary"></i>
+          </div>
+          <div class="min-w-0">
+            <div id="kpi-cl-naturales" class="fs-4 fw-bold lh-1 mb-1">-</div>
+            <div class="small text-muted text-truncate">Naturales</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+          <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+            <i class="bi bi-shield-check text-warning"></i>
+          </div>
+          <div class="min-w-0">
+            <div id="kpi-cl-retenedores" class="fs-4 fw-bold lh-1 mb-1">-</div>
+            <div class="small text-muted text-truncate">Retenedores</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+          <div class="rounded-circle bg-danger bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+            <i class="bi bi-person-x text-danger"></i>
+          </div>
+          <div class="min-w-0">
+            <div id="kpi-cl-inactivos" class="fs-4 fw-bold lh-1 mb-1">-</div>
+            <div class="small text-muted text-truncate">Inactivos</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="card-body">
-    <div class="tab-content" id="clientes-tab-content">
+  {# === Tabs === #}
+  <ul class="nav nav-pills gap-2 mb-3" id="clientes-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-clientes-btn" data-bs-toggle="tab"
+              data-bs-target="#tab-pane-clientes" type="button" role="tab" aria-selected="true">
+        <i class="bi bi-people me-1"></i>Clientes
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-contactos-btn" data-bs-toggle="tab"
+              data-bs-target="#tab-pane-contactos" type="button" role="tab" aria-selected="false">
+        <i class="bi bi-person-lines-fill me-1"></i>Contactos
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-cartera-btn" data-bs-toggle="tab"
+              data-bs-target="#tab-pane-cartera" type="button" role="tab" aria-selected="false">
+        <i class="bi bi-currency-dollar me-1"></i>Cartera
+      </button>
+    </li>
+  </ul>
 
-      {# ========================================= #}
-      {# TAB 1: CLIENTES #}
-      {# ========================================= #}
-      <div class="tab-pane fade show active" id="tab-pane-clientes" role="tabpanel"
-           aria-labelledby="tab-clientes-btn" tabindex="0">
+  <div class="tab-content" id="clientes-tab-content">
 
-        {# Toolbar #}
-        <div class="d-flex justify-content-between align-items-center mb-3" data-module="clientes">
-          <div class="input-group input-group-sm w-auto">
-            <input type="text"
-                   id="search-cliente"
-                   class="form-control"
-                   placeholder="Buscar cliente..."
-                   data-module="clientes"
-                   data-search-input>
-            <button class="btn btn-outline-secondary" type="button"
-                    data-action="search" data-module="clientes" title="Buscar">
-              <i class="bi bi-search"></i>
-            </button>
-          </div>
+    {# ── TAB: CLIENTES ─────────────────────────────────────────────── #}
+    <div class="tab-pane fade show active" id="tab-pane-clientes" role="tabpanel" tabindex="0">
+
+      {# Toolbar #}
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div class="d-flex gap-2 flex-wrap align-items-center">
           <button class="btn btn-primary btn-sm"
                   hx-get="/api/v1/clientes/render-offcanvas/crear/"
                   hx-target="#offcanvas-container-clientes"
                   hx-swap="innerHTML"
-                  data-module="clientes"
-                  data-create-button>
+                  data-module="clientes" data-create-button>
             <i class="bi bi-plus-lg me-1"></i>Nuevo Cliente
           </button>
+          <button class="btn btn-outline-secondary btn-sm" id="btn-refresh-clientes" title="Refrescar">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
         </div>
-
-        {# Spinner #}
-        <div data-spinner="clientes" class="text-center py-5" style="display: none;">
-          <div class="spinner-border" role="status">
-            <span class="visually-hidden">Cargando...</span>
-          </div>
-          <p class="mt-2 text-muted">Inicializando tabla de clientes...</p>
-        </div>
-
-        {# Grid #}
-        <div id="grid-clientes" data-grid="clientes" style="display: none;"></div>
-
-        {# Empty State #}
-        <div data-empty-state="clientes" class="text-center py-5" style="display: none;">
-          <p class="text-muted"><i class="bi bi-inbox"></i> No hay clientes registrados</p>
+        <div class="input-group input-group-sm" style="max-width:300px;">
+          <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+          <input type="text" id="search-cliente" class="form-control border-start-0 ps-0"
+                 placeholder="Buscar cliente, NIT, ciudad..." data-module="clientes" data-search-input>
         </div>
       </div>
 
-      {# ========================================= #}
-      {# TAB 2: CONTACTOS #}
-      {# ========================================= #}
-      <div class="tab-pane fade" id="tab-pane-contactos" role="tabpanel"
-           aria-labelledby="tab-contactos-btn" tabindex="0">
+      {# Filtros por tipo #}
+      <div class="d-flex gap-2 flex-wrap mb-3" id="filtros-tipo-clientes">
+        <button class="btn btn-sm btn-outline-dark active" data-filtro-cl="">
+          <i class="bi bi-grid-3x3-gap me-1"></i>Todos
+        </button>
+        <button class="btn btn-sm btn-outline-info" data-filtro-cl="JURIDICA">
+          <i class="bi bi-building me-1"></i>Jurídicas
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" data-filtro-cl="NATURAL">
+          <i class="bi bi-person me-1"></i>Naturales
+        </button>
+        <button class="btn btn-sm btn-outline-warning" data-filtro-cl="RETENEDOR">
+          <i class="bi bi-shield-check me-1"></i>Retenedores
+        </button>
+        <button class="btn btn-sm btn-outline-success" data-filtro-cl="ACTIVO">
+          <i class="bi bi-check-circle me-1"></i>Activos
+        </button>
+        <button class="btn btn-sm btn-outline-danger" data-filtro-cl="INACTIVO">
+          <i class="bi bi-x-circle me-1"></i>Inactivos
+        </button>
+      </div>
 
-        {# Toolbar #}
-        <div class="d-flex justify-content-between align-items-center mb-3" data-module="contactos">
-          <div class="input-group input-group-sm w-auto">
-            <input type="text"
-                   id="search-contacto"
-                   class="form-control"
-                   placeholder="Buscar contacto..."
-                   data-module="contactos"
-                   data-search-input>
-            <button class="btn btn-outline-secondary" type="button"
-                    data-action="search" data-module="contactos" title="Buscar">
-              <i class="bi bi-search"></i>
-            </button>
+      {# Grid #}
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+          <div data-spinner="clientes" class="text-center py-5" style="display:none;">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted small">Cargando clientes...</p>
           </div>
+          <div id="grid-clientes" data-grid="clientes" style="min-height:360px;"></div>
+          <div data-empty-state="clientes" class="text-center py-5" style="display:none;">
+            <i class="bi bi-inbox text-muted" style="font-size:2.5rem;"></i>
+            <p class="mt-2 text-muted">No hay clientes registrados</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── TAB: CONTACTOS ────────────────────────────────────────────── #}
+    <div class="tab-pane fade" id="tab-pane-contactos" role="tabpanel" tabindex="0">
+
+      {# Toolbar #}
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex gap-2 align-items-center">
           <button class="btn btn-primary btn-sm"
                   hx-get="/api/v1/clientes/contactos/render-offcanvas/crear/"
                   hx-target="#offcanvas-container-contactos"
                   hx-swap="innerHTML"
-                  data-module="contactos"
-                  data-create-button>
+                  data-module="contactos" data-create-button>
             <i class="bi bi-person-plus me-1"></i>Nuevo Contacto
           </button>
+          <button class="btn btn-outline-secondary btn-sm" id="btn-refresh-contactos" title="Refrescar">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
         </div>
-
-        {# Spinner #}
-        <div data-spinner="contactos" class="text-center py-5" style="display: none;">
-          <div class="spinner-border" role="status">
-            <span class="visually-hidden">Cargando...</span>
-          </div>
-          <p class="mt-2 text-muted">Inicializando tabla de contactos...</p>
-        </div>
-
-        {# Grid #}
-        <div id="grid-contactos" data-grid="contactos" style="display: none;"></div>
-
-        {# Empty State #}
-        <div data-empty-state="contactos" class="text-center py-5" style="display: none;">
-          <p class="text-muted"><i class="bi bi-inbox"></i> No hay contactos registrados</p>
+        <div class="input-group input-group-sm" style="max-width:300px;">
+          <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+          <input type="text" id="search-contacto" class="form-control border-start-0 ps-0"
+                 placeholder="Buscar contacto..." data-module="contactos" data-search-input>
         </div>
       </div>
 
+      {# Grid #}
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+          <div data-spinner="contactos" class="text-center py-5" style="display:none;">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted small">Cargando contactos...</p>
+          </div>
+          <div id="grid-contactos" data-grid="contactos" style="min-height:360px;"></div>
+          <div data-empty-state="contactos" class="text-center py-5" style="display:none;">
+            <i class="bi bi-inbox text-muted" style="font-size:2.5rem;"></i>
+            <p class="mt-2 text-muted">No hay contactos registrados</p>
+          </div>
+        </div>
+      </div>
     </div>
+
+    {# ── TAB: CARTERA ──────────────────────────────────────────────── #}
+    <div class="tab-pane fade" id="tab-pane-cartera" role="tabpanel" tabindex="0">
+
+      {# Toolbar #}
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex gap-2 align-items-center">
+          <button class="btn btn-primary btn-sm"
+                  data-action="nueva-cartera"
+                  title="Registrar nueva obligación de cobro">
+            <i class="bi bi-plus-lg me-1"></i>Nueva Obligación
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" id="btn-refresh-cartera" title="Refrescar">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+          {# KPIs resumen #}
+          <div class="d-flex gap-3 ms-2 align-items-center fs-7 text-muted border-start ps-3" id="cartera-kpi-summary">
+            <div>Pendiente: <span class="fw-bold text-danger" id="cartera-pendiente-monto">$0.00</span> (<span id="cartera-pendiente-count">0</span>)</div>
+            <div>Pagado: <span class="fw-bold text-success" id="cartera-pagado-monto">$0.00</span></div>
+          </div>
+        </div>
+        <div class="input-group input-group-sm" style="max-width:300px;">
+          <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+          <input type="text" id="search-cartera" class="form-control border-start-0 ps-0"
+                 placeholder="Buscar por factura o cliente..." data-module="cartera" data-search-input>
+        </div>
+      </div>
+
+      {# Filtros por estado #}
+      <div class="d-flex gap-2 flex-wrap mb-3" id="filtros-estado-cartera">
+        <button class="btn btn-sm btn-outline-dark active" data-filtro-cartera="">
+          <i class="bi bi-grid-3x3-gap me-1"></i>Todas
+        </button>
+        <button class="btn btn-sm btn-outline-danger" data-filtro-cartera="SIN_PAGO">
+          <i class="bi bi-x-circle me-1"></i>Sin Pago
+        </button>
+        <button class="btn btn-sm btn-outline-warning" data-filtro-cartera="PARCIAL">
+          <i class="bi bi-hourglass-split me-1"></i>Parcial
+        </button>
+        <button class="btn btn-sm btn-outline-success" data-filtro-cartera="PAGADA">
+          <i class="bi bi-check-circle me-1"></i>Pagadas
+        </button>
+      </div>
+
+      {# Grid #}
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+          <div data-spinner="cartera" class="text-center py-5" style="display:none;">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted small">Cargando cartera...</p>
+          </div>
+          <div id="grid-cartera" data-grid="cartera" style="min-height:360px;"></div>
+          <div data-empty-state="cartera" class="text-center py-5" style="display:none;">
+            <i class="bi bi-inbox text-muted" style="font-size:2.5rem;"></i>
+            <p class="mt-2 text-muted">No hay cuentas por cobrar registradas</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
 {# OFFCANVAS CONTAINERS (HTMX Injection) #}
 <div id="offcanvas-container-clientes"></div>
 <div id="offcanvas-container-contactos"></div>
+<div id="offcanvas-container-cartera"></div>

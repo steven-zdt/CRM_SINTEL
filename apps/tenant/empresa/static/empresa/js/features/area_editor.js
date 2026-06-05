@@ -51,7 +51,7 @@
             // Recolectar datos
             const sedeVal = d.getElementById('area-sede')?.value;
             const payload = {
-                sede: sedeVal ? parseInt(sedeVal, 10) : null,
+                sede: sedeVal || null,   // UUID directo — sin parseInt (AGENTS.md §27)
                 nombre: d.getElementById('area-nombre')?.value?.trim(),
                 codigo_funcionamiento: d.getElementById('area-codigo_funcionamiento')?.value?.trim()
             };
@@ -142,9 +142,9 @@
         }
     }
 
-    // Inicializar cuando se inserte el offcanvas en el DOM por HTMX o carga de página
-    d.addEventListener('htmx:afterSwap', (e) => {
-        if (e.detail.target.id === 'offcanvas-container-area' || e.detail.target.querySelector('#form-area')) {
+    // Inicializar cuando el DOM esta estabilizado tras swap HTMX (htmx:afterSettle garantiza DOM listo)
+    d.addEventListener('htmx:afterSettle', (e) => {
+        if (e.detail.target.id === 'offcanvas-container-area' || e.detail.target.querySelector?.('#form-area')) {
             initFormEvents();
         }
     });

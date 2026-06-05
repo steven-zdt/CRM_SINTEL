@@ -17,7 +17,7 @@
 
     /**
      * Handler con event delegation para acciones de la celda.
-     * Solo opera acciones CRUD del módulo Empleados: editar y eliminar.
+     * Solo opera acciones CRUD del módulo Empleados: ver, editar y eliminar.
      */
     function handleCellAction(e, cell) {
         const btn = e.target.closest('[data-action]');
@@ -27,6 +27,9 @@
         const id     = btn.dataset.id;
 
         switch (action) {
+            case 'ver':
+                verDetalle(id);
+                break;
             case 'editar':
                 editar(id);
                 break;
@@ -142,18 +145,16 @@
             },
             {
                 title: 'Acciones',
-                width: 110,
+                width: 140,
                 hozAlign: 'center',
                 headerSort: false,
                 formatter: (cell) => {
-                    const data       = cell.getRow().getData();
-                    const uuid       = data.uuid;
-                    const esRetirado = data.estado === 'RETIRADO';
+                    const data = cell.getRow().getData();
+                    const uuid = data.uuid;
                     let html = '<div class="btn-group btn-group-sm">';
+                    html += `<button data-action="ver" data-id="${uuid}" class="btn btn-outline-info" title="Ver detalle"><i class="bi bi-eye"></i></button>`;
                     html += `<button data-action="editar" data-id="${uuid}" class="btn btn-outline-primary" title="Editar empleado"><i class="bi bi-pencil"></i></button>`;
-                    if (esRetirado) {
-                        html += `<button data-action="eliminar" data-id="${uuid}" class="btn btn-outline-danger" title="Eliminar permanentemente"><i class="bi bi-trash"></i></button>`;
-                    }
+                    html += `<button data-action="eliminar" data-id="${uuid}" class="btn btn-outline-danger" title="Eliminar permanentemente"><i class="bi bi-trash"></i></button>`;
                     html += '</div>';
                     return html;
                 },
@@ -221,6 +222,27 @@
             const res = await window.http('GET', url);
             if (res.ok) {
                 const data = res.data;
+                
+                // Intentar actualizar elementos individuales si existen
+                const totalEmpEl = document.getElementById('total-empleados');
+                const activosEl = document.getElementById('total-contratos-activos');
+                const nominasEl = document.getElementById('total-nominas');
+                const costoEl = document.getElementById('costo-nomina-mes');
+
+                if (totalEmpEl || activosEl || nominasEl || costoEl) {
+                    if (totalEmpEl) totalEmpEl.textContent = data.total_empleados || 0;
+                    if (activosEl) activosEl.textContent = data.empleados_activos || 0;
+                    if (nominasEl) nominasEl.textContent = data.empleados_pagados || 0;
+                    if (costoEl) {
+                        const val = parseFloat(data.total_nomina_mes) || 0;
+                        costoEl.textContent = new Intl.NumberFormat('es-CO', {
+                            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+                        }).format(val);
+                    }
+                    return;
+                }
+
+                // Fallback para estructura dinámica antigua
                 element.innerHTML = `
                     <div class="col-md-3">
                         <div class="card bg-glass border-0 shadow-sm">
@@ -260,24 +282,33 @@
             }
         } catch (err) {
             console.error('[EmpleadoList] Error cargando summary:', err);
-            element.innerHTML = '<div class="alert alert-warning">Error cargando resumen</div>';
+            if (element && element.id !== 'panel-resumen-empleados') {
+                element.innerHTML = '<div class="alert alert-warning">Error cargando resumen</div>';
+            }
         }
     }
 
     /**
-     * Ver detalle de empleado usando window.http
+     * Ver detalle de empleado cargando el offcanvas en modo lectura
      */
-    async function verDetalle(id) {
-        const url = window.Sintel.Empleados.API.empleados.detail(id);
+    async function verDetalle(uuid) {
+        if (!uuid) return;
+        const apiUrl = window.Sintel?.Empleados?.API?.empleados?.gestorOffcanvas || '/api/v1/empleados/gestor-offcanvas/';
+        const url = `${apiUrl}?tipo=empleado&mode=ver&uuid=${uuid}`;
+        const containerId = 'offcanvas-container-empleados';
+
+        console.log('[EmpleadoList] Cargando detalle offcanvas:', url);
         
         try {
-            const res = await window.http('GET', url);
-            if (res.ok) {
-                console.log('[EmpleadoList] Detalle:', res.data);
-                return res.data;
+            await htmx.ajax('GET', url, {
+                target: `#${containerId}`,
+                swap: 'innerHTML'
+            });
+        } catch (error) {
+            console.error('[EmpleadoList] Error al cargar detalle:', error);
+            if (window.UIManager) {
+                window.UIManager.notifyError('Error al cargar el detalle del empleado');
             }
-        } catch (err) {
-            console.error('[EmpleadoList] Error:', err);
         }
     }
 
@@ -340,7 +371,18 @@
                 reload();
                 loadSummary('#empleados-summary');
             } else {
-                throw new Error(res.data?.error || res.data?.detail || 'Error al eliminar empleado');
+                let errorMsg = 'Error al eliminar empleado';
+                if (res.data) {
+                    const detail = res.data.error || res.data.detail;
+                    if (detail) {
+                        errorMsg = Array.isArray(detail) ? detail.join(', ') : (typeof detail === 'object' ? JSON.stringify(detail) : String(detail));
+                    } else if (typeof res.data === 'object') {
+                        errorMsg = JSON.stringify(res.data);
+                    } else if (typeof res.data === 'string') {
+                        errorMsg = res.data;
+                    }
+                }
+                throw new Error(errorMsg);
             }
         } catch (err) {
             console.error('[EmpleadoList] Error eliminando:', err);

@@ -110,19 +110,22 @@ def _build_login_url(domain: str) -> str:
     if not fqdn:
         raise ValidationError("Dominio inválido para construir login_url")
 
-    if not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False):
+    # SITE_PROTOCOL env override takes priority (set to 'https' when behind nginx/reverse proxy)
+    site_protocol = getattr(settings, 'SITE_PROTOCOL', '').strip().lower()
+    if site_protocol in ('https', 'http'):
+        protocol = site_protocol
+    elif not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False):
         protocol = "https"
     else:
         protocol = "http"
 
-    # WARNING: v2.30: Incluir puerto en DEV si APP_PORT está configurado
+    # Omit port when protocol is https (reverse proxy handles 443→app)
     app_port = getattr(settings, 'APP_PORT', None)
-    if settings.DEBUG and app_port and str(app_port) not in ('80', '443'):
+    if protocol != 'https' and settings.DEBUG and app_port and str(app_port) not in ('80', '443'):
         domain_with_port = f"{fqdn}:{app_port}"
     else:
         domain_with_port = fqdn
 
-    # WARNING: v2.30: Apuntar al shell de login (ahora en Core via urls_tenant)
     return f"{protocol}://{domain_with_port}/login/"
 
 
@@ -211,7 +214,7 @@ def crear_tenant_con_owner(
     owner_email: str | None = None,
     # WARNING: v2.29: owner_password ELIMINADO - NO se acepta password en onboarding
     admin_user_id: int | None = None,
-    owner_is_staff: bool = True,
+    owner_is_staff: bool = False,  # Owners de tenant no son staff del sistema
     owner_is_active: bool = True,
     paid_until: str | None = None,
     on_trial: bool = True,
@@ -430,7 +433,6 @@ def crear_tenant_con_owner(
                     empresa=empresa,
                     defaults={
                         "cargo": "Administrador Principal",
-                        "departamento": "Gerencia",
                         "rol": "ADMIN",  # Auto-Admin: owner siempre es ADMIN
                         "configuracion": {"theme": "light", "notifications": True},
                     },
@@ -463,79 +465,61 @@ def crear_tenant_con_owner(
         )
         raise
     
-    # 7) Generar token de invitación y enviar email (solo si owner_email fue proporcionado)
-    # CAMBIO v2.24: Owner se invita por email con token de activación
+    # 7) Generar token y encolar email + certificados via Celery post-commit.
+    #
+    # CRITICO: send_invitation_email() NO se llama aqui de forma sincrona.
+    # Razon 1 - Race condition: si se usa .delay() dentro del bloque atomic,
+    #   el worker Celery puede ejecutar la tarea antes de que la transaccion
+    #   haga commit, resultando en User.DoesNotExist o Client.DoesNotExist.
+    # Razon 2 - Timeout SMTP: una llamada SMTP sincrona dentro de @transaction.atomic
+    #   puede bloquear la transaccion entera si el servidor de correo es lento.
+    # Solucion: transaction.on_commit() garantiza que el callback se ejecuta
+    #   solo despues de que todos los cambios esten confirmados en BD.
     activation_url = None
     if owner_email and not admin_user_id:
-        logger.info(
-            "Iniciando proceso de invitación por email: user=%s, tenant=%s",
-            user.email, raw_schema
-        )
         try:
-            from django.conf import settings
-
             from apps.public.tenants.services.invitations import (
                 build_activation_url,
                 generate_invitation_token,
-                send_invitation_email,
             )
-            
-            logger.info("Generando token de invitación para user_id=%s, tenant_id=%s", user.id, client.id)
-            
-            # Generar token de invitación (TTL: 24 horas)
+
+            # Generar token DENTRO de la transaccion (operacion pura, sin I/O externo)
             token = generate_invitation_token(
                 user_id=user.id,
                 tenant_id=client.id,
                 ttl_hours=24,
             )
-            logger.info("Token de invitación generado (TTL: 24 horas)")
-            
-            # Construir URL de activación en el subdominio del tenant
-            logger.info("Construyendo URL de activación para dominio: %s", domain.domain)
+            # Construir URL DENTRO de la transaccion (pura, sin I/O externo)
             activation_url = build_activation_url(domain.domain, token)
-            logger.info("URL de activación construida: %s", activation_url)
-            
-            # Enviar email de invitación
-            logger.info("Invocando send_invitation_email para user=%s", user.email)
-            email_sent = send_invitation_email(user, client, activation_url)
-            
-            if email_sent:
-                logger.info(
-                    "PROCESO DE INVITACIÓN COMPLETADO: user=%s, tenant=%s, activation_url=%s",
-                    user.email, raw_schema, activation_url
-                )
-            else:
-                logger.warning(
-                    "Invitación generada pero email NO enviado: user=%s, tenant=%s, activation_url=%s",
-                    user.email, raw_schema, activation_url
-                )
-                
-        except Exception as e:
-            # No abortar onboarding si falla el envío de email
-            logger.error(
-                "ERROR en proceso de invitación para tenant '%s': %s. "
-                "Onboarding continúa normalmente.",
-                raw_schema, str(e),
-                exc_info=True  # Stacktrace completo
+
+            logger.info(
+                "Token de activacion generado para user=%s tenant=%s (email se enviara post-commit)",
+                user.email, raw_schema,
             )
-            # En desarrollo, construir URL aunque no se envíe email
-            try:
-                from django.conf import settings
-                if settings.DEBUG:
-                    logger.info("Modo desarrollo: construyendo URL de activación sin email")
-                    from apps.public.tenants.services.invitations import (
-                        build_activation_url,
-                        generate_invitation_token,
-                    )
-                    token = generate_invitation_token(user_id=user.id, tenant_id=client.id)
-                    activation_url = build_activation_url(domain.domain, token)
-                    logger.info("URL de activación construida (modo desarrollo): %s", activation_url)
-            except Exception as fallback_error:
-                logger.error(
-                    "Error incluso en fallback de desarrollo: %s",
-                    str(fallback_error),
-                    exc_info=True
-                )
+
+            # Encolar email via Celery solo despues del commit exitoso.
+            # Capturar valores en parametros default para evitar closure-capture issues.
+            _uid = user.id
+            _tok = token
+            _dom = domain.domain
+
+            transaction.on_commit(
+                lambda uid=_uid, tok=_tok, dom=_dom: _enqueue_activation_email(uid, tok, dom)
+            )
+
+        except Exception as e:
+            logger.error(
+                "ERROR generando token de invitacion para tenant '%s': %s. "
+                "Onboarding continua sin email de activacion.",
+                raw_schema, str(e), exc_info=True,
+            )
+
+    # Encolar aprovisionamiento de certificados siempre post-commit
+    _dom_cert = domain.domain
+    _schema_cert = raw_schema
+    transaction.on_commit(
+        lambda dom=_dom_cert, schema=_schema_cert: _enqueue_provision_certificates(dom, schema)
+    )
     
     # 8) Construir login_url sin puerto (para compatibilidad con consola)
     login_url = _build_login_url(domain.domain)
@@ -667,7 +651,6 @@ def onboard_tenant(
 
                     profile_defaults = {
                         "cargo": "Administrador Principal",
-                        "departamento": "Gerencia",
                         "rol": "ADMIN",  # Auto-Admin: owner siempre es ADMIN
                         "configuracion": {"theme": "light", "notifications": True},
                     }
@@ -783,7 +766,7 @@ def crear_empresa(
             new_user = User(
                 email=email_admin,
                 username=_generate_unique_username(email_admin),
-                is_staff=True,
+                is_staff=False,   # Owners de tenant no son staff del sistema
                 is_active=True,
             )
             new_user.set_unusable_password()
@@ -811,31 +794,16 @@ def crear_empresa(
     # de activación e intentar enviar email de invitación. No abortar onboarding si falla.
     try:
         if 'user_created' in locals() and user_created:
-            from apps.public.tenants.services.invitations import (
-                build_activation_url,
-                generate_invitation_token,
-                send_invitation_email,
-            )
-            logger.info("Generando token de invitación para nuevo admin user_id=%s, tenant_id=%s", user.id, client.id)
-            token = generate_invitation_token(user_id=user.id, tenant_id=client.id)
-            activation_url = build_activation_url(domain.domain, token)
-            logger.info("Invocando send_invitation_email para nuevo admin %s", user.email)
-            sent = send_invitation_email(user, client, activation_url)
+            from apps.public.core.services.email_service import EmailService
+            logger.info("Enviando email de activacion a nuevo admin user_id=%s tenant=%s", user.id, client.schema_name)
+            # SSoT: send_tenant_activation_email genera token + URL tenant-especifica internamente
+            sent = EmailService.send_tenant_activation_email(user, client)
             if sent:
-                logger.info("Email de activación enviado para user=%s tenant=%s", user.email, client.schema_name)
-                # Incluir activation_url en el return payload
-                return_payload = {
-                    'client': client,
-                    'domain': domain,
-                    'user': user,
-                    'schema_name': schema_name,
-                    'activation_url': activation_url,
-                }
-                return return_payload
+                logger.info("Email de activacion encolado para user=%s tenant=%s", user.email, client.schema_name)
             else:
-                logger.warning("No se pudo enviar email de activación para user=%s", user.email)
+                logger.warning("No se pudo encolar email de activacion para user=%s", user.email)
     except Exception as e:
-        logger.error("ERROR enviando invitación para nuevo admin %s en tenant %s: %s", user.email, schema_name, str(e), exc_info=True)
+        logger.error("ERROR enviando invitacion para nuevo admin %s en tenant %s: %s", user.email, schema_name, str(e), exc_info=True)
 
     # 3. (Opcional) Poblar datos iniciales en el schema del tenant
     if poblar_datos_iniciales:
@@ -849,6 +817,43 @@ def crear_empresa(
         'user': user,
         'schema_name': schema_name,
     }
+
+
+def _enqueue_activation_email(user_id: int, token: str, domain: str) -> None:
+    """
+    Despacha send_activation_email_task a Celery.
+    Llamado exclusivamente desde transaction.on_commit().
+    """
+    try:
+        from apps.public.tenants.tasks import send_activation_email_task
+        send_activation_email_task.delay(user_id, token, domain)
+        logger.info(
+            "send_activation_email_task encolada: user_id=%s domain=%s", user_id, domain
+        )
+    except Exception as e:
+        logger.error(
+            "Error encolando send_activation_email_task para user_id=%s: %s",
+            user_id, e, exc_info=True,
+        )
+
+
+def _enqueue_provision_certificates(domain: str, schema_name: str) -> None:
+    """
+    Despacha provision_tenant_certificates_task a Celery.
+    Llamado exclusivamente desde transaction.on_commit().
+    """
+    try:
+        from apps.public.tenants.tasks import provision_tenant_certificates_task
+        provision_tenant_certificates_task.delay(domain, schema_name)
+        logger.info(
+            "provision_tenant_certificates_task encolada: domain=%s schema=%s",
+            domain, schema_name,
+        )
+    except Exception as e:
+        logger.error(
+            "Error encolando provision_tenant_certificates_task para domain=%s: %s",
+            domain, e, exc_info=True,
+        )
 
 
 def verificar_empresa(schema_name: str) -> bool:

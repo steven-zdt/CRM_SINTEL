@@ -380,15 +380,12 @@ PENDIENTE_FACTURA_FIELDS = (
 )
 
 PENDIENTE_GASTO_FIELDS = (
-    'id', 'consecutivo', 'fecha', 'subtotal', 'retefuente', 'reteica', 'total',
+    'id', 'consecutivo', 'fecha', 'subtotal', 'total',
+    # retefuente/reteica eliminados en v3.7.1 — leer via @property total_retefuente/total_reteica
 )
 
 PENDIENTE_NOMINA_FIELDS = (
     'id', 'periodo_mes', 'fecha_pago', 'neto_pagar', 'anulado',
-)
-
-PENDIENTE_INVENTARIO_FIELDS = (
-    'id', 'tipo', 'cantidad', 'costo_unitario', 'created_at',
 )
 
 
@@ -445,22 +442,38 @@ def qs_nominas_pendientes(empresa_id: int):
     )
 
 
-def qs_inventario_pendientes(empresa_id: int):
-    """Movimientos de inventario del tenant que aun no tienen AsientoContable asociado."""
-    from apps.tenant.inventario.models import MovimientoInventario
-    ya_ids = AsientoContable.objects.filter(
+def qs_inventario_movimientos_recientes_pendientes(empresa_id: int):
+    """
+    Movimientos recientes de Inventario pendientes de contabilizar.
+
+    Contrato v3.9.2: Contabilidad consume exclusivamente el agregado
+    Inventario/Movimientos Recientes (`get_movimientos_timeline`). No consulta
+    Producto, Servicio, ActivoFijo ni MovimientoInventario directamente.
+    """
+    from apps.tenant.inventario.services.selectors import get_movimientos_timeline
+
+    ya_ids_por_modelo = {}
+    rows = AsientoContable.objects.filter(
         empresa_id=empresa_id,
         documento_origen_app='inventario',
-        documento_origen_modelo='MovimientoInventario',
+        documento_origen_modelo__in=['MovimientoInventario', 'HistorialServicio'],
         documento_origen_id__isnull=False,
-    ).values_list('documento_origen_id', flat=True)
-    return (
-        MovimientoInventario.objects.filter(empresa_id=empresa_id)
-        .exclude(id__in=ya_ids)
-        .select_related('producto')
-        .only(*PENDIENTE_INVENTARIO_FIELDS, 'producto__codigo', 'producto__nombre')
-        .order_by('-created_at')
+    ).only('documento_origen_modelo', 'documento_origen_id').values_list(
+        'documento_origen_modelo', 'documento_origen_id'
     )
+    for modelo, doc_id in rows:
+        ya_ids_por_modelo.setdefault(modelo, set()).add(doc_id)
+
+    pendientes = []
+    for item in get_movimientos_timeline(empresa_id=empresa_id):
+        modelo = item.get('modelo_origen')
+        documento_id = item.get('documento_id')
+        if not modelo or not documento_id:
+            continue
+        if documento_id in ya_ids_por_modelo.get(modelo, set()):
+            continue
+        pendientes.append(item)
+    return pendientes
 
 
 def get_documento_pendiente(app_label: str, modelo: str, documento_id: int, empresa_id: int):
@@ -488,19 +501,15 @@ def get_documento_pendiente(app_label: str, modelo: str, documento_id: int, empr
         from apps.tenant.empleados.models import Devengo
         return (
             Devengo.objects.filter(empresa_id=empresa_id, id=documento_id, anulado=False)
-            .select_related('empleado', 'contrato')
-            .only(*PENDIENTE_NOMINA_FIELDS, 'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido', 
-                  'contrato__salario_mensual', 'auxilio_transporte', 'otros_devengos', 'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos')
+            .select_related('empleado')
+            .only(*PENDIENTE_NOMINA_FIELDS, 'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido',
+                  'auxilio_transporte', 'otros_devengos', 'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos')
             .first()
         )
-    if app_label == 'inventario' and modelo == 'MovimientoInventario':
-        from apps.tenant.inventario.models import MovimientoInventario
-        return (
-            MovimientoInventario.objects.filter(empresa_id=empresa_id, id=documento_id)
-            .select_related('producto')
-            .only(*PENDIENTE_INVENTARIO_FIELDS, 'producto__codigo', 'producto__nombre')
-            .first()
-        )
+    if app_label == 'inventario' and modelo in {'MovimientoInventario', 'HistorialServicio'}:
+        for item in qs_inventario_movimientos_recientes_pendientes(empresa_id):
+            if item.get('modelo_origen') == modelo and item.get('documento_id') == documento_id:
+                return item
     return None
 
 
@@ -584,7 +593,8 @@ def get_balance_prueba(empresa_id: int, fecha_hasta: Optional[Any] = None) -> di
     }
 
 def get_tercero_movimiento(tipo_tercero: str, tercero_id: int) -> Optional[Any]:
-    """Obtiene el objeto del tercero según tipo e ID."""
+    """Obtiene el objeto del tercero segun tipo e ID. Solo CLIENTE y PROVEEDOR.
+    EMPLEADO se resuelve unicamente via Devengo (Pull Model — boundary empleados)."""
     if not tipo_tercero or not tercero_id:
         return None
 
@@ -595,9 +605,6 @@ def get_tercero_movimiento(tipo_tercero: str, tercero_id: int) -> Optional[Any]:
         elif tipo_tercero == 'PROVEEDOR':
             from apps.tenant.proveedores.models import Proveedor
             return Proveedor.objects.filter(id=tercero_id).only('id', 'nombre', 'nit').first()
-        elif tipo_tercero == 'EMPLEADO':
-            from apps.tenant.empleados.models import Empleado
-            return Empleado.objects.filter(id=tercero_id).only('id', 'nombre', 'nit').first()
     except Exception:
         return None
     return None

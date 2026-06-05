@@ -3,7 +3,6 @@ import logging
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.core.management import call_command
 from django.db import transaction
 from django_tenants.utils import schema_exists
 
@@ -57,7 +56,6 @@ def generar_schema_name(nombre: str) -> str:
     return slug
 
 
-@transaction.atomic
 def crear_tenant_con_owner(
     nombre: str,
     admin_user_id: int,
@@ -66,18 +64,30 @@ def crear_tenant_con_owner(
     on_trial: bool = True,
 ) -> tuple[Client, Domain, TenantMembership, str]:
     """
-    Crea un tenant completo en el esquema público y asigna un owner (primary admin).
+    Crea un tenant completo en el esquema publico y asigna un owner (primary admin).
+
+    Separacion intencional de DDL y DML para compatibilidad con PostgreSQL:
+    -----------------------------------------------------------------------
+    PostgreSQL trata CREATE SCHEMA como DDL transaccional, pero django-tenants
+    emite ese DDL en Client.save() via auto_create_schema=True. Envolver esa
+    operacion en transaction.atomic() global causa que cualquier excepcion
+    posterior intente revertir el CREATE SCHEMA junto con DML, generando
+    estados inconsistentes cuando el schema fue creado pero la transaccion
+    hace rollback (el schema queda huerfano o la FK queda rota).
+
+    Solucion adoptada (two-phase commit pattern):
+      FASE 1 — DDL (sin transaction.atomic): Client.objects.create() deja que
+               TenantMixin cree el schema PostgreSQL de forma irrevocable.
+      FASE 2 — DML (transaction.atomic): Domain + TenantMembership se crean
+               atomicamente DESPUES de confirmar que el schema existe.
 
     Flujo:
-    1. Genera/valida schema_name (sin puntos, único).
-    2. Verifica que el usuario admin exista y esté activo.
-    3. Crea Client (TenantMixin) → señal post_save crea Domain principal.
-    4. Ejecuta migrate_schemas SOLO para ese schema.
-    5. Crea TenantMembership con rol ADMIN + is_primary_admin=True.
-    6. Verifica integridad final (schema existe, dominio principal único).
-    7. Construye login_url estándar (API-First, apunta a /login/).
-
-    Todo el proceso es atómico: si falla algo, no quedan tenants huérfanos.
+    1. Genera/valida schema_name (sin puntos, unico).
+    2. Verifica que el usuario admin exista y este activo.
+    3. FASE 1 — Crea Client (TenantMixin crea el schema PostgreSQL via DDL).
+    4. FASE 2 — Crea Domain y TenantMembership en transaction.atomic() separada.
+    5. Verifica integridad final (schema existe, dominio primario unico).
+    6. Construye login_url estandar (apunta a /login/).
     """
     if not nombre or not nombre.strip():
         raise ValidationError("El nombre de la empresa es requerido")
@@ -92,7 +102,7 @@ def crear_tenant_con_owner(
     if "." in schema_normalized:
         raise ValidationError(
             f"El schema_name '{schema_normalized}' no puede contener puntos. "
-            f"Los subdominios se construyen automáticamente como: "
+            f"Los subdominios se construyen automaticamente como: "
             f"{{schema_name}}.{settings.TENANT_DOMAIN_BASE}"
         )
 
@@ -104,53 +114,50 @@ def crear_tenant_con_owner(
         admin_user = User.objects.get(pk=admin_user_id, is_active=True)
     except User.DoesNotExist:
         raise ValidationError(
-            f"El usuario con ID {admin_user_id} no existe o no está activo. "
-            f"No se puede crear un tenant sin un administrador válido."
+            f"El usuario con ID {admin_user_id} no existe o no esta activo. "
+            f"No se puede crear un tenant sin un administrador valido."
         )
 
-    # 3–5 dentro de try para log enriquecido
+    logger.info("Creando tenant '%s' (schema=%s)", nombre, schema_normalized)
+
+    # FASE 1 — DDL: Client.save() emite CREATE SCHEMA via TenantMixin.
+    # No se envuelve en transaction.atomic() para evitar conflictos DDL/DML.
+    # Si falla aqui, no hay datos parciales que revertir.
+    client = Client.objects.create(
+        schema_name=schema_normalized,
+        nombre=nombre.strip(),
+        paid_until=paid_until,
+        on_trial=on_trial,
+        is_active=True,
+    )
+    logger.info("Tenant schema creado: %s", schema_normalized)
+
+    # FASE 2 — DML: Domain + TenantMembership en bloque atomico.
+    # Solo se ejecuta una vez confirmado que el schema PostgreSQL existe.
     try:
-        logger.info("🚀 Creando tenant '%s' (schema=%s)", nombre, schema_normalized)
+        with transaction.atomic():
+            expected_domain = f"{schema_normalized}.{settings.TENANT_DOMAIN_BASE}"
+            domain, _ = Domain.objects.get_or_create(
+                tenant=client,
+                domain=expected_domain,
+                defaults={"is_primary": True},
+            )
+            if not domain.is_primary:
+                domain.is_primary = True
+                domain.save(update_fields=["is_primary"])
 
-        # 3. Client (auto_create_schema=True crea el schema físico)
-        client = Client.objects.create(
-            schema_name=schema_normalized,
-            nombre=nombre.strip(),
-            paid_until=paid_until,
-            on_trial=on_trial,
-            is_active=True,
-        )
+            logger.info("Dominio registrado: %s (is_primary=%s)", domain.domain, domain.is_primary)
 
-        # 4. Crear dominio principal manualmente (las señales están desactivadas)
-        expected_domain = f"{schema_normalized}.{settings.TENANT_DOMAIN_BASE}"
-        domain, created = Domain.objects.get_or_create(
-            tenant=client, domain=expected_domain, defaults={"is_primary": True}
-        )
-
-        if not domain.is_primary:
-            domain.is_primary = True
-            domain.save()
-
-        logger.info(f"OK: Dominio creado: {domain.domain} (is_primary={domain.is_primary})")
-
-        # 5. Migraciones del schema del tenant
-        logger.info("🛠 Aplicando migraciones a schema '%s'…", schema_normalized)
-        call_command(
-            "migrate_schemas", "--schema", schema_normalized, "--fake-initial", verbosity=0
-        )
-
-        # 6. TenantMembership (owner)
-        membership = TenantMembership.objects.create(
-            client=client,
-            user=admin_user,
-            rol="ADMIN",
-            is_primary_admin=True,
-            is_active=True,
-        )
-
+            membership = TenantMembership.objects.create(
+                client=client,
+                user=admin_user,
+                rol="ADMIN",
+                is_primary_admin=True,
+                is_active=True,
+            )
     except Exception as exc:
         logger.error(
-            "ERROR: ROLLBACK creando tenant '%s' (schema=%s): %s",
+            "FASE 2 fallida para tenant '%s' (schema=%s): %s",
             nombre,
             schema_normalized,
             exc,
@@ -158,40 +165,25 @@ def crear_tenant_con_owner(
         )
         raise
 
-    # 7. Validaciones finales
-    if not client.is_active:
-        raise ValidationError(
-            f"El tenant '{schema_normalized}' fue creado pero no está activo (is_active=False). "
-            f"Esto no debería ocurrir."
-        )
-
+    # 5. Validaciones finales
     if not schema_exists(schema_normalized):
         raise ValidationError(
-            f"El schema PostgreSQL '{schema_normalized}' no existe después de crear el tenant. "
+            f"El schema PostgreSQL '{schema_normalized}' no existe despues de crear el tenant. "
             f"Revisa auto_create_schema=True en el modelo Client."
         )
 
     primary_domains = Domain.objects.filter(tenant=client, is_primary=True)
     if primary_domains.count() != 1:
         raise ValidationError(
-            f"El tenant '{schema_normalized}' debe tener exactamente un dominio principal. "
+            f"El tenant '{schema_normalized}' debe tener exactamente un dominio primario. "
             f"Encontrados: {primary_domains.count()}"
         )
 
-    # 8. Construir login_url estándar (API-First login)
+    # 6. Construir login_url
     tenant_domain = domain.domain
-    if not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False):
-        protocol = "https"
-    else:
-        protocol = "http"
-
+    protocol = "https" if (not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False)) else "http"
     login_url = f"{protocol}://{tenant_domain}/login/"
 
-    logger.info(
-        "OK: Tenant creado: %s (%s) -> %s",
-        client.nombre,
-        client.schema_name,
-        login_url,
-    )
+    logger.info("Tenant creado: %s (%s) -> %s", client.nombre, client.schema_name, login_url)
 
     return client, domain, membership, login_url

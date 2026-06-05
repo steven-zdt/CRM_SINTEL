@@ -254,6 +254,29 @@
 
             renderCotizacionVinculada(Object.freeze(data));
 
+            // Desglose de impuestos (Fase 4)
+            const taxBody = d.getElementById('view_impuestos_desglosados_body');
+            if (taxBody) {
+                taxBody.innerHTML = '';
+                const impuestos = data.impuestos_desglosados;
+                if (impuestos && Array.isArray(impuestos) && impuestos.length > 0) {
+                    impuestos.forEach(tax => {
+                        const row = d.createElement('tr');
+                        row.innerHTML = `
+                            <td><span class="fw-semibold">${tax.tipo_impuesto || 'OTRO'}</span></td>
+                            <td class="text-end">${parseFloat(tax.porcentaje || 0).toFixed(2)}%</td>
+                            <td class="text-end">${formatearMoneda(tax.base_imponible, data.moneda || 'COP')}</td>
+                            <td class="text-end fw-semibold text-dark">${formatearMoneda(tax.valor_impuesto, data.moneda || 'COP')}</td>
+                        `;
+                        taxBody.appendChild(row);
+                    });
+                } else {
+                    const row = d.createElement('tr');
+                    row.innerHTML = '<td colspan="4" class="text-center text-muted">No se reportaron impuestos desglosados</td>';
+                    taxBody.appendChild(row);
+                }
+            }
+
             // Items de la factura
             // ⚠️ v2.61.2: Cargar items desde endpoint separado si no vienen en la respuesta
             const tableBody = d.getElementById('view_detalle_items_body');

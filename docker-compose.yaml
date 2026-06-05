@@ -1,6 +1,5 @@
-# ⚠️ OPTIMIZACIÓN: Ancla YAML para reutilizar configuración común de la aplicación
 # Docker Compose v2+ (sin atributo version - obsoleto desde v2.0)
-# Esto evita duplicación y permite construir una única imagen reutilizable
+# Ancla YAML para reutilizar configuracion comun de la aplicacion
 x-app-base: &app-base
   build:
     context: .
@@ -8,12 +7,19 @@ x-app-base: &app-base
   env_file:
     - .env
   volumes:
-    - .:/app  # Sincronización de código local para desarrollo
+    - .:/app
   depends_on:
     db:
       condition: service_healthy
     redis:
       condition: service_healthy
+  # extra_hosts: resolucion DNS interna de subdominios tenant
+  # Agregar manualmente al crear nuevo tenant o ejecutar: python manage.py ensure_tenant_dns
+  extra_hosts:
+    - "sintel.com:192.168.2.15"
+    - "cliente.sintel.com:192.168.2.15"
+    - "putito.sintel.com:192.168.2.15"
+    - "tupapi.sintel.com:192.168.2.15"
 
 services:
   # Base de datos PostgreSQL
@@ -36,7 +42,7 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # Redis para Celery y caché
+  # Redis para Celery y cache
   redis:
     container_name: crm_sintel-redis-1
     image: redis:7.2-alpine
@@ -55,13 +61,28 @@ services:
     <<: *app-base
     container_name: crm_sintel-web-1
     ports:
-      - "0.0.0.0:80:8000"    # Exponer en TODAS las interfaces (0.0.0.0) en puerto 80
-      - "0.0.0.0:8000:8000"  # También en puerto 8000 para compatibilidad
+      - "0.0.0.0:8000:8000"
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings
       - SERVICE_ROLE=web
       - DATABASE_HOST=db
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    restart: unless-stopped
+
+  # Reverse proxy HTTPS
+  nginx:
+    container_name: crm_sintel-nginx-1
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - ./staticfiles:/app/staticfiles:ro
+      - ./media:/app/media:ro
+    depends_on:
+      - web
     restart: unless-stopped
 
   # Worker Celery
@@ -73,8 +94,9 @@ services:
       - SERVICE_ROLE=celery
       - C_FORCE_ROOT=1
       - DATABASE_HOST=db
-    command: ["celery", "-A", "config", "worker", "-l", "info"]
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "high_priority,default"]
     restart: unless-stopped
+
 
 volumes:
   postgres_data:

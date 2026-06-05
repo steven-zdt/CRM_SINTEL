@@ -53,7 +53,8 @@
 </style>
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cliente"
-     data-cliente-id="{{ cliente.id }}" aria-labelledby="offcanvas-cliente-label">
+     data-cliente-id="{{ cliente.uuid }}"
+     data-cliente-uuid="{{ cliente.uuid }}" aria-labelledby="offcanvas-cliente-label">
   <div class="offcanvas-header border-bottom py-3 px-4">
     <h5 class="offcanvas-title fw-semibold" id="offcanvas-cliente-label">
       <i class="bi bi-pencil-fill text-primary me-2"></i>Editar Cliente
@@ -68,7 +69,7 @@
     <div id="cliente-feedback" class="alert d-none" role="alert" aria-live="polite"></div>
 
     <form id="form-cliente" method="POST" onsubmit="return false;">
-      <input type="hidden" id="cliente-id" name="id" value="{{ cliente.id }}">
+      <input type="hidden" id="cliente-id" name="id" value="{{ cliente.uuid }}">
 
       {# ── Sección: Identificación ───────────────────────────────────── #}
       <div class="section-divider">
@@ -221,27 +222,6 @@
       </div>
 
       {# ── Sección: Configuración Contable ──────────────────────────── #}
-      <div class="section-divider">
-        <p class="section-title">
-          <i class="bi bi-journal-check me-1"></i>Configuración Contable
-        </p>
-        <div class="row g-3">
-          <div class="col-12">
-            <label for="cliente-cuenta_contable_search" class="form-label">Cuenta de Cartera (Control) *</label>
-            <div class="position-relative">
-              <input type="text" class="form-control" id="cliente-cuenta_contable_search"
-                     placeholder="Buscar cuenta nivel 6 (ej: 130505)..." autocomplete="off" value="">
-              {# v3.6.1: cuenta_contable_uuid se pre-carga en JS via getCuentaByUuid() — §18 HTTP pull #}
-              <input type="hidden" id="cliente-cuenta_contable_uuid" name="cuenta_contable_uuid"
-                     value="{{ cliente.cuenta_contable_uuid|default:'' }}">
-              <div id="cliente-cuenta-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050;">
-                {# Sugerencias dinámicas #}
-              </div>
-            </div>
-            <small class="text-muted">Cuenta donde se registrarán las deudas de este cliente.</small>
-          </div>
-        </div>
-      </div>
 
       {# ── Sección: Observaciones ───────────────────────────────────── #}
       <div class="mb-2">

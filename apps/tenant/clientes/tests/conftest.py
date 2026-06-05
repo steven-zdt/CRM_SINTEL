@@ -72,6 +72,12 @@ def tenant(db):
     if 'perfil_tenantprofile' not in tables:
         call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, 'perfil', '--noinput', verbosity=0)
 
+    with schema_context(tenant_obj.schema_name):
+        tables = set(connection.introspection.table_names())
+
+    if 'facturas_factura' not in tables:
+        call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, 'facturas', '--noinput', verbosity=0)
+
     # Ensure singleton Empresa exists with valid current model fields.
     with schema_context(tenant_obj.schema_name):
         empresa = Empresa.objects.only('id').first()

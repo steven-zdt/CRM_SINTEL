@@ -1,62 +1,148 @@
-{# proveedores_list.html - Directorio de Proveedores v3.7 #}
-{# ZERO JS IN HTML: All logic in proveedores_main.js #}
-{# HTMX: Offcanvas injection via hx-get → render-offcanvas/crear|editar|detalle #}
+{# proveedores_list.html - Modulo de Proveedores y Cuentas por Pagar v3.9 #}
+{# Estructura FSD y Zero-JS en HTML. Orquestado por proveedores_main.js #}
 
-<div class="card shadow-sm" data-module="proveedores">
-  <div class="card-header bg-white py-3 px-3">
-    <div class="d-flex justify-content-between align-items-center">
-      <h6 class="mb-0 text-secondary fw-semibold">
+<div class="card border-0 shadow-none bg-transparent" data-module="proveedores">
+  {# Navegacion por Sub-tabs (Pills) #}
+  <ul class="nav nav-pills mb-3 bg-light p-1 rounded-3 d-inline-flex" id="proveedores-subnav" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active py-2 px-3 fw-semibold border-0" 
+              id="subtab-directorio-btn" 
+              data-bs-toggle="tab" 
+              data-bs-target="#subtab-directorio" 
+              type="button" 
+              role="tab" 
+              aria-controls="subtab-directorio" 
+              aria-selected="true">
         <i class="bi bi-truck me-2"></i>Directorio de Proveedores
-      </h6>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link py-2 px-3 fw-semibold border-0"
+              id="subtab-cuentas-pagar-btn"
+              data-bs-toggle="tab"
+              data-bs-target="#subtab-cuentas-pagar"
+              type="button"
+              role="tab"
+              aria-controls="subtab-cuentas-pagar"
+              aria-selected="false">
+        <i class="bi bi-journal-check me-2"></i>Cuentas por Pagar
+      </button>
+    </li>
+  </ul>
 
-      <div class="d-flex align-items-center gap-2">
-        {# Buscador inline — idéntico al patrón clientes #}
-        <div class="input-group input-group-sm w-auto">
-          <input type="text"
-                 id="search-proveedor"
-                 class="form-control"
-                 placeholder="Buscar proveedor..."
-                 data-module="proveedores"
-                 data-search-input>
-          <button class="btn btn-outline-secondary" type="button"
-                  data-action="search" data-module="proveedores" title="Buscar">
-            <i class="bi bi-search"></i>
-          </button>
+  <div class="tab-content" id="proveedores-tab-content">
+    {# ── TAB 1: Directorio de Proveedores ───────────────────────────────── #}
+    <div class="tab-pane fade show active" id="subtab-directorio" role="tabpanel" aria-labelledby="subtab-directorio-btn">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 px-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 text-secondary fw-semibold">
+              <i class="bi bi-truck me-2"></i>Directorio de Proveedores
+            </h6>
+
+            <div class="d-flex align-items-center gap-2">
+              {# Buscador inline #}
+              <div class="input-group input-group-sm w-auto">
+                <input type="text"
+                       id="search-proveedor"
+                       class="form-control"
+                       placeholder="Buscar proveedor..."
+                       data-module="proveedores"
+                       data-search-input>
+                <button class="btn btn-outline-secondary" type="button"
+                        data-action="search" data-module="proveedores" title="Buscar">
+                  <i class="bi bi-search"></i>
+                </button>
+              </div>
+
+              {# Boton Nuevo #}
+              <button class="btn btn-primary btn-sm"
+                      hx-get="/api/v1/proveedores/render-offcanvas/crear/"
+                      hx-target="#offcanvas-container-proveedores"
+                      hx-swap="innerHTML"
+                      data-module="proveedores"
+                      data-create-button>
+                <i class="bi bi-plus-lg me-1"></i>Nuevo Proveedor
+              </button>
+            </div>
+          </div>
         </div>
 
-        {# Botón Nuevo — HTMX Gateway Directo, igual que clientes #}
-        <button class="btn btn-primary btn-sm"
-                hx-get="/api/v1/proveedores/render-offcanvas/crear/"
-                hx-target="#offcanvas-container-proveedores"
-                hx-swap="innerHTML"
-                data-module="proveedores"
-                data-create-button>
-          <i class="bi bi-plus-lg me-1"></i>Nuevo Proveedor
-        </button>
+        <div class="card-body p-0">
+          {# Spinner #}
+          <div data-spinner="proveedores" class="text-center py-5" style="display: none;">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2 text-muted">Inicializando tabla de proveedores...</p>
+          </div>
+
+          {# Grid Tabulator #}
+          <div id="grid-proveedores" data-grid="proveedores" style="display: none;"></div>
+
+          {# Empty State #}
+          <div data-empty-state="proveedores" class="text-center py-5" style="display: none;">
+            <p class="text-muted"><i class="bi bi-inbox"></i> No hay proveedores registrados</p>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="card-body p-0">
+    {# ── TAB 2: Cuentas por Pagar ──────────────────────────────── #}
+    <div class="tab-pane fade" id="subtab-cuentas-pagar" role="tabpanel" aria-labelledby="subtab-cuentas-pagar-btn">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3 px-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h6 class="mb-0 text-secondary fw-semibold">
+              <i class="bi bi-journal-check me-2"></i>Cuentas por Pagar de Proveedores
+            </h6>
 
-    {# Spinner — mismo patrón data-spinner que clientes #}
-    <div data-spinner="proveedores" class="text-center py-5" style="display: none;">
-      <div class="spinner-border" role="status">
-        <span class="visually-hidden">Cargando...</span>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              {# Selector de Estado de Pago #}
+              <select id="filtro-estado-cuentas-pagar" class="form-select form-select-sm w-auto">
+                <option value="">Todos los Estados</option>
+                <option value="SIN_PAGO">Sin Pago</option>
+                <option value="PARCIAL">Pago Parcial</option>
+                <option value="PAGADA">Pagadas</option>
+              </select>
+
+              {# Buscador Cuentas por Pagar #}
+              <div class="input-group input-group-sm w-auto">
+                <input type="text"
+                       id="search-cuentas-pagar"
+                       class="form-control"
+                       placeholder="Buscar factura..."
+                       data-module="cuentas-pagar">
+                <button class="btn btn-outline-secondary" type="button" id="btn-search-cuentas-pagar" title="Buscar">
+                  <i class="bi bi-search"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body p-0">
+          {# Spinner Cuentas por Pagar — arranca oculto, JS lo muestra al init #}
+          <div data-spinner="cuentas-pagar" class="text-center py-5" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2 text-muted">Cargando cuentas por pagar de proveedores...</p>
+          </div>
+
+          {# Grid Tabulator Cuentas por Pagar #}
+          <div id="grid-cuentas-pagar" data-grid="cuentas-pagar" style="display: none;"></div>
+
+          {# Empty State Cuentas por Pagar #}
+          <div data-empty-state="cuentas-pagar" class="text-center py-5" style="display: none;">
+            <p class="text-muted"><i class="bi bi-wallet2-fill me-2"></i> No se encontraron registros de cuentas por pagar</p>
+          </div>
+        </div>
       </div>
-      <p class="mt-2 text-muted">Inicializando tabla de proveedores...</p>
     </div>
-
-    {# Grid Tabulator — mismo patrón data-grid que clientes #}
-    <div id="grid-proveedores" data-grid="proveedores" style="display: none;"></div>
-
-    {# Empty State — mismo patrón data-empty-state que clientes #}
-    <div data-empty-state="proveedores" class="text-center py-5" style="display: none;">
-      <p class="text-muted"><i class="bi bi-inbox"></i> No hay proveedores registrados</p>
-    </div>
-
   </div>
 </div>
 
-{# OFFCANVAS CONTAINER (HTMX Injection) — equivalente a offcanvas-container-clientes #}
+{# OFFCANVAS CONTAINER (HTMX Injection) #}
 <div id="offcanvas-container-proveedores"></div>
+<div id="offcanvas-container-cuentas-pagar"></div>

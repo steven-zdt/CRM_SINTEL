@@ -48,13 +48,6 @@ class Cliente(SintelTenantBaseModel):
     activo = models.BooleanField(default=True)
     observaciones = models.TextField(blank=True, help_text="Observaciones adicionales")
 
-    # [NEW v3.5.0] Vinculación con Contabilidad
-    cuenta_contable_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
-        help_text="Cuenta PUC nivel 6 (Cartera)"
-    )
-
     class Meta:
         verbose_name = "Cliente"
         verbose_name_plural = "Clientes"
@@ -110,3 +103,114 @@ class ContactoCliente(SintelTenantBaseModel):
 
     def __str__(self):
         return f"{self.nombre_completo} ({self.email})"
+
+
+class Cartera(SintelTenantBaseModel):
+    """
+    Cartera (Cuentas por Cobrar) del Cliente.
+    """
+    ESTADO_PAGO = [
+        ("SIN_PAGO", "Sin pago"),
+        ("PARCIAL", "Pago parcial"),
+        ("PAGADA", "Pagada"),
+    ]
+
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        db_index=True,
+        editable=False,
+    )
+    empresa = models.ForeignKey(
+        'empresa.Empresa',
+        on_delete=models.PROTECT,
+        related_name="carteras",
+        db_index=True,
+    )
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name="carteras",
+        db_index=True,
+    )
+    numero_factura = models.CharField(
+        max_length=50,
+        help_text="Numero de factura de venta",
+    )
+    factura_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="UUID de la factura de venta (referencia blanda)",
+    )
+    fecha_emision = models.DateField(
+        help_text="Fecha de emision de la factura"
+    )
+    fecha_vencimiento = models.DateField(
+        db_index=True,
+        help_text="Fecha de vencimiento de la obligacion"
+    )
+    valor_total = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        help_text="Monto total de la deuda"
+    )
+    valor_pagado = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        default=0,
+        help_text="Monto pagado"
+    )
+    saldo = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        default=0,
+        editable=False,
+        help_text="Saldo pendiente"
+    )
+    estado_pago = models.CharField(
+        max_length=15,
+        choices=ESTADO_PAGO,
+        default="SIN_PAGO",
+        db_index=True,
+    )
+    observaciones = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Cartera"
+        verbose_name_plural = "Carteras"
+        ordering = ["fecha_vencimiento", "numero_factura"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["empresa", "cliente", "numero_factura"],
+                name="uniq_cartera_factura_cliente",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["empresa", "estado_pago"]),
+            models.Index(fields=["empresa", "cliente", "estado_pago"]),
+            models.Index(fields=["numero_factura"]),
+            models.Index(fields=["fecha_vencimiento"]),
+            models.Index(fields=["factura_uuid"]),
+        ]
+
+    def __str__(self):
+        return f"Factura {self.numero_factura} - {self.cliente.razon_social} - {self.estado_pago}"
+
+    def save(self, *args, **kwargs):
+        from decimal import Decimal
+
+        if self.valor_pagado is None or self.valor_pagado < Decimal("0"):
+            self.valor_pagado = Decimal("0")
+
+        self.saldo = self.valor_total - self.valor_pagado
+
+        if self.valor_pagado == Decimal("0"):
+            self.estado_pago = "SIN_PAGO"
+        elif self.saldo <= Decimal("0"):
+            self.saldo = Decimal("0")
+            self.estado_pago = "PAGADA"
+        else:
+            self.estado_pago = "PARCIAL"
+
+        super().save(*args, **kwargs)

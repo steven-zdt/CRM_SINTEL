@@ -1,8 +1,15 @@
 import logging
+import uuid
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, connection, transaction
+from django.db.models import Field
+from django_tenants.utils import get_public_schema_name
 
+from apps.tenant.core.services.membership import check_membership_by_schema, check_primary_admin
+from apps.tenant.empresa.models import Area, Empresa, Sede
+from apps.tenant.perfil.models import Departamento, RolTenant
 from .crud_service import PerfilCRUDService
 
 logger = logging.getLogger(__name__)
@@ -33,7 +40,6 @@ class PerfilBusinessService:
         """
         try:
             # Tier 1: intra-schema via Empresa.owner_email (fast path)
-            from apps.tenant.empresa.models import Empresa
             if (
                 user.email
                 and Empresa.objects.filter(owner_email=user.email).only('id').exists()
@@ -44,7 +50,6 @@ class PerfilBusinessService:
 
         try:
             # Tier 2: cross-schema fallback via Core Membership Bridge (REGLA 2)
-            from apps.tenant.core.services.membership import check_primary_admin
             return check_primary_admin(user.pk)
         except Exception:
             return False
@@ -58,13 +63,10 @@ class PerfilBusinessService:
         Returns:
             True si tiene membresia activa, False en caso contrario.
         """
-        from django.db import connection as _conn
-        from django_tenants.utils import get_public_schema_name
         # En schema public no aplica la validacion de membership
-        if _conn.schema_name == get_public_schema_name():
+        if connection.schema_name == get_public_schema_name():
             return True
         try:
-            from apps.tenant.core.services.membership import check_membership_by_schema
             return check_membership_by_schema(user.id)
         except Exception:
             logger.warning(
@@ -95,12 +97,11 @@ class PerfilBusinessService:
         if not profile:
             # [SEG-1] Verificar membership antes de crear perfil
             if not self._verify_user_membership(user):
-                from django.db import connection as _conn
                 logger.warning(
                     "[perfil:create] BLOQUEADO: usuario sin membership intento crear perfil "
                     "| user=%s schema=%s",
                     user.email,
-                    _conn.schema_name,
+                    connection.schema_name,
                 )
                 raise ValidationError(
                     "El usuario no tiene membresia activa en este tenant."
@@ -132,9 +133,6 @@ class PerfilBusinessService:
         [RULE 17] Usa get_user_model() (API estandar Django) en lugar de
         importar directamente desde apps.public.
         """
-        from django.contrib.auth import get_user_model
-        from django.db.models import Field
-
         User = get_user_model()
 
         email = (data.get("email") or "").strip().lower()
@@ -204,12 +202,11 @@ class PerfilBusinessService:
                 user = User(**user_kwargs)
                 user.set_unusable_password()
                 user.save()
-                from django.db import connection as _conn
                 logger.info(
                     "[perfil:create] Usuario creado en public: %s (username=%s, unusable password) | schema=%s",
                     email,
                     user_kwargs.get("username", "N/A"),
-                    _conn.schema_name,
+                    connection.schema_name,
                 )
             except IntegrityError:
                 # Email o username duplicado: reintentar busqueda
@@ -220,11 +217,10 @@ class PerfilBusinessService:
                     raise ValidationError(
                         "No se pudo crear el usuario: email o username ya existente."
                     )
-                from django.db import connection as _conn2
                 logger.info(
                     "[perfil:create] Usuario obtenido tras conflicto de unicidad: %s | schema=%s",
                     email,
-                    _conn2.schema_name,
+                    connection.schema_name,
                 )
 
         # 3. [SEG-4 REVISADO] La verificacion de membership del usuario destino
@@ -250,20 +246,69 @@ class PerfilBusinessService:
         # 4. Construir defaults con datos corporativos
         defaults = {}
         if data.get("cargo"):
-            defaults["cargo"] = data["cargo"].strip()
-        if data.get("departamento"):
-            defaults["departamento"] = data["departamento"].strip()
+            defaults["cargo"] = str(data["cargo"]).strip()
         if data.get("telefono_corporativo"):
-            defaults["telefono_corporativo"] = data["telefono_corporativo"].strip()
+            defaults["telefono_corporativo"] = str(data["telefono_corporativo"]).strip()
+
+        # Resolver departamento_uuid -> instancia Departamento con DSV
+        departamento_uuid = (data.get("departamento_uuid") or data.get("departamento") or "").strip()
+        if departamento_uuid:
+            dept = Departamento.objects.filter(
+                uuid=departamento_uuid, empresa=empresa
+            ).only("id", "uuid").first()
+            if not dept:
+                raise ValidationError(
+                    "El departamento no pertenece a la empresa activa del tenant (DSV)."
+                )
+            defaults["departamento"] = dept
 
         # Rol inicial: ADMIN puede asignar rol en la creacion (DSV: valor valido de RolTenant)
         if data.get("rol"):
-            from apps.tenant.perfil.models import RolTenant
             valid_roles = [c[0] for c in RolTenant.choices]
             if data["rol"] in valid_roles:
                 defaults["rol"] = data["rol"]
 
-        return self.crud.create_profile(user, empresa, defaults=defaults)
+        profile = self.crud.create_profile(user, empresa, defaults=defaults)
+        self._sync_sedes_y_areas(profile, data, empresa)
+        return profile
+
+    def _sync_sedes_y_areas(self, profile, data, empresa):
+        """
+        Sincroniza las M2M sedes_asignadas y areas_asignadas con DSV.
+        Tambien valida que el departamento FK pertenezca al tenant activo.
+        """
+        if not isinstance(data, dict):
+            return
+
+        sedes_uuids = data.pop("sedes_uuids", None)
+        areas_uuids = data.pop("areas_uuids", None)
+
+        # DSV: validar que el departamento pertenezca al tenant activo
+        # El SlugRelatedField puede haberlo resuelto como instancia ya
+        departamento = data.get("departamento", None)
+        if departamento is not None:
+            dept_id = getattr(departamento, 'id', None) or departamento
+            if not Departamento.objects.filter(id=dept_id, empresa=empresa).exists():
+                raise ValidationError(
+                    "El departamento no pertenece a la empresa activa del tenant (DSV)."
+                )
+
+        with transaction.atomic():
+            if sedes_uuids is not None:
+                # Cast a str para compatibilidad con filter(uuid__in=...)
+                sedes_uuids_str = [str(u) for u in sedes_uuids if u]
+                sedes = list(Sede.objects.filter(uuid__in=sedes_uuids_str, empresa=empresa))
+                if len(sedes) != len(sedes_uuids_str):
+                    raise ValidationError("Una o mas sedes no pertenecen a la empresa actual (DSV).")
+                profile.sedes_asignadas.set(sedes)
+
+            if areas_uuids is not None:
+                # Cast a str para compatibilidad con filter(uuid__in=...)
+                areas_uuids_str = [str(u) for u in areas_uuids if u]
+                areas = list(Area.objects.filter(uuid__in=areas_uuids_str, empresa=empresa))
+                if len(areas) != len(areas_uuids_str):
+                    raise ValidationError("Una o mas areas no pertenecen a la empresa actual (DSV).")
+                profile.areas_asignadas.set(areas)
 
     def update_user_profile(self, user, empresa, data):
         # Double Semantic Verification (anti-IDOR): ensure payload does not attempt to reassign FK to other tenant/user
@@ -278,18 +323,30 @@ class PerfilBusinessService:
                     raise ValidationError("Foreign key 'user' in payload does not belong to authenticated user (anti-IDOR)")
 
         profile = self.get_or_initialize_profile(user, empresa)
+        self._sync_sedes_y_areas(profile, data, empresa)
         return self.crud.update_profile(profile, data)
 
     def get_profile(self, profile_id, empresa):
-        """Obtiene un perfil específico, validando pertenencia al tenant."""
-        profile = self.crud.get_profile_by_id_and_tenant(profile_id, empresa.id)
+        """Obtiene un perfil especifico, validando pertenencia al tenant, soportando UUID e ID."""
+        is_uuid = False
+        if isinstance(profile_id, str):
+            try:
+                uuid.UUID(profile_id)
+                is_uuid = True
+            except ValueError:
+                pass
+        
+        if is_uuid:
+            profile = self.crud.get_profile_by_uuid_and_tenant(profile_id, empresa.id)
+        else:
+            profile = self.crud.get_profile_by_id_and_tenant(profile_id, empresa.id)
+            
         if not profile:
             raise ValidationError("Perfil no encontrado o no pertenece a la empresa actual.")
         return profile
 
     def update_profile_by_id(self, profile_id, empresa, data):
-        """Actualiza un perfil por ID (para administradores del tenant)."""
-        # Anti-IDOR en payload
+        """Actualiza un perfil por ID/UUID (para administradores del tenant) con DSV y sync de M2M."""
         if isinstance(data, dict):
             if "empresa_id" in data or "empresa" in data:
                 incoming_empresa = data.get("empresa_id") or data.get("empresa")
@@ -297,6 +354,7 @@ class PerfilBusinessService:
                     raise ValidationError("Foreign key 'empresa' in payload does not belong to tenant (anti-IDOR)")
                     
         profile = self.get_profile(profile_id, empresa)
+        self._sync_sedes_y_areas(profile, data, empresa)
         return self.crud.update_profile(profile, data)
 
     def delete_profile(self, profile_id, empresa):
@@ -304,28 +362,8 @@ class PerfilBusinessService:
         profile = self.get_profile(profile_id, empresa)
         return self.crud.delete_profile(profile)
 
-    def assign_rol(self, profile_id: int, empresa, new_rol: str):
-        """[RULE 13] Asigna un rol a un perfil con Double Semantic Verification.
-
-        DSV aplicado:
-          1. Valida que new_rol sea un valor valido de RolTenant.
-          2. Valida que el perfil exista Y pertenezca a la empresa del tenant
-             activo (anti-IDOR horizontal).
-          3. Persiste via CRUDService (operacion atomica).
-
-        Args:
-            profile_id: PK del perfil a actualizar.
-            empresa: Objeto Empresa del tenant activo (resuelto en el ViewSet).
-            new_rol: Nuevo rol a asignar ('ADMIN', 'OPERADOR' o 'VISOR').
-
-        Returns:
-            TenantProfile actualizado.
-
-        Raises:
-            ValidationError: Si el rol es invalido o el perfil no pertenece al tenant.
-        """
-        from apps.tenant.perfil.models import RolTenant
-
+    def assign_rol(self, profile_id, empresa, new_rol: str):
+        """[RULE 13] Asigna un rol a un perfil con Double Semantic Verification."""
         # DSV Paso 1: valor de rol valido
         valid_roles = [choice[0] for choice in RolTenant.choices]
         if new_rol not in valid_roles:
@@ -334,11 +372,7 @@ class PerfilBusinessService:
             )
 
         # DSV Paso 2: perfil pertenece al tenant actual
-        profile = self.crud.get_profile_by_id_and_tenant(profile_id, empresa.id)
-        if not profile:
-            raise ValidationError(
-                "Perfil no encontrado o no pertenece a la empresa actual (anti-IDOR)."
-            )
+        profile = self.get_profile(profile_id, empresa)
 
         # Persistencia atomica
         return self.crud.assign_rol(profile, new_rol)

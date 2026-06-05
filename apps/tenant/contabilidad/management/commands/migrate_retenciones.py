@@ -2,10 +2,10 @@
 Management command para migrar retenciones desde Facturas a Contabilidad (v3.7.1).
 
 Uso:
-    python manage.py migrate_retenciones                     # Ejecuta migración
+    python manage.py migrate_retenciones                     # Ejecuta migracion
     python manage.py migrate_retenciones --dry-run           # Valida sin commitear
-    python manage.py migrate_retenciones --rollback           # Eliminam retenciones migradas
-    python manage.py migrate_retenciones --empresa-id 1      # Para tenant específico
+    python manage.py migrate_retenciones --rollback           # Elimina retenciones migradas
+    python manage.py migrate_retenciones --empresa-id 1      # Para tenant especifico
 """
 
 from decimal import Decimal
@@ -30,7 +30,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--empresa-id',
             type=int,
-            help='Migra solo para empresa específica (por defecto: todas)',
+            help='Migra solo para empresa especifica (por defecto: todas)',
         )
 
     def handle(self, *args, **options):
@@ -44,16 +44,16 @@ class Command(BaseCommand):
         return self.execute_migration(empresa_id, dry_run)
 
     def execute_migration(self, empresa_id=None, dry_run=False):
-        """Ejecuta la migración de retenciones."""
+        """Ejecuta la migracion de retenciones."""
         from apps.tenant.facturas.models import Factura, ItemFactura
         from apps.tenant.contabilidad.models import Retencion
 
         self.stdout.write(self.style.HTTP_INFO('=' * 70))
-        self.stdout.write(self.style.HTTP_INFO('FASE 4: Migración de Retenciones Facturas → Contabilidad (v3.7.1)'))
+        self.stdout.write(self.style.HTTP_INFO('FASE 4: Migracion de Retenciones Facturas a Contabilidad (v3.7.1)'))
         self.stdout.write(self.style.HTTP_INFO('=' * 70))
 
         if dry_run:
-            self.stdout.write(self.style.WARNING('\n⚠️  MODO DRY-RUN: Cambios NO se persistirán\n'))
+            self.stdout.write(self.style.WARNING('\nMODO DRY-RUN: Cambios NO se persistiran\n'))
 
         try:
             with transaction.atomic():
@@ -62,16 +62,16 @@ class Command(BaseCommand):
                 factura_ids = set()
                 item_ids = set()
 
-                qs_facturas = Factura.objects.all()
+                qs_facturas = Factura.objects.only(
+                    'id', 'uuid', 'numero_factura', 'empresa_id',
+                    'retefuente', 'reteica', 'reteiva',
+                )
                 if empresa_id:
                     qs_facturas = qs_facturas.filter(empresa_id=empresa_id)
 
                 self.stdout.write(f'Procesando {qs_facturas.count()} facturas...\n')
 
-                for factura in qs_facturas.only(
-                    'id', 'uuid', 'numero_factura', 'empresa_id',
-                    'retefuente', 'reteica', 'reteiva',
-                ):
+                for factura in qs_facturas.iterator(chunk_size=500):
                     tipos_retenciones = []
 
                     if factura.retefuente and Decimal(str(factura.retefuente)) > Decimal('0'):
@@ -96,6 +96,7 @@ class Command(BaseCommand):
                         try:
                             if not dry_run:
                                 retencion = Retencion.objects.create(
+                                    empresa_id=factura.empresa_id,
                                     tipo=ret_data['tipo'],
                                     porcentaje=Decimal('0'),
                                     base=Decimal('0'),
@@ -110,28 +111,28 @@ class Command(BaseCommand):
                             factura_ids.add(factura.id)
 
                             self.stdout.write(
-                                f'  ✓ Factura {factura.numero_factura}: {ret_data["tipo"]} = {ret_data["monto"]}'
+                                f'  OK Factura {factura.numero_factura}: {ret_data["tipo"]} = {ret_data["monto"]}'
                             )
                         except Exception as e:
                             skipped_count += 1
                             self.stdout.write(
                                 self.style.ERROR(
-                                    f'  ✗ Error en Factura {factura.id}: {str(e)[:60]}'
+                                    f'  ERROR en Factura {factura.id}: {str(e)[:60]}'
                                 )
                             )
 
-                qs_items = ItemFactura.objects.all()
-                if empresa_id:
-                    qs_items = qs_items.filter(factura__empresa_id=empresa_id)
-
-                self.stdout.write(f'\nProcesando {qs_items.count()} items...\n')
-
-                for item in qs_items.only(
-                    'id', 'factura_id',
+                qs_items = ItemFactura.objects.select_related('factura').only(
+                    'id', 'empresa_id', 'factura_id', 'factura__empresa_id',
                     'porcentaje_retefuente', 'valor_retefuente',
                     'porcentaje_reteica', 'valor_reteica',
                     'porcentaje_reteiva', 'valor_reteiva',
-                ):
+                )
+                if empresa_id:
+                    qs_items = qs_items.filter(empresa_id=empresa_id)
+
+                self.stdout.write(f'\nProcesando {qs_items.count()} items...\n')
+
+                for item in qs_items.iterator(chunk_size=500):
                     tipos_retenciones = []
 
                     if item.valor_retefuente and Decimal(str(item.valor_retefuente)) > Decimal('0'):
@@ -159,6 +160,7 @@ class Command(BaseCommand):
                         try:
                             if not dry_run:
                                 retencion = Retencion.objects.create(
+                                    empresa_id=item.empresa_id or item.factura.empresa_id,
                                     tipo=ret_data['tipo'],
                                     porcentaje=ret_data['porcentaje'],
                                     base=Decimal('0'),
@@ -173,38 +175,38 @@ class Command(BaseCommand):
                             item_ids.add(item.id)
 
                             self.stdout.write(
-                                f'  ✓ Item {item.id}: {ret_data["tipo"]} = {ret_data["monto"]}'
+                                f'  OK Item {item.id}: {ret_data["tipo"]} = {ret_data["monto"]}'
                             )
                         except Exception as e:
                             skipped_count += 1
                             self.stdout.write(
                                 self.style.ERROR(
-                                    f'  ✗ Error en Item {item.id}: {str(e)[:60]}'
+                                    f'  ERROR en Item {item.id}: {str(e)[:60]}'
                                 )
                             )
 
                 self.stdout.write('\n' + self.style.SUCCESS('=' * 70))
-                self.stdout.write(self.style.SUCCESS(f'✓ Migración completada'))
+                self.stdout.write(self.style.SUCCESS('OK Migracion completada'))
                 self.stdout.write(self.style.SUCCESS(f'  - Retenciones creadas: {migrated_count}'))
                 self.stdout.write(self.style.SUCCESS(f'  - Saltadas por error: {skipped_count}'))
                 self.stdout.write(self.style.SUCCESS(f'  - Facturas procesadas: {len(factura_ids)}'))
                 self.stdout.write(self.style.SUCCESS(f'  - Items procesados: {len(item_ids)}'))
 
                 if dry_run:
-                    self.stdout.write(self.style.WARNING('\n⚠️  Dry-run: cambios NO persistidos. Ejecuta sin --dry-run para aplicar.'))
+                    self.stdout.write(self.style.WARNING('\nDry-run: cambios NO persistidos. Ejecuta sin --dry-run para aplicar.'))
                     raise transaction.TransactionManagementError('Rollback de dry-run')
 
         except transaction.TransactionManagementError:
             if dry_run:
-                self.stdout.write(self.style.SUCCESS('\n✓ Validación exitosa. Cambios reversados (dry-run).'))
+                self.stdout.write(self.style.SUCCESS('\nOK Validacion exitosa. Cambios reversados (dry-run).'))
             else:
                 raise
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'\n✗ Error fatal: {str(e)}'))
-            raise CommandError(f'Migración fallida: {str(e)}')
+            self.stdout.write(self.style.ERROR(f'\nERROR fatal: {str(e)}'))
+            raise CommandError(f'Migracion fallida: {str(e)}')
 
     def rollback_migration(self, empresa_id=None, dry_run=False):
-        """Revierte la migración (elimina retenciones migradas)."""
+        """Revierte la migracion (elimina retenciones migradas)."""
         from apps.tenant.contabilidad.models import Retencion
 
         self.stdout.write(self.style.HTTP_INFO('=' * 70))
@@ -212,7 +214,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.HTTP_INFO('=' * 70))
 
         if dry_run:
-            self.stdout.write(self.style.WARNING('\n⚠️  MODO DRY-RUN: Cambios NO se persistirán\n'))
+            self.stdout.write(self.style.WARNING('\nMODO DRY-RUN: Cambios NO se persistiran\n'))
 
         try:
             with transaction.atomic():
@@ -224,22 +226,22 @@ class Command(BaseCommand):
                 self.stdout.write(f'Se van a eliminar {count} retenciones migradas...\n')
 
                 if not dry_run:
-                    for ret in qs:
+                    for ret in qs.only('id', 'tipo', 'monto', 'documento_origen_id').iterator(chunk_size=500):
                         self.stdout.write(f'  - {ret.tipo} ${ret.monto} (doc: {ret.documento_origen_id})')
                         ret.delete()
 
                 self.stdout.write('\n' + self.style.SUCCESS('=' * 70))
-                self.stdout.write(self.style.SUCCESS(f'✓ Rollback completado: {count} retenciones eliminadas'))
+                self.stdout.write(self.style.SUCCESS(f'OK Rollback completado: {count} retenciones eliminadas'))
 
                 if dry_run:
-                    self.stdout.write(self.style.WARNING('\n⚠️  Dry-run: cambios NO persistidos. Ejecuta sin --dry-run para aplicar.'))
+                    self.stdout.write(self.style.WARNING('\nDry-run: cambios NO persistidos. Ejecuta sin --dry-run para aplicar.'))
                     raise transaction.TransactionManagementError('Rollback de dry-run')
 
         except transaction.TransactionManagementError:
             if dry_run:
-                self.stdout.write(self.style.SUCCESS('\n✓ Validación exitosa. Cambios reversados (dry-run).'))
+                self.stdout.write(self.style.SUCCESS('\nOK Validacion exitosa. Cambios reversados (dry-run).'))
             else:
                 raise
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f'\n✗ Error en rollback: {str(e)}'))
+            self.stdout.write(self.style.ERROR(f'\nERROR en rollback: {str(e)}'))
             raise CommandError(f'Rollback fallido: {str(e)}')

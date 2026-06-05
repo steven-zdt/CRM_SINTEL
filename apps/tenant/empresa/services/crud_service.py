@@ -1,7 +1,10 @@
 from typing import Any
-from django.db import transaction
 
-from apps.tenant.empresa.models import Empresa, Sede, Area
+from django.db import transaction
+from django.db.models import Q
+
+from apps.tenant.empresa.impl.mailbox_provider import get_mailbox_config as _get_mailbox_config
+from apps.tenant.empresa.models import Area, Empresa, Sede
 
 # Campos canónicos alineados con los serializers y UI
 LIST_FIELDS = (
@@ -36,8 +39,6 @@ DETAIL_FIELDS = (
 
 
 def qs_list(search=None):
-    from django.db.models import Q
-
     qs = Empresa.objects.only(*LIST_FIELDS)
     if search:
         qs = qs.filter(
@@ -134,7 +135,6 @@ def get_empresa_emisor_data() -> dict[str, Any]:
 
 
 def get_mailbox_config(config_id: int):
-    from apps.tenant.empresa.impl.mailbox_provider import get_mailbox_config as _get_mailbox_config
     return _get_mailbox_config(config_id)
 
 

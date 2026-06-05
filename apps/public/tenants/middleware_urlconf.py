@@ -237,6 +237,7 @@ class TenantSecurityAndURLConfMiddleware:
         """
         # --- A. Obtener Tenant y Host ---
         tenant = getattr(request, "tenant", None)
+
         if not tenant:
             # Sin tenant: Django usará ROOT_URLCONF por defecto
             return self.get_response(request)

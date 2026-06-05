@@ -1,11 +1,11 @@
 """
-Tests para Presupuesto Manual (v3.5.2) — ItemPresupuestoProyecto
+Tests para Presupuesto Manual (v3.5.2) - ItemPresupuestoProyecto
 
 Tests para validar:
-1. Cálculo matemático correcto de utilidad planeada
-2. DSV (Double Semantic Verification) — rechaza item de otro tenant
-3. Bloqueo de edición en Fase CIERRE — crear item
-4. Bloqueo de edición en Fase CIERRE — eliminar item
+1. Calculo matematico correcto de utilidad planeada
+2. DSV (Double Semantic Verification) - rechaza item de otro tenant
+3. Bloqueo de edicion en Fase CIERRE - crear item
+4. Bloqueo de edicion en Fase CIERRE - eliminar item
 """
 from decimal import Decimal
 import pytest
@@ -23,7 +23,7 @@ class TestPresupuestoProyecto:
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        """Configuración inicial para cada test."""
+        """Configuracion inicial para cada test."""
         self.empresa1 = Empresa.objects.create(
             razon_social='Empresa 1',
             nit='123456789'
@@ -42,12 +42,12 @@ class TestPresupuestoProyecto:
 
     def test_calculo_utilidad_planeada_correcta(self):
         """
-        TEST 1: Cálculo matemático correcto de utilidad planeada.
+        TEST 1: Calculo matematico correcto de utilidad planeada.
 
         Scenario:
         - Valor contrato: $1,000,000
-        - Item 1: MANO_OBRA, cantidad=2, valor_unitario=100,000 → subtotal=$200,000
-        - Item 2: MATERIALES, cantidad=10, valor_unitario=30,000 → subtotal=$300,000
+        - Item 1: MANO_OBRA, cantidad=2, valor_unitario=100,000 -> subtotal=$200,000
+        - Item 2: MATERIALES, cantidad=10, valor_unitario=30,000 -> subtotal=$300,000
         - costo_planeado_total debe ser $500,000
         - utilidad_planeada debe ser $500,000 (1,000,000 - 500,000)
         - margen_planeado debe ser 50.00% (500,000 / 1,000,000 * 100)
@@ -57,7 +57,7 @@ class TestPresupuestoProyecto:
             proyecto=self.proyecto,
             data={
                 'categoria': 'MANO_OBRA',
-                'descripcion': 'Instalación técnica',
+                'descripcion': 'Instalacion tecnica',
                 'cantidad': Decimal('2'),
                 'valor_unitario': Decimal('100000.00')
             }
@@ -83,7 +83,7 @@ class TestPresupuestoProyecto:
 
     def test_dsv_item_otro_empresa_rechazado(self):
         """
-        TEST 2: DSV (Double Semantic Verification) — rechaza item de otro tenant.
+        TEST 2: DSV (Double Semantic Verification) - rechaza item de otro tenant.
 
         Scenario:
         - Crear proyecto en Empresa 1
@@ -92,8 +92,8 @@ class TestPresupuestoProyecto:
         """
         with pytest.raises(ValidationError):
             PresupuestoBusinessService.crear_item(
-                empresa=self.empresa2,  # ← Diferente empresa
-                proyecto=self.proyecto,  # ← Proyecto pertenece a empresa1
+                empresa=self.empresa2,  # <- Diferente empresa
+                proyecto=self.proyecto,  # <- Proyecto pertenece a empresa1
                 data={
                     'categoria': 'EQUIPOS',
                     'descripcion': 'Test',
@@ -104,7 +104,7 @@ class TestPresupuestoProyecto:
 
     def test_cierre_bloquea_crear_item(self):
         """
-        TEST 3: Bloqueo de creación de items en Fase CIERRE.
+        TEST 3: Bloqueo de creacion de items en Fase CIERRE.
 
         Scenario:
         - Proyecto en fase CIERRE
@@ -128,7 +128,7 @@ class TestPresupuestoProyecto:
 
     def test_cierre_bloquea_eliminar_item(self):
         """
-        TEST 4: Bloqueo de eliminación de items en Fase CIERRE.
+        TEST 4: Bloqueo de eliminacion de items en Fase CIERRE.
 
         Scenario:
         - Crear item en proyecto (fase PLANEACION)
@@ -151,7 +151,7 @@ class TestPresupuestoProyecto:
         self.proyecto.fase_actual = 'CIERRE'
         self.proyecto.save()
 
-        # Recargar item para que tenga la relación actualizada
+        # Recargar item para que tenga la relacion actualizada
         item.refresh_from_db()
 
         with pytest.raises(ValidationError, match='Cierre'):

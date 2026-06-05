@@ -33,7 +33,7 @@
                     if (!val) return '<span class="text-muted">—</span>';
                     return `<i class="bi bi-geo-alt-fill text-primary me-2"></i><span class="fw-semibold">${val}</span>`;
                 },
-                minWidth: 200
+                minWidth: 120
             },
             {
                 title: "Dirección",
@@ -43,7 +43,7 @@
                     if (!val) return '<span class="text-muted">—</span>';
                     return `<i class="bi bi-house text-secondary me-1"></i><span class="small">${val}</span>`;
                 },
-                minWidth: 220
+                minWidth: 140
             },
             {
                 title: "Teléfono",
@@ -70,7 +70,6 @@
                 title: "Acciones",
                 formatter: function(cell) {
                     const rowData = cell.getRow().getData();
-                    const id   = rowData.id;
                     const uuid = rowData.uuid;
                     return `
                         <div class="btn-group btn-group-sm" role="group">

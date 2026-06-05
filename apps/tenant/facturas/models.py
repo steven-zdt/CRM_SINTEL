@@ -58,8 +58,8 @@ class Factura(SintelTenantBaseModel):
 
     # Información básica
     numero = models.CharField(
-        max_length=50, unique=True, verbose_name=_('Número de Factura'),
-        help_text=_('Ej: FST354')
+        max_length=200, unique=True, verbose_name=_('Número de Factura'),
+        help_text=_('Numero UBL: puede ser alfanumerico (FAxxxx) o hash SHA256 (96 chars). Max real encontrado: 96.')
     )
     prefijo = models.CharField(max_length=10, blank=True, null=True, verbose_name=_('Prefijo'))
     consecutivo = models.IntegerField(verbose_name=_('Consecutivo'))
@@ -126,11 +126,6 @@ class Factura(SintelTenantBaseModel):
     payment_due_date = models.DateField(blank=True, null=True, verbose_name=_('Fecha límite de pago'))
     
     # Vinculación Contable (v3.7)
-    cuenta_contable_uuid = models.UUIDField(
-        null=True,
-        blank=True,
-        help_text=_("Cuenta PUC nivel 6 (Cartera/Ingreso/Gasto)")
-    )
 
     # Vinculación Cotización (v3.9.3) — Soft reference
     cotizacion_uuid = models.UUIDField(
@@ -147,15 +142,29 @@ class Factura(SintelTenantBaseModel):
         help_text=_("Numero de la cotizacion vinculada (snapshot para Zero Waste queries)")
     )
 
+    cliente_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=_("UUID del cliente vinculado para facturas de venta")
+    )
+
+    proveedor_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=_("UUID del proveedor vinculado para facturas de compra")
+    )
+
     # DIAN / QR / CUFE y autorización
     # # WARNING: v2.60: Índice único para garantizar idempotencia en guardar_factura_desde_dto()
     # Django permite múltiples NULLs en campos únicos, así que esto garantiza unicidad cuando hay valor
     # # WARNING: v2.61.2: Pre-validación de idempotencia: fast_get_cufe() extrae CUFE con regex antes del parsing completo
     # Esto permite verificar duplicados en los primeros milisegundos sin cargar todo el XML en memoria
     cufe = models.CharField(
-        max_length=128, 
-        blank=True, 
-        null=True, 
+        max_length=200,   # max real encontrado: 96 chars. Ampliado para CUFEs largos futuros.
+        blank=True,
+        null=True,
         unique=True,  # # WARNING: CRÍTICO: Garantiza idempotencia por CUFE (clave legal de la DIAN)
         db_index=True,  # Índice adicional para búsquedas rápidas (usado por fast_get_cufe para pre-validación)
         verbose_name=_('CUFE'), 
@@ -172,7 +181,7 @@ class Factura(SintelTenantBaseModel):
 
     # Respuesta DIAN (ApplicationResponse) / estado de validación
     dian_validation_code = models.CharField(max_length=10, blank=True, null=True, verbose_name=_('Código Validación DIAN'))
-    dian_validation_desc = models.CharField(max_length=200, blank=True, null=True, verbose_name=_('Descripción Validación'))
+    dian_validation_desc = models.CharField(max_length=500, blank=True, null=True, verbose_name=_('Descripción Validación'))
     dian_validation_fecha = models.DateField(blank=True, null=True, verbose_name=_('Fecha Validación'))
     dian_validation_hora = models.TimeField(blank=True, null=True, verbose_name=_('Hora Validación'))
     dian_response_xml = models.TextField(blank=True, null=True, verbose_name=_('ApplicationResponse XML'))
@@ -181,6 +190,19 @@ class Factura(SintelTenantBaseModel):
     # Mantenido por compatibilidad durante migración
     xml_content = models.TextField(blank=True, null=True, verbose_name=_('XML UBL completo (Deprecado)'))
     xml_file_path = models.CharField(max_length=500, blank=True, null=True, verbose_name=_('Ruta XML'))
+
+    # Sede — vinculacion para indicadores y KPIs por sede (DT-SEDE-02)
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='facturas',
+        verbose_name=_('Sede'),
+        help_text=_('Sede de la empresa que emite o recibe la factura. '
+                    'Opcional — si no se asigna aplica a toda la empresa.'),
+        db_index=True,
+    )
 
     # [v2.61.4] created_at y updated_at heredados de SintelTenantBaseModel
 
@@ -195,6 +217,8 @@ class Factura(SintelTenantBaseModel):
             models.Index(fields=['estado']),
             models.Index(fields=['naturaleza']),  # # WARNING: v2.60: Índice para filtrar por VENTA/COMPRA
             # # WARNING: v2.60: cufe tiene unique=True y db_index=True, no necesita índice adicional aquí
+            models.Index(fields=['empresa_id', 'cliente_uuid'], name='idx_fact_empresa_cliente_uuid'),
+            models.Index(fields=['empresa_id', 'proveedor_uuid'], name='idx_fact_empresa_prov_uuid'),
         ]
         # # WARNING: v2.60: Constraint único por cufe garantiza idempotencia (definido en el campo con unique=True)
         # Django permite múltiples NULLs en campos únicos, así que esto funciona correctamente
@@ -258,6 +282,33 @@ class Factura(SintelTenantBaseModel):
         except Exception:
             return Decimal('0.00')
 
+    # ── Pull Model: Bancos (v3.11.0, ADR-001) ──────────────────────────────
+    # medio_pago_codigo == '10' significa "Efectivo" segun catalogo DIAN.
+    # Para pagos en efectivo no se requiere conciliacion bancaria.
+
+    @property
+    def total_pagado_bancos(self) -> Decimal:
+        """
+        [Pull Model v3.11.0] Total conciliado en bancos para esta factura.
+        Lee de TransaccionBancaria via BancosBridge (sin FK directa).
+        Retorna 0.00 si el objeto no esta guardado aun.
+        """
+        if not self.pk or not self.empresa_id:
+            return Decimal('0.00')
+        try:
+            from apps.tenant.facturas.services.selectors import BancosBridge
+            return BancosBridge.obtener_total_conciliado(self.empresa_id, self.uuid)
+        except Exception:
+            return Decimal('0.00')
+
+    @property
+    def saldo_pendiente(self) -> Decimal:
+        """
+        [Pull Model v3.11.0] Diferencia entre total factura y lo conciliado en bancos.
+        Nunca negativo: max(0, total - total_pagado_bancos).
+        """
+        return max(Decimal('0.00'), (self.total or Decimal('0.00')) - self.total_pagado_bancos)
+
     def __str__(self):
         cufe_str = f" | {self.cufe}" if self.cufe else ""
         return f"{self.numero}{cufe_str}"
@@ -269,6 +320,10 @@ class Factura(SintelTenantBaseModel):
             empresa = Empresa.objects.only('id').first()
             if empresa:
                 self.empresa = empresa
+        if self.consecutivo is None:
+            self.consecutivo = 0
+        if not self.fecha_emision:
+            self.fecha_emision = timezone.now()
         if self.total is None or self.total == Decimal('0.00'):
             self.total = (self.subtotal or Decimal('0.00')) + (self.impuestos or Decimal('0.00'))
         super().save(*args, **kwargs)
@@ -279,6 +334,11 @@ class ItemFactura(SintelTenantBaseModel):
         PRODUCTO = 'PRODUCTO', _('Producto de Inventario')
         SERVICIO = 'SERVICIO', _('Servicio de Inventario')
 
+    uuid = models.UUIDField(
+        default=uuid.uuid4, editable=False, unique=True, db_index=True,
+        verbose_name=_('UUID'),
+        help_text=_('Identificador publico del item de factura'),
+    )
     factura = models.ForeignKey(Factura, on_delete=models.CASCADE, related_name='items', verbose_name=_('Factura'))
     
     # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
@@ -427,53 +487,6 @@ class ItemFactura(SintelTenantBaseModel):
         except Exception:
             return self.valor_reteica or Decimal('0.00')
 
-
-# --- DEPRECADO: Configuración de ingesta por correo (por tenant) ---
-# # WARNING: DEPRECADO (Fase 5): Este modelo ha sido migrado a apps.tenant.empresa.models.MailInboxConfig
-# Se mantiene temporalmente para migración de datos. No usar en código nuevo.
-# TODO: Crear migración de datos y eliminar este modelo.
-class MailIngestionConfig(SintelTenantBaseModel):
-    """
-    # WARNING: DEPRECADO: Este modelo ha sido migrado a apps.tenant.empresa.models.MailInboxConfig (SSoT).
-    
-    No usar en código nuevo. Usar apps.tenant.empresa.services.mailbox_provider.get_mailbox_config().
-    """
-    PROTOCOL_CHOICES = (
-        ("imap", "IMAP"),
-        ("pop3", "POP3"),
-    )
-    
-    host = models.CharField(max_length=255, verbose_name=_('Servidor'))
-    port = models.PositiveIntegerField(default=993, verbose_name=_('Puerto'))
-    protocol = models.CharField(
-        max_length=10,
-        choices=PROTOCOL_CHOICES,
-        default="imap",
-        verbose_name=_('Protocolo')
-    )
-    ssl = models.BooleanField(default=True, verbose_name=_('Usar SSL/TLS'))
-    username = models.CharField(max_length=255, verbose_name=_('Usuario'))
-    password = models.CharField(max_length=255, verbose_name=_('Contraseña'))
-    mailbox = models.CharField(max_length=255, default="INBOX", verbose_name=_('Carpeta'))
-    mark_as_seen = models.BooleanField(default=True, verbose_name=_('Marcar como leído'))
-    move_processed_to = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        verbose_name=_('Mover procesados a')
-    )
-    max_attachment_mb = models.PositiveIntegerField(default=50, verbose_name=_('Límite adjuntos (MB)'))
-    is_active = models.BooleanField(default=True, verbose_name=_('Activa'))
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Creado'))
-    updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Actualizado'))
-    
-    class Meta:
-        verbose_name = _('Configuración de Ingesta por Correo (DEPRECADO)')
-        verbose_name_plural = _('Configuraciones de Ingesta por Correo (DEPRECADO)')
-        ordering = ("-updated_at",)
-    
-    def __str__(self):
-        return f"{self.protocol.upper()}://{self.username}@{self.host}:{self.port}/{self.mailbox}"
 
 
 # --- Tracking de ejecuciones de ingesta por correo (por tenant) ---
@@ -672,6 +685,11 @@ class NotaCredito(SintelTenantBaseModel):
     # WARNING: TENANT_APPS: Aislado por esquema (django-tenants).
     # WARNING: INMUTABILIDAD: Las notas crédito son documentos históricos (solo creación/eliminación).
     """
+    uuid = models.UUIDField(
+        default=uuid.uuid4, editable=False, unique=True, db_index=True,
+        verbose_name=_('UUID'),
+        help_text=_('Identificador publico de la nota credito'),
+    )
     factura = models.OneToOneField(
         Factura,
         related_name="nota_credito",
@@ -682,13 +700,13 @@ class NotaCredito(SintelTenantBaseModel):
     
     # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
     numero = models.CharField(
-        max_length=50,
+        max_length=200,   # alineado con Factura.numero — puede ser hash UBL
         unique=True,
         verbose_name=_('Número de Nota Crédito'),
         help_text=_('Ej: NC135')
     )
     cude = models.CharField(
-        max_length=128,
+        max_length=200,   # alineado con Factura.cufe
         unique=True,
         verbose_name=_('CUDE'),
         help_text=_('Código Único de Documento Electrónico (identificador legal de la nota)')
@@ -794,6 +812,11 @@ class NotaCredito(SintelTenantBaseModel):
     def __str__(self):
         return f"NC {self.numero} | {self.cude}"
 
+    @property
+    def factura_original(self):
+        """Alias de compatibilidad para la factura afectada por la nota credito."""
+        return self.factura
+
     def save(self, *args, **kwargs):
         """Calcula total automáticamente si no está definido."""
         # # WARNING: v2.40: Auto-asignar empresa desde factura si no está asignada
@@ -810,12 +833,13 @@ NaturalezaFactura = Factura.Naturaleza
 
 # SINTEL v3.5 Secure Update Configuration Sets
 MANUAL_EDITABLE_FIELDS = [
+    'estado',
+    'estado_pago',
+    'categoria',
     'fecha_vencimiento',
     'payment_due_date',
     'forma_pago',
     'medio_pago_codigo',
-    'estado_pago',
-    'cuenta_contable_uuid',
     'orden_compra',
     'cotizacion_uuid',
     'cotizacion_numero',
@@ -853,4 +877,53 @@ XML_IMMUTABLE_FIELDS = {
     'autorizacion_vigencia_inicio',
     'autorizacion_vigencia_fin',
 }
+
+
+class FacturaImpuesto(SintelTenantBaseModel):
+    class TipoImpuesto(models.TextChoices):
+        IVA = 'IVA', _('IVA')
+        INC = 'INC', _('Impuesto Nacional al Consumo')
+        RETEFUENTE = 'RETEFUENTE', _('Retencion en la Fuente')
+        RETEIVA = 'RETEIVA', _('Retencion de IVA')
+        RETEICA = 'RETEICA', _('Retencion de ICA')
+        OTRO = 'OTRO', _('Otro Impuesto')
+
+    factura = models.ForeignKey(
+        Factura,
+        on_delete=models.CASCADE,
+        related_name='impuestos_desglosados',
+        verbose_name=_('Factura')
+    )
+    tipo_impuesto = models.CharField(
+        max_length=20,
+        choices=TipoImpuesto.choices,
+        verbose_name=_('Tipo de Impuesto')
+    )
+    porcentaje = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Porcentaje')
+    )
+    base_imponible = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Base Imponible')
+    )
+    valor_impuesto = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Valor Impuesto')
+    )
+
+    class Meta:
+        verbose_name = _('Impuesto Desglosado')
+        verbose_name_plural = _('Impuestos Desglosados')
+        db_table = 'factura_impuestos'
+
+    def __str__(self):
+        return f"{self.tipo_impuesto} ({self.porcentaje}%): {self.valor_impuesto}"
+
 

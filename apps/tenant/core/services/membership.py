@@ -24,9 +24,59 @@ Operaciones expuestas:
 import logging
 
 from django.db import connection
-from django_tenants.utils import get_public_schema_name
+from django.dispatch import receiver
+from django_tenants.utils import get_public_schema_name, tenant_context
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Receiver: limpieza de TenantProfile cuando se elimina un User global
+# ---------------------------------------------------------------------------
+
+def _on_global_user_hard_deleting(sender, user, **kwargs) -> None:
+    """
+    Receiver para apps.public.accounts.signals.global_user_hard_deleting.
+
+    Elimina TenantProfile del usuario en cada tenant al que pertenece,
+    usando tenant_context() para cambiar de schema de forma segura.
+
+    Se registra en AppConfig.ready() de apps.tenant.core para garantizar
+    que el signal este conectado en el momento de la emision.
+
+    Patron de aislamiento:
+        - apps.public emite el signal (no conoce TenantProfile).
+        - apps.tenant.core recibe y limpia (bridge autorizado).
+        - Sin raw SQL ni SET search_path — ORM maneja el switch de schema.
+    """
+    from apps.public.tenants.models import TenantMembership
+
+    with _public_schema():
+        memberships = list(
+            TenantMembership.objects.filter(user=user).select_related("client")
+        )
+
+    if not memberships:
+        logger.info("[membership] no tenant memberships for user_id=%s, skipping TenantProfile cleanup", user.pk)
+        return
+
+    for membership in memberships:
+        tenant = membership.client
+        try:
+            with tenant_context(tenant):
+                from apps.tenant.perfil.models import TenantProfile
+                deleted_count, _ = TenantProfile.objects.filter(user=user).delete()
+                logger.info(
+                    "[membership] deleted %s TenantProfile(s) in schema=%s for user_id=%s",
+                    deleted_count, tenant.schema_name, user.pk,
+                )
+        except Exception as exc:
+            logger.warning(
+                "[membership] TenantProfile cleanup failed schema=%s user_id=%s: %s",
+                getattr(tenant, "schema_name", "?"), user.pk, exc,
+            )
+
+    logger.info("[membership] TenantProfile cleanup complete for user_id=%s", user.pk)
 
 # ---------------------------------------------------------------------------
 # Contexto de esquema
@@ -268,3 +318,109 @@ def verify_invitation(token):
     except Exception:
         logger.exception("[core:membership] verify_invitation error")
         return None
+
+
+def check_user_exists_by_email(email):
+    """Verifica si el usuario existe a nivel global por su email."""
+    if not email:
+        return False
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    try:
+        with _public_schema():
+            return User.objects.filter(email__iexact=email).exists()
+    except Exception:
+        logger.exception("[core:membership] Error checking global user existence by email: %s", email)
+        return False
+
+
+def create_global_user(email, first_name, last_name):
+    """Registra un usuario global en el esquema public."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    try:
+        with _public_schema():
+            base = (email.split("@")[0] if email else "user").strip().replace(" ", "").lower() or "user"
+            candidate = base[:150]
+            if User.objects.filter(username=candidate).exists():
+                i = 1
+                while True:
+                    cand = f"{base}-{i}"[:150]
+                    if not User.objects.filter(username=cand).exists():
+                        candidate = cand
+                        break
+                    i += 1
+            user = User(
+                email=email.strip().lower(),
+                username=candidate,
+                first_name=first_name.strip(),
+                last_name=last_name.strip(),
+                is_staff=False,
+                is_active=True
+            )
+            user.set_unusable_password()
+            user.save()
+            return user
+    except Exception:
+        logger.exception("[core:membership] Error creating global user: %s", email)
+        raise
+
+
+def add_tenant_membership(user_id, schema_name, rol="USER"):
+    """Crea una TenantMembership activa para un usuario en un tenant."""
+    try:
+        from apps.public.tenants.models import TenantMembership, Client
+        with _public_schema():
+            client = Client.objects.filter(schema_name=schema_name).first()
+            if not client:
+                raise ValueError(f"Tenant client not found for schema {schema_name}")
+            
+            membership, created = TenantMembership.objects.get_or_create(
+                client=client,
+                user_id=user_id,
+                defaults={
+                    "rol": rol,
+                    "is_active": True,
+                    "is_primary_admin": False
+                }
+            )
+            if not created and not membership.is_active:
+                membership.is_active = True
+                membership.save(update_fields=["is_active", "updated_at"])
+            return membership
+    except Exception:
+        logger.exception("[core:membership] Error adding membership: user_id=%s schema=%s", user_id, schema_name)
+        raise
+
+
+def registrar_failed_task(
+    task_id: str,
+    task_name: str,
+    args: list,
+    kwargs: dict,
+    exception: Exception,
+    schema_name: str | None,
+    retries: int,
+) -> None:
+    """
+    Bridge method to register a failed task in FailedTenantTask (Dead Letter Queue)
+    in the public schema, respecting the schema isolation rules.
+    """
+    import traceback as tb
+    try:
+        from apps.public.tenants.models import FailedTenantTask
+        with _public_schema():
+            FailedTenantTask.objects.create(
+                task_id=task_id or "unknown",
+                task_name=task_name,
+                args=args,
+                kwargs=kwargs,
+                exception=str(exception),
+                traceback=tb.format_exc(),
+                tenant_schema=schema_name,
+                retries=retries,
+            )
+        logger.info("[membership] DLQ registered in FailedTenantTask: task=%s", task_name)
+    except Exception as dlq_err:
+        logger.error("[membership] DLQ error registering task in DB: %s", dlq_err)
+

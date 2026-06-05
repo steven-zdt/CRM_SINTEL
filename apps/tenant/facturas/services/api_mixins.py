@@ -50,8 +50,14 @@ class FacturaServiceMixin:
         """Obtiene retenciones desde Cliente."""
         return FacturaBusinessService.obtener_retenciones_desde_cliente(cliente_nit, empresa_id)
 
+    def service_vincular_cliente(self, factura, cliente_uuid, empresa_id):
+        """Vincula un cliente existente a una factura de venta."""
+        return FacturaBusinessService.vincular_cliente(factura, cliente_uuid, empresa_id)
+
+    def service_vincular_proveedor(self, factura, proveedor_uuid, empresa_id):
+        """Vincula un proveedor existente a una factura de compra."""
+        return FacturaBusinessService.vincular_proveedor(factura, proveedor_uuid, empresa_id)
+
     def service_obtener_retenciones_proveedor(self, proveedor_nit, empresa_id):
         """Obtiene retenciones desde Proveedor."""
         return FacturaBusinessService.obtener_retenciones_desde_proveedor(proveedor_nit, empresa_id)
-
-

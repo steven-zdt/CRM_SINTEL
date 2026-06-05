@@ -1,102 +1,270 @@
-(function() {
+/**
+ * Feature: Listado de Gastos y Resoluciones v3.10.0
+ * - KPIs calculados dinamicamente desde datos del grid de gastos
+ * - TabulatorFactory standard con layout fitDataFill
+ * - Columnas redisenadas estilo Proyectos (apilados y chips de estado)
+ * - Event Delegation y Anti-Zombies integrados
+ */
+(function(w, d) {
     'use strict';
 
-    window.Sintel = window.Sintel || {};
-    window.Sintel.Gastos = window.Sintel.Gastos || {};
+    const MOD = '[gastos.list]';
 
-    /**
-     * Gasto List Module
-     */
+    // Anti-Zombies: destruir instancias previas en HTMX swap
+    if (w.SintelGastosTables) {
+        Object.values(w.SintelGastosTables).forEach(tb => {
+            if (tb && typeof tb.destroy === 'function') {
+                try { tb.destroy(); } catch (_) {}
+            }
+        });
+    }
+    w.SintelGastosTables = {};
+
+    // Namespace
+    w.Sintel = w.Sintel || {};
+    w.Sintel.Gastos = w.Sintel.Gastos || {};
+
+    // ─── Utilidades de Formateo ───────────────────────────────────────────────
+
+    function fmtMoneda(v) {
+        const n = parseFloat(v);
+        if (!v && v !== 0 || isNaN(n)) return '—';
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP',
+            minimumFractionDigits: 0, maximumFractionDigits: 0
+        }).format(n);
+    }
+
+    function fmtFecha(v) {
+        if (!v) return '—';
+        try {
+            return new Date(v + 'T00:00:00').toLocaleDateString('es-CO', {
+                day: '2-digit', month: 'short', year: 'numeric'
+            });
+        } catch (_) { return v; }
+    }
+
+    // ─── KPIs Dinamicos de Gastos ─────────────────────────────────────────────
+
+    function actualizarKPIs(rows) {
+        const summaryEl = d.getElementById('gastos-summary');
+        if (!summaryEl) return;
+
+        const totalQty = rows.length;
+        const activos = rows.filter(r => !r.ds_anulado);
+        const activosQty = activos.length;
+        const anuladosQty = totalQty - activosQty;
+        const totalMonto = activos.reduce((s, r) => s + (parseFloat(r.ds_total) || 0), 0);
+
+        summaryEl.innerHTML = `
+            <div class="row g-3">
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+                                <i class="bi bi-receipt text-primary fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold lh-1 mb-1">${totalQty}</div>
+                                <div class="small text-muted">Total Documentos</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+                                <i class="bi bi-cash-coin text-success fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fs-6 fw-bold lh-1 mb-1">${fmtMoneda(totalMonto)}</div>
+                                <div class="small text-muted">Monto Activo</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+                                <i class="bi bi-check-circle text-info fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold lh-1 mb-1">${activosQty}</div>
+                                <div class="small text-muted">Gastos Activos</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-danger bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+                                <i class="bi bi-x-circle text-danger fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fs-4 fw-bold lh-1 mb-1">${anuladosQty}</div>
+                                <div class="small text-muted">Anulados</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // ─── Modulo GastoList ─────────────────────────────────────────────────────
+
     const GastoList = {
         table: null,
         tableId: "#grid-gastos",
         _initializing: false,
 
         init: function(retryCount = 0) {
-            const container = document.querySelector(this.tableId);
+            const container = d.querySelector(this.tableId);
             if (this.table || !container || this._initializing) return;
 
             this._initializing = true;
-            console.log("[GastoList] Inicializando tabla v2.62...");
+            console.log("[GastoList] Inicializando tabla v3.10.0...");
 
-            // Verificar si TabulatorFactory está disponible
-            if (!window.TabulatorFactory) {
+            if (!w.TabulatorFactory) {
                 if (retryCount < 5) {
-                    console.warn("[GastoList] TabulatorFactory no disponible, reintentando en 500ms...");
+                    console.warn("[GastoList] TabulatorFactory no disponible, reintentando...");
                     this._initializing = false;
                     setTimeout(() => this.init(retryCount + 1), 500);
                 } else {
-                    console.error("[GastoList] TabulatorFactory nunca estuvo disponible después de 5 intentos");
-                    window.UIManager?.notifyError("Error al cargar la tabla de gastos");
+                    console.error("[GastoList] TabulatorFactory no disponible despues de 5 intentos");
+                    w.UIManager?.notifyError("Error al cargar la tabla de gastos");
                     this._initializing = false;
                 }
                 return;
             }
 
-            // Mostrar grid y ocultar spinner
             container.style.display = 'block';
-            const spinner = document.querySelector('[data-spinner="gastos"]');
+            const spinner = d.querySelector('[data-spinner="gastos"]');
             if (spinner) spinner.style.display = 'none';
 
             try {
-                const apiUrl = window.Sintel.Gastos.API?.gastos?.list || '/api/v1/gastos/';
+                const apiUrl = w.Sintel.Gastos.API?.gastos?.list || '/api/v1/gastos/';
                 const columns = this.getColumnas();
 
-                console.log("[GastoList] Creando tabla con API:", apiUrl);
-                this.table = window.TabulatorFactory.create(this.tableId, apiUrl, columns, {
+                console.log("[GastoList] Creando tabla en contenedor:", this.tableId);
+                this.table = w.TabulatorFactory.create(this.tableId, apiUrl, columns, {
                     initialSort: [{ field: "ds_fecha", dir: "desc" }],
-                    placeholder: "No se encontraron gastos registrados"
+                    placeholder: "No se encontraron gastos registrados",
+                    searchInputSelector: '#search-gasto'
                 });
 
-                if (!this.table) {
-                    console.warn("[GastoList] TabulatorFactory.create retornó null, reintentando...");
-                    this.table = null; // Limpiar
+                if (this.table) {
+                    w.SintelGastosTables.gastos = this.table;
+
+                    // Calcular KPIs con base en los datos de la grilla
+                    this.table.on('dataLoaded', function(data) {
+                        actualizarKPIs(data);
+                    });
+                    this.table.on('dataFiltered', function(_filters, rows) {
+                        actualizarKPIs(rows.map(r => r.getData()));
+                    });
+
+                    this._initializing = false;
+                } else {
+                    console.warn("[GastoList] Fallo la creacion de la tabla, reintentando...");
                     this._initializing = false;
                     setTimeout(() => this.init(0), 1000);
-                } else {
-                    this._initializing = false;
                 }
             } catch (error) {
-                console.error("[GastoList] Error al inicializar Tabulator:", error);
-                window.UIManager?.notifyError("Error al inicializar tabla de gastos");
+                console.error("[GastoList] Error critico al inicializar:", error);
+                w.UIManager?.notifyError("Error al inicializar tabla de gastos");
                 this._initializing = false;
             }
         },
 
         getColumnas: function() {
             return [
-                { title: "N° Gasto", field: "ds_numero_documento", width: 120, headerFilter: "input" },
-                { title: "Doc. Proveedor", field: "ds_numero_documento_proveedor", width: 150, headerFilter: "input" },
-                { title: "Fecha", field: "ds_fecha", width: 110, headerFilter: "input" },
-                { title: "Vendedor / Proveedor", field: "ds_vendedor", minWidth: 200, headerFilter: "input" },
-                { title: "Categoría", field: "categoria_contable_display", width: 150, headerFilter: "input" },
+                // 1. Documento (Numero + Doc. Proveedor apilados)
                 {
-                    title: "Asociado a",
-                    field: "producto_relacionado_nombre",
-                    width: 180,
-                    headerFilter: "input",
+                    title: "Documento",
+                    field: "ds_numero_documento",
+                    frozen: true,
+                    width: 170,
                     formatter: function(cell) {
-                        const data = cell.getData();
-                        if (data.producto_relacionado_nombre) {
-                            return `<span class="badge bg-light text-dark border border-info"><i class="bi bi-box text-info me-1"></i>${data.producto_relacionado_nombre}</span>`;
-                        }
-                        if (data.servicio_relacionado_nombre) {
-                            return `<span class="badge bg-light text-dark border border-warning"><i class="bi bi-gear text-warning me-1"></i>${data.servicio_relacionado_nombre}</span>`;
-                        }
-                        if (data.activo_relacionado_nombre) {
-                            return `<span class="badge bg-light text-dark border border-primary"><i class="bi bi-building text-primary me-1"></i>${data.activo_relacionado_nombre}</span>`;
-                        }
-                        return `<span class="text-muted">-</span>`;
+                        const row = cell.getRow().getData();
+                        const num = row.ds_numero_documento || '—';
+                        const prov = row.ds_numero_documento_proveedor;
+                        return `
+                            <div style="line-height:1.35;">
+                                <div class="fw-semibold text-primary" style="font-size:0.85rem;">${num}</div>
+                                ${prov ? `<div class="mt-1 small" style="font-size:0.72rem;"><span class="text-muted">Prov:</span> <code class="text-secondary">${prov}</code></div>` : ''}
+                            </div>
+                        `;
                     }
                 },
+                // 2. Fecha (Formato local colombiano con icono)
+                {
+                    title: "Fecha",
+                    field: "ds_fecha",
+                    width: 120,
+                    formatter: function(cell) {
+                        return `
+                            <div style="font-size:0.8rem;">
+                                <i class="bi bi-calendar-event text-muted me-1"></i>${fmtFecha(cell.getValue())}
+                            </div>
+                        `;
+                    }
+                },
+                // 3. Vendedor / Proveedor (Con iniciales del tercero)
+                {
+                    title: "Vendedor / Proveedor",
+                    field: "ds_vendedor",
+                    minWidth: 200,
+                    formatter: function(cell) {
+                        const nombre = cell.getValue() || '—';
+                        const iniciales = nombre.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+                        return `
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
+                                     style="width:26px;height:26px;font-size:0.65rem;">${iniciales}</div>
+                                <span class="text-truncate small" style="max-width:160px;" title="${nombre}">${nombre}</span>
+                            </div>
+                        `;
+                    }
+                },
+                // 4. Clasificacion (Categoria + Asociado apilados)
+                {
+                    title: "Clasificación / Asociación",
+                    field: "categoria_contable_display",
+                    width: 200,
+                    formatter: function(cell) {
+                        const row = cell.getRow().getData();
+                        const cat = row.categoria_contable_display || '—';
+                        let assocHtml = '';
+                        if (row.producto_relacionado_nombre) {
+                            assocHtml = `<span class="badge bg-light text-dark border border-info" style="font-size:0.65rem;"><i class="bi bi-box text-info me-1"></i>${row.producto_relacionado_nombre}</span>`;
+                        } else if (row.servicio_relacionado_nombre) {
+                            assocHtml = `<span class="badge bg-light text-dark border border-warning" style="font-size:0.65rem;"><i class="bi bi-gear text-warning me-1"></i>${row.servicio_relacionado_nombre}</span>`;
+                        } else if (row.activo_relacionado_nombre) {
+                            assocHtml = `<span class="badge bg-light text-dark border border-primary" style="font-size:0.65rem;"><i class="bi bi-building text-primary me-1"></i>${row.activo_relacionado_nombre}</span>`;
+                        }
+                        return `
+                            <div style="line-height:1.35;">
+                                <div class="fw-semibold text-truncate small" style="max-width:180px;" title="${cat}">${cat}</div>
+                                ${assocHtml ? `<div class="mt-1">${assocHtml}</div>` : ''}
+                            </div>
+                        `;
+                    }
+                },
+                // 5. Total (Moneda premium)
                 { 
                     title: "Total", 
                     field: "ds_total", 
                     width: 130, 
                     hozAlign: "right", 
-                    formatter: "money", 
-                    formatterParams: { precision: 0, decimal: ",", thousand: "." } 
+                    formatter: function(cell) {
+                        return `<div class="fw-bold text-dark" style="font-size:0.85rem;">${fmtMoneda(cell.getValue())}</div>`;
+                    }
                 },
+                // 6. Estado (Chips premium)
                 {
                     title: "Estado",
                     field: "ds_anulado",
@@ -105,137 +273,118 @@
                     formatter: function(cell) {
                         const anulado = cell.getValue();
                         return anulado 
-                            ? '<span class="badge bg-danger">Anulado</span>' 
-                            : '<span class="badge bg-success">Activo</span>';
+                            ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 px-2 py-1">Anulado</span>' 
+                            : '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-2 py-1">Activo</span>';
                     }
                 },
+                // 7. Acciones (Frozen con Event Delegation)
                 {
-                    title: "Acciones",
+                    title: "",
+                    field: "uuid",
                     headerSort: false,
-                    width: 160,
                     hozAlign: "center",
+                    width: 150,
+                    frozen: true,
                     formatter: function(cell) {
-                        const data = cell.getData();
+                        const data = cell.getRow().getData();
+                        const uuid = data.uuid;
                         const isAnulado = data.ds_anulado;
                         const btnEditClass = isAnulado ? "btn-light disabled" : "btn-outline-primary";
                         const btnCancelClass = isAnulado ? "btn-light disabled" : "btn-outline-warning";
                         
                         return `
-                            <div class="btn-group btn-group-sm shadow-sm" role="group">
-                                <button class="btn btn-outline-info" data-action="view" title="Ver Detalle">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-info btn-view-gasto" data-uuid="${uuid}" title="Ver Detalle">
                                     <i class="bi bi-eye"></i>
                                 </button>
-                                <button class="btn ${btnEditClass}" data-action="edit" title="Editar">
+                                <button type="button" class="btn ${btnEditClass} btn-edit-gasto" data-uuid="${uuid}" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </button>
-                                <button class="btn ${btnCancelClass}" data-action="cancel" title="Anular">
+                                <button type="button" class="btn ${btnCancelClass} btn-cancel-gasto" data-uuid="${uuid}" title="Anular">
                                     <i class="bi bi-x-circle"></i>
                                 </button>
-                                <button class="btn btn-outline-danger" data-action="delete" title="Eliminar">
-                                    <i class="bi bi-trash3"></i>
+                                <button type="button" class="btn btn-outline-danger btn-delete-gasto" data-uuid="${uuid}" data-anulado="${isAnulado ? 'true' : 'false'}" title="Eliminar">
+                                    <i class="bi bi-trash"></i>
                                 </button>
                             </div>
                         `;
-                    },
-                    cellClick: (e, cell) => GastoList.handleCellAction(e, cell)
+                    }
                 }
             ];
         },
 
         refresh: function() {
-            if (this.table) this.table.setData();
+            if (this.table) {
+                const tbl = this.table;
+                setTimeout(() => tbl.replaceData(), 50);
+            }
         },
 
         reload: function() {
             this.refresh();
         },
 
-        handleCellAction: function(e, cell) {
-            const btn = e.target.closest("[data-action]");
-            if (!btn) return;
-
-            const action = btn.dataset.action;
-            const data = cell.getRow().getData();
-            const uuid = data.uuid;
-
-            switch (action) {
-                case 'view': this.verDetalle(uuid); break;
-                case 'edit': this.editarGasto(uuid); break;
-                case 'cancel': this.anularGasto(uuid); break;
-                case 'delete': this.eliminarGasto(uuid); break;
-            }
-        },
-
         verDetalle: function(uuid) {
-            const url = window.Sintel.Gastos.API.endpoints.renderDetalle(uuid);
-            if (window.htmx) {
-                window.htmx.ajax('GET', url, { target: '#offcanvas-container-gastos', swap: 'innerHTML' });
+            const url = w.Sintel.Gastos.API.endpoints.renderDetalle(uuid);
+            if (w.htmx) {
+                w.htmx.ajax('GET', url, { target: '#offcanvas-container-gastos', swap: 'innerHTML' });
             } else {
-                this.loadAndShowOffcanvas(url, 'offcanvas-gasto-detalle');
+                this.loadAndShowOffcanvas(url);
             }
         },
 
         editarGasto: function(uuid) {
-            const url = window.Sintel.Gastos.API.endpoints.renderEditar(uuid);
-            if (window.htmx) {
-                window.htmx.ajax('GET', url, { target: '#offcanvas-container-gastos', swap: 'innerHTML' });
+            const url = w.Sintel.Gastos.API.endpoints.renderEditar(uuid);
+            if (w.htmx) {
+                w.htmx.ajax('GET', url, { target: '#offcanvas-container-gastos', swap: 'innerHTML' });
             } else {
-                this.loadAndShowOffcanvas(url, 'offcanvas-gasto-editar');
+                this.loadAndShowOffcanvas(url);
             }
         },
 
         anularGasto: async function(uuid) {
-            const confirmed = await window.UIManager?.confirm("¿Está seguro de anular este gasto? Esta acción es irreversible.");
+            const confirmed = await w.UIManager?.confirm("¿Está seguro de anular este gasto? Esta acción es irreversible.");
             if (!confirmed) return;
 
             try {
-                const response = await window.Sintel.Gastos.API.anular(uuid);
+                const response = await w.Sintel.Gastos.API.anular(uuid);
                 if (response.id || response.message) {
-                    window.UIManager?.notifySuccess("Gasto anulado correctamente");
+                    w.UIManager?.notifySuccess("Gasto anulado correctamente");
                     this.refresh();
                 } else {
-                    window.UIManager?.notifyError("Error al anular el gasto");
+                    w.UIManager?.notifyError("Error al anular el gasto");
                 }
             } catch (error) {
-                window.UIManager?.handleError(error);
+                w.UIManager?.handleError(error);
             }
         },
 
-        eliminarGasto: async function(uuid) {
-            const row = this.table.getRow(uuid);
-            const data = row ? row.getData() : {};
-            const isAnulado = data.ds_anulado === true || data.ds_anulado === 'true';
-
-            // [STANDARDIZATION] Bloquear si no está anulado
+        eliminarGasto: async function(uuid, isAnulado) {
             if (!isAnulado) {
-                window.UIManager?.notifyError("El gasto está activo. Debe anularlo antes de poder eliminarlo permanentemente.");
+                w.UIManager?.notifyError("El gasto está activo. Debe anularlo antes de poder eliminarlo permanentemente.");
                 return;
             }
 
-            const confirmed = await window.UIManager?.confirm("¿Está seguro de eliminar este gasto de forma PERMANENTE? Esta acción no se puede deshacer.");
+            const confirmed = await w.UIManager?.confirm("¿Está seguro de eliminar este gasto de forma PERMANENTE? Esta acción no se puede deshacer.");
             if (!confirmed) return;
 
             try {
-                const response = await window.Sintel.Gastos.API.eliminar(uuid);
-                // El backend retorna 204 No Content para eliminacion exitosa
-                if (response.status === 204 || response.success || response.message) {
-                    window.UIManager?.notifySuccess("Gasto eliminado permanentemente");
+                const response = await w.Sintel.Gastos.API.eliminar(uuid);
+                if (response.ok || response.success || response.status === 204 || response.message) {
+                    w.UIManager?.notifySuccess("Gasto eliminado permanentemente");
                     this.refresh();
                 } else {
                     const msg = response.data?.detail || response.data?.message || "Error al eliminar el gasto";
-                    window.UIManager?.notifyError(msg);
+                    w.UIManager?.notifyError(msg);
                 }
             } catch (error) {
-                window.UIManager?.handleError(error);
+                w.UIManager?.handleError(error);
             }
         },
 
         loadAndShowOffcanvas: async function(url) {
-            const container = document.querySelector("#offcanvas-container-gastos");
-            if (!container) {
-                console.error("[GastoList] Contenedor offcanvas no encontrado");
-                return;
-            }
+            const container = d.querySelector("#offcanvas-container-gastos");
+            if (!container) return;
 
             try {
                 const response = await fetch(url, {
@@ -243,164 +392,169 @@
                 });
                 const html = await response.text();
 
-                // Limpiar cualquier offcanvas anterior
                 const existingOffcanvas = container.querySelector('.offcanvas');
-                if (existingOffcanvas && window.bootstrap?.Offcanvas) {
-                    const instance = window.bootstrap.Offcanvas.getInstance(existingOffcanvas);
+                if (existingOffcanvas && w.bootstrap?.Offcanvas) {
+                    const instance = w.bootstrap.Offcanvas.getInstance(existingOffcanvas);
                     if (instance) instance.hide();
                 }
 
                 container.innerHTML = html;
 
-                // Esperar a que el DOM se actualice
                 setTimeout(() => {
                     const offcanvasEl = container.querySelector('.offcanvas');
-                    if (!offcanvasEl) {
-                        console.error("[GastoList] Offcanvas no encontrado en el contenedor después de inyectar HTML");
-                        return;
-                    }
+                    if (!offcanvasEl) return;
 
                     try {
-                        // Crear instancia de Bootstrap Offcanvas
-                        const offcanvas = new window.bootstrap.Offcanvas(offcanvasEl);
+                        const offcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
                         offcanvas.show();
 
-                        // Notificar al editor para inicializar el formulario si existe
                         const formGasto = offcanvasEl.querySelector('#gasto-form');
                         if (formGasto) {
-                            document.body.dispatchEvent(new CustomEvent('gasto-editor-init', { detail: { form: formGasto } }));
+                            d.body.dispatchEvent(new CustomEvent('gasto-editor-init', { detail: { form: formGasto } }));
                         }
 
                         const formRes = offcanvasEl.querySelector('#resolucion-form');
                         if (formRes) {
-                            document.body.dispatchEvent(new CustomEvent('resolucion-editor-init', { detail: { form: formRes } }));
+                            d.body.dispatchEvent(new CustomEvent('resolucion-editor-init', { detail: { form: formRes } }));
                         }
                     } catch (bootstrapError) {
                         console.error("[GastoList] Error al inicializar Bootstrap Offcanvas:", bootstrapError);
-                        window.UIManager?.notifyError("Error al abrir el formulario");
                     }
                 }, 10);
-
             } catch (error) {
                 console.error("[GastoList] Error cargando offcanvas:", error);
-                window.UIManager?.notifyError("No se pudo cargar el formulario");
             }
         }
     };
 
-    /**
-     * Resolucion List Module
-     */
+    // ─── Modulo ResolucionList ────────────────────────────────────────────────
+
     const ResolucionList = {
         table: null,
         tableId: "#grid-resoluciones",
         _initializing: false,
 
         init: function(retryCount = 0) {
-            const container = document.querySelector(this.tableId);
+            const container = d.querySelector(this.tableId);
             if (this.table || !container || this._initializing) return;
 
             this._initializing = true;
-            console.log('[ResolucionList] Inicializando tabla de resoluciones v2.62...');
+            console.log('[ResolucionList] Inicializando tabla de resoluciones v3.10.0...');
 
-            // Verificar si TabulatorFactory está disponible
-            if (!window.TabulatorFactory) {
+            if (!w.TabulatorFactory) {
                 if (retryCount < 5) {
-                    console.warn("[ResolucionList] TabulatorFactory no disponible, reintentando en 500ms...");
                     this._initializing = false;
                     setTimeout(() => this.init(retryCount + 1), 500);
                 } else {
-                    console.error("[ResolucionList] TabulatorFactory nunca estuvo disponible después de 5 intentos");
                     this._initializing = false;
                 }
                 return;
             }
 
             try {
-                // Mostrar grid y ocultar spinner
                 container.style.display = 'block';
-                const spinner = document.querySelector('[data-spinner="resoluciones"]');
+                const spinner = d.querySelector('[data-spinner="resoluciones"]');
                 if (spinner) spinner.style.display = 'none';
 
-                const apiUrl = window.Sintel.Gastos.API?.resoluciones?.list || '/api/v1/gastos/resoluciones/';
+                const apiUrl = w.Sintel.Gastos.API?.resoluciones?.list || '/api/v1/gastos/resoluciones/';
                 const columns = [
-                    { title: "N° Resolución", field: "numero_resolucion", width: 150, headerFilter: "input" },
-                    { title: "Prefijo", field: "prefijo", width: 100, headerFilter: "input" },
-                    { title: "Desde", field: "rango_desde", width: 100 },
-                    { title: "Hasta", field: "rango_hasta", width: 100 },
-                    { title: "Vencimiento", field: "fecha_fin", width: 120 },
+                    // 1. Resolucion y Prefijo apilados
+                    {
+                        title: "Resolución",
+                        field: "numero_resolucion",
+                        frozen: true,
+                        width: 190,
+                        formatter: function(cell) {
+                            const row = cell.getRow().getData();
+                            return `
+                                <div style="line-height:1.35;">
+                                  <div class="fw-semibold text-dark" style="font-size:0.85rem;">${row.numero_resolucion || '—'}</div>
+                                  ${row.prefijo ? `<div class="mt-1" style="font-size:0.72rem;"><span class="text-muted">Prefijo:</span> <code class="text-secondary">${row.prefijo}</code></div>` : ''}
+                                </div>`;
+                        }
+                    },
+                    // 2. Rango autorizado apilados
+                    {
+                        title: "Rango Autorizado",
+                        field: "rango_desde",
+                        width: 150,
+                        formatter: function(cell) {
+                            const row = cell.getRow().getData();
+                            return `
+                                <div style="line-height:1.35; font-size:0.78rem;">
+                                  <div><span class="text-muted">Desde:</span> ${row.rango_desde || '—'}</div>
+                                  <div><span class="text-muted">Hasta:</span> ${row.rango_hasta || '—'}</div>
+                                </div>`;
+                        }
+                    },
+                    // 3. Vencimiento con icono
+                    {
+                        title: "Vencimiento",
+                        field: "fecha_fin",
+                        width: 140,
+                        formatter: function(cell) {
+                            return `<div style="font-size:0.8rem;"><i class="bi bi-calendar-event text-muted me-1"></i>${fmtFecha(cell.getValue())}</div>`;
+                        }
+                    },
+                    // 4. Estado (Badge premium)
                     { 
                         title: "Estado", 
                         field: "vigente", 
-                        width: 100, 
-                        hozAlign: "center", 
-                        formatter: "tickCross", 
-                        formatterParams: { allowEmpty: true } 
-                    },
-                    {
-                        title: "Acciones", 
-                        headerSort: false, 
-                        width: 130,
+                        width: 120, 
                         hozAlign: "center",
-                        formatter: (cell) => {
-                            const data = cell.getData();
+                        formatter: function(cell) {
+                            return cell.getValue()
+                                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-2 py-1">Vigente</span>'
+                                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20 px-2 py-1">Vencida/Inactiva</span>';
+                        }
+                    },
+                    // 5. Acciones con Event Delegation
+                    {
+                        title: "", 
+                        field: "uuid",
+                        headerSort: false, 
+                        width: 110,
+                        hozAlign: "center",
+                        frozen: true,
+                        formatter: function(cell) {
+                            const data = cell.getRow().getData();
+                            const uuid = data.uuid;
                             return `
-                                <div class="btn-group btn-group-sm shadow-sm" role="group">
-                                    <button class="btn btn-outline-primary" data-action="edit" title="Editar Resolución">
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary btn-edit-resolucion" data-uuid="${uuid}" title="Editar Resolución">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     ${data.vigente ? `
-                                    <button class="btn btn-outline-warning" data-action="deactivate" title="Desactivar">
+                                    <button class="btn btn-outline-warning btn-deactivate-resolucion" data-uuid="${uuid}" title="Desactivar">
                                         <i class="bi bi-slash-circle"></i>
                                     </button>` : ''}
                                 </div>`;
-                        },
-                        cellClick: (e, cell) => ResolucionList.handleCellAction(e, cell)
+                        }
                     }
                 ];
 
-                this.table = window.TabulatorFactory?.create(this.tableId, apiUrl, columns, {
-                    placeholder: "No hay resoluciones registradas"
+                this.table = w.TabulatorFactory.create(this.tableId, apiUrl, columns, {
+                    placeholder: "No hay resoluciones registradas",
+                    searchInputSelector: '#search-resolucion'
                 });
                 
-                if (!this.table) {
+                if (this.table) {
+                    w.SintelGastosTables.resoluciones = this.table;
                     this._initializing = false;
                 } else {
                     this._initializing = false;
                 }
             } catch (error) {
-                console.error("[ResolucionList] Error crítico al inicializar:", error);
-                window.UIManager?.notifyError("Error al cargar lista de resoluciones");
+                console.error("[ResolucionList] Error critico al inicializar:", error);
+                w.UIManager?.notifyError("Error al cargar lista de resoluciones");
                 this._initializing = false;
             }
         },
 
         reload: function() {
-            if (this.table) this.table.setData();
-        },
-
-        handleCellAction: function(e, cell) {
-            const btn = e.target.closest("[data-action]");
-            if (!btn) return;
-
-            const action = btn.dataset.action;
-            const data = cell.getRow().getData();
-            const uuid = data.uuid;
-
-            switch (action) {
-                case 'edit':
-                    const url = window.Sintel.Gastos.API.endpoints.renderResolucion(uuid);
-                    if (window.htmx) {
-                        window.htmx.ajax('GET', url, { target: '#offcanvas-container-gastos', swap: 'innerHTML' });
-                    } else {
-                        window.Sintel.Gastos.GastoList.loadAndShowOffcanvas(url, 'offcanvas-resolucion-editar');
-                    }
-                    break;
-                case 'deactivate':
-                    window.UIManager?.confirm("¿Desea desactivar esta resolución? Esta acción no se puede deshacer.").then(confirmed => {
-                        if (confirmed) this.desactivar(uuid);
-                    });
-                    break;
+            if (this.table) {
+                const tbl = this.table;
+                setTimeout(() => tbl.replaceData(), 50);
             }
         },
 
@@ -408,64 +562,138 @@
             try {
                 const response = await fetch(`/api/v1/gastos/resoluciones/${uuid}/desactivar/`, {
                     method: 'POST',
-                    headers: window.Sintel.Gastos.getHeaders()
+                    headers: w.Sintel.Gastos.getHeaders()
                 });
                 
                 if (response.ok) {
-                    window.UIManager?.notifySuccess('Resolución desactivada');
+                    w.UIManager?.notifySuccess('Resolución desactivada');
                     this.reload();
                 } else {
                     const data = await response.json();
-                    window.UIManager?.handleError({error: data.detail || 'Error al desactivar'});
+                    w.UIManager?.handleError({error: data.detail || 'Error al desactivar'});
                 }
             } catch (e) {
                 console.error('[ResolucionList] Error:', e);
-                window.UIManager?.notifyError('Error de conexión');
+                w.UIManager?.notifyError('Error de conexión');
             }
         }
     };
 
-    // Export to namespace
-    window.Sintel.Gastos.GastoList = GastoList;
-    window.Sintel.Gastos.ResolucionList = ResolucionList;
-    window.Sintel.Gastos.List = GastoList; // Legacy alias
+    // ─── Event Delegation (Acciones de la Grilla) ─────────────────────────────
 
-    // --- Orquestación de Eventos ---
+    function initListEvents() {
+        // Gastos Grid Events
+        const gridGastos = d.querySelector('#grid-gastos');
+        if (gridGastos) {
+            gridGastos.addEventListener('click', async (e) => {
+                const btnView = e.target.closest('.btn-view-gasto');
+                const btnEdit = e.target.closest('.btn-edit-gasto');
+                const btnCancel = e.target.closest('.btn-cancel-gasto');
+                const btnDel = e.target.closest('.btn-delete-gasto');
 
-    // 1. Inicialización para carga inicial (si existe)
-    function setup() {
-        console.log('[GastoList] Setup iniciado');
-        console.log('[GastoList] window.TabulatorFactory disponible:', !!window.TabulatorFactory);
-        console.log('[GastoList] window.Sintel.Gastos.API disponible:', !!window.Sintel?.Gastos?.API);
-        console.log('[GastoList] Contenedor #grid-gastos existe:', !!document.querySelector('#grid-gastos'));
-        console.log('[GastoList] Contenedor #grid-resoluciones existe:', !!document.querySelector('#grid-resoluciones'));
+                if (btnView) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const uuid = btnView.getAttribute('data-uuid');
+                    if (uuid) GastoList.verDetalle(uuid);
+                    return;
+                }
 
-        GastoList.init();
-        ResolucionList.init();
+                if (btnEdit) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (btnEdit.classList.contains('disabled')) return;
+                    const uuid = btnEdit.getAttribute('data-uuid');
+                    if (uuid) GastoList.editarGasto(uuid);
+                    return;
+                }
+
+                if (btnCancel) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (btnCancel.classList.contains('disabled')) return;
+                    const uuid = btnCancel.getAttribute('data-uuid');
+                    if (uuid) GastoList.anularGasto(uuid);
+                    return;
+                }
+
+                if (btnDel) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const uuid = btnDel.getAttribute('data-uuid');
+                    const anulado = btnDel.getAttribute('data-anulado') === 'true';
+                    if (uuid) GastoList.eliminarGasto(uuid, anulado);
+                    return;
+                }
+            });
+        }
+
+        // Resoluciones Grid Events
+        const gridResoluciones = d.querySelector('#grid-resoluciones');
+        if (gridResoluciones) {
+            gridResoluciones.addEventListener('click', async (e) => {
+                const btnEdit = e.target.closest('.btn-edit-resolucion');
+                const btnDeactivate = e.target.closest('.btn-deactivate-resolucion');
+
+                if (btnEdit) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const uuid = btnEdit.getAttribute('data-uuid');
+                    if (uuid) {
+                        const url = w.Sintel.Gastos.API.endpoints.renderResolucion(uuid);
+                        if (w.htmx) {
+                            w.htmx.ajax('GET', url, { target: '#offcanvas-container-gastos', swap: 'innerHTML' });
+                        } else {
+                            GastoList.loadAndShowOffcanvas(url);
+                        }
+                    }
+                    return;
+                }
+
+                if (btnDeactivate) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const uuid = btnDeactivate.getAttribute('data-uuid');
+                    if (uuid) {
+                        const confirmed = await w.UIManager?.confirm("¿Desea desactivar esta resolución? Esta acción no se puede deshacer.");
+                        if (confirmed) ResolucionList.desactivar(uuid);
+                    }
+                    return;
+                }
+            });
+        }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setup);
+    // ─── Setup e Inicializacion Segura ────────────────────────────────────────
+
+    function setup() {
+        console.log('[GastoList] Setup iniciado');
+        GastoList.init();
+        ResolucionList.init();
+        initListEvents();
+    }
+
+    // Cargar segun el estado del DOM
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', setup);
     } else {
         setup();
     }
 
-    // 2. Manejo de Offcanvas vía HTMX
-    document.body.addEventListener('htmx:afterSettle', (evt) => {
+    // Manejo de Offcanvas con HTMX
+    d.body.addEventListener('htmx:afterSettle', (evt) => {
         const target = evt.detail.target;
         if (target && target.id === 'offcanvas-container-gastos') {
             setTimeout(() => {
                 const offcanvasEl = target.querySelector('.offcanvas');
-                if (offcanvasEl && window.bootstrap?.Offcanvas) {
+                if (offcanvasEl && w.bootstrap?.Offcanvas) {
                     try {
-                        const offcanvas = new window.bootstrap.Offcanvas(offcanvasEl);
+                        const offcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
                         offcanvas.show();
-                        console.log('[GastoList] Offcanvas abierto vía HTMX:', offcanvasEl.id);
 
-                        // Inicializar editor si existe
                         const formGasto = offcanvasEl.querySelector('#gasto-form');
                         if (formGasto) {
-                            document.body.dispatchEvent(new CustomEvent('gasto-editor-init', { detail: { form: formGasto } }));
+                            d.body.dispatchEvent(new CustomEvent('gasto-editor-init', { detail: { form: formGasto } }));
                         }
                     } catch (error) {
                         console.error('[GastoList] Error abriendo offcanvas HTMX:', error);
@@ -475,12 +703,12 @@
         }
     });
 
-    document.body.addEventListener('htmx:beforeCleanupElement', (evt) => {
+    d.body.addEventListener('htmx:beforeCleanupElement', (evt) => {
         const el = evt?.detail?.elt;
         if (el && el.classList && el.classList.contains('offcanvas')) {
             try {
-                if (window.bootstrap?.Offcanvas) {
-                    const instance = window.bootstrap.Offcanvas.getInstance(el);
+                if (w.bootstrap?.Offcanvas) {
+                    const instance = w.bootstrap.Offcanvas.getInstance(el);
                     if (instance) instance.hide();
                 }
             } catch (e) {
@@ -489,30 +717,33 @@
         }
     });
 
-    // 3. Sincronización Reactiva: Refrescar tablas cuando se crean/editan registros
-    document.body.addEventListener('gasto-created', () => {
-        console.log('[GastoList] Gasto creado detectado, refrescando tabla...');
+    // Eventos de Sincronizacion Reactiva
+    d.body.addEventListener('gasto-created', () => {
         GastoList.refresh();
     });
 
-    document.body.addEventListener('gasto-updated', () => {
-        console.log('[GastoList] Gasto actualizado detectado, refrescando tabla...');
+    d.body.addEventListener('gasto-updated', () => {
         GastoList.refresh();
     });
 
-    document.body.addEventListener('resolucion-created', () => {
-        console.log('[ResolucionList] Resolución creada detectada, refrescando tabla...');
+    d.body.addEventListener('resolucion-created', () => {
         ResolucionList.reload();
     });
 
-    // Tab handling
-    document.addEventListener('shown.bs.tab', (e) => {
-        if (e.target.id === 'resoluciones-tab') ResolucionList.init();
-        if (e.target.id === 'gastos-tab') GastoList.init();
+    // Manejo de Tabs de Bootstrap
+    d.addEventListener('shown.bs.tab', (e) => {
+        const targetId = e.target.id;
+        if (targetId === 'tab-resoluciones' || targetId === 'resoluciones-tab') {
+            ResolucionList.init();
+        }
+        if (targetId === 'tab-gastos' || targetId === 'gastos-tab') {
+            GastoList.init();
+        }
     });
 
-    // Public API
-    window.Sintel.Gastos.GastoList = GastoList;
-    window.Sintel.Gastos.ResolucionList = ResolucionList;
+    // API Publica
+    w.Sintel.Gastos.GastoList = GastoList;
+    w.Sintel.Gastos.ResolucionList = ResolucionList;
+    w.Sintel.Gastos.List = GastoList; // Legacy alias
 
-})();
+})(window, document);

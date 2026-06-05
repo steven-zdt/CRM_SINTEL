@@ -83,116 +83,135 @@
     }
 
     /**
-     * Definir columnas específicas del módulo
-     * @returns {Array} Configuración de columnas Tabulator
+     * Definir columnas — presentación compacta apilada (v3.10.4)
+     * 9 columnas → 5 columnas: Producto | Stock | Precio/Costo | Estado | Acciones
      */
     function getColumns() {
         return [
             {
-                title: "Código",
-                field: "codigo",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
-                },
-                width: 120,
-                headerFilter: "input"
-            },
-            {
-                title: "Nombre",
+                title: "Producto",
                 field: "nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
+                formatter: function(cell) {
+                    const d = cell.getRow().getData();
+                    const cat = d.categoria_nombre
+                        ? `<span class="badge bg-light text-secondary border" style="font-size:.65rem;font-weight:500">${d.categoria_nombre}</span>`
+                        : '';
+                    const cod = d.codigo
+                        ? `<span class="font-monospace text-muted me-1" style="font-size:.72rem">${d.codigo}</span>`
+                        : '';
+                    return `<div class="py-1 lh-sm">
+                        <div class="fw-semibold">${d.nombre || '—'}</div>
+                        <div class="d-flex align-items-center gap-1 mt-1">${cod}${cat}</div>
+                    </div>`;
                 },
-                minWidth: 250,
+                minWidth: 220,
                 headerFilter: "input"
             },
             {
-                title: "Categoría",
-                field: "categoria_nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '<span class="text-muted">Sin categoría</span>';
-                },
-                width: 150
-            },
-            {
-                title: "Stock Actual",
+                title: "Stock",
                 field: "stock_actual",
                 formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    return formatearStock(rowData.stock_actual, rowData.stock_minimo);
+                    const d = cell.getRow().getData();
+                    const actual = parseFloat(d.stock_actual) || 0;
+                    const minimo = parseFloat(d.stock_minimo) || 0;
+                    const alerta = actual <= minimo;
+                    const cls = alerta ? 'bg-danger' : 'bg-success';
+                    const icon = alerta ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.7rem"></i>' : '';
+                    const unidad = d.unidad ? `<span class="text-muted">${d.unidad}</span>` : '';
+                    return `<div class="text-center lh-sm">
+                        <span class="badge ${cls}">${icon}${actual % 1 === 0 ? actual : actual.toFixed(2)} ${unidad}</span>
+                        <div class="text-muted mt-1" style="font-size:.68rem">mín ${minimo % 1 === 0 ? minimo : minimo.toFixed(2)}</div>
+                    </div>`;
                 },
-                width: 120,
-                hozAlign: "center"
+                width: 110,
+                hozAlign: "center",
+                vertAlign: "middle",
+                sorter: "number"
             },
             {
-                title: "Stock Mínimo",
-                field: "stock_minimo",
-                formatter: function(cell) {
-                    const val = parseFloat(cell.getValue()) || 0;
-                    return val.toFixed(2);
-                },
-                width: 120,
-                hozAlign: "center"
-            },
-            {
-                title: "Costo",
-                field: "costo_promedio",
-                formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
-                },
-                width: 120,
-                hozAlign: "right"
-            },
-            {
-                title: "Precio Venta",
+                title: "Precio / Costo",
                 field: "precio_venta",
                 formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
+                    const d = cell.getRow().getData();
+                    const precio = formatearMoneda(d.precio_venta);
+                    const costo = parseFloat(d.costo_promedio) > 0
+                        ? `<div class="text-muted mt-1" style="font-size:.72rem">Costo: ${formatearMoneda(d.costo_promedio)}</div>`
+                        : '';
+                    return `<div class="text-end lh-sm"><div class="fw-semibold">${precio}</div>${costo}</div>`;
                 },
-                width: 120,
-                hozAlign: "right"
+                width: 150,
+                hozAlign: "right",
+                vertAlign: "middle",
+                sorter: "number"
             },
             {
                 title: "Estado",
                 field: "activo",
                 formatter: function(cell) {
-                    const activo = cell.getValue();
-                    if (activo) {
-                        return '<span class="badge bg-success">Activo</span>';
-                    }
-                    return '<span class="badge bg-secondary">Inactivo</span>';
+                    return cell.getValue()
+                        ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>'
+                        : '<span class="badge bg-secondary-subtle text-secondary border">Inactivo</span>';
                 },
-                width: 100,
-                hozAlign: "center"
+                width: 90,
+                hozAlign: "center",
+                vertAlign: "middle"
             },
             {
-                title: "Acciones",
+                title: "",
                 field: "acciones",
                 formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    const id = rowData.id;
-                    return `
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-edit-producto" data-id="${id}" title="Editar">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-info btn-ver-kardex" data-id="${id}" title="Ver Kardex">
-                                <i class="bi bi-list-ul"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-producto" data-id="${id}" title="Eliminar">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    `;
+                    const id = cell.getRow().getData().id;
+                    return `<div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary btn-edit-producto" data-id="${id}" title="Editar">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-info btn-ver-kardex" data-id="${id}" title="Kardex">
+                            <i class="bi bi-list-ul"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-delete-producto" data-id="${id}" title="Eliminar">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>`;
                 },
-                width: 180,
+                width: 120,
                 headerSort: false,
                 resizable: false,
                 hozAlign: "center",
-                responsive: 0,
+                vertAlign: "middle",
                 frozen: true
             }
         ];
+    }
+
+    /**
+     * KPI strip: muestra totales sobre los datos de la página actual
+     */
+    function _actualizarKPIs(data) {
+        const kpisEl = d.querySelector('#prod-kpis');
+        if (!kpisEl) return;
+        const total = data.length;
+        const activos = data.filter(r => r.activo).length;
+        const alertas = data.filter(r => (parseFloat(r.stock_actual) || 0) <= (parseFloat(r.stock_minimo) || 0)).length;
+        const valorTotal = data.reduce((s, r) => s + ((parseFloat(r.stock_actual) || 0) * (parseFloat(r.costo_promedio) || 0)), 0);
+        const fmt = v => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+        kpisEl.innerHTML = `
+            <div class="kpi-card">
+                <div class="kpi-label">SKUs</div>
+                <div class="kpi-val">${total}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Activos</div>
+                <div class="kpi-val text-success">${activos}</div>
+            </div>
+            ${alertas > 0 ? `<div class="kpi-card border-danger">
+                <div class="kpi-label text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Stock Bajo</div>
+                <div class="kpi-val text-danger">${alertas}</div>
+            </div>` : ''}
+            <div class="kpi-card">
+                <div class="kpi-label">Valor Inventario</div>
+                <div class="kpi-val">${fmt(valorTotal)}</div>
+            </div>
+        `;
     }
 
     /**
@@ -212,17 +231,18 @@
             return null;
         }
 
-        // Configuración de la tabla
+        // Configuración de la tabla — layout compacto v3.10.4
         const tableConfig = {
             searchInputSelector: SEARCH_ID,
             pagination: true,
             paginationMode: "remote",
-            paginationSize: 10,
-            paginationSizeSelector: [10, 25, 50, 100],
-            layout: "fitColumns",
-            responsiveLayout: "hide",
+            paginationSize: 15,
+            paginationSizeSelector: [15, 30, 50, 100],
+            layout: "fitDataFill",
+            responsiveLayout: "collapse",
             placeholder: "No hay productos registrados",
-            locale: "es"
+            locale: "es",
+            rowHeight: 56
         };
 
         // Crear tabla usando TabulatorFactory
@@ -235,6 +255,13 @@
 
         // Guardar instancia en singleton global
         w.Sintel.Inventario.Tables.productos = table;
+
+        // KPI strip — se actualiza con cada carga de datos
+        if (table) {
+            table.on('dataLoaded', function(data) {
+                _actualizarKPIs(data);
+            });
+        }
 
         // Event Delegation para acciones del Grid
         initListEvents();

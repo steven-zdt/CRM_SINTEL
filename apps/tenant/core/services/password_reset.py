@@ -1,23 +1,109 @@
 """
-Servicio de dominio para reset de contraseña (Core).
+Servicio de dominio para reset de contrasena (Core).
 
-⚠️ POLÍTICA v2.61:
-- Migrado desde Landing para centralización en Core API.
-- Trabaja con User global (esquema public).
-- No renderiza HTML.
-- Lanza excepciones tipadas para tokens inválidos/expirados.
+v3.13.0: Migrado a codigos alfanumericos de 8 chars via Redis (mismo patron
+que activacion de cuentas). Eliminada dependencia de uidb64 + Django tokens
+en URLs — Gmail bloqueaba links con tokens largos.
+
+Flujo nuevo:
+  1. request_reset(email, tenant) → genera codigo → envia email con codigo
+  2. confirm_reset_with_code(code, tenant_schema, new_password) → valida + set_password
 """
+import json
 import logging
+import secrets
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+
 from django.contrib.auth import get_user_model
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.encoding import force_str, force_bytes
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.db import connection
-from django_tenants.utils import schema_context
 from django.conf import settings
 
-from apps.public.tenants.models import TenantMembership, Domain
+from apps.public.tenants.models import TenantMembership
+
+logger = logging.getLogger(__name__)
+User = get_user_model()
+
+# ---------------------------------------------------------------------------
+# Configuracion del codigo de reset
+# ---------------------------------------------------------------------------
+_RESET_ALPHABET: str = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # sin O/0/I/1/L
+_RESET_CODE_LEN: int = 8
+_RESET_TTL_HOURS: int = 1  # 1 hora por seguridad (vs 48h de activacion)
+
+
+def _redis():
+    import redis as _redis_lib
+    return _redis_lib.from_url(getattr(settings, "REDIS_URL", "redis://redis:6379/0"))
+
+
+def generate_reset_code(user_id: int, tenant_schema: str, ttl_hours: int = _RESET_TTL_HOURS) -> str:
+    """
+    Genera un codigo alfanumerico de 8 chars para reset de contrasena y lo persiste
+    en Redis con clave `reset:code:{tenant_schema}:{code}`.
+
+    Incluye tenant_schema en la clave para evitar uso cross-tenant del mismo codigo.
+    Uso unico: confirm_reset_with_code() elimina la clave al consumir.
+
+    Args:
+        user_id: PK del usuario.
+        tenant_schema: schema_name del tenant para aislamiento.
+        ttl_hours: Tiempo de vida (default 1 hora).
+
+    Returns:
+        str: Codigo de 8 chars en mayusculas (ej. "AKBT3M7Q").
+    """
+    code = "".join(secrets.choice(_RESET_ALPHABET) for _ in range(_RESET_CODE_LEN))
+    key = f"reset:code:{tenant_schema}:{code}"
+    payload = {
+        "user_id": user_id,
+        "tenant_schema": tenant_schema,
+        "expires_at": (datetime.now() + timedelta(hours=ttl_hours)).isoformat(),
+    }
+    ttl_seconds = int(timedelta(hours=ttl_hours).total_seconds())
+    _redis().set(key, json.dumps(payload), ex=ttl_seconds)
+    logger.info("Reset code generado: user_id=%s tenant=%s", user_id, tenant_schema)
+    return code
+
+
+def validate_reset_code(code: str, tenant_schema: str) -> dict | None:
+    """
+    Valida el codigo de reset. Uso unico — elimina la clave de Redis al consumir.
+
+    Args:
+        code: Codigo de 8 chars del formulario (acepta minusculas).
+        tenant_schema: schema_name del tenant para verificacion cross-tenant.
+
+    Returns:
+        dict con user_id y tenant_schema, o None si invalido/expirado.
+    """
+    if not code or len(str(code).strip()) != _RESET_CODE_LEN:
+        return None
+    normalized = str(code).strip().upper()
+    if not all(c in _RESET_ALPHABET for c in normalized):
+        return None
+
+    key = f"reset:code:{tenant_schema}:{normalized}"
+    r = _redis()
+    raw = r.get(key)
+    if not raw:
+        logger.warning("Reset code no encontrado o expirado: tenant=%s", tenant_schema)
+        return None
+
+    try:
+        data = json.loads(raw)
+    except Exception:
+        r.delete(key)
+        return None
+
+    expires_at = datetime.fromisoformat(data["expires_at"])
+    if datetime.now() > expires_at:
+        r.delete(key)
+        logger.warning("Reset code expirado: tenant=%s", tenant_schema)
+        return None
+
+    r.delete(key)  # uso unico
+    return data
 
 logger = logging.getLogger(__name__)
 
@@ -106,39 +192,21 @@ def request_reset(email_or_username: str, tenant) -> None:
         if not user.has_usable_password():
             raise UserNotFoundError("Este usuario aun no ha activado su cuenta. Usa el enlace de activacion.")
         
-        # Generar token Django estándar
-        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
-        
-        # Construir URL de reset (tenant domain)
-        with schema_context('public'):
-            domain_obj = Domain.objects.filter(tenant=tenant, is_primary=True).first()
-        
-        if not domain_obj:
-            raise TenantNotFoundError("Error: tenant sin dominio primario.")
-        
-        protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
-        app_port = getattr(settings, 'APP_PORT', None)
-        if settings.DEBUG and app_port and str(app_port) not in ('80', '443'):
-            domain_with_port = f"{domain_obj.domain}:{app_port}"
-        else:
-            domain_with_port = domain_obj.domain
-            
-        reset_url = f"{protocol}://{domain_with_port}/static/tenant/landing/reset-confirm.html?uid={uidb64}&token={token}"
-        
-        # Enviar email usando servicio público existente
-        from apps.public.tenants.services.password_reset import send_password_reset_email
+        # v3.13.0: Codigo de 8 chars via Redis — reemplaza uidb64+token en URL
+        code = generate_reset_code(user.pk, tenant.schema_name, ttl_hours=_RESET_TTL_HOURS)
+
+        # Enviar email con codigo
+        from apps.public.core.services.email_service import EmailService
         try:
-            send_password_reset_email(user, tenant, reset_url)
+            EmailService.send_password_reset_code_email(user, tenant, code)
             logger.info(
-                "PasswordResetService.request_reset: Email ENVIADO EXITOSAMENTE - user=%s, tenant=%s",
-                user.email, tenant.schema_name
+                "PasswordResetService.request_reset: codigo enviado user=%s tenant=%s",
+                user.email, tenant.schema_name,
             )
         except Exception as e:
             logger.error(
-                "PasswordResetService.request_reset: Error enviando email: user=%s, tenant=%s, error=%s",
-                user.email, tenant.schema_name, str(e),
-                exc_info=True
+                "PasswordResetService.request_reset: error email user=%s tenant=%s: %s",
+                user.email, tenant.schema_name, str(e), exc_info=True,
             )
         
     finally:
@@ -234,23 +302,67 @@ def confirm_reset(uid: str, token: str, new_password: str, tenant) -> Any:
         connection.set_schema(current_schema)
 
 
+def confirm_reset_with_code(code: str, tenant_schema: str, new_password: str) -> User:
+    """
+    Confirma reset de contrasena usando codigo Redis de 8 chars (v3.13.0).
+
+    Args:
+        code: Codigo de 8 chars recibido en el formulario.
+        tenant_schema: schema_name del tenant para aislamiento cross-tenant.
+        new_password: Nueva contrasena del usuario.
+
+    Returns:
+        User actualizado.
+
+    Raises:
+        InvalidTokenError: Si el codigo no existe, expiro o pertenece a otro tenant.
+    """
+    payload = validate_reset_code(code, tenant_schema)
+    if not payload:
+        raise InvalidTokenError("Codigo de reset invalido o expirado.")
+
+    if payload.get("tenant_schema") != tenant_schema:
+        raise InvalidTokenError("Codigo de reset invalido o expirado.")
+
+    current_schema = connection.schema_name
+    try:
+        connection.set_schema_to_public()
+        try:
+            user = User.objects.get(pk=payload["user_id"], is_active=True)
+        except User.DoesNotExist:
+            raise InvalidTokenError("Codigo de reset invalido o expirado.")
+
+        membership = TenantMembership.objects.filter(
+            client__schema_name=tenant_schema,
+            user=user,
+            is_active=True,
+        ).first()
+        if not membership:
+            raise InvalidTokenError("Codigo de reset invalido o expirado.")
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        logger.info("Contrasena restablecida via codigo: user=%s tenant=%s", user.email, tenant_schema)
+        return user
+    finally:
+        connection.set_schema(current_schema)
+
+
 class PasswordResetService:
-    """
-    Servicio de reset de contrasena.
-    Wrapper class para funciones de password reset.
-    """
+    """Wrapper class para funciones de password reset."""
 
     @staticmethod
     def request_reset(email_or_username, tenant):
-        """Solicita reset de contrasena."""
         return request_reset(email_or_username, tenant)
 
     @staticmethod
     def validate_token(uid, token, tenant):
-        """Valida token de reset de contrasena."""
         return validate_token(uid, token, tenant)
 
     @staticmethod
     def confirm_reset(uid, token, new_password, tenant):
-        """Confirma reset de contrasena."""
         return confirm_reset(uid, token, new_password, tenant)
+
+    @staticmethod
+    def confirm_reset_with_code(code, tenant_schema, new_password):
+        return confirm_reset_with_code(code, tenant_schema, new_password)

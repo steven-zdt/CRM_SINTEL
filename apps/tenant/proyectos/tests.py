@@ -115,7 +115,7 @@ class TestPaginacionStandard(TestCase):
 
 class TestIndicadoresFinancieros(TenantAPITestCase):
     """
-    PASO 3 Roadmap M3 — Cobertura de pruebas P&L.
+    PASO 3 Roadmap M3 - Cobertura de pruebas P&L.
     Valida calcular_costo_mano_obra(), calcular_costo_materiales()
     y calcular_indicadores_financieros() con casos exactos.
     """
@@ -142,7 +142,7 @@ class TestIndicadoresFinancieros(TenantAPITestCase):
         )
 
     # ------------------------------------------------------------------
-    # Caso 1 — costo_mano_obra (asignaciones activas)
+    # Caso 1 - costo_mano_obra (asignaciones activas)
     # ------------------------------------------------------------------
     def test_calcular_costo_mano_obra_suma_asignaciones_activas(self):
         AsignacionPersonal.objects.create(
@@ -167,7 +167,7 @@ class TestIndicadoresFinancieros(TenantAPITestCase):
             costo_hora=Decimal('15000.00'),
             costo_total_asignacion=Decimal('1200000.00'),
         )
-        # Asignacion inactiva — NO debe sumarse
+        # Asignacion inactiva - NO debe sumarse
         AsignacionPersonal.objects.create(
             empresa=self.empresa,
             proyecto=self.proyecto,
@@ -183,7 +183,7 @@ class TestIndicadoresFinancieros(TenantAPITestCase):
         self.assertEqual(resultado, Decimal('5200000.00'))
 
     # ------------------------------------------------------------------
-    # Caso 2 — costo_materiales (items de pedidos APROBADO)
+    # Caso 2 - costo_materiales (items de pedidos APROBADO)
     # ------------------------------------------------------------------
     def test_calcular_costo_materiales_solo_pedidos_aprobados(self):
         pedido_aprobado = PedidoProyecto.objects.create(
@@ -209,7 +209,7 @@ class TestIndicadoresFinancieros(TenantAPITestCase):
             unidad_medida='UND',
             precio_unitario=Decimal('150000.00'),
         )
-        # Pedido en BORRADOR — NO debe sumarse
+        # Pedido en BORRADOR - NO debe sumarse
         pedido_borrador = PedidoProyecto.objects.create(
             empresa=self.empresa,
             proyecto=self.proyecto,
@@ -232,7 +232,7 @@ class TestIndicadoresFinancieros(TenantAPITestCase):
         self.assertEqual(resultado, Decimal('350000.00'))
 
     # ------------------------------------------------------------------
-    # Caso 3 — P&L completo: utilidad, margen y persistencia
+    # Caso 3 - P&L completo: utilidad, margen y persistencia
     # ------------------------------------------------------------------
     def test_calcular_indicadores_financieros_pl_completo(self):
         # Mano de obra: 3_000_000
@@ -378,11 +378,11 @@ class TestCierreProyectoBloqueo(TenantAPITestCase):
 
 class TestServicioAsociado(TenantAPITestCase):
     """
-    FASE 5 QA — Testing de Vinculación Servicio-Proyecto (v3.5.4)
+    FASE 5 QA - Testing de Vinculacion Servicio-Proyecto (v3.5.4)
     Valida:
-    - Creación de proyecto con servicio_asociado (UUID-Safe)
+    - Creacion de proyecto con servicio_asociado (UUID-Safe)
     - DSV: Bloqueo de servicio de otro tenant
-    - Actualización de proyecto con nuevo servicio
+    - Actualizacion de proyecto con nuevo servicio
     - Rechazo de servicio inexistente
     """
 
@@ -397,7 +397,7 @@ class TestServicioAsociado(TenantAPITestCase):
 
     def test_asociar_servicio_proyecto_exitoso(self):
         """
-        Crear proyecto con UUID de Servicio válido.
+        Crear proyecto con UUID de Servicio valido.
         Valida que el campo servicio_asociado se asigna correctamente.
         """
         try:
@@ -408,8 +408,8 @@ class TestServicioAsociado(TenantAPITestCase):
         # Crear un servicio en la empresa
         servicio = Servicio.objects.create(
             empresa=self.empresa,
-            nombre='Servicio Instalación',
-            descripcion='Servicio de instalación técnica',
+            nombre='Servicio Instalacion',
+            descripcion='Servicio de instalacion tecnica',
             tipo='SERVICIO',
             codigo='SRV-001',
         )
@@ -426,7 +426,7 @@ class TestServicioAsociado(TenantAPITestCase):
             }
         )
 
-        # Validar que el servicio se asoció correctamente
+        # Validar que el servicio se asocio correctamente
         self.assertIsNotNone(proyecto.servicio_asociado)
         self.assertEqual(proyecto.servicio_asociado.id, servicio.id)
         self.assertEqual(proyecto.servicio_asociado.empresa_id, self.empresa.id)
@@ -434,7 +434,7 @@ class TestServicioAsociado(TenantAPITestCase):
     def test_dsv_asociar_servicio_otro_tenant(self):
         """
         DSV: Intentar asociar un servicio de otra empresa debe fallar.
-        Valida que la validación DSV en business_service bloquea IDOR.
+        Valida que la validacion DSV en business_service bloquea IDOR.
         """
         try:
             from apps.tenant.inventario.models import Servicio
@@ -456,7 +456,7 @@ class TestServicioAsociado(TenantAPITestCase):
             codigo='SRV-002',
         )
 
-        # Intentar crear proyecto en empresa1 con servicio de empresa2 — DEBE FALLAR
+        # Intentar crear proyecto en empresa1 con servicio de empresa2 - DEBE FALLAR
         from apps.tenant.proyectos.services.business_service import orchestrate_create_proyecto
         from rest_framework.exceptions import ValidationError
 

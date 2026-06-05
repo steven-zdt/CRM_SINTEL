@@ -150,13 +150,19 @@
                     const verBtn = '<button class="btn btn-outline-info btn-km-ver" data-uuid="' + uuid + '" data-modulo="' + modulo + '" title="Ver detalle"><i class="bi bi-eye"></i></button>';
                     const delBtn = '<button class="btn btn-outline-danger btn-km-eliminar" data-uuid="' + uuid + '" data-modulo="' + modulo + '" title="Eliminar"><i class="bi bi-trash"></i></button>';
                     if (modulo === 'SERVICIO') {
-                        // Servicio: ver + eliminar (sin editar — no hay form de edicion)
-                        return '<div class="btn-group btn-group-sm">' + verBtn + delBtn + '</div>';
+                        // Servicio: ver + proyBtn/Badge + eliminar (sin editar — no hay form de edicion)
+                        let proyPart = '';
+                        if (row.proyecto_uuid) {
+                            proyPart = '<button class="btn btn-outline-success btn-km-proyecto-link" data-uuid="' + row.proyecto_uuid + '" title="Proyecto: ' + (row.proyecto_nombre || 'Ver Proyecto') + '"><i class="bi bi-folder-check"></i></button>';
+                        } else {
+                            proyPart = '<button class="btn btn-outline-success btn-km-crear-proyecto" data-uuid="' + uuid + '" title="Crear Proyecto"><i class="bi bi-plus-circle"></i></button>';
+                        }
+                        return '<div class="btn-group btn-group-sm">' + verBtn + proyPart + delBtn + '</div>';
                     }
                     const editBtn = '<button class="btn btn-outline-primary btn-km-editar" data-uuid="' + uuid + '" title="Editar"><i class="bi bi-pencil"></i></button>';
                     return '<div class="btn-group btn-group-sm">' + verBtn + editBtn + delBtn + '</div>';
                 },
-                width: 125,
+                width: 160,
                 headerSort: false,
                 resizable: false,
                 hozAlign: 'center',
@@ -180,8 +186,9 @@
             paginationMode: 'remote',
             paginationSize: 15,
             paginationSizeSelector: [10, 15, 25, 50],
-            layout: 'fitColumns',
-            responsiveLayout: 'hide',
+            layout: 'fitDataFill',
+            responsiveLayout: false,
+            resizeColumns: false,
             placeholder: 'No hay movimientos registrados',
             locale: 'es'
         });
@@ -318,6 +325,52 @@
                 await eliminar(btnDel.dataset.uuid, btnDel.dataset.modulo, btnDel);
                 return;
             }
+
+            // Crear proyecto desde venta de servicio (v3.9.7)
+            const btnCrearProy = e.target.closest('.btn-km-crear-proyecto');
+            if (btnCrearProy) {
+                e.preventDefault(); e.stopPropagation();
+                const uuid = btnCrearProy.dataset.uuid;
+                const original = btnCrearProy.innerHTML;
+                btnCrearProy.disabled = true;
+                btnCrearProy.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+                try {
+                    await htmx.ajax('GET', '/api/v1/proyectos/gestor-offcanvas/?historial_uuid=' + uuid, {
+                        target: '#offcanvas-container-proyectos',
+                        swap: 'innerHTML'
+                    });
+                } catch (err) {
+                    console.error(MOD, err);
+                    mostrarError('Error al iniciar la creación de proyecto.');
+                } finally {
+                    btnCrearProy.disabled = false;
+                    btnCrearProy.innerHTML = original;
+                }
+                return;
+            }
+
+            // Ver proyecto vinculado (v3.9.7)
+            const btnLinkProy = e.target.closest('.btn-km-proyecto-link');
+            if (btnLinkProy) {
+                e.preventDefault(); e.stopPropagation();
+                const uuid = btnLinkProy.dataset.uuid;
+                const original = btnLinkProy.innerHTML;
+                btnLinkProy.disabled = true;
+                btnLinkProy.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+                try {
+                    await htmx.ajax('GET', '/api/v1/proyectos/gestor-offcanvas/?uuid=' + uuid, {
+                        target: '#offcanvas-container-proyectos',
+                        swap: 'innerHTML'
+                    });
+                } catch (err) {
+                    console.error(MOD, err);
+                    mostrarError('Error al cargar el proyecto.');
+                } finally {
+                    btnLinkProy.disabled = false;
+                    btnLinkProy.innerHTML = original;
+                }
+                return;
+            }
         });
     }
 
@@ -347,6 +400,9 @@
         const el = d.querySelector(GRID_ID);
         if (!el) return;
         initTable();
+
+        // Escuchar cuando un proyecto es guardado o creado para recargar el grid
+        d.addEventListener('proyectoGuardado', recargar);
     }
 
     w.MovimientosList = { init, recargar, getTable: () => table };

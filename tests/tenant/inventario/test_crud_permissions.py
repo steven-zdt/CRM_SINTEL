@@ -190,7 +190,7 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
             nombre='Categoria Para Actualizar',
             aplicacion='PRODUCTO'
         )
-        url = reverse('inv-categorias-detail', kwargs={'pk': item.pk})
+        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
         response = self.admin_client.patch(url, {
             'nombre': 'Categoria Actualizada'
         }, format='json')
@@ -205,7 +205,7 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
             nombre='Categoria Protegida Update',
             aplicacion='PRODUCTO'
         )
-        url = reverse('inv-categorias-detail', kwargs={'pk': item.pk})
+        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
         response = self.visor_client.patch(url, {'nombre': 'Modificada'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED,
                          f"Esperado 405, obtenido {response.status_code}: {response.data}")
@@ -219,7 +219,7 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
             nombre='Categoria A Eliminar',
             aplicacion='PRODUCTO'
         )
-        url = reverse('inv-categorias-detail', kwargs={'pk': item.pk})
+        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
         response = self.admin_client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT,
                          f"Esperado 204, obtenido {response.status_code}: {response.data}")
@@ -231,12 +231,12 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
             nombre='Categoria Protegida Delete',
             aplicacion='PRODUCTO'
         )
-        url = reverse('inv-categorias-detail', kwargs={'pk': item.pk})
+        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
         response = self.visor_client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED,
                          f"Esperado 405, obtenido {response.status_code}")
         # Verificar que no fue eliminada
-        self.assertTrue(CategoriaItem.objects.filter(pk=item.pk).exists())
+        self.assertTrue(CategoriaItem.objects.filter(uuid=item.uuid).exists())
 
     # --- Lectura ---
 
@@ -261,7 +261,7 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
         item = CategoriaItem.objects.create(
             empresa=self.empresa, nombre='Cat Detalle', aplicacion='PRODUCTO'
         )
-        url = reverse('inv-categorias-detail', kwargs={'pk': item.pk})
+        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
         for label, client in [
             ('ADMIN', self.admin_client),
             ('OPERADOR', self.operador_client),
@@ -482,7 +482,7 @@ class TestMovimientoInventarioCRUD(InventarioPermissionsMixin, SintelTenantTestC
             costo_unitario=Decimal('500.00'),
             origen_referencia='REF-DETAIL-001'
         )
-        url = reverse('inv-movimientos-detail', kwargs={'pk': movimiento.pk})
+        url = reverse('inv-movimientos-detail', kwargs={'uuid': movimiento.uuid})
         for label, client in [('ADMIN', self.admin_client), ('VISOR', self.visor_client)]:
             with self.subTest(rol=label):
                 response = client.get(url)

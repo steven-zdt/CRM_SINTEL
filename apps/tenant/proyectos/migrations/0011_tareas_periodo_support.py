@@ -30,7 +30,7 @@ class Migration(migrations.Migration):
             model_name='tareadiariaproyecto',
             name='fecha_inicio',
             field=models.DateField(
-                help_text='Primer día de la tarea. DEBE estar entre fecha_inicio y fecha_fin_estimada del proyecto',
+                help_text='Primer dia de la tarea. DEBE estar entre fecha_inicio y fecha_fin_estimada del proyecto',
                 verbose_name='Fecha Inicio',
                 null=True,
                 blank=True
@@ -41,7 +41,7 @@ class Migration(migrations.Migration):
             model_name='tareadiariaproyecto',
             name='fecha_fin',
             field=models.DateField(
-                help_text='Último día de la tarea. DEBE ser >= fecha_inicio y dentro del rango del proyecto',
+                help_text='ultimo dia de la tarea. DEBE ser >= fecha_inicio y dentro del rango del proyecto',
                 verbose_name='Fecha Fin',
                 null=True,
                 blank=True
@@ -62,7 +62,7 @@ class Migration(migrations.Migration):
             model_name='tareadiariaproyecto',
             name='fecha_inicio',
             field=models.DateField(
-                help_text='Primer día de la tarea. DEBE estar entre fecha_inicio y fecha_fin_estimada del proyecto',
+                help_text='Primer dia de la tarea. DEBE estar entre fecha_inicio y fecha_fin_estimada del proyecto',
                 verbose_name='Fecha Inicio'
             ),
         ),
@@ -71,7 +71,7 @@ class Migration(migrations.Migration):
             model_name='tareadiariaproyecto',
             name='fecha_fin',
             field=models.DateField(
-                help_text='Último día de la tarea. DEBE ser >= fecha_inicio y dentro del rango del proyecto',
+                help_text='ultimo dia de la tarea. DEBE ser >= fecha_inicio y dentro del rango del proyecto',
                 verbose_name='Fecha Fin'
             ),
         ),

@@ -74,7 +74,8 @@
 </style>
 
 <div class="offcanvas offcanvas-end d-flex flex-column" tabindex="-1"
-     id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label">
+     id="offcanvas-proveedor" aria-labelledby="offcanvas-proveedor-label"
+     {% if modo_detalle and proveedor %}data-proveedor-uuid="{{ proveedor.uuid }}"{% endif %}>
 
   <div class="offcanvas-header border-bottom py-3 px-4">
     <h5 class="offcanvas-title fw-semibold" id="offcanvas-proveedor-label">
@@ -86,7 +87,25 @@
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
 
-  <div class="offcanvas-body flex-grow-1 overflow-y-auto">
+  {% if modo_detalle %}
+  <ul class="nav nav-tabs px-3 pt-2 border-bottom-0" id="prov-detalle-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-prov-info-btn" data-bs-toggle="tab"
+              data-bs-target="#tab-prov-info" type="button" role="tab" aria-selected="true">
+        <i class="bi bi-card-text me-1"></i>Información
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-compras-btn" data-bs-toggle="tab"
+              data-bs-target="#tab-compras" type="button" role="tab" aria-selected="false">
+        <i class="bi bi-file-invoice-dollar me-1"></i>Facturas de Compra
+      </button>
+    </li>
+  </ul>
+  {% endif %}
+
+  <div class="offcanvas-body flex-grow-1 overflow-y-auto{% if modo_detalle %} tab-content p-0{% endif %}">
+    {% if modo_detalle %}<div class="tab-pane fade show active p-3" id="tab-prov-info" role="tabpanel" tabindex="0">{% endif %}
     <div id="form-proveedor-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
 
     <form id="form-proveedor" method="POST" onsubmit="return false;">
@@ -190,18 +209,6 @@
                      name="actividad_economica_ciiu"
                      value="{% if proveedor %}{{ proveedor.actividad_economica_ciiu|default:'' }}{% endif %}"
                      maxlength="10" placeholder="Ej. 4669">
-            </div>
-            <div class="col-12">
-              <label for="proveedor-cuenta_contable_label" class="form-label">Cuenta Contable (Pasivo)</label>
-              <div class="position-relative">
-                <input type="text" class="form-control" id="proveedor-cuenta_contable_label"
-                       value="{% if proveedor %}{{ proveedor.cuenta_contable_label|default:'' }}{% endif %}"
-                       placeholder="Buscar por código o nombre...">
-                <input type="hidden" id="proveedor-cuenta_contable_uuid" name="cuenta_contable_uuid"
-                       value="{% if proveedor %}{{ proveedor.cuenta_contable_uuid|default:'' }}{% endif %}">
-                <div id="proveedor-cuenta-resultados" class="list-group position-absolute w-100 shadow-sm d-none"
-                     style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
-              </div>
             </div>
 
             {# Switches tributarios — 2 por fila #}
@@ -323,17 +330,23 @@
                      value="{% if proveedor %}{{ proveedor.telefono_contacto|default:'' }}{% endif %}"
                      placeholder="+57 300 000 0000">
             </div>
-            <div class="col-8">
+            <div class="col-7">
               <label for="proveedor-direccion" class="form-label">Dirección</label>
               <input type="text" class="form-control" id="proveedor-direccion" name="direccion"
                      value="{% if proveedor %}{{ proveedor.direccion|default:'' }}{% endif %}"
                      placeholder="Calle, carrera, número, barrio">
             </div>
-            <div class="col-4">
+            <div class="col-3">
               <label for="proveedor-ciudad" class="form-label">Ciudad</label>
               <input type="text" class="form-control" id="proveedor-ciudad" name="ciudad"
                      value="{% if proveedor %}{{ proveedor.ciudad|default:'' }}{% endif %}"
-                     placeholder="Ciudad o municipio">
+                     placeholder="Ciudad">
+            </div>
+            <div class="col-2">
+              <label for="proveedor-departamento" class="form-label">Dpto.</label>
+              <input type="text" class="form-control" id="proveedor-departamento" name="departamento"
+                     value="{% if proveedor %}{{ proveedor.departamento|default:'' }}{% endif %}"
+                     placeholder="Depto.">
             </div>
             <div class="col-12 pt-1">
               <label class="form-label d-block">Estado</label>
@@ -400,6 +413,44 @@
 
       </fieldset>
     </form>
+    {% if modo_detalle %}</div>{# /tab-prov-info #}
+
+    {# ── TAB: FACTURAS DE COMPRA ──────────────────────────────── #}
+    <div class="tab-pane fade p-3" id="tab-compras" role="tabpanel" tabindex="0">
+
+      {# Filtro rápido de estado #}
+      <div class="d-flex gap-2 flex-wrap mb-3" id="historial-compras-filtros-estado">
+        <button class="btn btn-sm btn-outline-dark active"    data-compras-estado="">Todas</button>
+        <button class="btn btn-sm btn-outline-success"        data-compras-estado="ACEPTADA">Aceptadas</button>
+        <button class="btn btn-sm btn-outline-warning"        data-compras-estado="ENVIADA">Pendientes</button>
+        <button class="btn btn-sm btn-outline-danger"         data-compras-estado="ANULADA">Anuladas</button>
+      </div>
+
+      {# KPIs inline #}
+      <div class="d-flex gap-3 mb-3 flex-wrap" id="historial-compras-kpis">
+        <div class="text-center">
+          <div id="ckpi-total" class="fs-5 fw-bold lh-1">—</div>
+          <div class="small text-muted">Facturas</div>
+        </div>
+        <div class="text-center">
+          <div id="ckpi-monto" class="fs-5 fw-bold lh-1 text-success">—</div>
+          <div class="small text-muted">Total compras</div>
+        </div>
+        <div class="text-center">
+          <div id="ckpi-pendiente" class="fs-5 fw-bold lh-1 text-warning">—</div>
+          <div class="small text-muted">Por pagar</div>
+        </div>
+      </div>
+
+      {# Grid #}
+      <div id="historial-compras-grid" style="min-height:200px;"></div>
+      <div id="historial-compras-empty" class="text-center py-4" style="display:none;">
+        <i class="bi bi-inbox text-muted" style="font-size:2rem;"></i>
+        <p class="mt-2 text-muted small">No hay facturas de compra para este proveedor</p>
+      </div>
+
+    </div>{# /tab-compras #}
+    {% endif %}
   </div>
 
   <div class="offcanvas-footer">

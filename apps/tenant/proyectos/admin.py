@@ -25,11 +25,11 @@ class ProyectoAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at']
     
     fieldsets = (
-        ('SSoT (Única Dependencia Externa)', {
+        ('SSoT (unica Dependencia Externa)', {
             'fields': ('empresa',),
-            'description': 'Empresa es la única ForeignKey permitida (SSoT estricto)'
+            'description': 'Empresa es la unica ForeignKey permitida (SSoT estricto)'
         }),
-        ('Información Básica', {
+        ('Informacion Basica', {
             'fields': ('nombre', 'codigo', 'tipo_servicio', 'descripcion')
         }),
         ('Relaciones Desacopladas (Loose Coupling)', {
@@ -51,11 +51,11 @@ class ProyectoAdmin(admin.ModelAdmin):
             ),
             'description': 'Snapshots de nombres de responsables (sin ForeignKeys a Empleados)'
         }),
-        ('Documentación - Fase Inicio', {
+        ('Documentacion - Fase Inicio', {
             'fields': ('contrato_archivo', 'acta_inicio_archivo'),
             'classes': ('collapse',)
         }),
-        ('Documentación - Fase Planeación', {
+        ('Documentacion - Fase Planeacion', {
             'fields': ('cronograma_archivo', 'fecha_inicio', 'fecha_fin_estimada'),
             'classes': ('collapse',)
         }),
@@ -91,7 +91,7 @@ class ProyectoAdmin(admin.ModelAdmin):
 @admin.register(AsignacionPersonal)
 class AsignacionPersonalAdmin(admin.ModelAdmin):
     """
-    Admin para Asignación de Personal (Equipo de Trabajo)
+    Admin para Asignacion de Personal (Equipo de Trabajo)
     Modelo desacoplado: solo referencia (ID) y snapshot (nombre) del empleado
     """
     list_display = [
@@ -106,11 +106,11 @@ class AsignacionPersonalAdmin(admin.ModelAdmin):
         ('SSoT', {
             'fields': ('empresa', 'proyecto')
         }),
-        ('Asignación (Desacoplada)', {
+        ('Asignacion (Desacoplada)', {
             'fields': ('empleado_id', 'nombre_colaborador', 'rol'),
             'description': 'Referencia desacoplada: empleado_id (Integer) y nombre_colaborador (Snapshot)'
         }),
-        ('Período', {
+        ('Periodo', {
             'fields': ('fecha_asignacion', 'fecha_fin_asignacion')
         }),
         ('Datos Financieros', {

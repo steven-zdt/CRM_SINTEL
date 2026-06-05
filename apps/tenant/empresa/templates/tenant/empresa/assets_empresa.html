@@ -7,10 +7,7 @@
 {# 3. features/empresa_list.js - Feature: Listado y Tabulator #}
 {# 4. features/empresa_editor.js - Feature: Editor y Offcanvas #}
 
-{# BLOQUE 1: API Wrapper (Legacy - mantener para compatibilidad) #}
-<script src="{% static 'empresa/js/empresa.api.js' %}"></script>
-
-{# BLOQUE 2: Feature-Sliced Architecture v2.60 #}
+{# BLOQUE 1: Feature-Sliced Architecture v2.60 #}
 {# Feature 1: Listado y Tabulator #}
 <script src="{% static 'empresa/js/features/empresa_list.js' %}"></script>
 
@@ -29,11 +26,10 @@
 <script src="{% static 'empresa/js/features/mailinboxconfig_list.js' %}"></script>
 <script src="{% static 'empresa/js/features/mailinboxconfig_editor.js' %}"></script>
 
-{# ⚠️ v2.60: HTMX afterSwap - Refrescar tablas cuando se recargue el contenido #}
+{# HTMX afterSettle - Refrescar tablas cuando el DOM este estable (no afterSwap) #}
 <script>
     if (typeof htmx !== 'undefined') {
-        document.addEventListener('htmx:afterSwap', function(event) {
-            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
+        document.addEventListener('htmx:afterSettle', function(event) {
             // Si se recargó el contenedor de empresa, refrescar Tabulator
             if (event.detail.target.id === 'ui-empresa-list' || 
                 event.detail.target.closest('#ui-empresa-list')) {

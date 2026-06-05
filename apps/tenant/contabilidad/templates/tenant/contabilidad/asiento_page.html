@@ -41,7 +41,7 @@
               hx-target="#offcanvas-container-asiento"
               hx-swap="innerHTML"
               hx-indicator="#spinner"
-              hx-on::after-swap="if(event.detail.successful){ const el = document.getElementById('offcanvas-asiento-crear'); if(el && window.bootstrap && window.bootstrap.Offcanvas){ window.bootstrap.Offcanvas.getOrCreateInstance(el).show(); } }">
+              hx-on::after-request="if(event.detail.successful){ const el=document.getElementById('offcanvas-asiento-crear'); if(el){ if(window.UIManager?.handleOffcanvas){window.UIManager.handleOffcanvas(el,'show');}else{const p=window.bootstrap.Offcanvas.getInstance(el);if(p)p.dispose();document.querySelectorAll('.offcanvas-backdrop').forEach(b=>b.remove());new window.bootstrap.Offcanvas(el).show();} } }">
         <i class="bi bi-plus-circle"></i> Crear Asiento
       </button>
     </div>

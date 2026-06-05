@@ -27,7 +27,8 @@ app.autodiscover_tasks()
 # Esto asegura que las tareas se registren aunque no estén en una app Django
 app.conf.imports = (
     "apps.services.maildigester.tasks",  # Tarea crítica de ingesta de correo
-    "apps.tenant.dashboard.tasks",  # Dashboard: snapshots + caché
+    "apps.tenant.dashboard.tasks",       # Dashboard: snapshots + caché
+    "apps.public.core.tasks",            # Email transaccional (invitacion, reset, codigo activacion)
 )
 
 # ============================================================================

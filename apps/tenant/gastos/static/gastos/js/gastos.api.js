@@ -68,30 +68,8 @@
         resoluciones: {
             list: RESOLUCION_ROOT,
             detail: (id) => `${RESOLUCION_ROOT}${id}/`,
-            create: async function(data) {
-                const response = await fetch(RESOLUCION_ROOT, {
-                    method: 'POST',
-                    headers: window.Sintel.Gastos.getHeaders(),
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) {
-                    try { response.data = await response.json(); } catch(e) {}
-                    throw response;
-                }
-                return await response.json();
-            },
-            update: async function(uuid, data) {
-                const response = await fetch(`${RESOLUCION_ROOT}${uuid}/`, {
-                    method: 'PUT',
-                    headers: window.Sintel.Gastos.getHeaders(),
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) {
-                    try { response.data = await response.json(); } catch(e) {}
-                    throw response;
-                }
-                return await response.json();
-            },
+            create: RESOLUCION_ROOT,
+            update: (uuid) => `${RESOLUCION_ROOT}${uuid}/`,
             activa: `${RESOLUCION_ROOT}activa/`
         },
         contabilidad: {
@@ -109,9 +87,7 @@
             list: '/api/v1/proveedores/'
         },
         inventario: {
-            productos: '/api/v1/inventario/productos/',
-            servicios: '/api/v1/inventario/servicios/',
-            activos: '/api/v1/inventario/activos/'
+            searchMovimientos: (q) => `/api/v1/inventario/movimientos/?search=${encodeURIComponent(q)}&page_size=10`,
         },
         
         

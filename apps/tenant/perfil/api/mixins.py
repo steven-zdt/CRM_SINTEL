@@ -1,4 +1,5 @@
 """Mixin de inyeccion de servicios para Perfil ViewSet."""
+from apps.tenant.empresa.models import Empresa
 from apps.tenant.perfil.services.business_service import PerfilBusinessService
 from apps.tenant.perfil.services.crud_service import PerfilCRUDService
 from apps.tenant.perfil.services.selectors import PerfilSelector
@@ -29,6 +30,5 @@ class PerfilServiceMixin:
 
     def _resolve_empresa_id(self):
         """Resuelve empresa_id del tenant activo."""
-        from apps.tenant.empresa.models import Empresa
         empresa = Empresa.objects.only('id').first()
         return empresa.id if empresa else None

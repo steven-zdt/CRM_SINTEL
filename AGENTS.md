@@ -23,6 +23,8 @@ Este documento refleja el **ADN real** del codebase: patrones, convenciones y es
 - **ALCANCE**: Aplica a TODO el proyecto - `/apps/`, `/config/`, `/tests/`, `/tools/`, `/scripts/`.
 - **VALIDACIÓN**: Toda PR debe pasar `python -m py_compile archivo.py` sin errores.
 
+> Ver tambien **§29 [ZERO-HARDCODING]** — Norma de Abstraccion que prohíbe nombres propios de tenants en codigo. Aplica a todo el proyecto con la misma prioridad que esta regla.
+
 ## [TECH] 1. Tecnologías Implementadas y Stack Base
 
 ### Patrones Implementados (Generales por App)
@@ -580,6 +582,75 @@ Si encuentra matches → error, requiere migración a `APP_ORIGEN_PREFIJOS`.
 - **Se validan:** Mediante `filtrar_cuentas_por_app_origen()` en backend
 - **Mejoras futuras:** Migrar a Django admin si se requiere UI de gestión sin código
 
+### 18.8. [COMPLETED] Eliminación de Campos Contables en Apps Origen (v3.10.2)
+
+**Estado:** ✅ **COMPLETADO** — 2026-05-28
+
+Todas las apps de negocio han sido **completamente desacopladas** de responsabilidad contable. Se eliminaron campos `cuenta_contable_uuid`, propiedades de resolución de labels y funciones de búsqueda de cuentas de:
+
+#### 18.8.1. Apps Refactorizadas
+
+| App | Modelo | Campo Eliminado | Archivos | Migración |
+|---|---|---|---|---|
+| **proveedores** | Proveedor | `codigo_contable`, `cuenta_contable_uuid` | 4 | 0007 |
+| **clientes** | Cliente | `cuenta_contable_uuid` | 5 | 0007 |
+| **inventario** | 4 modelos | `cuenta_inventario_uuid`, `cuenta_costo_uuid`, `cuenta_ingreso_uuid`, `cuenta_activo_uuid`, `cuenta_depreciacion_uuid` | 6 | 0009 |
+| **facturas** | Factura | `cuenta_contable_uuid` | 4 | 0026 |
+| **gastos** | DocumentoSoporte | `cuenta_gasto_uuid` | 6 | 0020 |
+| **empleados** | Devengo | `cuenta_contable_uuid` | 5 | 0010 |
+
+**Total:** 6 apps, 10 modelos, 15 campos eliminados, 30 archivos modificados, 6 migraciones aplicadas.
+
+#### 18.8.2. Cambios Estructurales
+
+Cada app fue limpiada sistemáticamente en las siguientes capas:
+
+1. **ORM (`models.py`):** Eliminar campo UUIDField o CHAR para soft reference contable
+2. **Selectores (`services/selectors.py`):** Quitar de tuplas `LIST_FIELDS`, `DETAIL_FIELDS`
+3. **Serializers (`api/serializers.py`):** Quitar de `Meta.fields`, eliminar `get_<campo>()`, `validate_<campo>()`
+4. **Lógica de Negocio (`services/business_service.py`):** Quitar validaciones contables e imports
+5. **Templates:** Quitar secciones "Integración Contable" y campos de búsqueda
+6. **JavaScript (`static/*/js/features/`):** Quitar funciones `initCuentaSearch()`, `getCuentaByUuid()`, data collection
+
+#### 18.8.3. Garantía de Pureza (Pull Model)
+
+✅ **Post-refactorización:**
+- ✅ Ningún import de `apps.tenant.contabilidad` desde apps origen
+- ✅ Ningún campo de tipo `UUIDField` para mapeo contable
+- ✅ Ningún input HTML para búsqueda de cuentas
+- ✅ 0 referencias a `cuenta_contable_*` en código vivo (excepto migraciones)
+- ✅ Django system check: 0 errores
+
+#### 18.8.4. Implicancia: Contabilidad es Ahora Pure Pull
+
+Con esta refactorización:
+
+1. **Extractores** en `apps/tenant/contabilidad/integracion/extractores/` son los ÚNICOS lectores de apps origen
+2. **Apps origen** NO saben que existen — zero coupling
+3. **Nuevo usuario/flujo:** Usuario contabiliza documento manual en offcanvas de Contabilidad (not en app origen)
+4. **Documentación:** Ver `REFACTORIZAR_DESACOPLAMIENTO_CONTABLE_FRAMEWORK.md` (checklist reutilizable para futuras refactorizaciones)
+
+#### 18.8.5. Validación
+
+```bash
+# Verificar que NO hay referencias contables pendientes
+grep -r "cuenta_gasto\|cuenta_contable_uuid\|cuenta_.*_uuid" \
+  apps/tenant/{proveedores,clientes,inventario,facturas,gastos,empleados} \
+  --include="*.py" --include="*.html" --include="*.js" \
+  | grep -v migrations
+# Output: (vacío — cero matches)
+
+# Django check
+python manage.py check
+# Output: System check identified no issues (0 silenced).
+```
+
+#### 18.8.6. Próximos Pasos
+
+- **Contabilidad:** Validar que extractores leen correctamente sin campos contables en origen
+- **Testing:** Smoke tests en cada app para crear/editar documentos sin error
+- **Fallback Manual:** Documentar flujo de contabilización manual en offcanvas Contabilidad
+
 ## [AI-AGENTS] 20. Arquitectura de Agentes IA Especializados (Asistente Contable)
 
 ### 20.1. Principio de Diseño
@@ -723,6 +794,15 @@ hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanv
 
 `sintelAbrirOffcanvas` encapsula identicamente la misma logica de limpieza.
 
+> **CRITICO — Regla de scope `hx-on::` (incidente 2026-06-01):**
+> `hx-on::` en un botón/form SOLO captura eventos que se disparan en ESE elemento.
+> En HTMX 1.9.x:
+> - `htmx:afterRequest` → dispara en el **elemento iniciador** → `hx-on::after-request` funciona en botones
+> - `htmx:afterSettle` → dispara en el **elemento target** (el div receptor del swap) → `hx-on::after-settle` NO funciona en botones
+>
+> **Usar `hx-on::after-request` en botones** para abrir offcanvas post-HTMX (el swap inline ocurre de forma sícrona ANTES de que se dispare `afterRequest`).
+> **Usar `document.addEventListener('htmx:afterSettle', ...)` en JS** para inicializar formularios en los módulos editor.
+
 ### 26.2. Contenedores HTMX — SSoT en Template Padre
 
 **[PROHIBIDO]** declarar el mismo `id` de contenedor HTMX en dos templates distintos del mismo modulo.
@@ -838,18 +918,26 @@ grep -rn "parseInt.*formData\|parseInteger.*formData" apps/tenant/*/static/*/js/
 - **Detener:** `make down` | **Logs:** `make logs` | **Shell:** `make shell`
 - **Directo:** `docker compose up --build`
 - **REGLA CRITICA — Healthcheck PostgreSQL:** El healthcheck del servicio `db` DEBE usar `psql -c 'SELECT 1'`, NUNCA `pg_isready`. `pg_isready` solo verifica TCP y produce falso-positivo durante la inicialización del DB. Ver `skills/workflow/docker-services.md`.
-- **REGLA CRITICA — Admin dev:** `ensure_admin` crea automáticamente `sintel_dev` / `admin123` en cada `make up`. Username reservado para dev — NO colisiona con usuarios de tenant. `ensure_admin` NUNCA sobreescribe contraseñas de usuarios existentes. NO usar `createsuperuser`. Para limpiar BD: `make down` (incluye `-v`).
+- **REGLA CRITICA — Superusuario del sistema:** El usuario administrador del dominio público (`sintel.com/admin/`) se crea SIEMPRE y SOLO de forma manual con `python manage.py createsuperuser [--tenant <schema>]`. NUNCA se crea automáticamente al arrancar el servidor. `ensure_admin` SOLO verifica existencia — no crea usuarios. PROHIBIDO usar `ensure_admin` para crear administradores. Para la primera instalación ejecutar `createsuperuser` manualmente.
 
 ### Serializers — Obtener empresa_id (REGLA CRITICA)
 - **PROHIBIDO en serializers:** `self.context.get('request').user.perfil.empresa_id` — lanza `AttributeError: 'User' object has no attribute 'perfil'` cuando el user no tiene `TenantProfile` asociado. Afecta GET list/detail porque el serializer se ejecuta antes de cualquier guard de perfil.
 - **Patrón correcto:** Agregar `_get_empresa_id()` a `NormalizationMixin` con dos niveles: (1) `self.context.get('empresa_id')` si el ViewSet lo inyecta, (2) fallback `Empresa.objects.only('id').first()`. Ver `serializers.py` de inventario como referencia.
 - **Patrón en ViewSet:** Inyectar `empresa_id` en `get_serializer_context()` para que el serializer no necesite acceder al `request.user` directamente.
 
-### Onboarding de Tenants Privados (Contraseñas)
-- **REGLA ABSOLUTA:** Las contraseñas de owners de tenants privados (`home.sintel.com`, etc.) se crean SIEMPRE y SOLO por el propio usuario a través del email de activación. NUNCA de forma automática.
-- **Flujo único autorizado:** `crear_tenant_con_owner()` → `set_unusable_password()` → email con token → `/activate?token=` → `process_activation()` → `user.set_password(password_elegido_por_owner)`.
+### Onboarding de Tenants Privados (Contraseñas y Activación)
+- **REGLA ABSOLUTA — Contraseñas:** Las contraseñas de owners de tenants privados se crean SIEMPRE y SOLO por el propio usuario a través del email de activación. NUNCA de forma automática.
+- **REGLA ABSOLUTA — Flujo de activación canónico (v3.15.1):** Todo email de activación de tenant privado DEBE enviarse exclusivamente via `EmailService.send_tenant_activation_email(user, tenant)`. Esta función es el SSoT — genera el código Redis (8 chars, TTL 48h) internamente. PROHIBIDO llamar a `generate_invitation_token`, `build_activation_url`, `send_invitation_email` directamente en flujos de onboarding.
+- **Flujo único autorizado:** `crear_tenant_con_owner()` → `set_unusable_password()` → `EmailService.send_tenant_activation_email()` → email con código 8 chars → `{schema}.sintel.com/static/tenant/core/auth/activate.html` → `POST /api/v1/core/auth/activate-with-code/` → `user.set_password()`.
 - **Prohibido en onboarding:** `set_password(...)`, `make_random_password()`, `create_user_service(password=...)`. Solo `set_unusable_password()`.
-- **`ensure_admin`** es para el superusuario Django Admin dev (`sintel_dev`) únicamente. NUNCA se usa en el flujo de tenant.
+- **`ensure_admin`** SOLO verifica si existe un superusuario activo — NO crea usuarios. Si no existe ninguno, muestra alerta y ordena ejecutar `createsuperuser`. Nunca se llama automáticamente al arrancar el servidor.
+
+### Nomenclatura y Abstracción de Configuraciones (v3.16.0 — INMUTABLE) → Ver §29 para reglas detalladas
+- **REGLA CRITICA — Sin nombres propios de tenants en código:** Cualquier script, management command, configuración de infraestructura o docstring en `apps/public/` DEBE usar placeholders abstractos (`{schema_name}`, `{schema}.sintel.com`, `<schema_name>`) en lugar de nombres propios de tenants específicos (`cliente`, `home`, `putito`, `tupapi`, etc.).
+- **REGLA CRITICA — Datos dinámicos via ORM:** Los scripts de aprovisionamiento (DNS, extra_hosts, health checks) deben obtener la lista de tenants activos consultando `Client.objects.exclude(schema_name="public").filter(is_active=True)`, nunca una lista hardcodeada.
+- **EXCEPCIÓN DOCUMENTADA — Dominio público:** `schema_name="public"` y `sintel.com` son la excepción explícita y documentada. Su DNS se gestiona independientemente y nunca debe ser modificado por comandos de aprovisionamiento de tenants privados. La excepción está marcada con comentario en `ensure_tenant_dns.py`.
+- **REGLA CRITICA — Filtro console/users/:** El endpoint `UsersDataTableView` SOLO muestra `Q(is_staff=True, is_superuser=True) OR Q(TenantMembership.is_primary_admin=True)`. PROHIBIDO cambiar este filtro sin aprobación manual — exponer empleados de tenants en el panel admin es una brecha de privacidad.
+- **REGLA CRITICA — is_staff para owners:** Los owners de tenants privados tienen `is_staff=False, is_superuser=False`. PROHIBIDO asignar `is_staff=True` a un owner de tenant en ningún flujo de onboarding o management command. Solo los admins del sistema tienen `is_staff=True + is_superuser=True`.
 
 ### Migraciones Multi-Tenant
 - **Tenants:** `make migrate-tenants` / `docker compose exec web python manage.py migrate_schemas`
@@ -1090,6 +1178,144 @@ class TestMiModeloCRUD(SintelTenantTestCase):
 ```
 
 **Referencia completa:** `apps/tenant/inventario/.agent/docs/TESTING_MULTI_TENANT_PATTERNS.md`
+
+---
+
+### 24.5. Estandar de Aislamiento Multi-Tenant — Los 3 Niveles Obligatorios
+
+**REGLA FUNDAMENTAL:** Todo test de app tenant que implique lectura, acceso directo o creacion/mutacion de datos DEBE verificar los 3 niveles de aislamiento. El patron canonico es `apps/tenant/gastos/tests/test_multitenant_isolation.py`.
+
+#### Los 3 Niveles (no negociables)
+
+| Nivel | Que valida | Assertion minima |
+|---|---|---|
+| **1 — Listado** | `GET /api/v1/{app}/` desde `tenant1` solo devuelve datos de `tenant1` | `assert objeto_t2.descripcion not in [item['campo'] for item in results]` |
+| **2 — IDOR directo** | `GET /api/v1/{app}/{uuid_de_tenant2}/` desde `tenant1` devuelve 404 | `assert resp.status_code == 404` |
+| **3 — IDOR en FKs** | `POST` con FK de `tenant2` desde `tenant1` devuelve 400/403/404 | `assert resp.status_code in (400, 403, 404)` |
+
+#### Template Canonico (copiar y adaptar por app)
+
+```python
+# apps/tenant/{app}/tests/test_multitenant_isolation.py
+import pytest
+from django_tenants.utils import schema_context
+from rest_framework import status
+from apps.public.tenants.models import TenantMembership
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+@pytest.mark.django_db
+def test_multitenant_isolation_{app}(client, tenant1, tenant2):
+    """
+    Verifica los 3 niveles de aislamiento multi-tenant para {App}.
+    Patron: apps/tenant/gastos/tests/test_multitenant_isolation.py
+    """
+    # --- NIVEL 1 & 2 setup: crear datos en cada tenant ---
+    with schema_context(tenant1.schema_name):
+        emp1 = Empresa.objects.first()
+        user1 = User.objects.create_user(username="user1_t1", email="u1@t1.local", password="pass")
+        TenantProfile.objects.create(user=user1, empresa=emp1, rol="ADMIN")
+        with schema_context('public'):
+            TenantMembership.objects.create(client=tenant1, user=user1, rol="ADMIN")
+        obj1 = {Model}.objects.create(empresa=emp1, ...)  # objeto de tenant1
+
+    with schema_context(tenant2.schema_name):
+        emp2 = Empresa.objects.first()
+        user2 = User.objects.create_user(username="user2_t2", email="u2@t2.local", password="pass")
+        TenantProfile.objects.create(user=user2, empresa=emp2, rol="ADMIN")
+        with schema_context('public'):
+            TenantMembership.objects.create(client=tenant2, user=user2, rol="ADMIN")
+        obj2 = {Model}.objects.create(empresa=emp2, ...)  # objeto de tenant2
+
+    # --- NIVEL 1: Aislamiento en listado ---
+    client.force_login(user1)
+    resp = client.get("/api/v1/{app}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.com")
+    assert resp.status_code == status.HTTP_200_OK
+    ids_visibles = [item['{campo_identificador}'] for item in resp.json().get('results', [])]
+    assert '{valor_obj1}' in ids_visibles      # propio tenant: VISIBLE
+    assert '{valor_obj2}' not in ids_visibles  # otro tenant: INVISIBLE
+
+    # --- NIVEL 2: Prevencion de IDOR (acceso directo por UUID) ---
+    resp = client.get(
+        f"/api/v1/{app}/{obj2.uuid}/",
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+    )
+    assert resp.status_code == status.HTTP_404_NOT_FOUND  # UUID de otro tenant: 404
+
+    # --- NIVEL 3: Prevencion de IDOR en FKs (FK de otro tenant en payload) ---
+    payload = {
+        "{campo_fk}": obj2.id,  # FK que pertenece a tenant2 — debe ser rechazado
+        # ... resto del payload valido para tenant1
+    }
+    resp = client.post(
+        "/api/v1/{app}/",
+        data=payload,
+        content_type="application/json",
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+    )
+    assert resp.status_code in (
+        status.HTTP_400_BAD_REQUEST,
+        status.HTTP_403_FORBIDDEN,
+        status.HTTP_404_NOT_FOUND,
+    )  # FK de otro tenant: rechazado por DSV
+```
+
+#### Fixtures `conftest.py` estandar para tests de aislamiento
+
+```python
+# apps/tenant/{app}/tests/conftest.py
+import pytest
+from django.core.management import call_command
+from django.db import connection
+from django_tenants.utils import schema_context
+from apps.public.tenants.models import Client, Domain
+from apps.tenant.empresa.models import Empresa
+
+
+def _make_test_tenant(schema: str, nombre: str, nit: str):
+    """Crea (o reutiliza) un tenant de prueba con schema y empresa."""
+    tenant_obj = Client.objects.filter(schema_name=schema).first()
+    if not tenant_obj:
+        with schema_context('public'):
+            tenant_obj = Client.objects.create(schema_name=schema, nombre=nombre)
+            Domain.objects.create(
+                tenant=tenant_obj,
+                domain=f'{schema}.sintel.com',  # dominio de test
+                is_primary=True,
+            )
+    with connection.cursor() as cur:
+        cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+    call_command('migrate_schemas', '--tenant', '-s', schema, '--noinput', verbosity=0)
+    with schema_context(schema):
+        if not Empresa.objects.exists():
+            Empresa.objects.create(nit=nit, razon_social=f"Empresa {nombre} SAS", direccion="Calle Test")
+    return tenant_obj
+
+
+@pytest.fixture
+def tenant1(db):
+    return _make_test_tenant('tenant1', 'Tenant 1', '111111111')
+
+
+@pytest.fixture
+def tenant2(db):
+    return _make_test_tenant('tenant2', 'Tenant 2', '222222222')
+```
+
+#### Reglas de naming para fixtures de aislamiento
+
+| Elemento | Patron | Ejemplo |
+|---|---|---|
+| schema del tenant de test | `tenant1`, `tenant2` | No usar `home`, `cliente`, etc. |
+| dominio del tenant de test | `{schema}.sintel.com` | `tenant1.sintel.com` |
+| email del usuario de test | `u{n}@t{n}.local` | `u1@t1.local` |
+| username | `user{n}_t{n}` | `user1_t1` |
+
+**[OBLIGATORIO]** Cada app tenant con modelos propios DEBE tener un archivo `test_multitenant_isolation.py` con los 3 niveles verificados.
+
+**[PROHIBIDO]** Tests de CRUD de tenant que solo verifiquen el happy path sin incluir los niveles 2 (IDOR directo) y 3 (IDOR en FKs).
 
 ## [UUID-MIGRATION] 25. Migracion Obligatoria de Lookup Field: PK Entero → UUID
 
@@ -1361,3 +1587,543 @@ offcanvasEl.addEventListener('hidden.bs.offcanvas', () => {
 - **[PROHIBIDO]** Limpiar campos de formulario en funciones de navegacion sin discriminar modo creacion vs modo edicion.
 - **[OBLIGATORIO]** Al agregar un campo `_uuid` read-only en un serializer con `exclude`, no se requiere actualizar `Meta.fields` — se incluye automaticamente.
 - **[PROHIBIDO]** Usar `pk=valor_uuid` en selectors cuando `valor_uuid` es un UUID string (type mismatch en PostgreSQL para columnas integer PK).
+
+---
+
+## [ZERO-HARDCODING] 29. Norma de Abstraccion Zero-Hardcoding (Escalabilidad a 1000+ Tenants)
+
+**REGLA FUNDAMENTAL — Aplica a TODO el proyecto: `apps/public/`, `apps/tenant/`, `tests/`, `scripts/`, `scratch/`**
+
+La plataforma SINTEL debe poder aprovisionar y gestionar cualquier numero de tenants sin requerir la modificacion de una sola linea de codigo estatico. Esta norma define los patrones OBLIGATORIOS y los antipatrones PROHIBIDOS.
+
+---
+
+### 29.1. Antipatron A — Listas Estaticas de Tenants [PROHIBIDO]
+
+**[PROHIBIDO]** — Cualquier iteracion manual o lista hardcodeada de schemas o dominios:
+
+```python
+# PROHIBIDO
+for schema in ['home', 'cliente', 'putito', 'empresa1']:
+    ...
+tenants = ["public", "empresa_a", "empresa_b"]
+```
+
+**[OBLIGATORIO]** — Sustituir SIEMPRE por consultas dinamicas al ORM del modelo `Client`:
+
+```python
+# CORRECTO
+from apps.public.tenants.models import Client
+for tenant in Client.objects.exclude(schema_name='public').filter(is_active=True):
+    with tenant_context(tenant):
+        ...
+```
+
+**Variante con filtro opcional `--schema`:**
+```python
+tenants = Client.objects.exclude(schema_name='public').filter(is_active=True)
+if schema_filter:  # argumento CLI opcional
+    tenants = tenants.filter(schema_name=schema_filter)
+```
+
+---
+
+### 29.2. Antipatron B — Nombres Propios y Dominios Fijos [PROHIBIDO]
+
+**[PROHIBIDO]** — Cadenas literales apuntando a tenants especificos de produccion:
+
+```python
+# PROHIBIDO
+tenant = Client.objects.get(schema_name='home')
+domain = Domain.objects.get(domain='cliente.sintel.com')
+host = "home.sintel.com"
+url = "http://tupapi.sintel.com/api/"
+```
+
+**[OBLIGATORIO]** — Resolver dinamicamente desde el ORM o variables de entorno:
+
+```python
+# CORRECTO
+tenant = Client.objects.exclude(schema_name='public').filter(is_active=True).first()
+domain = Domain.objects.filter(tenant=tenant, is_primary=True).first()
+host = domain.domain  # resuelto en runtime
+url = f"{protocol}://{domain.domain}/api/"
+```
+
+**[EXCEPCION DOCUMENTADA]** — `schema_name='public'` y el dominio raiz `sintel.com` son la unica excepcion permitida. Son el dominio de la plataforma, no un tenant privado. Su DNS se gestiona independientemente. Esta excepcion DEBE estar marcada con comentario explicito en el codigo.
+
+---
+
+### 29.3. Antipatron C — Ejemplos Hardcodeados en Logs y Help Text [PROHIBIDO]
+
+**[PROHIBIDO]** — Ejemplos en `help=`, `print()`, docstrings que usen nombres reales de tenants:
+
+```python
+# PROHIBIDO
+help = "Ejecuta el proceso. Ej: --schema cliente"
+print("Accede via: http://home.sintel.com/")
+print("client = Client.objects.get(schema_name='putito')")
+```
+
+**[OBLIGATORIO]** — Usar marcadores genericos abstractos:
+
+```python
+# CORRECTO
+help = "Ejecuta el proceso. Ej: --schema {schema_name}"
+print("Accede via: http://{schema}.sintel.com/")
+print("client = Client.objects.get(schema_name='<schema_name>')")
+```
+
+---
+
+### 29.4. Antipatron D — Fixtures de Tests con Nombres de Produccion [PROHIBIDO]
+
+**[PROHIBIDO]** — Fixtures que referencian tenants de produccion o asumen estado de la BD real:
+
+```python
+# PROHIBIDO
+tenant = Client.objects.filter(schema_name='home').first()
+tenant = Client(schema_name='home', nombre='Home Test Tenant', ...)
+domain = 'home.sintel.com'
+client.defaults["HTTP_HOST"] = "cliente.sintel.com"
+```
+
+**[OBLIGATORIO]** — Nombres claramente transaccionales que no colisionen con produccion:
+
+```python
+# CORRECTO — schema con prefijo "test_", nombres genericos, dominios ".sintel.local"
+schema_name = "test_schema_01"
+tenant = Client(schema_name=schema_name, nombre='Test Tenant Isolation', ...)
+domain = f"{schema_name}.sintel.local"
+client.defaults["HTTP_HOST"] = domain  # o f"{self.tenant.schema_name}.sintel.local"
+```
+
+**Convencion de nombres para fixtures de tests:**
+| Elemento | Patron correcto | Patron incorrecto |
+|---|---|---|
+| schema_name | `test_{app}_{descripcion}_01` | `home`, `cliente`, `empresa` |
+| domain | `test-{desc}-01.sintel.local` | `home.sintel.com`, `cliente.sintel.com` |
+| HTTP_HOST | `f"{self.tenant.schema_name}.sintel.local"` | `"home.sintel.com"` |
+| nombre Tenant | `"Test {App} Tenant"` | `"Home Test Tenant"` |
+
+---
+
+### 29.5. Alcance y Enforcement
+
+**Alcance total — aplica a:**
+- `apps/public/` — management commands, tasks, services, tests
+- `apps/tenant/` — tests, scripts de utilidad
+- `tests/` — todos los fixtures y factories
+- `scripts/` — scripts de diagnostico y utilidad
+- `scratch/` — scripts de desarrollo/debug
+- `config/` — settings y configuraciones
+
+**Enforcement — validacion obligatoria antes de merge:**
+```bash
+# Buscar violaciones de tipo B (strings literales de tenants conocidos)
+grep -rn "'home'\|'cliente'\|'putito'\|'tupapi'\|home\.sintel\.com\|cliente\.sintel\.com" \
+    apps/ tests/ scripts/ scratch/ --include="*.py" \
+    | grep -v "__pycache__\|migration\|assertNotIn\|\.sintel\.local\|{schema" \
+    | grep -v "schema_name='public'\|# EXCEPCION"
+# Resultado esperado: 0 lineas
+```
+
+**Patron de argumentos CLI para scripts:**
+Todo script o management command que opere sobre tenants DEBE:
+1. Aceptar `--schema <schema_name>` como argumento opcional
+2. Sin `--schema`: iterar `Client.objects.exclude(schema_name='public').filter(is_active=True)`
+3. Con `--schema`: filtrar `tenants.filter(schema_name=schema_filter)`
+
+**Ejemplo patron completo:**
+```python
+# Patron canonico para scripts/management commands
+schema_filter = None
+args = sys.argv[1:]
+for i, arg in enumerate(args):
+    if arg == "--schema" and i + 1 < len(args):
+        schema_filter = args[i + 1]
+
+tenants = Client.objects.exclude(schema_name="public").filter(is_active=True)
+if schema_filter:
+    tenants = tenants.filter(schema_name=schema_filter)
+
+for tenant in tenants:
+    with tenant_context(tenant):  # o schema_context(tenant.schema_name)
+        # logica de negocio...
+        pass
+```
+
+---
+
+### 29.6. Tabla de Decision Rapida
+
+| Situacion | Antipatron | Patron correcto |
+|---|---|---|
+| Iterar tenants | `for s in ['home','cliente']` | `Client.objects.exclude(schema_name='public')` |
+| Obtener un tenant | `Client.objects.get(schema_name='home')` | `Client.objects.filter(...).first()` con arg CLI |
+| URL de tenant | `"http://home.sintel.com"` | `f"http://{domain.domain}"` donde `domain` viene del ORM |
+| HTTP_HOST en test | `"home.sintel.com"` | `f"{self.tenant.schema_name}.sintel.local"` |
+| Schema en fixture | `schema_name='cliente'` | `schema_name='test_feature_01'` |
+| Ejemplo en help | `ej: --schema putito` | `ej: --schema {schema_name}` |
+| DNS management command | lista `['home','cliente']` | `Client.objects.exclude(schema_name='public')` |
+
+---
+
+## [ORM-SELECTORS] 30. Marco de Referencia: Constantes de Selector y Serializer (Zero-Collision Pattern)
+
+**Aplica a:** todas las apps bajo `apps/tenant/` y `apps/public/` sin excepcion.
+
+---
+
+### 30.1. Raiz del problema — dos contextos, una sola constante
+
+Las constantes `LIST_FIELDS` / `DETAIL_FIELDS` en `services/selectors.py` son el SSoT de campos por app.
+Se usan en **dos contextos con reglas incompatibles**:
+
+| Contexto | Uso tipico | Acepta `rel__campo` |
+|---|---|---|
+| **Queryset ORM** `.only()` | `Model.objects.only(*DETAIL_FIELDS)` | SI — traversal ORM valida |
+| **Serializer** `Meta.fields` | `fields = tuple(DETAIL_FIELDS) + (...)` | NO — DRF lanza `ImproperlyConfigured` |
+
+Cuando una sola constante alimenta ambos contextos, **cualquier string con `__` (doble guion bajo) la hace explotar** en tiempo de request (no de arranque — `django check` no lo detecta).
+
+> **Incidente de referencia (2026-06-01):**
+> `django.core.exceptions.ImproperlyConfigured: Field name sede__nombre is not valid
+>  for model Factura in FacturaDetailSerializer`
+
+---
+
+### 30.2. Taxonomia de strings validos por contexto
+
+| Tipo de string | Ejemplo | `.only()` ORM | `Meta.fields` serializer |
+|---|---|---|---|
+| Campo de modelo directo | `"nombre"`, `"empresa_id"`, `"sede_id"` | SI | SI |
+| FK id autogenerado | `"cliente_id"`, `"sede_id"` | SI | SI |
+| Traversal de relacion | `"sede__nombre"`, `"cliente__uuid"` | SI | NO |
+| Campo de serializer declarado | `"sede_nombre"`, `"tipo_display"` | NO | SI |
+
+**Regla de oro:** si el string tiene `__` (doble guion bajo), no puede estar en `LIST_FIELDS` ni `DETAIL_FIELDS` si esas constantes se usan en `Meta.fields`.
+
+---
+
+### 30.3. Patron de riesgo — detectarlo
+
+En `api/serializers.py` de cualquier app, buscar:
+
+```python
+# PATRON DE RIESGO — la constante se pasa directo a Meta.fields
+fields = tuple(DETAIL_FIELDS) + ("campo_extra",)
+fields = DETAIL_FIELDS + ("campo_extra",)
+fields = tuple(LIST_FIELDS)
+```
+
+Si existe alguno de estos patrones, la constante referenciada **NUNCA puede contener strings con `__`**.
+
+---
+
+### 30.4. Arquitectura correcta — Zero-Collision Pattern
+
+Separar en tres niveles en `services/selectors.py`:
+
+```python
+# ============================================================
+# NIVEL 1: Campos de modelo puro — validos en AMBOS contextos
+# Regla: solo nombres de atributos directos del modelo Django.
+#        Incluye FK ids (campo_id). NUNCA doble guion bajo.
+# ============================================================
+LIST_FIELDS = (
+    "id", "uuid", "empresa_id",
+    "nombre", "estado", "fecha_creacion",
+    "cliente_id",           # FK id autogenerado — valido en ambos
+    "sede_id",              # FK id autogenerado — valido en ambos
+)
+
+DETAIL_FIELDS = LIST_FIELDS + (
+    "descripcion", "observaciones",
+    "created_at", "updated_at",
+    # solo atributos directos del modelo — nunca rel__campo
+)
+
+# ============================================================
+# NIVEL 2: Traversals ORM — SOLO para .only(), nunca en Meta.fields
+# Prefijo _ = uso interno del modulo selector.
+# Nombrar por relacion: _<RELACION>_TRAVERSALS
+# ============================================================
+_CLIENTE_TRAVERSALS   = ("cliente__razon_social", "cliente__numero_documento")
+_SEDE_TRAVERSALS      = ("sede__nombre", "sede__uuid")
+_PROVEEDOR_TRAVERSALS = ("proveedor__razon_social",)
+_AREA_TRAVERSALS      = ("area__nombre",)
+
+# ============================================================
+# NIVEL 3: Clases Selector — usan NIVEL 1 + NIVEL 2 juntos en .only()
+# ============================================================
+class MiModeloSelector:
+    @staticmethod
+    def qs_list(empresa_id: int):
+        return MiModelo.objects.filter(
+            empresa_id=empresa_id
+        ).select_related(
+            "cliente", "sede"    # obligatorio para cada relacion en TRAVERSALS
+        ).only(
+            *LIST_FIELDS,
+            *_CLIENTE_TRAVERSALS,   # inline — no contaminan Meta.fields
+            *_SEDE_TRAVERSALS,
+        )
+
+    @staticmethod
+    def qs_detail(empresa_id: int):
+        return MiModelo.objects.filter(
+            empresa_id=empresa_id
+        ).select_related(
+            "cliente", "sede", "proveedor"
+        ).only(
+            *DETAIL_FIELDS,
+            *_CLIENTE_TRAVERSALS,
+            *_SEDE_TRAVERSALS,
+            *_PROVEEDOR_TRAVERSALS,
+        )
+```
+
+---
+
+### 30.5. Patron correcto — serializer
+
+```python
+# api/serializers.py
+
+# CORRECTO: campos de serializer usan notacion con PUNTO (source="rel.campo")
+# Nunca doble guion bajo en nombres de campos de serializer.
+
+cliente_nombre    = serializers.CharField(source="cliente.razon_social",   read_only=True, allow_null=True)
+sede_nombre       = serializers.CharField(source="sede.nombre",             read_only=True, allow_null=True)
+proveedor_nombre  = serializers.CharField(source="proveedor.razon_social",  read_only=True, allow_null=True)
+
+class Meta:
+    model = MiModelo
+    # DETAIL_FIELDS solo contiene atributos de modelo (Nivel 1) — sin __
+    # Los campos de serializer se agregan explicitamente
+    fields = tuple(DETAIL_FIELDS) + (
+        "cliente_nombre",    # CharField declarado arriba — notacion punto
+        "sede_nombre",       # CharField declarado arriba — notacion punto
+        "sede",              # UUIDOrPKRelatedField o PrimaryKeyRelatedField
+        # NUNCA: "sede__nombre", "cliente__razon_social"
+    )
+```
+
+---
+
+### 30.6. Tabla de equivalencias — ORM vs Serializer
+
+| Lo que quieres exponer | En `.only()` (selector) | En `Meta.fields` (serializer) |
+|---|---|---|
+| Nombre del cliente | `"cliente__razon_social"` | `cliente_nombre` via `CharField(source="cliente.razon_social")` |
+| Nombre de la sede | `"sede__nombre"` | `sede_nombre` via `CharField(source="sede.nombre")` |
+| UUID de la sede | `"sede__uuid"` | `sede_uuid` via `UUIDField(source="sede.uuid")` o `SerializerMethodField` |
+| ID de FK (entero) | `"sede_id"` | `"sede_id"` — directo, valido en ambos |
+| Objeto FK completo | no aplica en `.only()` | `sede` via `PrimaryKeyRelatedField` / `UUIDOrPKRelatedField` |
+
+---
+
+### 30.7. Anti-patrones catalogados — PROHIBIDOS
+
+```python
+# ❌ ANTIPATRON A — traversal en constante compartida con Meta.fields
+LIST_FIELDS = (
+    "id", "uuid",
+    "sede__nombre",          # PROHIBIDO si LIST_FIELDS va a Meta.fields
+    "cliente__razon_social", # PROHIBIDO
+)
+
+# ❌ ANTIPATRON B — traversal directa en Meta.fields del serializer
+class Meta:
+    fields = ("id", "uuid", "sede__nombre")  # PROHIBIDO — DRF explota
+
+# ❌ ANTIPATRON C — source con doble guion bajo en serializer
+sede_nombre = serializers.CharField(source="sede__nombre")  # PROHIBIDO
+# Correcto: source="sede.nombre" (punto, no doble guion bajo)
+
+# ❌ ANTIPATRON D — omitir select_related al usar traversal en .only()
+Model.objects.only("sede__nombre")  # Falla silenciosamente sin select_related
+# Correcto: .select_related("sede").only("sede__nombre")
+```
+
+---
+
+### 30.8. Reglas de select_related obligatorio
+
+Cuando se agrega una traversal `_*_TRAVERSALS` al `.only()`, el `select_related` correspondiente es **obligatorio**:
+
+| Traversal en `.only()` | `select_related` requerido |
+|---|---|
+| `"sede__nombre"` | `.select_related("sede")` |
+| `"cliente__razon_social"` | `.select_related("cliente")` |
+| `"proveedor__nit"` | `.select_related("proveedor")` |
+| `"area__nombre"` | `.select_related("area")` |
+| `"factura_costo__numero"` | `.select_related("factura_costo")` |
+| `"sede__area__nombre"` | `.select_related("sede__area")` |
+
+Sin `select_related`, Django hace N+1 queries o retorna `None` silenciosamente.
+
+---
+
+### 30.9. Auditoria de apps — estado actual (2026-06-01)
+
+Apps que usan el patron de riesgo `tuple(FIELDS)` en `Meta.fields`:
+
+| App | Serializer | Patron | Estado |
+|---|---|---|---|
+| `facturas` | `FacturaDetailSerializer` | `tuple(DETAIL_FIELDS) + (...)` | CORREGIDO — `_SEDE_ONLY_TRAVERSALS` separadas |
+| `proveedores` | `ProveedorDetailSerializer` | `DETAIL_FIELDS + (...)` | Sin traversals en la constante — seguro |
+
+Apps que usan listas explicitas en `Meta.fields` (patron seguro — traversals en constantes no afectan):
+
+| App | Patron serializer | Traversals en constantes LIST/DETAIL_FIELDS | Riesgo |
+|---|---|---|---|
+| `gastos` | Lista explicita | SI — solo para `.only()` | NINGUNO |
+| `proyectos` | `exclude = ['empresa']` | SI — `_SEDE_DETAIL_TRAVERSALS` separadas | NINGUNO |
+| `cotizaciones` | Lista explicita | SI — `_SEDE_LIST_TRAVERSALS` separadas | NINGUNO |
+| `inventario` | Lista explicita | SI — `_SEDE_ONLY_TRAVERSALS` separadas | NINGUNO |
+| `empleados` | Lista explicita | SI — solo para `.only()` | NINGUNO |
+| `perfil` | Lista explicita | SI (`user__email`, `departamento__nombre`) | NINGUNO — no se usan en Meta.fields |
+| `clientes` | Lista explicita | Sin traversals | NINGUNO |
+
+---
+
+### 30.10. Verificacion automatica — ejecutar antes de mergear
+
+```bash
+# 1. Detectar traversals ORM dentro de constantes LIST_FIELDS / DETAIL_FIELDS
+#    (lineas que esten dentro de esas constantes y tengan doble guion bajo)
+docker compose exec web python -c "
+import ast, pathlib, sys
+errors = []
+for f in pathlib.Path('apps/tenant').rglob('selectors.py'):
+    src = f.read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id in ('LIST_FIELDS', 'DETAIL_FIELDS'):
+                    for elt in ast.walk(node.value):
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str) and '__' in elt.value:
+                            errors.append(f'{f}:{elt.lineno} -> {t.id} contiene traversal: {elt.value!r}')
+if errors:
+    print('ERRORES:')
+    for e in errors: print(' ', e)
+    sys.exit(1)
+else:
+    print('OK: ninguna traversal ORM en LIST_FIELDS/DETAIL_FIELDS')
+"
+
+# 2. Detectar serializers que usan tuple(FIELDS) — patron de riesgo
+grep -rn "tuple(LIST_FIELDS)\|tuple(DETAIL_FIELDS)\|= LIST_FIELDS +\|= DETAIL_FIELDS +" \
+  apps/tenant/*/api/serializers.py apps/public/*/api/serializers.py 2>/dev/null
+# Para cada resultado: ejecutar verificacion 1 sobre su selectors.py correspondiente
+
+# 3. Smoke test serializers — instanciar y forzar build de campos
+docker compose exec web python -c "
+import django; django.setup()
+import importlib, pathlib, sys
+errors = []
+for f in pathlib.Path('apps/tenant').rglob('serializers.py'):
+    mod_path = str(f).replace('/', '.').replace('\\\\', '.').replace('.py', '')
+    try:
+        mod = importlib.import_module(mod_path)
+        for name in dir(mod):
+            cls = getattr(mod, name)
+            if isinstance(cls, type) and hasattr(cls, 'Meta') and hasattr(cls.Meta, 'model'):
+                try:
+                    _ = cls().fields
+                except Exception as e:
+                    errors.append(f'{name}: {e}')
+    except Exception:
+        pass
+if errors:
+    for e in errors: print('ERROR:', e)
+    sys.exit(1)
+else:
+    print('OK: todos los serializers instancian sin error')
+"
+```
+
+---
+
+### 30.11. Checklist al agregar cualquier FK a una app existente
+
+- [ ] FK id (`campo_id`) agregado a `LIST_FIELDS` y `DETAIL_FIELDS` (valido en ambos)
+- [ ] Traversals (`campo__subcampo`) en constante privada `_<RELACION>_TRAVERSALS`
+- [ ] `select_related("<relacion>")` agregado en cada metodo selector que use las traversals
+- [ ] `campo_nombre = CharField(source="relacion.campo")` en serializer (punto, no `__`)
+- [ ] Si el serializer usa `tuple(FIELDS)` en Meta.fields: auditar que la constante NO tiene `__`
+- [ ] Verificacion 30.10 paso 1 pasa en verde
+- [ ] `django check` limpio
+- [ ] Smoke test serializer: `s = MiSerializer(); _ = s.fields` sin excepcion
+
+---
+
+## [FRONTEND-SSOT] 31. Unica Fuente de Verdad para Frontend — `.agents/skills/frontend/`
+
+**REGLA OBLIGATORIA — Aplica a toda tarea que toque HTML, JS, HTMX, Offcanvas, Tabulator o cualquier componente UI.**
+
+Antes de escribir, modificar o revisar cualquier codigo frontend, el agente DEBE consultar los skills de frontend como unica fuente de verdad:
+
+```
+.agents/skills/frontend/
+  htmx.md              — Patrones HTMX, hx-on::, eventos, OOB, polling
+  ui-management.md     — Offcanvas/Modal lifecycle, UIManager, backdrops
+  crud-fsd.md          — Arquitectura CRUD completa (HTMX + Tabulator + Vanilla JS)
+  vanilla-js.md        — Namespace, window.http(), UUID sin parseInt, CustomEvents
+  tabulator.md         — TabulatorFactory, formatters, cellClick, replaceData
+  dom-ids-sync.md      — Sincronizacion IDs HTML ↔ JS, data-attributes
+  creacion_item_full.md — Patron completo Add Association end-to-end
+```
+
+### 31.1. Protocolo de consulta obligatorio
+
+```
+ANTES de cualquier accion frontend:
+  1. Identificar categoria: HTMX / Offcanvas / JS / Tabulator / DOM
+  2. Abrir el skill correspondiente en .agents/skills/frontend/
+  3. Aplicar exactamente el patron documentado
+  4. Si el skill no cubre el caso → escalar al usuario, NO improvisar
+```
+
+### 31.2. Prohibiciones derivadas de los skills
+
+| Prohibicion | Skill de referencia |
+|---|---|
+| `bootstrap.Offcanvas.getOrCreateInstance(el).show()` sin dispose | ui-management.md §2, AGENTS.md §26 |
+| `hx-on::after-settle` en atributos de botones | htmx.md §12.1 |
+| `hx-on::after-swap` en atributos de botones | htmx.md §12.1 (usar `after-request`) |
+| `htmx:afterSwap` en `document.addEventListener` | htmx.md §12.2-B (usar `afterSettle`) |
+| `setTimeout()` como sustituto de `afterSettle` | htmx.md §12.2-B |
+| `parseInt()` sobre campos FK/UUID de API | vanilla-js.md §4, AGENTS.md §27 |
+| Traversals `campo__subcampo` en `LIST_FIELDS`/`DETAIL_FIELDS` | creacion_item_full.md, AGENTS.md §30 |
+| `new Tabulator()` directamente | tabulator.md §1 (usar TabulatorFactory) |
+| Codigo JS global sin namespace `window.Sintel.<App>` | vanilla-js.md §1 |
+
+### 31.3. Patron de apertura de offcanvas — decision tree
+
+```
+¿Desde un botón HTML con hx-get?
+  └─ hx-on::after-request="...UIManager.handleOffcanvas(el,'show')..."  [htmx.md §12.1]
+
+¿Desde document.addEventListener en un modulo JS?
+  └─ htmx:afterSettle → UIManager.handleOffcanvas(el,'show')           [htmx.md §12.2-B]
+
+¿Desde htmx.ajax().then() en un modulo JS?
+  └─ UIManager.handleOffcanvas(el,'show') directamente                 [ui-management.md §2]
+
+¿UIManager no disponible? → fallback seguro:
+  const prev = bootstrap.Offcanvas.getInstance(el);
+  if (prev) prev.dispose();
+  document.querySelectorAll('.offcanvas-backdrop').forEach(b=>b.remove());
+  new bootstrap.Offcanvas(el).show();
+```
+
+### 31.4. Enforcement
+
+Al iniciar cualquier tarea con cambios de UI, el agente debe declarar en su respuesta:
+> "Consultado: .agents/skills/frontend/[archivo.md] — patron [seccion]"
+
+Si no puede determinar el patron correcto leyendo los skills, escalar al usuario antes de implementar.

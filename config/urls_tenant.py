@@ -180,6 +180,7 @@ urlpatterns = [
     path('ui/proveedores/', include('apps.tenant.proveedores.urls', namespace='proveedores')),
     path('ui/proyectos/', include('apps.tenant.proyectos.urls', namespace='proyectos')),
     path('ui/clientes/', include('apps.tenant.clientes.urls', namespace='clientes')),
+    path('ui/bancos/', include('apps.tenant.bancos.urls', namespace='bancos')),
     # WARNING: v2.30: Facturas migrado a API-First - UI deprecada
     # path('ui/facturas/', include('apps.tenant.facturas.urls_ui')),
     # WARNING: v2.61: Contabilidad migrado a API-First - URLs migradas a api/urls.py

@@ -4,6 +4,34 @@ import uuid
 import pytest
 
 
+class FakeRedis:
+    def __init__(self, store):
+        self.store = store
+
+    def set(self, key, value, ex=None, px=None, nx=False, xx=False, keepttl=False):
+        self.store[key] = value
+        return True
+
+    def get(self, key):
+        return self.store.get(key)
+
+    def delete(self, *keys):
+        count = 0
+        for k in keys:
+            if k in self.store:
+                del self.store[k]
+                count += 1
+        return count
+
+
+@pytest.fixture(autouse=True)
+def mock_redis(monkeypatch):
+    store = {}
+    fake = FakeRedis(store)
+    monkeypatch.setattr("apps.public.tenants.services.onboarding._get_redis_client", lambda: fake)
+    return fake
+
+
 @pytest.mark.django_db
 def test_onboarding_ott_cookie_flow(client):
     """Integration-style test: create onboarding, consume OTT and verify HttpOnly cookies authenticate API calls."""

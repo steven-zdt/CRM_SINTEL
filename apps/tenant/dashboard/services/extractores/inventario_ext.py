@@ -1,58 +1,51 @@
 """
-Extractor de Inventario para Dashboard v3.9.4
-Pull Model: Consulta selectors.py de inventario, nunca importa models.py
-Zero-Waste: Usa .aggregate() para métricas Kardex.
+Extractor de Inventario para Dashboard v3.9.5 — datos reales.
+Pull Model: usa ProductoSelector, ActivoFijoSelector, ServicioSelector,
+MovimientoInventarioSelector. No importa models.py directamente.
 """
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.db.models import F, Sum
+from django.utils import timezone
 
 from apps.tenant.dashboard.services.dtos import WidgetInventarioDTO
 
+_ZERO = Decimal('0.00')
+
 
 class InventarioExtractor:
-    """Extrae métricas de Inventario (Kardex universal)."""
 
     @staticmethod
     def extraer_metricas(empresa_id: int) -> WidgetInventarioDTO:
-        """
-        Extrae métricas de Inventario usando selectors.py
-        Incluye Productos, Activos, Servicios bajo un Kardex unificado.
-
-        Args:
-            empresa_id: ID de la empresa (Double Semantic Verification)
-
-        Returns:
-            WidgetInventarioDTO con métricas consolidadas
-        """
         try:
-            from apps.tenant.inventario.services.selectors import InventarioSelectors
+            from apps.tenant.inventario.services.selectors import (
+                ProductoSelector,
+                ActivoFijoSelector,
+                ServicioSelector,
+                MovimientoInventarioSelector,
+            )
 
-            # Obtener queryset base (Productos + Activos + Servicios)
-            qs = InventarioSelectors.qs_kardex(empresa_id)
+            prod_qs     = ProductoSelector.get_list(empresa_id)
+            activo_qs   = ActivoFijoSelector.get_list(empresa_id)
+            servicio_qs = ServicioSelector.get_list(empresa_id)
 
-            # Métrica 1: Total de items en inventario
-            total_productos = qs.count()
+            total_productos = prod_qs.count() + activo_qs.count() + servicio_qs.count()
 
-            # Métrica 2: Items bajo stock mínimo
-            productos_bajo_stock = qs.filter(
-                cantidad_stock__lt=Sum('cantidad_minima')
+            # Productos con stock por debajo del mínimo
+            productos_bajo_stock = prod_qs.filter(
+                stock_actual__lt=F('stock_minimo'),
+                activo=True,
             ).count()
 
-            # Métrica 3: Movimientos del mes (desde tabla MovimientoKardex)
-            try:
-                from apps.tenant.inventario.services.selectors import InventarioSelectors
-                qs_movimientos = InventarioSelectors.qs_movimientos_mes(empresa_id)
-                movimientos_mes = qs_movimientos.count()
-            except:
-                movimientos_mes = 0
+            # Movimientos totales registrados en el kardex
+            movimientos_mes = MovimientoInventarioSelector.get_list(empresa_id).count()
 
-            # Métrica 4: Valor total de inventario
-            valor_inventario = qs.aggregate(
-                total=Sum('valor_unitario_promedio_ponderado', output_field=Decimal('0.00'))
-            )['total'] or Decimal('0.00')
+            # Valor de inventario = Σ(stock_actual × costo_promedio) de productos
+            agg = prod_qs.filter(activo=True).aggregate(
+                valor=Sum(F('stock_actual') * F('costo_promedio'))
+            )
+            valor_inventario = Decimal(str(agg['valor'] or 0)).quantize(Decimal('0.01'))
 
-            # Métrica 5: Rotación promedio (movimientos / items)
             rotacion_promedio = Decimal(movimientos_mes) / max(total_productos, 1)
 
             return WidgetInventarioDTO(
@@ -60,14 +53,8 @@ class InventarioExtractor:
                 productos_bajo_stock=productos_bajo_stock,
                 movimientos_mes=movimientos_mes,
                 valor_inventario=valor_inventario,
-                rotacion_promedio=rotacion_promedio
+                rotacion_promedio=rotacion_promedio.quantize(Decimal('0.01')),
             )
 
-        except Exception as e:
-            return WidgetInventarioDTO(
-                total_productos=0,
-                productos_bajo_stock=0,
-                movimientos_mes=0,
-                valor_inventario=Decimal('0.00'),
-                rotacion_promedio=Decimal('0.00')
-            )
+        except Exception:
+            return WidgetInventarioDTO(0, 0, 0, _ZERO, _ZERO)

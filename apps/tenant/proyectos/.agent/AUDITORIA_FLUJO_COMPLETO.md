@@ -1,8 +1,8 @@
 # AUDITORIA_FLUJO_COMPLETO.md — Proyectos
 
-## Fecha: 2026-05-20
+## Fecha: 2026-05-25
 ## Modulo: tenant/proyectos
-## Version: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2
+## Version: v3.10.3 (imports globales consolidados) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2
 
 ---
 
@@ -432,6 +432,45 @@ python manage.py test apps.tenant.proyectos
 
 ---
 
+## FIX v3.10.4 (2026-05-28) — TareaCorta.cliente FK PROTECT → SET_NULL
+
+### Contexto
+
+`TareaCorta.cliente` tenía `on_delete=PROTECT`, bloqueando `Cliente.delete()` con `ProtectedError` cuando el cliente (ya inactivo) tenía TareaCortas vinculadas. El error llegaba como 500 sin manejar.
+
+### Decisión de diseño
+
+`TareaCorta` ya tiene dos mecanismos de snapshot que preservan el contexto del cliente:
+- `cliente_id: IntegerField` — soft reference (no FK) para queries
+- `cliente_nombre: CharField` — snapshot del nombre
+
+Por esto, el cambio a `SET_NULL` es seguro: al eliminar un cliente, las TareaCortas se desvinculan automáticamente (FK → NULL) pero conservan el nombre del cliente como texto.
+
+### Archivos modificados
+
+**`apps/tenant/proyectos/models.py`**
+```python
+# Antes
+cliente = models.ForeignKey('tenant_clientes.Cliente', on_delete=models.PROTECT, null=True, ...)
+# Después
+cliente = models.ForeignKey('tenant_clientes.Cliente', on_delete=models.SET_NULL, null=True, ...)
+```
+
+**`apps/tenant/clientes/services/crud_service.py`**
+```python
+# Agrega ProtectedError import + captura residual en delete_cliente()
+from django.db.models import ProtectedError
+try:
+    cliente.delete()
+except ProtectedError as e:
+    modelos = ', '.join({obj.__class__.__name__ for obj in e.protected_objects})
+    raise ValidationError({"detail": f"... registros vinculados: {modelos}."})
+```
+
+**Migración:** `0018_tareaCorta_cliente_set_null.py` — Aplicada a shared + todos los schemas.
+
+---
+
 ## MIGRACIONES
 
 | # | Descripcion |
@@ -444,6 +483,7 @@ python manage.py test apps.tenant.proyectos
 | 0006 | UniqueConstraint en ItemPedido (FIX-5) |
 | 0007 | UUID field en Proyecto — M3-PASO1 |
 | 0008 | ItemPresupuestoProyecto + campos planeados — M5-Presupuesto Manual |
+| **0018** | **TareaCorta.cliente FK: PROTECT → SET_NULL (v3.10.4)** |
 
 **Comandos para aplicar:**
 ```bash
@@ -462,5 +502,7 @@ make migrate-tenants
 | v3.5.0 | 2026-05-11 | Base inicial: Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido |
 | v3.5.1 | 2026-05-19 | M3: UUID lookup, M4: Máquina de Estados CIERRE (16 tests) |
 | v3.5.2 | 2026-05-20 | M5: Presupuesto Manual (Fase 2 Planeación), 8 Critical Fixes, 21 tests totales |
+| v3.10.3 | 2026-05-25 | Imports globales: crud_service (IntegrityError+ValidationError), business_service (date + 5 cross-app models via try/except guards), viewsets (logging + 6 cross-app), serializers (sys + FacturaInterAppAPI); models.py lazy stays justified (Django app loading) |
+| **v3.10.4** | **2026-05-28** | **TareaCorta.cliente FK PROTECT → SET_NULL** (mig 0018). Permite eliminar clientes inactivos aunque tengan TareaCortas vinculadas. FK → NULL preserva snapshot `cliente_nombre`. `crud_service.delete_cliente()` captura `ProtectedError` residual con mensaje 400. |
 
-*Auditoría actualizada el 2026-05-20 | SINTEL v3.5.2 — Presupuesto Manual v3.5.2, M4 Máquina de Estados por Fase, y 8 Critical Fixes completados con éxito. Status: PRODUCTION READY ✅*
+*Auditoría actualizada el 2026-05-28 | SINTEL v3.10.4 — Status: PRODUCTION READY ✅*

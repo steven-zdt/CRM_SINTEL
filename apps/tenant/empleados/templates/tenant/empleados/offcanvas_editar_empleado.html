@@ -176,6 +176,33 @@
         </div>
       </div>
 
+      {# ── 4. Estructura Organizativa ────────────────────────── #}
+      <div class="section-divider">
+        <p class="section-title s-success">
+          <i class="bi bi-building"></i>Estructura Organizativa
+        </p>
+        <div class="row g-3">
+          <div class="col-6">
+            <label for="empleado-sede" class="form-label">Sede</label>
+            <select class="form-select" id="empleado-sede" name="sede">
+              <option value="">Seleccionar Sede...</option>
+              {% for s in sedes %}
+                <option value="{{ s.uuid }}" {% if empleado.sede.uuid == s.uuid %}selected{% endif %}>{{ s.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label for="empleado-area" class="form-label">Área</label>
+            <select class="form-select" id="empleado-area" name="area">
+              <option value="">Seleccionar Área...</option>
+              {% for a in areas %}
+                <option value="{{ a.uuid }}" data-sede-uuid="{{ a.sede.uuid }}" {% if empleado.area.uuid == a.uuid %}selected{% endif %} style="display: none;">{{ a.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {# ── 5. Información Laboral ───────────────────────────── #}
       <div class="section-divider">
         <p class="section-title s-primary">
@@ -197,7 +224,53 @@
         </div>
       </div>
 
-      {# ── 6. Foto de Perfil ─────────────────────────────────── #}
+      {# ── 6. Nómina Electrónica DIAN (DSPNE) ───────────────────── #}
+      <div class="section-divider">
+        <p class="section-title s-primary">
+          <i class="bi bi-file-earmark-lock2"></i>Nómina Electrónica DIAN
+        </p>
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="empleado-resolucion_dian" class="form-label">
+              Resolución DIAN asignada
+              <span class="badge bg-secondary ms-1" style="font-size:.62rem;font-weight:500;">Opcional</span>
+            </label>
+            <select class="form-select" id="empleado-resolucion_dian" name="resolucion_dian">
+              <option value="">Sin resolución asignada</option>
+              {% for res in resoluciones_activas %}
+                <option value="{{ res.uuid }}"
+                  {% if empleado.resolucion_dian and empleado.resolucion_dian.uuid == res.uuid %}selected{% endif %}>
+                  {{ res.prefijo }} · {{ res.numero_resolucion }}
+                  — Vence: {{ res.fecha_fin }}
+                  (Consec. {{ res.consecutivo }}/{{ res.rango_hasta }})
+                </option>
+              {% endfor %}
+              {# Si tiene resolución asignada pero ya no está activa, mostrarla como opción disabled #}
+              {% if empleado.resolucion_dian %}
+                {% with r=empleado.resolucion_dian %}
+                  {% if not r.vigente %}
+                    <option value="{{ r.uuid }}" selected disabled>
+                      ⚠ {{ r.prefijo }} · {{ r.numero_resolucion }} (Inactiva — {{ r.fecha_fin }})
+                    </option>
+                  {% endif %}
+                {% endwith %}
+              {% endif %}
+            </select>
+            {% if not resoluciones_activas %}
+              <div class="form-text text-warning mt-1">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                No hay resoluciones DIAN activas.
+              </div>
+            {% else %}
+              <div class="form-text text-muted">
+                Resolución usada al generar el Documento Soporte de Pago (DSPNE).
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# ── 7. Foto de Perfil ─────────────────────────────────── #}
       <div class="mb-2">
         <p class="section-title s-success">
           <i class="bi bi-person-bounding-box"></i>Foto de Perfil

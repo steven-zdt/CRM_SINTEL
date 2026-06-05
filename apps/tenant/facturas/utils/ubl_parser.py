@@ -1125,6 +1125,46 @@ def parse_ubl_to_dict(root: etree._Element, xml_bytes: bytes | None = None, natu
             from apps.tenant.facturas.models import Factura
             naturaleza = Factura.Naturaleza.VENTA
         
+        # Extraer impuestos desglosados de la raiz (TaxTotal / WithholdingTaxTotal)
+        impuestos_desglosados = []
+        tax_totals = invoice_root.xpath("./*[local-name()='TaxTotal' or local-name()='WithholdingTaxTotal']")
+        for tax_total in tax_totals:
+            subtotals = tax_total.xpath("./*[local-name()='TaxSubtotal']")
+            for subtotal_el in subtotals:
+                base_imponible_nodes = subtotal_el.xpath("./*[local-name()='TaxableAmount']/text()")
+                base_imponible = Decimal(base_imponible_nodes[0].strip()) if base_imponible_nodes else Decimal('0.00')
+                
+                valor_impuesto_nodes = subtotal_el.xpath("./*[local-name()='TaxAmount']/text()")
+                valor_impuesto = Decimal(valor_impuesto_nodes[0].strip()) if valor_impuesto_nodes else Decimal('0.00')
+                
+                porcentaje_nodes = subtotal_el.xpath("./*[local-name()='Percent']/text()")
+                porcentaje = Decimal(porcentaje_nodes[0].strip()) if porcentaje_nodes else Decimal('0.00')
+                
+                scheme_id_nodes = subtotal_el.xpath("./*[local-name()='TaxCategory']/*[local-name()='TaxScheme']/*[local-name()='ID']/text()")
+                scheme_name_nodes = subtotal_el.xpath("./*[local-name()='TaxCategory']/*[local-name()='TaxScheme']/*[local-name()='Name']/text()")
+                
+                scheme_id = scheme_id_nodes[0].strip().upper() if scheme_id_nodes else ''
+                scheme_name = scheme_name_nodes[0].strip().upper() if scheme_name_nodes else ''
+                
+                tipo_impuesto = 'OTRO'
+                if scheme_id == '01' or 'IVA' in scheme_name:
+                    tipo_impuesto = 'IVA'
+                elif scheme_id == '03' or 'INC' in scheme_name or 'CONSUMO' in scheme_name:
+                    tipo_impuesto = 'INC'
+                elif scheme_id == '05' or 'RETEFUENTE' in scheme_name or 'RETENCION EN LA FUENTE' in scheme_name:
+                    tipo_impuesto = 'RETEFUENTE'
+                elif scheme_id == '06' or 'RETEIVA' in scheme_name or 'RETENCION DE IVA' in scheme_name or 'RETENCION IVA' in scheme_name:
+                    tipo_impuesto = 'RETEIVA'
+                elif scheme_id == '07' or 'RETEICA' in scheme_name or 'RETENCION DE ICA' in scheme_name or 'RETENCION ICA' in scheme_name:
+                    tipo_impuesto = 'RETEICA'
+                
+                impuestos_desglosados.append({
+                    'tipo_impuesto': tipo_impuesto,
+                    'porcentaje': porcentaje,
+                    'base_imponible': base_imponible,
+                    'valor_impuesto': valor_impuesto
+                })
+
         # Construir DTO
         dto = {
             'numero': numero_factura,
@@ -1145,6 +1185,7 @@ def parse_ubl_to_dict(root: etree._Element, xml_bytes: bytes | None = None, natu
             'cufe': cufe,
             'naturaleza': naturaleza,
             'items': [],  # Items se pueden agregar si es necesario para preview
+            'impuestos_desglosados': impuestos_desglosados,
         }
         
         # # WARNING: XMLs pesados: incluir en DTO para guardar en FacturaAnexos (no en fila principal)

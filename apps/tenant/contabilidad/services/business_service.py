@@ -17,7 +17,7 @@ from rest_framework.exceptions import ValidationError
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.tenant.contabilidad.models import AsientoContable, CatalogoMaestroNIIF, CuentaContable, MovimientoContable, TipoComprobante
+from apps.tenant.contabilidad.models import AsientoContable, CatalogoMaestroNIIF, CuentaContable, MovimientoContable, PeriodoContable, TipoComprobante
 from apps.tenant.contabilidad.services.selectors import verificar_periodo_cerrado
 from apps.tenant.contabilidad.services.crud_service import ContabilidadCRUDService
 
@@ -60,7 +60,9 @@ class ContabilidadBusinessService:
         if cuenta:
             return cuenta
 
-        catalogo = CatalogoMaestroNIIF.objects.filter(codigo=codigo).first()
+        catalogo = CatalogoMaestroNIIF.objects.filter(codigo=codigo).only(
+            'id', 'codigo', 'nombre', 'nivel', 'naturaleza'
+        ).first()
         if catalogo:
             nombre = catalogo.nombre
             nivel = catalogo.nivel
@@ -71,7 +73,7 @@ class ContabilidadBusinessService:
         tipo = self._DIGITO_TIPO.get(codigo[0] if codigo else '', 'GASTO')
 
         from apps.tenant.empresa.models import Empresa
-        empresa = Empresa.objects.filter(id=empresa_id).first()
+        empresa = Empresa.objects.filter(id=empresa_id).only('id').first()
         if not empresa:
             raise ValidationError({'lineas': f'Empresa id={empresa_id} no encontrada.'})
 
@@ -537,12 +539,11 @@ class ContabilidadBusinessService:
         o activaciones manuales de sincronización contable.
         """
         from apps.tenant.contabilidad.integracion.extractores import (
-            ExtractorGastos, ExtractorInventario, ExtractorFacturas, ExtractorNomina
+            ExtractorGastos, ExtractorFacturas, ExtractorNomina
         )
         
         extractores = [
             ExtractorGastos(empresa_id),
-            ExtractorInventario(empresa_id),
             ExtractorFacturas(empresa_id),
             ExtractorNomina(empresa_id),
         ]
@@ -573,7 +574,7 @@ class ContabilidadBusinessService:
         'facturas': 'Factura de Venta',
         'gastos': 'Compra/Gasto (Documento Soporte)',
         'empleados': 'Nomina (Devengo de empleado)',
-        'inventario': 'Movimiento de Inventario',
+        'inventario': 'Movimiento Reciente de Inventario',
     }
 
     def sugerir_lineas_asiento_ia(self, empresa_id: int, app_label: str, ctx: Dict[str, Any]) -> List[Dict[str, Any]]:

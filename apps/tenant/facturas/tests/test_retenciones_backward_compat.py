@@ -293,7 +293,10 @@ class EndpointBackwardCompatTestCase(TenantAPITestCase):
         cliente = Cliente.objects.create(
             empresa=self.empresa,
             numero_documento='123456789',
-            nombre='Cliente Retenedor',
+            razon_social='Cliente Retenedor',
+            tipo_persona='JURIDICA',
+            tipo_documento='NIT',
+            regimen_tributario='ORDINARIO',
             aplica_retefuente=True,
             retefuente_porcentaje=Decimal('2.50'),
         )

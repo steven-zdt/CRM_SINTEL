@@ -8,6 +8,7 @@ Backward-compatibility layer for Clientes services.
 from .selectors import ClienteSelector, ContactoSelector
 from .crud_service import ClienteCRUDService, ContactoCRUDService
 from .business_service import ClienteBusinessService
+from ..models import Cliente, ContactoCliente
 
 class ClienteBusinessService(ClienteBusinessService):
     """Deprecated: Use business_service.ClienteBusinessService directly."""
@@ -23,7 +24,6 @@ class ContactoClienteService:
         return ContactoSelector.get_contacto_list(empresa_id, cliente_id)
     
     def eliminar_contacto(self, pk, empresa_id):
-        from ..models import ContactoCliente
         c = ContactoCliente.objects.filter(pk=pk, empresa_id=empresa_id).first()
         if c:
             ContactoCRUDService.delete_contacto(c)
@@ -44,9 +44,6 @@ def crear_cliente(empresa, data):
     Deprecated backward-compatibility function for testing.
     Uses ClienteBusinessService to create or update a client.
     """
-    from apps.tenant.clientes.models import Cliente
-    from apps.tenant.clientes.services.business_service import ClienteBusinessService
-
     tipo_doc = data.get("tipo_documento")
     num_doc = data.get("numero_documento")
 

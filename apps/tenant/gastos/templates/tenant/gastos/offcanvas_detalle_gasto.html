@@ -46,42 +46,31 @@
             </div>
         </div>
 
-        {# Sección: Integración Contable (v3.7.1) #}
-        <div class="mb-4">
-            <h6 class="text-success border-bottom pb-2 mb-3">
-                <i class="bi bi-calculator me-2"></i>Integración Contable
-            </h6>
-            <div class="row g-3">
-                <div class="col-12">
-                    <span class="text-muted d-block small">Cuenta de Gasto/Costo</span>
-                    <strong id="cuenta_gasto_label_display">{{ instance.cuenta_gasto_label|default:'No vinculada' }}</strong>
-                </div>
-            </div>
-        </div>
-
-        {# Sección: Asignación a Inventario (Opcional) #}
-        {% if instance.producto_relacionado or instance.servicio_relacionado or instance.activo_relacionado %}
+        {# Sección: Movimiento de Inventario vinculado (Pull Model v3.8+) #}
+        {% if instance.movimiento_referencia %}
         <div class="mb-4">
             <h6 class="text-primary border-bottom pb-2 mb-3">
-                <i class="bi bi-box-seam me-2"></i>Asignación a Inventario
+                <i class="bi bi-box-seam me-2"></i>Movimiento de Inventario Vinculado
             </h6>
             <div class="row g-3">
-                {% if instance.producto_relacionado %}
-                <div class="col-12">
-                    <span class="text-muted d-block small">Producto Relacionado</span>
-                    <strong>{{ instance.producto_relacionado.nombre }}</strong>
+                <div class="col-6">
+                    <span class="text-muted d-block small">Tipo</span>
+                    <strong>{{ instance.movimiento_referencia.tipo_display|default:instance.movimiento_referencia.tipo }}</strong>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted d-block small">Item</span>
+                    <strong>{{ instance.movimiento_referencia.item_nombre|default:'N/A' }}</strong>
+                </div>
+                {% if instance.movimiento_referencia.item_codigo %}
+                <div class="col-6">
+                    <span class="text-muted d-block small">Código</span>
+                    <span>{{ instance.movimiento_referencia.item_codigo }}</span>
                 </div>
                 {% endif %}
-                {% if instance.servicio_relacionado %}
-                <div class="col-12">
-                    <span class="text-muted d-block small">Servicio Relacionado</span>
-                    <strong>{{ instance.servicio_relacionado.nombre }}</strong>
-                </div>
-                {% endif %}
-                {% if instance.activo_relacionado %}
-                <div class="col-12">
-                    <span class="text-muted d-block small">Activo Fijo Relacionado</span>
-                    <strong>{{ instance.activo_relacionado.nombre }}</strong>
+                {% if instance.movimiento_referencia.cantidad %}
+                <div class="col-6">
+                    <span class="text-muted d-block small">Cantidad</span>
+                    <span>{{ instance.movimiento_referencia.cantidad }}</span>
                 </div>
                 {% endif %}
             </div>

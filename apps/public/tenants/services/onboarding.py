@@ -108,19 +108,62 @@ def create_onboarding_ott(company_name: str, admin_email: str, schema_name: str 
 
 
 def consume_onboarding_ott(ott: str) -> dict[str, Any] | None:
-    """Consume el OTT (si existe) y lo elimina de Redis. Retorna payload o None si no existe/expiró."""
+    """Consume el OTT (uso unico) desde Redis y retorna el payload enriquecido.
+
+    Validacion de seguridad — cuenta preexistente:
+    -----------------------------------------------
+    Si el usuario asociado al OTT ya tiene una contrasena usable (is_active
+    con password real, no set_unusable_password), el tenant ya fue vinculado
+    a una cuenta global previa. En ese caso NO se debe forzar un nuevo
+    seteo de contrasena. El payload retorna `already_activated=True` y un
+    mensaje informativo para que la vista redirija al login con contexto.
+
+    Retorna:
+        dict con keys:
+            user_id        (int)
+            schema_name    (str)
+            domain         (str)
+            already_activated (bool) — True si user.has_usable_password()
+            message        (str)     — mensaje para mostrar al usuario
+        None si el OTT no existe o expiro.
+    """
     redis_client = _get_redis_client()
     key = f"onboard:{ott}"
     raw = redis_client.get(key)
     if not raw:
         return None
+
     try:
         data = json.loads(raw)
     except Exception:
-        # borrar por seguridad
         redis_client.delete(key)
         return None
 
-    # Borrar inmediatamente para asegurar uso único
+    # Uso unico: eliminar de Redis antes de cualquier validacion posterior
     redis_client.delete(key)
+
+    # Validar si el usuario ya tiene contrasena usable
+    user_id = data.get("user_id")
+    already_activated = False
+    message = ""
+
+    if user_id:
+        try:
+            user = User.objects.filter(pk=user_id).first()
+            if user and user.has_usable_password():
+                already_activated = True
+                message = (
+                    "El tenant ha sido anadido a tu cuenta existente. "
+                    "Inicia sesion con tus credenciales habituales."
+                )
+                logger.info(
+                    "consume_onboarding_ott: user_id=%s ya tiene contrasena usable "
+                    "(schema=%s) — omitiendo flujo de activacion",
+                    user_id, data.get("schema_name"),
+                )
+        except Exception as exc:
+            logger.warning("consume_onboarding_ott: error verificando user_id=%s: %s", user_id, exc)
+
+    data["already_activated"] = already_activated
+    data["message"] = message
     return data

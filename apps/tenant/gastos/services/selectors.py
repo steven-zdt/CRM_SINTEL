@@ -6,7 +6,7 @@ WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 - Todas las funciones son @staticmethod.
 - Usa .only() para cargar solo campos necesarios (Zero Waste).
 """
-from django.db.models import Q, Sum, Count
+from django.db.models import Max, Q, Sum, Count
 from django.utils import timezone
 
 from apps.tenant.gastos.models import ResolucionDIAN, DocumentoSoporte
@@ -30,8 +30,8 @@ DOCUMENTO_LIST_FIELDS = (
     'id', 'uuid', 'consecutivo', 'subtotal',
     'fecha', 'total', 'categoria_contable', 'descripcion',
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
-    'cuenta_gasto_uuid',
-    'producto_relacionado_id', 'servicio_relacionado_id', 'activo_relacionado_id'
+    'movimiento_inventario_uuid',
+    'sede_id', 'sede__nombre',  # DT-SEDE-01: KPI por sede
 )
 
 # Campos completos para DETALLE (formularios de edicion)
@@ -39,9 +39,9 @@ DOCUMENTO_DETAIL_FIELDS = (
     'id', 'uuid', 'consecutivo', 'fecha', 'total', 'subtotal',
     'categoria_contable', 'descripcion', 'observaciones',
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
-    'cuenta_gasto_uuid',
     'resolucion_dian_id', 'proveedor_id',
-    'producto_relacionado_id', 'servicio_relacionado_id', 'activo_relacionado_id',
+    'movimiento_inventario_uuid',
+    'sede_id', 'sede__uuid', 'sede__nombre',  # DT-SEDE-01
     'created_at', 'updated_at'
 )
 
@@ -125,20 +125,14 @@ class DocumentoSelector:
             empresa_id=empresa_id
         ).select_related(
             'resolucion_dian',
-            'proveedor',
-            'producto_relacionado',
-            'servicio_relacionado',
-            'activo_relacionado'
+            'proveedor'
         ).only(
             *DOCUMENTO_LIST_FIELDS,
             'resolucion_dian_id',
             'resolucion_dian__prefijo',
             'resolucion_dian__consecutivo',
             'proveedor__razon_social',
-            'proveedor_id',
-            'producto_relacionado__nombre',
-            'servicio_relacionado__nombre',
-            'activo_relacionado__nombre'
+            'proveedor_id'
         )
 
         if resolucion_id:
@@ -162,14 +156,39 @@ class DocumentoSelector:
         ).select_related(
             'resolucion_dian',
             'proveedor',
-            'usuario_anulacion',
-            'producto_relacionado',
-            'servicio_relacionado',
-            'activo_relacionado'
+            'usuario_anulacion'
         )
         if documento_uuid:
             return qs.filter(uuid=documento_uuid)
         return qs
+
+    @staticmethod
+    def get_siguiente_numero_preview(resolucion: 'ResolucionDIAN') -> dict:
+        """
+        Vista previa del siguiente numero de Doc. Soporte para pre-llenar el formulario.
+
+        NO usa select_for_update. Es orientativo: el numero definitivo se asigna
+        atomicamente en DocumentoCRUDService._obtener_siguiente_consecutivo().
+
+        Returns dict:
+          numero      int|None  Siguiente consecutivo disponible (None si agotado)
+          formateado  str       Valor listo para inyectar en el campo (prefijo + numero)
+          agotado     bool      True si el rango de la resolucion esta agotado
+          disponibles int       Cantidad de consecutivos restantes en el rango
+        """
+        ultimo = DocumentoSoporte.objects.filter(
+            resolucion_dian=resolucion
+        ).aggregate(max_val=Max('consecutivo'))['max_val']
+
+        siguiente = (ultimo + 1) if ultimo is not None else resolucion.rango_desde
+        agotado = siguiente > resolucion.rango_hasta
+
+        return {
+            'numero': siguiente if not agotado else None,
+            'formateado': resolucion.formar_consecutivo(siguiente) if not agotado else '',
+            'agotado': agotado,
+            'disponibles': max(0, resolucion.rango_hasta - siguiente + 1) if not agotado else 0,
+        }
 
     @staticmethod
     def get_summary(empresa_id: int):

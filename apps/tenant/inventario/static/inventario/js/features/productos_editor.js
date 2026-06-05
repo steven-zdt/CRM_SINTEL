@@ -33,20 +33,7 @@
     // ⚠️ v2.61.3: Flag para prevenir doble envío
     let _guardandoProducto = false;
 
-    // §28: Pre-carga el label de una cuenta contable en el input de busqueda por UUID
-    async function _preCargarLabelCuenta(inputSel, uuidSel) {
-        const uuidEl = d.querySelector(uuidSel);
-        const textEl = d.querySelector(inputSel);
-        if (!uuidEl?.value || !textEl || textEl.value.trim()) return;
-        try {
-            const res = await w.Sintel.Inventario.API.getCuentaByUuid(uuidEl.value);
-            if (res.ok && res.data) {
-                const list = Array.isArray(res.data) ? res.data : (res.data.results || []);
-                const cta = list[0];
-                if (cta) textEl.value = `${cta.codigo} - ${cta.nombre}`;
-            }
-        } catch (_) {}
-    }
+
 
     /**
      * Recolectar datos del formulario de producto
@@ -95,14 +82,15 @@
             precio_venta: parseDecimal(precioVentaValue, 0),
             stock_minimo: parseDecimal(stockMinimoValue, 0),
             activo: d.querySelector('#producto-activo')?.checked !== false,
-            // Dual accounting: activo de inventario + costo de ventas
-            cuenta_inventario_uuid: d.querySelector('#producto-cuenta-inventario-uuid')?.value || null,
-            cuenta_costo_uuid: d.querySelector('#producto-cuenta-costo-uuid')?.value || null
         };
 
         // ⚠️ v2.61.3: Validación básica
         if (!payload.codigo || !payload.nombre) {
             mostrarError('Los campos Código y Nombre son requeridos.');
+            return null;
+        }
+        if (payload.codigo.length > 64) {
+            mostrarError('El Código no puede superar 64 caracteres.');
             return null;
         }
 
@@ -439,25 +427,7 @@
                 cargarCategorias(categoriaId || null);
             }
 
-            // v3.5 Dual Accounting: Inicializar dos buscadores de cuenta contable
-            // Cuenta Inventario (Activo - Balance)
-            if (d.querySelector('#producto-cuenta-inventario-busqueda')) {
-                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
-                    inputSelector: '#producto-cuenta-inventario-busqueda',
-                    resultsSelector: '#producto-cuenta-inventario-resultados',
-                    uuidSelector: '#producto-cuenta-inventario-uuid'
-                });
-                _preCargarLabelCuenta('#producto-cuenta-inventario-busqueda', '#producto-cuenta-inventario-uuid');
-            }
-            // Cuenta Costo de Ventas (Resultado - Estado de Resultados)
-            if (d.querySelector('#producto-cuenta-costo-busqueda')) {
-                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
-                    inputSelector: '#producto-cuenta-costo-busqueda',
-                    resultsSelector: '#producto-cuenta-costo-resultados',
-                    uuidSelector: '#producto-cuenta-costo-uuid'
-                });
-                _preCargarLabelCuenta('#producto-cuenta-costo-busqueda', '#producto-cuenta-costo-uuid');
-            }
+
         }
 
         if (formAjuste) {
@@ -465,6 +435,8 @@
             console.log(`${MOD} Formulario de ajuste detectado, delegando a inventario_editor.js`);
         }
     }
+
+
 
     // ⚠️ Exposición global del módulo v3.5
     w.Sintel.Inventario.Productos.Editor = {

@@ -9,14 +9,14 @@ Views para ingesta de facturas desde correo.
 import logging
 
 from rest_framework import generics, status
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 # # WARNING: IMPORT LAZY: enqueue_mail_ingestion se importa dentro del método (evita ciclos)
-# from apps.tenant.facturas.services_mail_ingestion import enqueue_mail_ingestion
+# from apps.tenant.facturas.services.services_mail_ingestion import enqueue_mail_ingestion
+from apps.tenant.api.base import RelaxedJWTAuthentication
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+from rest_framework.authentication import SessionAuthentication
 from apps.tenant.empresa.models import MailInboxConfig
 from apps.tenant.facturas.api.serializers import (
     MailIngestionRunCreateSerializer,
@@ -25,6 +25,8 @@ from apps.tenant.facturas.api.serializers import (
 from apps.tenant.facturas.models import MailIngestionRun
 
 logger = logging.getLogger(__name__)
+
+DUAL_AUTH_CLASSES = [RelaxedJWTAuthentication, SessionAuthentication]
 
 
 class MailIngestionRunCreateAPIView(APIView):
@@ -36,18 +38,26 @@ class MailIngestionRunCreateAPIView(APIView):
     # WARNING: ASINCRONO: La tarea se ejecuta en Celery (cola high_priority).
     # WARNING: PERMISOS: IsTenantAdminOrReadOnly (TODO: permisos finos)
     """
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = DUAL_AUTH_CLASSES
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     
     def post(self, request, *args, **kwargs):
         # # WARNING: IMPORT LAZY: Evita ciclos de importación
-        from apps.tenant.facturas.services_mail_ingestion import enqueue_mail_ingestion
+        from apps.tenant.facturas.services.services_mail_ingestion import enqueue_mail_ingestion
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
         
         serializer = MailIngestionRunCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         
         try:
+            perfil = get_or_create_profile(request.user)
+            MailInboxConfig.objects.only("id").get(
+                id=data["config_id"],
+                empresa_id=perfil.empresa_id,
+                is_active=True,
+            )
+
             run = enqueue_mail_ingestion(
                 config_id=data["config_id"],
                 limit_messages=data.get("limit_messages", 50),
@@ -84,13 +94,25 @@ class MailIngestionRunsListAPIView(generics.ListAPIView):
     # WARNING: PAGINACIÓN: Usa paginación estándar de DRF.
     # WARNING: PERMISOS: IsTenantAdminOrReadOnly (TODO: permisos finos)
     """
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = DUAL_AUTH_CLASSES
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     serializer_class = MailIngestionRunListSerializer
     
     def get_queryset(self):
-        """Retorna todas las ejecuciones del tenant (aislamiento por esquema automático)."""
-        return MailIngestionRun.objects.all()
+        """Retorna ejecuciones del tenant activo con carga minima."""
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+
+        empresa_id = get_or_create_profile(self.request.user).empresa_id
+        return MailIngestionRun.objects.filter(empresa_id=empresa_id).only(
+            "id",
+            "empresa_id",
+            "started_at",
+            "finished_at",
+            "status",
+            "task_id",
+            "naturaleza",
+            "counts",
+        ).order_by("-started_at")
 
 
 class MailIngestionPreviewAPIView(APIView):
@@ -138,13 +160,15 @@ class MailIngestionPreviewAPIView(APIView):
         "details": List[Dict]
     }
     """
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = DUAL_AUTH_CLASSES
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     
     def post(self, request, *args, **kwargs):
         # # WARNING: IMPORT LAZY: Evita ciclos de importación
-        from apps.tenant.empresa.models import MailInboxConfig
-        from apps.tenant.facturas.services_mail_ingestion import preview_mail_ingestion
+        from apps.tenant.facturas.services.services_mail_ingestion import preview_mail_ingestion
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+
+        empresa_id = get_or_create_profile(request.user).empresa_id
         
         # # WARNING: v2.60: config_id y limit_messages son opcionales con valores por defecto
         config_id = request.data.get("config_id")
@@ -153,7 +177,10 @@ class MailIngestionPreviewAPIView(APIView):
         # Si no se proporciona config_id, intentar obtener la primera configuración activa
         if not config_id:
             try:
-                active_config = MailInboxConfig.objects.filter(is_active=True).first()
+                active_config = MailInboxConfig.objects.filter(
+                    empresa_id=empresa_id,
+                    is_active=True,
+                ).only("id").first()
                 if active_config:
                     config_id = active_config.id
                     logger.info(f"[MailIngestionPreviewAPIView] Usando configuración activa por defecto: {config_id}")
@@ -180,7 +207,11 @@ class MailIngestionPreviewAPIView(APIView):
         # # WARNING: VALIDACIÓN DE SEGURIDAD: Verificar que la configuración pertenezca al tenant actual
         # El aislamiento por tenant es automático, pero validamos explícitamente para mejor mensaje de error
         try:
-            config = MailInboxConfig.objects.filter(id=config_id, is_active=True).first()
+            config = MailInboxConfig.objects.filter(
+                id=config_id,
+                empresa_id=empresa_id,
+                is_active=True,
+            ).only("id").first()
             if not config:
                 return Response(
                     {

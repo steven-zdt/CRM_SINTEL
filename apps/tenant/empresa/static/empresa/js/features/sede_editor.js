@@ -18,7 +18,7 @@
         form.parentNode.replaceChild(newForm, form);
 
         const feedbackEl = d.getElementById('form-sede-feedback');
-        const btnSave = d.getElementById('btn-guardar-role') || d.getElementById('btn-guardar-sede');
+        const btnSave = d.getElementById('btn-guardar-sede');
 
         newForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -142,9 +142,9 @@
         }
     }
 
-    // Inicializar cuando se inserte el offcanvas en el DOM por HTMX o carga de página
-    d.addEventListener('htmx:afterSwap', (e) => {
-        if (e.detail.target.id === 'offcanvas-container-sede' || e.detail.target.querySelector('#form-sede')) {
+    // htmx:afterSettle garantiza DOM estable (no usar afterSwap — DOM no listo aun)
+    d.addEventListener('htmx:afterSettle', (e) => {
+        if (e.detail.target.id === 'offcanvas-container-sede' || e.detail.target.querySelector?.('#form-sede')) {
             initFormEvents();
         }
     });

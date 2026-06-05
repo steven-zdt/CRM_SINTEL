@@ -19,7 +19,8 @@ from .crud_service import (
 )
 from .business_service import (
     GastoBusinessService,
-    ResolucionBusinessService
+    ResolucionBusinessService,
+    materializar_gasto_desde_dto
 )
 from .api_mixins import GastoServiceMixin, ResolucionServiceMixin
 
@@ -30,6 +31,7 @@ __all__ = [
     'DocumentoCRUDService',
     'GastoBusinessService',
     'ResolucionBusinessService',
+    'materializar_gasto_desde_dto',
     'GastoServiceMixin',
     'ResolucionServiceMixin',
     'RESOLUCION_LIST_FIELDS',

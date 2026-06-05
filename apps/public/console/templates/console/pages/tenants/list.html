@@ -109,6 +109,125 @@
   </div>
 </div>
 
+<!-- =====================================================================
+     MODAL: Activacion Manual de Emergencia
+     ===================================================================== -->
+<div id="modal-activacion" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="modal-activacion-title">
+  <!-- Backdrop -->
+  <div class="fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm transition-opacity" id="modal-activacion-backdrop"></div>
+
+  <!-- Panel -->
+  <div class="fixed inset-0 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 overflow-hidden">
+
+      <!-- Header -->
+      <div class="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="bg-white bg-opacity-20 rounded-full p-2">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 id="modal-activacion-title" class="text-white font-bold text-base">Activacion Manual de Emergencia</h3>
+            <p id="modal-activacion-subtitle" class="text-amber-100 text-xs mt-0.5"></p>
+          </div>
+        </div>
+        <button id="modal-activacion-close" class="text-white hover:text-amber-200 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="border-b border-gray-200 px-6 pt-4">
+        <nav class="flex gap-4" role="tablist">
+          <button id="tab-link" role="tab" aria-selected="true"
+                  class="tab-btn pb-3 border-b-2 border-amber-500 text-amber-600 font-semibold text-sm transition-colors">
+            Generar Link
+          </button>
+          <button id="tab-password" role="tab" aria-selected="false"
+                  class="tab-btn pb-3 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm transition-colors">
+            Establecer Contrasena
+          </button>
+        </nav>
+      </div>
+
+      <!-- Tab: Generar Link -->
+      <div id="panel-link" class="p-6">
+        <p class="text-sm text-gray-600 mb-4">
+          Genera un link de activacion de <strong>48 horas</strong> que puedes copiar
+          y enviar al owner por WhatsApp, Slack u otro canal. No se envia ningun email.
+        </p>
+        <div id="link-result" class="hidden mb-4">
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Link de activacion</label>
+          <div class="flex items-stretch gap-2">
+            <input id="activation-url-display" type="text" readonly
+                   class="flex-1 text-xs font-mono bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 focus:outline-none select-all"
+                   onclick="this.select()">
+            <button id="btn-copy-link" class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+              </svg>
+              Copiar
+            </button>
+          </div>
+          <p class="text-xs text-amber-600 mt-2 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+            </svg>
+            Este link expira en 48 horas. Compartelo de forma segura.
+          </p>
+        </div>
+        <button id="btn-generar-link"
+                class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-xl shadow-sm transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+          </svg>
+          Generar Link de Activacion
+        </button>
+      </div>
+
+      <!-- Tab: Establecer Contrasena -->
+      <div id="panel-password" class="p-6 hidden">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex gap-2">
+          <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+          </svg>
+          <p class="text-xs text-red-700">
+            <strong>Accion critica:</strong> Estableces la contrasena del owner directamente.
+            Comparte la contrasena de forma segura y pide al usuario que la cambie tras el primer ingreso.
+          </p>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nueva contrasena</label>
+            <input id="input-password" type="password" autocomplete="new-password"
+                   placeholder="Minimo 8 caracteres"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Confirmar contrasena</label>
+            <input id="input-password-confirm" type="password" autocomplete="new-password"
+                   placeholder="Repetir contrasena"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent">
+          </div>
+          <p id="password-error" class="text-xs text-red-600 hidden"></p>
+          <button id="btn-set-password"
+                  class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-semibold rounded-xl shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+            </svg>
+            Establecer Contrasena y Activar
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <style>
   /* Animaciones */
   @keyframes fadeIn {
@@ -250,29 +369,23 @@
     color: #1f2937;
   }
   
-  /* Mejora de botones de acción - Unificados */
-  #dt-tenants button {
-    transition: all 0.2s ease;
-    font-size: 0.75rem;
-    font-weight: 500;
-    padding: 0.5rem 1rem;
+  /* Botones icono compactos — reemplazan los botones de texto */
+  .btn-icon-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
     border-radius: 0.5rem;
-    margin: 0 0.25rem;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
   }
-  
-  #dt-tenants button:not(:disabled):hover {
+  .btn-icon-action:not(:disabled):hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   }
-  
-  #dt-tenants button:not(:disabled):active {
+  .btn-icon-action:not(:disabled):active {
     transform: translateY(0);
-  }
-  
-  /* Botones deshabilitados */
-  .btn-delete-disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
   
   /* Loading state */
@@ -303,17 +416,20 @@
     text-overflow: ellipsis;
   }
   
-  /* Columnas específicas con más espacio */
-  #dt-tenants th:nth-child(3), /* Empresa */
-  #dt-tenants td:nth-child(3) {
-    min-width: 200px;
-    white-space: normal;
+  /* Columnas: ancho fijo para compactar la tabla */
+  #dt-tenants th:nth-child(1), #dt-tenants td:nth-child(1) { width: 48px; }   /* ID */
+  #dt-tenants th:nth-child(2), #dt-tenants td:nth-child(2) { width: 100px; }  /* Schema */
+  #dt-tenants th:nth-child(3), #dt-tenants td:nth-child(3) {                  /* Empresa */
+    min-width: 140px; white-space: normal;
   }
-  
-  #dt-tenants th:nth-child(10), /* Acciones */
-  #dt-tenants td:nth-child(10) {
-    min-width: 300px;
-    white-space: normal;
+  #dt-tenants th:nth-child(4), #dt-tenants td:nth-child(4) { width: 160px; white-space: normal; } /* Dominio */
+  #dt-tenants th:nth-child(5), #dt-tenants td:nth-child(5) { width: 180px; white-space: normal; } /* Admin */
+  #dt-tenants th:nth-child(6), #dt-tenants td:nth-child(6) { width: 70px; }   /* Creado */
+  #dt-tenants th:nth-child(7), #dt-tenants td:nth-child(7) { width: 80px; }   /* Trial */
+  #dt-tenants th:nth-child(8), #dt-tenants td:nth-child(8) { width: 80px; }   /* Estado */
+  #dt-tenants th:nth-child(9), #dt-tenants td:nth-child(9) { width: 100px; white-space: normal; } /* Vence */
+  #dt-tenants th:nth-child(10), #dt-tenants td:nth-child(10) {                /* Acciones */
+    width: 130px; white-space: normal;
   }
   
   /* Responsive improvements */

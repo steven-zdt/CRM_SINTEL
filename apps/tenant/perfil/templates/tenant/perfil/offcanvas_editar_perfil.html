@@ -43,14 +43,51 @@
                    value="{{ profile.cargo|default:'' }}">
           </div>
           <div class="col-md-6">
-            <label for="perfil-edit-departamento" class="form-label">Departamento</label>
-            <input type="text" class="form-control" id="perfil-edit-departamento" name="departamento"
-                   value="{{ profile.departamento|default:'' }}">
+            <label for="perfil-edit-departamento-select" class="form-label">Departamento</label>
+            {# Selector visible - DOM Shield: no tiene name para evitar envio doble #}
+            <select class="form-select" id="perfil-edit-departamento-select">
+              <option value="">-- Selecciona un departamento --</option>
+              {% for dept in departamentos %}
+                <option value="{{ dept.uuid }}" {% if profile.departamento.uuid == dept.uuid %}selected{% endif %}>
+                  {{ dept.nombre }}
+                </option>
+              {% empty %}
+                <option value="" disabled>No hay departamentos registrados</option>
+              {% endfor %}
+            </select>
+            {# DOM Shield: hidden input que recibe el UUID real (departamento_uuid) #}
+            <input type="hidden" id="perfil-edit-departamento-uuid" name="departamento_uuid" value="{{ profile.departamento.uuid|default:'' }}">
           </div>
           <div class="col-md-6">
             <label for="perfil-edit-telefono" class="form-label">Teléfono Corporativo</label>
             <input type="text" class="form-control" id="perfil-edit-telefono" name="telefono_corporativo"
                    value="{{ profile.telefono_corporativo|default:'' }}">
+          </div>
+          <div class="col-12 mt-3">
+            <label for="perfil-edit-sedes-select" class="form-label fw-bold">Sedes Asignadas</label>
+            <select class="form-select" id="perfil-edit-sedes-select" multiple size="3" style="min-height: 80px;">
+              {% for sede in sedes %}
+                <option value="{{ sede.uuid }}" {% if sede.uuid|stringformat:"s" in assigned_sedes_uuids %}selected{% endif %}>
+                  {{ sede.nombre }}
+                </option>
+              {% empty %}
+                <option value="" disabled>No hay sedes registradas</option>
+              {% endfor %}
+            </select>
+            <div class="form-text text-muted small">Manten presionado Ctrl (Cmd en Mac) para seleccionar multiples sedes.</div>
+          </div>
+          <div class="col-12 mt-3">
+            <label for="perfil-edit-areas-select" class="form-label fw-bold">Áreas Asignadas</label>
+            <select class="form-select" id="perfil-edit-areas-select" multiple size="3" style="min-height: 80px;">
+              {% for area in areas %}
+                <option value="{{ area.uuid }}" data-sede="{{ area.sede.uuid }}" {% if area.uuid|stringformat:"s" in assigned_areas_uuids %}selected{% endif %}>
+                  {{ area.nombre }} ({{ area.sede.nombre }})
+                </option>
+              {% empty %}
+                <option value="" disabled>No hay áreas registradas</option>
+              {% endfor %}
+            </select>
+            <div class="form-text text-muted small">Manten presionado Ctrl (Cmd en Mac) para seleccionar multiples áreas.</div>
           </div>
         </div>
       </div>
@@ -85,3 +122,62 @@
     </form>
   </div>
 </div>
+
+{# DOM Shield Script #}
+<script>
+(function() {
+  var deptSel = document.getElementById('perfil-edit-departamento-select');
+  var deptHid = document.getElementById('perfil-edit-departamento-uuid');
+  if (deptSel && deptHid) {
+    deptSel.addEventListener('change', function() {
+      deptHid.value = this.value;
+    });
+  }
+
+  // Dynamic filtering of Areas based on selected Sede in Edit form
+  var sedeSel = document.getElementById('perfil-edit-sedes-select');
+  var areaSel = document.getElementById('perfil-edit-areas-select');
+
+  function filterAreasBySede() {
+    if (!areaSel) return;
+    
+    // Get selected sedes uuids
+    var selectedSedes = [];
+    if (sedeSel) {
+      selectedSedes = Array.from(sedeSel.selectedOptions).map(opt => opt.value);
+    }
+
+    Array.from(areaSel.options).forEach(function(opt) {
+      if (!opt.value) return;
+      var optSedeUuid = opt.getAttribute('data-sede');
+      
+      var matchSede = selectedSedes.length === 0 || selectedSedes.includes(optSedeUuid);
+      
+      if (matchSede) {
+        opt.style.display = '';
+        opt.disabled = false;
+      } else {
+        opt.style.display = 'none';
+        opt.disabled = true;
+      }
+    });
+  }
+
+  if (sedeSel) {
+    sedeSel.addEventListener('change', function() {
+      var selectedSedes = Array.from(sedeSel.selectedOptions).map(opt => opt.value);
+      Array.from(areaSel.options).forEach(function(opt) {
+        if (!opt.value) return;
+        var optSedeUuid = opt.getAttribute('data-sede');
+        if (selectedSedes.length > 0 && !selectedSedes.includes(optSedeUuid)) {
+          opt.selected = false;
+        }
+      });
+      filterAreasBySede();
+    });
+  }
+  
+  // Initial run
+  filterAreasBySede();
+})();
+</script>

@@ -1,15 +1,4 @@
-"""
-Modelo de Perfil Privado del Colaborador.
-
-ARQUITECTURA MULTI-TENANT:
-- Este modelo vive en el esquema del tenant (TENANT_APPS)
-- Tiene una relacion OneToOneField con User (que esta en SHARED_APPS/public)
-- Django permite relaciones FK/OneToOne desde tenant hacia public (pero no al reves)
-
-PATRON DE DATOS:
-- User global: Datos personales (nombre, email, telefono personal)
-- TenantProfile: Datos especificos del tenant (cargo, departamento, telefono corporativo, preferencias)
-"""
+import uuid
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -22,6 +11,44 @@ class RolTenant(models.TextChoices):
     ADMIN = 'ADMIN', 'Administrador'
     OPERADOR = 'OPERADOR', 'Operador'
     VISOR = 'VISOR', 'Visor'
+
+
+class Departamento(SintelTenantBaseModel):
+    """
+    Departamento o area organizacional para agrupar perfiles dentro del tenant.
+    """
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        db_index=True,
+        editable=False,
+        verbose_name=_('UUID')
+    )
+    nombre = models.CharField(
+        max_length=100,
+        verbose_name=_('Nombre'),
+        help_text=_('Nombre del departamento')
+    )
+    descripcion = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name=_('Descripcion'),
+        help_text=_('Descripcion del departamento')
+    )
+    activo = models.BooleanField(
+        default=True,
+        verbose_name=_('Activo'),
+        help_text=_('Determina si el departamento esta activo')
+    )
+
+    class Meta:
+        db_table = 'perfil_departamento'
+        unique_together = ('nombre', 'empresa')
+        verbose_name = 'Departamento'
+        verbose_name_plural = 'Departamentos'
+
+    def __str__(self):
+        return f"{self.nombre}"
 
 
 class TenantProfile(SintelTenantBaseModel):
@@ -40,6 +67,14 @@ class TenantProfile(SintelTenantBaseModel):
     - User global: Datos personales
     - TenantProfile: Datos especificos del tenant
     """
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        db_index=True,
+        editable=False,
+        verbose_name=_('UUID')
+    )
+    
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -64,10 +99,12 @@ class TenantProfile(SintelTenantBaseModel):
         help_text=_('Cargo del colaborador en esta empresa')
     )
     
-    departamento = models.CharField(
-        max_length=100,
+    departamento = models.ForeignKey(
+        Departamento,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
+        related_name='perfiles',
         verbose_name=_('Departamento'),
         help_text=_('Departamento al que pertenece el colaborador')
     )
@@ -105,6 +142,22 @@ class TenantProfile(SintelTenantBaseModel):
         help_text=_('Rol del colaborador en el tenant: ADMIN (admin), OPERADOR (puede editar), VISOR (solo lectura).')
     )
 
+    sedes_asignadas = models.ManyToManyField(
+        'empresa.Sede',
+        blank=True,
+        related_name='perfiles_asignados',
+        verbose_name=_('Sedes Asignadas'),
+        help_text=_('Sedes a las que el colaborador tiene acceso asignado')
+    )
+
+    areas_asignadas = models.ManyToManyField(
+        'empresa.Area',
+        blank=True,
+        related_name='perfiles_asignados',
+        verbose_name=_('Areas Asignadas'),
+        help_text=_('Areas a las que el colaborador tiene acceso asignado')
+    )
+
     class Meta:
         db_table = 'perfil_tenantprofile'
         unique_together = ('user', 'empresa')
@@ -115,4 +168,6 @@ class TenantProfile(SintelTenantBaseModel):
         ]
     
     def __str__(self):
-        return f"{self.user.email} - {self.cargo}"
+        email = getattr(self.user, 'email', 'Sin email')
+        cargo_str = self.cargo or 'Sin cargo'
+        return f"{email} - {cargo_str}"

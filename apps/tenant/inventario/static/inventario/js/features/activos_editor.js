@@ -25,20 +25,7 @@
     const FEEDBACK_ID = '#form-activo-feedback';
     const OFFCANVAS_ID = '#offcanvas-activos';
 
-    // §28: Pre-carga el label de una cuenta contable en el input de busqueda por UUID
-    async function _preCargarLabelCuenta(inputSel, uuidSel) {
-        const uuidEl = d.querySelector(uuidSel);
-        const textEl = d.querySelector(inputSel);
-        if (!uuidEl?.value || !textEl || textEl.value.trim()) return;
-        try {
-            const res = await w.Sintel.Inventario.API.getCuentaByUuid(uuidEl.value);
-            if (res.ok && res.data) {
-                const list = Array.isArray(res.data) ? res.data : (res.data.results || []);
-                const cta = list[0];
-                if (cta) textEl.value = `${cta.codigo} - ${cta.nombre}`;
-            }
-        } catch (_) {}
-    }
+
 
     /**
      * Recolectar datos del formulario de activo
@@ -64,14 +51,19 @@
             fecha_adquisicion: formData.get('fecha_adquisicion') || null,
             costo_adquisicion: parseFloat(formData.get('costo_adquisicion') || '0') || 0,
             estado: formData.get('estado') || 'ACTIVO',
-            // v3.5 Dual Accounting: cuenta activo (balance) + cuenta depreciacion (gasto)
-            cuenta_activo_uuid: d.querySelector('#activo-cuenta-activo-uuid')?.value || null,
-            cuenta_depreciacion_uuid: d.querySelector('#activo-cuenta-depreciacion-uuid')?.value || null
         };
 
         // Validación básica
         if (!payload.codigo || !payload.nombre || !payload.estado) {
             mostrarError('Los campos Código, Nombre y Estado son requeridos.');
+            return null;
+        }
+        if (payload.codigo.length < 2) {
+            mostrarError('El Código debe tener al menos 2 caracteres.');
+            return null;
+        }
+        if (payload.codigo.length > 64) {
+            mostrarError('El Código no puede superar 64 caracteres.');
             return null;
         }
 
@@ -273,28 +265,11 @@
                 }
             }
 
-            // v3.5 Dual Accounting: Cuenta Activo (Balance) — Código 15 (Activos Fijos)
-            if (d.querySelector('#activo-cuenta-activo-busqueda')) {
-                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
-                    inputSelector: '#activo-cuenta-activo-busqueda',
-                    resultsSelector: '#activo-cuenta-activo-resultados',
-                    uuidSelector: '#activo-cuenta-activo-uuid',
-                    codigoPrefix: '15'
-                });
-                _preCargarLabelCuenta('#activo-cuenta-activo-busqueda', '#activo-cuenta-activo-uuid');
-            }
-            // v3.5 Dual Accounting: Cuenta Depreciacion (Gasto/Acumulada) — Código 51 (Gastos)
-            if (d.querySelector('#activo-cuenta-depreciacion-busqueda')) {
-                w.Sintel.Inventario.Utils.setupCuentaAutocomplete({
-                    inputSelector: '#activo-cuenta-depreciacion-busqueda',
-                    resultsSelector: '#activo-cuenta-depreciacion-resultados',
-                    uuidSelector: '#activo-cuenta-depreciacion-uuid',
-                    codigoPrefix: '51'
-                });
-                _preCargarLabelCuenta('#activo-cuenta-depreciacion-busqueda', '#activo-cuenta-depreciacion-uuid');
-            }
+
         }
     }
+
+
 
     // ⚠️ Exposición global del módulo
     if (!w.ActivosEditor) {

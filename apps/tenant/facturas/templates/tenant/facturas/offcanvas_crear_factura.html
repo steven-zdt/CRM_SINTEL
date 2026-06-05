@@ -1,215 +1,322 @@
-{# offcanvas_factura.html - Offcanvas del módulo Facturas v2.60 #}
-{# ⚠️ v2.60: Centralizado en Core - HTMX + Offcanvas con Zero Trust #}
-{# ⚠️ Diseño simplificado: Detalle de factura o formulario de subida #}
+{# offcanvas_crear_factura.html — v3.16 Subida masiva XML UBL 2.1 #}
+{# Mantiene modo detalle (si factura) + modo subida masiva (si no factura) #}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-factura" aria-labelledby="offcanvas-factura-label" style="width: 90%; max-width: 600px;">
-  <div class="offcanvas-header border-bottom bg-light">
-    <h5 class="offcanvas-title" id="offcanvas-factura-label">
-      <i class="bi bi-receipt me-2"></i>
+<style>
+  #offcanvas-factura { width: min(96vw, 620px) !important; }
+  .file-item { transition: background .15s; }
+  .file-item.uploading { background: #fff8e1; }
+  .file-item.success   { background: #e8f5e9; }
+  .file-item.duplicate { background: #e3f2fd; }
+  .file-item.error     { background: #fce4ec; }
+  .drop-zone {
+    border: 2px dashed #adb5bd;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #0d6efd; background: #f0f4ff; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { display: inline-block; animation: spin .8s linear infinite; }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-factura"
+     aria-labelledby="offcanvas-factura-label">
+
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-factura-label">
       {% if factura %}
-        Detalle de Factura {{ factura.numero }}
+        <i class="bi bi-receipt text-primary me-2"></i>Factura {{ factura.numero }}
       {% else %}
-        Subir Nueva Factura
+        <i class="bi bi-cloud-upload text-primary me-2"></i>Importar Facturas XML
       {% endif %}
     </h5>
-    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
   </div>
-  
-        <div class="offcanvas-body">
-          {# ⚠️ v2.60: Contenedor de errores para Error Boundary Pattern (legacy) #}
-          <div id="factura-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
-          
-          {# ⚠️ PROPAGACIÓN AL WORKSPACE: Gestión de Errores en Cascada #}
-          {# El partial error_handler.html recibe la propagación de errores 422 con missing_fields #}
-          {# error_injector.js intercepta htmx:responseError y muestra los campos faltantes aquí #}
-          {# ⚠️ v2.60: Componente modular de manejo de errores HTMX #}
-          {% include 'tenant/core/partials/error_handler.html' %}
-          
-          {% if error %}
-            <div class="alert alert-warning mb-3" role="alert">
-              <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
-            </div>
-          {% endif %}
-    
+
+  <div class="offcanvas-body">
+
+    {% include 'tenant/core/partials/error_handler.html' %}
+
     {% if factura %}
-      {# Modo Detalle: Mostrar información de la factura #}
-      <div class="card mb-3 border-0 shadow-sm">
-        <div class="card-header bg-primary text-white">
-          <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Información de la Factura</h6>
+    {# ══ MODO DETALLE ═══════════════════════════════════════════════════════ #}
+    <div class="card mb-3 border-0 shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Información</h6>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="text-muted small">Receptor</div>
+            <div class="fw-bold">{{ factura.receptor_razon_social|default:"N/A" }}</div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted small">NIT</div>
+            <div class="fw-bold">{{ factura.receptor_nit|default:"N/A" }}</div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted small">Estado</div>
+            <span class="badge bg-{% if factura.estado == 'ACEPTADA' %}success{% elif factura.estado == 'RECHAZADA' %}danger{% elif factura.estado == 'ENVIADA' %}primary{% else %}secondary{% endif %}">
+              {{ factura.get_estado_display }}
+            </span>
+          </div>
+          <div class="col-6">
+            <div class="text-muted small">Fecha</div>
+            <div class="fw-bold">{{ factura.fecha_emision|date:"d/m/Y"|default:"N/A" }}</div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted small">Total</div>
+            <div class="fw-bold text-primary">${{ factura.total|floatformat:0|default:"0" }}</div>
+          </div>
+          {% if factura.cufe %}
+          <div class="col-12">
+            <div class="text-muted small">CUFE</div>
+            <div class="font-monospace small text-break">{{ factura.cufe }}</div>
+          </div>
+          {% endif %}
         </div>
-        <div class="card-body">
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label text-muted small">Cliente (Receptor)</label>
-              <div class="fw-bold">{{ factura.receptor_razon_social|default:"N/A" }}</div>
-            </div>
-            <div class="col-6">
-              <label class="form-label text-muted small">NIT Receptor</label>
-              <div class="fw-bold">{{ factura.receptor_nit|default:"N/A" }}</div>
-            </div>
-            <div class="col-6">
-              <label class="form-label text-muted small">Estado</label>
-              <div>
-                {% if factura.estado == 'BORRADOR' %}
-                  <span class="badge bg-secondary">{{ factura.get_estado_display }}</span>
-                {% elif factura.estado == 'ENVIADA' %}
-                  <span class="badge bg-primary">{{ factura.get_estado_display }}</span>
-                {% elif factura.estado == 'ACEPTADA' %}
-                  <span class="badge bg-success">{{ factura.get_estado_display }}</span>
-                {% elif factura.estado == 'RECHAZADA' %}
-                  <span class="badge bg-danger">{{ factura.get_estado_display }}</span>
-                {% elif factura.estado == 'ANULADA' %}
-                  <span class="badge bg-dark">{{ factura.get_estado_display }}</span>
-                {% else %}
-                  <span class="badge bg-secondary">{{ factura.get_estado_display }}</span>
-                {% endif %}
-              </div>
-            </div>
-            <div class="col-6">
-              <label class="form-label text-muted small">Fecha de Emisión</label>
-              <div class="fw-bold">{{ factura.fecha_emision|date:"d/m/Y H:i"|default:"N/A" }}</div>
-            </div>
-            <div class="col-6">
-              <label class="form-label text-muted small">Moneda</label>
-              <div class="fw-bold">{{ factura.moneda|default:"COP" }}</div>
-            </div>
-            <div class="col-12">
-              <label class="form-label text-muted small">Total</label>
-              <div class="h4 text-primary fw-bold mb-0">
-                ${{ factura.total|floatformat:2|default:"0.00" }} {{ factura.moneda|default:"COP" }}
-              </div>
-            </div>
-            {% if factura.cufe %}
-              <div class="col-12">
-                <label class="form-label text-muted small">CUFE</label>
-                <div class="font-monospace small text-break">{{ factura.cufe }}</div>
-              </div>
-            {% endif %}
+      </div>
+    </div>
+    <div class="d-flex flex-column gap-2">
+      <button type="button" class="btn btn-outline-danger btn-sm"
+              data-action="eliminar-factura" data-factura-id="{{ factura.id }}">
+        <i class="bi bi-trash me-2"></i>Eliminar Factura
+      </button>
+    </div>
+
+    {% else %}
+    {# ══ MODO SUBIDA MASIVA ═════════════════════════════════════════════════ #}
+
+    {# Zona drag & drop #}
+    <div id="drop-zone" class="drop-zone p-4 text-center mb-3"
+         onclick="document.getElementById('archivoFactura').click()">
+      <i class="bi bi-file-earmark-arrow-up fs-1 text-primary mb-2 d-block"></i>
+      <div class="fw-semibold fs-6">Arrastra archivos XML aquí</div>
+      <div class="text-muted small mb-3">o haz clic para seleccionar</div>
+      <span class="badge bg-primary">XML UBL 2.1 — individual o masiva</span>
+    </div>
+
+    {# Input oculto — múltiple #}
+    <input type="file" id="archivoFactura" accept=".xml,application/xml,text/xml"
+           multiple class="d-none">
+
+    {# Barra de progreso global #}
+    <div id="upload-progress-wrap" class="mb-3 d-none">
+      <div class="d-flex justify-content-between small mb-1">
+        <span id="upload-progress-label" class="text-muted">Procesando...</span>
+        <span id="upload-progress-pct" class="fw-semibold">0%</span>
+      </div>
+      <div class="progress" style="height:8px;">
+        <div id="upload-progress-bar"
+             class="progress-bar progress-bar-striped progress-bar-animated"
+             role="progressbar" style="width:0%"></div>
+      </div>
+    </div>
+
+    {# Lista de archivos #}
+    <div id="file-list-wrap" class="d-none mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="small fw-semibold" id="file-count-label"></span>
+        <button type="button" id="btn-clear-files"
+                class="btn btn-link btn-sm text-danger p-0">
+          <i class="bi bi-x-circle me-1"></i>Limpiar lista
+        </button>
+      </div>
+      <div id="file-items"
+           class="border rounded overflow-auto"
+           style="max-height:260px;"></div>
+    </div>
+
+    {# Resumen de resultados #}
+    <div id="upload-summary" class="d-none mb-3">
+      <div class="row g-2 text-center">
+        <div class="col-4">
+          <div class="border rounded p-2 bg-success-subtle">
+            <div class="fs-3 fw-bold text-success" id="cnt-ok">0</div>
+            <div class="small text-muted">Importadas</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="border rounded p-2 bg-warning-subtle">
+            <div class="fs-3 fw-bold text-warning" id="cnt-dup">0</div>
+            <div class="small text-muted">Duplicadas</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="border rounded p-2 bg-danger-subtle">
+            <div class="fs-3 fw-bold text-danger" id="cnt-err">0</div>
+            <div class="small text-muted">Errores</div>
           </div>
         </div>
       </div>
-      
-      {# Acciones disponibles #}
-      <div class="d-flex flex-column gap-2">
-        {# Ver PDF si está disponible #}
-        {% if factura.anexos and factura.anexos.pdf_file %}
-          <a href="{{ factura.anexos.pdf_file.url }}" 
-             target="_blank" 
-             class="btn btn-outline-primary btn-sm"
-             data-action="ver-pdf">
-            <i class="bi bi-file-pdf me-2"></i>Ver PDF
-          </a>
-        {% endif %}
-        
-        {# Ver XML UBL si está disponible #}
-        {% if factura.anexos and factura.anexos.ubl_xml %}
-          <a href="/api/v1/facturas/{{ factura.id }}/xml/" 
-             target="_blank" 
-             class="btn btn-outline-info btn-sm"
-             data-action="ver-xml">
-            <i class="bi bi-file-code me-2"></i>Ver XML UBL
-          </a>
-        {% endif %}
-        
-        {# Eliminar Factura #}
-        <button type="button" 
-                class="btn btn-outline-danger btn-sm" 
-                data-action="eliminar-factura"
-                data-factura-id="{{ factura.id }}">
-          <i class="bi bi-trash me-2"></i>Eliminar Factura
-        </button>
-      </div>
-      
-    {% else %}
-      {# Modo Subida: Formulario para subir nueva factura #}
-      <div class="card mb-3 border-0 shadow-sm">
-        <div class="card-header bg-success text-white">
-          <h6 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Subir Factura</h6>
-        </div>
-        <div class="card-body">
-          {# ⚠️ PROPAGACIÓN AL WORKSPACE: Formulario HTMX para subida de archivos #}
-          {# Este formulario dispara el flujo completo: parseo → validación → persistencia #}
-          {# Si hay errores 422, error_injector.js los muestra en #error-container (error_handler.html) #}
-          {# ⚠️ v2.61.1: Actualizado para usar Core API facade de facturas (upload-ubl no requiere feature flag) #}
-          <form id="form-upload-factura"
-                hx-post="/api/v1/facturas/upload-ubl/?preview=false&async=false" 
-                hx-encoding="multipart/form-data" 
-                hx-target="#upload-result"
-                hx-indicator="#upload-spinner"
-                hx-swap="innerHTML"
-                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                onsubmit="return false;">
-            {% csrf_token %}
-            
-            <div class="mb-3">
-              <label for="archivoFactura" class="form-label">
-                <i class="bi bi-file-earmark me-2"></i>Archivo de Factura
-              </label>
-              <input class="form-control" 
-                     type="file" 
-                     id="archivoFactura" 
-                     name="file" 
-                     accept=".xml,.pdf" 
-                     required
-                     aria-describedby="archivoFacturaHelp">
-              <div id="archivoFacturaHelp" class="form-text">
-                Formatos soportados: XML UBL 2.1 (.xml) o PDF (.pdf)
-              </div>
-            </div>
-            
-            <div class="mb-3">
-              <div class="form-check">
-                <input class="form-check-input"
-                       type="checkbox"
-                       id="previewMode"
-                       name="preview"
-                       value="true">
-                <label class="form-check-label" for="previewMode">
-                  Modo preview (solo parsear, no persistir)
-                </label>
-              </div>
-            </div>
+    </div>
 
-            <button type="submit" class="btn btn-primary w-100">
-              <i class="bi bi-upload me-2"></i>Subir y Procesar
-            </button>
-            
-            {# Indicador de carga HTMX #}
-            <div id="upload-spinner" class="htmx-indicator mt-3 text-center">
-              <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Procesando...</span>
-              </div>
-              <div class="mt-2 text-muted">Procesando archivo...</div>
-            </div>
-            
-            {# Resultado de la subida #}
-            <div id="upload-result" class="mt-3"></div>
-          </form>
-        </div>
-      </div>
-      
-      {# Información adicional #}
-      <div class="alert alert-info mb-0" role="alert">
-        <i class="bi bi-info-circle me-2"></i>
-        <strong>Nota:</strong> El sistema procesará automáticamente el archivo y extraerá los datos de la factura.
-        {% if factura %}
-          Si la factura ya existe (mismo CUFE), se actualizará la información.
-        {% endif %}
-        <hr class="my-2">
-        <p class="mb-0 small">
-          <strong>⚠️ Importante sobre PDFs:</strong> Los PDFs son representaciones gráficas y pueden tener errores de extracción. 
-          Para garantizar el 100% de precisión, use el archivo <strong>XML UBL 2.1</strong> de la DIAN, 
-          que contiene toda la información estructurada sin errores de lectura.
-        </p>
-      </div>
+    {# Botón de subida #}
+    <button type="button" id="btn-upload-batch"
+            class="btn btn-primary w-100 d-none mb-3">
+      <i class="bi bi-upload me-2"></i>
+      <span id="btn-upload-label">Subir archivos</span>
+    </button>
+
+    <div class="alert alert-light border small mb-0">
+      <i class="bi bi-info-circle text-primary me-1"></i>
+      Soporta facturas electrónicas y notas crédito UBL 2.1.
+      Los duplicados (mismo CUFE) se detectan automáticamente.
+    </div>
+
     {% endif %}
-  </div>
+  </div>{# /offcanvas-body #}
 </div>
 
-{# ⚠️ v2.60: Scripts inline eliminados - Toda la lógica está centralizada en facturas_ui.js #}
-{# El módulo facturas_ui.js maneja automáticamente:
-   - Respuestas de HTMX para subida de archivos
-   - Errores de HTMX
-   - Inicialización del Offcanvas
-   - Event delegation para botones
-#}
+{% if not factura %}
+<script>
+// @ts-nocheck — Vanilla JS subida masiva (skill: vanilla-js.md §2)
+(function() {
+  'use strict';
+
+  const MOD      = '[facturas:upload-masivo]';
+  const ENDPOINT = '/api/v1/facturas/upload-ubl/?preview=false&async=false';
+  const CSRF     = '{{ csrf_token }}';
+
+  let files     = [];   // File[]
+  let uploading = false;
+
+  // Refs DOM
+  const dropZone  = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('archivoFactura');
+  const listWrap  = document.getElementById('file-list-wrap');
+  const fileItems = document.getElementById('file-items');
+  const fileCount = document.getElementById('file-count-label');
+  const btnUpload = document.getElementById('btn-upload-batch');
+  const btnClear  = document.getElementById('btn-clear-files');
+  const btnLabel  = document.getElementById('btn-upload-label');
+  const progWrap  = document.getElementById('upload-progress-wrap');
+  const progBar   = document.getElementById('upload-progress-bar');
+  const progLabel = document.getElementById('upload-progress-label');
+  const progPct   = document.getElementById('upload-progress-pct');
+  const summary   = document.getElementById('upload-summary');
+  const cntOk     = document.getElementById('cnt-ok');
+  const cntDup    = document.getElementById('cnt-dup');
+  const cntErr    = document.getElementById('cnt-err');
+
+  // ── Drag & Drop ────────────────────────────────────────────────────────
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    addFiles([...e.dataTransfer.files]);
+  });
+  fileInput.addEventListener('change', () => {
+    addFiles([...fileInput.files]);
+    fileInput.value = '';
+  });
+
+  // ── Agregar archivos (filtrar solo .xml) ───────────────────────────────
+  function addFiles(newFiles) {
+    const xml = newFiles.filter(f =>
+      f.name.toLowerCase().endsWith('.xml') ||
+      ['application/xml', 'text/xml'].includes(f.type)
+    );
+    if (!xml.length) { alert('Solo se aceptan archivos .xml'); return; }
+    const names = new Set(files.map(f => f.name));
+    xml.forEach(f => { if (!names.has(f.name)) files.push(f); });
+    render(); resetSummary();
+  }
+
+  // ── Render lista ───────────────────────────────────────────────────────
+  function render() {
+    if (!files.length) { listWrap.classList.add('d-none'); btnUpload.classList.add('d-none'); return; }
+    listWrap.classList.remove('d-none');
+    btnUpload.classList.remove('d-none');
+    fileCount.textContent = `${files.length} archivo${files.length > 1 ? 's' : ''} seleccionado${files.length > 1 ? 's' : ''}`;
+    btnLabel.textContent  = `Subir ${files.length} archivo${files.length > 1 ? 's' : ''}`;
+    fileItems.innerHTML   = files.map((f, i) => `
+      <div id="fi-${i}" class="file-item d-flex align-items-center gap-2 px-3 py-2 border-bottom small">
+        <i class="bi bi-file-earmark-code text-primary flex-shrink-0"></i>
+        <span class="text-truncate flex-grow-1" title="${f.name}">${f.name}</span>
+        <span class="text-muted flex-shrink-0">${(f.size/1024).toFixed(0)} KB</span>
+        <span id="fs-${i}" class="badge bg-secondary flex-shrink-0">Pendiente</span>
+        <button type="button" class="btn btn-link btn-sm text-muted p-0 flex-shrink-0"
+                onclick="window._removeFile(${i})"><i class="bi bi-x"></i></button>
+      </div>`).join('');
+  }
+
+  window._removeFile = function(i) {
+    if (uploading) return;
+    files.splice(i, 1); render(); resetSummary();
+  };
+
+  btnClear.addEventListener('click', () => { if (!uploading) { files = []; render(); resetSummary(); } });
+
+  // ── Upload secuencial ─────────────────────────────────────────────────
+  btnUpload.addEventListener('click', async () => {
+    if (uploading || !files.length) return;
+    uploading = true; btnUpload.disabled = true;
+    progWrap.classList.remove('d-none');
+    summary.classList.remove('d-none');
+    resetCounters();
+    let ok = 0, dup = 0, err = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      setProgress(Math.round(i / files.length * 100), `${i+1}/${files.length} — ${f.name}`);
+      setStatus(i, 'uploading', '<i class="bi bi-arrow-repeat spin"></i> Subiendo...');
+
+      try {
+        const fd = new FormData(); fd.append('file', f);
+        const res = await fetch(ENDPOINT, {
+          method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: fd,
+        });
+        const body = await res.json().catch(() => ({}));
+
+        if (res.status === 201) {
+          ok++;
+          setStatus(i, 'success',   '<i class="bi bi-check-circle-fill text-success"></i> Importada');
+        } else if (res.status === 200) {
+          dup++;
+          setStatus(i, 'duplicate', '<i class="bi bi-arrow-repeat text-warning"></i> Duplicada');
+        } else {
+          err++;
+          const msg = (body.detail || body.error || body.message || `Error ${res.status}`).toString().slice(0,70);
+          setStatus(i, 'error', `<i class="bi bi-x-circle-fill text-danger"></i> ${msg}`);
+        }
+      } catch(e) {
+        err++;
+        setStatus(i, 'error', '<i class="bi bi-wifi-off text-danger"></i> Sin conexión');
+        console.error(MOD, e);
+      }
+
+      cntOk.textContent = ok; cntDup.textContent = dup; cntErr.textContent = err;
+    }
+
+    setProgress(100, `Listo: ${ok} importadas · ${dup} duplicadas · ${err} errores`);
+    progBar.classList.remove('progress-bar-animated');
+    progBar.classList.add(err > 0 && ok === 0 ? 'bg-danger' : err > 0 ? 'bg-warning' : 'bg-success');
+    btnLabel.textContent = 'Subir de nuevo';
+    btnUpload.disabled = false; uploading = false;
+
+    // Notificar al listado de facturas (skill: crud-fsd.md §4)
+    if (ok > 0 || dup > 0) {
+      document.body.dispatchEvent(new CustomEvent('listaFacturasChanged'));
+    }
+  });
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  function setStatus(i, cls, html) {
+    const item = document.getElementById(`fi-${i}`);
+    const st   = document.getElementById(`fs-${i}`);
+    if (item) item.className = `file-item d-flex align-items-center gap-2 px-3 py-2 border-bottom small ${cls}`;
+    if (st)   st.outerHTML  = `<span id="fs-${i}" class="small flex-shrink-0">${html}</span>`;
+  }
+  function setProgress(pct, label) {
+    progBar.style.width = `${pct}%`; progPct.textContent = `${pct}%`; progLabel.textContent = label;
+  }
+  function resetCounters() { cntOk.textContent = cntDup.textContent = cntErr.textContent = '0'; }
+  function resetSummary() {
+    resetCounters(); progBar.style.width = '0%';
+    progBar.className = 'progress-bar progress-bar-striped progress-bar-animated';
+    progWrap.classList.add('d-none'); summary.classList.add('d-none');
+  }
+})();
+</script>
+{% endif %}

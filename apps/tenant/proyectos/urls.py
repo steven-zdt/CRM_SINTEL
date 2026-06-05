@@ -14,7 +14,7 @@ urlpatterns = [
     path('', 
          ProyectoViewSet.as_view({'get': 'list', 'post': 'create'}), 
          name='proyecto-list'),
-    # Detalle de proyecto (UI) - Para editar/obtener un proyecto específico
+    # Detalle de proyecto (UI) - Para editar/obtener un proyecto especifico
     path('<int:pk>/', 
          ProyectoViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update'}), 
          name='proyecto-detail'),

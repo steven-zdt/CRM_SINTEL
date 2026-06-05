@@ -31,36 +31,32 @@ from django.core.exceptions import ValidationError
 
 CATEGORIA_LIST_FIELDS = (
     'id', 'uuid', 'nombre', 'descripcion', 'aplicacion', 'activo', 'empresa_id',
-    'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'cuenta_ingreso_uuid'
 )
 
 PRODUCTO_LIST_FIELDS = (
     'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'stock_actual', 'stock_minimo', 'precio_venta', 'costo_promedio', 'activo', 'imagen', 'unidad', 
-    'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'empresa_id'
 )
 
 SERVICIO_LIST_FIELDS = (
     'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
-    'precio_venta', 'activo', 'imagen', 'cuenta_ingreso_uuid', 'empresa_id'
 )
 
 ACTIVO_LIST_FIELDS = (
     'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'ubicacion', 'responsable', 'estado', 'fecha_adquisicion', 'costo_adquisicion', 
-    'cuenta_activo_uuid', 'cuenta_depreciacion_uuid', 'empresa_id'
 )
 
 MOVIMIENTO_LIST_FIELDS = (
     'id', 'uuid', 'created_at',
     'producto', 'producto__id', 'producto__uuid', 'producto__codigo', 'producto__nombre',
     'activo_fijo', 'activo_fijo__id', 'activo_fijo__uuid', 'activo_fijo__codigo', 'activo_fijo__nombre',
-    'tipo', 'cantidad', 'costo_unitario', 'origen_referencia', 'cliente_referencia', 'observaciones', 'empresa_id'
+    'tipo', 'cantidad', 'costo_unitario', 'origen_referencia', 'cliente_referencia', 'observaciones', 'empresa_id',
+    'sede_id', 'sede__nombre',  # DT-SEDE-05: KPI por sede
 )
 
 CATEGORIA_DETAIL_FIELDS = (
     'id', 'uuid', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo',
-    'cuenta_inventario_uuid', 'cuenta_costo_uuid', 'cuenta_ingreso_uuid',
     'created_at', 'updated_at', 'empresa_id'
 )
 
@@ -69,14 +65,12 @@ PRODUCTO_DETAIL_FIELDS = (
     'descripcion', 'unidad', 'imagen',
     'precio_venta', 'costo_promedio',
     'stock_actual', 'stock_minimo',
-    'cuenta_inventario_uuid', 'cuenta_costo_uuid',
     'activo', 'created_at', 'updated_at', 'empresa_id'
 )
 
 SERVICIO_DETAIL_FIELDS = (
     'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
     'descripcion', 'imagen', 'precio_venta',
-    'cuenta_ingreso_uuid',
     'activo', 'created_at', 'updated_at', 'empresa_id'
 )
 
@@ -85,7 +79,6 @@ ACTIVO_DETAIL_FIELDS = (
     'marca', 'modelo', 'descripcion', 'imagen',
     'ubicacion', 'responsable',
     'fecha_adquisicion', 'costo_adquisicion', 'estado',
-    'cuenta_activo_uuid', 'cuenta_depreciacion_uuid',
     'created_at', 'updated_at', 'empresa_id'
 )
 
@@ -95,6 +88,7 @@ MOVIMIENTO_DETAIL_FIELDS = (
     'activo_fijo', 'activo_fijo__id', 'activo_fijo__uuid', 'activo_fijo__codigo', 'activo_fijo__nombre',
     'tipo', 'cantidad', 'costo_unitario',
     'origen_referencia', 'cliente_referencia', 'observaciones',
+    'sede_id', 'sede__uuid', 'sede__nombre',  # DT-SEDE-05
     'created_at', 'updated_at', 'empresa_id'
 )
 
@@ -373,6 +367,7 @@ class HistorialServicioSelector:
                 'id', 'uuid', 'fecha_registro', 'cantidad', 'valor_cobrado',
                 'origen_referencia', 'cliente_referencia', 'observaciones',
                 'servicio', 'servicio__uuid', 'servicio__codigo', 'servicio__nombre',
+                'proyecto_uuid', 'proyecto_nombre',
             )
             .order_by('-fecha_registro')
         )
@@ -425,6 +420,7 @@ def get_movimientos_timeline(empresa_id: int, search: str = None) -> list:
             'id', 'uuid', 'fecha_registro', 'cantidad', 'valor_cobrado',
             'origen_referencia', 'cliente_referencia', 'observaciones',
             'servicio', 'servicio__uuid', 'servicio__codigo', 'servicio__nombre',
+            'proyecto_uuid', 'proyecto_nombre',
         )
     )
     if search:
@@ -455,6 +451,8 @@ def get_movimientos_timeline(empresa_id: int, search: str = None) -> list:
         resultado.append({
             '_sort': _normalizar_fecha(fecha_dt),
             'uuid': str(mov.uuid),
+            'documento_id': mov.id,
+            'modelo_origen': 'MovimientoInventario',
             'fecha': fecha_dt.isoformat() if fecha_dt else '',
             'modulo_origen': modulo,
             'item_uuid': item_uuid,
@@ -474,6 +472,8 @@ def get_movimientos_timeline(empresa_id: int, search: str = None) -> list:
         resultado.append({
             '_sort': _normalizar_fecha(fecha_dt),
             'uuid': str(hist.uuid),
+            'documento_id': hist.id,
+            'modelo_origen': 'HistorialServicio',
             'fecha': hist.fecha_registro.isoformat() if hist.fecha_registro else '',
             'modulo_origen': 'SERVICIO',
             'item_uuid': str(svc.uuid) if svc else '',
@@ -485,6 +485,8 @@ def get_movimientos_timeline(empresa_id: int, search: str = None) -> list:
             'valor_costo': str(hist.valor_cobrado or 0),
             'referencia': hist.origen_referencia or '',
             'observaciones': hist.observaciones or '',
+            'proyecto_uuid': str(hist.proyecto_uuid) if hist.proyecto_uuid else '',
+            'proyecto_nombre': hist.proyecto_nombre or '',
         })
 
     resultado.sort(key=lambda x: x['_sort'], reverse=True)

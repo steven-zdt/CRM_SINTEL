@@ -46,6 +46,50 @@
     }
 
     /**
+     * Configurar lógica en cascada para Sede y Área
+     */
+    function setupCascadingSelects(offcanvasEl) {
+        const sedeSelect = offcanvasEl.querySelector('#empleado-sede');
+        const areaSelect = offcanvasEl.querySelector('#empleado-area');
+
+        if (!sedeSelect || !areaSelect) return;
+
+        function updateAreas() {
+            const selectedSedeUuid = sedeSelect.value;
+            let currentSelectedStillValid = false;
+
+            Array.from(areaSelect.options).forEach(opt => {
+                if (!opt.value) {
+                    opt.style.display = '';
+                    return;
+                }
+
+                const optSedeUuid = opt.getAttribute('data-sede-uuid');
+                if (!selectedSedeUuid) {
+                    opt.style.display = 'none';
+                } else if (optSedeUuid === selectedSedeUuid) {
+                    opt.style.display = '';
+                    if (opt.value === areaSelect.value) {
+                        currentSelectedStillValid = true;
+                    }
+                } else {
+                    opt.style.display = 'none';
+                    if (opt.value === areaSelect.value) {
+                        opt.selected = false;
+                    }
+                }
+            });
+
+            if (!currentSelectedStillValid && areaSelect.value !== '') {
+                areaSelect.value = '';
+            }
+        }
+
+        sedeSelect.addEventListener('change', updateAreas);
+        updateAreas();
+    }
+
+    /**
      * Listener para activar offcanvas tras inyección HTMX
      */
     function setupOffcanvasLoadListener() {
@@ -57,6 +101,9 @@
             if (offcanvasEl && window.bootstrap) {
                 console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
                 _mostrarOffcanvasSeguro(offcanvasEl);
+
+                // Configurar lógica en cascada para Sede y Área
+                setupCascadingSelects(offcanvasEl);
 
                 // Vincular validador al formulario
                 const form = offcanvasEl.querySelector('form');
@@ -131,6 +178,7 @@
             'email', 'telefono',
             'eps', 'afp', 'arl', 'nivel_riesgo_arl',
             'fecha_ingreso', 'estado', 'fecha_retiro',
+            'sede', 'area',
         ];
         campos.forEach(c => {
             const el = form.querySelector(`[name="${c}"]`);

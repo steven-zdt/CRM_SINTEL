@@ -95,6 +95,11 @@
       return w.http('DELETE', `${API_BASE}/${uuid}/`);
     },
 
+    /** GET /api/v1/inventario/movimientos/?search=<q>
+     *  Busqueda de movimientos Kardex para autocomplete (Pull Model v3.8+).
+     */
+    searchMovimientos: (q) => buildUrlWithParams('/api/v1/inventario/movimientos/', { search: q, page_size: 10 }),
+
     /** GET /api/v1/facturas/lista-centro-costos/
      *  Vínculo cross-app para centros de costos.
      */
@@ -159,6 +164,65 @@
       }
     },
 
+    tareasCortas: {
+      /** GET /api/v1/proyectos/tareas-cortas/?empleado_uuid=<uuid> */
+      list: async (empleadoUuid, params = {}) => {
+        console.log(`[${MOD}] tareasCortas.list(${empleadoUuid})`);
+        const qp = {};
+        if (empleadoUuid) qp.empleado_uuid = empleadoUuid;
+        Object.assign(qp, params);
+        const url = buildUrlWithParams(`${API_BASE}/tareas-cortas/`, qp);
+        return w.http('GET', url);
+      },
+
+      /** POST /api/v1/proyectos/tareas-cortas/ */
+      create: async (data) => {
+        console.log(`[${MOD}] tareasCortas.create()`, data);
+        return w.http('POST', `${API_BASE}/tareas-cortas/`, data);
+      },
+
+      /** PATCH /api/v1/proyectos/tareas-cortas/<uuid>/ */
+      update: async (uuid, data) => {
+        console.log(`[${MOD}] tareasCortas.update(${uuid})`, data);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return w.http('PATCH', `${API_BASE}/tareas-cortas/${uuid}/`, data);
+      },
+
+      /** POST /api/v1/proyectos/tareas-cortas/<uuid>/cambiar-estado/ */
+      cambiarEstado: async (uuid, nuevoEstado) => {
+        console.log(`[${MOD}] tareasCortas.cambiarEstado(${uuid}, ${nuevoEstado})`);
+        if (!uuid || !nuevoEstado) return { ok: false, status: 400, data: { detail: 'UUID y estado requeridos' } };
+        return w.http('POST', `${API_BASE}/tareas-cortas/${uuid}/cambiar-estado/`, { nuevo_estado: nuevoEstado });
+      },
+
+      /** DELETE /api/v1/proyectos/tareas-cortas/<uuid>/ */
+      delete: async (uuid) => {
+        console.log(`[${MOD}] tareasCortas.delete(${uuid})`);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return w.http('DELETE', `${API_BASE}/tareas-cortas/${uuid}/`);
+      }
+    },
+
+    lookups: {
+      clientes: async (search = '') => {
+        const url = buildUrlWithParams('/api/v1/clientes/', {
+          search,
+          page_size: 500,
+          ordering: 'razon_social'
+        });
+        return w.http('GET', url);
+      },
+
+      empleados: async (search = '') => {
+        const url = buildUrlWithParams('/api/v1/empleados/', {
+          search,
+          page_size: 500,
+          ordering: 'primer_apellido'
+        });
+        return w.http('GET', url);
+      }
+    },
+
     formatCurrency: (value) => {
       if (value === null || value === undefined || value === '') return '$ 0,00';
       const num = parseFloat(value);
@@ -169,5 +233,5 @@
     }
   };
 
-  console.log(`[${MOD}] ✅ API inicializada correctamente.`);
+  console.log(`[${MOD}] API inicializada correctamente.`);
 })(window);

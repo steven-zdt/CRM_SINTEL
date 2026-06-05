@@ -17,9 +17,11 @@ from apps.tenant.contabilidad.models import (
     TIPO_TERCERO_CHOICES,
     AsientoContable,
     CatalogoMaestroNIIF,
+    ConfiguracionRetenciones,
     CuentaContable,
     MovimientoContable,
     PeriodoContable,
+    Retencion,
     TipoComprobante,
 )
 from apps.tenant.contabilidad.services.selectors import (
@@ -427,7 +429,7 @@ class LineaManualInputSerializer(serializers.Serializer):
 class ContabilizarManualInputSerializer(serializers.Serializer):
     """Payload del POST /contabilizar-manual/."""
     app_label = serializers.ChoiceField(choices=['facturas', 'gastos', 'empleados', 'inventario'])
-    modelo = serializers.ChoiceField(choices=['Factura', 'DocumentoSoporte', 'Devengo', 'MovimientoInventario'])
+    modelo = serializers.ChoiceField(choices=['Factura', 'DocumentoSoporte', 'Devengo', 'MovimientoInventario', 'HistorialServicio'])
     documento_id = serializers.IntegerField(min_value=1)
     documento_numero = serializers.CharField(max_length=50)
     tipo_comprobante_id = serializers.IntegerField(required=True)
@@ -447,9 +449,9 @@ class ContabilizarManualInputSerializer(serializers.Serializer):
 # ============================================================================
 
 class AsistenteIAInputSerializer(serializers.Serializer):
-    """Payload del POST /asistente-ia/ — datos del documento para sugerir lineas."""
+    """Payload del POST /asistente-ia/ - datos del documento para sugerir lineas."""
     app_label = serializers.ChoiceField(choices=['facturas', 'gastos', 'empleados', 'inventario'])
-    modelo = serializers.ChoiceField(choices=['Factura', 'DocumentoSoporte', 'Devengo', 'MovimientoInventario'])
+    modelo = serializers.ChoiceField(choices=['Factura', 'DocumentoSoporte', 'Devengo', 'MovimientoInventario', 'HistorialServicio'])
     documento_id = serializers.IntegerField(min_value=1)
     numero = serializers.CharField(max_length=50, allow_blank=True, default='')
     subtotal = serializers.DecimalField(max_digits=15, decimal_places=2)
@@ -508,7 +510,6 @@ class ConfiguracionRetencionesListSerializer(serializers.ModelSerializer):
     clase_meta = None
 
     class Meta:
-        from apps.tenant.contabilidad.models import ConfiguracionRetenciones
         model = ConfiguracionRetenciones
         fields = [
             'id', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
@@ -524,7 +525,6 @@ class ConfiguracionRetencionesDetailSerializer(serializers.ModelSerializer):
     cuenta_retencion_data = serializers.SerializerMethodField()
 
     class Meta:
-        from apps.tenant.contabilidad.models import ConfiguracionRetenciones
         model = ConfiguracionRetenciones
         fields = [
             'id', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
@@ -549,7 +549,6 @@ class RetencionListSerializer(serializers.ModelSerializer):
     Serializer mínimo para listado de retenciones.
     """
     class Meta:
-        from apps.tenant.contabilidad.models import Retencion
         model = Retencion
         fields = [
             'uuid', 'tipo', 'porcentaje', 'monto', 'documento_origen_app',
@@ -567,7 +566,6 @@ class RetencionDetailSerializer(serializers.ModelSerializer):
     asiento_data = serializers.SerializerMethodField()
 
     class Meta:
-        from apps.tenant.contabilidad.models import Retencion
         model = Retencion
         fields = [
             'uuid', 'tipo', 'porcentaje', 'base', 'monto',

@@ -80,12 +80,23 @@
                     </div>
                     <div class="col-md-6">
                         <label for="fecha" class="form-label">Fecha Emisión *</label>
-                        <input type="date" class="form-control" id="fecha" name="fecha" required>
+                        <input type="date" class="form-control" id="fecha" name="fecha"
+                               value="{{ fecha_default }}"
+                               {% if resolucion_activa %}min="{{ resolucion_activa.fecha_inicio|date:'Y-m-d' }}" max="{{ resolucion_activa.fecha_fin|date:'Y-m-d' }}"{% endif %}
+                               required>
                     </div>
                     <div class="col-md-6">
                         <label for="numero_documento_proveedor" class="form-label">Doc. Soporte Ext. *</label>
                         <input type="text" class="form-control" id="numero_documento_proveedor"
-                               name="numero_documento_proveedor" placeholder="Ej: FAC-123" required>
+                               name="numero_documento_proveedor"
+                               value="{{ doc_soporte_siguiente|default:'' }}"
+                               placeholder="Ej: FAC-123" required
+                               data-prefijo="{{ resolucion_activa.prefijo|default:'' }}">
+                        {% if doc_soporte_siguiente %}
+                        <div class="form-text text-muted small">
+                            <i class="bi bi-magic me-1"></i>Consecutivo sugerido por la resolución activa. Puede modificarlo.
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -247,38 +258,21 @@
                 </div>
             </div>
 
-            {# ── Sección: Asignación a Inventario (Opcional) ───────────── #}
+            {# ── Sección: Asignación a Kardex/Inventario (Opcional) — Pull Model v3.8+ ── #}
             <div class="section-divider">
                 <p class="section-title">
-                    <i class="bi bi-box-seam me-1"></i>Asignación a Inventario (Opcional)
+                    <i class="bi bi-box-seam me-1"></i>Movimiento de Inventario (Opcional)
                 </p>
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <label for="tipo_relacion_inventario" class="form-label">Tipo de Relación</label>
-                        <select class="form-select" id="tipo_relacion_inventario">
-                            <option value="NINGUNO">Ninguno</option>
-                            <option value="PRODUCTO">Producto</option>
-                            <option value="SERVICIO">Servicio</option>
-                            <option value="ACTIVO_FIJO">Activo Fijo</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6 d-none" id="wrapper_producto_relacionado">
-                        <label for="producto_relacionado" class="form-label">Producto Relacionado</label>
-                        <select class="form-select" id="producto_relacionado" name="producto_relacionado">
-                            <option value="">Seleccione producto...</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6 d-none" id="wrapper_servicio_relacionado">
-                        <label for="servicio_relacionado" class="form-label">Servicio Relacionado</label>
-                        <select class="form-select" id="servicio_relacionado" name="servicio_relacionado">
-                            <option value="">Seleccione servicio...</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6 d-none" id="wrapper_activo_relacionado">
-                        <label for="activo_relacionado" class="form-label">Activo Fijo Relacionado</label>
-                        <select class="form-select" id="activo_relacionado" name="activo_relacionado">
-                            <option value="">Seleccione activo fijo...</option>
-                        </select>
+                    <div class="col-12">
+                        <label for="movimiento_inventario_search" class="form-label">Buscar Movimiento</label>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="movimiento_inventario_search"
+                                   placeholder="Buscar por producto, servicio, activo, código..." autocomplete="off">
+                            <input type="hidden" id="movimiento_inventario_uuid" name="movimiento_inventario_uuid">
+                            <div id="movimiento-inventario-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050;"></div>
+                        </div>
+                        <small class="text-muted">Vincule este gasto a un movimiento de inventario (entrada de producto, activo, servicio).</small>
                     </div>
                 </div>
             </div>
@@ -302,26 +296,6 @@
                 </div>
             </div>
 
-            {# ── Sección: Integración Contable (v3.7.1) - §18 Pull Model ── #}
-            <div class="mb-2">
-                <p class="section-title">
-                    <i class="bi bi-calculator me-1"></i>Integración Contable
-                </p>
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label for="cuenta_gasto_search" class="form-label">Cuenta PUC Nivel 6 (Gasto/Costo)</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-control" id="cuenta_gasto_search"
-                                   placeholder="Buscar cuenta nivel 6 (ej: 5105)..." autocomplete="off">
-                            <input type="hidden" id="cuenta_gasto_uuid" name="cuenta_gasto_uuid">
-                            <div id="cuenta-gasto-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050;">
-                                {# Sugerencias dinámicas #}
-                            </div>
-                        </div>
-                        <small class="text-muted">Vincule este gasto a una cuenta de control contable para automatizar el ciclo de egresos.</small>
-                    </div>
-                </div>
-            </div>
         </form>
     </div>
 

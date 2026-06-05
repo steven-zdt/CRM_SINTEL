@@ -167,9 +167,6 @@ class DocumentoSoporte(SintelTenantBaseModel):
         ('0.11', '11% - Honorarios y Consultoria (Declarante)'),
     ]
     
-    retefuente_porcentaje = models.CharField(max_length=10, choices=RETEFUENTE_CHOICES, default='0.00', verbose_name=_('% Retefuente [DEPRECATED v3.7.1]'), editable=False)
-    retefuente = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name=_('Monto Retefuente [DEPRECATED v3.7.1]'), editable=False)
-    
     RETEICA_CHOICES = [
         ('0.00', '0% - Exento'),
         ('0', '0% - Exento'),
@@ -179,8 +176,6 @@ class DocumentoSoporte(SintelTenantBaseModel):
         ('0.01104', '1.104%'),
     ]
     
-    reteica_porcentaje = models.CharField(max_length=10, choices=RETEICA_CHOICES, default='0.00', verbose_name=_('% ReteICA [DEPRECATED v3.7.1]'), editable=False)
-    reteica = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name=_('Monto ReteICA [DEPRECATED v3.7.1]'), editable=False)
     total = models.DecimalField(max_digits=15, decimal_places=2)
     
   
@@ -193,41 +188,26 @@ class DocumentoSoporte(SintelTenantBaseModel):
 
     # Integracion Contable (SSoT UUID - mapeados por app contabilidad)
     # WARNING: v3.7.1 - Solo cuenta de gasto. Contrapartida orquestada por app contabilidad
-    cuenta_gasto_uuid = models.UUIDField(
+
+    # Sede — vinculacion para indicadores y KPIs por sede (DT-SEDE-01)
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='gastos',
+        verbose_name=_('Sede'),
+        help_text=_('Sede de la empresa donde se origina el gasto. '
+                    'Opcional — si no se asigna aplica a toda la empresa.'),
+        db_index=True,
+    )
+
+    # Integration with Inventario Kardex (Pull Model via UUID)
+    movimiento_inventario_uuid = models.UUIDField(
         null=True,
         blank=True,
         db_index=True,
-        verbose_name="Cuenta de Gasto/Egreso (UUID)",
-        help_text="UUID de la CuentaContable de resultado (ej. 5105 Gastos). Contabilidad determina la contrapartida segun tipo de transaccion."
-    )
-
-    # Relaciones Opcionales a Inventario (Fase 1: Trazabilidad)
-    producto_relacionado = models.ForeignKey(
-        'tenant_inventario.Producto',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='documentos_soporte',
-        verbose_name=_('Producto Relacionado'),
-        help_text=_('Producto opcional de inventario asociado a este gasto')
-    )
-    servicio_relacionado = models.ForeignKey(
-        'tenant_inventario.Servicio',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='documentos_soporte',
-        verbose_name=_('Servicio Relacionado'),
-        help_text=_('Servicio opcional de inventario asociado a este gasto')
-    )
-    activo_relacionado = models.ForeignKey(
-        'tenant_inventario.ActivoFijo',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='documentos_soporte',
-        verbose_name=_('Activo Fijo Relacionado'),
-        help_text=_('Activo Fijo opcional asociado a este gasto')
+        help_text="Vinculacion transaccional al Kardex de Inventario"
     )
     
     adjunto = models.FileField(upload_to='documentos_soporte/%Y/%m/', blank=True, null=True)
@@ -293,7 +273,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
     def total_retefuente(self) -> Decimal:
         """Lee RETEFUENTE desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
         if not self.pk:
-            return self.retefuente or Decimal('0.00')
+            return Decimal('0.00')
         try:
             Retencion = self._get_retencion_model()
             total = Retencion.objects.filter(
@@ -305,13 +285,13 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(total))
         except Exception:
-            return self.retefuente or Decimal('0.00')
+            return Decimal('0.00')
 
     @property
     def total_reteica(self) -> Decimal:
         """Lee RETEICA desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
         if not self.pk:
-            return self.reteica or Decimal('0.00')
+            return Decimal('0.00')
         try:
             Retencion = self._get_retencion_model()
             total = Retencion.objects.filter(
@@ -323,7 +303,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(total))
         except Exception:
-            return self.reteica or Decimal('0.00')
+            return Decimal('0.00')
 
     @property
     def total_reteiva(self) -> Decimal:
@@ -352,6 +332,42 @@ class DocumentoSoporte(SintelTenantBaseModel):
     def vendedor_telefono(self): return self.proveedor.telefono_contacto
 
     @property
+    def movimiento_referencia(self):
+        """
+        Retorna detalles clave del movimiento de inventario asociado (Pull Model).
+        Evita dependencias circulares importando localmente el selector.
+        """
+        if not self.movimiento_inventario_uuid:
+            return None
+        try:
+            from apps.tenant.inventario.services.selectors import MovimientoInventarioSelector
+            mov = MovimientoInventarioSelector.get_detail(
+                empresa_id=self.empresa_id,
+                movimiento_uuid=self.movimiento_inventario_uuid
+            )
+            item_nombre = ""
+            item_codigo = ""
+            item_tipo = ""
+            if mov.producto:
+                item_nombre = mov.producto.nombre
+                item_codigo = mov.producto.codigo
+                item_tipo = "PRODUCTO"
+            elif mov.activo_fijo:
+                item_nombre = mov.activo_fijo.nombre
+                item_codigo = mov.activo_fijo.codigo
+                item_tipo = "ACTIVO_FIJO"
+            return {
+                'tipo': mov.tipo,
+                'tipo_display': mov.get_tipo_display(),
+                'item_tipo': item_tipo,
+                'item_nombre': item_nombre,
+                'item_codigo': item_codigo,
+                'cantidad': float(mov.cantidad or 0),
+            }
+        except Exception:
+            return None
+
+    @property
     def total_cop(self): return f"${self.total:,.0f}".replace(',', '.') if self.total else "$0"
 
     @property
@@ -374,7 +390,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
     @property
     def retefuente_calculada(self) -> Decimal:
         """Retorna el monto de Retefuente desde Contabilidad."""
-        if not self.pk: return self.retefuente or Decimal('0.00')
+        if not self.pk: return Decimal('0.00')
         try:
             Retencion = self._get_retencion_model()
             monto = Retencion.objects.filter(
@@ -386,12 +402,12 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(monto))
         except Exception:
-            return self.retefuente or Decimal('0.00')
+            return Decimal('0.00')
 
     @property
     def reteica_calculada(self) -> Decimal:
         """Retorna el monto de ReteICA desde Contabilidad."""
-        if not self.pk: return self.reteica or Decimal('0.00')
+        if not self.pk: return Decimal('0.00')
         try:
             Retencion = self._get_retencion_model()
             monto = Retencion.objects.filter(
@@ -403,7 +419,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(monto))
         except Exception:
-            return self.reteica or Decimal('0.00')
+            return Decimal('0.00')
 
     @property
     def subtotal_cop(self): return f"${self.subtotal:,.0f}".replace(',', '.') if self.subtotal else "$0"
@@ -422,16 +438,5 @@ class DocumentoSoporte(SintelTenantBaseModel):
     def total_retenciones_cop(self):
         val = self.total_retenciones
         return f"${val:,.0f}".replace(',', '.') if val else "$0"
-
-    @property
-    def cuenta_gasto_label(self):
-        """Resuelve el label de la cuenta contable de gasto (SSoT v3.5.0)."""
-        if not self.cuenta_gasto_uuid:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        return CuentaContableSelector.get_label_by_uuid(
-            empresa_id=self.empresa_id,
-            uuid=self.cuenta_gasto_uuid
-        )
 
 

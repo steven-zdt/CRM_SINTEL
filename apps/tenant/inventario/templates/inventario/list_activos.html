@@ -1,32 +1,39 @@
-{# list_activos.html - Módulo Activos Fijos v3.5 - Nucleus #}
-<div class="ui-module h-100 d-flex flex-column">
-    <div id="feedback-activos-list" class="alert d-none mb-2" role="alert"></div>
-    
-    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
-        <div class="d-flex align-items-center gap-2">
-            <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-building me-2"></i>Activos Fijos</h5>
-            <span class="badge bg-light text-dark border">Planta y Equipo</span>
-        </div>
-        <div class="btn-group shadow-sm">
-            <button type="button" class="btn btn-primary" id="btn-nuevo-activo"
-                    hx-get="/api/v1/inventario/activos/gestor-offcanvas/"
-                    hx-target="#offcanvas-container-activos"
-                    hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-activos'); }">
-                <i class="bi bi-plus-lg me-1"></i> Nuevo Activo
-            </button>
-            <button type="button" class="btn btn-outline-secondary" 
-                    onclick="if(window.Sintel?.Inventario?.Activos?.List?.recargar){ window.Sintel.Inventario.Activos.List.recargar(); } else if(window.SintelInventarioTables?.activos){ window.SintelInventarioTables.activos.replaceData(); }">
-                <i class="bi bi-arrow-clockwise"></i>
-            </button>
-        </div>
-    </div>
-    
-    <div class="mb-3">
-        <input type="text" id="search-activo" class="form-control" placeholder="Buscar por código, nombre, categoría, ubicación o responsable...">
-    </div>
-    
-    <div id="grid-activos" class="flex-grow-1"></div>
-</div>
+{# list_activos.html - Módulo Activos Fijos v3.10.4 - Presentación Compacta #}
+<style>
+  #grid-activos .tabulator-row { min-height: 56px; }
+  #grid-activos .tabulator-cell { padding: 6px 8px; vertical-align: middle; }
+  #activos-kpis .kpi-card { background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:8px 14px; }
+  #activos-kpis .kpi-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; }
+  #activos-kpis .kpi-val { font-size:1.1rem; font-weight:700; line-height:1.2; }
+</style>
 
-{# Contenedor definido en list_inventario.html — NO duplicar aqui #}
+<div class="ui-module h-100 d-flex flex-column">
+  <div id="feedback-activos-list" class="alert d-none mb-2" role="alert"></div>
+
+  {# Toolbar #}
+  <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+    <div class="d-flex align-items-center gap-2 flex-grow-1">
+      <input type="text" id="search-activo" class="form-control form-control-sm"
+             placeholder="Buscar código, nombre, categoría, ubicación, responsable..." style="max-width:360px">
+    </div>
+    <div class="d-flex gap-1">
+      <button type="button" class="btn btn-sm btn-outline-secondary"
+              onclick="if(window.ActivosList?.recargar){ window.ActivosList.recargar(); } else if(window.SintelInventarioTables?.activos){ window.SintelInventarioTables.activos.replaceData(); }"
+              title="Recargar">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-primary" id="btn-nuevo-activo"
+              hx-get="/api/v1/inventario/activos/gestor-offcanvas/"
+              hx-target="#offcanvas-container-activos"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-activos'); }">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo Activo
+      </button>
+    </div>
+  </div>
+
+  {# KPIs strip — llenado por JS en dataLoaded #}
+  <div id="activos-kpis" class="d-flex gap-2 mb-2 flex-wrap"></div>
+
+  <div id="grid-activos" class="flex-grow-1 w-100"></div>
+</div>

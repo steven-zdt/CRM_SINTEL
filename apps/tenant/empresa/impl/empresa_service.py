@@ -11,6 +11,8 @@ from typing import Any
 
 from django.db import transaction
 
+from apps.tenant.empresa.models import Empresa
+
 
 def get_empresa() -> dict[str, Any] | None:
     """
@@ -21,8 +23,6 @@ def get_empresa() -> dict[str, Any] | None:
     Returns:
         dict: DTO con datos de la empresa o None si no existe
     """
-    from apps.tenant.empresa.models import Empresa
-    
     empresa = Empresa.objects.only(
         'id', 'razon_social', 'nit', 'dv', 'direccion', 'telefono', 'email_contacto',
         'regimen_tributario', 'logo', 'website', 'moneda', 'created_at', 'updated_at'

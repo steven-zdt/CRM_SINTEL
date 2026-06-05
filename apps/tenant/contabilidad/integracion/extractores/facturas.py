@@ -1,12 +1,12 @@
 # apps/tenant/contabilidad/integracion/extractores/facturas.py
-from typing import Dict, List, Optional
-from decimal import Decimal
 import logging
+from datetime import date
+from decimal import Decimal
+from typing import Dict, List, Optional
 
+from apps.tenant.contabilidad.models import AsientoContable
 from apps.tenant.facturas.models import Factura, NotaCredito
 from .base import AbstractExtractor, DocumentoEnriquecido, CuentaAsignada, MovimientoResumen
-from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-from datetime import date
 from ..dtos import (
     TransaccionEconomica,
     TipoTransaccion,
@@ -25,13 +25,11 @@ class ExtractorFacturas(AbstractExtractor):
 
     Arquitectura Pull: extrae VENTAS (emitidas) y COMPRAS (recibidas).
     Zero Waste: solo extrae registros ACEPTADOS y no contabilizados.
-    v3.7.1: usa cuenta_contable_uuid de Factura/Cliente/Proveedor como cuenta_hint.
+    v3.10.2: cuenta_hint eliminado — cuentas resueltas via ReglaContable (Pure Pull Model).
     Retenciones: leidas desde Contabilidad.Retencion via @property Pull Model.
     """
 
     def extraer_pendientes(self) -> List[TransaccionEconomica]:
-        from apps.tenant.contabilidad.models import AsientoContable
-
         facturas_contabilizadas = set(
             AsientoContable.objects.filter(
                 empresa_id=self.empresa_id,
@@ -57,7 +55,7 @@ class ExtractorFacturas(AbstractExtractor):
             id__in=facturas_contabilizadas,
         ).only(
             'id', 'numero', 'fecha_emision', 'naturaleza',
-            'subtotal', 'impuestos', 'total', 'cuenta_contable_uuid',
+            'subtotal', 'impuestos', 'total',
             'emisor_nit', 'emisor_razon_social',
             'receptor_nit', 'receptor_razon_social',
         ))
@@ -88,22 +86,10 @@ class ExtractorFacturas(AbstractExtractor):
 
     def _cargar_cuentas_terceros(self, app: str, modelo: str, nits: set) -> Dict[str, Optional[str]]:
         """
-        Batch lookup numero_documento -> cuenta_contable_uuid para Cliente o Proveedor.
-        Una sola query por tipo de tercero en lugar de N queries en el loop.
+        Placeholder — cuenta_contable_uuid fue eliminado de Cliente/Proveedor (v3.10.2 Pull Model).
+        Retorna dict vacío; el Contabilizador resuelve cuentas via ReglaContable.
         """
-        if not nits:
-            return {}
-        from django.apps import apps as django_apps
-        Modelo = django_apps.get_model(app, modelo)
-        qs = Modelo.objects.filter(
-            empresa_id=self.empresa_id,
-            numero_documento__in=nits,
-        ).values('numero_documento', 'cuenta_contable_uuid')
-        return {
-            row['numero_documento']: str(row['cuenta_contable_uuid'])
-            if row['cuenta_contable_uuid'] else None
-            for row in qs
-        }
+        return {}
 
     def _mapear_factura_a_dto(
         self,
@@ -125,16 +111,13 @@ class ExtractorFacturas(AbstractExtractor):
         reteica = fact.total_reteica
         reteiva = fact.total_reteiva
 
-        cuenta_factura = str(fact.cuenta_contable_uuid) if fact.cuenta_contable_uuid else None
         lineas = []
 
         if es_venta:
-            cuenta_cxc = cliente_cuentas.get(fact.receptor_nit)
             lineas.append(LineaTransaccion(
                 concepto='INGRESO_PRINCIPAL',
                 monto=fact.subtotal,
                 lado='HABER',
-                cuenta_hint=cuenta_factura,
             ))
             if fact.impuestos > 0:
                 lineas.append(LineaTransaccion(concepto='IVA_GENERADO', monto=fact.impuestos, lado='HABER'))
@@ -145,20 +128,13 @@ class ExtractorFacturas(AbstractExtractor):
             if reteiva > 0:
                 lineas.append(LineaTransaccion(concepto='RETEIVA', monto=reteiva, lado='DEBE'))
             neto = fact.total - retefuente - reteica - reteiva
-            lineas.append(LineaTransaccion(
-                concepto='CXC_CLIENTES',
-                monto=neto,
-                lado='DEBE',
-                cuenta_hint=cuenta_cxc,
-            ))
+            lineas.append(LineaTransaccion(concepto='CXC_CLIENTES', monto=neto, lado='DEBE'))
             tipo_tx = TipoTransaccion.VENTA_FACTURA
         else:
-            cuenta_cxp = proveedor_cuentas.get(fact.emisor_nit)
             lineas.append(LineaTransaccion(
                 concepto='GASTO_GENERAL',
                 monto=fact.subtotal,
                 lado='DEBE',
-                cuenta_hint=cuenta_factura,
             ))
             if fact.impuestos > 0:
                 lineas.append(LineaTransaccion(concepto='IVA_DESCONTABLE', monto=fact.impuestos, lado='DEBE'))
@@ -169,12 +145,7 @@ class ExtractorFacturas(AbstractExtractor):
             if reteiva > 0:
                 lineas.append(LineaTransaccion(concepto='RETEIVA', monto=reteiva, lado='HABER'))
             neto = fact.total - retefuente - reteica - reteiva
-            lineas.append(LineaTransaccion(
-                concepto='PASIVO_COMPRA_GASTO',
-                monto=neto,
-                lado='HABER',
-                cuenta_hint=cuenta_cxp,
-            ))
+            lineas.append(LineaTransaccion(concepto='PASIVO_COMPRA_GASTO', monto=neto, lado='HABER'))
             tipo_tx = TipoTransaccion.COMPRA_GASTO
 
         return TransaccionEconomica(
@@ -248,8 +219,6 @@ class ExtractorFacturas(AbstractExtractor):
         )
 
     def get_documentos_enriquecidos(self, empresa_id: int, fecha_inicio: date, fecha_fin: date) -> List[DocumentoEnriquecido]:
-        from apps.tenant.contabilidad.models import AsientoContable
-        
         # 1. Obtener Facturas y Notas
         facturas = Factura.objects.filter(
             empresa_id=empresa_id,
@@ -260,12 +229,6 @@ class ExtractorFacturas(AbstractExtractor):
             empresa_id=empresa_id,
             fecha_emision__date__range=(fecha_inicio, fecha_fin)
         ).select_related('factura').order_by('fecha_emision', 'id')
-        
-        # 2. Batch load NITS for account resolution
-        venta_nits = {f.receptor_nit for f in facturas if f.naturaleza == 'VENTA'}
-        compra_nits = {f.emisor_nit for f in facturas if f.naturaleza != 'VENTA'}
-        cliente_cuentas = self._cargar_cuentas_terceros('clientes', 'Cliente', venta_nits)
-        proveedor_cuentas = self._cargar_cuentas_terceros('proveedores', 'Proveedor', compra_nits)
         
         # 3. Mapear asientos
         asientos = {
@@ -283,29 +246,8 @@ class ExtractorFacturas(AbstractExtractor):
         for f in facturas:
             asiento = asientos.get(('Factura', f.id))
             es_venta = f.naturaleza == 'VENTA'
-            
-            cuentas_asignadas = []
-            if f.cuenta_contable_uuid:
-                cod, nom = CuentaContableSelector.resolve_label_by_uuid(f.cuenta_contable_uuid, empresa_id)
-                cuentas_asignadas.append(CuentaAsignada(
-                    concepto='Ingreso/Gasto (Principal)',
-                    uuid=str(f.cuenta_contable_uuid),
-                    codigo_puc=cod,
-                    nombre=nom,
-                    monto=f.subtotal
-                ))
-            
             tercero_nit = f.receptor_nit if es_venta else f.emisor_nit
-            tercero_cuenta_uuid = cliente_cuentas.get(tercero_nit) if es_venta else proveedor_cuentas.get(tercero_nit)
-            if tercero_cuenta_uuid:
-                cod, nom = CuentaContableSelector.resolve_label_by_uuid(tercero_cuenta_uuid, empresa_id)
-                cuentas_asignadas.append(CuentaAsignada(
-                    concepto='Cartera/Pasivo Tercero',
-                    uuid=str(tercero_cuenta_uuid),
-                    codigo_puc=cod,
-                    nombre=nom,
-                    monto=f.total
-                ))
+            cuentas_asignadas = []
 
             dto = DocumentoEnriquecido(
                 app_label='facturas',

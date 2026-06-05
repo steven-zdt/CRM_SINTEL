@@ -17,6 +17,8 @@ from apps.tenant.dashboard.services.extractores import (
     EmpleadosExtractor,
     GastosExtractor,
     ProyectosExtractor,
+    ClientesExtractor,
+    SedesExtractor,
 )
 
 
@@ -60,8 +62,8 @@ class DashboardBusinessService:
 
         try:
             # Obtener nombre y NIT de la empresa (Double Semantic Verification)
-            from apps.tenant.empresa.services.selectors import EmpresaSelectors
-            empresa = EmpresaSelectors.obtener_por_id(empresa_id)
+            from apps.tenant.empresa.services.selectors import EmpresaSelector
+            empresa = EmpresaSelector.get_by_id(empresa_id)
 
             if not empresa:
                 raise ValueError(f"Empresa {empresa_id} no encontrada")
@@ -72,10 +74,11 @@ class DashboardBusinessService:
             empleados_dto = EmpleadosExtractor.extraer_metricas(empresa_id)
             gastos_dto = GastosExtractor.extraer_metricas(empresa_id)
             proyectos_dto = ProyectosExtractor.extraer_metricas(empresa_id)
+            clientes_dto = ClientesExtractor.extraer_metricas(empresa_id)
 
             # Consolidar en DTO principal
             metricas = DashboardMetricasDTO(
-                empresa_nombre=empresa.nombre or "Sin nombre",
+                empresa_nombre=empresa.razon_social or "Sin nombre",
                 empresa_nit=empresa.nit or "Sin NIT",
                 fecha_actualizacion=timezone.now().isoformat(),
                 facturas=facturas_dto,
@@ -83,6 +86,7 @@ class DashboardBusinessService:
                 empleados=empleados_dto,
                 gastos=gastos_dto,
                 proyectos=proyectos_dto,
+                clientes=clientes_dto,
             )
 
             # Guardar en caché con TTL
@@ -97,13 +101,21 @@ class DashboardBusinessService:
             logger.warning(f"Error obteniendo métricas para empresa {empresa_id}: {str(e)}")
 
             # Retornar estructura vacía pero válida
+            from decimal import Decimal
+            from apps.tenant.dashboard.services.dtos import (
+                WidgetFacturasDTO, WidgetInventarioDTO, WidgetEmpleadosDTO,
+                WidgetGastosDTO, WidgetProyectosDTO, WidgetClientesDTO,
+            )
             return DashboardMetricasDTO(
                 empresa_nombre="—",
                 empresa_nit="—",
                 fecha_actualizacion=timezone.now().isoformat(),
-                facturas=FacturasExtractor.extraer_metricas(empresa_id),
-                inventario=InventarioExtractor.extraer_metricas(empresa_id),
-                empleados=EmpleadosExtractor.extraer_metricas(empresa_id),
+                facturas=WidgetFacturasDTO(0, 0, 0, Decimal('0'), Decimal('0')),
+                inventario=WidgetInventarioDTO(0, 0, 0, Decimal('0'), Decimal('0')),
+                empleados=WidgetEmpleadosDTO(0, 0, 0, Decimal('0')),
+                gastos=WidgetGastosDTO(Decimal('0'), 0, 0, Decimal('0')),
+                proyectos=WidgetProyectosDTO(0, 0, 0, 0),
+                clientes=WidgetClientesDTO(0, 0, 0, 0, 0),
             )
 
     @staticmethod
@@ -111,3 +123,12 @@ class DashboardBusinessService:
         """Invalida el caché de métricas para una empresa."""
         cache_key = f"dashboard:metricas:{empresa_id}"
         cache.delete(cache_key)
+
+    @staticmethod
+    def obtener_kpis_por_sede(empresa_id: int, fecha_inicio=None, fecha_fin=None):
+        """Obtiene indicadores transversales agrupados por sede."""
+        return SedesExtractor.extraer_kpis(
+            empresa_id=empresa_id,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+        )

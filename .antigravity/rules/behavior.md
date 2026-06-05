@@ -60,6 +60,39 @@ DEFINICION DE "HECHO": <el observable concreto>
 1. `apps/public/` BLOQUEADO sin autorizacion explicita + RFC.
 2. Tras editar `.py` → `python -m py_compile <archivo>` (PostToolUse hook).
 3. Tras editar serializer/viewset/service → `python manage.py check`.
+4. **Zero-Hardcoding (§29 AGENTS.md):** Antes de cerrar cualquier tarea que toque `scripts/`, `scratch/`, `tests/` o management commands, verificar:
+   ```bash
+   grep -rn "'home'\|'cliente'\|'tupapi'\|'putito'\|home\.sintel\.com" \
+       apps/ tests/ scripts/ scratch/ --include="*.py" \
+       | grep -v "__pycache__\|migration\|assertNotIn\|\.sintel\.local\|{schema"
+   # Esperado: 0 resultados
+   ```
+5. **ORM Traversals en Selectors (§30 AGENTS.md — Zero-Collision Pattern):**
+   Al tocar `services/selectors.py` de cualquier app:
+   - `LIST_FIELDS` / `DETAIL_FIELDS` — SOLO nombres de atributos directos del modelo (sin `__`)
+   - Traversals ORM (`campo__subcampo`) — van en constantes privadas `_<RELACION>_TRAVERSALS`
+   - `select_related("<relacion>")` — obligatorio en cada selector que use traversals
+   - `source="relacion.campo"` (punto) en serializer — nunca `source="relacion__campo"`
+   ```bash
+   # Verificacion automatica (ver §30.10 AGENTS.md para el script completo AST):
+   docker compose exec web python -c "
+   import ast, pathlib, sys
+   errors = []
+   for f in pathlib.Path('apps/tenant').rglob('selectors.py'):
+       src = f.read_text()
+       try: tree = ast.parse(src)
+       except: continue
+       for node in ast.walk(tree):
+           if isinstance(node, ast.Assign):
+               for t in node.targets:
+                   if isinstance(t, ast.Name) and t.id in ('LIST_FIELDS','DETAIL_FIELDS'):
+                       for elt in ast.walk(node.value):
+                           if isinstance(elt, ast.Constant) and isinstance(elt.value, str) and '__' in elt.value:
+                               errors.append(f'{f}:{elt.lineno} {t.id}: {elt.value!r}')
+   [print(e) for e in errors] if errors else print('OK')
+   "
+   # Para cada resultado: verificar que el serializer de esa app NO usa tuple(FIELDS) en Meta.fields
+   ```
 
 ---
 
@@ -70,6 +103,11 @@ DEFINICION DE "HECHO": <el observable concreto>
 - Signals para logica de negocio
 - Crear `AsientoContable` directamente (usar Contabilizador)
 - Tocar codigo fuera del alcance declarado en seccion 0
+- **Nombres propios de tenants en codigo** (`'home'`, `'cliente'`, `'putito'`, `'tupapi'` como strings literales en logica, fixtures o scripts). Ver §29 AGENTS.md.
+- **Tests CRUD sin los 3 niveles de aislamiento** — PROHIBIDO hacer merge de tests de app tenant que omitan `test_multitenant_isolation.py` con Nivel 1 (listado), Nivel 2 (IDOR UUID) y Nivel 3 (IDOR FK). Ver §24.5 AGENTS.md.
+- **Traversals ORM (`campo__subcampo`) en `LIST_FIELDS` / `DETAIL_FIELDS`** — PROHIBIDO si esa constante se usa en `Meta.fields` de serializer. Mover a `_*_TRAVERSALS` + `select_related()`. Ver §30 AGENTS.md.
+- **Frontend sin consultar `.agents/skills/frontend/`** — PROHIBIDO. Antes de cualquier HTML/JS/HTMX consultar htmx.md, ui-management.md, crud-fsd.md, vanilla-js.md, tabulator.md segun corresponda (AGENTS.md §31).
+- **`hx-on::after-settle` en botones/forms** — PROHIBIDO. `htmx:afterSettle` dispara en el elemento TARGET, no en el iniciador. Usar `hx-on::after-request` en botones para post-swap (el swap sync ocurre antes). Usar `document.addEventListener('htmx:afterSettle', ...)` en JS para editors. Ver §26 AGENTS.md y skill htmx.md §12.
 
 ---
 

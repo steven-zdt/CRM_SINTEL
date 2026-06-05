@@ -64,6 +64,29 @@ class WidgetProyectosDTO:
 
 
 @dataclass(frozen=True)
+class WidgetClientesDTO:
+    """DTO para métricas de Clientes."""
+    total_clientes: int
+    clientes_activos: int
+    nuevos_mes: int
+    personas_juridicas: int
+    retenedores: int
+
+
+@dataclass(frozen=True)
+class KpiSedeDTO:
+    """DTO para indicadores transversales por sede."""
+    sede_uuid: Optional[str]
+    sede_nombre: str
+    gastos_total: Decimal
+    ingresos_total: Decimal
+    proyectos_activos: int
+    valor_proyectos: Decimal
+    movimientos_inventario: int
+    margen: Decimal
+
+
+@dataclass(frozen=True)
 class DashboardMetricasDTO:
     """DTO principal que consolida todas las métricas del dashboard."""
     empresa_nombre: str
@@ -74,3 +97,4 @@ class DashboardMetricasDTO:
     empleados: WidgetEmpleadosDTO
     gastos: Optional[WidgetGastosDTO] = None
     proyectos: Optional[WidgetProyectosDTO] = None
+    clientes: Optional[WidgetClientesDTO] = None

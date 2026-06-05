@@ -10,8 +10,10 @@ WARNING: IMPORTANTE:
 
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
+import calendar
 import logging
 import traceback
+from datetime import date
 from decimal import Decimal
 
 from django.utils.translation import gettext_lazy as _
@@ -28,6 +30,23 @@ from apps.tenant.api.mixins import SintelDSVMixin, SintelServiceMixin
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
 
 logger = logging.getLogger(__name__)
+
+def _decimal_from_value(value):
+    """Convierte valores del timeline a Decimal sin propagar None/string vacio."""
+    if value in (None, ''):
+        return Decimal('0')
+    return Decimal(str(value))
+
+
+def _date_from_timeline(value):
+    """Extrae YYYY-MM-DD del timeline como date para templates/serializers."""
+    raw = str(value or '')[:10]
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
 
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.contabilidad.api.serializers import (
@@ -70,13 +89,14 @@ from apps.tenant.contabilidad.services.selectors import (
     AsientoContableSelector,
     CuentaContableSelector,
     PeriodoContableSelector,
+    TipoComprobanteSelector,
     get_asiento_by_identifier,
     get_cuenta_by_identifier,
     get_periodo_by_identifier,
     qs_facturas_pendientes,
     qs_gastos_pendientes,
     qs_nominas_pendientes,
-    qs_inventario_pendientes,
+    qs_inventario_movimientos_recientes_pendientes,
     get_documento_pendiente,
     balance_prueba_selector,
     estado_resultados_selector,
@@ -85,6 +105,8 @@ from apps.tenant.contabilidad.services.selectors import (
     qs_periodos_disponibles,
 )
 from apps.tenant.contabilidad.services.business_service import ContabilidadBusinessService
+from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+from apps.tenant.contabilidad.integracion.dtos import LineaManual, ComprobanteManualDTO
 
 
 class ContabilidadServiceMixin(SintelServiceMixin):
@@ -550,7 +572,9 @@ class CatalogoMaestroNIIFViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseT
             return CatalogoMaestroNIIF.objects.only(
                 'id', 'codigo', 'nombre', 'nivel', 'naturaleza', 'activa'
             ).order_by('codigo')
-        return CatalogoMaestroNIIF.objects.prefetch_related('cuentas_vinculadas')
+        return CatalogoMaestroNIIF.objects.only(
+            'id', 'codigo', 'nombre', 'nivel', 'naturaleza', 'activa'
+        ).prefetch_related('cuentas_vinculadas').order_by('codigo')
     
     def create(self, request, *args, **kwargs):
         try:
@@ -703,11 +727,10 @@ class TipoComprobanteViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
         return TipoComprobanteListSerializer
 
     def get_queryset(self):
+        empresa_id = self.get_empresa_id()
         if self.action == "list":
-            return TipoComprobante.objects.only(
-                'id', 'uuid', 'codigo', 'nombre', 'prefijo', 'activa'
-            ).order_by('codigo')
-        return TipoComprobante.objects.all()
+            return TipoComprobanteSelector.get_qs_list(empresa_id).order_by('codigo')
+        return TipoComprobanteSelector.get_qs_detail(empresa_id).order_by('codigo')
 
     def create(self, request, *args, **kwargs):
         try:
@@ -796,7 +819,7 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 'tercero_nit': g.proveedor.numero_documento,
                 'tercero_nombre': g.proveedor.razon_social,
                 'subtotal': str(g.subtotal),
-                'impuestos': str(g.retefuente + g.reteica),
+                'impuestos': str(g.total_retefuente + g.total_reteica),
                 'total': str(g.total),
                 'estado': 'ACTIVO',
             })
@@ -817,20 +840,24 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 'estado': 'ACTIVO',
             })
 
-        for i in qs_inventario_pendientes(empresa_id):
+        for item in qs_inventario_movimientos_recientes_pendientes(empresa_id):
+            cantidad = _decimal_from_value(item.get('cantidad'))
+            valor = _decimal_from_value(item.get('valor_costo'))
+            total = (cantidad * valor).quantize(Decimal('0.01'))
+            fecha = _date_from_timeline(item.get('fecha'))
             resultado.append({
                 'tipo_doc': 'INVENTARIO',
                 'app_label': 'inventario',
-                'modelo': 'MovimientoInventario',
-                'documento_id': i.id,
-                'numero': f"{i.tipo}",
-                'fecha': str(i.created_at.date()),
+                'modelo': item.get('modelo_origen'),
+                'documento_id': item.get('documento_id'),
+                'numero': item.get('referencia') or item.get('uuid'),
+                'fecha': str(fecha) if fecha else '',
                 'tercero_nit': 'N/A',
-                'tercero_nombre': f"{i.producto.nombre}",
-                'subtotal': str(i.cantidad * i.costo_unitario),
+                'tercero_nombre': item.get('item_nombre') or item.get('modulo_origen') or 'Movimiento de inventario',
+                'subtotal': str(total),
                 'impuestos': "0.00",
-                'total': str(i.cantidad * i.costo_unitario),
-                'estado': 'ACTIVO',
+                'total': str(total),
+                'estado': item.get('tipo_accion_display') or 'ACTIVO',
             })
 
         return Response(resultado, status=status.HTTP_200_OK)
@@ -887,14 +914,18 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 'tercero_nombre': f"{doc.empleado.primer_nombre} {doc.empleado.primer_apellido}",
             }
         elif app_label == 'inventario':
+            cantidad = _decimal_from_value(doc.get('cantidad'))
+            valor = _decimal_from_value(doc.get('valor_costo'))
+            total = (cantidad * valor).quantize(Decimal('0.01'))
+            fecha = _date_from_timeline(doc.get('fecha'))
             ctx = {
                 'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
-                'numero': doc.tipo, 'fecha': doc.created_at.date(),
-                'subtotal': doc.cantidad * doc.costo_unitario,
+                'numero': doc.get('referencia') or doc.get('uuid'), 'fecha': fecha,
+                'subtotal': total,
                 'impuestos': Decimal('0.00'),
-                'total': doc.cantidad * doc.costo_unitario,
+                'total': total,
                 'tercero_nit': 'N/A',
-                'tercero_nombre': doc.producto.nombre,
+                'tercero_nombre': doc.get('item_nombre') or doc.get('modulo_origen') or 'Movimiento de inventario',
             }
         else:
             ctx = {
@@ -922,9 +953,11 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
         elif app_label == 'empleados':
             tipo_tx = 'NOMINA_LIQUIDACION'
         elif app_label == 'inventario':
-            # Determinar si es entrada o salida para sugerir cuenta
-            es_entrada = getattr(doc, 'tipo', '').startswith('ENTRADA')
-            tipo_tx = 'COMPRA_INVENTARIO' if es_entrada else 'SALIDA_INVENTARIO_VENTA'
+            if modelo == 'HistorialServicio':
+                tipo_tx = 'VENTA_FACTURA'
+            else:
+                tipo_accion = str(doc.get('tipo_accion', ''))
+                tipo_tx = 'COMPRA_INVENTARIO' if tipo_accion.startswith('ENTRADA') else 'SALIDA_INVENTARIO_VENTA'
         else:
             tipo_tx = 'COMPRA_GASTO'
 
@@ -951,9 +984,6 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
 
     @action(detail=False, methods=['post'], url_path='contabilizar-manual')
     def contabilizar_manual(self, request):
-        from decimal import Decimal as D
-        from apps.tenant.contabilidad.integracion.dtos import LineaManual, ComprobanteManualDTO
-
         serializer = ContabilizarManualInputSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -975,8 +1005,8 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 lineas=[
                     LineaManual(
                         cuenta_codigo=l['cuenta_codigo'],
-                        debe=D(str(l.get('debe', 0))),
-                        haber=D(str(l.get('haber', 0))),
+                        debe=Decimal(str(l.get('debe', 0))),
+                        haber=Decimal(str(l.get('haber', 0))),
                         descripcion=l.get('descripcion', ''),
                         tercero_nit=l.get('tercero_nit', ''),
                         tercero_razon_social=l.get('tercero_razon_social', ''),
@@ -1117,8 +1147,6 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
                 'reteiva_porcentaje': Decimal,
             }
         """
-        from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
-
         nit = request.query_params.get('nit')
         tipo_tercero = request.query_params.get('tipo_tercero', 'CLIENTE')
         naturaleza = request.query_params.get('naturaleza', 'VENTA')
@@ -1168,8 +1196,6 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
                 ...
             ]
         """
-        from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
-
         app = request.query_params.get('app')
         modelo = request.query_params.get('modelo')
         doc_id = request.query_params.get('id')
@@ -1210,9 +1236,6 @@ class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.View
     permission_classes = [IsTenantMember]
 
     def list(self, request, *args, **kwargs):
-        from datetime import date as date_type
-        import calendar
-
         empresa_id = self.get_empresa_id()
         periodo_param = request.query_params.get('periodo', '').strip()
         fecha_inicio_str = request.query_params.get('fecha_inicio', '').strip()
@@ -1223,8 +1246,8 @@ class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.View
         if periodo_param:
             try:
                 año, mes = map(int, periodo_param.split('-'))
-                fecha_inicio = date_type(año, mes, 1)
-                fecha_fin = date_type(año, mes, calendar.monthrange(año, mes)[1])
+                fecha_inicio = date(año, mes, 1)
+                fecha_fin = date(año, mes, calendar.monthrange(año, mes)[1])
             except (ValueError, IndexError):
                 return Response(
                     {'detail': 'Formato de periodo invalido. Use YYYY-MM.'},
@@ -1232,16 +1255,16 @@ class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.View
                 )
         elif fecha_inicio_str and fecha_fin_str:
             try:
-                fecha_inicio = date_type.fromisoformat(fecha_inicio_str)
-                fecha_fin = date_type.fromisoformat(fecha_fin_str)
+                fecha_inicio = date.fromisoformat(fecha_inicio_str)
+                fecha_fin = date.fromisoformat(fecha_fin_str)
             except ValueError:
                 return Response(
                     {'detail': 'Formato de fecha invalido. Use YYYY-MM-DD.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         else:
-            hoy = date_type.today()
-            fecha_inicio = date_type(hoy.year, hoy.month, 1)
+            hoy = date.today()
+            fecha_inicio = date(hoy.year, hoy.month, 1)
             fecha_fin = hoy
 
         resultado = get_libro_diario_periodo(empresa_id, fecha_inicio, fecha_fin)

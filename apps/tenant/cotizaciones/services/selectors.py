@@ -8,12 +8,18 @@ from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacio
 from apps.tenant.cotizaciones.models import Cotizacion
 
 LIST_FIELDS = (
-    "id", "uuid", "numero_cotizacion", "estado", "fecha_emision", 
-    "fecha_vencimiento", "total_con_impuestos", "empresa_id", "created_at",
+    "id", "uuid", "numero_cotizacion", "codigo_unico", "tipo_cotizacion",
+    "estado", "fecha_emision", "fecha_vencimiento",
+    "total_con_impuestos", "empresa_id", "created_at",
+    "sede_id",  # DT-SEDE-04: KPI por sede
 )
 
 LIST_FK_FIELDS = (
     "cliente__razon_social", "cliente__nombre_comercial",
+)
+
+_SEDE_LIST_TRAVERSALS = (
+    "sede__nombre",
 )
 
 DETAIL_FIELDS = (
@@ -23,11 +29,16 @@ DETAIL_FIELDS = (
     "total_con_impuestos", "empresa_id", "created_at", "updated_at",
     "dias_totales", "dias_infraestructura", "dias_instalacion", "dias_configuracion", "dias_pruebas",
     "cliente_id", "configuracion_id",
+    "sede_id",  # DT-SEDE-04
 )
 
 DETAIL_FK_FIELDS = (
-    "cliente__razon_social", "cliente__nombre_comercial", 
+    "cliente__razon_social", "cliente__nombre_comercial",
     "cliente__numero_documento", "cliente__uuid", "configuracion__id", "configuracion__uuid",
+)
+
+_SEDE_DETAIL_TRAVERSALS = (
+    "sede__nombre", "sede__uuid",
 )
 
 class CotizacionSelector:
@@ -35,7 +46,9 @@ class CotizacionSelector:
     def get_list(empresa_id, search=None, estado=None, cliente=None):
         qs = Cotizacion.objects.filter(
             empresa_id=empresa_id
-        ).select_related('cliente').only(*LIST_FIELDS, *LIST_FK_FIELDS)
+        ).select_related(
+            'cliente', 'sede'
+        ).only(*LIST_FIELDS, *LIST_FK_FIELDS, *_SEDE_LIST_TRAVERSALS)
 
         if search:
             qs = qs.filter(
@@ -55,17 +68,19 @@ class CotizacionSelector:
         return Cotizacion.objects.filter(
             empresa_id=empresa_id
         ).select_related(
-            'cliente', 'configuracion'
+            'cliente', 'configuracion', 'sede'
         ).prefetch_related('items').only(
-            *DETAIL_FIELDS, *DETAIL_FK_FIELDS
+            *DETAIL_FIELDS, *DETAIL_FK_FIELDS, *_SEDE_DETAIL_TRAVERSALS
         )
 
     @staticmethod
     def get_detail_by_uuid(uuid, empresa_id):
         return Cotizacion.objects.filter(
             empresa_id=empresa_id, uuid=uuid
-        ).select_related('cliente', 'configuracion').prefetch_related('items').only(
-            *DETAIL_FIELDS, *DETAIL_FK_FIELDS
+        ).select_related(
+            'cliente', 'configuracion', 'sede'
+        ).prefetch_related('items').only(
+            *DETAIL_FIELDS, *DETAIL_FK_FIELDS, *_SEDE_DETAIL_TRAVERSALS
         )
 
     @staticmethod

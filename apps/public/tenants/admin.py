@@ -1,7 +1,11 @@
+import logging
+
 from django.contrib import admin
 from django.db import transaction
+from django_tenants.utils import get_public_schema_name
 
 from apps.public.tenants.forms import ClientAdminForm
+from apps.public.tenants.services.deletion_service import hard_delete_tenant
 
 from .models import Client, Domain, TenantMembership
 
@@ -106,18 +110,22 @@ class ClientAdmin(admin.ModelAdmin):
             # Obtener el usuario seleccionado desde el formulario
             admin_user = form.cleaned_data.get("admin_user")
 
-            # Si hay un usuario seleccionado, actualizar/crear la membresía
+            # Si hay un usuario seleccionado, actualizar/crear la membresía.
+            # El lookup debe ser (client, user) — la clave única del modelo.
+            # Buscar por is_primary_admin=True causaría IntegrityError si el usuario
+            # ya tiene una membresía con is_primary_admin=False.
             if admin_user:
                 TenantMembership.objects.update_or_create(
                     client=obj,
-                    is_primary_admin=True,
+                    user=admin_user,
                     defaults={
-                        "user": admin_user,
                         "rol": "ADMIN",
+                        "is_primary_admin": True,
+                        "is_active": True,
                     },
                 )
 
-                # Si había otro usuario como primary_admin, desmarcarlo
+                # Desmarcar cualquier otro primary_admin en este tenant
                 TenantMembership.objects.filter(client=obj, is_primary_admin=True).exclude(
                     user=admin_user
                 ).update(is_primary_admin=False)
@@ -173,8 +181,6 @@ class ClientAdmin(admin.ModelAdmin):
             return super().has_delete_permission(request, obj)
 
         # BLOQUEO ABSOLUTO DEL TENANT PÚBLICO
-        from django_tenants.utils import get_public_schema_name
-
         public_schema = get_public_schema_name()
         if obj.schema_name == public_schema:
             return False  # Oculta el botón de eliminar en la UI
@@ -187,51 +193,19 @@ class ClientAdmin(admin.ModelAdmin):
 
     def delete_model(self, request, obj):
         """
-        Sobrescribe delete_model para validar precondición is_active=False.
+        Sobrescribe delete_model para delegar la eliminacion al servicio hard_delete_tenant.
 
-        [WARNING] HARD DELETE CON PRECONDICIÓN:
-        - Solo permite eliminar tenants con is_active=False
-        - Usa el servicio hard_delete_tenant para eliminación segura
-        - Bloquea eliminación del tenant público (defensa en profundidad)
+        [WARNING] HARD DELETE CON PRECONDICION:
+        - La validacion de is_active=False y el bloqueo del tenant publico los realiza
+          hard_delete_tenant() como SSoT (defense in depth en el servicio).
+        - Este metodo solo actua como capa de feedback UI para el admin.
 
         Raises:
-            ValidationError: Si el tenant está activo o es público
+            ValidationError: Propagada desde hard_delete_tenant si el tenant esta activo o es publico.
         """
-        import datetime
-        import logging
-
-        from django.core.exceptions import ValidationError
-        from django_tenants.utils import get_public_schema_name
-
-        from apps.public.tenants.services.deletion_service import hard_delete_tenant
-
         logger = logging.getLogger("security.tenants")
-        public_schema = get_public_schema_name()
-
-        # BLOQUEO ABSOLUTO DEL TENANT PÚBLICO (defensa en profundidad - capa Admin)
-        if obj.schema_name == public_schema:
-            error_msg = "El esquema público no puede eliminarse bajo ningún motivo. Es el núcleo del sistema y es indeletable."
-            logger.critical(
-                f"[ALERT] ADMIN: INTENTO DE ELIMINAR TENANT PÚBLICO RECHAZADO | "
-                f"schema={public_schema} | "
-                f"user_id={request.user.id if request.user.is_authenticated else None} | "
-                f"ip={request.META.get('REMOTE_ADDR', 'unknown')} | "
-                f"time={datetime.datetime.now().isoformat()}"
-            )
-            self.message_user(request, f"[ERROR] {error_msg}", level="error")
-            raise ValidationError(error_msg)
-
-        # Precondición: is_active == False
-        if obj.is_active:
-            raise ValidationError(
-                "El tenant debe estar suspendido (is_active=False) antes de eliminarlo definitivamente. "
-                "Primero desactiva el tenant desde la interfaz o la API."
-            )
-
-        # Obtener ID del usuario que ejecuta la acción (para auditoría)
         actor_user_id = request.user.id if request.user.is_authenticated else None
 
-        # Ejecutar hard delete usando el servicio
         try:
             hard_delete_tenant(client_id=obj.id, actor_user_id=actor_user_id)
             self.message_user(
@@ -239,16 +213,9 @@ class ClientAdmin(admin.ModelAdmin):
                 f'[OK] Tenant "{obj.nombre}" eliminado permanentemente (esquema y datos).',
                 level="success",
             )
-        except ValidationError as e:
-            # Errores de validación (incluye bloqueo de tenant público)
-            self.message_user(request, f"[ERROR] Error: {str(e)}", level="error")
-            raise
         except Exception as e:
-            # Otros errores
             logger.error(f"Error en delete_model (Admin): {str(e)}", exc_info=True)
-            self.message_user(
-                request, f"[ERROR] Error al eliminar el tenant: {str(e)}", level="error"
-            )
+            self.message_user(request, f"[ERROR] {str(e)}", level="error")
             raise
 
 

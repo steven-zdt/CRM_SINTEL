@@ -7,6 +7,8 @@ WARNING: SINTEL v2.60: Sincronización Arquitectónica
 - Separación List/Detail: ListSerializer para tablas, DetailSerializer para formularios
 - Campos Explícitos: PROHIBIDO __all__, usar campos explícitos alineados con LIST_FIELDS y DETAIL_FIELDS
 """
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from rest_framework import serializers
 
@@ -39,7 +41,6 @@ class NormalizationMixin(BaseMixin):
             return empresa_id
 
         # 2. Fallback: Empresa Singleton del Tenant
-        from apps.tenant.empresa.models import Empresa
         empresa = Empresa.objects.only('id').first()
         if empresa:
             return empresa.id
@@ -100,9 +101,6 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
     Campos alineados con CATEGORIA_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
-    cuenta_inventario_label = serializers.SerializerMethodField()
-    cuenta_costo_label = serializers.SerializerMethodField()
-    cuenta_ingreso_label = serializers.SerializerMethodField()
     id = serializers.UUIDField(source='uuid', read_only=True)
     pk = serializers.IntegerField(source='id', read_only=True)
 
@@ -111,41 +109,13 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
         fields = [
             'id', 'pk', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo',
             'created_at', 'updated_at', 
-            'cuenta_inventario_uuid', 'cuenta_inventario_label',
-            'cuenta_costo_uuid', 'cuenta_costo_label',
-            'cuenta_ingreso_uuid', 'cuenta_ingreso_label'
         ]
         read_only_fields = [
-            'id', 'pk', 'created_at', 'updated_at', 'empresa',
-            'cuenta_inventario_label', 'cuenta_costo_label', 'cuenta_ingreso_label'
+            'id', 'pk', 'created_at', 'updated_at', 'empresa'
         ]
-    
-    def get_cuenta_inventario_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
-        return self.get_cuenta_label(obj.cuenta_inventario_uuid)
 
-    def get_cuenta_costo_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
-        return self.get_cuenta_label(obj.cuenta_costo_uuid)
 
-    def get_cuenta_ingreso_label(self, obj):
-        """WARNING: v3.5: Resuelve el label de la cuenta vía HTTP/Selector (Decoupled)."""
-        return self.get_cuenta_label(obj.cuenta_ingreso_uuid)
-    
-    def get_cuenta_label(self, uuid_value):
-        return None
 
-    def validate_cuenta_uuid(self, value):
-        return value
-
-    def validate_cuenta_inventario_uuid(self, value):
-        return self.validate_cuenta_uuid(value)
-
-    def validate_cuenta_costo_uuid(self, value):
-        return self.validate_cuenta_uuid(value)
-
-    def validate_cuenta_ingreso_uuid(self, value):
-        return self.validate_cuenta_uuid(value)
     
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
@@ -215,7 +185,6 @@ class ProductoListSerializer(serializers.ModelSerializer):
         WARNING: v2.60: Calcula el valor total del inventario: stock_actual * costo_promedio
         Lógica en backend (Zero Trust) - No confiar en cálculos del frontend.
         """
-        from decimal import Decimal
         stock = obj.stock_actual or Decimal('0')
         costo = obj.costo_promedio or Decimal('0')
         return float(stock * costo)
@@ -237,8 +206,6 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
-    cuenta_inventario_label = serializers.SerializerMethodField()
-    cuenta_costo_label = serializers.SerializerMethodField()
     id = serializers.UUIDField(source='uuid', read_only=True)
     pk = serializers.IntegerField(source='id', read_only=True)
     categoria = UUIDOrPKRelatedField(
@@ -255,13 +222,11 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'descripcion', 'unidad', 'imagen',
             'precio_venta', 'costo_promedio',
             'stock_actual', 'stock_minimo',
-            'cuenta_inventario_uuid', 'cuenta_inventario_label',
-            'cuenta_costo_uuid', 'cuenta_costo_label',
             'activo', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'pk', 'created_at', 'updated_at', 'empresa',
-            'stock_actual', 'costo_promedio', 'cuenta_inventario_label', 'cuenta_costo_label'
+            'stock_actual', 'costo_promedio'
         ]
 
     def validate(self, attrs):
@@ -269,19 +234,9 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         attrs = self.normalize_data(attrs)
         return attrs
 
-    def get_cuenta_inventario_label(self, obj):
-        """Label resuelto por frontend via Gateway Directo de contabilidad."""
-        return None
 
-    def get_cuenta_costo_label(self, obj):
-        """Label resuelto por frontend via Gateway Directo de contabilidad."""
-        return None
 
-    def validate_cuenta_inventario_uuid(self, value):
-        return value
 
-    def validate_cuenta_costo_uuid(self, value):
-        return value
 
     def validate_categoria(self, value):
         """
@@ -341,7 +296,6 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
     categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
-    cuenta_ingreso_label = serializers.SerializerMethodField()
     id = serializers.UUIDField(source='uuid', read_only=True)
     pk = serializers.IntegerField(source='id', read_only=True)
     categoria = UUIDOrPKRelatedField(
@@ -357,22 +311,16 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
             'descripcion', 'imagen',
             'precio_venta',
-            'cuenta_ingreso_uuid', 'cuenta_ingreso_label',
             'activo', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa', 'cuenta_ingreso_label']
+        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa']
 
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
 
-    def get_cuenta_ingreso_label(self, obj):
-        """Label resuelto por frontend via Gateway Directo de contabilidad."""
-        return None
 
-    def validate_cuenta_ingreso_uuid(self, value):
-        return value
 
     def validate_categoria(self, value):
         """
@@ -442,33 +390,18 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
             'marca', 'modelo', 'descripcion', 'imagen',
             'ubicacion', 'responsable',
             'fecha_adquisicion', 'costo_adquisicion', 'estado', 'estado_display',
-            'cuenta_activo_uuid', 'cuenta_activo_label',
-            'cuenta_depreciacion_uuid', 'cuenta_depreciacion_label',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa', 'cuenta_activo_label', 'cuenta_depreciacion_label']
-        
-    cuenta_activo_label = serializers.SerializerMethodField()
-    cuenta_depreciacion_label = serializers.SerializerMethodField()
+        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa']
 
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
 
-    def get_cuenta_activo_label(self, obj):
-        """Label resuelto por frontend via Gateway Directo de contabilidad."""
-        return None
 
-    def validate_cuenta_activo_uuid(self, value):
-        return value
 
-    def get_cuenta_depreciacion_label(self, obj):
-        """Label resuelto por frontend via Gateway Directo de contabilidad."""
-        return None
 
-    def validate_cuenta_depreciacion_uuid(self, value):
-        return value
 
     def validate_categoria(self, value):
         """
@@ -510,6 +443,9 @@ class MovimientoInventarioListSerializer(serializers.ModelSerializer):
     item_codigo = serializers.SerializerMethodField()
     item_uuid = serializers.SerializerMethodField()
 
+    # DT-SEDE-05: sede para KPIs por sede
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+
     class Meta:
         model = MovimientoInventario
         fields = [
@@ -519,7 +455,8 @@ class MovimientoInventarioListSerializer(serializers.ModelSerializer):
             'item_tipo', 'item_nombre', 'item_codigo', 'item_uuid',
             'tipo', 'tipo_display', 'cantidad', 'costo_unitario',
             'origen_referencia', 'cliente_referencia', 'observaciones',
-            'factura_uuid', 'factura_numero'
+            'factura_uuid', 'factura_numero',
+            'sede_nombre',  # DT-SEDE-05
         ]
         read_only_fields = [
             'id', 'pk', 'producto_codigo', 'producto_nombre',
@@ -573,6 +510,9 @@ class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.Model
     producto = UUIDOrPKRelatedField(queryset=Producto.objects.all(), required=False, allow_null=True)
     activo_fijo = UUIDOrPKRelatedField(queryset=ActivoFijo.objects.all(), required=False, allow_null=True)
 
+    # DT-SEDE-05: sede para KPIs por sede
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+
     class Meta:
         model = MovimientoInventario
         fields = [
@@ -581,9 +521,10 @@ class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.Model
             'tipo', 'tipo_display', 'cantidad', 'costo_unitario',
             'origen_referencia', 'cliente_referencia',
             'observaciones', 'created_at', 'updated_at',
-            'factura_uuid', 'factura_numero'
+            'factura_uuid', 'factura_numero',
+            'sede_nombre',  # DT-SEDE-05
         ]
-        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa']
+        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa', 'sede_nombre']
 
     def validate(self, attrs):
         """WARNING: v3.8.0: Validar exactly-one de producto/activo_fijo.
@@ -641,6 +582,8 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
     id = serializers.UUIDField(source='uuid', read_only=True)
     pk = serializers.IntegerField(source='id', read_only=True)
     servicio = UUIDOrPKRelatedField(queryset=Servicio.objects.all())
+    proyecto_uuid = serializers.UUIDField(read_only=True, allow_null=True)
+    proyecto_nombre = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta:
         model = HistorialServicio
@@ -648,9 +591,10 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
             'id', 'pk', 'servicio', 'servicio_nombre',
             'fecha_registro', 'cantidad', 'valor_cobrado',
             'origen_referencia', 'cliente_referencia',
-            'observaciones', 'created_at', 'updated_at'
+            'observaciones', 'created_at', 'updated_at',
+            'proyecto_uuid', 'proyecto_nombre'
         ]
-        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa']
+        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa', 'proyecto_uuid', 'proyecto_nombre']
     
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
@@ -723,6 +667,8 @@ class MovimientoUnificadoListSerializer(serializers.Serializer):
     Proyecta DTOs unificados de MovimientoInventario + HistorialServicio.
     """
     uuid = serializers.CharField(read_only=True)
+    documento_id = serializers.IntegerField(read_only=True)
+    modelo_origen = serializers.CharField(read_only=True)
     fecha = serializers.CharField(read_only=True)
     modulo_origen = serializers.ChoiceField(
         choices=['PRODUCTO', 'ACTIVO_FIJO', 'SERVICIO'],
@@ -737,6 +683,8 @@ class MovimientoUnificadoListSerializer(serializers.Serializer):
     valor_costo = serializers.CharField(read_only=True)
     referencia = serializers.CharField(read_only=True)
     observaciones = serializers.CharField(read_only=True)
+    proyecto_uuid = serializers.CharField(read_only=True, default='')
+    proyecto_nombre = serializers.CharField(read_only=True, default='')
 
 
 # ==============================================================================

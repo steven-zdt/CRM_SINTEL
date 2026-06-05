@@ -6,7 +6,8 @@ Referencia: https://www.django-rest-framework.org/api-guide/serializers/
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from apps.tenant.perfil.models import TenantProfile, RolTenant
+from apps.tenant.perfil.api.permissions import get_available_actions, get_permissions_context
+from apps.tenant.perfil.models import TenantProfile, RolTenant, Departamento
 
 User = get_user_model()
 
@@ -51,6 +52,30 @@ class TenantProfileSerializer(serializers.ModelSerializer):
     # Contexto de permisos UI: habilita/deshabilita modulos de configuracion en frontend
     permissions_context = serializers.SerializerMethodField()
 
+    # Departamento UUID / Nombre integration
+    departamento_uuid = serializers.SlugRelatedField(
+        queryset=Departamento.objects.all(),
+        slug_field='uuid',
+        source='departamento',
+        required=False,
+        allow_null=True
+    )
+    departamento_nombre = serializers.CharField(source='departamento.nombre', read_only=True)
+
+    # Sedes and Areas integration via UUID lists and details
+    sedes_uuids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        write_only=True
+    )
+    areas_uuids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        write_only=True
+    )
+    sedes_detalles = serializers.SerializerMethodField(read_only=True)
+    areas_detalles = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = TenantProfile
         fields = [
@@ -63,11 +88,17 @@ class TenantProfileSerializer(serializers.ModelSerializer):
             'user_full_name',
             'cargo',
             'departamento',
+            'departamento_uuid',
+            'departamento_nombre',
             'telefono_corporativo',
             'avatar',
             'avatar_url',
             'configuracion',
             'rol',
+            'sedes_uuids',
+            'areas_uuids',
+            'sedes_detalles',
+            'areas_detalles',
             'available_actions',
             'permissions_context',
             'created_at',
@@ -76,6 +107,7 @@ class TenantProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'user_id', 'user_email', 'user_username',
                           'user_first_name', 'user_last_name', 'user_full_name',
                           'avatar_url', 'available_actions', 'permissions_context',
+                          'departamento_nombre', 'sedes_detalles', 'areas_detalles',
                           'created_at', 'updated_at',
                           'rol']  # [RULE 15] rol solo modificable via assign_rol endpoint
         extra_kwargs = {
@@ -88,6 +120,29 @@ class TenantProfileSerializer(serializers.ModelSerializer):
                 'allow_null': True,
             }
         }
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['sedes_uuids'] = [str(s.uuid) for s in instance.sedes_asignadas.all()]
+        ret['areas_uuids'] = [str(a.uuid) for a in instance.areas_asignadas.all()]
+        return ret
+
+    def get_sedes_detalles(self, obj):
+        return [
+            {"uuid": str(s.uuid), "nombre": s.nombre}
+            for s in obj.sedes_asignadas.all()
+        ]
+
+    def get_areas_detalles(self, obj):
+        return [
+            {
+                "uuid": str(a.uuid),
+                "nombre": a.nombre,
+                "sede_uuid": str(a.sede.uuid) if a.sede else None,
+                "sede_nombre": a.sede.nombre if a.sede else None
+            }
+            for a in obj.areas_asignadas.all()
+        ]
     
     def get_user_full_name(self, obj):
         """
@@ -122,7 +177,6 @@ class TenantProfileSerializer(serializers.ModelSerializer):
         requester_perfil = getattr(request.user, 'tenant_profile', None)
         if not requester_perfil:
             return []
-        from apps.tenant.perfil.api.permissions import get_available_actions
         return get_available_actions(requester_perfil)
 
     def get_permissions_context(self, obj):
@@ -138,7 +192,6 @@ class TenantProfileSerializer(serializers.ModelSerializer):
         requester_perfil = getattr(request.user, 'tenant_profile', None)
         if not requester_perfil:
             return {}
-        from apps.tenant.perfil.api.permissions import get_permissions_context
         return get_permissions_context(requester_perfil, user=request.user)
 
     def validate_configuracion(self, value):
@@ -167,14 +220,22 @@ class TenantProfileMeUpdateSerializer(serializers.ModelSerializer):
     Serializer para actualización parcial del perfil (endpoint /me/).
     
     WARNING: v2.30: Serializer específico para PATCH /api/v1/perfil/perfiles/me/
-    - Solo incluye campos editables: cargo, departamento, telefono_corporativo, configuracion
+    - Solo incluye campos editables: cargo, departamento, departamento_uuid, telefono_corporativo, configuracion
     - Todos los campos son opcionales (partial=True)
     - Valida que configuracion sea dict
     - Normaliza strings vacíos a None para campos opcionales
     """
+    departamento_uuid = serializers.SlugRelatedField(
+        queryset=Departamento.objects.all(),
+        slug_field='uuid',
+        source='departamento',
+        required=False,
+        allow_null=True
+    )
+
     class Meta:
         model = TenantProfile
-        fields = ['cargo', 'departamento', 'telefono_corporativo', 'configuracion']
+        fields = ['cargo', 'departamento', 'departamento_uuid', 'telefono_corporativo', 'configuracion']
         extra_kwargs = {
             'cargo': {
                 'required': False,
@@ -236,3 +297,45 @@ class TenantProfileRolSerializer(serializers.Serializer):
         choices=RolTenant.choices,
         help_text="Rol a asignar: 'ADMIN', 'OPERADOR' o 'VISOR'.",
     )
+
+
+class DepartamentoListSerializer(serializers.ModelSerializer):
+    """
+    Serializer para listado de Departamento.
+    """
+    class Meta:
+        model = Departamento
+        fields = ['uuid', 'nombre', 'descripcion', 'activo', 'created_at', 'updated_at']
+        read_only_fields = ['uuid', 'created_at', 'updated_at']
+
+
+class DepartamentoDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer para detalle de Departamento.
+    """
+    class Meta:
+        model = Departamento
+        fields = ['uuid', 'nombre', 'descripcion', 'activo', 'created_at', 'updated_at']
+        read_only_fields = ['uuid', 'created_at', 'updated_at']
+
+
+class PerfilCreateSerializer(serializers.Serializer):
+    """
+    Serializer para creacion/invitacion de un nuevo colaborador (TenantProfile + User).
+    """
+    email = serializers.EmailField(required=True)
+    first_name = serializers.CharField(required=True)
+    last_name = serializers.CharField(required=True)
+    rol = serializers.ChoiceField(choices=RolTenant.choices, default=RolTenant.OPERADOR)
+    cargo = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    telefono_corporativo = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    departamento_uuid = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    sedes_uuids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False
+    )
+    areas_uuids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False
+    )
+

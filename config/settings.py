@@ -107,6 +107,7 @@ TENANT_APPS = [
     "apps.tenant.landing",      # Landing page para tenants (accesible anónimamente)
     "apps.tenant.dashboard",    # Dashboard con control de roles
     "apps.tenant.perfil",       # Perfil privado del colaborador (por tenant)
+    "apps.tenant.bancos",       # Gestion de estados bancarios y conciliacion (por tenant)
 ]
 
 # ============================================================================
@@ -190,7 +191,6 @@ MIDDLEWARE = [
     'apps.public.tenants.middleware_urlconf.TenantSecurityAndURLConfMiddleware',  # OK: SEGURIDAD + URLConf: Protege ámbito público y establece request.urlconf (después de TenantMainMiddleware)
     'apps.public.tenants.middleware.TenantSecurityMiddleware',  # OK: SEGURIDAD: Bloquea tenants suspendidos (debe ir después de TenantMainMiddleware)
     'apps.public.core.middleware.CSRFTrustedOriginMiddleware',  # OK: DESARROLLO: Permite dominios arbitrarios en CSRF_TRUSTED_ORIGINS
-    'apps.public.core.middleware.HTTPSRedirectMiddleware',  # OK: DESARROLLO: Redirige HTTPS -> HTTP en DEBUG
     'django.middleware.common.CommonMiddleware',
     'apps.public.core.middleware.DebugNoCSRFMiddleware',  # OK: DESARROLLO: Desactiva CSRF en DEBUG mode
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -272,6 +272,7 @@ TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', _default_tenant_domain_base
 # En desarrollo: runserver puede usar 8000, pero los dominios son sin puerto
 # En producción: 80 (HTTP) o 443 (HTTPS) - puertos implícitos
 APP_PORT = os.getenv('APP_PORT', '8000')  # Solo para referencia, no se usa en construcción de URLs
+SITE_PROTOCOL = os.getenv('SITE_PROTOCOL', '')  # 'https' para forzar en todos los URL builders
 
 # Tenant configuration
 TENANT_MODEL = "tenants.Client"  # app_label es 'tenants' (último componente de 'apps.public.tenants')
@@ -397,7 +398,7 @@ Seguridad Host Header (prod) y soporte HTTPS detrás de proxy.
 # WARNING: SEGURIDAD: En producción, usar lista explícita desde ENV (NO usar '*')
 # WARNING: v2.60: Siempre incluir sintel.com y dominios públicos para permitir acceso desde ambos dominios
 base_allowed_hosts = (
-    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,sintel.com,186.117.247.166,186.117.247.167").split(",")
+    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,192.168.2.15,sintel.com,186.117.247.166,186.117.247.167").split(",")
     if DEBUG
     else os.getenv("ALLOWED_HOSTS", "sintel.com,.sintel.com,186.117.247.166,186.117.247.167").split(",")
 )
@@ -422,6 +423,7 @@ if DEBUG:
         "sintel.com.co",
         "testserver",
         "test.sintel.local",  # Soporte para tests
+        "192.168.2.15",  # IP local del servidor (acceso desde red interna)
     ]
     for host in _dev_hosts:
         if host not in ALLOWED_HOSTS:
@@ -445,10 +447,11 @@ if DEBUG:
         r"^http://.*\.sintel\.com(:\d+)?$",  # Cualquier subdominio de sintel.com en HTTP (con puerto opcional)
         r"^http://sintel\.com(:\d+)?$",  # Dominio sintel.com en HTTP (con puerto opcional)
     ])
-    # También permitir localhost en desarrollo
+    # También permitir localhost e IP local en desarrollo
     CORS_ALLOWED_ORIGIN_REGEXES.extend([
         r"^http://localhost(:\d+)?$",
         r"^http://127\.0\.0\.1(:\d+)?$",
+        r"^https?://192\.168\.2\.15(:\d+)?$",  # IP local del servidor
     ])
 
 # WARNING: IMPORTANTE: Permitir credenciales (cookies) en CORS para autenticación por sesión
@@ -462,7 +465,7 @@ CORS_ALLOW_CREDENTIALS = True
 # CSRF: orígenes de confianza (con esquema). Separar por comas en ENV.
 _csrf_origins = os.getenv(
     "CSRF_TRUSTED_ORIGINS",
-    "http://localhost,http://127.0.0.1,https://sintel.com,https://.sintel.com",
+    "http://localhost,http://127.0.0.1,http://192.168.2.15,https://192.168.2.15,https://sintel.com,https://.sintel.com,https://186.117.247.166,https://186.117.247.167",
 ).split(",")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins if o.strip()]
 
@@ -476,7 +479,10 @@ if DEBUG:
         f"http://{TENANT_DOMAIN_BASE}",
         "http://sintel.com",  # Dominio de producción (también disponible en desarrollo)
         "http://sintel.com:8000",  # Dominio con puerto 8000 para desarrollo
-        "http://home.sintel.com:8000",  # Host del tenant para desarrollo
+        "http://*.sintel.com:8000",  # Todos los subdominios tenant en desarrollo
+        "http://192.168.2.15",  # IP local del servidor
+        "https://192.168.2.15",
+        "http://192.168.2.15:8000",
     ]
     for origin in _dev_csrf_origins:
         if origin not in CSRF_TRUSTED_ORIGINS:
@@ -484,8 +490,10 @@ if DEBUG:
 else:
     # En producción, agregar orígenes HTTPS explícitos si no están en ENV
     _prod_csrf_origins = [
-        "https://sintel.com",  # Dominio público principal
-        "https://.sintel.com.co",  # Subdominios de sintel.com
+        "https://sintel.com",         # Dominio público principal
+        "https://.sintel.com.co",     # Subdominios de sintel.com
+        "https://186.117.247.166",    # IP pública del servidor (acceso directo por IP)
+        "https://186.117.247.167",    # IP pública del servidor (acceso directo por IP)
     ]
     for origin in _prod_csrf_origins:
         if origin not in CSRF_TRUSTED_ORIGINS:
@@ -705,26 +713,8 @@ if JWT_SECRET_KEY_ENV:
             )
         jwt_signing_key = JWT_SECRET_KEY_ENV
 else:
-    # En desarrollo, generar una clave fuerte automáticamente si no está configurada
-    # WARNING: ADVERTENCIA: En producción, SIEMPRE usar JWT_SECRET_KEY desde variable de entorno
-    if DEBUG:
-        # Generar clave de 32 bytes (256 bits) en base64
-        jwt_signing_key = base64.b64encode(secrets.token_bytes(32)).decode()
-        import warnings
-        warnings.warn(
-            "WARNING: JWT_SECRET_KEY no configurada. Generada automáticamente para desarrollo. "
-            "En producción, configura JWT_SECRET_KEY en variables de entorno.",
-            UserWarning
-        )
-    else:
-        # En producción, usar SECRET_KEY como fallback (con advertencia)
-        jwt_signing_key = SECRET_KEY
-        import warnings
-        warnings.warn(
-            "WARNING: JWT_SECRET_KEY no configurada en producción. Usando SECRET_KEY como fallback. "
-            "Se recomienda configurar JWT_SECRET_KEY separada para mayor seguridad.",
-            UserWarning
-        )
+    # Fallback: usar SECRET_KEY si JWT_SECRET_KEY no esta configurada
+    jwt_signing_key = SECRET_KEY
 
 SIMPLE_JWT = {
     # Duración de los tokens
@@ -848,17 +838,15 @@ CELERY_TASK_DEFAULT_QUEUE = 'default'
 # Rutas explícitas de tareas a colas
 # IMPORTANTE: El orden importa. Las tareas críticas van a high_priority
 CELERY_TASK_ROUTES = {
-    # Tarea crítica de onboarding: cola de alta prioridad
-    'apps.public.tenants.tasks.onboard_tenant_task': {'queue': 'high_priority'},
-    
-    # Ingesta de facturas desde correo: cola de alta prioridad (crítica)
+    # Onboarding de tenants: cola de alta prioridad
+    'apps.public.tenants.tasks.onboard_tenant_task':              {'queue': 'high_priority'},
+    'apps.public.tenants.tasks.send_activation_email_task':       {'queue': 'high_priority'},
+    'apps.public.tenants.tasks.provision_tenant_certificates_task': {'queue': 'high_priority'},
+
+    # Ingesta de facturas desde correo: cola de alta prioridad (critica)
     'apps.services.maildigester.tasks.fetch_and_process_billing_mail': {'queue': 'high_priority'},
-    'apps.services.maildigester.tasks.fetch_and_process_billing_mail': {'queue': 'high_priority'},
-    
-    # Otras tareas pueden ir a sus colas específicas
-    # 'apps.public.impuestos.tasks.*': {'queue': 'default'},
-    
-    # Todas las demás tareas van a default
+
+    # Todas las demas tareas van a default
     '*': {'queue': 'default'},
 }
 

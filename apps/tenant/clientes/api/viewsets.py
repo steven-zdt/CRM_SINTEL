@@ -17,16 +17,20 @@ from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
 from apps.tenant.api.utils import render_template_safe, resolve_tenant_empresa
-from apps.tenant.clientes.services.api_mixins import ClienteServiceMixin, ContactoClienteServiceMixin
+from apps.tenant.clientes.services.api_mixins import ClienteServiceMixin, ContactoClienteServiceMixin, CarteraServiceMixin
 from apps.tenant.clientes.api.serializers import (
     ClienteDetailSerializer,
     ClienteListSerializer,
     ContactoClienteSerializer,
+    CarteraListSerializer,
+    CarteraDetailSerializer,
+    CarteraAbonoSerializer,
+    FacturaCxCListSerializer,
 )
-from apps.tenant.clientes.models import Cliente, ContactoCliente
-from apps.tenant.clientes.services.selectors import ClienteSelector, ContactoSelector
-from apps.tenant.clientes.services.crud_service import ClienteCRUDService, ContactoCRUDService
-from apps.tenant.clientes.services.business_service import ClienteBusinessService
+from apps.tenant.clientes.models import Cliente, ContactoCliente, Cartera
+from apps.tenant.clientes.services.selectors import ClienteSelector, ContactoSelector, CarteraSelector
+from apps.tenant.clientes.services.crud_service import ClienteCRUDService, ContactoCRUDService, CarteraCRUDService
+from apps.tenant.clientes.services.business_service import ClienteBusinessService, CarteraBusinessService
 from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
@@ -45,7 +49,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenantViewSet):
+class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, CarteraServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Clientes con soporte Tabulator y HTMX Offcanvas.
     
@@ -133,22 +137,56 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
     def list(self, request):
         """
         Endpoint para Tabulator (GET /api/v1/clientes/).
+        Soporta filtros servidor: tipo_persona, es_retenedor, activo, search.
         """
         empresa = self.get_empresa()
         if not empresa:
             return Response({'count': 0, 'results': []})
-            
-        search = request.query_params.get('search', '').strip()
-        queryset = self.cliente_selector.get_cliente_list(empresa.id, search if search else None)
+
+        search = request.query_params.get('search', '').strip() or None
+
+        filters = {}
+        tipo_persona = request.query_params.get('tipo_persona', '').strip()
+        if tipo_persona:
+            filters['tipo_persona'] = tipo_persona
+
+        es_retenedor_raw = request.query_params.get('es_retenedor', '').strip().lower()
+        if es_retenedor_raw in ('true', '1'):
+            filters['es_retenedor'] = True
+
+        activo_raw = request.query_params.get('activo', '').strip().lower()
+        if activo_raw == 'true':
+            filters['activo'] = True
+        elif activo_raw == 'false':
+            filters['activo'] = False
+
+        queryset = self.cliente_selector.get_cliente_list(empresa.id, search, filters or None)
 
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request)
+        rows = page if page is not None else list(queryset)
+
+        # Cartera: una query agrupada para todos los clientes de la pagina
+        uuids = [c.uuid for c in rows if c.uuid]
+        cartera_map = self.cliente_selector.get_cartera_resumen(empresa.id, uuids)
+
+        ctx = self.get_serializer_context()
+        ctx['cartera_map'] = cartera_map
+
+        serializer = ClienteListSerializer(rows, many=True, context=ctx)
         if page is not None:
-            serializer = ClienteListSerializer(page, many=True)
             return paginator.get_paginated_response(serializer.data)
-        
-        serializer = ClienteListSerializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='kpis')
+    def kpis(self, request):
+        """GET /api/v1/clientes/kpis/ — Agregados para los KPI cards (una sola query)."""
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({'total': 0, 'activos': 0, 'inactivos': 0,
+                             'juridicas': 0, 'naturales': 0, 'retenedores': 0})
+        data = self.cliente_selector.get_kpis(empresa.id)
+        return Response(data)
     
     def get_serializer_context(self):
         """
@@ -380,8 +418,6 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, BaseTenan
             )
         # PERFORMANCE BIBLE: Cargar contactos con .only()
         contactos = self.contacto_selector.get_contacto_list(empresa_id=cliente.empresa_id, cliente_id=cliente.id)
-        # cuenta_contable_uuid se pasa como opaco al template.
-        # El nombre se resuelve en frontend via JS (GET /api/v1/contabilidad/cuentas-contables/?uuid=)
 
         context = {
             'cliente': cliente,
@@ -645,8 +681,6 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
         Endpoint HTMX RESTful para cargar offcanvas de detalle (read-only).
         GET /api/v1/clientes/contactos/{uuid}/render-offcanvas/detalle/
         """
-        from rest_framework.exceptions import NotFound
-        
         try:
             contacto = self.get_object()
         except Exception:
@@ -659,5 +693,310 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
         return render_template_safe(
             context,
             'tenant/contactos/offcanvas_detalle_contacto_cliente.html',
+            request=request
+        )
+
+
+
+class CarteraViewSet(CarteraServiceMixin, BaseTenantViewSet):
+    """
+    ViewSet for accounts receivable (Cartera) management.
+    """
+    lookup_field = 'uuid'
+    lookup_url_kwarg = 'uuid'
+    queryset = Cartera.objects.none()
+    serializer_class = CarteraListSerializer
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['numero_factura', 'cliente__razon_social']
+    ordering_fields = ['fecha_vencimiento', 'created_at']
+
+    def get_object(self):
+        """DSV for Cartera."""
+        uuid_val = self.kwargs.get(self.lookup_url_kwarg)
+        empresa = self.get_empresa()
+        if not empresa:
+            raise NotFound("Empresa no detectada en el contexto del tenant.")
+            
+        obj = Cartera.objects.filter(uuid=uuid_val, empresa_id=empresa.id).select_related('cliente').first()
+        if not obj:
+            logger.warning(f"[cartera:DSV] IDOR Intent or Missing Record: UUID {uuid_val} for Empresa {empresa.id}")
+            raise NotFound("Obligacion de cartera no encontrada.")
+        return obj
+
+    def get_queryset(self):
+        empresa = self.get_empresa()
+        if not empresa:
+            return Cartera.objects.none()
+        return Cartera.objects.filter(empresa_id=empresa.id).select_related('cliente').only(
+            'id',
+            'uuid',
+            'cliente__id',
+            'cliente__uuid',
+            'cliente__razon_social',
+            'cliente__numero_documento',
+            'numero_factura',
+            'factura_uuid',
+            'fecha_emision',
+            'fecha_vencimiento',
+            'valor_total',
+            'valor_pagado',
+            'estado_pago',
+            'observaciones',
+        )
+
+    def get_empresa(self):
+        return resolve_tenant_empresa(self.request, self)
+
+    def list(self, request, *args, **kwargs):
+        """
+        GET /api/v1/clientes/cartera/ — Lista facturas de VENTA (fuente de verdad).
+        Patron Pull Model: lee de Factura.naturaleza='VENTA' (AGENTS.md §18).
+        """
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({'count': 0, 'results': []})
+
+        cliente_uuid = request.query_params.get('cliente_uuid') or request.query_params.get('cliente_id')
+        estado_pago  = request.query_params.get('estado_pago')
+        search       = request.query_params.get('search', '').strip() or None
+
+        qs = CarteraSelector.qs_list_facturas_venta(
+            empresa_id=empresa.id,
+            cliente_uuid=cliente_uuid,
+            estado_pago=estado_pago,
+            search=search,
+        )
+
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(qs, request)
+        rows = page if page is not None else list(qs)
+
+        serializer = FacturaCxCListSerializer(rows, many=True)
+        if page is not None:
+            return paginator.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='kpis')
+    def kpis(self, request):
+        """GET /api/v1/clientes/cartera/kpis/ — KPIs sobre Facturas VENTA."""
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({'pendiente_monto': '0', 'pendiente_count': 0, 'pagado_monto': '0', 'total_count': 0})
+        data = CarteraSelector.get_cartera_kpis_facturas_venta(empresa.id)
+        return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='registrar-abono')
+    def registrar_abono(self, request, uuid=None):
+        """
+        POST /api/v1/clientes/cartera/{uuid}/registrar-abono/
+        """
+        cartera = self.get_object()
+        from apps.tenant.clientes.api.serializers import CarteraAbonoSerializer
+        serializer = CarteraAbonoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        monto = serializer.validated_data['monto']
+        try:
+            cartera, abono_aplicado = self.cartera_service.registrar_abono(
+                empresa_id=cartera.empresa_id,
+                cartera_uuid=cartera.uuid,
+                monto=monto
+            )
+            return Response({
+                "detail": f"Abono de {abono_aplicado} registrado exitosamente.",
+                "saldo": str(cartera.saldo),
+                "estado_pago": cartera.estado_pago,
+                "valor_pagado": str(cartera.valor_pagado)
+            }, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+
+    def get_serializer_class(self):
+        if self.action in ('create', 'update', 'partial_update'):
+            return CarteraDetailSerializer
+        return CarteraListSerializer
+
+    def create(self, request, *args, **kwargs):
+        """
+        POST /api/v1/clientes/cartera/ — Registra nueva obligación de cuentas por cobrar.
+        DSV: valida que el cliente pertenezca a la empresa del tenant.
+        """
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({'detail': 'Empresa no configurada.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = CarteraDetailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # DSV: verificar que el cliente pertenece a esta empresa
+        cliente_id = serializer.validated_data.get('cliente')
+        if hasattr(cliente_id, 'pk'):
+            cliente_id = cliente_id.pk
+        cliente_obj = Cliente.objects.filter(id=cliente_id, empresa_id=empresa.id).only('id', 'uuid', 'empresa_id').first()
+        if not cliente_obj:
+            raise NotFound("Cliente no encontrado en esta empresa.")
+
+        try:
+            cartera, created = self.cartera_service.registrar_cartera(
+                empresa_id=empresa.id,
+                data={**serializer.validated_data, 'empresa_id': empresa.id},
+            )
+            out_serializer = CarteraDetailSerializer(cartera)
+            http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+            return Response(out_serializer.data, status=http_status)
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+
+    def partial_update(self, request, uuid=None, *args, **kwargs):
+        """
+        PATCH /api/v1/clientes/cartera/{uuid}/ — Edita campos permitidos.
+        Solo se permiten: fecha_vencimiento, observaciones, numero_factura.
+        DSV: cartera debe pertenecer a la empresa del tenant.
+        """
+        cartera = self.get_object()
+        ALLOWED = {'fecha_vencimiento', 'observaciones', 'numero_factura', 'factura_uuid'}
+        data = {k: v for k, v in request.data.items() if k in ALLOWED}
+        if not data:
+            return Response({'detail': f'Solo se permiten editar: {", ".join(sorted(ALLOWED))}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = CarteraDetailSerializer(cartera, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated = self.cartera_crud.update_cartera(cartera, serializer.validated_data)
+        return Response(CarteraDetailSerializer(updated).data)
+
+    def destroy(self, request, uuid=None, *args, **kwargs):
+        """
+        DELETE /api/v1/clientes/cartera/{uuid}/ — Elimina obligación.
+        Solo permitido si estado_pago == SIN_PAGO (sin abonos aplicados).
+        DSV: cartera debe pertenecer a la empresa del tenant.
+        """
+        cartera = self.get_object()
+        if cartera.estado_pago != 'SIN_PAGO':
+            return Response(
+                {'detail': 'Solo se puede eliminar una obligación con estado SIN_PAGO (sin abonos registrados).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            self.cartera_crud.delete_cartera(cartera)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'],
+            renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
+            url_path='render-offcanvas/crear')
+    def render_offcanvas_crear(self, request):
+        """GET /api/v1/clientes/cartera/render-offcanvas/crear/?cliente_uuid=<uuid>"""
+        empresa = self.get_empresa()
+        cliente_uuid = request.query_params.get('cliente_uuid')
+        cliente = None
+        if cliente_uuid:
+            cliente = Cliente.objects.filter(uuid=cliente_uuid, empresa_id=empresa.id if empresa else None).only(
+                'id', 'uuid', 'razon_social', 'numero_documento'
+            ).first()
+        return render_template_safe(
+            {'empresa': empresa, 'cliente': cliente, 'modo': 'crear'},
+            'tenant/clientes/offcanvas_crear_cartera.html',
+            request=request,
+        )
+
+    @action(detail=False, methods=['get'],
+            renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
+            url_path='render-offcanvas/abono-factura')
+    def render_offcanvas_abono_factura(self, request):
+        """
+        GET /api/v1/clientes/cartera/render-offcanvas/abono-factura/?factura_uuid=<uuid>
+
+        Encuentra o crea un registro Cartera vinculado a la Factura de Venta
+        y devuelve el offcanvas de abono. Si el cliente no esta vinculado,
+        devuelve el offcanvas de creacion de Cartera con datos pre-rellenados.
+        """
+        from decimal import Decimal
+        from django.utils import timezone as tz
+        from apps.tenant.facturas.models import Factura
+
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({'error': 'empresa_not_found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        factura_uuid = request.query_params.get('factura_uuid')
+        if not factura_uuid:
+            return Response({'error': 'factura_uuid requerido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        factura = Factura.objects.filter(
+            uuid=factura_uuid, empresa_id=empresa.id, naturaleza='VENTA'
+        ).only(
+            'id', 'uuid', 'numero', 'total', 'receptor_razon_social',
+            'payment_due_date', 'fecha_emision', 'cliente_uuid', 'estado_pago'
+        ).first()
+
+        if not factura:
+            return Response({'error': 'Factura de venta no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. Buscar Cartera existente por referencia blanda factura_uuid
+        cartera = (
+            Cartera.objects.filter(empresa_id=empresa.id, factura_uuid=factura.uuid)
+            .select_related('cliente')
+            .first()
+        )
+
+        if not cartera and factura.cliente_uuid:
+            # 2. Resolver cliente via UUID blando
+            cliente = Cliente.objects.filter(
+                uuid=factura.cliente_uuid, empresa_id=empresa.id
+            ).only('id', 'uuid', 'empresa_id', 'razon_social', 'numero_documento').first()
+
+            if cliente:
+                hoy = tz.now().date()
+                cartera = Cartera.objects.create(
+                    empresa_id=empresa.id,
+                    cliente=cliente,
+                    numero_factura=factura.numero[:50],
+                    factura_uuid=factura.uuid,
+                    fecha_emision=(factura.fecha_emision.date() if factura.fecha_emision else hoy),
+                    fecha_vencimiento=(factura.payment_due_date or hoy),
+                    valor_total=(factura.total or Decimal('0')),
+                )
+
+        if not cartera:
+            # 3. Sin cliente vinculado: mostrar crear-cartera pre-rellenado
+            context = {
+                'empresa': empresa,
+                'cliente': None,
+                'modo': 'crear',
+                'factura_prefill': {
+                    'numero':       factura.numero[:50],
+                    'uuid':         str(factura.uuid),
+                    'total':        str(factura.total),
+                    'fecha_emision':  str(factura.fecha_emision.date()) if factura.fecha_emision else '',
+                    'fecha_vencimiento': str(factura.payment_due_date) if factura.payment_due_date else '',
+                },
+            }
+            return render_template_safe(context, 'tenant/clientes/offcanvas_crear_cartera.html', request=request)
+
+        context = {'cartera': cartera, 'cliente': cartera.cliente, 'empresa': cartera.empresa}
+        return render_template_safe(context, 'tenant/clientes/offcanvas_abono_cartera.html', request=request)
+
+    @action(
+        detail=True,
+        methods=['get'],
+        renderer_classes=[TemplateHTMLRenderer, JSONRenderer],
+        url_path='render-offcanvas/abono'
+    )
+    def render_offcanvas_abono(self, request, uuid=None):
+        """
+        GET /api/v1/clientes/cartera/{uuid}/render-offcanvas/abono/
+        """
+        cartera = self.get_object()
+        context = {
+            'cartera': cartera,
+            'cliente': cartera.cliente,
+            'empresa': cartera.empresa
+        }
+        return render_template_safe(
+            context,
+            'tenant/clientes/offcanvas_abono_cartera.html',
             request=request
         )

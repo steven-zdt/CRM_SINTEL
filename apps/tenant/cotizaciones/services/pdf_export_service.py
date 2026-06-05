@@ -12,6 +12,7 @@ except ImportError:
     pisa = None
 
 from ..models import Cotizacion, CotizacionItem
+from .item_service import CotizacionItemSelector
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,6 @@ class CotizacionPDFExportService:
 
     @staticmethod
     def preparar_contexto(cotizacion, empresa, request=None):
-        from .item_service import CotizacionItemSelector
-
         items_qs = CotizacionItemSelector.get_list(cotizacion.id, empresa.id)
 
         productos = [i for i in items_qs if i.tipo_item == CotizacionItem.TipoItem.PRODUCTO]

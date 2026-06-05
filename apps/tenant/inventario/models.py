@@ -51,15 +51,6 @@ class CategoriaItem(TimeStampedModel):
     activo = models.BooleanField(default=True)
     
     # Mapeo Contable Base (Heredado por los items si no tienen uno propio)
-    cuenta_inventario_uuid = models.UUIDField(
-        null=True, blank=True, help_text="Cuenta PUC nivel 6 (Inventario/Activo)"
-    )
-    cuenta_costo_uuid = models.UUIDField(
-        null=True, blank=True, help_text="Cuenta PUC nivel 6 (Costo de Ventas/Depreciación)"
-    )
-    cuenta_ingreso_uuid = models.UUIDField(
-        null=True, blank=True, help_text="Cuenta PUC nivel 6 (Ingreso por Ventas)"
-    )
 
     class Meta:
         ordering = ["nombre"]
@@ -115,16 +106,6 @@ class ActivoFijo(TimeStampedModel):
     fecha_adquisicion = models.DateField(null=True, blank=True)
     costo_adquisicion = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.ACTIVO)
-    cuenta_activo_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
-        help_text="Cuenta PUC nivel 6 (Control Activo)"
-    )
-    cuenta_depreciacion_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
-        help_text="Cuenta PUC nivel 6 (Depreciación Acumulada/Gasto)"
-    )
 
     class Meta:
         ordering = ["nombre"]
@@ -183,16 +164,6 @@ class Producto(TimeStampedModel):
     stock_minimo = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     
     activo = models.BooleanField(default=True)
-    cuenta_inventario_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
-        help_text="Cuenta PUC nivel 6 (Activo de Inventario)"
-    )
-    cuenta_costo_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
-        help_text="Cuenta PUC nivel 6 (Costo de Ventas)"
-    )
 
     class Meta:
         ordering = ["nombre"]
@@ -242,11 +213,6 @@ class Servicio(TimeStampedModel):
     imagen = models.ImageField(upload_to='inventario/servicios/', null=True, blank=True)
     precio_venta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     activo = models.BooleanField(default=True)
-    cuenta_ingreso_uuid = models.UUIDField(
-        null=True, 
-        blank=True, 
-        help_text="Cuenta PUC nivel 6 (Ingreso)"
-    )
 
     class Meta:
         ordering = ["nombre"]
@@ -328,6 +294,19 @@ class MovimientoInventario(TimeStampedModel):
     cliente_referencia = models.CharField(max_length=200, blank=True, null=True)
     observaciones = models.TextField(blank=True, null=True)
 
+    # Sede — vinculacion para indicadores y KPIs por sede (DT-SEDE-05)
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movimientos_inventario',
+        verbose_name=_('Sede'),
+        help_text=_('Sede de la empresa donde ocurre el movimiento de inventario. '
+                    'Opcional — si no se asigna aplica a toda la empresa.'),
+        db_index=True,
+    )
+
     class Meta:
         ordering = ["-created_at"]
         verbose_name = "Movimiento Inventario"
@@ -379,6 +358,16 @@ class HistorialServicio(TimeStampedModel):
     origen_referencia = models.CharField(max_length=100, blank=True, null=True)
     cliente_referencia = models.CharField(max_length=200, blank=True, null=True)
     observaciones = models.TextField(blank=True, null=True)
+
+    # VINCULACION PROYECTO (Soft Reference - patron factura_uuid/numero)
+    proyecto_uuid = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text="UUID snapshot del proyecto vinculado (Soft Reference)."
+    )
+    proyecto_nombre = models.CharField(
+        max_length=255, null=True, blank=True,
+        help_text="Nombre snapshot del proyecto vinculado."
+    )
 
     class Meta:
         ordering = ["-fecha_registro"]

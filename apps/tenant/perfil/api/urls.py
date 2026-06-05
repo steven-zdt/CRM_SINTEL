@@ -9,10 +9,11 @@ Endpoints disponibles:
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from apps.tenant.perfil.api.viewsets import PerfilViewSet
+from apps.tenant.perfil.api.viewsets import PerfilViewSet, DepartamentoViewSet
 
 router = DefaultRouter()
 router.register(r'perfiles', PerfilViewSet, basename='perfil')
+router.register(r'departamentos', DepartamentoViewSet, basename='departamento')
 
 urlpatterns = [
     path('', include(router.urls)),

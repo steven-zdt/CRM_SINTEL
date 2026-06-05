@@ -16,10 +16,12 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 
+from apps.tenant.perfil.models import TenantProfile
+
 User = get_user_model()
 
 
-def get_or_create_profile(user: User, defaults: dict[str, Any] | None = None) -> 'TenantProfile':
+def get_or_create_profile(user: User, defaults: dict[str, Any] | None = None) -> TenantProfile:
     """
     Obtiene o crea el perfil del usuario en el tenant actual.
     
@@ -33,8 +35,6 @@ def get_or_create_profile(user: User, defaults: dict[str, Any] | None = None) ->
     Returns:
         TenantProfile: Perfil del usuario en el tenant actual
     """
-    from apps.tenant.perfil.models import TenantProfile
-    
     # Valores por defecto si no se proporcionan
     if defaults is None:
         defaults = {

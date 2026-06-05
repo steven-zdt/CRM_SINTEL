@@ -138,43 +138,61 @@
     var API_URL = getApiBase();
     var feedbackEl = d.getElementById('form-perfil-feedback');
 
+    function hideFeedback() {
+      if (feedbackEl) feedbackEl.classList.add('d-none');
+    }
+    function showFeedback(msg) {
+      if (feedbackEl) { feedbackEl.textContent = msg; feedbackEl.classList.remove('d-none'); }
+    }
+
     // DOM Shield: leer empresa_id desde el input hidden (no del select visible)
-    var empresaId = d.getElementById('perfil-empresa-id');
-    var empresaIdValue = empresaId ? empresaId.value.trim() : '';
-    if (empresaIdValue) {
-      data['empresa_id'] = empresaIdValue;
+    var empresaIdEl = d.getElementById('perfil-empresa-id');
+    var empresaIdValue = empresaIdEl ? empresaIdEl.value.trim() : '';
+    if (empresaIdValue) data['empresa_id'] = empresaIdValue;
+
+    // [PICKER] Leer sedes y areas desde window._perfilCrearGetExtras (pill-pickers)
+    // Fallback a select nativo legacy si el picker no esta disponible
+    if (typeof w._perfilCrearGetExtras === 'function') {
+      var extras = w._perfilCrearGetExtras();
+      data['sedes_uuids'] = extras.sedes_uuids || [];
+      data['areas_uuids'] = extras.areas_uuids || [];
+    } else {
+      // legacy fallback
+      var sedesSelect = d.getElementById('perfil-crear-sedes-select');
+      if (sedesSelect) {
+        data['sedes_uuids'] = Array.from(sedesSelect.selectedOptions)
+          .map(function(opt) { return opt.value; }).filter(Boolean);
+      }
+      var areasSelect = d.getElementById('perfil-crear-areas-select');
+      if (areasSelect) {
+        data['areas_uuids'] = Array.from(areasSelect.selectedOptions)
+          .map(function(opt) { return opt.value; }).filter(Boolean);
+      }
     }
 
-    // Validacion basica frontend
+    // -- Validaciones frontend --
+    hideFeedback();
+
     if (!empresaIdValue) {
-      if (feedbackEl) {
-        feedbackEl.textContent = 'Debes seleccionar una empresa.';
-        feedbackEl.classList.remove('d-none');
-      }
-      // Resaltar el select
-      var sel = d.getElementById('perfil-empresa-select');
-      if (sel) sel.classList.add('is-invalid');
+      var empSel = d.getElementById('perfil-empresa-select');
+      if (empSel) empSel.classList.add('is-invalid');
+      showFeedback('Debes seleccionar una empresa.');
       return;
     }
-    // Limpiar validacion del select
-    var sel2 = d.getElementById('perfil-empresa-select');
-    if (sel2) sel2.classList.remove('is-invalid');
+    var empSel2 = d.getElementById('perfil-empresa-select');
+    if (empSel2) empSel2.classList.remove('is-invalid');
 
-    if (!data.email) {
-      if (feedbackEl) {
-        feedbackEl.textContent = 'El email es requerido.';
-        feedbackEl.classList.remove('d-none');
-      }
+    if (!data['sedes_uuids'] || data['sedes_uuids'].length === 0) {
+      var sedePickerEl = d.getElementById('sede-picker');
+      if (sedePickerEl) sedePickerEl.classList.add('is-invalid');
+      showFeedback('Debes seleccionar al menos una sede.');
       return;
     }
+    var sedePickerClean = d.getElementById('sede-picker');
+    if (sedePickerClean) sedePickerClean.classList.remove('is-invalid');
 
-    if (!data.first_name) {
-      if (feedbackEl) {
-        feedbackEl.textContent = 'El nombre es requerido.';
-        feedbackEl.classList.remove('d-none');
-      }
-      return;
-    }
+    if (!data.email) { showFeedback('El email es requerido.'); return; }
+    if (!data.first_name) { showFeedback('El nombre es requerido.'); return; }
 
     // POST al endpoint de creacion
     fetch(API_URL, {
@@ -247,15 +265,31 @@
     var rolEl = d.getElementById('perfil-edit-rol');
     var newRol = rolEl ? data.rol : null;
 
+    // Extract selected sedes
+    var sedesSelect = d.getElementById('perfil-edit-sedes-select');
+    var sedesUuids = [];
+    if (sedesSelect) {
+      sedesUuids = Array.from(sedesSelect.selectedOptions).map(function(opt) { return opt.value; }).filter(Boolean);
+    }
+    
+    // Extract selected areas
+    var areasSelect = d.getElementById('perfil-edit-areas-select');
+    var areasUuids = [];
+    if (areasSelect) {
+      areasUuids = Array.from(areasSelect.selectedOptions).map(function(opt) { return opt.value; }).filter(Boolean);
+    }
+
     // Payload para el PATCH principal (sin id ni rol)
     var payload = {};
     Object.keys(data).forEach(function(k) {
       if (k !== 'id' && k !== 'rol') payload[k] = data[k];
     });
+    payload['sedes_uuids'] = sedesUuids;
+    payload['areas_uuids'] = areasUuids;
 
     var csrfToken = getCsrfToken();
 
-    // PATCH principal: cargo, departamento, telefono_corporativo
+    // PATCH principal: cargo, departamento, telefono_corporativo, sedes, areas
     var mainPromise = fetch(API_URL + profileId + '/', {
       method: 'PATCH',
       credentials: 'same-origin',

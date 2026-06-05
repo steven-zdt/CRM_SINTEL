@@ -236,7 +236,9 @@
           }).then(() => {
             const offcanvasEl = d.getElementById('offcanvas-asiento-detalle');
             if (offcanvasEl && w.bootstrap && w.bootstrap.Offcanvas) {
-              w.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+              // dispose + show seguro (AGENTS.md §26 / ui-management.md §2)
+              if (w.UIManager?.handleOffcanvas) { w.UIManager.handleOffcanvas(offcanvasEl, 'show'); }
+              else { const _p = w.bootstrap.Offcanvas.getInstance(offcanvasEl); if (_p) _p.dispose(); d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove()); new w.bootstrap.Offcanvas(offcanvasEl).show(); }
             }
           });
         }
@@ -256,7 +258,9 @@
           }).then(() => {
             const offcanvasEl = d.getElementById('offcanvas-asiento-editar');
             if (offcanvasEl && w.bootstrap && w.bootstrap.Offcanvas) {
-              w.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+              // dispose + show seguro (AGENTS.md §26 / ui-management.md §2)
+              if (w.UIManager?.handleOffcanvas) { w.UIManager.handleOffcanvas(offcanvasEl, 'show'); }
+              else { const _p = w.bootstrap.Offcanvas.getInstance(offcanvasEl); if (_p) _p.dispose(); d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove()); new w.bootstrap.Offcanvas(offcanvasEl).show(); }
             }
           });
         }

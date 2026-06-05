@@ -1,32 +1,39 @@
-{# list_productos.html - Módulo Productos v3.5 - Nucleus #}
-<div class="ui-module h-100 d-flex flex-column">
-    <div id="feedback-productos-list" class="alert d-none mb-2" role="alert"></div>
-    
-    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
-        <div class="d-flex align-items-center gap-2">
-            <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-box-seam me-2"></i>Productos</h5>
-            <span class="badge bg-light text-dark border">Inventario Físico</span>
-        </div>
-        <div class="btn-group shadow-sm">
-            <button type="button" class="btn btn-primary" id="btn-nuevo-producto"
-                    hx-get="/api/v1/inventario/productos/gestor-offcanvas/"
-                    hx-target="#offcanvas-container-inventario"
-                    hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-inventario'); }">
-                <i class="bi bi-plus-lg me-1"></i> Nuevo Producto
-            </button>
-            <button type="button" class="btn btn-outline-secondary" 
-                    onclick="if(window.Sintel?.Inventario?.Productos?.List?.recargar){ window.Sintel.Inventario.Productos.List.recargar(); } else if(window.SintelInventarioTables?.main){ window.SintelInventarioTables.main.replaceData(); }">
-                <i class="bi bi-arrow-clockwise"></i>
-            </button>
-        </div>
-    </div>
-    
-    <div class="mb-3">
-        <input type="text" id="search-producto" class="form-control" placeholder="Buscar por código, nombre o categoría...">
-    </div>
-    
-    <div id="grid-productos" class="flex-grow-1"></div>
-</div>
+{# list_productos.html - Módulo Productos v3.10.4 - Presentación Compacta #}
+<style>
+  #grid-productos .tabulator-row { min-height: 56px; }
+  #grid-productos .tabulator-cell { padding: 6px 8px; vertical-align: middle; }
+  #prod-kpis .kpi-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 8px 14px; }
+  #prod-kpis .kpi-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .05em; color: #6c757d; }
+  #prod-kpis .kpi-val { font-size: 1.1rem; font-weight: 700; line-height: 1.2; }
+</style>
 
-{# Contenedor definido en list_inventario.html — NO duplicar aqui #}
+<div class="ui-module h-100 d-flex flex-column">
+  <div id="feedback-productos-list" class="alert d-none mb-2" role="alert"></div>
+
+  {# Toolbar #}
+  <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+    <div class="d-flex align-items-center gap-2 flex-grow-1">
+      <input type="text" id="search-producto" class="form-control form-control-sm"
+             placeholder="Buscar código, nombre, categoría..." style="max-width:320px">
+    </div>
+    <div class="d-flex gap-1">
+      <button type="button" class="btn btn-sm btn-outline-secondary"
+              onclick="if(window.Sintel?.Inventario?.Productos?.List?.recargar){ window.Sintel.Inventario.Productos.List.recargar(); }"
+              title="Recargar">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+      <button type="button" class="btn btn-sm btn-primary" id="btn-nuevo-producto"
+              hx-get="/api/v1/inventario/productos/gestor-offcanvas/"
+              hx-target="#offcanvas-container-inventario"
+              hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-inventario'); }">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo Producto
+      </button>
+    </div>
+  </div>
+
+  {# KPIs strip — llenado por JS en dataLoaded #}
+  <div id="prod-kpis" class="d-flex gap-2 mb-2 flex-wrap"></div>
+
+  <div id="grid-productos" class="flex-grow-1"></div>
+</div>

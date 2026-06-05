@@ -1,10 +1,10 @@
 # ARCHIVO: apps/tenant/proyectos/migrations/0007_proyecto_uuid.py
 """
-Migracion M-001 Roadmap M3 — UUID lookup field para Proyecto.
+Migracion M-001 Roadmap M3 - UUID lookup field para Proyecto.
 Patron 3-fases (safe migration):
   1. AddField nullable
-  2. RunPython — popula filas existentes
-  3. AlterField — aplica unique + db_index
+  2. RunPython - popula filas existentes
+  3. AlterField - aplica unique + db_index
 """
 import uuid as uuid_lib
 

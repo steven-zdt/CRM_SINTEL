@@ -3,44 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Activa tu cuenta</title>
+    <title>Codigo de activacion — {{ tenant_name }} - SINTEL</title>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background-color: #f4f4f4; padding: 20px; border-radius: 5px;">
-        <h1 style="color: #2c3e50;">¡Bienvenido a {{ tenant_name }}!</h1>
-        
-        <p>Hola {{ user.first_name|default:user.email }},</p>
-        
-        <p>Has sido invitado como administrador principal de <strong>{{ tenant_name }}</strong> en SINTEL.</p>
-        
-        <p>Para activar tu cuenta y establecer tu contraseña, haz clic en el siguiente enlace:</p>
-        
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{{ activation_url }}" 
-               style="display: inline-block; background-color: #3498db; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                Activar mi cuenta
-            </a>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f0f2f5;">
+    <div style="background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.10);">
+
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #3b5bdb 0%, #1971c2 100%); padding: 28px 40px; text-align: center;">
+            <h1 style="color: #ffffff; font-size: 1.6rem; margin: 0;">SINTEL</h1>
+            <p style="color: rgba(255,255,255,0.80); font-size: 0.85rem; margin: 4px 0 0;">Sistema Integral de Gestion Empresarial</p>
         </div>
-        
-        <p style="font-size: 12px; color: #666;">
-            O copia y pega este enlace en tu navegador:<br>
-            <a href="{{ activation_url }}" style="color: #3498db; word-break: break-all;">{{ activation_url }}</a>
-        </p>
-        <p style="font-size: 12px; color: #666;">
-            O visita el sitio del tenant:
-            <a href="{{ login_url }}" style="color: #3498db;">{{ login_url }}</a>
-        </p>
-        
-        <p style="font-size: 12px; color: #999; margin-top: 30px;">
-            <strong>Importante:</strong> Este enlace expirará en 24 horas. Si no activas tu cuenta en ese tiempo, 
-            contacta al administrador para recibir una nueva invitación.
-        </p>
-        
-        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-        
-        <p style="font-size: 12px; color: #999; text-align: center;">
-            © 2026 SINTEL. Todos los derechos reservados.
-        </p>
+
+        <!-- Body -->
+        <div style="padding: 32px 40px;">
+
+            <p style="font-size: 1rem; margin-top: 0;">Hola <strong>{{ user.first_name|default:user.email }}</strong>,</p>
+
+            <p style="font-size: 1rem;">
+                Has sido designado como <strong>administrador principal</strong> del espacio de trabajo
+                <strong style="color: #1971c2;">{{ tenant_name }}</strong> en SINTEL.
+                Para acceder por primera vez utiliza el siguiente codigo de activacion.
+            </p>
+
+            <!-- Codigo de activacion destacado -->
+            <div style="text-align: center; margin: 32px 0;">
+                <div style="display: inline-block; background-color: #e7f5ff; border: 2px solid #339af0; border-radius: 12px; padding: 20px 40px;">
+                    <p style="margin: 0 0 8px; font-size: 0.78rem; color: #1971c2; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700;">
+                        Codigo de activacion (8 caracteres)
+                    </p>
+                    <span style="font-size: 2.6rem; font-weight: 700; letter-spacing: 0.35em; color: #1864ab; font-family: 'Courier New', monospace;">
+                        {{ code }}
+                    </span>
+                    <p style="margin: 8px 0 0; font-size: 0.75rem; color: #868e96;">Valido por 48 horas &mdash; Uso unico</p>
+                </div>
+            </div>
+
+            <!-- Boton CTA -->
+            <div style="text-align: center; margin: 24px 0 20px;">
+                <a href="{{ activate_url }}"
+                   style="display: inline-block; background: linear-gradient(135deg, #3b5bdb 0%, #1971c2 100%);
+                          color: #ffffff; text-decoration: none; font-weight: 700; font-size: 1rem;
+                          padding: 14px 44px; border-radius: 8px; letter-spacing: 0.02em;">
+                    Activar mi cuenta en {{ tenant_name }}
+                </a>
+                <p style="margin: 10px 0 0; font-size: 0.78rem; color: #868e96;">
+                    O ve directamente a:<br>
+                    <a href="{{ activate_url }}" style="color: #3b5bdb; word-break: break-all; font-size: 0.75rem;">{{ activate_url }}</a>
+                </p>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #e9ecef; margin: 24px 0;">
+
+            <!-- Datos de acceso -->
+            <p style="font-size: 0.9rem; font-weight: 700; color: #495057; margin-bottom: 12px;">Tus datos de acceso:</p>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-bottom: 24px;">
+                <tr style="background-color: #f8f9fa;">
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6; color: #6c757d; font-weight: 600; width: 38%;">Empresa / Workspace</td>
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6; font-weight: 700; color: #1971c2;">{{ tenant_name }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6; color: #6c757d; font-weight: 600;">Tu email</td>
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6;">{{ user.email }}</td>
+                </tr>
+                <tr style="background-color: #f8f9fa;">
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6; color: #6c757d; font-weight: 600;">Codigo de activacion</td>
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6; font-family: monospace; font-weight: 700; font-size: 1.1rem; color: #1864ab; letter-spacing: 0.2em;">{{ code }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6; color: #6c757d; font-weight: 600;">Pagina de activacion</td>
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6;">
+                        <a href="{{ activate_url }}" style="color: #3b5bdb; word-break: break-all; font-size: 0.82rem;">{{ activate_url }}</a>
+                    </td>
+                </tr>
+                <tr style="background-color: #f8f9fa;">
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6; color: #6c757d; font-weight: 600;">Login (post-activacion)</td>
+                    <td style="padding: 10px 14px; border: 1px solid #dee2e6;">
+                        <a href="{{ login_url }}" style="color: #3b5bdb;">{{ login_url }}</a>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Pasos -->
+            <p style="font-size: 0.9rem; font-weight: 700; color: #495057; margin-bottom: 8px;">Como activar tu cuenta:</p>
+            <ol style="padding-left: 20px; color: #495057; font-size: 0.88rem; margin: 0 0 20px;">
+                <li style="margin-bottom: 6px;">Haz clic en el boton <strong>"Activar mi cuenta en {{ tenant_name }}"</strong></li>
+                <li style="margin-bottom: 6px;">Ingresa tu email: <strong>{{ user.email }}</strong></li>
+                <li style="margin-bottom: 6px;">Escribe el codigo: <strong style="font-family: monospace; font-size: 1rem; color: #1864ab; letter-spacing: 0.15em;">{{ code }}</strong></li>
+                <li>Crea tu contrasena y accede a tu workspace</li>
+            </ol>
+
+            <!-- Aviso -->
+            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 16px; border-radius: 4px;">
+                <p style="margin: 0; font-size: 0.85rem; color: #856404;">
+                    <strong>Importante:</strong> El codigo expira en <strong>48 horas</strong> y es de un solo uso.
+                    Si no activas tu cuenta a tiempo, solicita uno nuevo en
+                    <a href="mailto:{{ contact_email }}" style="color: #856404;">{{ contact_email }}</a>.
+                </p>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #f8f9fa; padding: 18px 40px; text-align: center; border-top: 1px solid #e9ecef;">
+            <p style="font-size: 0.78rem; color: #868e96; margin: 0;">
+                Si no esperabas este correo, puedes ignorarlo.<br>
+                Enviado por <strong>SINTEL</strong> &mdash;
+                <a href="mailto:{{ contact_email }}" style="color: #3b5bdb; text-decoration: none;">{{ contact_email }}</a>
+            </p>
+            <p style="font-size: 0.72rem; color: #adb5bd; margin: 6px 0 0;">&copy; 2026 SINTEL. Todos los derechos reservados.</p>
+        </div>
+
     </div>
 </body>
 </html>

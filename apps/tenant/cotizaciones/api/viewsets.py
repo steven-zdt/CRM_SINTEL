@@ -24,6 +24,7 @@ from ..services import (
     CotizacionPDFExportService,
 )
 from ..services.selectors import CotizacionSelector
+from ..services.business_service import CotizacionService
 from .serializers import (
     CotizacionItemSerializer,
     CotizacionListSerializer,
@@ -170,7 +171,6 @@ class CotizacionViewSet(SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSe
 
     @action(detail=True, methods=['post'], url_path='recalcular')
     def recalcular(self, request, **kwargs):
-        from ..services.business_service import CotizacionService
         instance = self.get_object()
         CotizacionService.calcular_totales(instance.id)
         instance.refresh_from_db()

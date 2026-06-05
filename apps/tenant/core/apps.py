@@ -18,14 +18,19 @@ class TenantCoreConfig(AppConfig):
     label = 'tenant_core'  # # WARNING: CRÍTICO: Label único para evitar conflicto con apps.public.core
     verbose_name = 'Tenant Core'
     
-    def ready(self):
+    def ready(self) -> None:
         """
-        Se ejecuta cuando todas las apps están listas.
-        
-        Aquí registramos los modelos de tenant en el admin site aislado.
-        Esto garantiza que todos los admin.py de las apps de tenant
-        ya hayan registrado sus modelos en admin.site.
+        Se ejecuta cuando todas las apps estan listas.
+
+        1. Registra modelos tenant en el admin site aislado.
+        2. Conecta el receiver de limpieza de TenantProfile al signal
+           global_user_hard_deleting (emitido por delete_user_service cuando
+           se elimina un usuario global).
         """
-        # Importar aquí para evitar problemas de importación circular
         from .admin import ensure_tenant_apps_registered
         ensure_tenant_apps_registered()
+
+        # Conectar receiver: limpieza de TenantProfile cross-schema
+        from apps.public.accounts.signals import global_user_hard_deleting
+        from apps.tenant.core.services.membership import _on_global_user_hard_deleting
+        global_user_hard_deleting.connect(_on_global_user_hard_deleting, weak=False)

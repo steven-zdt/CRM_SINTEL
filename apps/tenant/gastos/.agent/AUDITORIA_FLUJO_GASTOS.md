@@ -1,68 +1,66 @@
-# Auditoría Flujo Completo — Módulo Gastos
+# Auditoria Flujo Completo — Modulo Gastos
 
-**Versión auditada:** v3.9.1  
-**Fecha:** 2026-05-23  
-**Estado:** ✅ ALINEADO SINTEL v3.9.1 (0 CRÍTICOS)  
-**Auditor:** Antigravity AI (Google Deepmind)  
-**Ubicación:** `apps/tenant/gastos/`
+**Version auditada:** v3.10.3
+**Fecha:** 2026-05-25
+**Estado:** PRODUCTION READY (0 criticos, 3 DEUDA BAJA/MEDIA)
+**Ubicacion:** `apps/tenant/gastos/`
 
 ---
 
-## 1. Responsabilidades del Módulo
+## 1. Responsabilidades del Modulo
 
 | # | Responsabilidad | Estado |
 |---|----------------|--------|
-| 1 | **Documento Soporte (DS)** — Evidencia legal inmutable para proveedores no obligados a facturar (Decreto 1625/2016 DIAN) | ✅ |
-| 2 | **Resolución DIAN** — Gestión de numeración oficial: consecutivos, prefijos, rangos, vigencia | ✅ |
-| 3 | **Desacoplamiento Operativo** — `DocumentoSoporte` (legal) separado de clasificación administrativa (`categoria_contable`) | ✅ |
-| 4 | **Selectores de Retenciones** — Usuario elige tipo Retefuente/ReteICA desde dropdown; cálculo en tiempo real en el formulario | ✅ (v3.7.3) |
-| 5 | **Pull Model Retenciones** — `@property` lee desde `Contabilidad.Retencion`; `DocumentoSoporte` no almacena retenciones | ✅ (v3.7.1) |
-| 6 | **Ciclo de Vida Controlado** — `activo → anulado` con trazabilidad: `fecha_anulacion`, `motivo_anulacion`, `usuario_anulacion` | ✅ |
-| 7 | **UUID Lookup** — `lookup_field = 'uuid'` en todos los ViewSets | ✅ (mig 0016) |
-| 8 | **Vinculación Contable** — `cuenta_gasto_uuid` mapea a `CuentaContable` via Pull Model de Contabilidad | ✅ (mig 0013) |
-| 9 | **Precargar Editar Gasto** — Valores de retenciones y base gravable se precargan desde BD al abrir edición | ✅ (v3.7.5) |
-| 10 | **Singleton-locking de Grillas** — Prevención de doble inicialización de grillas Tabulator mediante `_initializing` | ✅ (v3.9.1) |
-| 11 | **Cero Emojis / Caracteres Especiales** — Cumplimiento de codificación estricta en código Python (evita SyntaxError) | ✅ (v3.9.1) |
+| 1 | **Documento Soporte (DS)** — Evidencia legal inmutable para proveedores no obligados a facturar (Decreto 1625/2016 DIAN) | OK |
+| 2 | **Resolucion DIAN** — Gestion de numeracion oficial: consecutivos, prefijos, rangos, vigencia | OK |
+| 3 | **Desacoplamiento Operativo** — `DocumentoSoporte` (legal) separado de clasificacion administrativa (`categoria_contable`) | OK |
+| 4 | **Selectores de Retenciones** — Usuario elige tipo Retefuente/ReteICA desde dropdown; calculo en tiempo real en el formulario | OK (v3.7.3) |
+| 5 | **Pull Model Retenciones** — `@property` lee desde `Contabilidad.Retencion`; `DocumentoSoporte` no almacena retenciones | OK (v3.7.1) |
+| 6 | **Ciclo de Vida Controlado** — `activo -> anulado` con trazabilidad: `fecha_anulacion`, `motivo_anulacion`, `usuario_anulacion` | OK |
+| 7 | **UUID Lookup** — `lookup_field = 'uuid'` en todos los ViewSets | OK (mig 0016) |
+| 8 | **Vinculacion Contable** — `cuenta_gasto_uuid` mapea a `CuentaContable` via Pull Model de Contabilidad | OK (mig 0013) |
+| 9 | **Precargar Editar Gasto** — Valores de retenciones y base gravable se precargan desde BD al abrir edicion | OK (v3.7.5) |
+| 10 | **Pull Model Inventario (Kardex)** — `movimiento_inventario_uuid` (UUID opaco) vincula al Kardex; elimina FKs directos a Producto/Servicio/Activo | OK (mig 0019 — v3.8+) |
+| 11 | **Buscador Unificado Movimientos** — Autocomplete `initMovimientoSearch()` reemplaza los 3 selects FK de inventario | OK (v3.8+) |
 
 ---
 
 ## 2. Modelos
 
 ### 2.1 `ResolucionDIAN`
-**Herencia:** `SintelTenantBaseModel` ✅  
+**Herencia:** `SintelTenantBaseModel`
 **Ordering:** `['-vigente', '-fecha_resolucion']`
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
-| `uuid` | UUIDField | `unique=True, db_index=True, editable=False` ✅ (mig 0016) |
+| `uuid` | UUIDField | `unique=True, db_index=True, editable=False` |
 | `numero_resolucion` | CharField(50) | `db_index=True` |
 | `prefijo` | CharField(10) | p.ej. `"DS"`, `"GS"` |
 | `rango_desde` | IntegerField | `MinValueValidator(1)` |
 | `rango_hasta` | IntegerField | `MinValueValidator(1)` |
-| `fecha_resolucion` | DateField | fecha de emisión DIAN |
-| `fecha_inicio` | DateField | default `datetime.date.today` |
-| `fecha_fin` | DateField | vencimiento de la resolución |
+| `fecha_resolucion` | DateField | fecha de emision DIAN |
+| `fecha_inicio` | DateField | `default=datetime.date.today` |
+| `fecha_fin` | DateField | vencimiento |
 | `clave_tecnica` | CharField(100) | nullable |
-| `vigente` | BooleanField | `db_index=True` — solo una vigente por empresa |
-| `consecutivo` | IntegerField | `db_index=True, editable=False` — próximo consecutivo a asignar |
+| `vigente` | BooleanField | `db_index=True` |
+| `consecutivo` | IntegerField | `db_index=True, editable=False` — proximo a asignar |
 
-**Índices BD:** `(empresa, vigente)`  
-**Ordering:** `['-vigente', '-fecha_resolucion']`
+**Indices BD:** `(empresa, vigente)`
 
-**Métodos:**
+**Metodos:**
 ```python
-formar_consecutivo(numero) → f"{prefijo} {numero}"
-esta_dentro_de_fecha(fecha_referencia=None) → bool  # valida rango de fechas
-save() → full_clean() + super().save()
+formar_consecutivo(numero) -> f"{prefijo} {numero}"
+esta_dentro_de_fecha(fecha_referencia=None) -> bool
+save() -> full_clean() + super().save()
 ```
 
 ---
 
 ### 2.2 `DocumentoSoporte`
-**Herencia:** `SintelTenantBaseModel` ✅  
+**Herencia:** `SintelTenantBaseModel`
 **Ordering:** `['-fecha', '-consecutivo']`
 
-#### Choices SSoT (definidos en este modelo — críticos para sincronía con templates)
+#### Choices SSoT (definidos en este modelo — criticos para sincronia con templates)
 
 ```python
 RETEFUENTE_CHOICES = [
@@ -85,106 +83,114 @@ RETEICA_CHOICES = [
 ]
 ```
 
-**Regla CRÍTICA:** Si se modifican estos choices en `models.py`, los `<option>` de los templates `offcanvas_crear_gasto.html` y `offcanvas_editar_gasto.html` DEBEN sincronizarse manualmente (ver CLAUDE.md § Selectores de Retenciones v3.7.3).
+**REGLA CRITICA:** Si se modifican estos choices en `models.py`, los `<option>` de los templates `offcanvas_crear_gasto.html` y `offcanvas_editar_gasto.html` DEBEN sincronizarse manualmente (ver CLAUDE.md Seccion Selectores de Retenciones v3.7.3).
 
 #### Campos
 
-| Campo | Tipo | Notas |
-|-------|------|-------|
-| `uuid` | UUIDField | `unique=True, db_index=True, editable=False` ✅ (mig 0016) |
-| `resolucion_dian` | FK → `ResolucionDIAN` | `PROTECT`, `related_name='documentos_soporte'` |
-| `consecutivo` | IntegerField | `db_index=True, editable=False` — asignado por `GastoBusinessService` |
-| `categoria_contable` | CharField(50) | `choices=CATEGORIA_CONTABLE_CHOICES`, nullable |
-| `fecha` | DateField | fecha del documento |
-| `proveedor` | FK → `tenant_proveedores.Proveedor` | `CASCADE` — si elimina proveedor, elimina todos sus DS |
-| `numero_documento_proveedor` | CharField(100) | nullable, referencia factura del proveedor |
-| `subtotal` | DecimalField(12,2) | `MinValueValidator(0.01)` — **editable**, base gravable |
-| `retefuente_porcentaje` | CharField(10) | **DEPRECATED v3.7.1** — `editable=False`, choices=`RETEFUENTE_CHOICES` |
-| `retefuente` | DecimalField(15,2) | **DEPRECATED v3.7.1** — `editable=False` |
-| `reteica_porcentaje` | CharField(10) | **DEPRECATED v3.7.1** — `editable=False`, choices=`RETEICA_CHOICES` |
-| `reteica` | DecimalField(15,2) | **DEPRECATED v3.7.1** — `editable=False` |
-| `total` | DecimalField(15,2) | **editable** — `total = subtotal - retenciones` |
-| `descripcion` | TextField | nullable |
-| `observaciones` | TextField | blank=True |
-| `cuenta_gasto_uuid` | UUIDField | nullable, `db_index=True` — mapeo a `CuentaContable` |
-| `adjunto` | FileField | `upload_to='documentos_soporte/%Y/%m/'`, nullable |
-| `activo` | BooleanField | `default=True, db_index=True` |
-| `anulado` | BooleanField | `default=False` |
-| `fecha_anulacion` | DateTimeField | nullable |
-| `motivo_anulacion` | TextField | nullable |
-| `usuario_anulacion` | FK → `perfil.TenantProfile` | `PROTECT`, nullable |
+| Campo | Tipo | Null | Choices/Info |
+|-------|------|------|--------------|
+| `uuid` | UUIDField | No | `unique=True, db_index=True, editable=False` |
+| `resolucion_dian` | FK ResolucionDIAN | No | `PROTECT`, `related_name='documentos_soporte'` |
+| `consecutivo` | IntegerField | No | `db_index=True, editable=False` — asignado atomicamente |
+| `categoria_contable` | CharField(50) | Si | `choices=CATEGORIA_CONTABLE_CHOICES` |
+| `fecha` | DateField | No | fecha del documento |
+| `proveedor` | FK Proveedor | No | `CASCADE` |
+| `numero_documento_proveedor` | CharField(100) | Si | referencia factura del proveedor |
+| `subtotal` | DecimalField(12,2) | No | `MinValueValidator(0.01)` — base gravable |
+| `retefuente_porcentaje` | CharField(10) | No | **DEPRECATED v3.7.1** `editable=False` `choices=RETEFUENTE_CHOICES` |
+| `retefuente` | DecimalField(15,2) | No | **DEPRECATED v3.7.1** `editable=False` |
+| `reteica_porcentaje` | CharField(10) | No | **DEPRECATED v3.7.1** `editable=False` `choices=RETEICA_CHOICES` |
+| `reteica` | DecimalField(15,2) | No | **DEPRECATED v3.7.1** `editable=False` |
+| `total` | DecimalField(15,2) | No | `total = subtotal - retenciones` |
+| `descripcion` | TextField | Si | |
+| `observaciones` | TextField | No (blank=True) | |
+| `cuenta_gasto_uuid` | UUIDField | Si | `db_index=True` — UUID opaco a `CuentaContable` |
+| **`movimiento_inventario_uuid`** | **UUIDField** | **Si** | **`db_index=True` — UUID opaco a `MovimientoInventario` (Pull Model v3.8+, mig 0019)** |
+| `adjunto` | FileField | Si | `upload_to='documentos_soporte/%Y/%m/'` |
+| `activo` | BooleanField | No | `default=True, db_index=True` |
+| `anulado` | BooleanField | No | `default=False` |
+| `fecha_anulacion` | DateTimeField | Si | trazabilidad |
+| `motivo_anulacion` | TextField | Si | trazabilidad |
+| `usuario_anulacion` | FK TenantProfile | Si | `PROTECT` |
 
-**Índices BD:**
+**Campos ELIMINADOS en mig 0019:**
+- ~~`producto_relacionado`~~ FK directo a Producto — removido
+- ~~`servicio_relacionado`~~ FK directo a Servicio — removido
+- ~~`activo_relacionado`~~ FK directo a ActivoFijo — removido
+
+**Indices BD:**
 ```
 (empresa, fecha)
 (resolucion_dian, consecutivo)
 (proveedor, numero_documento_proveedor)
 (categoria_contable)
-(fecha) WHERE activo=True AND anulado=False  → 'idx_gastos_activos'
+(fecha) WHERE activo=True AND anulado=False  -> 'idx_gastos_activos'
 ```
 
 **Constraints:**
 ```
-UNIQUE (resolucion_dian, consecutivo)                               → 'unique_ds_resolucion_consecutivo'
-UNIQUE (empresa, proveedor, numero_documento_proveedor) WHERE NOT anulado  → 'unique_ds_vendedor_documento'
+UNIQUE (resolucion_dian, consecutivo)                               -> 'unique_ds_resolucion_consecutivo'
+UNIQUE (empresa, proveedor, numero_documento_proveedor) WHERE NOT anulado  -> 'unique_ds_vendedor_documento'
 ```
 
-**`clean()`:** Valida que `consecutivo` esté dentro de `rango_desde`..`rango_hasta` de la resolución.
-
-#### Propiedades (Pull Model v3.7.1)
+#### Propiedades (@property — Pull Model)
 
 ```python
-@property prefijo              → resolucion_dian.prefijo
-@property numero_documento     → resolucion_dian.formar_consecutivo(consecutivo)
-@property total_retefuente     → Retencion(tipo='RETEFUENTE', doc=self.id, reversada=False).Sum('monto')
-@property total_reteica        → Retencion(tipo='RETEICA', doc=self.id, reversada=False).Sum('monto')
-@property total_reteiva        → Retencion(tipo='RETEIVA', doc=self.id, reversada=False).Sum('monto')
-@property total_retenciones    → Retencion(todos tipos, doc=self.id, reversada=False).Sum('monto')
-@property retefuente_calculada → alias a total_retefuente (retrocompat)
-@property reteica_calculada    → alias a total_reteica (retrocompat)
-@property vendedor_nombre      → proveedor.razon_social
-@property vendedor_nit         → proveedor.numero_documento
-@property vendedor_direccion   → proveedor.direccion
-@property vendedor_telefono    → proveedor.telefono_contacto
-@property total_cop            → "${total:,.0f}" formateado COP
-@property subtotal_cop         → "${subtotal:,.0f}" formateado COP
-@property retefuente_cop       → "${retefuente_calculada:,.0f}" formateado COP
-@property reteica_cop          → "${reteica_calculada:,.0f}" formateado COP
-@property total_retenciones_cop → "${total_retenciones:,.0f}" formateado COP
-@property cuenta_gasto_label   → CuentaContableSelector.get_label_by_uuid(empresa_id, cuenta_gasto_uuid)
+# Retenciones (Pull Model ADR-001 v3.7.1) — leen de Contabilidad.Retencion
+total_retefuente     -> SUM(monto) WHERE tipo='RETEFUENTE' AND doc=self.id
+total_reteica        -> SUM(monto) WHERE tipo='RETEICA'    AND doc=self.id
+total_reteiva        -> SUM(monto) WHERE tipo='RETEIVA'    AND doc=self.id
+total_retenciones    -> SUM(monto) todos los tipos
+retefuente_calculada -> alias total_retefuente (retrocompat)
+reteica_calculada    -> alias total_reteica
+
+# Inventario (Pull Model v3.8+) — lee de MovimientoInventario via Selector
+movimiento_referencia -> dict: {tipo, tipo_display, item_nombre, item_codigo, cantidad, item_tipo}
+                         o None si movimiento_inventario_uuid es null
+
+# Contabilidad
+cuenta_gasto_label   -> CuentaContableSelector.get_label_by_uuid(empresa_id, cuenta_gasto_uuid)
+
+# Proveedor (aplanado)
+vendedor_nombre      -> proveedor.razon_social
+vendedor_nit         -> proveedor.numero_documento
+vendedor_direccion   -> proveedor.direccion
+vendedor_telefono    -> proveedor.telefono_contacto
+
+# Numeracion
+numero_documento     -> resolucion_dian.formar_consecutivo(consecutivo)
+prefijo              -> resolucion_dian.prefijo
+
+# Formateo COP
+total_cop, subtotal_cop, retefuente_cop, reteica_cop, total_retenciones_cop
 ```
 
 ---
 
-### 2.3 Módulo `choices/`
+### 2.3 Modulo `choices/`
 
 | Archivo | Constante | Uso |
 |---------|-----------|-----|
 | `choices/categoria_contable.py` | `CATEGORIA_CONTABLE_CHOICES` | importado en `DocumentoSoporte.categoria_contable` |
-| `choices/centros_costo.py` | `CENTROS_COSTO_CHOICES` | disponible para clasificación administrativa |
-| `choices/niif_gastos_choices.py` | `NIIF_GASTOS_CHOICES` | clasificación NIIF de gastos |
 
 ---
 
-### 2.4 Migraciones (17 total)
+### 2.4 Migraciones (19 total)
 
 | # | Archivo | Cambio Principal |
 |---|---------|-----------------|
-| 0001 | `0001_initial.py` | Creación inicial: ResolucionDIAN, DocumentoSoporte, modelo legacy Gasto |
-| 0002 | `...idx_and_more.py` | Índices optimización |
-| 0003 | `...resoluciondian_options.py` | Opciones de modelo y ordering |
-| 0004–0006 | `...unique_ds_resolucion...` | Evolución de constraints únicos |
-| 0007 | `...gasto_centro_idx.py` | Índices en Gasto legacy |
-| 0008 | `...unique_ds_vendedor_documento.py` | Constraint vendedor+documento |
-| 0009 | `...gasto_empresa_idx.py` | Índices empresa en Gasto legacy |
-| 0010 | `...remove_gasto_documento_soporte.py` | **Elimina modelo legacy `Gasto`** — queda solo `DocumentoSoporte` |
-| 0011 | `...retefuente_porcentaje.py` | Ajustes campos retención (pre-deprecación) |
-| 0012 | `...alter_proveedor.py` | FK proveedor CASCADE |
-| 0013 | `...add_cuenta_contable_uuid_fields.py` | Agrega `cuenta_gasto_uuid` y `cuenta_contrapartida_uuid` |
-| 0014 | `...remove_cuenta_contrapartida_uuid.py` | Elimina `cuenta_contrapartida_uuid` (contabilidad la orquesta) |
-| 0015 | `...alter_cuenta_gasto_uuid.py` | Ajuste field `cuenta_gasto_uuid` |
-| 0016 | `...add_uuid_fields.py` | UUID fields en ResolucionDIAN y DocumentoSoporte ✅ |
-| 0017 | `...alter_retefuente_and_more.py` | **ÚLTIMA (2026-05-17)** — `editable=False` en campos retención (deprecación v3.7.1) |
+| 0001 | `0001_initial.py` | Creacion inicial: ResolucionDIAN, DocumentoSoporte, modelo legacy Gasto |
+| 0002–0006 | varios | Indices, constraints |
+| 0007–0009 | varios | Indices Gasto legacy |
+| 0010 | `...remove_gasto_documento_soporte.py` | **Elimina modelo legacy Gasto** |
+| 0011–0012 | varios | Ajustes retenciones, FK proveedor |
+| 0013 | `...add_cuenta_contable_uuid_fields.py` | Agrega `cuenta_gasto_uuid` |
+| 0014 | `...remove_cuenta_contrapartida_uuid.py` | Elimina `cuenta_contrapartida_uuid` |
+| 0015 | `...alter_cuenta_gasto_uuid.py` | Ajuste field |
+| 0016 | `...add_uuid_fields.py` | UUID fields en ambos modelos |
+| 0017 | `...alter_retefuente_and_more.py` | `editable=False` en campos retenciones (deprecacion v3.7.1) |
+| 0018 | `...activo_relacionado_and_more.py` | Agregaba `producto_relacionado`, `servicio_relacionado`, `activo_relacionado` (FK directo — patron obsoleto) |
+| **0019** | **`...remove_documentosoporte_activo_relacionado_and_more.py`** | **Elimina los 3 FK; agrega `movimiento_inventario_uuid` (UUIDField Pull Model v3.8+)** — ULTIMA |
 
 ---
 
@@ -194,65 +200,74 @@ UNIQUE (empresa, proveedor, numero_documento_proveedor) WHERE NOT anulado  → '
 
 #### `ResolucionSelector`
 
-| Método | Descripción |
+| Metodo | Descripcion |
 |--------|-------------|
 | `get_list(empresa_id, search, solo_vigentes)` | `.only(RESOLUCION_LIST_FIELDS)` + `annotate(conteo_documentos=Count(...))` |
-| `get_detail(empresa_id, resolucion_uuid)` | `.only(RESOLUCION_DETAIL_FIELDS)` + filtro opcional por uuid |
-| `get_vigente(empresa_id)` | Cache 1 hora con key `resolucion_vigente_{empresa_id}` → `filter(vigente=True).first()` |
+| `get_detail(empresa_id, resolucion_uuid)` | `.only(RESOLUCION_DETAIL_FIELDS)` |
+| `get_vigente(empresa_id)` | Cache 1 hora → `filter(vigente=True).first()` |
 
 #### `DocumentoSelector`
 
-| Método | Descripción |
+| Metodo | Descripcion |
 |--------|-------------|
-| `get_list(empresa_id, resolucion_id, search)` | `.only(DOCUMENTO_LIST_FIELDS)` + `select_related('resolucion_dian', 'proveedor')` + filtros opcionales; incluye anulados (consecutividad) |
-| `get_detail(empresa_id, documento_uuid)` | `.select_related('resolucion_dian', 'proveedor', 'usuario_anulacion')` + filtro uuid |
-| `get_summary(empresa_id)` | Agrega `SUM(total)` + `COUNT(id)` del mes actual para documentos no anulados → `{total_gastos_mes, documentos_emitidos, periodo_actual}` |
+| `get_list(empresa_id, resolucion_id, search)` | `.only(DOCUMENTO_LIST_FIELDS)` + `select_related('resolucion_dian', 'proveedor')` |
+| `get_detail(empresa_id, documento_uuid)` | `.select_related(...)` + filtro uuid |
+| `get_summary(empresa_id)` | `SUM(total)` + `COUNT(id)` mes actual, sin anulados |
 
 **Constantes SSoT:**
 ```python
-RESOLUCION_LIST_FIELDS  = (id, uuid, numero_resolucion, prefijo, vigente,
-                           rango_desde, rango_hasta, fecha_resolucion,
-                           fecha_inicio, fecha_fin, consecutivo, empresa_id)
+RESOLUCION_LIST_FIELDS = (
+    'id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
+    'rango_desde', 'rango_hasta', 'fecha_resolucion',
+    'fecha_inicio', 'fecha_fin', 'consecutivo', 'empresa_id'
+)
 
-DOCUMENTO_LIST_FIELDS   = (id, uuid, consecutivo, subtotal, fecha, total,
-                           categoria_contable, descripcion, activo, anulado,
-                           numero_documento_proveedor, empresa_id, cuenta_gasto_uuid)
+DOCUMENTO_LIST_FIELDS = (
+    'id', 'uuid', 'consecutivo', 'subtotal', 'fecha', 'total',
+    'categoria_contable', 'descripcion', 'activo', 'anulado',
+    'numero_documento_proveedor', 'empresa_id', 'cuenta_gasto_uuid',
+    'movimiento_inventario_uuid'   # <- v3.8+
+)
 
-DOCUMENTO_DETAIL_FIELDS = (id, uuid, consecutivo, fecha, total, subtotal,
-                           categoria_contable, descripcion, observaciones,
-                           activo, anulado, numero_documento_proveedor, empresa_id,
-                           cuenta_gasto_uuid, resolucion_dian_id, proveedor_id,
-                           created_at, updated_at)
+DOCUMENTO_DETAIL_FIELDS = (
+    'id', 'uuid', 'consecutivo', 'fecha', 'total', 'subtotal',
+    'categoria_contable', 'descripcion', 'observaciones',
+    'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
+    'cuenta_gasto_uuid', 'movimiento_inventario_uuid',  # <- v3.8+
+    'resolucion_dian_id', 'proveedor_id', 'created_at', 'updated_at'
+)
 
-RESOLUCION_DETAIL_FIELDS = (id, uuid, numero_resolucion, prefijo, vigente,
-                            rango_desde, rango_hasta, fecha_resolucion,
-                            fecha_inicio, fecha_fin, clave_tecnica,
-                            empresa_id, created_at, updated_at)
+RESOLUCION_DETAIL_FIELDS = (
+    'id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
+    'rango_desde', 'rango_hasta', 'fecha_resolucion',
+    'fecha_inicio', 'fecha_fin', 'clave_tecnica',
+    'empresa_id', 'created_at', 'updated_at'
+)
 ```
 
 ---
 
-### 3.2 `services/crud_service.py` — Escritura Atómica
+### 3.2 `services/crud_service.py` — Escritura Atomica
 
 #### `ResolucionCRUDService`
 
-| Método | Descripción |
+| Metodo | Descripcion |
 |--------|-------------|
-| `_invalidar_cache_vigente(empresa_id)` | Invalida cache `resolucion_vigente_{empresa_id}` |
-| `crear_resolucion(data, empresa)` | `@transaction.atomic` — crea resolución, invalida cache si `vigente=True` |
+| `crear_resolucion(data, empresa)` | `@transaction.atomic` |
 | `desactivar_resolucion(resolucion)` | `@transaction.atomic` — `vigente=False`, invalida cache |
-| `actualizar_resolucion(resolucion, data)` | `@transaction.atomic` — actualiza campos permitidos |
+| `actualizar_resolucion(resolucion, data)` | `@transaction.atomic` |
 | `eliminar_resolucion(resolucion)` | Elimina si no tiene documentos asociados |
+| `_invalidar_cache_vigente(empresa_id)` | Invalida `resolucion_vigente_{empresa_id}` |
 
 #### `DocumentoCRUDService`
 
-| Método | Descripción |
+| Metodo | Descripcion |
 |--------|-------------|
-| `crear_documento(empresa, data, resolucion)` | `@transaction.atomic` — asigna consecutivo atómico desde resolución, crea DS |
-| `actualizar_documento(instance, data)` | `@transaction.atomic` — actualiza campos editables del DS |
-| `anular_documento(instance, motivo, usuario)` | `@transaction.atomic` — `anulado=True`, registra trazabilidad |
-| `desactivar_documento(instance)` | `@transaction.atomic` — `activo=False` |
-| `eliminar_documento(instance)` | Elimina físicamente si `anulado=True` |
+| `crear_documento(empresa, data, resolucion)` | `@transaction.atomic` — consecutivo atomico via `select_for_update` |
+| `actualizar_documento(instance, data)` | `@transaction.atomic` |
+| `anular_documento(instance, motivo, usuario)` | `@transaction.atomic` — registra trazabilidad completa |
+| `desactivar_documento(instance)` | `@transaction.atomic` — soft delete |
+| `eliminar_documento(instance)` | Elimina fisicamente si `anulado=True` |
 
 ---
 
@@ -260,43 +275,50 @@ RESOLUCION_DETAIL_FIELDS = (id, uuid, numero_resolucion, prefijo, vigente,
 
 #### `GastoBusinessService`
 
-| Método | Descripción |
+| Metodo | Descripcion |
 |--------|-------------|
-| `anular_gasto(gasto_id, motivo, usuario, empresa_id)` | DSV `empresa_id` + `DocumentoCRUDService.anular_documento()` |
+| `procesar_gasto(empresa, data)` | Orquestador principal (ver flujo completo abajo) |
+| `materializar_gasto_desde_dto(dto)` | Materializa desde DTO canonico (idempotente) |
+| `anular_gasto(gasto_id, motivo, usuario, empresa_id)` | DSV + `DocumentoCRUDService.anular_documento()` |
 | `desactivar_gasto(gasto_id, empresa_id)` | DSV + `DocumentoCRUDService.desactivar_documento()` |
-| `eliminar_gasto(gasto_id, empresa_id)` | DSV + valida `anulado=True` antes de eliminar físicamente |
-| `procesar_gasto(empresa, data)` | Orquestador principal: resuelve resolución vigente → asigna consecutivo → crea DS → crea `Retencion` via Pull Model |
+| `eliminar_gasto(gasto_id, empresa_id)` | DSV + valida `anulado=True` antes de eliminar |
 
-**Flujo `procesar_gasto`:**
+**Flujo `procesar_gasto(empresa, data)` — v3.10.2:**
 ```
-1. Resolver resolucion_dian (de data o usar vigente)
-2. DSV: resolucion.empresa_id == empresa.id
-3. Validar consecutivo dentro del rango
-4. DocumentoCRUDService.crear_documento() @transaction.atomic
-5. Si retefuente_porcentaje > 0 → RetencionesService.crear_retencion(tipo='RETEFUENTE', ...)
-6. Si reteica_porcentaje > 0 → RetencionesService.crear_retencion(tipo='RETEICA', ...)
-7. return (success, documento, status_code)
+1. Limpiar campos deprecated (retefuente_porcentaje, reteica_porcentaje, retefuente, reteica)
+2. DSV Resolucion: resolucion.empresa_id == empresa.id + vigencia de fecha
+3. DSV Proveedor: UUID/ID resilente
+4. DSV Movimiento Inventario (v3.8+):
+     si data.movimiento_inventario_uuid:
+       MovimientoInventarioSelector.get_detail(uuid) -> valida existencia
+       almacena en ds_data['movimiento_inventario_uuid']
+5. Validar DIAN: fecha dentro del rango de la resolucion
+6. Calcular totales via RetencionesService.obtener_retenciones_desde_tercero(PROVEEDOR/COMPRA)
+7. DocumentoCRUDService.crear_documento() @transaction.atomic
+8. Si retefuente_porcentaje > 0 -> RetencionesService.crear_retencion(tipo='RETEFUENTE', ...)
+9. Si reteica_porcentaje > 0 -> RetencionesService.crear_retencion(tipo='RETEICA', ...)
+10. return (True, documento, 201)
 ```
 
 #### `ResolucionBusinessService`
 
-| Método | Descripción |
+| Metodo | Descripcion |
 |--------|-------------|
 | `validar_fechas_y_rangos(data)` | Valida `rango_desde < rango_hasta`, `fecha_inicio < fecha_fin` |
 | `crear_resolucion(empresa, data)` | Valida + `ResolucionCRUDService.crear_resolucion()` |
-| `desactivar_resolucion(empresa_id, resolucion_id)` | DSV + `ResolucionCRUDService.desactivar_resolucion()` |
-| `puede_eliminar(empresa_id, resolucion_id)` | Retorna `(bool, mensaje)` — false si tiene documentos asociados |
+| `desactivar_resolucion(empresa_id, resolucion_id)` | DSV + desactivar |
+| `puede_eliminar(empresa_id, resolucion_id)` | `(bool, mensaje)` — false si tiene documentos |
 
 ---
 
-### 3.4 `services/api_mixins.py` — Inyección en ViewSet
+### 3.4 `services/api_mixins.py` — Inyeccion en ViewSet
 
 #### `GastoServiceMixin`
 
-| Método | Descripción |
+| Metodo | Descripcion |
 |--------|-------------|
-| `_get_empresa_id_seguro()` | `tenant_profile.empresa_id` o fallback `Empresa.objects.first()` en DEBUG |
-| `get_qs_list()` | `DocumentoSelector.get_list(empresa_id, ...)` con params del request |
+| `_get_empresa_id_seguro()` | `tenant_profile.empresa_id` o fallback en DEBUG |
+| `get_qs_list()` | `DocumentoSelector.get_list(empresa_id, ...)` |
 | `get_qs_detail()` | `DocumentoSelector.get_detail(empresa_id)` |
 | `service_crear_gasto(data, empresa)` | `GastoBusinessService.procesar_gasto()` |
 | `service_anular_gasto(gasto, motivo, usuario)` | `GastoBusinessService.anular_gasto()` |
@@ -305,9 +327,8 @@ RESOLUCION_DETAIL_FIELDS = (id, uuid, numero_resolucion, prefijo, vigente,
 
 #### `ResolucionServiceMixin`
 
-| Método | Descripción |
+| Metodo | Descripcion |
 |--------|-------------|
-| `_get_empresa_id_seguro()` | Idéntico al de GastoServiceMixin |
 | `get_qs_list()` | `ResolucionSelector.get_list(empresa_id, ...)` |
 | `get_qs_detail()` | `ResolucionSelector.get_detail(empresa_id)` |
 | `service_crear_resolucion(empresa, data)` | `ResolucionBusinessService.crear_resolucion()` |
@@ -322,50 +343,67 @@ RESOLUCION_DETAIL_FIELDS = (id, uuid, numero_resolucion, prefijo, vigente,
 
 | ViewSet | Herencia | lookup_field | Acciones |
 |---------|----------|-------------|----------|
-| `GastoViewSet` | `GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet` | `uuid` | CRUD + `anular`, `summary`, `gestor_offcanvas` |
-| `ResolucionDIANViewSet` | `ResolucionServiceMixin, SintelDSVMixin, BaseTenantViewSet` | `uuid` | CRUD + `activa`, `desactivar` |
+| `GastoViewSet` | `GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet` | `uuid` (heredado) | CRUD + `anular`, `summary`, `render_offcanvas_crear`, `render_offcanvas_editar`, `render_offcanvas_detalle`, `render_offcanvas_resolucion` |
+| `ResolucionDIANViewSet` | `ResolucionServiceMixin, SintelDSVMixin, BaseTenantViewSet` | `uuid` (heredado) | CRUD + `activa`, `desactivar` |
 
 ---
 
 ### 4.2 Serializers (`api/serializers.py`)
 
-| Serializer | Propósito |
-|------------|-----------|
-| `ResolucionDIANNestedSerializer` | Embedding en DocumentoSoporte (campos mínimos) |
-| `ResolucionDIANListSerializer` | GET lista resoluciones |
-| `ResolucionDIANCreateSerializer` | POST/PATCH resoluciones |
-| `ResolucionDIANDetailSerializer` | GET detalle resolución |
-| `DocumentoSoporteListSerializer` | GET lista gastos |
-| `DocumentoSoporteDetailSerializer` | GET detalle + `@property` retenciones via Pull Model |
+| Serializer | Proposito | Campos clave |
+|------------|-----------|-------------|
+| `ResolucionDIANNestedSerializer` | Embedding en DocumentoSoporte | campos minimos |
+| `ResolucionDIANListSerializer` | GET lista resoluciones | |
+| `ResolucionDIANCreateSerializer` | POST/PATCH resoluciones | |
+| `ResolucionDIANDetailSerializer` | GET detalle resolucion | |
+| `DocumentoSoporteListSerializer` | GET lista gastos (Tabulator) | `movimiento_inventario_uuid` |
+| `DocumentoSoporteDetailSerializer` | GET detalle + formularios | `movimiento_inventario_uuid` (writable), `movimiento_referencia` (read-only dict), `cuenta_gasto_label` (SerializerMethodField) |
+
+**Campos clave en `DocumentoSoporteDetailSerializer`:**
+```python
+# Escritura
+movimiento_inventario_uuid  # UUIDField, required=False, allow_null=True
+
+# Solo lectura (SerializerMethodField / @property)
+movimiento_referencia  # dict: {tipo, tipo_display, item_nombre, item_codigo, cantidad, item_tipo} | null
+cuenta_gasto_label     # str | null
+total_retefuente       # Decimal (Pull Model Retencion)
+total_reteica          # Decimal (Pull Model Retencion)
+```
+
+**`UUIDOrPKRelatedField`:** Campo custom que acepta UUID o PK entero. Filtra por `empresa_id` del contexto del serializer para DSV multi-tenant.
 
 ---
 
 ### 4.3 Endpoints REST
 
-| Método | URL | Descripción |
+| Metodo | URL | Descripcion |
 |--------|-----|-------------|
-| GET | `/api/v1/gastos/` | Lista Documentos Soporte (paginada) |
-| POST | `/api/v1/gastos/` | Crear DS + asignar consecutivo + crear Retenciones |
+| GET | `/api/v1/gastos/` | Lista DS paginada |
+| POST | `/api/v1/gastos/` | Crear DS + consecutivo atomico + Retenciones |
 | GET | `/api/v1/gastos/{uuid}/` | Detalle completo |
 | PATCH | `/api/v1/gastos/{uuid}/` | Actualizar campos editables |
 | DELETE | `/api/v1/gastos/{uuid}/` | Eliminar (solo si anulado) |
-| POST | `/api/v1/gastos/{uuid}/anular/` | Anular DS (inmutable desde ese momento) |
-| GET | `/api/v1/gastos/summary/` | KPIs del mes: total gastos, documentos emitidos |
-| GET | `/api/v1/gastos/gestor-offcanvas/` | Render HTML offcanvas gestor |
+| POST | `/api/v1/gastos/{uuid}/anular/` | Anular DS (inmutable) |
+| GET | `/api/v1/gastos/summary/` | KPIs del mes |
+| GET | `/api/v1/gastos/render-offcanvas/crear/` | HTML offcanvas crear |
+| GET | `/api/v1/gastos/render-offcanvas/editar/?uuid=...` | HTML offcanvas editar |
+| GET | `/api/v1/gastos/render-offcanvas/detalle/?uuid=...` | HTML offcanvas detalle |
 | GET | `/api/v1/gastos/resoluciones/` | Lista resoluciones DIAN |
-| POST | `/api/v1/gastos/resoluciones/` | Crear resolución |
-| GET | `/api/v1/gastos/resoluciones/{uuid}/` | Detalle resolución |
-| PATCH | `/api/v1/gastos/resoluciones/{uuid}/` | Actualizar resolución |
-| DELETE | `/api/v1/gastos/resoluciones/{uuid}/` | Eliminar resolución (si no tiene DS) |
-| GET | `/api/v1/gastos/resoluciones/activa/` | Resolución vigente activa |
-| POST | `/api/v1/gastos/resoluciones/{uuid}/desactivar/` | Desactivar resolución |
+| POST | `/api/v1/gastos/resoluciones/` | Crear resolucion |
+| GET | `/api/v1/gastos/resoluciones/{uuid}/` | Detalle resolucion |
+| PATCH | `/api/v1/gastos/resoluciones/{uuid}/` | Actualizar resolucion |
+| DELETE | `/api/v1/gastos/resoluciones/{uuid}/` | Eliminar resolucion (si no tiene DS) |
+| GET | `/api/v1/gastos/resoluciones/activa/` | Resolucion vigente activa |
+| POST | `/api/v1/gastos/resoluciones/{uuid}/desactivar/` | Desactivar resolucion |
+| GET | `/api/v1/gastos/render-offcanvas/resolucion/?uuid=` | HTML offcanvas crear/editar ResolucionDIAN |
 
-**Orden de registro en Router** (anti-greedy — fix v3.7.5):
+**Orden de registro en Router** (anti-greedy):
 ```python
 router.register(r'resoluciones', ResolucionDIANViewSet, ...)  # PRIMERO
 router.register(r'', GastoViewSet, ...)                       # AL FINAL
 ```
-**Motivo:** `r''` genera `^(?P<uuid>[^/.]+)/$` que capturaría `"resoluciones"` como UUID si va primero, causando 500 `"resoluciones" no es UUID válido`.
+**Motivo:** `r''` genera `^(?P<uuid>[^/.]+)/$` que capturaria `"resoluciones"` como UUID si va primero.
 
 ---
 
@@ -373,75 +411,113 @@ router.register(r'', GastoViewSet, ...)                       # AL FINAL
 
 ### 5.1 JavaScript (`static/gastos/js/`)
 
-| Archivo | Líneas | Namespace / Responsabilidad |
-|---------|--------|----------------------------|
-| `gastos.api.js` | 164 | **SSoT de URLs** — `window.Sintel.Gastos.API`: métodos `gastos.*`, `resoluciones.*`, `contabilidad.obtenerRetenciones()` |
-| `gastos.utils.js` | 181 | Helpers con cache: `fetchProveedores()`, `fetchCuentas()`, `fetchResoluciones()`, `loadProveedoresSelect()`, `loadCuentasSelect()`, `loadResolucionesSelect()`, `invalidateCache()` |
-| `features/gasto_editor.js` | 407 | Editor crear/editar: `init()`, `cargarProveedores()`, `obtenerRetencionesProveedor()`, `calcularTotales()`, `submitGasto()` |
-| `features/gasto_list.js` | 422 | Tabulator: `init()`, `getColumnas()`, `handleCellAction()`, `verDetalle()`, `abrirEditarGasto()`, `anularGasto()`, `eliminarGasto()` |
-| `features/resolucion_editor.js` | 185 | CRUD resoluciones: `init()`, `submitResolucion()` |
+| Archivo | Namespace / Responsabilidad |
+|---------|----------------------------|
+| `gastos.api.js` | SSoT de URLs — `window.Sintel.Gastos.API`: metodos `gastos.*`, `resoluciones.*`, `contabilidad.obtenerRetenciones()`, `inventario.searchMovimientos(q)` |
+| `gastos.utils.js` | Helpers con cache: `fetchProveedores()`, `fetchCuentas()`, `fetchResoluciones()`, `loadProveedoresSelect()`, `loadCuentasSelect()`, `loadResolucionesSelect()`, `invalidateCache()` |
+| `features/gasto_editor.js` | Editor crear/editar — exports: `init, cargarResoluciones, calcularTotales, initMovimientoSearch` |
+| `features/gasto_list.js` | Tabulator: `init()`, `getColumnas()`, `handleCellAction()`, `verDetalle()`, `abrirEditarGasto()`, `anularGasto()`, `eliminarGasto()` |
+| `features/resolucion_editor.js` | CRUD resoluciones: `init()`, `submitResolucion()` |
 
-**Flujo de retenciones en formulario (v3.7.3):**
+**Export actual de `gasto_editor.js`:**
+```javascript
+window.Sintel.Gastos.Editor = { init, cargarResoluciones, calcularTotales, initMovimientoSearch };
+```
+
+**Funciones internas relevantes (no exportadas):**
+- `cargarProveedores(form)`, `actualizarInfoProveedor(form, uuid)`, `obtenerRetencionesProveedor(form, nit)`
+- `initCuentaSearch(form)` + `renderSuggestions()` — autocomplete cuentas contables
+- `initMovimientoSearch(form)` + `renderMovimientoSuggestions()` — autocomplete movimientos kardex (v3.8+)
+- `collectData(form)` — recoge `movimiento_inventario_uuid` del input oculto (NO `producto/servicio/activo_relacionado`)
+- `handleSubmit(e)` — POST/PATCH via API
+
+**Funciones ELIMINADAS en v3.8+ (ya no existen en el codigo):**
+- ~~`initInventarioSelects(form)`~~
+- ~~`cargarProductos(form)`~~
+- ~~`cargarServicios(form)`~~
+- ~~`cargarActivos(form)`~~
+
+**Seccion `inventario` en `gastos.api.js` (actual):**
+```javascript
+inventario: {
+    searchMovimientos: (q) => `/api/v1/inventario/movimientos/?search=${encodeURIComponent(q)}&page_size=10`,
+},
+```
+
+**Flujo retenciones en formulario (v3.7.3):**
 ```
 Usuario selecciona Retefuente desde dropdown
-  → JS listener: #retefuente_select → #retefuente_porcentaje (hidden) = valor
-  → calcularTotales() corre:
-       subtotal = parseFloat(#base_gravable.value)
-       retefuente = subtotal × porcentaje_retefuente / 100
-       reteica    = subtotal × porcentaje_reteica / 100
-       total      = subtotal - retefuente - reteica
-  → actualiza displays: #retefuente_display, #reteica_display, #total_display
-On save: backend recibe subtotal + total → crea Retencion via Pull Model
+  -> #retefuente_select -> #retefuente_porcentaje (hidden) = valor
+  -> calcularTotales():
+       subtotal    = parseFloat(#base_gravable.value)
+       retefuente  = subtotal * porcentaje_retefuente / 100
+       reteica     = subtotal * porcentaje_reteica    / 100
+       total       = subtotal - retefuente - reteica
+  -> actualiza #retefuente_display, #reteica_display, #total_display
+On save: backend recibe subtotal + total -> crea Retencion via Pull Model
 ```
 
-**Flujo precargar editar (v3.7.5):**
+**Flujo movimiento inventario (v3.8+):**
 ```
-abrirEditarGasto(uuid) → GET /api/v1/gastos/{uuid}/
-  → response.retefuente_calculada → setea valor en #base_gravable
-  → response.cuenta_gasto_uuid → precarga select contable
-  → response.total → precarga campo total
+Usuario escribe >= 2 chars en #movimiento_inventario_search
+  -> debounce 300ms -> GET /api/v1/inventario/movimientos/?search=...
+  -> renderMovimientoSuggestions() muestra dropdown
+  -> usuario selecciona -> #movimiento_inventario_uuid.value = UUID del movimiento
+On save: collectData() incluye movimiento_inventario_uuid en el payload
 ```
 
 ---
 
 ### 5.2 Templates HTML (`templates/tenant/gastos/`)
 
-| Template | Líneas | Propósito |
-|----------|--------|-----------|
-| `gastos_list.html` | 148 | Lista principal con Tabulator + botones crear, filtrar |
-| `list.html` | 3 | Wrapper mínimo (incluye `gastos_list.html`) |
-| `offcanvas_crear_gasto.html` | 283 | Form crear DS: resolución, proveedor, base gravable, selectores retefuente/reteica, cuenta contable |
-| `offcanvas_editar_gasto.html` | 291 | Form editar DS: misma estructura que crear pero con datos precargados desde BD |
-| `offcanvas_detalle_gasto.html` | 141 | Vista read-only: todos los campos + retenciones calculadas |
-| `offcanvas_resolucion.html` | 48 | Form crear/editar ResolucionDIAN |
-| `assets_gastos.html` | 12 | Include CSS/JS del módulo |
+| Template | Proposito |
+|----------|-----------|
+| `gastos_list.html` | Lista principal con Tabulator + botones crear, filtrar |
+| `list.html` | Wrapper minimo (incluye `gastos_list.html`) |
+| `offcanvas_crear_gasto.html` | Form crear DS: resolucion, proveedor, base gravable, selectores retenciones, cuenta contable, buscador movimiento |
+| `offcanvas_editar_gasto.html` | Form editar DS: misma estructura con datos precargados |
+| `offcanvas_detalle_gasto.html` | Vista read-only: todos los campos + retenciones + movimiento vinculado |
+| `offcanvas_resolucion.html` | Form crear/editar ResolucionDIAN |
+| `assets_gastos.html` | Include CSS/JS del modulo |
 
-**Estructura de secciones en `offcanvas_crear_gasto.html` y `offcanvas_editar_gasto.html`:**
+**Secciones en `offcanvas_crear_gasto.html` y `offcanvas_editar_gasto.html`:**
 ```
 1. Documento Soporte: resolucion_dian (select), consecutivo (auto), fecha
-2. Información Proveedor: proveedor (select), display info (NIT, dirección, teléfono)
+2. Informacion Proveedor: proveedor (select), NIT/direccion/telefono (display)
 3. Valores:
    - Base Gravable: #base_gravable (editable)
-   - Retefuente: #retefuente_select (dropdown RETEFUENTE_CHOICES) + #retefuente_display (readonly)
-   - ReteICA: #reteica_select (dropdown RETEICA_CHOICES) + #reteica_display (readonly)
-   - Total: #total_display (calculado automáticamente)
-   - Inputs ocultos: #retefuente_porcentaje, #reteica_porcentaje
-4. Categorización Contable: categoria_contable (select CATEGORIA_CONTABLE_CHOICES), cuenta_gasto_uuid
-5. Observaciones: textarea
+   - Retefuente: #retefuente_select (dropdown) + #retefuente_display (readonly)
+   - ReteICA: #reteica_select (dropdown) + #reteica_display (readonly)
+   - Total: #total_display (calculado)
+   - Ocultos: #retefuente_porcentaje, #reteica_porcentaje
+4. Categorizacion Contable: categoria_contable + cuenta_gasto_uuid (autocomplete)
+5. Movimiento de Inventario (Opcional) — Pull Model v3.8+:
+   - #movimiento_inventario_search (texto, autocomplete)
+   - #movimiento_inventario_uuid (hidden, valor enviado al backend)
+   - #movimiento-inventario-suggestions (dropdown sugerencias)
+6. Observaciones: textarea
+```
+
+**Seccion movimiento en `offcanvas_detalle_gasto.html`:**
+```django
+{% if instance.movimiento_referencia %}
+  Movimiento de Inventario Vinculado:
+    tipo_display, item_nombre, item_codigo (si existe), cantidad (si existe)
+{% endif %}
 ```
 
 ---
 
 ## 6. Tests (`tests/` — 6 archivos)
 
-| Archivo | Propósito |
+| Archivo | Proposito |
 |---------|-----------|
 | `conftest.py` | Fixtures multi-tenant: `tenant1`, `tenant2` con schemas aislados |
-| `test_auth_session_smoke.py` | Smoke test de autenticación |
+| `test_auth_session_smoke.py` | Smoke test de autenticacion |
 | `test_fase9_persistence.py` | Tests de persistencia (fase 9 Contabilidad) |
-| `test_gastos_login_session_loop.py` | Tests de sesión en loop |
+| `test_gastos_login_session_loop.py` | Tests de sesion en loop |
 | `test_multitenant_isolation.py` | Verifica aislamiento por schema entre `tenant1` y `tenant2` |
-| `test_proveedor_integration.py` | Integración con módulo Proveedores |
+| `test_proveedor_integration.py` | Integracion con modulo Proveedores |
 
 ---
 
@@ -449,124 +525,131 @@ abrirEditarGasto(uuid) → GET /api/v1/gastos/{uuid}/
 
 | Regla | Estado | Detalle |
 |-------|--------|---------|
-| `SintelTenantBaseModel` | ✅ | `ResolucionDIAN` y `DocumentoSoporte` |
-| `empresa_id` en queries | ✅ | Todos los selectores filtran por `empresa_id` |
-| `.only()` en querysets | ✅ | `RESOLUCION_LIST_FIELDS`, `DOCUMENTO_LIST_FIELDS`, `RESOLUCION_DETAIL_FIELDS`, `DOCUMENTO_DETAIL_FIELDS` |
-| `lookup_field = 'uuid'` | ✅ | Ambos ViewSets (heredado de `BaseTenantViewSet`) |
-| UUID en modelos | ✅ | Migración 0016 aplicada |
-| No signals para negocio | ✅ | Service Layer exclusivo |
-| `@transaction.atomic` en CRUD | ✅ | Todos los métodos de `ResolucionCRUDService` y `DocumentoCRUDService` |
-| `BaseTenantViewSet` sin override auth | ✅ | Ningún ViewSet sobreescribe `authentication_classes` |
-| FK a `perfil.TenantProfile` (no a `AUTH_USER_MODEL`) | ✅ | `usuario_anulacion` FK a `TenantProfile` |
-| Pull Model retenciones | ✅ | `@property` lee desde `Contabilidad.Retencion`, `editable=False` en campos deprecated |
-| Router anti-greedy | ✅ | `r'resoluciones'` registrado ANTES que `r''` |
-| Sincronía CHOICES templates | ✅ | `RETEFUENTE_CHOICES`/`RETEICA_CHOICES` en `models.py` — templates sincronizados |
-| `APP_ORIGEN_PREFIJOS['gastos']` en Contabilidad | ✅ | `cuenta_gasto_uuid` válida contra prefijos de contabilidad |
-| Imports globales (no dentro de `def`) | ⚠️ | `models.py` usa imports locales en `@property` — excepción justificada (circular import con contabilidad) |
+| `SintelTenantBaseModel` | OK | `ResolucionDIAN` y `DocumentoSoporte` |
+| `empresa_id` en queries | OK | Todos los selectores filtran por `empresa_id` |
+| `.only()` en querysets | OK | 4 constantes LIST/DETAIL_FIELDS |
+| `lookup_field = 'uuid'` | OK | Ambos ViewSets (heredado de `BaseTenantViewSet`) |
+| UUID en modelos | OK | Migracion 0016 |
+| No signals para negocio | OK | Service Layer exclusivo |
+| `@transaction.atomic` en CRUD | OK | Todos los metodos CRUD |
+| `BaseTenantViewSet` sin override auth | OK | Ningun ViewSet sobreescribe `authentication_classes` |
+| FK a `perfil.TenantProfile` (no `AUTH_USER_MODEL`) | OK | `usuario_anulacion` FK a `TenantProfile` |
+| Pull Model retenciones (ADR-001) | OK | `@property` lee de `Contabilidad.Retencion`, `editable=False` en deprecated |
+| Pull Model inventario (v3.8+) | OK | `movimiento_inventario_uuid` UUID opaco, DSV via `MovimientoInventarioSelector` |
+| Sin FK directos a Producto/Servicio/ActivoFijo | OK | Eliminados en mig 0019 |
+| Router anti-greedy | OK | `r'resoluciones'` registrado ANTES que `r''` |
+| Sincronia CHOICES templates | OK | `RETEFUENTE_CHOICES`/`RETEICA_CHOICES` en `models.py` — templates sincronizados |
+| `APP_ORIGEN_PREFIJOS['gastos']` en Contabilidad | OK | `cuenta_gasto_uuid` valida contra prefijos de contabilidad |
+| Imports globales (no dentro de `def`) | OK | `business_service.py`: `DocumentoCRUDService`/`ResolucionCRUDService` movidos a globales (v3.10.3). Imports cross-app (`Proveedor`, `MovimientoInventarioSelector`, `RetencionesService`) permanecen lazy — justificado para evitar circulares. `models.py` @property: excepcion justificada |
 
 ---
 
-## 8. Fixes Aplicados (v3.7.x)
+## 8. Historial de Cambios
 
-### F1 — Router Greedy Matching → 500 en GET `/resoluciones/` (v3.7.5)
+### v3.8+ — Pull Model Inventario (mig 0018 + 0019)
 
-**Causa:** `r''` (GastoViewSet) registrado primero en `api/urls.py`. El patrón `^(?P<uuid>[^/.]+)/$` capturaba `"resoluciones"` como UUID → `500 '"resoluciones" no es un UUID válido'`.
+Sustitucion completa del patron FK directo a inventario por UUID opaco:
 
-**Fix:**
-```python
-# ANTES (roto):
-router.register(r'', GastoViewSet, basename='gastos')
-router.register(r'resoluciones', ResolucionDIANViewSet, basename='resoluciones-dian')
+| Antes (eliminado) | Despues (actual) |
+|-------------------|-----------------|
+| `producto_relacionado` FK a Producto | `movimiento_inventario_uuid` UUIDField nullable |
+| `servicio_relacionado` FK a Servicio | `movimiento_referencia` @property (Pull Model) |
+| `activo_relacionado` FK a ActivoFijo | `initMovimientoSearch()` en JS (autocomplete unificado) |
+| `initInventarioSelects()` + 3 `cargar*()` | `renderMovimientoSuggestions()` |
+| `gastos.api.inventario.{productos,servicios,activos}` | `gastos.api.inventario.searchMovimientos(q)` |
+| `tipo_relacion_inventario` + 3 selects en templates | `#movimiento_inventario_search` + `#movimiento_inventario_uuid` |
+| `{% if instance.producto_relacionado %}` en detalle | `{% if instance.movimiento_referencia %}` |
 
-# DESPUÉS (correcto):
-router.register(r'resoluciones', ResolucionDIANViewSet, ...)  # PRIMERO
-router.register(r'', GastoViewSet, ...)                       # AL FINAL
-```
+### v3.7.5 — Router Greedy Fix + Precargar Editar
 
----
+- `r'resoluciones'` antes de `r''` en `api/urls.py`
+- Precargar base gravable, retenciones y cuenta contable al abrir offcanvas editar
 
-### F2 — Selectores de Retenciones UI (v3.7.3)
+### v3.7.3 — Selectores de Retenciones UI
 
-**Cambio:** Usuario selecciona tipo de retención desde dropdown en formulario. Los porcentajes se calcutan en tiempo real en el cliente. Los montos se envían al backend que crea `Retencion` records via Pull Model.
+Usuario selecciona tipo desde dropdown; calculo en tiempo real; Pull Model para persistencia.
 
-**Arquitectura:**
-- SSoT: `RETEFUENTE_CHOICES` / `RETEICA_CHOICES` en `models.py`
-- Frontend: Replicados como `<option>` en ambos templates
-- IDs HTML: `#retefuente_select`, `#reteica_select`, `#retefuente_porcentaje`, `#reteica_porcentaje`
-- Listener JS en `gasto_editor.js` → `calcularTotales()` en tiempo real
+### v3.7.1 — Pull Model Retenciones (ADR-001)
 
----
-
-### F3 — Precargar Editar Gasto desde BD (v3.7.5)
-
-**Cambio:** Al abrir el offcanvas de edición, los valores de retenciones y base gravable se precargan desde la respuesta del API Detail, evitando que el usuario tenga que reintroducirlos.
+Campos `retefuente*`/`reteica*` marcados `editable=False`. Datos viven en `Contabilidad.Retencion`.
 
 ---
 
-### F4 — Base Gravable como campo editable (v3.7.5)
+## 9. Deuda Tecnica
 
-**Cambio:** Campo `Base Gravable` es un input editable directo. El usuario ingresa el monto base; el sistema calcula retenciones y total automáticamente.
-
----
-
-## 9. Deuda Técnica
-
-| ID | Archivo | Severidad | Descripción | Estado |
+| ID | Archivo | Severidad | Descripcion | Estado |
 |----|---------|-----------|-------------|--------|
-| DEUDA-01 | `models.py` - `retefuente*`/`reteica*` | MEDIA | Campos `editable=False` DEPRECATED v3.7.1 aún en modelo — eliminar en v3.9 junto cleanup global retenciones | **Mitigado** (Pop en backend service layer en v3.7.1, pendiente migración de base de datos) |
-| DEUDA-02 | `services/selectors.py` - `LIST_FIELDS`/`DETAIL_FIELDS` | BAJA | Exportados como dict `{documento: ..., resolucion: ...}` — inconsistente con el patrón de otras apps que exportan tuplas directas | ✅ **RESUELTO (v3.9.1)** — Removido diccionario legacy, exportadas como tuplas directas |
-| DEUDA-03 | `choices/` directory | BAJA | `centros_costo.py` y `niif_gastos_choices.py` — validar si están en uso en algún campo o solo disponibles | ✅ **RESUELTO (v3.9.1)** — Eliminados archivos obsoletos y limpiadas referencias en `choices/__init__.py` |
-| DEUDA-04 | `gasto_editor.js` | BAJA | 407 líneas — el editor podría fragmentarse en `gasto_editor_retenciones.js` + `gasto_editor_form.js` | **Pendiente** |
-| DEUDA-05 | `models.py` - imports locales en `@property` | BAJA | `from apps.tenant.contabilidad.models import Retencion` dentro de cada `@property` — repetitivo; considerar helper privado centralizado | ✅ **RESUELTO (v3.9.1)** — Centralizado con `_get_retencion_model()` lazy-loading helper |
-| DEUDA-06 | Tests | MEDIA | Solo 6 archivos de test — faltan tests para: `GastoBusinessService.procesar_gasto()`, consecutivos atómicos, anulación con trazabilidad, Pull Model retenciones | **Mitigado** (Purga de caracteres especiales en archivos de test para alineación SINTEL v3.9.1) |
+| DEUDA-01 | `models.py` — `retefuente*`/`reteica*` | MEDIA | Campos `editable=False` DEPRECATED v3.7.1 aun en modelo. Eliminar en v3.9.0 segun cleanup plan (2026-08). | Mitigado — `editable=False`, pendiente migracion de borrado |
+| DEUDA-02 | `services/selectors.py` | BAJA | Exportar LIST/DETAIL_FIELDS como dict vs tuplas — inconsistencia historica | RESUELTO (v3.9.1) |
+| DEUDA-03 | `choices/` directory | BAJA | `centros_costo.py`, `niif_gastos_choices.py` obsoletos | RESUELTO (v3.9.1) |
+| DEUDA-04 | `gasto_editor.js` | BAJA | Archivo largo — candidato a fragmentar en submódulos | Pendiente |
+| DEUDA-05 | `models.py` imports locales en `@property` | BAJA | Repetitivo — centralizar con helper `_get_retencion_model()` | RESUELTO (v3.9.1) |
+| DEUDA-06 | Tests | MEDIA | Faltan tests para `procesar_gasto()`, consecutivos atomicos, Pull Model retenciones, `movimiento_inventario_uuid` DSV | Pendiente |
+| DEUDA-07 | `business_service.py` — imports locales crud | BAJA | `DocumentoCRUDService`/`ResolucionCRUDService` importados localmente 8 veces | ✅ **RESUELTO v3.10.3** — movidos a imports globales |
+| DEUDA-08 | `viewsets.py` | BAJA | `from django.conf import settings` dentro de `get_permissions()` — import inofensivo pero estilo incorrecto | Pendiente |
 
 ---
 
 ## 10. Patrones Clave
 
-### 10.1 Consecutivo Atómico
+### 10.1 Consecutivo Atomico
 
 ```
 DocumentoCRUDService.crear_documento():
   @transaction.atomic
-  → ResolucionDIAN.objects.select_for_update().get(id=resolucion_id)
-  → consecutivo = resolucion.consecutivo  (incrementar)
-  → DS.clean() → valida rango
-  → resolucion.consecutivo += 1; resolucion.save()
-  → DocumentoSoporte.objects.create(consecutivo=consecutivo, ...)
-```
-Garantiza que dos transacciones simultáneas no asignen el mismo consecutivo.
-
-### 10.2 Pull Model (ADR-001 v3.7.1)
-
-```
-DocumentoSoporte.total_retefuente [@property]
-  → Contabilidad.Retencion.objects.filter(
-      tipo='RETEFUENTE',
-      documento_origen_app='gastos',
-      documento_origen_modelo='DocumentoSoporte',
-      documento_origen_id=self.id,
-      reversada=False
-    ).aggregate(Sum('monto'))
+  -> ResolucionDIAN.objects.select_for_update().get(id=resolucion_id)
+  -> consecutivo = resolucion.consecutivo
+  -> DS.clean() -> valida rango
+  -> resolucion.consecutivo += 1; resolucion.save()
+  -> DocumentoSoporte.objects.create(consecutivo=consecutivo, ...)
 ```
 
-`DocumentoSoporte` nunca almacena retenciones propias. Los campos `retefuente`/`reteica` son vestigios con `editable=False`.
+### 10.2 Pull Model Retenciones (ADR-001 v3.7.1)
 
-### 10.3 Cache Resolución Vigente
+```python
+DocumentoSoporte.total_retefuente  # @property
+  -> Contabilidad.Retencion.objects.filter(
+       tipo='RETEFUENTE',
+       documento_origen_app='gastos',
+       documento_origen_modelo='DocumentoSoporte',
+       documento_origen_id=self.id,
+       reversada=False
+     ).aggregate(Sum('monto'))
+```
+
+### 10.3 Pull Model Inventario (v3.8+)
+
+```python
+DocumentoSoporte.movimiento_referencia  # @property
+  -> si not self.movimiento_inventario_uuid: return None
+  -> MovimientoInventarioSelector.get_detail(self.movimiento_inventario_uuid)
+  -> return {tipo, tipo_display, item_nombre, item_codigo, cantidad, item_tipo}
+```
+
+En `procesar_gasto`:
+```python
+if movimiento_inventario_uuid:
+    movimiento = MovimientoInventarioSelector.get_detail(movimiento_inventario_uuid)
+    if not movimiento:
+        raise ValidationError("Movimiento de inventario no encontrado (DSV)")
+    ds_data['movimiento_inventario_uuid'] = movimiento_inventario_uuid
+```
+
+### 10.4 Cache Resolucion Vigente
 
 ```python
 cache_key = f"resolucion_vigente_{empresa_id}"
 # TTL: 1 hora
-# Invalidado en: ResolucionCRUDService.crear_resolucion() si vigente=True
-#               ResolucionCRUDService.desactivar_resolucion()
+# Invalidado en: crear_resolucion() si vigente=True
+#               desactivar_resolucion()
 ```
 
-### 10.4 Inmutabilidad por Anulación (no por estado)
+### 10.5 Inmutabilidad por Anulacion
 
 ```
-DS.activo=True, DS.anulado=False  → Activo, editable
-DS.activo=False                   → Desactivado, no editable
-DS.anulado=True                   → Anulado, eliminar físicamente permitido
+DS.activo=True, DS.anulado=False  -> Activo, editable
+DS.activo=False                   -> Desactivado, no editable
+DS.anulado=True                   -> Anulado; eliminar fisicamente permitido
 Consecutivo: NUNCA reutilizable (constraint unique)
 ```
 
@@ -576,39 +659,35 @@ Consecutivo: NUNCA reutilizable (constraint unique)
 
 ```
 [Frontend offcanvas_crear_gasto.html]
-  ↓ usuario selecciona proveedor → obtenerRetencionesProveedor()
-    → GET /api/v1/contabilidad/retenciones/obtener-por-tercero/?nit=NIT&tipo=PROVEEDOR&naturaleza=COMPRA
-    → Pre-llena dropdown Retefuente/ReteICA si hay retenciones configuradas
-  ↓ usuario ingresa Base Gravable → calcularTotales()
-    → retefuente = base × pct_retefuente / 100
-    → reteica    = base × pct_reteica / 100
-    → total      = base - retefuente - reteica
-  ↓ usuario confirma → POST /api/v1/gastos/
+  usuario selecciona proveedor -> obtenerRetencionesProveedor()
+    -> GET /api/v1/contabilidad/retenciones/obtener-por-tercero/?nit=NIT&tipo=PROVEEDOR&naturaleza=COMPRA
+    -> Pre-llena dropdown Retefuente/ReteICA
+  usuario escribe en #movimiento_inventario_search (opcional) -> initMovimientoSearch()
+    -> GET /api/v1/inventario/movimientos/?search=...
+    -> usuario selecciona -> #movimiento_inventario_uuid = UUID
+  usuario ingresa Base Gravable -> calcularTotales()
+    -> retefuente = base * pct / 100
+    -> total = base - retefuente - reteica
+  usuario confirma -> POST /api/v1/gastos/
     Body: {resolucion_dian, proveedor, fecha, subtotal, total,
            retefuente_porcentaje, reteica_porcentaje,
-           categoria_contable, cuenta_gasto_uuid, descripcion}
-      ↓
+           categoria_contable, cuenta_gasto_uuid, descripcion,
+           movimiento_inventario_uuid (nullable)}
+      |
 [GastoViewSet.create()]
-  → empresa = _get_empresa()
-  → service_crear_gasto(data, empresa)
-    ↓
+  -> service_crear_gasto(data, empresa)
+      |
 [GastoBusinessService.procesar_gasto(empresa, data)]
-  → Resolver resolucion_dian (data o vigente)
-  → DSV: resolucion.empresa_id == empresa.id
-  → DocumentoCRUDService.crear_documento() @transaction.atomic
-      → select_for_update resolucion
-      → asignar consecutivo atómico
-      → DocumentoSoporte.objects.create(...)
-      → resolucion.consecutivo += 1
-  → Si retefuente_porcentaje > 0:
-      → RetencionesService.crear_retencion(tipo='RETEFUENTE', monto=..., doc=DS)
-  → Si reteica_porcentaje > 0:
-      → RetencionesService.crear_retencion(tipo='RETEICA', monto=..., doc=DS)
-  → return (True, documento, 201)
-      ↓
+  -> DSV resolucion + proveedor + movimiento_inventario_uuid
+  -> DocumentoCRUDService.crear_documento() @transaction.atomic
+       -> select_for_update resolucion
+       -> consecutivo atomico
+       -> DocumentoSoporte.objects.create(movimiento_inventario_uuid=uuid, ...)
+  -> RetencionesService.crear_retencion(RETEFUENTE / RETEICA) si > 0
+  -> return (True, documento, 201)
+      |
 [Response 201 + serialized DocumentoSoporte]
-  ↓
-[gasto_list.js] → table.replaceData() → tabla se refresca
+  -> gasto_list.js: table.replaceData()
 ```
 
 ---
@@ -616,29 +695,25 @@ Consecutivo: NUNCA reutilizable (constraint unique)
 ## 12. Flujo Completo: Anular Documento Soporte
 
 ```
-[gasto_list.js] → usuario clic en btn "Anular"
-  → confirma en modal con campo motivo
-  → POST /api/v1/gastos/{uuid}/anular/
+[gasto_list.js] usuario clic "Anular"
+  -> confirma en modal con campo motivo
+  -> POST /api/v1/gastos/{uuid}/anular/
     Body: {motivo: "descripcion del motivo"}
-      ↓
+      |
 [GastoViewSet.anular()]
-  → get_object() → DS con empresa_id verificado
-  → service_anular_gasto(instance, motivo, request.user)
-    ↓
+  -> get_object() -> DS con empresa_id verificado
+  -> service_anular_gasto(instance, motivo, request.user)
+      |
 [GastoBusinessService.anular_gasto(gasto_id, motivo, usuario, empresa_id)]
-  → DSV: DS.empresa_id == empresa_id → 403 si no coincide
-  → DocumentoCRUDService.anular_documento(instance, motivo, usuario_profile)
-      @transaction.atomic
-      → DS.anulado = True
-      → DS.fecha_anulacion = timezone.now()
-      → DS.motivo_anulacion = motivo
-      → DS.usuario_anulacion = usuario_profile (TenantProfile)
-      → DS.save()
-      ↓ Consecuencias:
-      → Consecutivo queda en "hueco" en la secuencia (inmutable por constraint)
-      → DS ahora eliminable físicamente si se requiere
-      ↓
+  -> DSV: DS.empresa_id == empresa_id
+  -> DocumentoCRUDService.anular_documento(instance, motivo, usuario_profile)
+       @transaction.atomic
+       -> DS.anulado = True
+       -> DS.fecha_anulacion = timezone.now()
+       -> DS.motivo_anulacion = motivo
+       -> DS.usuario_anulacion = usuario_profile (TenantProfile)
+       -> DS.save()
+      |
 [Response 200 + {detail: "Documento anulado"}]
-  ↓
-[gasto_list.js] → table.replaceData() → fila aparece con badge "Anulado"
+  -> gasto_list.js: table.replaceData() -> fila con badge "Anulado"
 ```

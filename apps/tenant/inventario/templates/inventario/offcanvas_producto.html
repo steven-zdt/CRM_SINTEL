@@ -93,7 +93,10 @@
           <!-- Información Básica -->
           <div class="col-md-6">
             <label for="producto-codigo" class="form-label text-danger fw-bold">Código (SKU) *</label>
-            <input type="text" class="form-control" id="producto-codigo" name="codigo" placeholder="Ej: PRD-001" value="{% if producto %}{{ producto.codigo }}{% endif %}" required>
+            <input type="text" class="form-control font-monospace" id="producto-codigo" name="codigo"
+                   value="{% if producto %}{{ producto.codigo }}{% endif %}" placeholder="Ej: PROD001"
+                   required maxlength="64" autocomplete="off">
+            <small class="form-text text-muted">Código de identificación único del producto.</small>
           </div>
           <div class="col-md-6">
             <label for="producto-nombre" class="form-label text-danger fw-bold">Nombre *</label>
@@ -156,45 +159,6 @@
             </div>
           </div>
 
-          <!-- Divider -->
-          <div class="col-12 mt-3 pt-3 border-top"></div>
-
-          <!-- Vinculación Contable (v3.5+) -->
-          <div class="col-12">
-            <h6 class="text-primary mb-3"><i class="bi bi-calculator me-2"></i>Vinculación Contable Dual (Opcional)</h6>
-
-            <div class="mb-3 position-relative">
-              <label for="producto-cuenta-inventario-busqueda" class="form-label text-danger fw-bold">Cuenta de Inventario (Activo) *</label>
-              <div class="input-group shadow-sm">
-                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                <input type="text"
-                       class="form-control border-start-0 ps-0"
-                       id="producto-cuenta-inventario-busqueda"
-                       placeholder="Buscar código o nombre (ej: 143505)..."
-                       autocomplete="off"
-                       value="{% if producto %}{{ producto.cuenta_inventario_label|default:'' }}{% endif %}">
-              </div>
-              <input type="hidden" name="cuenta_inventario_uuid" id="producto-cuenta-inventario-uuid" value="{% if producto %}{{ producto.cuenta_inventario_uuid|default:'' }}{% endif %}">
-              <div id="producto-cuenta-inventario-resultados" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
-              <small class="form-text text-muted d-block mt-1">Cuenta del activo donde se capitaliza el inventario (Grupo 14)</small>
-            </div>
-
-            <div class="mb-3 position-relative">
-              <label for="producto-cuenta-costo-busqueda" class="form-label text-danger fw-bold">Cuenta de Costo de Ventas *</label>
-              <div class="input-group shadow-sm">
-                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                <input type="text"
-                       class="form-control border-start-0 ps-0"
-                       id="producto-cuenta-costo-busqueda"
-                       placeholder="Buscar código o nombre (ej: 6135)..."
-                       autocomplete="off"
-                       value="{% if producto %}{{ producto.cuenta_costo_label|default:'' }}{% endif %}">
-              </div>
-              <input type="hidden" name="cuenta_costo_uuid" id="producto-cuenta-costo-uuid" value="{% if producto %}{{ producto.cuenta_costo_uuid|default:'' }}{% endif %}">
-              <div id="producto-cuenta-costo-resultados" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
-              <small class="form-text text-muted d-block mt-1">Cuenta de egreso donde se registra costo al vender (Grupo 61 o 62)</small>
-            </div>
-          </div>
         </div>
 
         <!-- Botones de Acción -->

@@ -23,6 +23,7 @@ class ConsoleActionLog(models.Model):
         ("USER_UPDATE", "Actualización de usuario"),
         ("USER_DELETE", "Eliminación de usuario"),
         ("USER_ACTIVATE", "Activación de cuenta"),
+        ("SECURITY_ALERT", "Alerta de seguridad"),
     ]
 
     action = models.CharField(max_length=50, choices=ACTION_CHOICES, verbose_name="Acción")

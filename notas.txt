@@ -6,6 +6,7 @@ Get-ChildItem -Path "." -Filter "__pycache__" -Recurse | Remove-Item -Force -Rec
 git config --unset extensions.worktreeConfig
 rmdir /s /q %APPDATA%\Antigravity\Cache
 
+C:\Windows\System32\drivers\etc\hosts
 
 docker compose up -d db redis
 
@@ -386,67 +387,179 @@ NOTAS IMPORTANTES
 
 
 
-Alineación Backend-Frontend y UX Secuencial — Módulo Proyectos v3.5.1
-Contexto del Sistema:
-Actúas como un Ingeniero de Software Principal Full-Stack experto en Django 5, DRF, HTMX, y diseño de interfaces de usuario (UI/UX). Tu objetivo es sincronizar y alinear completamente el backend (apps/tenant/proyectos/models.py) con el frontend (http://home.sintel.com/workspace/#proyectosusando), basándote en la arquitectura SINTEL, los lineamientos de AGENTS.md y el estado validado del backend (uso de uuid, DSV, @transaction.atomic).
 
-El Problema:
-Actualmente, la UI no expone de manera coherente todas las clases y campos del modelo. La gestión del proyecto debe transformarse en una experiencia secuencial, cíclica y estructurada como una Línea de Tiempo (Timeline) que guíe al usuario desde la creación del proyecto, pasando por la gestión de costos, hasta su cierre definitivo.
 
-Reglas de Generación Estrictas:
+### DT-PUB-02 — Tests básicos para `EmailService` y `PublicIndexView`
 
-Generación de Código: Debes generar el código necesario para los serializers, views, templates HTML (HTMX) y Vanilla JS.
+**Problema:** `apps/public/core/` sin tests. `EmailService` es crítico para activaciones y resets de contraseña (AGENTS.md menciona que modificaciones requieren prueba rigurosa).
 
-Respetar la Base: Mantén intacta la migración a UUID, los selectores Zero Waste (.only()) y las validaciones de DSV (empresa_id).
+**Acciones:**
+1. Crear `apps/public/core/tests/`:
+   - `test_email_service.py` — mock `send_mail`, verificar contexto de templates
+   - `test_public_index_view.py` — redirección por estado de autenticación (anon → login, staff → console, member → workspace)
+2. Ejecutar: `make test-file FILE="apps/public/core/tests/"`
 
-Flujo Cíclico y Secuencial: La UI debe mutar dinámicamente dependiendo de la fase_actual del proyecto (BORRADOR -> INICIO -> PLANEACION -> EJECUCION -> CIERRE).
+---
 
-INSTRUCCIONES DE EJECUCIÓN PASO A PASO:
-FASE 1: Ampliación de Exposición en el Backend (API & Serializers)
-Archivos a modificar: api/serializers.py, services/selectors.py, api/viewsets.py.
+## FASE 4 — Consolidación de Infraestructura y Deuda de Baja Prioridad
 
-Acción: Revisa el modelo Proyecto y asegura que LIST_FIELDS y DETAIL_FIELDS expongan absolutamente todos los datos relevantes que la UI necesita para construir el Timeline.
+**Objetivo:** Eliminar duplicación de código en admin/console, consolidar management commands, y limpiar dead code de JS de bajo riesgo.
 
-Campos Obligatorios a exponer:
+**Criterio de completación:** Sin duplicados funcionales detectables por grep, 0 dead code JS reportado por linter.
 
-Financieros: valor_contrato_proyectado, costo_mano_obra_real, costo_materiales_real, utilidad_estimada, margen_rentabilidad.
+---
 
-Archivos: contrato, acta, cronograma, entrega, informe.
+### DT-PUB-03 — Refactorizar `delete_model` en `ClientAdmin` para delegar a `hard_delete_tenant`
 
-Control: fase_actual, estado_tarea.
+**Problema:** `ClientAdmin.delete_model()` duplica validaciones que ya están en `hard_delete_tenant()`. Viola el principio DRY y puede desincronizarse.
 
-Integración Cíclica: Asegura que el método avanzar_fase exponga claramente las transiciones permitidas y retorne el estado actualizado de los indicadores financieros tras ejecutar calcular_indicadores_financieros().
+**Acciones:**
+1. Leer `apps/public/tenants/admin.py:delete_model()` y `deletion_service.py:hard_delete_tenant()`
+2. Reducir `delete_model()` a:
+   ```python
+   def delete_model(self, request, obj):
+       from apps.public.tenants.services.deletion_service import hard_delete_tenant
+       hard_delete_tenant(client_id=obj.id, actor_user_id=request.user.pk)
+   ```
+3. Mantener solo la validación de `is_active` en el admin como guard visual (antes de llamar al servicio)
 
-FASE 2: Arquitectura Frontend — UX Secuencial (Línea de Tiempo)
-Archivos a modificar: templates/tenant/proyectos/detalle_workspace.html (o equivalente en el workspace), css/js asociados.
+**Archivo afectado:** `apps/public/tenants/admin.py`
 
-Diseño de UI: Implementa un componente visual de Timeline (Línea de Tiempo) en la cabecera del detalle del proyecto. Cada nodo del timeline corresponde a una fase_actual.
+---
 
-Renderizado Dinámico (HTMX): El cuerpo del workspace debe renderizar paneles diferentes (vía hx-get) dependiendo de la fase activa del proyecto. Diseña las siguientes vistas secuenciales:
+### DT-PUB-04 — Consolidar `UsersDataTableView` con `UserAdminViewSet`
 
-Fase BORRADOR / INICIO: Formulario de definición. Selección de tipo de servicio, valor proyectado del contrato, carga de archivo contrato y acta. Asignación de responsables y snapshots iniciales.
+**Problema:** `apps/public/console/api/views.py:UsersDataTableView` duplica operaciones de `apps/public/accounts/api/viewsets.py:UserAdminViewSet`. Dos implementaciones del mismo CRUD.
 
-Fase PLANEACIÓN: Panel de planificación. Habilitación de submódulos para cargar el cronograma (archivo) y definir estimaciones iniciales.
+**Acciones:**
+1. Auditar diferencias entre ambas implementaciones
+2. Migrar funcionalidad de `UsersDataTableView` a una nueva acción `@action` en `UserAdminViewSet` para DataTables
+3. Actualizar `console/api/urls.py` para apuntar al ViewSet unificado
+4. Actualizar frontend `users_list.html` si cambia el endpoint
+5. Eliminar `UsersDataTableView` duplicada
 
-Fase EJECUCIÓN (El Ciclo de Gestión): Esta es la vista más compleja. Debe contener un dashboard interactivo de costos en tiempo real:
+**Archivos afectados:**
+- `apps/public/console/api/views.py` (reducir)
+- `apps/public/accounts/api/viewsets.py` (agregar acción DataTables)
+- `apps/public/console/api/urls.py` (actualizar ruta)
 
-Módulo Mano de Obra: Gestión de AsignacionPersonal (listar activos/inactivos).
+---
 
-Módulo Materiales: Gestión de PedidoProyecto e ItemPedido (mostrar solo aprobados para el P&L).
+### DT-PUB-05 — Revisar y deprecar management commands de diagnóstico en tenants
 
-Módulo Snapshots: Gestión de proveedores y clientes en tiempo real.
+**Problema:** 28 management commands en `tenants/management/commands/`. Varios son de diagnóstico/debugging que no deberían estar activos en producción.
 
-Fase CIERRE: Pantalla de resumen final. Bloqueo de edición de costos. Exposición destacada del P&L final (utilidad_estimada, margen_rentabilidad), cambio de estado_tarea a COMPLETADO, y subida obligatoria de entrega e informe.
+**Acciones:**
+1. Categorizar los 28 commands como: `PRODUCCION` | `MANTENIMIENTO` | `DIAGNOSTICO_SOLO_DEV`
+2. Los `DIAGNOSTICO_SOLO_DEV` (e.g., `diagnostico_404.py`, `analizar_tenants_prueba.py`):
+   - Agregar guard: `if not settings.DEBUG: raise CommandError("Solo disponible en DEBUG=True")`
+3. Los duplicados funcionales (e.g., `fix_tenant_domain.py` vs `fix_tenant_domains.py`):
+   - Consolidar en el más completo, agregar `--deprecated` flag al otro
+4. Documentar en `apps/public/tenants/management/commands/README.md`
 
-FASE 3: Sincronización HTMX y Vanilla JS para el Flujo
-Archivos a modificar: static/proyectos/js/proyectos.api.js, templates/tenant/proyectos/offcanvas_form.html.
+---
 
-Acción JS: Crea interceptores para que, al transicionar de una fase a otra (botón "Avanzar Fase"), el JS procese la respuesta (que contiene los nuevos cálculos financieros) y actualice el DOM reactivamente (Object.freeze) sin recargar toda la página.
+### DT-INV-08 — Eliminar dead code en `activos_editor.js`
 
-Bloqueos de Seguridad UI: Si fase_actual es CIERRE, oculta los botones de agregar pedidos o asignar personal utilizando lógica de plantillas de Django.
+**Problema:** `initCodigoPrefijo()` y `setupCuentaAutocomplete` para `#activo-cuenta-activo-busqueda` son dead code silencioso — el template ya no tiene esos inputs, el guard `if (d.querySelector(...))` evita errores pero el código existe sin propósito.
 
-FASE 4: Consolidación del Dashboard SSoT
-Acción: En la vista principal (#proyectosusando), actualiza la tabla Tabulator o el grid para que el indicador de fase_actual sea visualmente prominente (badges de colores) y los indicadores de rentabilidad (margen) tengan códigos de color (rojo si es negativo, verde si es positivo), extrayendo estos datos directamente de los fields expuestos en la Fase 1.
+**Acciones:**
+1. Verificar que `#activo-cuenta-activo-busqueda` no existe en `offcanvas_activo.html`:
+   ```bash
+   grep "activo-cuenta-activo-busqueda" apps/tenant/inventario/templates/inventario/offcanvas_activo.html
+   ```
+2. Si confirma que no existe: eliminar `initCodigoPrefijo()` de `activos_editor.js` y la llamada correspondiente en `init()`
 
-Entregable Esperado por la IA:
-Genera el código estructurado para cada archivo impactado, utilizando bloques de código separados. Prioriza la maquetación HTML/Tailwind/Bootstrap del componente Timeline para garantizar la coherencia visual que el usuario experimentará de principio a fin.
+**Archivo afectado:** `apps/tenant/inventario/static/inventario/js/features/activos_editor.js`
+
+---
+
+### DT-FACT-10 — Tests unitarios para `utils/ubl_parser.py`
+
+**Problema:** El parser UBL no tiene tests directos. Es código crítico (parsing de XML de la DIAN) sin cobertura.
+
+**Acciones:**
+1. Crear `apps/tenant/facturas/tests/test_ubl_parser.py`
+2. Fixtures: XMLs de facturas de venta DIAN (tipos FE, NC, ND)
+3. Test cases: parse campos básicos, parse retenciones, parse errores de formato
+4. Usar XMLs existentes en `facturas_xml/` si se mantienen como fixtures
+
+---
+
+### DT-FACT-12 — Evaluar y normalizar imports lazy en `api/viewsets.py`
+
+**Problema:** `ingest_service` y tareas Celery se importan dentro de métodos. AGENTS.md prohíbe imports dentro de `def` (TL;DR Imports). Evaluar si el lazy loading es realmente necesario para Celery.
+
+**Acciones:**
+1. Leer `apps/tenant/facturas/api/viewsets.py` — identificar todos los imports lazy
+2. Para cada uno: determinar si el lazy loading es por circularidad o por performance
+3. Los que NO tienen circularidad → mover a imports globales
+4. Los que sí la tienen → documentar con comentario explicando el motivo (excepción justificada)
+
+**Archivo afectado:** `apps/tenant/facturas/api/viewsets.py`
+
+**Regla AGENTS.md:** TL;DR Imports — SIEMPRE globales
+
+---
+
+## Matriz de Priorización
+
+```
+IMPACTO ALTO + ESFUERZO BAJO → FASE 1 (hacer primero)
+IMPACTO ALTO + ESFUERZO ALTO → FASE 1 (planificar cuidadosamente)
+IMPACTO MEDIO + ESFUERZO BAJO → FASE 2-3
+IMPACTO BAJO + ESFUERZO BAJO  → FASE 4
+```
+
+| Fase | Items | Esfuerzo estimado | Riesgo |
+|---|---|---|---|
+| **1** | DT-FACT-01, DT-FACT-02, DT-FACT-11, DT-GAST-01 | ~3–5 días | MEDIO (fragmentar código activo) |
+| **2** | DT-FACT-05, DT-FACT-06, DT-GAST-06, DT-PUB-01 | ~2–3 días | BAJO (eliminar DEPRECATED + crear tests) |
+| **3** | DT-FACT-03, DT-FACT-04, DT-FACT-09, DT-INV-04, DT-INV-05, DT-GAST-04, DT-GAST-08, DT-PUB-02 | ~3–4 días | MUY BAJO (limpieza pura) |
+| **4** | DT-PUB-03, DT-PUB-04, DT-PUB-05, DT-INV-08, DT-FACT-10, DT-FACT-12 | ~2–3 días | MUY BAJO (consolidación) |
+
+**Esfuerzo total estimado:** 10–15 días de desarrollo
+
+---
+
+## Verificaciones Obligatorias por Fase (AGENTS.md compliance)
+
+Antes de cerrar cada fase, ejecutar:
+
+```bash
+# 1. Compilación Python (hook PostToolUse — AGENTS.md §4.6)
+python -m py_compile apps/tenant/<app>/models.py
+python -m py_compile apps/tenant/<app>/api/serializers.py
+python -m py_compile apps/tenant/<app>/api/viewsets.py
+
+# 2. Django system check
+python manage.py check
+
+# 3. Migraciones pendientes (si hubo cambios en models.py)
+python manage.py makemigrations --check
+
+# 4. Tests del módulo afectado
+make test-file FILE="apps/tenant/<app>/tests/"
+
+# 5. Grep de referencias eliminadas
+grep -r "campo_eliminado\|funcion_eliminada" apps/ --include="*.py" | grep -v migration
+
+# 6. Sin emojis en .py (AGENTS.md Regla Fundamental)
+grep -rn "[\U0001F000-\U0001FFFF]" apps/tenant/<app>/ --include="*.py"
+```
+
+---
+
+## Notas de Alineamiento con AGENTS.md
+
+| Sección AGENTS.md | Items de deuda relacionados |
+|---|---|
+| §0 No emojis en .py | Verificación en todos los items que tocan .py |
+| §1 Service Layer unidireccional | DT-FACT-01, DT-INV-05 (separar servicios) |
+| §3.1 FSD un ecosistema por modelo | DT-FACT-01, DT-INV-05 |
+| §4.5 Karpathy — Simplicidad | DT-FACT-01, DT-FACT-02, DT-FACT-03, DT-GAST-04 |
+| §23 Aislamiento JS | DT-FACT-02, DT-FACT-03, DT-GAST-04 |
+| §13 IDOR Prevention + DSV | DT-GAST-06 (tests de aislamiento) |
+| TL;DR Imports globales | DT-GAST-08, DT-FACT-12 |
+| §3.9 Tests obligatorios | DT-GAST-06, DT-PUB-01, DT-PUB-02, DT-FACT-10 |
+| §14 Modelos limpios (sin campos zombie) | DT-GAST-01, DT-FACT-05, DT-FACT-06 |

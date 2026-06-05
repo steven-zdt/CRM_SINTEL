@@ -383,6 +383,8 @@ def ingest_document(
                 "dto": dto_dict,
                 "sha256": sha256_hash,
                 "metadata": metadata,
+                "document_type": dto_dict.get("document_type") or document_type,
+                "type": dto_dict.get("type"),
                 "error": error_code,
                 "message": f"Validación fallida: {', '.join(missing_fields[:5])}",
                 "missing_fields": missing_fields,
@@ -404,6 +406,8 @@ def ingest_document(
             "dto": dto_dict,
             "sha256": sha256_hash,
             "metadata": metadata,
+            "document_type": dto_dict.get("document_type") or document_type,
+            "type": dto_dict.get("type"),
         }, 200
     
     # 8. WARNING: REFACTOR: document_ingest SOLO parsea y devuelve DTO, NO persiste
@@ -424,6 +428,8 @@ def ingest_document(
         "dto": dto_dict,
         "sha256": sha256_hash,
         "metadata": metadata,
+        "document_type": dto_dict.get("document_type") or document_type,
+        "type": dto_dict.get("type"),
         "tipo": dto_dict.get("type") or dto_dict.get("document_type", ""),
     }, 200
 

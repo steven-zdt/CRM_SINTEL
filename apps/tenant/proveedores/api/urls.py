@@ -8,21 +8,28 @@ import logging
 
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import ProveedorViewSet
+from .viewsets import ProveedorViewSet, CuentasPagarViewSet
 
 logger = logging.getLogger(__name__)
 
 router = DefaultRouter()
-# IMPORTANTE: No incluir el prefijo aquí porque ya está en config/api_urls.py
-# El router se incluye con path('proveedores/', include(...)), así que registramos sin prefijo
+
+# ORDEN CRITICO: los prefijos con nombre ANTES del prefijo vacio ""
+# El router de DRF evalua en orden — si "" va primero, "cuentas-por-pagar"
+# se interpreta como UUID del ProveedorViewSet y lanza ValidationError.
+
+# Sub-modulo Cuentas por Pagar
+router.register(r"cuentas-pagar", CuentasPagarViewSet, basename="cuentas-pagar")
+
+# ViewSet principal de proveedores — SIEMPRE AL FINAL con prefijo vacio
 router.register(r"", ProveedorViewSet, basename="proveedor")
 
 urlpatterns = router.urls
 
-# DEBUG: Log para verificar que las URLs se generaron correctamente
 if urlpatterns:
-    logger.info(f"OK: ProveedorViewSet registrado correctamente. URLs generadas: {len(urlpatterns)}")
-    for url_pattern in urlpatterns:
-        logger.info(f"   - {url_pattern.pattern} -> {getattr(url_pattern, 'name', 'N/A')}")
+    logger.info(
+        "OK: ProveedorViewSet + CuentasPagarViewSet (CxP unificado) registrados. URLs: %d",
+        len(urlpatterns),
+    )
 else:
-    logger.error("ERROR: ERROR CRÍTICO: El router de proveedores no generó ninguna URL. Verifique que ProveedorViewSet esté correctamente configurado.")
+    logger.error("ERROR CRITICO: El router de proveedores no genero URLs. Verifique ViewSets.")

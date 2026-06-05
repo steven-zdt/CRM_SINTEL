@@ -258,50 +258,25 @@
                 </div>
             </div>
 
-            {# ── Sección: Asignación a Inventario (Opcional) ───────────── #}
+            {# ── Sección: Asignación a Kardex/Inventario (Opcional) — Pull Model v3.8+ ── #}
             <div class="section-divider">
                 <p class="section-title">
-                    <i class="bi bi-box-seam me-1"></i>Asignación a Inventario (Opcional)
+                    <i class="bi bi-box-seam me-1"></i>Movimiento de Inventario (Opcional)
                 </p>
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <label for="tipo_relacion_inventario" class="form-label">Tipo de Relación</label>
-                        <select class="form-select" id="tipo_relacion_inventario">
-                            <option value="NINGUNO" {% if not instance.producto_relacionado and not instance.servicio_relacionado and not instance.activo_relacionado %}selected{% endif %}>Ninguno</option>
-                            <option value="PRODUCTO" {% if instance.producto_relacionado %}selected{% endif %}>Producto</option>
-                            <option value="SERVICIO" {% if instance.servicio_relacionado %}selected{% endif %}>Servicio</option>
-                            <option value="ACTIVO_FIJO" {% if instance.activo_relacionado %}selected{% endif %}>Activo Fijo</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6 {% if not instance.producto_relacionado %}d-none{% endif %}" id="wrapper_producto_relacionado">
-                        <label for="producto_relacionado" class="form-label">Producto Relacionado</label>
-                        <select class="form-select" id="producto_relacionado" name="producto_relacionado"
-                                data-selected="{{ instance.producto_relacionado.id }}">
-                            <option value="">Seleccione producto...</option>
-                            {% if instance.producto_relacionado %}
-                            <option value="{{ instance.producto_relacionado.id }}" selected>{{ instance.producto_relacionado.codigo }} - {{ instance.producto_relacionado.nombre }}</option>
-                            {% endif %}
-                        </select>
-                    </div>
-                    <div class="col-md-6 {% if not instance.servicio_relacionado %}d-none{% endif %}" id="wrapper_servicio_relacionado">
-                        <label for="servicio_relacionado" class="form-label">Servicio Relacionado</label>
-                        <select class="form-select" id="servicio_relacionado" name="servicio_relacionado"
-                                data-selected="{{ instance.servicio_relacionado.id }}">
-                            <option value="">Seleccione servicio...</option>
-                            {% if instance.servicio_relacionado %}
-                            <option value="{{ instance.servicio_relacionado.id }}" selected>{{ instance.servicio_relacionado.codigo }} - {{ instance.servicio_relacionado.nombre }}</option>
-                            {% endif %}
-                        </select>
-                    </div>
-                    <div class="col-md-6 {% if not instance.activo_relacionado %}d-none{% endif %}" id="wrapper_activo_relacionado">
-                        <label for="activo_relacionado" class="form-label">Activo Fijo Relacionado</label>
-                        <select class="form-select" id="activo_relacionado" name="activo_relacionado"
-                                data-selected="{{ instance.activo_relacionado.id }}">
-                            <option value="">Seleccione activo fijo...</option>
-                            {% if instance.activo_relacionado %}
-                            <option value="{{ instance.activo_relacionado.id }}" selected>{{ instance.activo_relacionado.codigo }} - {{ instance.activo_relacionado.nombre }}</option>
-                            {% endif %}
-                        </select>
+                    <div class="col-12">
+                        <label for="movimiento_inventario_search" class="form-label">Buscar Movimiento</label>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="movimiento_inventario_search"
+                                   placeholder="Buscar por producto, servicio, activo, código..." autocomplete="off"
+                                   {% if instance.movimiento_referencia %}
+                                   data-current-label="{{ instance.movimiento_referencia.item_tipo|default:'' }}: {{ instance.movimiento_referencia.item_nombre|default:'' }} ({{ instance.movimiento_referencia.tipo_display|default:'' }})"
+                                   {% endif %}>
+                            <input type="hidden" id="movimiento_inventario_uuid" name="movimiento_inventario_uuid"
+                                   value="{{ instance.movimiento_inventario_uuid|default:'' }}">
+                            <div id="movimiento-inventario-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050;"></div>
+                        </div>
+                        <small class="text-muted">Vincule este gasto a un movimiento de inventario.</small>
                     </div>
                 </div>
             </div>
@@ -325,28 +300,6 @@
                 </div>
             </div>
 
-            {# ── Sección: Integración Contable (v3.7.1) - §18 Pull Model ── #}
-            <div class="mb-2">
-                <p class="section-title">
-                    <i class="bi bi-calculator me-1"></i>Integración Contable
-                </p>
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label for="cuenta_gasto_search" class="form-label">Cuenta PUC Nivel 6 (Gasto/Costo)</label>
-                        <div class="position-relative">
-                            <input type="text" class="form-control" id="cuenta_gasto_search"
-                                   placeholder="Buscar cuenta nivel 6 (ej: 5105)..." autocomplete="off" value="">
-                            {# v3.6.1: cuenta_gasto_uuid se pre-carga en JS via getCuentaByUuid() — §18 HTTP pull #}
-                            <input type="hidden" id="cuenta_gasto_uuid" name="cuenta_gasto_uuid"
-                                   value="{{ instance.cuenta_gasto_uuid|default:'' }}">
-                            <div id="cuenta-gasto-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050;">
-                                {# Sugerencias dinámicas #}
-                            </div>
-                        </div>
-                        <small class="text-muted">Vincule este gasto a una cuenta de control contable para automatizar el ciclo de egresos.</small>
-                    </div>
-                </div>
-            </div>
         </form>
     </div>
 

@@ -1,42 +1,47 @@
-import logging
-from collections.abc import Iterable
+"""
+Servicio de eliminacion de usuarios globales con cascada cross-schema.
 
+Patron de desacoplamiento via signal:
+--------------------------------------
+La limpieza de datos tenant (TenantProfile) NO se hace con raw SQL iterando
+schemas. En su lugar se emite el signal `global_user_hard_deleting` ANTES
+de borrar el usuario. El receiver registrado en apps.tenant.core.services.membership
+usa tenant_context() para limpiar TenantProfile en cada schema de forma ORM-safe.
+
+Esto elimina la dependencia de nombres de tabla hardcodeados y mantiene
+la unidireccionalidad public → tenant via signal/receiver.
+"""
+import logging
+
+from django.contrib.auth import get_user_model
 from django.db import connection, transaction
+
+from apps.public.accounts.signals import global_user_hard_deleting
 
 logger = logging.getLogger(__name__)
 
-
-def _get_tenant_schemas() -> Iterable[str]:
-    try:
-        from apps.public.tenants.models import Client
-
-        return [c["schema_name"] for c in Client.objects.values("schema_name")]
-    except Exception:
-        return []
+User = get_user_model()
 
 
 def delete_user_service(
     user_id: int, *, cascade: bool = True, deleted_by_id: int | None = None
 ) -> None:
     """
-    Delete a user and cascade-clean related public and tenant data.
+    Elimina un usuario global y sus referencias en todos los schemas.
 
-    This function performs best-effort cleanup in the following order:
-    1. Delete public app rows that reference the user (token blacklist, memberships, admin logs)
-    2. For each tenant schema, delete tenant profile rows referencing the user
-    3. Delete the user row from the public user table
-
-    The function uses raw SQL for predictable behavior across schemas.
+    Orden de operaciones:
+    1. Limpiar public: token blacklist, memberships, admin log.
+    2. Emitir global_user_hard_deleting — receiver en tenant.core limpia TenantProfile.
+    3. Registrar DeletionAudit.
+    4. Eliminar el registro User de la BD.
     """
-    from django.contrib.auth import get_user_model
-
-    User = get_user_model()
     table = User._meta.db_table
 
-    # Public cleanup statements (best-effort) - each statement in its own savepoint
+    # 1. Limpiar referencias publicas (best-effort, cada una en su savepoint)
     public_sqls = [
         (
-            "DELETE FROM token_blacklist_blacklistedtoken WHERE token_id IN (SELECT id FROM token_blacklist_outstandingtoken WHERE user_id = %s)",
+            "DELETE FROM token_blacklist_blacklistedtoken "
+            "WHERE token_id IN (SELECT id FROM token_blacklist_outstandingtoken WHERE user_id = %s)",
             [user_id],
         ),
         ("DELETE FROM token_blacklist_outstandingtoken WHERE user_id = %s", [user_id]),
@@ -48,69 +53,44 @@ def delete_user_service(
         try:
             with transaction.atomic(), connection.cursor() as cur:
                 cur.execute(sql, params)
-                logger.info(
-                    "delete_user_service: executed %s rows=%s", sql.split()[1], cur.rowcount
-                )
-        except Exception as e:
-            logger.warning("delete_user_service: failed %s -> %s", sql, e)
+                logger.info("delete_user_service: %s rows=%s", sql.split()[1], cur.rowcount)
+        except Exception as exc:
+            logger.warning("delete_user_service: public cleanup failed: %s -> %s", sql, exc)
 
-    # Tenant schemas: delete tenant profile rows that reference this user. Each schema in its own savepoint.
-    schemas = _get_tenant_schemas()
-    for schema in schemas:
-        try:
-            with transaction.atomic(), connection.cursor() as cur:
-                cur.execute(f'SET search_path TO "{schema}"')
-                cur.execute("DELETE FROM perfil_tenantprofile WHERE user_id = %s", [user_id])
-                logger.info(
-                    "delete_user_service: deleted tenant profiles in %s rows=%s",
-                    schema,
-                    cur.rowcount,
-                )
-        except Exception as e:
-            logger.warning(
-                "delete_user_service: schema=%s skip/profile-delete failed: %s", schema, e
-            )
-
-    # Finally delete the user row in its own atomic block
+    # 2. Emitir signal para limpieza tenant (TenantProfile en cada schema).
+    # El receiver en apps.tenant.core.services.membership usa tenant_context()
+    # para iterar schemas de forma ORM-safe sin raw SQL ni search_path.
     try:
-        # Record audit BEFORE deleting the user so we retain who triggered it
-        try:
-            from django.contrib.auth import get_user_model
-
-            from apps.public.accounts.models import DeletionAudit
-
-            User = get_user_model()
-            # best-effort: deleted_by may not exist (caller's context)
-            deleted_by = None
-        except Exception:
-            DeletionAudit = None
-            deleted_by = None
-
-        if DeletionAudit is not None:
-            try:
-                # Insert audit row using ORM to ensure proper types
-                audit = DeletionAudit.objects.create(
-                    target_user_id=user_id,
-                    deleted_by_id=deleted_by_id,
-                    reason="admin_deleted_via_service",
-                    details={"cascade": bool(cascade)},
-                )
-                logger.info(
-                    "delete_user_service: created DeletionAudit id=%s target=%s by=%s",
-                    getattr(audit, 'id', None),
-                    user_id,
-                    deleted_by_id,
-                )
-            except Exception as e:
-                logger.warning("delete_user_service: failed to write DeletionAudit: %s", e)
+        user_instance = User.objects.filter(pk=user_id).first()
+        if user_instance:
+            global_user_hard_deleting.send(sender=User, user=user_instance)
+            logger.info("delete_user_service: signal sent for user_id=%s", user_id)
         else:
-            logger.info("delete_user_service: DeletionAudit model not available, skipping audit write")
+            logger.warning("delete_user_service: user_id=%s not found, skipping signal", user_id)
+    except Exception as exc:
+        logger.warning("delete_user_service: signal dispatch error: %s", exc)
 
+    # 3. Audit (best-effort, antes del DELETE para preservar trazabilidad)
+    try:
+        from apps.public.accounts.models import DeletionAudit
+        audit = DeletionAudit.objects.create(
+            target_user_id=user_id,
+            deleted_by_id=deleted_by_id,
+            reason="admin_deleted_via_service",
+            details={"cascade": bool(cascade)},
+        )
+        logger.info(
+            "delete_user_service: DeletionAudit id=%s target=%s by=%s",
+            audit.id, user_id, deleted_by_id,
+        )
+    except Exception as exc:
+        logger.warning("delete_user_service: DeletionAudit failed: %s", exc)
+
+    # 4. Eliminar usuario
+    try:
         with transaction.atomic(), connection.cursor() as cur:
             cur.execute(f'DELETE FROM "{table}" WHERE id = %s', [user_id])
-            logger.info(
-                "delete_user_service: deleted user id=%s rows=%s", user_id, cur.rowcount
-            )
-    except Exception as e:
-        logger.error("delete_user_service: failed to delete user id=%s -> %s", user_id, e)
+            logger.info("delete_user_service: deleted user id=%s rows=%s", user_id, cur.rowcount)
+    except Exception as exc:
+        logger.error("delete_user_service: failed to delete user id=%s -> %s", user_id, exc)
         raise

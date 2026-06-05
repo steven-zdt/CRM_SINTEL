@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from .models import ConfiguracionCotizacion
+from apps.tenant.empresa.models import Empresa
 
 
 class ConfiguracionCotizacionListSerializer(serializers.ModelSerializer):
@@ -105,10 +106,6 @@ class ConfiguracionCotizacionDetailSerializer(serializers.ModelSerializer):
         # # WARNING: SSoT: Eliminar 'empresa' del data si fue enviado por error
         data.pop('empresa', None)
         data.pop('empresa_id', None)
-        
-        # # WARNING: SSoT v2.60: Obtener empresa del tenant actual (singleton)
-        # La empresa se obtiene del tenant, no del usuario
-        from apps.tenant.empresa.models import Empresa
         
         empresa = None
         if self.instance:

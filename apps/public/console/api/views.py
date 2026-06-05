@@ -12,14 +12,15 @@ WARNING: AUTENTICACIÓN:
 import logging
 
 from django.contrib.auth import get_user_model
-from django.db.models import OuterRef, QuerySet, Subquery
+from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
 from django.utils.timezone import now
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.public.tenants.models import Client, Domain
+from apps.public.accounts.services.delete_user_service import delete_user_service
+from apps.public.tenants.models import Client, Domain, TenantMembership
 from apps.shared.datatable import DataTableServer, DataTableSpec
 
 from .serializers import (
@@ -48,43 +49,32 @@ class TenantsDataTableView(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request, *args, **kwargs):
-        # Anotar primary_domain con Subquery para obtener el dominio primario
-        primary_domain_sq = Subquery(
-            Domain.objects.filter(tenant=OuterRef("pk"), is_primary=True).values("domain")[:1]
+        _base_membership = TenantMembership.objects.filter(
+            client=OuterRef("pk"), is_primary_admin=True, is_active=True
         )
 
-        # Excluir el tenant público (schema_name='public') para que los
-        # listados administrativos muestren solo tenants reales.
         base_qs: QuerySet = (
             Client.objects.exclude(schema_name="public")
             .only("id", "nombre", "schema_name", "is_active", "on_trial", "paid_until", "created_on")
-            .annotate(primary_domain=primary_domain_sq)
-        )
-
-        # DEBUG: log current tenants snapshot to trace unexpected extra tenants in tests
-        logger = logging.getLogger(__name__)
-        try:
-            tenant_snapshot = list(
-                base_qs.values("id", "schema_name", "nombre")
+            .annotate(
+                primary_domain=Subquery(
+                    Domain.objects.filter(tenant=OuterRef("pk"), is_primary=True).values("domain")[:1]
+                ),
+                owner_email=Subquery(_base_membership.values("user__email")[:1]),
+                owner_password=Subquery(_base_membership.values("user__password")[:1]),
             )
-            logger.info("TenantsDataTableView: base_qs_count=%s tenants=%s", len(tenant_snapshot), tenant_snapshot)
-        except Exception:
-            logger.exception("TenantsDataTableView: fallo al obtener snapshot de tenants")
+        )
 
         spec = DataTableSpec(
             fields_map={
                 0: "id",
                 1: "schema_name",
                 2: "nombre",
-                3: "primary_domain",  # nueva columna
+                3: "primary_domain",
                 4: "is_active",
                 5: "created_on",
             },
-            search_fields=[
-                "nombre",
-                "schema_name",
-                "domains__domain",
-            ],  # buscar también por dominio
+            search_fields=["nombre", "schema_name", "domains__domain", "owner_email"],
             base_qs=base_qs,
             serializer=TenantListSerializer,
         )
@@ -154,18 +144,36 @@ class UsersDataTableView(APIView):
             return Response({"error": "Usuario no encontrado"}, status=404)
 
     def post(self, request, *args, **kwargs):
-        """POST /api/admin/v1/console/dt/users/ - Listar o Crear"""
-        # Si es DataTables request (tiene draw, start, length)
+        """POST /api/admin/v1/console/dt/users/ - Listar (DataTables) o Crear usuario"""
         if "draw" in request.data:
-            base_qs = User.objects.only(
-                "id",
-                "email",
-                "first_name",
-                "last_name",
-                "is_active",
-                "is_staff",
-                "date_joined",
-                "telefono",
+            from django.db.models import Exists, Prefetch, Q
+
+            # Solo mostrar: system admins (staff+superuser) O owners de tenants (primary_admin)
+            # Los empleados/miembros de tenants (OPERADOR, VISOR) no deben aparecer aqui
+            _has_primary_admin = TenantMembership.objects.filter(
+                user=OuterRef("pk"),
+                is_primary_admin=True,
+                is_active=True,
+            )
+            memberships_qs = TenantMembership.objects.filter(
+                is_active=True
+            ).select_related("client").only(
+                "user_id", "client_id", "rol", "is_primary_admin", "is_active",
+                "client__id", "client__nombre", "client__schema_name",
+            )
+            base_qs = (
+                User.objects.filter(
+                    Q(is_staff=True, is_superuser=True) |  # Admins del sistema
+                    Q(Exists(_has_primary_admin))           # Owners de tenants privados
+                )
+                .distinct()
+                .only(
+                    "id", "email", "first_name", "last_name",
+                    "is_active", "is_staff", "is_superuser", "date_joined", "telefono",
+                )
+                .prefetch_related(
+                    Prefetch("tenant_memberships", queryset=memberships_qs, to_attr="_tenant_memberships")
+                )
             )
 
             spec = DataTableSpec(
@@ -184,7 +192,7 @@ class UsersDataTableView(APIView):
             )
             return DataTableServer(spec).handle(request)
 
-        # Si es crear usuario
+        # Crear usuario
         serializer = ConsoleUserDetailSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -207,43 +215,180 @@ class UsersDataTableView(APIView):
             return Response({"error": "Usuario no encontrado"}, status=404)
 
     def delete(self, request, user_id=None, *args, **kwargs):
-        """DELETE /api/admin/v1/console/dt/users/{id}/ - Eliminar usuario"""
+        """DELETE /api/admin/v1/console/dt/users/{id}/ - Eliminar usuario via delete_user_service"""
         if not user_id:
             return Response({"error": "user_id requerido"}, status=400)
 
         try:
-            user = User.objects.get(pk=user_id)
+            user = User.objects.only("id", "email").get(pk=user_id)
             email = user.email
-
-            # Clean up tenant profiles and use raw delete to bypass cascade check
-            try:
-                from django.db import connections
-                from django_tenants.utils import get_tenant_model
-
-                Tenant = get_tenant_model()
-                for tenant in Tenant.objects.all():
-                    try:
-                        with connections[tenant.schema_name].cursor() as cursor:
-                            cursor.execute(
-                                'DELETE FROM perfil_tenantprofile WHERE user_id = %s',
-                                [user_id]
-                            )
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            # Delete using raw SQL to bypass Django's cascade checks
-            from django.db import connection
-            with connection.cursor() as cursor:
-                cursor.execute('DELETE FROM accounts_user WHERE id = %s', [user_id])
-
-            return Response({"mensaje": f"Usuario {email} eliminado correctamente"})
         except User.DoesNotExist:
             return Response({"error": "Usuario no encontrado"}, status=404)
+
+        try:
+            deleted_by_id = request.user.id if request.user.is_authenticated else None
+            delete_user_service(
+                user_id=user_id,
+                cascade=True,
+                deleted_by_id=deleted_by_id,
+            )
+            return Response({"mensaje": f"Usuario {email} eliminado correctamente"})
         except Exception as e:
             logger.exception(f"Error eliminando usuario {user_id}: {e}")
             return Response({"error": f"Error al eliminar usuario: {str(e)}"}, status=400)
+
+
+class OrphanTenantsView(APIView):
+    """
+    Tenants sin administrador primario activo (huerfanos).
+
+    GET /api/admin/v1/console/orphan-tenants/
+
+    Devuelve lista de Clients sin TenantMembership is_primary_admin=True + is_active=True,
+    para permitir asignacion de un usuario como owner desde la consola.
+    """
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, *args, **kwargs):
+        from django.db.models import Subquery, OuterRef, Exists
+
+        has_primary_admin = TenantMembership.objects.filter(
+            client=OuterRef("pk"),
+            is_primary_admin=True,
+            is_active=True,
+        )
+        orphans = (
+            Client.objects.exclude(schema_name="public")
+            .filter(is_active=True)
+            .annotate(has_primary=Exists(has_primary_admin))
+            .filter(has_primary=False)
+            .only("id", "nombre", "schema_name")
+            .annotate(
+                primary_domain=Subquery(
+                    Domain.objects.filter(tenant=OuterRef("pk"), is_primary=True).values("domain")[:1]
+                )
+            )
+        )
+        data = [
+            {
+                "id": t.id,
+                "nombre": t.nombre,
+                "schema_name": t.schema_name,
+                "primary_domain": t.primary_domain,
+            }
+            for t in orphans
+        ]
+        return Response({"count": len(data), "results": data})
+
+
+class AssignTenantView(APIView):
+    """
+    Asigna un usuario a un tenant como administrador primario.
+
+    POST /api/admin/v1/console/dt/users/{user_id}/assign-tenant/
+    Body: {
+        "tenant_id": int,
+        "rol": "ADMIN"|"STAFF"|"USER",       (default: "ADMIN")
+        "is_primary_admin": bool              (default: true)
+    }
+
+    Si el usuario ya tenia una membresia en ese tenant, la actualiza.
+    Si is_primary_admin=True, desvincula el admin primario anterior.
+    """
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, user_id=None, *args, **kwargs):
+        if not user_id:
+            return Response({"error": "user_id requerido"}, status=400)
+
+        try:
+            user = User.objects.get(pk=user_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "Usuario no encontrado o inactivo"}, status=404)
+
+        tenant_id = request.data.get("tenant_id")
+        if not tenant_id:
+            return Response({"error": "tenant_id requerido"}, status=400)
+
+        try:
+            tenant = Client.objects.get(pk=tenant_id, is_active=True)
+        except Client.DoesNotExist:
+            return Response({"error": "Tenant no encontrado o inactivo"}, status=404)
+
+        rol = request.data.get("rol", "ADMIN")
+        is_primary = bool(request.data.get("is_primary_admin", True))
+
+        # Si va a ser primary_admin, desmarcar al anterior
+        if is_primary:
+            TenantMembership.objects.filter(
+                client=tenant, is_primary_admin=True
+            ).update(is_primary_admin=False)
+
+        membership, created = TenantMembership.objects.update_or_create(
+            client=tenant,
+            user=user,
+            defaults={
+                "rol": rol,
+                "is_primary_admin": is_primary,
+                "is_active": True,
+            },
+        )
+
+        return Response(
+            {
+                "mensaje": f"Usuario {user.email} asignado a {tenant.nombre} como {rol}.",
+                "membership_id": membership.pk,
+                "tenant_nombre": tenant.nombre,
+                "tenant_schema": tenant.schema_name,
+                "created": created,
+            },
+            status=201 if created else 200,
+        )
+
+
+class UserTenantsView(APIView):
+    """
+    Devuelve las membresías del usuario indicado.
+
+    GET /api/admin/v1/console/dt/users/{user_id}/tenants/
+    """
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, user_id=None, *args, **kwargs):
+        if not user_id:
+            return Response({"error": "user_id requerido"}, status=400)
+        try:
+            User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "Usuario no encontrado"}, status=404)
+
+        memberships = (
+            TenantMembership.objects.filter(user_id=user_id)
+            .select_related("client")
+            .only(
+                "id", "rol", "is_primary_admin", "is_active",
+                "client__id", "client__nombre", "client__schema_name",
+            )
+        )
+        data = [
+            {
+                "membership_id": m.pk,
+                "tenant_id": m.client_id,
+                "nombre": m.client.nombre,
+                "schema_name": m.client.schema_name,
+                "rol": m.rol,
+                "is_primary_admin": m.is_primary_admin,
+                "is_active": m.is_active,
+            }
+            for m in memberships
+        ]
+        return Response({"count": len(data), "results": data})
 
 
 class ConsoleHealthView(APIView):

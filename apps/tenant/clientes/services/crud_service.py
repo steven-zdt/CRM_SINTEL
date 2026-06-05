@@ -1,5 +1,6 @@
 import logging
 from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from rest_framework.exceptions import ValidationError
 from ..models import Cliente, ContactoCliente
 from .selectors import DETAIL_FIELDS
@@ -40,7 +41,13 @@ class ClienteCRUDService:
         """Deletes a client only if inactive."""
         if cliente.activo:
             raise ValidationError({"detail": "No se puede eliminar un cliente activo. Inactívelo primero."})
-        cliente.delete()
+        try:
+            cliente.delete()
+        except ProtectedError as e:
+            modelos = ', '.join({obj.__class__.__name__ for obj in e.protected_objects})
+            raise ValidationError({
+                "detail": f"No se puede eliminar el cliente porque tiene registros vinculados: {modelos}."
+            })
 
 
 class ContactoCRUDService:
@@ -73,3 +80,42 @@ class ContactoCRUDService:
     @transaction.atomic
     def delete_contacto(contacto: ContactoCliente):
         contacto.delete()
+
+
+class CarteraCRUDService:
+    """Atomic database mutations for Cartera."""
+
+    @staticmethod
+    @transaction.atomic
+    def create_cartera(empresa_id: int, data: dict):
+        from ..models import Cartera
+        try:
+            return Cartera.objects.create(empresa_id=empresa_id, **data)
+        except IntegrityError as e:
+            if "uniq_cartera_factura_cliente" in str(e):
+                raise ValidationError({"numero_factura": ["Ya existe este numero de factura registrado para este cliente."]})
+            raise e
+
+    @staticmethod
+    @transaction.atomic
+    def update_cartera(cartera, data: dict):
+        for field, value in data.items():
+            setattr(cartera, field, value)
+        try:
+            cartera.save()
+            return cartera
+        except IntegrityError as e:
+            if "uniq_cartera_factura_cliente" in str(e):
+                raise ValidationError({"numero_factura": ["Ya existe otro registro con este numero de factura para este cliente."]})
+            raise e
+
+    @staticmethod
+    @transaction.atomic
+    def delete_cartera(cartera):
+        try:
+            cartera.delete()
+        except ProtectedError as e:
+            modelos = ', '.join({obj.__class__.__name__ for obj in e.protected_objects})
+            raise ValidationError({
+                "detail": f"No se puede eliminar el registro de cartera porque tiene registros vinculados: {modelos}."
+            })

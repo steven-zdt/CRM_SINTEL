@@ -11,6 +11,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -92,7 +93,8 @@ class EmpleadoBusinessService:
     def eliminar_empleado_retirado(empleado: Empleado, empresa_id: int = None) -> dict:
         """
         Elimina un empleado RETIRADO y sus dependencias en cascada.
-        Guarda: devengos → contratos → empleado (dentro de @transaction.atomic en CRUDService).
+        Condiciones de bloqueo: estado != RETIRADO, contrato activo, nomina activa,
+        tareas asignadas en proyectos.
         DSV: verifica empresa_id si se proporciona.
         """
         if empresa_id is not None and empleado.empresa_id != empresa_id:
@@ -100,7 +102,24 @@ class EmpleadoBusinessService:
         if empleado.estado != 'RETIRADO':
             raise ValidationError(
                 f'Solo se pueden eliminar empleados con estado RETIRADO. '
-                f'Estado actual: {empleado.estado}'
+                f'Estado actual: {empleado.estado}.'
+            )
+        if Contrato.objects.filter(empleado=empleado, estado='ACTIVO').exists() or Contrato.objects.filter(empleado=empleado, activo=True).exists():
+            raise ValidationError(
+                'No se puede eliminar el empleado porque tiene un contrato activo. '
+                'Finalice o cancele el contrato primero.'
+            )
+        if Devengo.objects.filter(empleado=empleado, anulado=False).exists():
+            raise ValidationError(
+                'No se puede eliminar el empleado porque tiene nominas activas. '
+                'Anule las nominas antes de eliminar.'
+            )
+        from django.apps import apps as django_apps
+        TareaCorta = django_apps.get_model('tenant_proyectos', 'TareaCorta')
+        if TareaCorta.objects.filter(empleado=empleado).exists():
+            raise ValidationError(
+                'No se puede eliminar el empleado porque tiene tareas asignadas en proyectos. '
+                'Desvincule las tareas primero.'
             )
         return EmpleadoCRUDService.eliminar_empleado(empleado)
 
@@ -217,7 +236,6 @@ class DevengoBusinessService:
         if devengo_id_excluir:
             qs = qs.exclude(pk=devengo_id_excluir)
 
-        from django.db.models import Sum
         total_dias = qs.aggregate(total=Sum('dias_laborados'))['total'] or Decimal('0')
         total_final = total_dias + nuevos_dias
 
@@ -284,6 +302,11 @@ class DevengoBusinessService:
         - Persistencia
         """
         # Validaciones
+        if not empleado:
+            raise ValidationError({'empleado': 'Debe especificar un empleado valido.'})
+        if not contrato:
+            raise ValidationError({'contrato': 'Debe especificar un contrato valido.'})
+
         if empleado.empresa_id != empresa_id:
             raise ValidationError({'empleado': 'El empleado no pertenece a este tenant.'})
 
@@ -342,14 +365,112 @@ class DevengoBusinessService:
         data['pension_empleado']   = Decimal(calculo['pension_empleado'])
         data['neto_pagar']         = Decimal(calculo['neto_pagar'])
 
-        # Crear o actualizar
+        # Crear o actualizar — el @transaction.atomic del metodo ya cubre todo el bloque
         if instance:
             devengo = DevengoCRUDService.actualizar_devengo(instance, data)
         else:
-            # Remover 'empleado' de data para evitar conflicto (se pasa explicitamente como parametro)
+            # FASE 1: Resolucion DIAN
+            from apps.tenant.empleados.models import ResolucionDIAN, TransmisionNominaDIAN
+            import hashlib
+            from django.utils.dateparse import parse_date as _parse_date
+
+            fecha_pago = data.get('fecha_pago')
+            if not fecha_pago:
+                fecha_pago = timezone.now().date()
+            elif isinstance(fecha_pago, str):
+                parsed = _parse_date(fecha_pago)
+                fecha_pago = parsed if parsed else timezone.now().date()
+            elif isinstance(fecha_pago, datetime):
+                fecha_pago = fecha_pago.date()
+
+            # Prioridad 1: resolución asignada específicamente al empleado
+            resolucion_activa = None
+            if empleado.resolucion_dian_id:
+                resolucion_activa = ResolucionDIAN.objects.filter(
+                    id=empleado.resolucion_dian_id,
+                    empresa_id=empresa_id,
+                    vigente=True,
+                    fecha_inicio__lte=fecha_pago,
+                    fecha_fin__gte=fecha_pago,
+                ).select_for_update().first()
+
+            # Prioridad 2: resolución activa general de la empresa (fallback)
+            if not resolucion_activa:
+                resolucion_activa = ResolucionDIAN.objects.filter(
+                    empresa_id=empresa_id,
+                    vigente=True,
+                    fecha_inicio__lte=fecha_pago,
+                    fecha_fin__gte=fecha_pago,
+                ).select_for_update().first()
+
+            if not resolucion_activa:
+                logger.warning(
+                    "[DIAN-NOMINA] Sin resolucion activa. empresa_id=%s | fecha_pago=%s",
+                    empresa_id, fecha_pago
+                )
+                raise ValidationError({
+                    'resolucion': (
+                        'No existe una resolucion DIAN activa y vigente para la fecha de pago '
+                        f'{fecha_pago}. Configure una resolucion en Nomina Electronica.'
+                    )
+                })
+
+            consecutivo_actual = resolucion_activa.consecutivo
+
+            # Defensa en profundidad: verifica rango inferior
+            # (invariante garantizado por ResolucionDIAN.save(), pero auditado aqui)
+            if consecutivo_actual < resolucion_activa.rango_desde:
+                logger.error(
+                    "[DIAN-NOMINA] Consecutivo %s fuera del rango autorizado [%s-%s]. "
+                    "empresa_id=%s | resolucion_uuid=%s",
+                    consecutivo_actual, resolucion_activa.rango_desde,
+                    resolucion_activa.rango_hasta, empresa_id, resolucion_activa.uuid
+                )
+                raise ValidationError({
+                    'resolucion': (
+                        f'El consecutivo actual ({consecutivo_actual}) esta por debajo del '
+                        f'rango autorizado ({resolucion_activa.rango_desde}). '
+                        'Corrija la resolucion en Configuracion > Nomina Electronica.'
+                    )
+                })
+
+            if consecutivo_actual > resolucion_activa.rango_hasta:
+                logger.error(
+                    "[DIAN-NOMINA] Resolucion agotada. consecutivo=%s rango_hasta=%s. "
+                    "empresa_id=%s | resolucion_uuid=%s",
+                    consecutivo_actual, resolucion_activa.rango_hasta,
+                    empresa_id, resolucion_activa.uuid
+                )
+                raise ValidationError({
+                    'resolucion': (
+                        f'La resolucion {resolucion_activa.numero_resolucion} ha agotado '
+                        f'sus consecutivos disponibles (ultimo: {resolucion_activa.rango_hasta}). '
+                        'Solicite una nueva resolucion a la DIAN.'
+                    )
+                })
+
+            # Remover 'empleado' de data para evitar conflicto con crear_devengo
             data_copy = data.copy()
             data_copy.pop('empleado', None)
             devengo = DevengoCRUDService.crear_devengo(empleado, data_copy)
+
+            # Generar numero de documento y CUNE
+            numero_documento = resolucion_activa.formar_consecutivo(consecutivo_actual)
+            cune_raw = f"{numero_documento}{devengo.uuid}{fecha_pago}"
+            cune = hashlib.sha256(cune_raw.encode('utf-8')).hexdigest()
+
+            TransmisionNominaDIAN.objects.create(
+                empresa_id=empresa_id,
+                devengo=devengo,
+                resolucion=resolucion_activa,
+                numero_documento=numero_documento,
+                cune=cune,
+                estado_dian='PENDIENTE'
+            )
+
+            # Incrementar consecutivo
+            resolucion_activa.consecutivo = consecutivo_actual + 1
+            resolucion_activa.save(update_fields=['consecutivo'])
 
         return devengo
 
@@ -398,7 +519,8 @@ class NominaCalculationService:
     ) -> dict:
         """
         Calcula liquidacion de nomina segun normativa colombiana.
-        Base: Ley 2101 de 2021 (46 horas semanales).
+        Base: Ley 2101 de 2021 — jornada 42h/semana vigente desde 2026
+        (_HORAS_MENSUALES = 200 = 42h x 4.76 semanas/mes, practica laboral colombiana).
         """
         # Validaciones
         if empresa_id and contrato.empresa_id != empresa_id:
@@ -564,37 +686,154 @@ class NominaCalculationService:
         }
 
     @staticmethod
-    def calcular_nomina_dinamica(contrato, dias_laborados, horas_extras=0, otros_devengos=0):
+    def calcular_dias_360(fecha_inicio, fecha_fin):
         """
-        Calculo alternativo basado en horas (v2.95 — legacy).
-        Alineado a Ley 2101/2021: valor_hora = salario_mensual / 200h.
+        Calcula dias entre dos fechas usando base comercial 30/360 (metodo europeo).
+        Regla: d1=31 y d2=31 siempre se ajustan a 30, sin condicion sobre el otro.
+        Inclusivo: cuenta ambos extremos (+1).
+        Base legal: practica comercial colombiana para liquidacion de prestaciones sociales.
         """
-        salario_mensual = _to_decimal(contrato.salario_mensual)
-        dias            = _to_decimal(dias_laborados)
-        h_extras        = _to_decimal(horas_extras)
-        otros           = _to_decimal(otros_devengos)
+        y1, m1, d1 = fecha_inicio.year, fecha_inicio.month, fecha_inicio.day
+        y2, m2, d2 = fecha_fin.year, fecha_fin.month, fecha_fin.day
 
-        valor_hora   = salario_mensual / _HORAS_MENSUALES       # 200h (Ley 2101/2021)
-        total_horas  = dias * Decimal('8')                       # 8h/día
-        salario_base = valor_hora * total_horas
+        if d1 == 31:
+            d1 = 30
+        if d2 == 31:
+            d2 = 30  # Siempre, sin condicion sobre d1 — estandar 30/360 europeo
 
-        auxilio = Decimal('0')
-        if contrato.tipo != 'PRESTACION':
-            auxilio_mensual = _to_decimal(contrato.auxilio_transporte)
-            if auxilio_mensual > Decimal('0'):
-                auxilio = auxilio_mensual * (dias / _DIAS_MENSUALES)
+        dias = (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1) + 1
+        return max(0, dias)
 
-        salud = pension = Decimal('0')
-        if contrato.tipo in ('FIJO', 'INDEF', 'OBRA'):
-            salud    = salario_base * Decimal('0.04')
-            pension  = salario_base * Decimal('0.04')
+    @staticmethod
+    def calcular_liquidacion_prestaciones(
+        contrato: Contrato,
+        tipo_liquidacion: str,
+        fecha_corte,
+        dias_salario_pendiente=0,
+        indemnizacion=0
+    ) -> dict:
+        """
+        Calcula liquidacion de prestaciones sociales (Primas, Cesantias, Intereses, Vacaciones)
+        y liquidacion definitiva.
+        """
+        from datetime import date
+        from django.utils.dateparse import parse_date
 
-        valor_he = h_extras * valor_hora * Decimal('1.25')      # H.E. diurnas por defecto
-        neto = (salario_base + auxilio + valor_he + otros) - (salud + pension)
+        if isinstance(fecha_corte, str):
+            parsed = parse_date(fecha_corte)
+            if parsed:
+                fecha_corte = parsed
+            else:
+                fecha_corte = date.today()
+        elif isinstance(fecha_corte, datetime):
+            fecha_corte = fecha_corte.date()
+
+        # Validar que el empleado tenga al menos una nomina (Devengo) activa (no anulada)
+        if not Devengo.objects.filter(contrato=contrato, empresa_id=contrato.empresa_id, anulado=False).exists():
+            raise ValidationError(
+                "No es posible liquidar a un empleado que no tiene nominas activas registradas en el sistema."
+            )
+
+        # Si el contrato es PRESTACION, forzar a cero inmediatamente
+        if contrato.tipo == 'PRESTACION':
+            return {
+                'dias_primas': 0,
+                'dias_cesantias': 0,
+                'dias_intereses': 0,
+                'dias_vacaciones': 0,
+                'valor_primas': Decimal('0.00'),
+                'valor_cesantias': Decimal('0.00'),
+                'valor_intereses': Decimal('0.00'),
+                'valor_vacaciones': Decimal('0.00'),
+                'total_prestaciones': Decimal('0.00'),
+                'dias_salario_pendiente': 0,
+                'salario_pendiente': Decimal('0.00'),
+                'indemnizacion': Decimal('0.00'),
+                'prestamos_deducidos': Decimal('0.00'),
+                'total_neto': Decimal('0.00'),
+                'fecha_inicio_contrato': contrato.fecha_inicio.strftime('%Y-%m-%d'),
+                'fecha_corte': fecha_corte.strftime('%Y-%m-%d'),
+                'fecha_inicio_primas': contrato.fecha_inicio.strftime('%Y-%m-%d'),
+                'fecha_inicio_cesantias': contrato.fecha_inicio.strftime('%Y-%m-%d'),
+                'fecha_inicio_vacaciones': contrato.fecha_inicio.strftime('%Y-%m-%d'),
+            }
+
+        # Calcular dias de primas
+        # Primas se liquidan por semestre comercial
+        if fecha_corte.month <= 6:
+            inicio_sem = date(fecha_corte.year, 1, 1)
+        else:
+            inicio_sem = date(fecha_corte.year, 7, 1)
+
+        start_primas = max(contrato.fecha_inicio, inicio_sem)
+        dias_primas = NominaCalculationService.calcular_dias_360(start_primas, fecha_corte)
+
+        # Calcular dias de cesantias, intereses y vacaciones
+        # Cesantias se liquidan por ano calendario
+        inicio_ano = date(fecha_corte.year, 1, 1)
+        start_cesantias = max(contrato.fecha_inicio, inicio_ano)
+        dias_cesantias = NominaCalculationService.calcular_dias_360(start_cesantias, fecha_corte)
+
+        dias_intereses = dias_cesantias
+
+        if tipo_liquidacion == 'LIQUIDACION_DEFINITIVA':
+            start_vacaciones = contrato.fecha_inicio
+            dias_vacaciones = NominaCalculationService.calcular_dias_360(start_vacaciones, fecha_corte)
+        else:
+            start_vacaciones = start_cesantias
+            dias_vacaciones = dias_cesantias
+
+        # Salario Base para Prestaciones: Salario + Auxilio de Transporte
+        salario_base_liq = Decimal(str(contrato.salario_mensual)) + Decimal(str(contrato.auxilio_transporte))
+        salario_basico = Decimal(str(contrato.salario_mensual))
+
+        # Formulas legales colombianas
+        valor_primas = (salario_base_liq * Decimal(str(dias_primas))) / Decimal('360')
+        valor_cesantias = (salario_base_liq * Decimal(str(dias_cesantias))) / Decimal('360')
+        
+        # Intereses de cesantias = (Cesantias * dias * 0.12) / 360
+        valor_intereses = (valor_cesantias * Decimal(str(dias_intereses)) * Decimal('0.12')) / Decimal('360')
+        
+        # Vacaciones = (Salario Basico * dias) / 720
+        valor_vacaciones = (salario_basico * Decimal(str(dias_vacaciones))) / Decimal('720')
+
+        total_prestaciones = valor_primas + valor_cesantias + valor_intereses + valor_vacaciones
+
+        # Definir salario pendiente
+        dias_sal_pend = _to_decimal(dias_salario_pendiente)
+        salario_pendiente = dias_sal_pend * (salario_basico / Decimal('30'))
+
+        # Definir indemnizacion
+        val_indemnizacion = _to_decimal(indemnizacion)
+
+        # Prestamos deducidos
+        if tipo_liquidacion == 'LIQUIDACION_DEFINITIVA':
+            prestamos_deducidos = Decimal(str(contrato.prestamos_empresa or '0.00'))
+        else:
+            prestamos_deducidos = Decimal('0.00')
+
+        total_neto = total_prestaciones + salario_pendiente + val_indemnizacion - prestamos_deducidos
 
         return {
-            "salario_base":    str(salario_base.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
-            "salud_empleado":  str(salud.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
-            "pension_empleado":str(pension.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
-            "neto_pagar":      str(neto.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            'dias_primas': dias_primas,
+            'dias_cesantias': dias_cesantias,
+            'dias_intereses': dias_intereses,
+            'dias_vacaciones': dias_vacaciones,
+            'valor_primas': valor_primas.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'valor_cesantias': valor_cesantias.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'valor_intereses': valor_intereses.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'valor_vacaciones': valor_vacaciones.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'total_prestaciones': total_prestaciones.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'dias_salario_pendiente': int(dias_sal_pend),
+            'salario_pendiente': salario_pendiente.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'indemnizacion': val_indemnizacion.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'prestamos_deducidos': prestamos_deducidos.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'total_neto': total_neto.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            'fecha_inicio_contrato': contrato.fecha_inicio.strftime('%Y-%m-%d'),
+            'fecha_corte': fecha_corte.strftime('%Y-%m-%d'),
+            'fecha_inicio_primas': start_primas.strftime('%Y-%m-%d'),
+            'fecha_inicio_cesantias': start_cesantias.strftime('%Y-%m-%d'),
+            'fecha_inicio_vacaciones': start_vacaciones.strftime('%Y-%m-%d'),
         }
+
+

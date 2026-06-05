@@ -8,11 +8,13 @@ SINTEL v3.10.1: Arquitectura Service Layer Modular.
 from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.proveedores.services.selectors import (
     ProveedorSelector,
+    CuentasPagarSelector,
     LIST_FIELDS,
     DETAIL_FIELDS,
 )
 from apps.tenant.proveedores.services.business_service import (
     ProveedorBusinessService,
+    CuentasPagarBusinessService,
 )
 from apps.tenant.proveedores.services.crud_service import (
     ProveedorCRUDService,
@@ -68,3 +70,18 @@ class ProveedorServiceMixin(BaseServiceMixin):
             proveedor_uuid=proveedor_uuid,
             tipo_documento=tipo_documento
         )
+
+
+class CuentasPagarServiceMixin:
+    """
+    Mixin que inyecta cuentas_pagar_selector y cuentas_pagar_service en CuentasPagarViewSet.
+    Proporciona acceso al selector Zero-Waste y al business service de Cuentas por Pagar.
+    """
+
+    @property
+    def cuentas_pagar_selector(self) -> CuentasPagarSelector:
+        return CuentasPagarSelector()
+
+    @property
+    def cuentas_pagar_service(self):
+        return CuentasPagarBusinessService()

@@ -2,7 +2,7 @@
 Tests funcionales para validar acceso desde subdominios dinámicos.
 
 Valida que Django acepta correctamente peticiones desde subdominios
-configurados (ej: cliente.sintel.com) y que el esquema correcto está activo.
+configurados (ej: {schema}.sintel.com) y que el esquema correcto está activo.
 """
 import pytest
 from django.test import Client

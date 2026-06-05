@@ -1,6 +1,6 @@
 # 🗺️ Mapa de Flujo: Módulo Perfil (SSoT)
 
-Este documento define la secuencia operativa para la gestión de acceso e identidad.
+Este documento define la secuencia operativa para la gestión de acceso, identidad y la sincronización de datos organizacionales en SINTEL v3.9.1.
 
 ---
 
@@ -60,9 +60,34 @@ graph TD
 
 ---
 
-## 4. Estructura de Navegación UI (FSD)
+## 4. Flujo de Sincronización Organizacional (Sedes, Áreas, Departamentos)
+
+El siguiente flujo describe cómo interactúan el cliente (DOM Shield) y el backend para garantizar que solo se asignen sedes, áreas y departamentos válidos.
+
+```mermaid
+sequenceDiagram
+    participant UI as Formulario UI (Crear/Editar)
+    participant DOM as DOM Shield Script (JS)
+    participant HID as Inputs Ocultos (UUIDs)
+    participant API as ViewSet (render_offcanvas)
+
+    API->>UI: Renderiza HTML con opciones (Departamentos, Sedes, Áreas con data-empresa/data-sede)
+    Note over UI: Al cambiar Empresa
+    UI->>DOM: Evento "change" en Empresa
+    DOM->>UI: Oculta y deshabilita Departamentos y Sedes de otras empresas
+    Note over UI: Al cambiar Sede
+    UI->>DOM: Evento "change" en Sede
+    DOM->>UI: Oculta y deshabilita Áreas de otras sedes
+    Note over UI: Al seleccionar opciones válidas
+    UI->>HID: Actualiza valores de inputs ocultos (UUIDs)
+    DOM->>HID: Setea departamento_uuid, sedes_uuids, areas_uuids
+```
+
+---
+
+## 5. Estructura de Navegación UI (FSD)
 
 - **User Management**: Tabla Tabulator con listado de colaboradores y sus roles.
 - **Detalle de Perfil**: Vista de solo lectura para el administrador.
 - **Editor de Perfil Propio**: Sección especial para que el usuario actual actualice su avatar y preferencias.
-- **Buscador Cross-Tenant**: (Opcional) Funcionalidad de administrador para invitar usuarios que ya existen en otros tenants de la plataforma.
+- **Sincronización Dinámica**: Formulario de creación/edición con filtrado de sedes, áreas y departamentos bajo el namespace `window.Sintel.Perfil`.

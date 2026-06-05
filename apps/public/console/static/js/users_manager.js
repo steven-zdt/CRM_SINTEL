@@ -27,7 +27,6 @@
     // CONFIGURACIÓN Y HELPERS
     // ============================================
 
-    const API_BASE_URL = '/api/admin/v1/accounts/users/';
     const API_DT_URL = '/api/admin/v1/console/dt/users/';
 
     function getCookie(name) {
@@ -197,50 +196,59 @@
                 dataSrc: function(json) {
                     if (json.data && Array.isArray(json.data)) {
                         return json.data.map(function(user) {
-                            // Badges de estado
-                            const activeBadge = user.is_active 
-                                ? '<span class="badge-active inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>Activo</span>'
-                                : '<span class="badge-inactive inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>Inactivo</span>';
+                            // Badges
+                            const activeBadge = user.is_active
+                                ? '<span class="badge-active inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold">Activo</span>'
+                                : '<span class="badge-inactive inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold">Inactivo</span>';
 
-                            const staffBadge = user.is_staff
-                                ? '<span class="badge-staff inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"><svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>Staff</span>'
-                                : '<span class="text-gray-400">-</span>';
+                            const tipoBadge = user.tipo_usuario === 'SYSTEM_ADMIN'
+                                ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-800 border border-red-200">&#9679; Sistema</span>'
+                                : user.tipo_usuario === 'TENANT_OWNER'
+                                    ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">&#9679; Owner</span>'
+                                    : '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">?</span>';
 
-                            // Fecha formateada
-                            const createdDate = user.date_joined 
-                                ? new Date(user.date_joined).toLocaleDateString('es-ES', { 
-                                    year: 'numeric', 
-                                    month: 'short', 
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })
-                                : '-';
+                            const staffBadge = tipoBadge;
 
-                            // Botones de acción
-                            const editBtn = `<button class="btn-edit inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-semibold rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-all duration-200" data-id="${user.id}" title="Editar usuario">
-                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                </svg>
-                                Editar
-                               </button>`;
+                            // Columna Tenants asignados — muestra URL del dominio
+                            const tenants = Array.isArray(user.tenants) ? user.tenants : [];
+                            let tenantsHtml;
+                            if (tenants.length === 0) {
+                                tenantsHtml = '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">Sin tenant</span>';
+                            } else {
+                                tenantsHtml = tenants.map(function(t) {
+                                    const rolColor = t.is_primary_admin
+                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100';
+                                    const star = t.is_primary_admin ? '<svg class="w-3 h-3 ml-1 text-indigo-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>' : '';
+                                    const url = t.domain_url || '';
+                                    const label = url || t.schema_name;
+                                    return `<a href="${url}" target="_blank" rel="noopener"
+                                        class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium ${rolColor} border mr-1 mb-0.5 transition-colors"
+                                        title="${t.nombre} (${t.rol})">${label}${star}</a>`;
+                                }).join('');
+                            }
 
-                            const deleteBtn = `<button class="btn-delete inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-semibold rounded-lg text-white bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-sm transition-all duration-200" data-id="${user.id}" title="Eliminar usuario">
-                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                </svg>
-                                Eliminar
-                               </button>`;
+                            // Botones
+                            const editBtn = `<button class="btn-edit inline-flex items-center px-2.5 py-1 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-all" data-id="${user.id}" title="Editar">
+                                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                Editar</button>`;
+
+                            const assignBtn = `<button class="btn-assign inline-flex items-center px-2.5 py-1 border border-indigo-300 text-xs font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 shadow-sm transition-all" data-id="${user.id}" data-email="${user.email}" title="Asignar a tenant">
+                                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                                Asignar</button>`;
+
+                            const deleteBtn = `<button class="btn-delete inline-flex items-center px-2.5 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 shadow-sm transition-all" data-id="${user.id}" title="Eliminar">
+                                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                Eliminar</button>`;
 
                             return [
                                 `<span class="font-semibold text-gray-900">#${user.id || '-'}</span>`,
                                 `<span class="font-medium text-gray-900">${user.email || '-'}</span>`,
-                                `<span class="text-gray-600">${user.first_name || '-'}</span>`,
-                                `<span class="text-gray-600">${user.last_name || '-'}</span>`,
+                                `<span class="text-gray-600">${(user.first_name || '') + ' ' + (user.last_name || '')}</span>`,
                                 activeBadge,
                                 staffBadge,
-                                `<span class="text-gray-600">${createdDate}</span>`,
-                                `<div class="flex items-center gap-2">${editBtn}${deleteBtn}</div>`
+                                `<div class="flex flex-wrap gap-0.5">${tenantsHtml}</div>`,
+                                `<div class="flex items-center gap-1">${editBtn}${assignBtn}${deleteBtn}</div>`
                             ];
                         });
                     }
@@ -253,22 +261,15 @@
                 }
             },
             columns: [
-                { data: 0, title: 'ID', orderable: true, searchable: false, className: 'text-center' },
+                { data: 0, title: 'ID', orderable: true, searchable: false, width: '50px' },
                 { data: 1, title: 'Email', orderable: true, searchable: true },
                 { data: 2, title: 'Nombre', orderable: true, searchable: true },
-                { data: 3, title: 'Apellido', orderable: true, searchable: true },
-                { data: 4, title: 'Activo', orderable: true, searchable: false, className: 'text-center' },
-                { data: 5, title: 'Staff', orderable: true, searchable: false, className: 'text-center' },
-                { data: 6, title: 'Creado', orderable: true, searchable: false },
-                { 
-                    data: 7, 
-                    title: 'Acciones',
-                    orderable: false,
-                    searchable: false,
-                    className: 'text-center'
-                }
+                { data: 3, title: 'Activo', orderable: false, searchable: false, width: '80px', className: 'text-center' },
+                { data: 4, title: 'Staff', orderable: false, searchable: false, width: '70px', className: 'text-center' },
+                { data: 5, title: 'Tenants asignados', orderable: false, searchable: false },
+                { data: 6, title: 'Acciones', orderable: false, searchable: false, width: '200px' }
             ],
-            order: [[6, 'desc']],
+            order: [[0, 'desc']],
             pageLength: 25,
             lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Todos"]],
             language: {
@@ -292,6 +293,117 @@
                 deleteUser(userId);
             }
         });
+
+        jQuery('#dt-users').on('click', '.btn-assign', function() {
+            const userId = jQuery(this).data('id');
+            const userEmail = jQuery(this).data('email');
+            openAssignTenantModal(userId, userEmail);
+        });
+    }
+
+    // ============================================
+    // MODAL: ASIGNAR TENANT HUERFANO
+    // ============================================
+
+    let _assignUserId = null;
+    let _allOrphanTenants = [];
+
+    async function openAssignTenantModal(userId, userEmail) {
+        _assignUserId = userId;
+        const modal = document.getElementById('assign-tenant-modal');
+        const label = document.getElementById('assign-user-label');
+        const feedback = document.getElementById('assign-feedback');
+        const searchInput = document.getElementById('assign-search');
+        const listEl = document.getElementById('assign-tenant-list');
+
+        if (label) label.textContent = `Usuario: ${userEmail}`;
+        if (feedback) { feedback.classList.add('hidden'); feedback.textContent = ''; }
+        if (searchInput) searchInput.value = '';
+
+        modal.classList.remove('hidden');
+
+        // Cargar tenants huerfanos
+        const table = document.getElementById('dt-users');
+        const orphanUrl = table ? table.dataset.orphanApi : '/api/admin/v1/console/orphan-tenants/';
+
+        listEl.innerHTML = '<div class="text-center text-gray-400 text-sm py-6">Cargando tenants sin administrador...</div>';
+
+        try {
+            const resp = await fetch(orphanUrl, { headers: getHeaders(false), credentials: 'include' });
+            const data = await resp.json();
+            _allOrphanTenants = data.results || [];
+            renderOrphanTenantList(_allOrphanTenants);
+        } catch (e) {
+            listEl.innerHTML = '<div class="text-center text-red-400 text-sm py-6">Error al cargar tenants.</div>';
+        }
+    }
+
+    function renderOrphanTenantList(tenants) {
+        const listEl = document.getElementById('assign-tenant-list');
+        if (!tenants.length) {
+            listEl.innerHTML = '<div class="text-center text-gray-400 text-sm py-6">Todos los tenants ya tienen administrador asignado.</div>';
+            return;
+        }
+        listEl.innerHTML = tenants.map(function(t) {
+            return `<button class="btn-orphan-select w-full text-left px-4 py-3 hover:bg-indigo-50 transition-colors flex items-center justify-between"
+                            data-tenant-id="${t.id}" data-tenant-nombre="${t.nombre}">
+                <div>
+                    <div class="text-sm font-semibold text-gray-900">${t.nombre}</div>
+                    <div class="text-xs text-gray-500">${t.schema_name}${t.primary_domain ? ' &bull; ' + t.primary_domain : ''}</div>
+                </div>
+                <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </button>`;
+        }).join('');
+
+        listEl.querySelectorAll('.btn-orphan-select').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const tenantId = this.dataset.tenantId;
+                const tenantNombre = this.dataset.tenantNombre;
+                assignTenantToUser(tenantId, tenantNombre);
+            });
+        });
+    }
+
+    async function assignTenantToUser(tenantId, tenantNombre) {
+        const feedback = document.getElementById('assign-feedback');
+        const isPrimary = document.getElementById('assign-primary')?.checked !== false;
+        const table = document.getElementById('dt-users');
+        const assignUrl = `${table.dataset.assignApi || '/api/admin/v1/console/dt/users/'}${_assignUserId}/assign-tenant/`;
+
+        feedback.classList.add('hidden');
+
+        try {
+            const resp = await fetch(assignUrl, {
+                method: 'POST',
+                headers: getHeaders(),
+                credentials: 'include',
+                body: JSON.stringify({ tenant_id: tenantId, rol: 'ADMIN', is_primary_admin: isPrimary })
+            });
+            const data = await resp.json();
+
+            if (resp.ok) {
+                feedback.className = 'mt-3 text-sm rounded-lg px-3 py-2 bg-green-50 text-green-800 border border-green-200';
+                feedback.textContent = `Usuario asignado a "${tenantNombre}" como Administrador.`;
+                feedback.classList.remove('hidden');
+                // Actualizar tabla y cerrar modal tras 1.5s
+                setTimeout(function() {
+                    document.getElementById('assign-tenant-modal').classList.add('hidden');
+                    if (typeof jQuery !== 'undefined' && jQuery.fn.dataTable) {
+                        jQuery('#dt-users').DataTable().ajax.reload();
+                    }
+                }, 1500);
+            } else {
+                feedback.className = 'mt-3 text-sm rounded-lg px-3 py-2 bg-red-50 text-red-800 border border-red-200';
+                feedback.textContent = data.error || 'Error al asignar el tenant.';
+                feedback.classList.remove('hidden');
+            }
+        } catch (e) {
+            feedback.className = 'mt-3 text-sm rounded-lg px-3 py-2 bg-red-50 text-red-800 border border-red-200';
+            feedback.textContent = 'Error de red. Intenta nuevamente.';
+            feedback.classList.remove('hidden');
+        }
     }
 
     // ============================================
@@ -319,7 +431,7 @@
 
     async function openEditModal(userId) {
         try {
-            const response = await fetch(`${API_BASE_URL}${userId}/`, {
+            const response = await fetch(`${API_DT_URL}${userId}/`, {
                 method: 'GET',
                 headers: getHeaders(false),
                 credentials: 'include'
@@ -423,7 +535,7 @@
             payload.password2 = password2;
         }
 
-        const url = isEdit ? `${API_BASE_URL}${userId}/` : API_BASE_URL;
+        const url = isEdit ? `${API_DT_URL}${userId}/` : API_DT_URL;
         const method = isEdit ? 'PATCH' : 'POST';
 
         try {
@@ -470,10 +582,10 @@
 
     async function deleteUser(userId) {
         try {
-            const response = await fetch(`${API_BASE_URL}${userId}/`, {
+            const response = await fetch(`${API_DT_URL}${userId}/`, {
                 method: 'DELETE',
                 headers: getHeaders(false),
-                credentials: 'include'  // Enviar cookies de sesión
+                credentials: 'include'
             });
 
             if (response.ok || response.status === 204) {
@@ -522,6 +634,32 @@
                 if (e.target === modal) {
                     closeModal();
                 }
+            });
+        }
+
+        // Modal asignacion de tenant: cerrar
+        const assignModal = document.getElementById('assign-tenant-modal');
+        const assignClose = document.getElementById('assign-modal-close');
+        const assignBackdrop = document.getElementById('assign-backdrop');
+
+        if (assignClose) assignClose.addEventListener('click', function() {
+            if (assignModal) assignModal.classList.add('hidden');
+        });
+        if (assignBackdrop) assignBackdrop.addEventListener('click', function() {
+            if (assignModal) assignModal.classList.add('hidden');
+        });
+
+        // Filtrar lista de tenants en el modal
+        const assignSearch = document.getElementById('assign-search');
+        if (assignSearch) {
+            assignSearch.addEventListener('input', function() {
+                const q = this.value.trim().toLowerCase();
+                const filtered = q
+                    ? _allOrphanTenants.filter(function(t) {
+                        return t.nombre.toLowerCase().includes(q) || t.schema_name.toLowerCase().includes(q);
+                      })
+                    : _allOrphanTenants;
+                renderOrphanTenantList(filtered);
             });
         }
 

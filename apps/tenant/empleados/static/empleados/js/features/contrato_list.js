@@ -3,7 +3,7 @@
  * Contrato List Module - Tabla independiente de Contratos
  *
  * Namespace: window.Sintel.Empleados.ContratoList
- * Version: v3.8.0 - Feature-Sliced: CRUD autonomo por modulo
+ * Version: v3.10.1 - Migrado a TabulatorFactory (mismo patron que EmpleadoList)
  */
 (function (w, d) {
     'use strict';
@@ -50,9 +50,8 @@
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
 
-        const action   = btn.dataset.action;
-        const uuid     = btn.dataset.uuid;
-        const empUuid  = btn.dataset.empUuid;
+        const action  = btn.dataset.action;
+        const uuid    = btn.dataset.uuid;
 
         switch (action) {
             case 'ver-detalle':
@@ -161,8 +160,8 @@
                 hozAlign: 'center',
                 headerSort: false,
                 formatter: (cell) => {
-                    const data  = cell.getRow().getData();
-                    const uuid  = data.uuid || '';
+                    const data    = cell.getRow().getData();
+                    const uuid    = data.uuid || '';
                     const esActivo = data.estado === 'ACTIVO';
 
                     let html = '<div class="btn-group btn-group-sm">';
@@ -205,7 +204,6 @@
             if (resp && resp.ok) {
                 w.UIManager?.notifySuccess('Contrato cancelado correctamente');
                 reload();
-                // Recargar tabla de empleados si esta visible
                 w.Sintel.Empleados.EmpleadoList?.reload();
             } else {
                 const msg = resp?.data?.error || resp?.data?.detail || 'Error al cancelar contrato';
@@ -234,40 +232,17 @@
         const api = API();
         if (!api) { console.error(`${MOD} API no disponible`); return; }
 
-        table = new Tabulator(el, {
-            ajaxURL: api.contratos.list,
-            ajaxParams: {},
-            ajaxResponse: (url, params, response) => response.results ?? response,
-            layout: 'fitData',
-            responsiveLayout: false,
-            pagination: 'remote',
+        if (!w.TabulatorFactory) {
+            console.warn(`${MOD} TabulatorFactory no disponible, reintentando en 100ms...`);
+            setTimeout(() => init(gridSelector), 100);
+            return;
+        }
+
+        table = w.TabulatorFactory.create(gridSelector, api.contratos.list, getColumnas(), {
+            searchInputSelector: '#search-contrato',
             paginationSize: 15,
             paginationSizeSelector: [10, 15, 25, 50],
-            sortMode: 'remote',
-            filterMode: 'remote',
-            columns: getColumnas(),
-            locale: 'es-co',
-            langs: {
-                'es-co': {
-                    pagination: { first: '«', prev: '‹', next: '›', last: '»' }
-                }
-            },
-            placeholder: '<div class="text-center text-muted py-4"><i class="bi bi-file-text fs-3"></i><p class="mt-2">Sin contratos registrados</p></div>',
         });
-
-        // Busqueda delegada
-        const searchEl = d.querySelector('#search-contrato');
-        if (searchEl) {
-            let debounce;
-            searchEl.addEventListener('input', () => {
-                clearTimeout(debounce);
-                debounce = setTimeout(() => {
-                    if (table) table.setFilter([
-                        { field: 'empleado_nombre', type: 'like', value: searchEl.value }
-                    ]);
-                }, 350);
-            });
-        }
 
         console.log(`${MOD} Tabla inicializada: ${api.contratos.list}`);
         return table;
@@ -277,12 +252,18 @@
 
     function reload() {
         if (table) {
-            table.replaceData();
+            table.setData();
+        }
+    }
+
+    function redraw() {
+        if (table) {
+            table.redraw(true);
         }
     }
 
     // ── Export ─────────────────────────────────────────────────────────────────
 
-    w.Sintel.Empleados.ContratoList = { init, reload };
+    w.Sintel.Empleados.ContratoList = { init, reload, redraw };
 
 })(window, document);

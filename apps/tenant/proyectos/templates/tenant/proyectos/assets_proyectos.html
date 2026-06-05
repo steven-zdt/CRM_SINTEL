@@ -12,21 +12,19 @@
 
 {# BLOQUE 2: Features Feature-Sliced (REQUERIDO) #}
 <script src="{% static 'proyectos/js/features/proyectos_list.js' %}"></script>
+<script src="{% static 'proyectos/js/features/nueva_tarea_list.js' %}"></script>
+<script src="{% static 'proyectos/js/features/nueva_tarea_editor.js' %}"></script>
 <script src="{% static 'proyectos/js/features/proyectos_editor.js' %}"></script>
 
-{# ⚠️ HTMX: Reinicializar listeners cuando se carga el Offcanvas vía HTMX #}
+{# htmx:afterSettle — DOM estable tras swap (no afterSwap: skill htmx.md §12, AGENTS.md §26) #}
 <script>
     if (typeof htmx !== 'undefined') {
-        document.addEventListener('htmx:afterSwap', function(event) {
-            // ⚠️ v2.60: Usar requestAnimationFrame en lugar de setTimeout para esperar renderizado
-            // Los eventos htmx:afterSwap ya garantizan que el DOM está actualizado
+        document.addEventListener('htmx:afterSettle', function(event) {
             if (event.detail.target.id === 'offcanvas-container-proyectos') {
-                requestAnimationFrame(() => {
-                    const offcanvasEl = document.getElementById('offcanvas-container-proyectos');
-                    if (offcanvasEl && window.ProyectosEditorModule && typeof window.ProyectosEditorModule.init === 'function') {
-                        window.ProyectosEditorModule.init();
-                    }
-                });
+                var offcanvasEl = document.getElementById('offcanvas-container-proyectos');
+                if (offcanvasEl && window.ProyectosEditorModule && typeof window.ProyectosEditorModule.init === 'function') {
+                    window.ProyectosEditorModule.init();
+                }
             }
         });
     }

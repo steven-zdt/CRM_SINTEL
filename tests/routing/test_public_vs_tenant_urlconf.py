@@ -33,22 +33,22 @@ def public_tenant(db):
 
 @pytest.fixture
 def tenant_home(db):
-    """Crea un tenant 'home' para tests."""
+    """Crea un tenant privado transaccional para tests de routing (no usa nombres de produccion)."""
     connection.set_schema_to_public()
-    
+
     tenant = Client.objects.create(
-        nombre="Home Tenant",
-        schema_name="home",
+        nombre="Test Routing Tenant",
+        schema_name="test_routing_tenant_01",
         is_active=True,
-        on_trial=True
+        on_trial=True,
     )
-    
+
     Domain.objects.create(
         tenant=tenant,
-        domain="home.localhost",
-        is_primary=True
+        domain="test-routing-01.localhost",
+        is_primary=True,
     )
-    
+
     return tenant
 
 
@@ -78,10 +78,10 @@ def test_public_console_not_on_tenant_host(client, tenant_home):
     """
     Test: La consola pública NO está disponible en dominios de tenant.
     
-    Objetivo: Verificar que /console/ está bloqueada (404) en home.localhost (tenant privado).
+    Objetivo: Verificar que /console/ está bloqueada (404) en test-routing-01.localhost (tenant privado).
     """
     # Acceder a la consola en el dominio del tenant
-    r = client.get("/console/tenants/", HTTP_HOST="home.localhost")
+    r = client.get("/console/tenants/", HTTP_HOST="test-routing-01.localhost")
     
     # Debe ser 404 (guard-rail) o 302 (redirección), pero nunca 200
     assert r.status_code != 200, \
@@ -94,15 +94,15 @@ def test_tenant_landing_and_api_on_tenant_host(client, tenant_home):
     """
     Test: Las rutas del tenant están disponibles en el dominio del tenant.
     
-    Objetivo: Verificar que / y /api/v1/ están disponibles en home.localhost (tenant privado).
+    Objetivo: Verificar que / y /api/v1/ están disponibles en test-routing-01.localhost (tenant privado).
     """
     # Acceder a la landing del tenant
-    r1 = client.get("/", HTTP_HOST="home.localhost")
+    r1 = client.get("/", HTTP_HOST="test-routing-01.localhost")
     assert r1.status_code in (200, 302, 404), \
         f"La landing del tenant debe estar disponible. Status: {r1.status_code}"
     
     # Acceder a una API del tenant (puede requerir autenticación)
-    r2 = client.get("/api/v1/empresas/", HTTP_HOST="home.localhost")
+    r2 = client.get("/api/v1/empresas/", HTTP_HOST="test-routing-01.localhost")
     # Puede ser 200 (si no requiere auth), 401 (no autenticado), 403 (sin permisos) o 404 (ruta no existe)
     assert r2.status_code in (200, 401, 403, 404), \
         f"Las APIs del tenant deben estar disponibles. Status: {r2.status_code}"
@@ -112,10 +112,10 @@ def test_public_api_not_exposed_on_tenant_host(client, tenant_home):
     """
     Test: Las APIs públicas NO están disponibles en dominios de tenant.
     
-    Objetivo: Verificar que /api/public/v1/ está bloqueada (404) en home.localhost (tenant privado).
+    Objetivo: Verificar que /api/public/v1/ está bloqueada (404) en test-routing-01.localhost (tenant privado).
     """
     # Acceder a una API pública en el dominio del tenant
-    r = client.get("/api/public/v1/tenants/", HTTP_HOST="home.localhost")
+    r = client.get("/api/public/v1/tenants/", HTTP_HOST="test-routing-01.localhost")
     
     # Debe ser 404 (guard-rail) o 302 (redirección), pero nunca 200
     assert r.status_code != 200, \
@@ -128,10 +128,10 @@ def test_admin_not_exposed_on_tenant_host(client, tenant_home):
     """
     Test: El Admin NO está disponible en dominios de tenant.
     
-    Objetivo: Verificar que /admin/ está bloqueada (404) en home.localhost (tenant privado).
+    Objetivo: Verificar que /admin/ está bloqueada (404) en test-routing-01.localhost (tenant privado).
     """
     # Acceder al admin en el dominio del tenant
-    r = client.get("/admin/", HTTP_HOST="home.localhost")
+    r = client.get("/admin/", HTTP_HOST="test-routing-01.localhost")
     
     # Debe ser 404 (guard-rail) o 302 (redirección), pero nunca 200
     assert r.status_code != 200, \

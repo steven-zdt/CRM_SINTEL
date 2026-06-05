@@ -33,5 +33,5 @@ class DocumentoSoporteAdmin(admin.ModelAdmin):
     date_hierarchy = 'fecha'
     readonly_fields = [
         'consecutivo', 'created_at', 'updated_at', 
-        'numero_documento', 'subtotal', 'retefuente', 'reteica', 'total'
+        'numero_documento', 'subtotal', 'total'
     ]

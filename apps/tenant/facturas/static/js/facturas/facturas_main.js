@@ -58,7 +58,12 @@
         }
 
         try {
-            offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(element);
+            // Dispose instancia previa antes de crear (AGENTS.md §26 — evita backdrops acumulados)
+            const prev = bootstrap.Offcanvas.getInstance(element);
+            if (prev) prev.dispose();
+            d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+            d.body.style.overflow = '';
+            offcanvasInstance = new bootstrap.Offcanvas(element);
             console.log(`${MOD} Offcanvas inicializado`);
             return offcanvasInstance;
         } catch (error) {
@@ -1821,23 +1826,20 @@
      * Configurar event listeners para HTMX
      */
     function initHTMXListeners() {
-        // ⚠️ HTMX: Manejar respuesta exitosa de subida
-        d.body.addEventListener('htmx:afterSwap', manejarSubidaArchivo);
+        // afterSettle: DOM estable tras swap — no usar afterSwap (skill htmx.md §12, AGENTS.md §26)
+        d.body.addEventListener('htmx:afterSettle', manejarSubidaArchivo);
 
-        // ⚠️ HTMX: Manejar errores de subida
+        // Errores de subida
         d.body.addEventListener('htmx:responseError', manejarErrorSubida);
 
-        // ⚠️ HTMX: Reinicializar Offcanvas cuando se carga vía HTMX
-        d.body.addEventListener('htmx:afterSwap', (event) => {
+        // Reinicializar Offcanvas cuando se carga via HTMX — afterSettle garantiza DOM listo
+        d.body.addEventListener('htmx:afterSettle', (event) => {
             const target = event.detail.target;
             if (target && target.id === OFFCANVAS_CONTAINER_ID) {
-                // Pequeño delay para asegurar que el DOM esté completamente renderizado
-                setTimeout(() => {
-                    const offcanvasEl = d.getElementById(OFFCANVAS_ID);
-                    if (offcanvasEl) {
-                        initOffcanvas(offcanvasEl);
-                    }
-                }, 50);
+                const offcanvasEl = d.getElementById(OFFCANVAS_ID);
+                if (offcanvasEl) {
+                    initOffcanvas(offcanvasEl);
+                }
             }
         });
 

@@ -129,15 +129,15 @@ class CoreLinksViewSet(ViewSet):
         "ui": "/dashboard/empresa/"
       },
             "facturas": {
-                "api": "/api/v1/core/v1/facturas/facturas/",  # # WARNING: v2.61.2: Facade
+                "api": "/api/v1/facturas/",
                 "ui": "/workspace/#facturas",  # # WARNING: v2.61.2: Workspace tab
             },
             "facturas-items": {
-                "api": "/api/v1/core/v1/facturas/items-factura/",  # # WARNING: v2.61.2: Facade
+                "api": "/api/v1/facturas/items-factura/",
                 "ui": "/workspace/#facturas",
             },
             "facturas-notas-credito": {
-                "api": "/api/v1/core/v1/facturas/notas-credito/",  # # WARNING: v2.61.2: Facade
+                "api": "/api/v1/facturas/notas-credito/",
                 "ui": "/workspace/#facturas",
             },
       ...
@@ -173,47 +173,47 @@ class CoreLinksViewSet(ViewSet):
                     "ui": "/dashboard/empresa/",  # Placeholder para UI futura
                 },
                 "facturas": {
-                    "api": "/api/v1/core/v1/facturas/facturas/",  # # WARNING: v2.61.1: Facade
+                    "api": "/api/v1/facturas/",
                     "ui": "/workspace/#facturas",  # # WARNING: v2.61.1: Workspace tab
                 },
                 "facturas-items": {
-                    "api": "/api/v1/core/v1/facturas/items-factura/",  # # WARNING: v2.61.1: Facade
+                    "api": "/api/v1/facturas/items-factura/",
                     "ui": "/workspace/#facturas",
                 },
                 "facturas-notas-credito": {
-                    "api": "/api/v1/core/v1/facturas/notas-credito/",  # # WARNING: v2.61.1: Facade
+                    "api": "/api/v1/facturas/notas-credito/",
                     "ui": "/workspace/#facturas",
                 },
                 "contabilidad": {
-                    "api": "/api/v1/core/v1/contabilidad/asientos/",  # Endpoint principal de contabilidad (facade)
+                    "api": "/api/v1/contabilidad/asientos-contables/",
                     "ui": "/dashboard/contabilidad/",  # Placeholder para UI futura
                 },
                 "cuentas-contables": {
-                    "api": "/api/v1/core/v1/contabilidad/cuentas/",  # Facade
+                    "api": "/api/v1/contabilidad/cuentas-contables/",
                     "ui": "/dashboard/contabilidad/cuentas/",  # Placeholder para UI futura
                 },
                 "asientos-contables": {
-                    "api": "/api/v1/core/v1/contabilidad/asientos/",  # Facade
+                    "api": "/api/v1/contabilidad/asientos-contables/",
                     "ui": "/dashboard/contabilidad/asientos/",  # Placeholder para UI futura
                 },
                 "periodos-contables": {
-                    "api": "/api/v1/core/v1/contabilidad/periodos-contables/",  # Facade # WARNING: v2.61
+                    "api": "/api/v1/contabilidad/periodos-contables/",
                     "ui": "/dashboard/contabilidad/periodos/",  # Placeholder para UI futura
                 },
                 "catalogo-niif": {
-                    "api": "/api/v1/core/v1/contabilidad/catalogo-niif/",  # Facade
+                    "api": "/api/v1/contabilidad/catalogo-niif/",
                     "ui": "/dashboard/contabilidad/catalogo-niif/",  # Placeholder para UI futura
                 },
                 "cotizaciones": {
-                    "api": "/api/v1/core/v1/cotizaciones/cotizaciones/",  # Endpoint principal de cotizaciones (facade) # WARNING: v2.61
+                    "api": "/api/v1/cotizaciones/",
                     "ui": "/workspace/#cotizaciones",  # UI en workspace
                 },
                 "cotizaciones-items": {
-                    "api": "/api/v1/core/v1/cotizaciones/items/",  # Facade # WARNING: v2.61
+                    "api": "/api/v1/cotizaciones/items/",
                     "ui": "/workspace/#cotizaciones",  # UI en workspace
                 },
                 "cotizaciones-configuracion": {
-                    "api": "/api/v1/core/v1/cotizaciones/configuracion/",  # Facade # WARNING: v2.61
+                    "api": "/api/v1/cotizaciones/configuracion/",
                     "ui": "/workspace/#cotizaciones",  # UI en workspace
                 },
                 "perfil": {
@@ -225,23 +225,23 @@ class CoreLinksViewSet(ViewSet):
                     "ui": "/workspace/#landing",
                 },
                 "inventario-categorias": {
-                    "api": "/api/v1/core/v1/inventario/categorias/",  # # WARNING: v2.61.3: Facade
+                    "api": "/api/v1/inventario/categorias/",
                     "ui": "/workspace/#inventario",
                 },
                 "inventario-productos": {
-                    "api": "/api/v1/core/v1/inventario/productos/",  # # WARNING: v2.61.3: Facade
+                    "api": "/api/v1/inventario/productos/",
                     "ui": "/workspace/#inventario",
                 },
                 "inventario-servicios": {
-                    "api": "/api/v1/core/v1/inventario/servicios/",  # # WARNING: v2.61.3: Facade
+                    "api": "/api/v1/inventario/servicios/",
                     "ui": "/workspace/#inventario",
                 },
                 "inventario-activos": {
-                    "api": "/api/v1/core/v1/inventario/activos/",  # # WARNING: v2.61.3: Facade
+                    "api": "/api/v1/inventario/activos/",
                     "ui": "/workspace/#inventario",
                 },
                 "inventario-movimientos": {
-                    "api": "/api/v1/core/v1/inventario/movimientos/",  # # WARNING: v2.61.3: Facade
+                    "api": "/api/v1/inventario/movimientos/",
                     "ui": "/workspace/#inventario",
                 },
                 "dashboard": {
@@ -669,16 +669,16 @@ class CoreAuthViewSet(ViewSet):
         try:
             from apps.public.tenants.services.onboarding import consume_onboarding_ott
             payload = consume_onboarding_ott(ott)
-            
+
             if not payload:
-                return Response({"detail": "Token inválido o expirado."}, status=status.HTTP_400_BAD_REQUEST)
-            
+                return Response({"detail": "Token invalido o expirado."}, status=status.HTTP_400_BAD_REQUEST)
+
             # Verificar que el token pertenece a este tenant
             if payload.get("schema_name") != tenant.schema_name:
                 return Response({"detail": "El token no pertenece a este tenant."}, status=status.HTTP_400_BAD_REQUEST)
-            
+
             user_id = payload.get("user_id")
-            
+
             # Obtener usuario asegurando el esquema correcto
             current_schema = connection.schema_name
             try:
@@ -688,60 +688,88 @@ class CoreAuthViewSet(ViewSet):
                 user = None
             finally:
                 connection.set_schema(current_schema)
-                
+
             if not user:
-                return Response({"detail": "Usuario inválido o inactivo."}, status=status.HTTP_401_UNAUTHORIZED)
-                
-            # Loguear automáticamente mediante sesión (Django requiere user.backend cuando user se obtiene via get)
-            user.backend = 'django.contrib.auth.backends.ModelBackend'
+                return Response({"detail": "Usuario invalido o inactivo."}, status=status.HTTP_401_UNAUTHORIZED)
+
+            # Cuenta preexistente: el tenant ya fue vinculado, redirigir a login
+            if payload.get("already_activated"):
+                login_url = f"http://{tenant.schema_name}.{getattr(settings, 'TENANT_DOMAIN_BASE', 'sintel.com')}/login/"
+                logger.info(
+                    "CoreAuthViewSet.consume_ott: usuario %s ya tenia cuenta activa, "
+                    "tenant vinculado, redirigiendo a login",
+                    user.email,
+                )
+                return Response(
+                    {
+                        "success": True,
+                        "already_activated": True,
+                        "message": payload.get("message", "El tenant ha sido anadido a tu cuenta existente."),
+                        "redirect_url": login_url,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            # Cuenta nueva: loguear automaticamente y redirigir al workspace
+            user.backend = "django.contrib.auth.backends.ModelBackend"
             login(request, user)
-            
-            logger.info("CoreAuthViewSet.consume_ott: Autenticación exitosa vía OTT: user=%s, tenant=%s", user.email, tenant.schema_name)
-            
-            # El test original también espera respuesta exitosa vacía o con tokens.
-            # Como usamos session auth (HTTP cookies) a nivel vista, esto es suficiente.
-            return Response({"success": True}, status=status.HTTP_200_OK)
+
+            logger.info(
+                "CoreAuthViewSet.consume_ott: autenticacion exitosa via OTT: user=%s, tenant=%s",
+                user.email, tenant.schema_name,
+            )
+            return Response({"success": True, "already_activated": False}, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(
-                "CoreAuthViewSet.consume_ott: Error inesperado: error=%s",
+                "CoreAuthViewSet.consume_ott: error inesperado: %s",
                 str(e),
-                exc_info=True
+                exc_info=True,
             )
             return Response(
                 {"detail": "Error interno al procesar el consumo del token."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
     @action(detail=False, methods=['post'], url_path='password-reset/request', url_name='password-reset-request')
     def password_reset_request(self, request):
-        """POST /api/v1/core/auth/password-reset/request/"""
-        email_or_username = request.data.get('email_or_username', '').strip()
-        if not email_or_username:
+        """
+        POST /api/v1/core/auth/password-reset/request/
+        Body: { "email": "user@example.com" }
+        Respuesta idempotente — no revela si el usuario existe.
+        v3.13.0: genera codigo de 8 chars en Redis, envia por email.
+        """
+        # Acepta tanto "email" como "email_or_username" para compatibilidad
+        email = (
+            request.data.get('email', '')
+            or request.data.get('email_or_username', '')
+        ).strip().lower()
+
+        if not email:
             return Response(
-                {"detail": "Email o username requerido."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Email requerido."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         tenant = getattr(request, 'tenant', None)
         if not tenant:
             return Response(
                 {"detail": "No se pudo determinar el tenant."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         try:
             from apps.tenant.core.services.auth_service import (
                 password_reset_request as service_password_reset_request,
             )
-            result = service_password_reset_request(email_or_username, tenant)
+            result = service_password_reset_request(email, tenant)
             return Response(result, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"Error en password_reset_request: {str(e)}", exc_info=True)
+            logger.error("Error en password_reset_request: %s", str(e), exc_info=True)
             return Response(
-                {"detail": "Si el email existe y tiene acceso a este tenant, recibirás un correo."},
-                status=status.HTTP_200_OK
+                {"detail": "Si el email existe en este tenant, recibiras un codigo por correo."},
+                status=status.HTTP_200_OK,
             )
 
     @action(detail=False, methods=['post'], url_path='password-reset/validate', url_name='password-reset-validate')
@@ -778,36 +806,126 @@ class CoreAuthViewSet(ViewSet):
 
     @action(detail=False, methods=['post'], url_path='password-reset/confirm', url_name='password-reset-confirm')
     def password_reset_confirm(self, request):
-        """POST /api/v1/core/auth/password-reset/confirm/"""
-        uid = request.data.get('uid', '').strip()
-        token = request.data.get('token', '').strip()
-        new_password = request.data.get('new_password', '')
-        
-        if not uid or not token or not new_password:
+        """
+        POST /api/v1/core/auth/password-reset/confirm/
+        Body: { "code": "AKBT3M7Q", "new_password": "...", "confirm_password": "..." }
+        v3.13.0: acepta codigo Redis de 8 chars (reemplaza uid+token).
+        """
+        code = (request.data.get('code', '') or '').strip()
+        new_password = request.data.get('new_password', '') or request.data.get('password1', '')
+        confirm_password = request.data.get('confirm_password', '') or request.data.get('password2', '')
+
+        if not code or not new_password:
             return Response(
-                {"detail": "UID, token y nueva contraseña son requeridos."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Codigo y nueva contrasena son requeridos."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+        if len(new_password) < 8:
+            return Response(
+                {"detail": "La contrasena debe tener al menos 8 caracteres."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if confirm_password and new_password != confirm_password:
+            return Response(
+                {"detail": "Las contrasenas no coinciden."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         tenant = getattr(request, 'tenant', None)
         if not tenant:
             return Response(
                 {"detail": "No se pudo determinar el tenant."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         try:
-            from apps.tenant.core.services.auth_service import (
-                password_reset_confirm as service_password_reset_confirm,
-            )
-            result = service_password_reset_confirm(uid, token, new_password, tenant)
-            return Response(result, status=status.HTTP_200_OK)
-        except Exception as e:
-            logger.error(f"Error en password_reset_confirm: {str(e)}", exc_info=True)
+            from apps.tenant.core.services.password_reset import confirm_reset_with_code
+            user = confirm_reset_with_code(code, tenant.schema_name, new_password)
+            redirect_url = f"/static/tenant/core/auth/login.html"
             return Response(
-                {"detail": "Error al restablecer contraseña. Intenta nuevamente."},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "detail": "Contrasena restablecida exitosamente.",
+                    "redirect_url": redirect_url,
+                },
+                status=status.HTTP_200_OK,
             )
+        except Exception as e:
+            logger.warning("password_reset_confirm error: %s", str(e))
+            return Response(
+                {"detail": "Codigo invalido o expirado. Solicita uno nuevo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=False, methods=['post'], url_path='activate-with-code', url_name='activate-with-code')
+    def activate_with_code(self, request):
+        """
+        POST /api/v1/core/auth/activate-with-code/
+        Body: { "email": "...", "code": "AKBT3M7Q", "password": "...", "confirm_password": "..." }
+
+        Esquema canonico v3.15.1: activacion via codigo alfanumerico de 8 chars (Redis).
+        El codigo fue enviado por email al owner del tenant. Se valida contra Redis
+        con aislamiento por tenant_id para evitar uso cross-tenant.
+        """
+        from apps.public.tenants.services.invitations import validate_activation_code
+        from django.contrib.auth import get_user_model
+        from apps.public.tenants.models import TenantMembership
+
+        email = (request.data.get("email") or "").strip().lower()
+        code = (request.data.get("code") or "").strip()
+        password = request.data.get("password") or ""
+        confirm = request.data.get("confirm_password") or request.data.get("password2") or ""
+
+        if not email or not code or not password:
+            return Response({"detail": "Email, codigo y contrasena son obligatorios."}, status=status.HTTP_400_BAD_REQUEST)
+        if len(password) < 8:
+            return Response({"detail": "La contrasena debe tener al menos 8 caracteres."}, status=status.HTTP_400_BAD_REQUEST)
+        if confirm and password != confirm:
+            return Response({"detail": "Las contrasenas no coinciden."}, status=status.HTTP_400_BAD_REQUEST)
+
+        tenant = getattr(request, "tenant", None)
+        if not tenant:
+            return Response({"detail": "No se pudo determinar el tenant."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validar codigo en Redis (uso unico, aislado por tenant_id via payload)
+        payload = validate_activation_code(code)
+        if not payload:
+            return Response({"detail": "Codigo invalido o expirado. Solicita uno nuevo."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verificar que el codigo pertenece a este tenant
+        if payload.get("tenant_id") != tenant.id:
+            return Response({"detail": "Codigo invalido o expirado. Solicita uno nuevo."}, status=status.HTTP_400_BAD_REQUEST)
+
+        current_schema = connection.schema_name
+        try:
+            connection.set_schema_to_public()
+            User = get_user_model()
+            try:
+                user = User.objects.get(pk=payload["user_id"], is_active=True)
+            except User.DoesNotExist:
+                return Response({"detail": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+            # Verificar email del formulario coincide con el usuario del payload
+            if user.email.lower() != email:
+                return Response({"detail": "El email no coincide con el codigo de activacion."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Verificar membresia en este tenant
+            if not TenantMembership.objects.filter(client=tenant, user=user, is_active=True).exists():
+                return Response({"detail": "El usuario no pertenece a este tenant."}, status=status.HTTP_403_FORBIDDEN)
+
+            user.set_password(password)
+            user.is_active = True
+            user.save(update_fields=["password", "is_active"])
+            logger.info("activate_with_code: contrasena establecida para user=%s tenant=%s", user.email, tenant.schema_name)
+        finally:
+            connection.set_schema(current_schema)
+
+        return Response(
+            {
+                "detail": "Cuenta activada correctamente.",
+                "redirect_url": "/static/tenant/core/auth/login.html",
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=['get', 'post'], url_path='activate', url_name='activate')
     def activate(self, request):

@@ -217,14 +217,11 @@
         init();
     }
 
-    // ⚠️ HTMX: Reinicializar cuando se cargue el Offcanvas vía HTMX
+    // htmx:afterSettle garantiza DOM estable — no usar afterSwap ni setTimeout (race condition)
     if (typeof htmx !== 'undefined') {
-        d.addEventListener('htmx:afterSwap', (event) => {
+        d.addEventListener('htmx:afterSettle', (event) => {
             if (event.detail.target.id === 'offcanvas-container-empresa') {
-                // Pequeño delay para asegurar que el DOM esté completamente renderizado
-                setTimeout(() => {
-                    initEditorEvents();
-                }, 50);
+                initEditorEvents();
             }
         });
     }

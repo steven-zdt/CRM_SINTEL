@@ -7,22 +7,65 @@ WARNING: SINTEL v2.60: Sincronizacion Arquitectonica
 - Separacion List/Detail: ListSerializer para tablas, DetailSerializer para formularios
 - Campos Explicitos: PROHIBIDO __all__, usar campos explicitos alineados con LIST_FIELDS y DETAIL_FIELDS
 """
+import re
 from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import EmailValidator
 from rest_framework import serializers
 
 from apps.tenant.api.utils import NormalizationMixin as BaseMixin
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, ResolucionDIAN, LiquidacionPrestacion
 
 class NullableUUIDField(serializers.UUIDField):
-    """UUIDField que convierte cadena vacía en None (útil con FormData/HTMX)."""
+    """UUIDField que convierte cadena vacia en None (util con FormData/HTMX)."""
     def to_internal_value(self, data):
         if data == '' or data is None:
             return None
         return super().to_internal_value(data)
 
+class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
+    """Campo relacionado que acepta UUID publico o PK interno en formularios legacy."""
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if queryset is None:
+            return queryset
+        root = getattr(self, 'root', None)
+        context = getattr(root, 'context', {}) if root else {}
+        empresa_id = context.get('empresa_id')
+        if empresa_id and hasattr(queryset.model, 'empresa_id'):
+            queryset = queryset.filter(empresa_id=empresa_id)
+        return queryset
+
+    def to_internal_value(self, data):
+        if data in (None, ''):
+            if self.allow_null:
+                return None
+            self.fail('required')
+
+        data_str = str(data).strip()
+
+        # WARNING: UUID-Safe: Detectar si es UUID (tiene guiones) o PK entero
+        if '-' in data_str and not data_str.isdigit():
+            # Es un UUID - buscar por uuid field
+            queryset = self.get_queryset()
+            try:
+                obj = queryset.get(uuid=data_str)
+                return obj
+            except Exception as e:
+                # Manejar tanto DoesNotExist como otros errores
+                import sys
+                print(
+                    f"[DEBUG] UUID lookup failed: uuid='{data_str}', error={type(e).__name__}: {e}",
+                    file=sys.stderr
+                )
+                self.fail('does_not_exist', pk_value=data)
+
+        # Es un PK entero - usar el metodo parent
+        return super().to_internal_value(data)
+
 # WARNING: v2.60: Importar campos desde services.py (SSoT)
-from apps.tenant.empresa.models import Empresa
+from apps.tenant.empresa.models import Area, Empresa, Sede
 
 from ..choices import AFP_CHOICES, ARL_CHOICES, EPS_CHOICES, RIESGO_ARL_CHOICES
 from ..models import Contrato, Devengo, Empleado
@@ -93,6 +136,10 @@ class EmpleadoListSerializer(serializers.ModelSerializer):
     tipo_doc_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
 
+    # Sede and Area display fields (FASE 2: API & Serializacion)
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+    area_nombre = serializers.CharField(source='area.nombre', read_only=True, allow_null=True)
+
     # Foto de perfil — URL relativa para el avatar en Tabulator
     foto_url = serializers.SerializerMethodField()
 
@@ -101,6 +148,7 @@ class EmpleadoListSerializer(serializers.ModelSerializer):
     tiene_contrato_activo = serializers.BooleanField(read_only=True)
     tiene_nominas_registradas = serializers.BooleanField(read_only=True)
     contrato_activo_uuid = serializers.UUIDField(read_only=True, allow_null=True)
+    cargo = serializers.CharField(read_only=True, allow_null=True)
 
     def get_foto_url(self, obj):
         if not obj.foto:
@@ -115,11 +163,14 @@ class EmpleadoListSerializer(serializers.ModelSerializer):
             'primer_nombre', 'primer_apellido', 'nombre_completo',
             'estado', 'estado_display', 'fecha_ingreso',
             'foto_url',
-            'tiene_contrato_activo', 'tiene_nominas_registradas', 'contrato_activo_uuid'
+            'tiene_contrato_activo', 'tiene_nominas_registradas', 'contrato_activo_uuid',
+            'email', 'telefono', 'cargo',
+            'sede_nombre', 'area_nombre'
         )
         read_only_fields = ['id', 'uuid', 'nombre_completo', 'tipo_doc_display', 'estado_display',
                            'foto_url',
-                           'tiene_contrato_activo', 'tiene_nominas_registradas', 'contrato_activo_uuid']
+                           'tiene_contrato_activo', 'tiene_nominas_registradas', 'contrato_activo_uuid',
+                           'email', 'telefono', 'cargo', 'sede_nombre', 'area_nombre']
 
 class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
@@ -134,11 +185,11 @@ class ContratoNestedSerializer(NormalizationMixin, serializers.ModelSerializer):
     estado_display = serializers.CharField(source='get_estado_display', read_only=True)
     empleado_nombre = serializers.CharField(source='empleado.nombre_completo', read_only=True)
     
-    # WARNING: v2.60: Campo empleado - puede venir como ID (string) desde FormData
-    empleado = serializers.PrimaryKeyRelatedField(
+    # WARNING: v2.60: Campo empleado - puede venir como ID o UUID desde FormData
+    empleado = UUIDOrPKRelatedField(
         queryset=Empleado.objects.none(),
         required=True,
-        help_text="ID del empleado (puede venir como string desde FormData)"
+        help_text="ID o UUID del empleado (puede venir como string/UUID desde FormData)"
     )
     
     # WARNING: v2.95: Campos opcionales con valores por defecto (valores en COP)
@@ -243,16 +294,16 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
     # required=False: puede derivarse automaticamente de fecha_inicio en el viewset
     periodo_mes = serializers.CharField(required=False, allow_blank=True, help_text="Periodo YYYY-MM — se deriva de fecha_inicio si no se envia")
     fecha_pago = serializers.DateField(required=True)
-    dias_laborados = serializers.DecimalField(max_digits=5, decimal_places=2, required=True, help_text="Dias laborados (0.5-30, permite decimales)")
-    empleado = serializers.PrimaryKeyRelatedField(
+    dias_laborados = serializers.DecimalField(max_digits=5, decimal_places=2, required=True, help_text="Dias laborados (0.5-31, permite decimales)")
+    empleado = UUIDOrPKRelatedField(
         queryset=Empleado.objects.none(),
         required=True,
-        help_text="ID del empleado"
+        help_text="ID o UUID del empleado"
     )
-    contrato = serializers.PrimaryKeyRelatedField(
+    contrato = UUIDOrPKRelatedField(
         queryset=Contrato.objects.none(),
         required=True,
-        help_text="ID del contrato activo"
+        help_text="ID o UUID del contrato activo"
     )
     
     # WARNING: v2.60: Campos calculados - READ_ONLY
@@ -270,10 +321,6 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
     contrato_tipo_display = serializers.CharField(source='contrato.get_tipo_display', read_only=True)
     contrato_cargo        = serializers.CharField(source='contrato.cargo',             read_only=True)
 
-    # Mapeo contable — SSoT en Devengo (Pull Model Contabilidad)
-    # NullableUUIDField: acepta cadena vacía de FormData/HTMX y la convierte en None
-    cuenta_contable_uuid = NullableUUIDField(required=False, allow_null=True)
-    
     # WARNING: v2.95: Campos opcionales con valores por defecto
     prestamos = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Prestamos descontados en COP")
     descuentos_operativos = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0, help_text="Descuentos operativos en COP")
@@ -334,8 +381,6 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
             'observaciones', 'neto_pagar', 'anulado',
             # Rango de fechas del período
             'fecha_inicio', 'fecha_fin',
-            # Mapeo contable
-            'cuenta_contable_uuid',
         )
         read_only_fields = (
             'id', 'uuid',
@@ -355,19 +400,17 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
         # Validar formato de periodo_mes (YYYY-MM)
         periodo_mes = attrs.get('periodo_mes')
         if periodo_mes:
-            import re
             if not re.match(r'^\d{4}-\d{2}$', periodo_mes):
                 raise serializers.ValidationError({
                     'periodo_mes': ['El periodo debe tener el formato YYYY-MM (ej: 2024-01).']
                 })
         
-        # Validar rango de dias_laborados (0.5 - 30)
+        # Validar rango de dias_laborados (0.5 - 31, Colombia admite meses de 31 dias)
         dias_laborados = attrs.get('dias_laborados')
         if dias_laborados is not None:
-            from decimal import Decimal
-            if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('30'):
+            if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('31'):
                 raise serializers.ValidationError({
-                    'dias_laborados': ['Los dias laborados deben estar entre 0.5 y 30.']
+                    'dias_laborados': ['Los dias laborados deben estar entre 0.5 y 31.']
                 })
 
         # WARNING: v2.60: Validar unicidad (empleado, periodo_mes, fecha_pago)
@@ -443,19 +486,25 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
         # Validar que el contrato pertenezca al empleado enviado en el mismo payload.
         empleado = self.initial_data.get('empleado') if hasattr(self, 'initial_data') else None
         if empleado:
+            empleado_id = None
             if isinstance(empleado, int):
                 empleado_id = empleado
+            elif isinstance(empleado, str) and empleado.isdigit():
+                empleado_id = int(empleado)
             elif hasattr(empleado, 'id'):
                 empleado_id = empleado.id
-            else:
-                empleado_id = None
+            elif isinstance(empleado, str):
+                # Buscar por UUID si se envio como UUID
+                empleado_id = Empleado.objects.filter(
+                    empresa_id=empresa_id,
+                    uuid=empleado
+                ).values_list('id', flat=True).first()
 
             if empleado_id and value.empleado_id != empleado_id:
                 raise serializers.ValidationError("El contrato seleccionado no pertenece al empleado especificado.")
 
         return value
-
-class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
+class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     WARNING: v2.60: Serializer completo para DETALLE/EDICION de Empleados.
     Campos alineados con EMPLEADO_DETAIL_FIELDS de services.py.
@@ -465,6 +514,44 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     contratos = ContratoNestedSerializer(many=True, read_only=True)
     nombre_completo = serializers.ReadOnlyField()
+
+    # Sede and Area fields (Fase 2: API & Serializacion)
+    sede = UUIDOrPKRelatedField(
+        queryset=Sede.objects.none(),
+        required=False,
+        allow_null=True,
+        help_text="ID o UUID de la sede"
+    )
+
+    # Resolucion DIAN — Nomina Electronica (DSPNE)
+    resolucion_dian = UUIDOrPKRelatedField(
+        queryset=ResolucionDIAN.objects.none(),
+        required=False,
+        allow_null=True,
+        help_text="UUID de la ResolucionDIAN asignada para DSPNE de este empleado"
+    )
+    resolucion_dian_info = serializers.SerializerMethodField()
+
+    def get_resolucion_dian_info(self, obj):
+        r = obj.resolucion_dian
+        if not r:
+            return None
+        return {
+            'uuid':              str(r.uuid),
+            'numero_resolucion': r.numero_resolucion,
+            'prefijo':           r.prefijo,
+            'vigente':           r.vigente,
+            'consecutivo':       r.consecutivo,
+            'rango_hasta':       r.rango_hasta,
+        }
+    area = UUIDOrPKRelatedField(
+        queryset=Area.objects.none(),
+        required=False,
+        allow_null=True,
+        help_text="ID o UUID del area"
+    )
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+    area_nombre = serializers.CharField(source='area.nombre', read_only=True, allow_null=True)
 
     # Foto de perfil — ImageField writable + URL read-only
     foto = serializers.ImageField(required=False, allow_null=True, use_url=True)
@@ -495,6 +582,26 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     # WARNING: v2.60: Empresa es read_only pero se asigna en perform_create
     empresa = serializers.PrimaryKeyRelatedField(read_only=True)
 
+    def __init__(self, *args, **kwargs):
+        """WARNING: v2.60: Inicializar querysets dinamicamente para validacion Zero Trust."""
+        super().__init__(*args, **kwargs)
+        empresa_id = self._get_empresa_id()
+        if empresa_id:
+            # Filtrar querysets por empresa (Zero Trust)
+            if 'sede' in self.fields:
+                self.fields['sede'].queryset = Sede.objects.filter(
+                    empresa_id=empresa_id
+                ).only('id', 'uuid', 'nombre', 'empresa_id')
+            if 'area' in self.fields:
+                self.fields['area'].queryset = Area.objects.filter(
+                    empresa_id=empresa_id
+                ).select_related('sede').only('id', 'uuid', 'nombre', 'sede_id', 'sede__id', 'sede__uuid', 'empresa_id')
+            if 'resolucion_dian' in self.fields:
+                self.fields['resolucion_dian'].queryset = ResolucionDIAN.objects.filter(
+                    empresa_id=empresa_id
+                ).only('id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
+                       'consecutivo', 'rango_hasta', 'empresa_id')
+
     class Meta:
         model = Empleado
         fields = (
@@ -505,8 +612,11 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'estado', 'fecha_ingreso', 'fecha_retiro',
             'foto', 'foto_url',
             'nombre_completo', 'contratos',
+            'sede', 'area', 'sede_nombre', 'area_nombre',
+            'resolucion_dian', 'resolucion_dian_info',
         )
-        read_only_fields = ('id', 'uuid', 'empresa', 'nombre_completo', 'contratos', 'foto_url')
+        read_only_fields = ('id', 'uuid', 'empresa', 'nombre_completo', 'contratos',
+                            'foto_url', 'sede_nombre', 'area_nombre', 'resolucion_dian_info')
 
     def validate(self, attrs):
         """Zero Trust — normaliza y verifica unicidad antes de persistir."""
@@ -542,6 +652,21 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
                     msg = f'El documento {tipo} {numero} ya esta registrado para {nombre}.'
                 raise serializers.ValidationError({'numero_documento': msg})
 
+        # DSV (Double Semantic Verification) para Sede y Area
+        sede = attrs.get('sede')
+        area = attrs.get('area')
+
+        if sede and sede.empresa_id != empresa_id:
+            raise serializers.ValidationError({'sede': 'La sede seleccionada no pertenece a esta empresa.'})
+
+        if area:
+            if area.empresa_id != empresa_id:
+                raise serializers.ValidationError({'area': 'El area seleccionada no pertenece a esta empresa.'})
+            if not sede:
+                raise serializers.ValidationError({'sede': 'Debe seleccionar una sede si selecciona un area.'})
+            if area.sede_id != sede.id:
+                raise serializers.ValidationError({'area': 'El area seleccionada no pertenece a la sede seleccionada.'})
+
         return attrs
     
     def validate_email(self, value):
@@ -552,3 +677,75 @@ class EmpleadoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             except DjangoValidationError:
                 raise serializers.ValidationError('El formato del email no es valido.')
         return value
+
+
+class ResolucionDIANSerializer(BaseMixin, serializers.ModelSerializer):
+    uuid = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = ResolucionDIAN
+        fields = [
+            'id', 'uuid', 'prefijo', 'rango_desde', 'rango_hasta', 'consecutivo',
+            'numero_resolucion', 'fecha_resolucion', 'fecha_inicio', 'fecha_fin',
+            'vigente', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'uuid', 'consecutivo', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        rango_desde = attrs.get('rango_desde')
+        rango_hasta = attrs.get('rango_hasta')
+        if rango_desde is not None and rango_hasta is not None:
+            if rango_desde > rango_hasta:
+                raise serializers.ValidationError({
+                    'rango_desde': 'El rango desde no puede ser mayor al rango hasta.'
+                })
+        fecha_inicio = attrs.get('fecha_inicio')
+        fecha_fin = attrs.get('fecha_fin')
+        if fecha_inicio is not None and fecha_fin is not None:
+            if fecha_inicio > fecha_fin:
+                raise serializers.ValidationError({
+                    'fecha_inicio': 'La fecha de inicio no puede ser posterior a la fecha de fin.'
+                })
+        return attrs
+
+
+class LiquidacionPrestacionSerializer(BaseMixin, serializers.ModelSerializer):
+    uuid = serializers.UUIDField(read_only=True)
+    empleado_id = serializers.PrimaryKeyRelatedField(
+        source='empleado',
+        queryset=Empleado.objects.all(),
+        required=True
+    )
+    contrato_id = serializers.PrimaryKeyRelatedField(
+        source='contrato',
+        queryset=Contrato.objects.all(),
+        required=True
+    )
+    tipo_display = serializers.CharField(source='get_tipo_liquidacion_display', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    empleado_nombre = serializers.CharField(source='empleado.nombre_completo', read_only=True)
+    contrato_cargo = serializers.CharField(source='contrato.cargo', read_only=True)
+    
+    class Meta:
+        model = LiquidacionPrestacion
+        fields = [
+            'id', 'uuid', 'empleado_id', 'contrato_id', 'tipo_liquidacion', 'tipo_display',
+            'fecha_corte', 'dias_base_calculo', 'base_salarial', 'valor_total',
+            'estado', 'estado_display', 'empleado_nombre', 'contrato_cargo',
+            'desglose_conceptos', 'observaciones', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'uuid', 'created_at', 'updated_at', 'estado']
+
+    def validate(self, attrs):
+        empresa_id = self.context.get('empresa_id')
+        empleado = attrs.get('empleado')
+        contrato = attrs.get('contrato')
+        
+        if empleado and empleado.empresa_id != empresa_id:
+            raise serializers.ValidationError({'empleado_id': 'El empleado no pertenece a la empresa actual.'})
+            
+        if contrato and contrato.empresa_id != empresa_id:
+            raise serializers.ValidationError({'contrato_id': 'El contrato no pertenece a la empresa actual.'})
+            
+        return attrs
+

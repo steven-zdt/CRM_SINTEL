@@ -1,13 +1,13 @@
 """
-Servicio de Tareas Diarias (Fase 3 - Ejecución) v3.5.4
+Servicio de Tareas Diarias (Fase 3 - Ejecucion) v3.5.4
 
-Service Layer para gestión de tareas diarias (TareaDiariaProyecto).
-Patrón: CRUD Service + Business Service + Selector.
+Service Layer para gestion de tareas diarias (TareaDiariaProyecto).
+Patron: CRUD Service + Business Service + Selector.
 
-Validaciones críticas:
+Validaciones criticas:
 - fecha_inicio <= fecha_fin (rango coherente)
 - [fecha_inicio, fecha_fin] intersecta con [proyecto.fecha_inicio, proyecto.fecha_fin_estimada]
-- Proyecto en fase CIERRE → Tareas INMUTABLES (no create, update, delete)
+- Proyecto en fase CIERRE -> Tareas INMUTABLES (no create, update, delete)
 - DSV: empresa_id DEBE coincidir con proyecto.empresa_id
 """
 from decimal import Decimal
@@ -32,13 +32,13 @@ TAREA_FIELDS = [
 
 
 # ==============================================================================
-# CRUD SERVICE — Persistencia (v3.5.3)
+# CRUD SERVICE - Persistencia (v3.5.3)
 # ==============================================================================
 
 class TareasDiariasCRUDService:
     """
     Persistencia de TareaDiariaProyecto.
-    Métodos transaccionales @transaction.atomic.
+    Metodos transaccionales @transaction.atomic.
     """
 
     @staticmethod
@@ -55,29 +55,33 @@ class TareasDiariasCRUDService:
 
 
 # ==============================================================================
-# BUSINESS SERVICE — Lógica de Negocio (v3.5.3)
+# BUSINESS SERVICE - Logica de Negocio (v3.5.3)
 # ==============================================================================
 
 class TareasDiariasBusinessService:
     """
-    Lógica de negocio: validación, restricciones, y orquestación.
+    Logica de negocio: validacion, restricciones, y orquestacion.
     Responsable de:
-    - Validación de rango de fechas (fecha_inicio_real <= fecha <= fecha_fin_estimada)
+    - Validacion de rango de fechas (fecha_inicio_real <= fecha <= fecha_fin_estimada)
     - Bloqueo de operaciones en fase CIERRE
-    - DSV (Double Semantic Verification) — validar empresa_id
+    - DSV (Double Semantic Verification) - validar empresa_id
     """
 
     @staticmethod
     def _validar_fecha_en_rango(proyecto, fecha_inicio, fecha_fin):
         """
-        Valida que el período de la tarea [fecha_inicio, fecha_fin] sea coherente y no exceda el fin del proyecto.
+        Valida que el periodo de la tarea [fecha_inicio, fecha_fin] sea coherente y no exceda el fin del proyecto.
 
         Raises:
-            ValidationError si el período es inválido o excede el fin del proyecto
+            ValidationError si el periodo es invalido o excede el fin del proyecto
         """
         if fecha_inicio > fecha_fin:
             raise ValidationError(
                 f"La fecha de inicio ({fecha_inicio}) no puede ser posterior a la fecha de fin ({fecha_fin})"
+            )
+        if proyecto.fecha_inicio and fecha_inicio < proyecto.fecha_inicio:
+            raise ValidationError(
+                f"La fecha de inicio de la tarea ({fecha_inicio}) no puede ser anterior a la fecha de inicio del proyecto ({proyecto.fecha_inicio})."
             )
         if proyecto.fecha_fin_estimada and fecha_fin > proyecto.fecha_fin_estimada:
             raise ValidationError(
@@ -88,14 +92,14 @@ class TareasDiariasBusinessService:
     @staticmethod
     def _validar_proyecto_no_cerrado(proyecto):
         """
-        Valida que el proyecto NO esté en fase CIERRE.
+        Valida que el proyecto NO este en fase CIERRE.
 
         Raises:
-            ValidationError si proyecto está en CIERRE
+            ValidationError si proyecto esta en CIERRE
         """
         if proyecto.fase_actual == 'CIERRE':
             raise ValidationError(
-                "No se pueden crear, modificar o eliminar tareas en fase Cierre. El proyecto está cerrado."
+                "No se pueden crear, modificar o eliminar tareas en fase Cierre. El proyecto esta cerrado."
             )
 
     @staticmethod
@@ -108,25 +112,35 @@ class TareasDiariasBusinessService:
         """
         if proyecto.empresa_id != empresa.id:
             raise ValidationError(
-                "La empresa de la tarea no coincide con la empresa del proyecto (DSV falló)"
+                "La empresa de la tarea no coincide con la empresa del proyecto (DSV fallo)"
             )
 
     @staticmethod
-    def crear_tarea(empresa, proyecto, fecha_inicio, fecha_fin, titulo, descripcion='', prioridad='NORMAL', asignado_a=''):
+    def crear_tarea(
+        empresa,
+        proyecto,
+        fecha_inicio=None,
+        fecha_fin=None,
+        titulo='',
+        descripcion='',
+        prioridad='NORMAL',
+        asignado_a='',
+        fecha=None
+    ):
         """
         Crea una nueva TareaDiariaProyecto.
 
         Validaciones:
         1. DSV: empresa_id debe coincidir con proyecto.empresa_id
         2. Rango: fecha_inicio <= fecha_fin
-        3. Límite: fecha_fin <= proyecto.fecha_fin_estimada (no excede proyecto)
+        3. Limite: fecha_fin <= proyecto.fecha_fin_estimada (no excede proyecto)
         4. Bloqueo: proyecto.fase_actual != 'CIERRE'
 
         Args:
             empresa: Empresa instance
             proyecto: Proyecto instance
-            fecha_inicio: date object, primer día de la tarea
-            fecha_fin: date object, último día de la tarea
+            fecha_inicio: date object, primer dia de la tarea
+            fecha_fin: date object, ultimo dia de la tarea
             titulo: str, requerido
             descripcion: str, opcional
             prioridad: str, default='NORMAL'
@@ -136,9 +150,16 @@ class TareasDiariasBusinessService:
             TareaDiariaProyecto instance (guardada)
 
         Raises:
-            ValidationError por DSV, rango inválido, límites de proyecto, o fase bloqueada
+            ValidationError por DSV, rango invalido, limites de proyecto, o fase bloqueada
         """
-        # Validaciones
+        if fecha is not None and fecha_inicio is None:
+            fecha_inicio = fecha
+        if fecha_fin is None:
+            fecha_fin = fecha_inicio
+
+        if not fecha_inicio or not fecha_fin:
+            raise ValidationError("fecha_inicio y fecha_fin son requeridas.")
+
         TareasDiariasBusinessService._validar_empresa_dsv(proyecto, empresa)
         TareasDiariasBusinessService._validar_fecha_en_rango(proyecto, fecha_inicio, fecha_fin)
         TareasDiariasBusinessService._validar_proyecto_no_cerrado(proyecto)
@@ -175,12 +196,12 @@ class TareasDiariasBusinessService:
             nuevo_estado: str, uno de ESTADO_CHOICES
 
         Raises:
-            ValidationError si fase es CIERRE o estado inválido
+            ValidationError si fase es CIERRE o estado invalido
         """
         TareasDiariasBusinessService._validar_proyecto_no_cerrado(tarea.proyecto)
 
         if nuevo_estado not in dict(TareaDiariaProyecto.Estado.choices):
-            raise ValidationError(f"Estado inválido: {nuevo_estado}")
+            raise ValidationError(f"Estado invalido: {nuevo_estado}")
 
         tarea.estado = nuevo_estado
         TareasDiariasCRUDService.save_tarea(tarea)
@@ -203,7 +224,7 @@ class TareasDiariasBusinessService:
             data: dict con campos a actualizar
 
         Raises:
-            ValidationError si fase es CIERRE o fechas son inválidas
+            ValidationError si fase es CIERRE o fechas son invalidas
         """
         TareasDiariasBusinessService._validar_proyecto_no_cerrado(tarea.proyecto)
 
@@ -244,7 +265,7 @@ class TareasDiariasBusinessService:
 
 
 # ==============================================================================
-# SELECTOR — Queries Optimizadas (Zero Waste) (v3.5.3)
+# SELECTOR - Queries Optimizadas (Zero Waste) (v3.5.3)
 # ==============================================================================
 
 class TareasDiariasSelector:
@@ -257,14 +278,14 @@ class TareasDiariasSelector:
         """
         QuerySet de tareas filtradas por proyecto y empresa.
 
-        Filtros de fecha: busca tareas cuyo período [tarea.fecha_inicio, tarea.fecha_fin]
+        Filtros de fecha: busca tareas cuyo periodo [tarea.fecha_inicio, tarea.fecha_fin]
         intersecta con [fecha_inicio, fecha_fin] (si se proporcionan).
 
         Args:
             empresa_id: int, empresa_id para DSV
             proyecto_uuid: str, UUID del proyecto
-            fecha_inicio: date optional, límite mínimo de búsqueda
-            fecha_fin: date optional, límite máximo de búsqueda
+            fecha_inicio: date optional, limite minimo de busqueda
+            fecha_fin: date optional, limite maximo de busqueda
 
         Returns:
             QuerySet filtered y optimizado
@@ -284,7 +305,7 @@ class TareasDiariasSelector:
     @staticmethod
     def qs_resumen_proyecto(empresa_id, proyecto_uuid):
         """
-        Agregación de tareas por estado.
+        Agregacion de tareas por estado.
 
         Returns:
             dict con conteos por estado

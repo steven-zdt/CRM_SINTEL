@@ -32,12 +32,14 @@
         const title = document.getElementById('viewTitle');
         if (title) {
           const titles = {
+            'dashboard': '📊 Dashboard',
             'empresa': '🏢 Empresa',
             'facturas': '🧾 Facturas',
             'contabilidad': '📚 Contabilidad',
             'inventario': '📦 Inventario',
             'empleados': '👥 Empleados',
             'gastos': '💰 Gastos',
+            'bancos': '🏦 Bancos',
             'proveedores': '🏪 Proveedores',
             'clientes': '👤 Clientes',
             'cotizaciones': '📝 Cotizaciones',

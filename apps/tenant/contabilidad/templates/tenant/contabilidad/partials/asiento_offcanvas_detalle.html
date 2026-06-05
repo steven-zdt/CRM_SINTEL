@@ -188,14 +188,17 @@
 
 <script>
 (function() {
-  const offcanvasEl = document.getElementById('offcanvas-asiento-detalle');
-  
-  if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
-    const offcanvasInstance = window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-    offcanvasInstance.show();
-    console.log('[Contabilidad] Offcanvas detalle asiento activado');
-  } else {
-    console.error('[Contabilidad] No se pudo activar offcanvas detalle asiento');
+  var el = document.getElementById('offcanvas-asiento-detalle');
+  if (!el) { console.error('[Contabilidad] offcanvas-asiento-detalle no encontrado'); return; }
+  // UIManager gestiona dispose + backdrops + show (AGENTS.md §26, ui-management.md §2)
+  if (window.UIManager && typeof window.UIManager.handleOffcanvas === 'function') {
+    window.UIManager.handleOffcanvas(el, 'show');
+  } else if (window.bootstrap && window.bootstrap.Offcanvas) {
+    var prev = window.bootstrap.Offcanvas.getInstance(el);
+    if (prev) prev.dispose();
+    document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
+    document.body.style.overflow = '';
+    new window.bootstrap.Offcanvas(el).show();
   }
 })();
 </script>

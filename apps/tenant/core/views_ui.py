@@ -4,6 +4,7 @@ Vistas UI para el workspace compositor (core).
 # WARNING: API-First: Esta vista solo renderiza el template workspace.html.
 Los partials se cargan lazy vía HTMX y sus datos se obtienen vía JavaScript.
 """
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -45,7 +46,5 @@ class WorkspaceView(LoginRequiredMixin, TemplateView):
         # WARNING: API-First: El template carga datos desde APIs REST vía JavaScript.
         """
         context = super().get_context_data(**kwargs)
-        # Agregar STATIC_VERSION para cache-busting (si no está en settings)
-        from django.conf import settings
         context['STATIC_VERSION'] = getattr(settings, 'STATIC_VERSION', '0')
         return context

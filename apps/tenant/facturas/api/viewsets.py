@@ -16,6 +16,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.models import ProtectedError, Q
+from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -63,7 +64,10 @@ from django.conf import settings
 from django.http import HttpResponse
 
 from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.facturas.services import FacturaSelectors, FacturaServiceMixin, FacturaBusinessService
+from apps.tenant.facturas.api.mixins import FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin
+from apps.tenant.facturas.inbox_state import update_inbox_state
+from apps.tenant.facturas.services import FacturaSelectors, FacturaServiceMixin, FacturaBusinessService, FacturaCRUDService
+from apps.tenant.facturas.services.selectors import InventarioItemBridge
 from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
 from .serializers import (
     FacturaDetailSerializer,
@@ -85,7 +89,33 @@ def mini_error(message: str, code: str, status_code: int) -> Response:
     return Response({"error": code, "message": message}, status=status_code)
 
 
-class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
+def resolve_empresa_id_from_request(request: Request) -> int:
+    """
+    Resuelve empresa_id sin crear perfiles durante lecturas.
+
+    En pruebas y rutas legacy puede existir usuario autenticado sin
+    TenantProfile. Facturas ya usa el singleton Empresa como fallback
+    controlado para compatibilidad.
+    """
+    user = getattr(request, "user", None)
+    for attr in ("perfil", "tenant_profile"):
+        perfil = getattr(user, attr, None)
+        empresa_id = getattr(perfil, "empresa_id", None)
+        if empresa_id:
+            return empresa_id
+
+    empresa_id = getattr(user, "empresa_id", None)
+    if empresa_id:
+        return empresa_id
+
+    empresa_id = Empresa.objects.only("id").values_list("id", flat=True).first()
+    if empresa_id:
+        return empresa_id
+
+    raise ValidationError({"empresa": "No se pudo resolver la empresa activa del tenant."})
+
+
+class FacturaViewSet(FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, FacturaServiceMixin, BaseTenantViewSet):
 
     """
     FACTURAS MODULE — CONTROL CONTABLE
@@ -136,6 +166,8 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         "estado": ["exact"],
         "naturaleza": ["exact"],
         "fecha_emision": ["date__gte", "date__lte", "date", "gte", "lte", "exact"],
+        "cliente_uuid": ["exact"],
+        "proveedor_uuid": ["exact"],
     }
     search_fields = ["numero", "cufe", "receptor_razon_social", "emisor_razon_social"]
     ordering_fields = ["fecha_emision", "consecutivo", "total"]
@@ -161,10 +193,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         - estado: filtro exacto
         - search: busqueda general (Tabulator)
         """
-        # Garantiza que el perfil exista y obtén empresa_id de forma segura
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-        perfil = get_or_create_profile(self.request.user)
-        empresa_id = perfil.empresa_id
+        empresa_id = resolve_empresa_id_from_request(self.request)
         search = self.request.query_params.get('search', None)
 
         if self.action == "list":
@@ -173,7 +202,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
             qs = self.get_qs_detail().filter(empresa_id=empresa_id)
         elif self.action == "destroy":
             qs = Factura.objects.filter(empresa_id=empresa_id).only('id', 'estado', 'empresa_id')
-        elif self.action in ("partial_update", "update", "cambiar_estado", "vincular_cotizacion"):
+        elif self.action in ("partial_update", "update", "cambiar_estado", "vincular_cotizacion", "vincular_cliente", "vincular_proveedor"):
             qs = Factura.objects.filter(empresa_id=empresa_id)
         else:
             qs = self.get_qs_list(search=search).filter(empresa_id=empresa_id)
@@ -190,6 +219,9 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         if estado := request.GET.get("estado"):
             qs = qs.filter(estado=estado)
 
+        if tipo_impuesto := request.GET.get("tipo_impuesto"):
+            qs = qs.filter(impuestos_desglosados__tipo_impuesto=tipo_impuesto).distinct()
+
         return qs.order_by("-fecha_emision", "-id")
     
     def get_serializer_class(self):
@@ -202,7 +234,8 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         # # WARNING: v2.61.2: Acciones que no usan serializer (trabajan directamente con request.data)
         if self.action in ['create-from-dto', 'materialize', 'importar-ubl', 'upload-ubl', 'upload-document',
                            'summary', 'xml', 'app-response', 'update-inbox-state', 'gestor-offcanvas',
-                           'lista-centro-costos', 'por_estado', 'cambiar_estado', 'vincular_cotizacion']:
+                           'lista-centro-costos', 'por_estado', 'cambiar_estado', 'vincular_cotizacion',
+                           'vincular_cliente', 'vincular_proveedor']:
             return None
 
         if self.action == "list":
@@ -246,8 +279,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         # WARNING: SINTEL v3.5: Delegación a BusinessService para DSV y Sanitización.
         """
         factura = self.get_object()
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-        empresa_id = get_or_create_profile(request.user).empresa_id
+        empresa_id = resolve_empresa_id_from_request(request)
 
         try:
             with transaction.atomic():
@@ -284,8 +316,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         # WARNING: SINTEL v3.5: Delegación a BusinessService.
         """
         factura = self.get_object()
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-        empresa_id = get_or_create_profile(request.user).empresa_id
+        empresa_id = resolve_empresa_id_from_request(request)
 
         # Wrap in dict to match business service expected data
         data = {"cotizacion_uuid": request.data.get("cotizacion_uuid")}
@@ -311,10 +342,78 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                 {"error": "update_failed", "detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        except Exception as e:
-            log_up.error(f"[facturas:vincular_cotizacion] Unexpected error: {str(e)}", extra={"factura_id": factura.id})
+
+    @action(detail=True, methods=["patch"], url_path="vincular-cliente")
+    def vincular_cliente(self, request: Request, uuid=None) -> Response:
+        """
+        Vincula un cliente a una factura de venta.
+        """
+        factura = self.get_object()
+        empresa_id = resolve_empresa_id_from_request(request)
+
+        try:
+            with transaction.atomic():
+                factura = FacturaBusinessService.vincular_cliente(
+                    factura=factura,
+                    cliente_uuid=request.data.get("cliente_uuid"),
+                    empresa_id=empresa_id,
+                )
+
             return Response(
-                {"error": "internal_error", "detail": "Ocurrió un error inesperado al vincular la cotización."},
+                FacturaDetailSerializer(factura, context={"request": request}).data,
+                status=status.HTTP_200_OK,
+            )
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except DjangoValidationError as e:
+            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
+            return Response({"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, IntegrityError, ProtectedError) as e:
+            return Response(
+                {"error": "update_failed", "detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            log_up.error(f"[facturas:vincular_cliente] Unexpected error: {str(e)}", extra={"factura_id": factura.id})
+            return Response(
+                {"error": "internal_error", "detail": "Ocurrió un error inesperado al vincular el cliente."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=["patch"], url_path="vincular-proveedor")
+    def vincular_proveedor(self, request: Request, uuid=None) -> Response:
+        """
+        Vincula un proveedor a una factura de compra.
+        """
+        factura = self.get_object()
+        empresa_id = resolve_empresa_id_from_request(request)
+
+        try:
+            with transaction.atomic():
+                factura = FacturaBusinessService.vincular_proveedor(
+                    factura=factura,
+                    proveedor_uuid=request.data.get("proveedor_uuid"),
+                    empresa_id=empresa_id,
+                )
+
+            return Response(
+                FacturaDetailSerializer(factura, context={"request": request}).data,
+                status=status.HTTP_200_OK,
+            )
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except DjangoValidationError as e:
+            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
+            return Response({"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST)
+        except (ValueError, IntegrityError, ProtectedError) as e:
+            return Response(
+                {"error": "update_failed", "detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            log_up.error(f"[facturas:vincular_proveedor] Unexpected error: {str(e)}", extra={"factura_id": factura.id})
+            return Response(
+                {"error": "internal_error", "detail": "Ocurrió un error inesperado al vincular el proveedor."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -390,6 +489,8 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
             resp["HX-Trigger"] = "listaFacturasChanged"
             return resp
             
+        except Http404:
+            raise
         except ProtectedError as ex:
             # Solo errores de integridad a nivel de BD (muy raro, solo si hay FK con PROTECT)
             log_del.warning("protected_relation", extra=safe_extra({
@@ -468,9 +569,6 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
             200 OK con FacturaDetailSerializer.
             400 Bad Request si el estado es invalido o falta.
         """
-        from apps.tenant.facturas.services.crud_service import FacturaCRUDService
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-
         nuevo_estado = request.data.get("estado")
         if not nuevo_estado:
             return Response(
@@ -486,7 +584,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
             )
 
         factura = self.get_object()
-        empresa_id = get_or_create_profile(request.user).empresa_id
+        empresa_id = resolve_empresa_id_from_request(request)
 
         # DSV: verificar propiedad del tenant
         if factura.empresa_id != empresa_id:
@@ -507,54 +605,6 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         serializer = FacturaDetailSerializer(factura, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["post"], url_path="importar-ubl")
-    def importar_ubl(self, request: Request) -> Response:
-        """
-        # WARNING: DEPRECATED: Este endpoint está deprecado.
-        Use POST /api/v1/core/documentos/upload/ en su lugar.
-        Este endpoint será removido en v2.40.
-        
-        Importa una factura desde XML UBL 2.1 (texto pegado).
-        Delega al endpoint universal de documentos.
-        
-        Body:
-        {
-            "xml": "<Invoice xmlns=\"urn:oasis:names:specification:ubl:schema:xsd:Invoice-2\">...</Invoice>"
-        }
-        
-        Returns:
-            201 Created con FacturaDetailSerializer
-        """
-        # TODO: Deprecar este endpoint - delegar al endpoint universal
-        serializer = ImportUBLSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        # Convertir XML string a bytes y crear un archivo temporal
-        xml_content = serializer.validated_data["xml"]
-        xml_bytes = xml_content.encode("utf-8") if isinstance(xml_content, str) else xml_content
-        
-        # Usar el servicio universal
-        from apps.services.document_ingest.ingest_service import ingest_document
-        result, status_code = ingest_document(
-            content=xml_bytes,
-            filename="imported.xml",
-            preview=False,
-            async_mode=False
-        )
-        
-        # Si se persistió, obtener la factura
-        if result.get("persisted") and result.get("id"):
-            from apps.tenant.facturas.models import Factura
-            try:
-                factura = Factura.objects.get(pk=result.get("id"))
-                output_serializer = FacturaDetailSerializer(factura, context={'request': request})
-                return Response(output_serializer.data, status=status.HTTP_201_CREATED)
-            except Factura.DoesNotExist:
-                pass
-        
-        # Si no se pudo obtener la factura, retornar el resultado del pipeline
-        return Response(result, status=status_code)
-    
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request: Request) -> Response:
         """
@@ -610,683 +660,14 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         - Retorna solo ID, Número y Receptor
         - Filtrado automático por tenant mediante perfil
         """
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-        perfil = get_or_create_profile(request.user)
-        
-        qs = FacturaSelectors.qs_centros_costo().filter(empresa_id=perfil.empresa_id)
+        empresa_id = resolve_empresa_id_from_request(request)
+
+        qs = FacturaSelectors.qs_centros_costo().filter(empresa_id=empresa_id)
         
         # Serialización ligera para máxima velocidad
         data = list(qs.values('id', 'numero', 'receptor_razon_social'))
         return Response(data)
-    
-    @action(detail=False, methods=["post"], url_path="upload-ubl", parser_classes=[MultiPartParser, FormParser])
-    def upload_ubl(self, request: Request) -> Response:
-        """
-        # WARNING: DEPRECATED: Este endpoint está deprecado.
-        Use POST /api/v1/core/documentos/upload/ en su lugar.
-        Este endpoint será removido en v2.40.
-        
-        # WARNING: v2.61.2: OPTIMIZADO - Pre-validación de idempotencia y batch processing.
-        
-        Sube uno o múltiples archivos XML UBL 2.1 y los importa (async o sync).
-        Delega al endpoint universal de documentos.
-        
-        Body (multipart/form-data):
-        - file: <archivo.xml> (archivo único)
-        - files[]: <archivo1.xml>, <archivo2.xml>, ... (múltiples archivos - batch processing)
-        - files: <archivo1.xml>, <archivo2.xml>, ... (alternativa a files[])
-        
-        Query params:
-        - async=true (default): Encola tarea Celery y retorna 202 + task_id
-        - async=false: Parsea y materializa en la misma request (201/200)
-        - preview=true: Solo retorna DTO sin persistir
-        
-        # WARNING: v2.61.2: DELEGACIÓN A CELERY - Si hay más de 10 archivos, el procesamiento se delega
-        automáticamente a Celery para no bloquear la conexión del usuario, independientemente del
-        parámetro async. Use GET /api/v1/facturas/ingest/{task_id}/status/ para consultar el estado.
-        
-        Returns:
-            - async=true (single file): 202 Accepted con {"task_id": str, "status": "queued"}
-            - async=false (single file): 201/200 con datos de factura materializada
-            - async=false (batch <= 10 archivos): 200 OK con {"creados": X, "duplicados": Y, "errores": Z, "resultados": [...]}
-            - batch > 10 archivos: 202 Accepted con {"task_id": str, "status": "queued", "total_files": N, "message": "..."}
-            - 400 Bad Request si falta archivo XML
-            - 409 Conflict si es duplicado
-            - 415 Unsupported Media Type si el tipo no es soportado
-            - 422 Unprocessable Entity si hay error de validación
-            
-        # WARNING: CONSULTA DE ESTADO: Para batch > 10 archivos, use GET /api/v1/facturas/ingest/{task_id}/status/
-        """
-        # # WARNING: NORMALIZACIÓN: Obtener contexto para logging
-        schema = getattr(connection, "schema_name", "-")
-        rid = request.META.get("REQUEST_ID", "-")
-        
-        # # WARNING: v2.61.2: BATCH PROCESSING - Soportar files[] o files (múltiples archivos)
-        xml_files = request.FILES.getlist('files[]') or request.FILES.getlist('files') or []
-        single_file = request.FILES.get('file')
-        
-        # Si hay files[] o files, usar batch processing; si no, usar file único
-        if xml_files:
-            return self._upload_ubl_batch(request, xml_files, rid, schema)
-        
-        if not single_file:
-            log_up.warning(
-                "upload_ubl missing file",
-                extra={"request_id": rid, "schema_name": schema}
-            )
-            return Response({"error": "missing_xml", "message": "Falta archivo XML."}, status=400)
-        
-        use_async = request.query_params.get('async', 'true').lower() != 'false'
-        preview_mode = request.query_params.get('preview', 'false').lower() == 'true'
-        
-        try:
-            xml_bytes = single_file.read()
-            size = len(xml_bytes or b"")
-        except Exception as e:
-            log_up.warning(
-                "upload_ubl error reading file",
-                extra={"request_id": rid, "schema_name": schema, "error": str(e)}
-            )
-            return Response({"error": "read_error", "message": "Error al leer el archivo XML."}, status=400)
-        
-        # # WARNING: v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida")
-        # Extraer CUFE con regex antes del parsing completo - ejecuta en los primeros milisegundos
-        if not preview_mode and not use_async:
-            cufe_rapido = fast_get_cufe(xml_bytes)
-            
-            if cufe_rapido:
-                # Verificar si la factura ya existe por CUFE
-                # # WARNING: v2.61.5: IDOR fix - filtrar por empresa del tenant (Zero-Trust)
-                empresa_id = getattr(getattr(request.user, 'tenant_profile', None), 'empresa_id', None)
-                if not empresa_id:
-                    empresa_id = Empresa.objects.only('id').values_list('id', flat=True).first()
-                factura_existente = Factura.objects.filter(
-                    cufe=cufe_rapido,
-                    empresa_id=empresa_id
-                ).only('id', 'numero', 'naturaleza', 'cufe').first() if empresa_id else None
-                
-                if factura_existente:
-                    # # WARNING: v2.61.2: Retornar 200 OK inmediatamente sin parsing completo
-                    # Esto evita desperdiciar CPU en archivos que ya existen en la base de datos
-                    log_up.info(
-                        "upload_ubl duplicate detected (fast pre-validation)",
-                        extra={
-                            "request_id": rid,
-                            "schema_name": schema,
-                            "cufe": cufe_rapido,
-                            "factura_id": factura_existente.id,
-                            "numero": factura_existente.numero,
-                            "skipped_parsing": True
-                        }
-                    )
-                    return Response({
-                        "id": factura_existente.id,
-                        "numero": factura_existente.numero,
-                        "naturaleza": factura_existente.naturaleza,
-                        "cufe": factura_existente.cufe,
-                        "created": False,
-                        "message": "Factura ya existe (idempotente - pre-validación rápida)"
-                    }, status=200)
-        
-        # TODO: Deprecar este endpoint - delegar al endpoint universal
-        # Usar el servicio universal directamente
-        try:
-            # Usar el servicio a través del mixin
-            payload, code = self.service_importar_documento(
-                xml_bytes,
-                filename=single_file.name,
-                preview=preview_mode,
-                async_mode=use_async
-            )
-            
-            # Si es async, el formato ya es compatible
-            if use_async and isinstance(payload, dict) and "task_id" in payload:
-                log_up.info(
-                    "upload_ubl async enqueued (universal pipeline)",
-                    extra={
-                        "request_id": rid,
-                        "schema_name": schema,
-                        "task_id": payload.get("task_id")
-                    }
-                )
-                return Response(payload, status=202)
-            
-            # Si es sync, retornar payload directamente
-            log_up.info(
-                "upload_ubl done (universal pipeline)",
-                extra={
-                    "request_id": rid,
-                    "schema_name": schema,
-                    "size": size,
-                    "preview": preview_mode,
-                    "status_code": code,
-                    "numero": payload.get("numero") if isinstance(payload, dict) else None,
-                }
-            )
-            resp = Response(payload, status=code)
-            if not preview_mode and code in (200, 201):
-                resp["HX-Trigger"] = "listaFacturasChanged"
-            return resp
-        except Exception as e:
-            log_up.exception(
-                "upload_ubl error (universal pipeline)",
-                extra={
-                    "request_id": rid,
-                    "schema_name": schema,
-                    "size": size,
-                    "async": use_async
-                }
-            )
-            return Response({"error": "internal", "message": str(e)}, status=500)
-    
-    def _upload_ubl_batch(self, request: Request, xml_files: list, rid: str, schema: str) -> Response:
-        """
-        # WARNING: v2.61.2: BATCH PROCESSING - Procesa múltiples archivos XML y retorna resumen.
-        
-        # WARNING: DELEGACIÓN A CELERY: Si hay más de 10 archivos, delega el procesamiento a Celery
-        usando batch_upload_facturas_task para no bloquear la conexión del usuario.
-        
-        Args:
-            request: Request object
-            xml_files: Lista de archivos XML a procesar
-            rid: Request ID para logging
-            schema: Schema name para logging
-            
-        Returns:
-            - Si <= 10 archivos: Response con resumen sincrónico
-            - Si > 10 archivos: 202 Accepted con task_id para consultar estado
-        """
-        from apps.tenant.facturas.models import Factura
-        
-        preview_mode = request.query_params.get('preview', 'false').lower() == 'true'
-        use_async = request.query_params.get('async', 'true').lower() != 'false'
-        
-        if preview_mode:
-            # Batch preview no soportado
-            return Response({
-                "error": "preview_batch_not_supported",
-                "message": "Batch processing no soporta modo preview. Use preview=false."
-            }, status=400)
-        
-        # # WARNING: v2.61.2: DELEGACIÓN A CELERY - Si hay más de 10 archivos, usar Celery
-        BATCH_SIZE_THRESHOLD = 10
-        if len(xml_files) > BATCH_SIZE_THRESHOLD:
-            # Delegar a Celery para no bloquear la conexión del usuario
-            try:
-                # # WARNING: IMPORT LAZY: Importar tarea Celery solo cuando se necesita
-                from apps.services.document_ingest.tasks import batch_upload_facturas_task
-                
-                # Preparar datos de archivos (codificar en base64 para serialización)
-                files_data = []
-                for xml_file in xml_files:
-                    try:
-                        xml_bytes = xml_file.read()
-                        content_b64 = base64.b64encode(xml_bytes).decode('utf-8')
-                        files_data.append({
-                            "filename": xml_file.name,
-                            "content_b64": content_b64
-                        })
-                    except Exception as e:
-                        log_up.warning(
-                            "upload_ubl_batch error reading file for async",
-                            extra={
-                                "request_id": rid,
-                                "schema_name": schema,
-                                "filename": xml_file.name,
-                                "error": str(e)
-                            }
-                        )
-                        # Continuar con otros archivos
-                        continue
-                
-                if not files_data:
-                    return Response({
-                        "error": "no_valid_files",
-                        "message": "No se pudieron leer los archivos para procesamiento asíncrono."
-                    }, status=400)
-                
-                # Obtener esquema del tenant actual
-                tenant_schema = getattr(connection, "schema_name", schema)
-                
-                # Obtener usuario que inició la carga
-                started_by_id = request.user.id if request.user and request.user.is_authenticated else None
-                
-                # Encolar tarea Celery
-                async_res = batch_upload_facturas_task.apply_async(
-                    kwargs={
-                        "schema_name": tenant_schema,
-                        "files_data": files_data,
-                        "started_by_id": started_by_id
-                    },
-                    queue="high_priority"  # Cola de alta prioridad
-                )
-                
-                log_up.info(
-                    "upload_ubl_batch enqueued to Celery",
-                    extra={
-                        "request_id": rid,
-                        "schema_name": schema,
-                        "task_id": async_res.id,
-                        "total_files": len(files_data)
-                    }
-                )
-                
-                return Response({
-                    "task_id": async_res.id,
-                    "status": "queued",
-                    "total_files": len(files_data),
-                    "message": f"Procesamiento de {len(files_data)} archivos encolado. Use GET /api/v1/facturas/ingest/{async_res.id}/status/ para consultar el estado."
-                }, status=202)
-                
-            except Exception as e:
-                log_up.exception(
-                    "upload_ubl_batch error enqueuing to Celery",
-                    extra={
-                        "request_id": rid,
-                        "schema_name": schema,
-                        "total_files": len(xml_files)
-                    }
-                )
-                return Response({
-                    "error": "async_enqueue_error",
-                    "message": f"Error al encolar procesamiento asíncrono: {str(e)}"
-                }, status=500)
-        
-        # # WARNING: PROCESAMIENTO SÍNCRONO - Para <= 10 archivos
-        if use_async:
-            # Para batch pequeño, no usar async (procesar directamente)
-            log_up.info(
-                "upload_ubl_batch processing synchronously (small batch)",
-                extra={
-                    "request_id": rid,
-                    "schema_name": schema,
-                    "total_files": len(xml_files)
-                }
-            )
-        
-        resultados = []
-        creados = 0
-        duplicados = 0
-        errores = 0
-        
-        for xml_file in xml_files:
-            try:
-                xml_bytes = xml_file.read()
-                size = len(xml_bytes or b"")
-                
-                # # WARNING: v2.61.2: PRE-VALIDACIÓN DE IDEMPOTENCIA (La "Vía Rápida") - Extraer CUFE con regex
-                cufe_rapido = fast_get_cufe(xml_bytes)
-                
-                if cufe_rapido:
-                    # # WARNING: v2.61.5: IDOR fix - filtrar por empresa del tenant (Zero-Trust)
-                    _emp_id = getattr(getattr(self.request.user, 'tenant_profile', None), 'empresa_id', None)
-                    if not _emp_id:
-                        _emp_id = Empresa.objects.only('id').values_list('id', flat=True).first()
-                    factura_existente = Factura.objects.filter(
-                        cufe=cufe_rapido,
-                        empresa_id=_emp_id
-                    ).only('id', 'numero', 'cufe').first() if _emp_id else None
-                    if factura_existente:
-                        # Duplicado detectado sin parsing completo
-                        resultados.append({
-                            "filename": xml_file.name,
-                            "status": "duplicate",
-                            "factura_id": factura_existente.id,
-                            "numero": factura_existente.numero,
-                            "cufe": cufe_rapido
-                        })
-                        duplicados += 1
-                        continue
-                
-                # Procesar archivo normalmente via mixin
-                payload, code = self.service_importar_documento(
-                    xml_bytes,
-                    filename=xml_file.name,
-                    preview=False,
-                    async_mode=False
-                )
-                
-                if code == 201:
-                    creados += 1
-                    resultados.append({
-                        "filename": xml_file.name,
-                        "status": "created",
-                        "factura_id": payload.get("id"),
-                        "numero": payload.get("numero")
-                    })
-                elif code == 200:
-                    duplicados += 1
-                    resultados.append({
-                        "filename": xml_file.name,
-                        "status": "duplicate",
-                        "factura_id": payload.get("id"),
-                        "numero": payload.get("numero")
-                    })
-                else:
-                    errores += 1
-                    resultados.append({
-                        "filename": xml_file.name,
-                        "status": "error",
-                        "error": payload.get("error", "unknown"),
-                        "message": payload.get("message", "Error desconocido")
-                    })
-                    
-            except Exception as e:
-                errores += 1
-                resultados.append({
-                    "filename": xml_file.name,
-                    "status": "error",
-                    "error": "exception",
-                    "message": str(e)
-                })
-                log_up.warning(
-                    "upload_ubl_batch error processing file",
-                    extra={
-                        "request_id": rid,
-                        "schema_name": schema,
-                        "filename": xml_file.name,
-                        "error": str(e)
-                    }
-                )
-        
-        log_up.info(
-            "upload_ubl_batch completed",
-            extra={
-                "request_id": rid,
-                "schema_name": schema,
-                "total": len(xml_files),
-                "creados": creados,
-                "duplicados": duplicados,
-                "errores": errores
-            }
-        )
-        
-        resp = Response({
-            "creados": creados,
-            "duplicados": duplicados,
-            "errores": errores,
-            "total": len(xml_files),
-            "resultados": resultados
-        }, status=200)
-        if creados > 0:
-            resp["HX-Trigger"] = "listaFacturasChanged"
-        return resp
-    
-    @action(detail=False, methods=["post"], url_path="upload-document", parser_classes=[MultiPartParser, FormParser])
-    def upload_document(self, request: Request) -> Response:
-        """
-        Endpoint universal para subir documentos (XML, PDF, XLS/XLSX, CSV, TXT) (FASE 3).
-        
-        # WARNING: v2.36 FASE 3: Endpoint universal protegido por feature flag.
-        Usa el pipeline universal de documentos cuando FEATURE_UPLOAD_DOCUMENT_ENDPOINT=True.
-        
-        Body (multipart/form-data):
-        - file: <archivo> (XML, PDF, XLS/XLSX, CSV, TXT)
-        
-        Query params:
-        - preview=true|false: Modo preview (solo retorna DTO sin persistir)
-        - async=true|false: Modo asíncrono (actualmente procesa síncronamente pero retorna formato compatible)
-        
-        Returns:
-            - 200 OK: Preview mode (DTO sin persistir)
-            - 201 Created: Documento creado
-            - 200 OK: Documento actualizado (idempotencia)
-            - 400 Bad Request: Error de parsing/detección o archivo faltante
-            - 403 Forbidden: Endpoint deshabilitado (FEATURE_UPLOAD_DOCUMENT_ENDPOINT=False)
-            - 409 Conflict: Duplicado (idempotencia)
-            - 415 Unsupported Media Type: Tipo no soportado
-            - 422 Unprocessable Entity: Error de validación
-        """
-        # # WARNING: FASE 3: Verificar feature flag
-        if not getattr(settings, 'FEATURE_UPLOAD_DOCUMENT_ENDPOINT', False):
-            return Response(
-                {"error": "endpoint_disabled", "message": "Este endpoint está deshabilitado."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Obtener archivo
-        file = request.FILES.get("file")
-        if not file:
-            log_up.warning(
-                "upload_document missing file",
-                extra=safe_extra({
-                    "request_id": request.META.get("REQUEST_ID", "-"),
-                    "schema_name": getattr(connection, "schema_name", "-"),
-                })
-            )
-            return Response(
-                {"error": "missing_file", "message": "Campo 'file' requerido"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Extraer parámetros
-        preview = request.query_params.get("preview", "false").lower() == "true"
-        async_mode = request.query_params.get("async", "false").lower() == "true"
-        
-        # Leer contenido del archivo
-        try:
-            file_content = file.read()
-        except Exception as e:
-            log_up.warning(
-                "upload_document read error",
-                extra=safe_extra({
-                    "request_id": request.META.get("REQUEST_ID", "-"),
-                    "schema_name": getattr(connection, "schema_name", "-"),
-                    "upload_filename": file.name,
-                    "error": str(e)[:200],
-                })
-            )
-            return Response(
-                {"error": "read_error", "message": "Error al leer archivo"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Llamar a importar_documento via mixin
-        try:
-            payload, code = self.service_importar_documento(
-                file_content,
-                filename=file.name,
-                preview=preview,
-                async_mode=async_mode
-            )
-            
-            # Log de éxito
-            log_up.info(
-                "upload_document success",
-                extra=safe_extra({
-                    "request_id": request.META.get("REQUEST_ID", "-"),
-                    "schema_name": getattr(connection, "schema_name", "-"),
-                    "upload_filename": file.name,
-                    "size": len(file_content),
-                    "preview": preview,
-                    "async_mode": async_mode,
-                    "status_code": code,
-                    "persisted": payload.get("persisted", False) if isinstance(payload, dict) else False,
-                })
-            )
-            
-            return Response(payload, status=code)
-            
-        except Exception:
-            log_up.exception(
-                "upload_document error",
-                extra=safe_extra({
-                    "request_id": request.META.get("REQUEST_ID", "-"),
-                    "schema_name": getattr(connection, "schema_name", "-"),
-                    "upload_filename": file.name,
-                })
-            )
-            return Response(
-                {
-                    "error": "internal_server_error",
-                    "message": "Error interno al procesar documento",
-                    "persisted": False,
-                    "dto": {},
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    @action(detail=False, methods=["get"], url_path="ingest/(?P<task_id>[^/]+)/status")
-    def ingest_status(self, request: Request, task_id: str = None) -> Response:
-        """
-        Consulta el estado de una tarea de ingesta XML.
-        
-        # WARNING: FASE 2: Endpoint para polling del estado de tarea Celery.
-        # WARNING: NUNCA 500: Siempre retorna 200 con JSON estructurado (apto para UI).
-        
-        Args:
-            task_id: ID de la tarea Celery (retornado por upload_ubl?async=true)
-        
-        Returns:
-            - 200 OK: JSON estructurado con:
-              - state: PENDING | STARTED | SUCCESS | FAILURE | UNKNOWN
-              - result: payload si SUCCESS
-              - error_code/message/hint cuando hay problemas
-        """
-        # # WARNING: NORMALIZACIÓN: Pasar request para contexto de logging
-        from apps.services.document_ingest.tasks import get_task_status
-        payload, code = get_task_status(task_id, request=request)
-        return Response(payload, status=code)
-    
-    @action(detail=False, methods=["post"], url_path="create-from-dto", parser_classes=[JSONParser])
-    def create_from_dto(self, request: Request) -> Response:
-        """
-        # WARNING: REFACTOR: Crea una factura o nota crédito desde DTO parseado por document_ingest.
-        
-        Este endpoint recibe un DTO del pipeline universal y lo persiste bajo la lógica
-        propia de la app facturas. El pipeline universal SOLO parsea, NO persiste.
-        
-        POST /api/v1/facturas/create-from-dto/
-        
-        Body (JSON):
-        {
-            "dto": {...DTO_UNIFICADO...},
-            "persist_anexos": true|false,  # Opcional, default: true
-            "file_content_bytes": "base64_encoded_bytes",  # Opcional, bytes del archivo en base64
-            "file_type": "xml"|"pdf"  # Opcional, tipo de archivo
-        }
-        
-        Returns:
-            - 201 Created: Factura/NC creada {"id": int, "numero": str, "naturaleza": str, "created": true}
-            - 200 OK: Factura/NC actualizada {"id": int, "numero": str, "naturaleza": str, "created": false}
-            - 400 Bad Request: Falta 'dto' en el cuerpo
-            - 422 Unprocessable Entity: Falta SSoT empresa o DTO inválido con missing_fields
-            - 409 Conflict: Duplicado o restricción violada
-            - 413 Payload Too Large: XML/anexo excede tamaño permitido
-            
-        # WARNING: PROPAGACIÓN DE ERRORES 422:
-        Si la validación falla (ej. falta emisor.razon_social), se retorna un JSON estructurado:
-        {
-            "error": "missing_required_fields",
-            "message": "Faltan campos obligatorios: emisor.razon_social, emisor.nit",
-            "missing_fields": ["emisor.razon_social", "emisor.nit"]
-        }
-        
-        El módulo error_injector.js intercepta estos errores y los muestra en el Offcanvas.
-        """
-        import logging
-        
-        logger = logging.getLogger(__name__)
-        
-        # # WARNING: v2.61.2: Logging para debugging
-        schema = getattr(connection, "schema_name", "-")
-        rid = request.META.get("REQUEST_ID", "-")
-        log_up.debug(
-            "create_from_dto called",
-            extra=safe_extra({
-                "request_id": rid,
-                "schema_name": schema,
-                "has_dto": "dto" in request.data,
-                "action": self.action,
-            })
-        )
-        
-        dto = request.data.get("dto")
-        persist_anexos = bool(request.data.get("persist_anexos", True))
-        
-        # # WARNING: v2.60: Extraer file_content_bytes y file_type si vienen en el request
-        file_content_bytes_b64 = request.data.get("file_content_bytes")
-        file_type = request.data.get("file_type", "xml")
-        
-        file_bytes = None
-        if file_content_bytes_b64:
-            try:
-                file_bytes = base64.b64decode(file_content_bytes_b64)
-            except Exception as e:
-                logger.warning(f"Error decodificando file_content_bytes en create_from_dto: {e}")
-        
-        if not dto:
-            log_up.warning(
-                "create_from_dto missing dto",
-                extra=safe_extra({
-                    "request_id": rid,
-                    "schema_name": schema,
-                })
-            )
-            return Response({"error": "missing_dto", "message": "Falta 'dto' en el cuerpo."}, status=400)
-        
-        # # WARNING: v2.60: Pasar file_bytes y file_type a materializar_factura_desde_result
-        # # WARNING: PROPAGACIÓN: Los errores 422 con missing_fields se propagan directamente
-        payload, code = self.service_materializar(
-            dto, 
-            empresa_id=getattr(getattr(self.request.user, 'tenant_profile', None), 'empresa_id', None) or Empresa.objects.only('id').values_list('id', flat=True).first()
-        )
-        
-        # # WARNING: LOGGING: Registrar errores 422 con missing_fields para debugging
-        if code == 422 and "missing_fields" in payload:
-            logger.warning(f"[create_from_dto] Error 422 - Campos faltantes: {payload.get('missing_fields')}")
-        
-        log_up.info("create_from_dto", extra=safe_extra({
-            "status_code": code,
-            "numero": payload.get("numero") if "error" not in payload else None,
-            "missing_fields": payload.get("missing_fields") if code == 422 else None,
-        }))
-        
-        # WARNING: PROPAGACIÓN: Retornar payload tal cual (incluye missing_fields si es error 422)
-        # El módulo error_injector.js intercepta htmx:responseError y muestra los campos faltantes
-        resp = Response(payload, status=code)
-        if code in (200, 201):
-            resp["HX-Trigger"] = "listaFacturasChanged"
-        return resp
-    
-    @action(detail=False, methods=["post"], url_path="materialize")
-    def materialize(self, request: Request) -> Response:
-        """
-        # WARNING: DEPRECATED: Usar create_from_dto en su lugar.
-        Mantenido por compatibilidad temporal.
-        """
-        """
-        Materializa una factura desde el DTO resultante de la ingesta XML.
-        
-        # WARNING: FASE 2: Endpoint para materializar después de que la tarea Celery termine.
-        
-        Body (application/json):
-        {
-            "dto": <DocumentoXML-serializado>,  # Resultado de ingest_status cuando state=SUCCESS
-            "persist_anexos": true|false  # Opcional, default: true
-        }
-        
-        Returns:
-            - 201 Created: Factura creada {"id": int, "numero": str, "naturaleza": str, "created": true}
-            - 200 OK: Factura actualizada {"id": int, "numero": str, "naturaleza": str, "created": false}
-            - 400 Bad Request: Falta 'dto' en el cuerpo
-            - 422 Unprocessable Entity: Falta SSoT empresa o DTO inválido
-            - 409 Conflict: Duplicado o restricción violada
-            - 413 Payload Too Large: XML/anexo excede tamaño permitido
-        """
-        dto = request.data.get("dto")
-        persist_anexos = bool(request.data.get("persist_anexos", True))
-        
-        if not dto:
-            return Response({"error": "missing_dto", "message": "Falta 'dto' en el cuerpo."}, status=400)
-        
-        payload, code = self.service_materializar(dto, empresa_id=getattr(getattr(self.request.user, 'tenant_profile', None), 'empresa_id', None) or Empresa.objects.only('id').values_list('id', flat=True).first())
-        log_up.info("materialize", extra=safe_extra({
-            "status_code": code,
-            "numero": payload.get("numero") if "error" not in payload else None,
-        }))
-        return Response(payload, status=code)
-    
+
     def retrieve(self, request, *args, **kwargs):
         """Retorna detalle de factura con metadatos de anexos (sin contenido XML)."""
         # # WARNING: v2.61.5: Delegar queryset a get_queryset() -> qs_detail() que ya incluye
@@ -1294,124 +675,8 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         self.serializer_class = FacturaDetailSerializer
         return super().retrieve(request, *args, **kwargs)
     
-    # # WARNING: FASE 4: Acciones detail para anexos XML
-    @action(detail=True, methods=['get'], url_path='xml')
-    def xml_ubl(self, request, pk=None):
-        """
-        Retorna el UBL XML completo de la factura.
-        
-        # WARNING: FASE 6: Endpoint dedicado para artefactos pesados (XML).
-        - Listas y detalle NO incluyen XML (solo metadatos)
-        - Este endpoint retorna el XML completo con Content-Type: application/xml
-        - Inline si <= 2MB, descarga forzada si mayor
-        
-        Returns:
-            - 200 OK: XML completo con Content-Type: application/xml
-            - 204 No Content: Si no hay XML disponible
-            - 404 Not Found: Si la factura no existe
-        """
-        factura = self.get_object()
-        payload, code = self.service_obtener_xml(factura, "ubl")
-        if isinstance(payload, HttpResponse):
-            return payload
-        return Response(payload, status=code)
+    # # WARNING: FASE 4: Acciones detail para anexos XML y Buzón IMAP delegadas a mixins (FacturaXMLMixin, FacturaMailMixin)
     
-    @action(detail=True, methods=['get'], url_path='app-response')
-    def xml_app_response(self, request, pk=None):
-        """
-        Retorna el ApplicationResponse DIAN XML completo.
-        
-        # WARNING: FASE 6: Endpoint dedicado para artefactos pesados (ApplicationResponse XML).
-        - Listas y detalle NO incluyen XML (solo metadatos)
-        - Este endpoint retorna el XML completo con Content-Type: application/xml
-        - Inline si <= 2MB, descarga forzada si mayor
-        
-        Returns:
-            - 200 OK: XML completo con Content-Type: application/xml
-            - 204 No Content: Si no hay ApplicationResponse disponible
-            - 404 Not Found: Si la factura no existe
-        """
-        factura = self.get_object()
-        payload, code = self.service_obtener_xml(factura, "app")
-        if isinstance(payload, HttpResponse):
-            return payload
-        return Response(payload, status=code)
-    
-    # # WARNING: DEPRECATED v2.40: Método datatables() eliminado - usar GET /api/v1/facturas/ con StandardResultsSetPagination
-    
-    @action(detail=False, methods=['post'], url_path='update-inbox-state')
-    def update_inbox_state(self, request: Request) -> Response:
-        """
-        Actualiza el estado del buzón IMAP después de procesar facturas.
-        
-        # WARNING: ZERO WASTE: Actualiza last_seen_uid para evitar reprocesar correos ya vistos.
-        # WARNING: Este endpoint se llama después de que el usuario procesa facturas desde el modal.
-        
-        POST /api/v1/facturas/update-inbox-state/
-        
-        Body (JSON):
-        {
-            "config_id": int,  # ID de MailInboxConfig
-            "last_uid": int,   # Último UID procesado
-            "messages_processed": int  # Número de mensajes procesados
-        }
-        
-        Returns:
-            - 200 OK: Estado actualizado
-            - 400 Bad Request: Faltan parámetros
-            - 404 Not Found: Configuración no encontrada
-        """
-        from apps.tenant.facturas.inbox_state import update_inbox_state
-        
-        config_id = request.data.get('config_id')
-        last_uid = request.data.get('last_uid')
-        messages_processed = request.data.get('messages_processed', 0)
-        
-        if not config_id:
-            return Response(
-                {"error": "missing_config_id", "message": "Falta 'config_id' en el cuerpo."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if last_uid is None:
-            return Response(
-                {"error": "missing_last_uid", "message": "Falta 'last_uid' en el cuerpo."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            # Actualizar estado del buzón
-            update_inbox_state(config_id, last_uid, messages_processed)
-            
-            log_up.info("update_inbox_state", extra=safe_extra({
-                "config_id": config_id,
-                "last_uid": last_uid,
-                "messages_processed": messages_processed,
-            }))
-            
-            return Response({
-                "ok": True,
-                "message": "Estado del buzón actualizado correctamente",
-                "config_id": config_id,
-                "last_uid": last_uid,
-                "messages_processed": messages_processed,
-            }, status=status.HTTP_200_OK)
-            
-        except ValueError as e:
-            return Response(
-                {"error": "config_not_found", "message": str(e)},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            log_up.error("update_inbox_state_error", extra=safe_extra({
-                "config_id": config_id,
-                "error": str(e),
-            }), exc_info=True)
-            return Response(
-                {"error": "update_failed", "message": f"Error al actualizar estado: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
     @action(detail=False, methods=['get'], url_path='obtener-retenciones')
     def obtener_retenciones(self, request: Request) -> Response:
         """
@@ -1432,8 +697,6 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                 "reteiva_porcentaje": Decimal,
             }
         """
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-
         naturaleza = request.query_params.get('naturaleza', 'VENTA')
 
         try:
@@ -1456,8 +719,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                     "message": "Parámetro 'nit' es obligatorio"
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            perfil = get_or_create_profile(request.user)
-            empresa_id = perfil.empresa_id
+            empresa_id = resolve_empresa_id_from_request(request)
             retenciones = self.service_obtener_retenciones_cliente(nit, empresa_id)
 
             # Convertir Decimal a string para JSON
@@ -1492,14 +754,15 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         Returns:
             HTML template con el formulario Offcanvas (ruta centralizada en core)
         """
-        factura_id = request.query_params.get('id')
+        # Acepta ?id= (cargarOffcanvas) o ?uuid= (btn Ver legacy)
+        factura_id = request.query_params.get('id') or request.query_params.get('uuid')
         context = {}
-        
+
         # # WARNING: v2.60: Determinar qué template usar según el modo
         # - Modo simple (subida/detalle): tenant/facturas/partials/offcanvas_factura.html
         # - Modo edición completa: tenant/facturas/partials/offcanvas_form.html
         use_simple_template = request.query_params.get('simple', 'true').lower() == 'true'
-        
+
         if factura_id:
             try:
                 # # WARNING: ZERO TRUST: Validar que la factura pertenece al tenant
@@ -1509,7 +772,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                     context['error'] = "No se encontró la empresa (SSoT) configurada para este tenant."
                     template_name = 'tenant/facturas/offcanvas_crear_factura.html' if use_simple_template else 'tenant/facturas/offcanvas_editar_factura.html'
                     return Response(context, template_name=template_name)
-                
+
                 # # WARNING: ZERO WASTE: Solo cargar campos necesarios para el visualizador
                 # # WARNING: v2.61.2: Si es modo readonly, cargar también items para el template de solo lectura
                 readonly_mode = request.query_params.get('readonly', 'false').lower() == 'true'
@@ -1518,7 +781,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                         # Template de solo lectura: cargar campos básicos + items
                         factura = Factura.objects.select_related('anexos').prefetch_related('items').filter(
                             empresa=empresa,
-                            id=factura_id
+                            uuid=factura_id
                         ).only(
                             'id',
                             'numero',
@@ -1540,7 +803,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                         # Template simple: solo campos básicos para detalle/subida
                         factura = Factura.objects.select_related('anexos').filter(
                             empresa=empresa,
-                            id=factura_id
+                            uuid=factura_id
                         ).only(
                             'id',
                             'numero',
@@ -1559,17 +822,18 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                     # # WARNING: v2.61.5: Zero Waste - .only() con campos necesarios para el editor
                     factura = Factura.objects.select_related('anexos').prefetch_related('items').filter(
                         empresa=empresa,
-                        id=factura_id
+                        uuid=factura_id
                     ).only(
-                        'id', 'uuid', 'numero', 'prefijo', 'consecutivo', 'tipo', 'estado', 'naturaleza',
+                        'id', 'uuid', 'numero', 'prefijo', 'consecutivo', 'tipo', 'estado', 'estado_pago', 'naturaleza',
                         'fecha_emision', 'fecha_vencimiento',
                         'emisor_nit', 'emisor_razon_social', 'emisor_direccion', 'emisor_email', 'emisor_telefono',
                         'receptor_nit', 'receptor_razon_social', 'receptor_direccion', 'receptor_email', 'receptor_telefono',
                         'moneda', 'categoria', 'forma_pago', 'medio_pago_codigo', 'payment_due_date',
                         'subtotal', 'impuestos', 'total',
-                        'cuenta_contable_uuid',
                         'cotizacion_uuid', 'cotizacion_numero',
+                        'cliente_uuid', 'proveedor_uuid',
                         'cufe', 'qr_url',
+                        'dian_validation_code', 'dian_validation_desc', 'dian_validation_fecha',
                         'anexos__pdf_file', 'anexos__ubl_xml', 'anexos__application_response_xml',
                     ).first()
 
@@ -1578,6 +842,17 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
                     return Response(context, template_name='tenant/facturas/offcanvas_crear_factura.html')
 
                 context['factura'] = factura
+
+                # Resolver fichas de cliente/proveedor via Bridge (sin N+1)
+                from apps.tenant.facturas.services.selectors import ClienteBridge, ProveedorBridge
+                if factura.cliente_uuid:
+                    context['cliente_info'] = ClienteBridge.obtener_cliente_por_uuid(
+                        str(factura.cliente_uuid), empresa.id
+                    )
+                if factura.proveedor_uuid:
+                    context['proveedor_info'] = ProveedorBridge.obtener_proveedor_por_uuid(
+                        str(factura.proveedor_uuid), empresa.id
+                    )
 
                 # Determinar si es modo lectura o edición
                 # # WARNING: REGLA: Solo borradores pueden editarse
@@ -1612,9 +887,19 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         # Pasar choices para selects (solo necesario para template completo)
         context['tipos_factura'] = Factura.TipoFactura.choices
         context['estados'] = Factura.Estado.choices
+        context['estados_pago'] = Factura.EstadoPago.choices
         context['naturalezas'] = Factura.Naturaleza.choices
         context['categorias'] = Factura.Categoria.choices
-        
+
+        # v3.11.0: datos de conciliacion bancaria para el JS del editor
+        if context.get('factura'):
+            _f = context['factura']
+            context['total_pagado_bancos'] = str(_f.total_pagado_bancos)
+            context['saldo_pendiente']     = str(_f.saldo_pendiente)
+        else:
+            context['total_pagado_bancos'] = '0.00'
+            context['saldo_pendiente']     = '0.00'
+
         # Template completo para edición
         return Response(context, template_name='tenant/facturas/offcanvas_editar_factura.html')
 
@@ -1623,12 +908,9 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         """
         Busca productos y servicios unificados del inventario.
         """
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-        from apps.tenant.facturas.services.selectors import InventarioItemBridge
         from .serializers import CatalogoItemInventarioSerializer
 
-        perfil = get_or_create_profile(request.user)
-        empresa_id = perfil.empresa_id
+        empresa_id = resolve_empresa_id_from_request(request)
 
         search = request.query_params.get("q", "")
         catalogo = InventarioItemBridge.buscar_catalogo(empresa_id=empresa_id, search=search)
@@ -1647,9 +929,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
             "item_inventario_uuid", "item_inventario_tipo", "item_inventario_codigo"
         )
         
-        from apps.tenant.facturas.services.selectors import InventarioItemBridge
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-        empresa_id = get_or_create_profile(request.user).empresa_id
+        empresa_id = resolve_empresa_id_from_request(request)
 
         trazabilidad = []
         for item in items:
@@ -1685,10 +965,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
         if len(query) < 2:
             return Response([], status=status.HTTP_200_OK)
 
-        # Obtener empresa_id de forma segura desde el perfil del usuario
-        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
-        perfil = get_or_create_profile(request.user)
-        empresa_id = perfil.empresa_id
+        empresa_id = resolve_empresa_id_from_request(request)
         qs = Factura.objects.filter(empresa_id=empresa_id).only(
             'uuid', 'numero', 'fecha_emision', 'receptor_razon_social', 'receptor_nit',
             'total', 'naturaleza'
@@ -1720,43 +997,7 @@ class FacturaViewSet(FacturaServiceMixin, BaseTenantViewSet):
 
         return Response(resultados, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['patch'], url_path='vincular-cotizacion')
-    def vincular_cotizacion(self, request, uuid=None):
-        """
-        PATCH /api/v1/facturas/{uuid}/vincular-cotizacion/
-        Vincula una factura con una cotización (soft reference).
-
-        Payload: {"cotizacion_uuid": "uuid" or null}
-        Respuesta: {"cotizacion_uuid": "uuid", "success": true}
-        """
-        factura = self.get_object()
-        cotizacion_uuid = request.data.get('cotizacion_uuid')
-
-        if cotizacion_uuid is not None:
-            # Validar que sea un UUID válido si se proporciona
-            try:
-                import uuid as uuid_module
-                uuid_module.UUID(str(cotizacion_uuid))
-            except (ValueError, AttributeError):
-                return Response(
-                    {'detail': 'cotizacion_uuid debe ser un UUID válido'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        factura.cotizacion_uuid = cotizacion_uuid
-        factura.save(update_fields=['cotizacion_uuid'])
-
-        return Response({
-            'cotizacion_uuid': str(factura.cotizacion_uuid) if factura.cotizacion_uuid else None,
-            'success': True
-        }, status=status.HTTP_200_OK)
-
-
-class ItemFacturaViewSet(mixins.ListModelMixin,
-                         mixins.RetrieveModelMixin,
-                         mixins.UpdateModelMixin,
-                         mixins.DestroyModelMixin,
-                         viewsets.GenericViewSet):
+class ItemFacturaViewSet(BaseTenantViewSet):
     """
     Endpoints para ítems de factura.
 
@@ -1768,14 +1009,15 @@ class ItemFacturaViewSet(mixins.ListModelMixin,
 
     Endpoints disponibles:
     - GET /api/v1/items-factura/ (lista de ítems con filtro por factura)
-    - GET /api/v1/items-factura/{id}/ (detalle de un ítem)
-    - PATCH /api/v1/items-factura/{id}/ (actualizar ítem — campos item_inventario_* v3.9.2+)
-    - DELETE /api/v1/items-factura/{id}/ (eliminar un ítem)
+    - GET /api/v1/items-factura/{uuid}/ (detalle de un ítem)
+    - PATCH /api/v1/items-factura/{uuid}/ (actualizar ítem — campos item_inventario_* v3.9.2+)
+    - DELETE /api/v1/items-factura/{uuid}/ (eliminar un ítem)
     """
-    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    permission_classes = [IsAuthenticated]
     serializer_class = ItemFacturaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['factura_id']
+    http_method_names = ["get", "head", "options", "patch", "delete"]
 
     def get_queryset(self):
         """
@@ -1783,7 +1025,9 @@ class ItemFacturaViewSet(mixins.ListModelMixin,
         Filtra por factura si se proporciona el parámetro factura_id o factura.
         Incluye campos de inventario para vinculación v3.9.2+.
         """
-        qs = ItemFactura.objects.only(
+        empresa_id = resolve_empresa_id_from_request(self.request)
+
+        qs = ItemFactura.objects.filter(empresa_id=empresa_id).only(
             "id", "uuid", "empresa_id", "factura_id", "linea_id", "codigo", "descripcion",
             "cantidad", "unidad_medida", "valor_unitario", "porcentaje_iva",
             "valor_iva", "porcentaje_retefuente", "valor_retefuente",
@@ -1800,10 +1044,7 @@ class ItemFacturaViewSet(mixins.ListModelMixin,
         return qs.order_by('orden')
 
 
-class NotaCreditoViewSet(mixins.ListModelMixin,
-                         mixins.RetrieveModelMixin,
-                         mixins.DestroyModelMixin,
-                         viewsets.GenericViewSet):
+class NotaCreditoViewSet(BaseTenantViewSet):
     """
     NOTAS CRÉDITO — Endpoints para gestión de notas crédito.
     
@@ -1815,20 +1056,20 @@ class NotaCreditoViewSet(mixins.ListModelMixin,
     
     Endpoints permitidos:
     - GET /notas-credito/ → Lista de notas crédito (paginada)
-    - GET /notas-credito/{id}/ → Detalle de nota crédito (read-only)
-    - GET /notas-credito/{id}/xml/ → XML de nota crédito (artefacto pesado)
-    - DELETE /notas-credito/{id}/ → Eliminar nota crédito (rollback de error de carga)
+    - GET /notas-credito/{uuid}/ → Detalle de nota crédito (read-only)
+    - GET /notas-credito/{uuid}/xml/ → XML de nota crédito (artefacto pesado)
+    - DELETE /notas-credito/{uuid}/ → Eliminar nota crédito (rollback de error de carga)
     
     Endpoints bloqueados:
     - POST /notas-credito/ → 405 Method Not Allowed (solo importación vía pipeline XML)
-    - PUT /notas-credito/{id}/ → 405 Method Not Allowed
-    - PATCH /notas-credito/{id}/ → 405 Method Not Allowed
+    - PUT /notas-credito/{uuid}/ → 405 Method Not Allowed
+    - PATCH /notas-credito/{uuid}/ → 405 Method Not Allowed
     
     # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
     [OK] Escalable (millones de notas crédito)
     [OK] Artefactos pesados (XML) solo en endpoint /xml/
     """
-    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    permission_classes = [IsAuthenticated]
     http_method_names = ["get", "head", "options", "delete"]  # # WARNING: v2.40: POST eliminado (datatables deprecated)
     
     def get_serializer_class(self):
@@ -1843,17 +1084,19 @@ class NotaCreditoViewSet(mixins.ListModelMixin,
         
         # WARNING: OPTIMIZACIÓN: Para list, solo campos esenciales (sin xml_content).
         """
+        empresa_id = resolve_empresa_id_from_request(self.request)
+
         if self.action == "list":
-            return NotaCredito.objects.select_related("factura").only(
-                "id", "numero", "cude", "fecha_emision", "moneda",
+            return NotaCredito.objects.select_related("factura").filter(empresa_id=empresa_id).only(
+                "id", "uuid", "empresa_id", "numero", "cude", "fecha_emision", "moneda",
                 "subtotal", "impuestos", "total", "motivo",
                 "ref_factura_numero", "ref_factura_cufe",
                 "factura__numero", "factura__cufe",
                 "created_at"
             )
         # Para retrieve, incluir más campos pero aún sin xml_content
-        return NotaCredito.objects.select_related("factura").only(
-            "id", "numero", "cude", "fecha_emision", "moneda",
+        return NotaCredito.objects.select_related("factura").filter(empresa_id=empresa_id).only(
+            "id", "uuid", "empresa_id", "numero", "cude", "fecha_emision", "moneda",
             "subtotal", "impuestos", "total", "motivo",
             "ref_factura_numero", "ref_factura_cufe",
             "factura__id", "factura__numero", "factura__cufe",
@@ -1863,7 +1106,7 @@ class NotaCreditoViewSet(mixins.ListModelMixin,
     # # WARNING: DEPRECATED v2.40: Método datatables() eliminado - usar GET /api/v1/facturas/notas-credito/ con StandardResultsSetPagination
     
     @action(detail=True, methods=["get"], url_path="xml")
-    def xml(self, request, pk=None):
+    def xml(self, request, uuid=None):
         """
         Endpoint dedicado para XML completo (artefacto pesado).
         

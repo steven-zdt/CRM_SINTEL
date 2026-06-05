@@ -18,11 +18,11 @@ Usage:
 
 import uuid
 from decimal import Decimal
-from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils.timezone import now as tz_now
 
+from ..models import AsientoContable, MovimientoContable, PeriodoContable
 from .dtos import TransaccionEconomica, LineaTransaccion
 from .excepciones import AsientoYaExisteError
 from .resolver import ResolverCuentas
@@ -31,9 +31,6 @@ from .validadores import (
     validar_no_vacio,
     validar_periodo_abierto,
 )
-
-if TYPE_CHECKING:
-    from ..models import AsientoContable, PeriodoContable
 
 
 class Contabilizador:
@@ -65,7 +62,7 @@ class Contabilizador:
         self.empresa_id = empresa_id
         self.resolver = ResolverCuentas(empresa_id)
 
-    def contabilizar(self, transaccion: TransaccionEconomica) -> 'AsientoContable':
+    def contabilizar(self, transaccion: TransaccionEconomica) -> AsientoContable:
         """
         Materialize economic transaction into journal entry.
 
@@ -80,7 +77,6 @@ class Contabilizador:
         Raises:
             Various ContabilidadError subclasses on validation failure
         """
-        from ..models import AsientoContable, PeriodoContable
         with transaction.atomic():
             # 1. Resolve period from transaction date
             periodo = self._resolver_periodo(transaccion.fecha)
@@ -123,8 +119,6 @@ class Contabilizador:
         Returns:
             True if entry exists, False otherwise
         """
-        from ..models import AsientoContable
-
         return AsientoContable.objects.filter(
             empresa_id=self.empresa_id,
             documento_origen_app=app_label,
@@ -133,7 +127,7 @@ class Contabilizador:
             documento_origen_reversado=False,  # Count only original, not reverses
         ).exists()
 
-    def reversar_asiento(self, asiento_original: 'AsientoContable') -> 'AsientoContable':
+    def reversar_asiento(self, asiento_original: AsientoContable) -> AsientoContable:
         """
         Create reversal entry (opposite signs) for existing journal entry.
 
@@ -149,8 +143,6 @@ class Contabilizador:
         Raises:
             PeriodoCerradoError: If current period is closed (but original can be in past period)
         """
-        from ..models import AsientoContable, PeriodoContable
-
         with transaction.atomic():
             periodo = self._resolver_periodo(tz_now().date())
             validar_periodo_abierto(periodo)
@@ -185,7 +177,7 @@ class Contabilizador:
 
     # ========== Private methods ==========
 
-    def _resolver_periodo(self, fecha) -> 'PeriodoContable':
+    def _resolver_periodo(self, fecha) -> PeriodoContable:
         """
         Infer accounting period from transaction date.
 
@@ -198,8 +190,6 @@ class Contabilizador:
         Returns:
             Matching PeriodoContable instance
         """
-        from ..models import PeriodoContable
-
         periodo = PeriodoContable.objects.filter(
             empresa_id=self.empresa_id,
             fecha_inicio__lte=fecha,
@@ -235,8 +225,8 @@ class Contabilizador:
     def _construir_asiento(
         self,
         transaccion: TransaccionEconomica,
-        periodo: 'PeriodoContable'
-    ) -> 'AsientoContable':
+        periodo: PeriodoContable,
+    ) -> AsientoContable:
         """
         Build journal entry object with resolved accounts and movements.
 
@@ -249,8 +239,6 @@ class Contabilizador:
         Returns:
             Unsaved AsientoContable with movimientos_por_guardar queued
         """
-        from ..models import AsientoContable, MovimientoContable
-
         asiento = AsientoContable(
             empresa_id=self.empresa_id,
             fecha=transaccion.fecha,

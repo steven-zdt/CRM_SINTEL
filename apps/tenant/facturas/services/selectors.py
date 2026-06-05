@@ -21,6 +21,9 @@ from apps.tenant.facturas.models import Factura, FacturaAnexos
 
 
 # --- Campos optimizados para alineación Serializers ↔ UI ---
+# IMPORTANTE: estas constantes se usan en Meta.fields de serializers.
+# NUNCA incluir notacion ORM de traversal (doble guion bajo ej: sede__nombre).
+# Las traversals van INLINE en .only() dentro del selector, junto con select_related.
 LIST_FIELDS = (
     "id",
     "uuid",
@@ -42,12 +45,18 @@ LIST_FIELDS = (
     "emisor_razon_social",
     "receptor_nit",
     "receptor_razon_social",
-    "cuenta_contable_uuid",
+    "cliente_uuid",
+    "proveedor_uuid",
     "cotizacion_uuid",
     "cotizacion_numero",
     "cufe",
     "qr_url",
+    "sede_id",      # DT-SEDE-02: FK id (valido en Meta.fields y en .only())
 )
+
+# Traversals ORM para .only() — NO incluir en LIST_FIELDS/DETAIL_FIELDS
+# porque se usan directamente en serializer Meta.fields.
+_SEDE_ONLY_TRAVERSALS = ("sede__nombre",)
 
 DETAIL_FIELDS = (
     "id",
@@ -76,11 +85,13 @@ DETAIL_FIELDS = (
     "forma_pago",
     "medio_pago_codigo",
     "payment_due_date",
-    "cuenta_contable_uuid",
+    "cliente_uuid",
+    "proveedor_uuid",
     "cotizacion_uuid",
     "cotizacion_numero",
     "cufe",
     "qr_url",
+    "sede_id",       # DT-SEDE-02: FK id (valido en Meta.fields y en .only())
     "created_at",
     "updated_at",
 )
@@ -105,9 +116,10 @@ class FacturaSelectors:
         QuerySet optimizado para listado (v3.5 Zero Waste).
         empresa_id aplicado aqui (SSoT Anti-IDOR).
         """
-        qs = Factura.objects.select_related("nota_credito").only(
+        qs = Factura.objects.select_related("nota_credito", "sede").only(
             *LIST_FIELDS,
             *NOTA_CREDITO_ONLY_FIELDS,
+            *_SEDE_ONLY_TRAVERSALS,
         )
         if empresa_id:
             qs = qs.filter(empresa_id=empresa_id)
@@ -126,9 +138,10 @@ class FacturaSelectors:
         QuerySet optimizado para detalle.
         empresa_id aplicado aqui (SSoT Anti-IDOR).
         """
-        qs = Factura.objects.select_related("nota_credito", "anexos").only(
+        qs = Factura.objects.select_related("nota_credito", "sede").prefetch_related("impuestos_desglosados").only(
             *DETAIL_FIELDS,
             *NOTA_CREDITO_ONLY_FIELDS,
+            *_SEDE_ONLY_TRAVERSALS,
         )
         if empresa_id:
             qs = qs.filter(empresa_id=empresa_id)
@@ -291,6 +304,110 @@ class CotizacionBridge:
             logger.warning(f"Error resolviendo cotizacion {cotizacion_uuid}: {e}")
             return None
 
+    @staticmethod
+    def exists_by_uuid(cotizacion_uuid: str, empresa_id: int | None = None) -> bool:
+        """Valida existencia de cotizacion por UUID."""
+        return CotizacionBridge.obtener_cotizacion_por_uuid(cotizacion_uuid, empresa_id) is not None
+
+
+class ClienteBridge:
+    """Bridge de lectura hacia Clientes para resolver cliente_uuid sin snapshots."""
+
+    @staticmethod
+    def obtener_cliente_por_uuid(cliente_uuid: str, empresa_id: int | None = None) -> dict | None:
+        """Retorna informacion minima del cliente vinculado."""
+        if not cliente_uuid:
+            return None
+
+        try:
+            from apps.tenant.clientes.models import Cliente
+
+            qs = Cliente.objects.only(
+                "id",
+                "uuid",
+                "empresa_id",
+                "numero_documento",
+                "razon_social",
+                "nombre_comercial",
+                "email",
+                "telefono",
+            )
+            if empresa_id:
+                qs = qs.filter(empresa_id=empresa_id)
+
+            cliente = qs.filter(uuid=cliente_uuid).first()
+            if not cliente:
+                return None
+
+            return {
+                "uuid": str(cliente.uuid),
+                "numero_documento": cliente.numero_documento,
+                "razon_social": cliente.razon_social,
+                "nombre_comercial": cliente.nombre_comercial,
+                "email": cliente.email,
+                "telefono": cliente.telefono,
+                "label": cliente.razon_social or cliente.numero_documento,
+            }
+        except Exception:
+            return None
+
+    @staticmethod
+    def exists_by_uuid(cliente_uuid: str, empresa_id: int | None = None) -> bool:
+        """Valida existencia del cliente dentro del tenant activo."""
+        return ClienteBridge.obtener_cliente_por_uuid(cliente_uuid, empresa_id) is not None
+
+
+class ProveedorBridge:
+    """Bridge de lectura hacia Proveedores para resolver proveedor_uuid sin snapshots."""
+
+    @staticmethod
+    def obtener_proveedor_por_uuid(proveedor_uuid: str, empresa_id: int | None = None) -> dict | None:
+        """Retorna informacion minima del proveedor vinculado."""
+        if not proveedor_uuid:
+            return None
+
+        try:
+            from apps.tenant.proveedores.models import Proveedor
+
+            qs = Proveedor.objects.only(
+                "id",
+                "uuid",
+                "empresa_id",
+                "numero_documento",
+                "digito_verificacion",
+                "razon_social",
+                "nombre_comercial",
+                "email_contacto",
+                "telefono_contacto",
+            )
+            if empresa_id:
+                qs = qs.filter(empresa_id=empresa_id)
+
+            proveedor = qs.filter(uuid=proveedor_uuid).first()
+            if not proveedor:
+                return None
+
+            numero = proveedor.numero_documento
+            if proveedor.digito_verificacion:
+                numero = f"{numero}-{proveedor.digito_verificacion}"
+
+            return {
+                "uuid": str(proveedor.uuid),
+                "numero_documento": numero,
+                "razon_social": proveedor.razon_social,
+                "nombre_comercial": proveedor.nombre_comercial,
+                "email": proveedor.email_contacto,
+                "telefono": proveedor.telefono_contacto,
+                "label": proveedor.razon_social or numero,
+            }
+        except Exception:
+            return None
+
+    @staticmethod
+    def exists_by_uuid(proveedor_uuid: str, empresa_id: int | None = None) -> bool:
+        """Valida existencia del proveedor dentro del tenant activo."""
+        return ProveedorBridge.obtener_proveedor_por_uuid(proveedor_uuid, empresa_id) is not None
+
 
 class InventarioItemBridge:
     """
@@ -380,3 +497,43 @@ class InventarioItemBridge:
                 return None
         return None
 
+
+class BancosBridge:
+    """
+    [v3.11.0] Pull Model bridge: Facturas lee transacciones bancarias conciliadas
+    sin FK directa (Bounded Context §18, ADR-001).
+
+    Importacion dinamica de TransaccionBancaria para evitar circularidad
+    entre apps.tenant.facturas y apps.tenant.bancos.
+    """
+
+    @staticmethod
+    def obtener_total_conciliado(empresa_id: int, factura_uuid) -> Decimal:
+        """
+        Suma el valor absoluto de todas las TransaccionBancaria conciliadas
+        que referencian esta factura.
+
+        DEBITO  (valor < 0) → pago de facturas de COMPRA
+        CREDITO (valor >= 0) → cobro de facturas de VENTA
+        ABS garantiza suma correcta en ambos casos.
+
+        Returns Decimal: total conciliado en bancos, 0.00 si no hay ninguno.
+        """
+        from django.db.models import Func, F, Sum
+        from apps.tenant.bancos.models import TransaccionBancaria
+
+        if not factura_uuid or not empresa_id:
+            return Decimal('0.00')
+
+        result = (
+            TransaccionBancaria.objects
+            .filter(
+                empresa_id=empresa_id,
+                factura_uuid=factura_uuid,
+                conciliado=True,
+            )
+            .aggregate(
+                total=Sum(Func(F('valor'), function='ABS'))
+            )
+        )
+        return Decimal(str(result['total'] or '0.00'))

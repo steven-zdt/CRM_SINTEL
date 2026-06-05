@@ -23,7 +23,7 @@
             <select class="form-select" id="area-sede" name="sede" required>
               <option value="" disabled selected>-- Seleccionar Sede --</option>
               {% for s in sedes %}
-                <option value="{{ s.id }}">{{ s.nombre }}</option>
+                <option value="{{ s.uuid }}">{{ s.nombre }}</option>
               {% endfor %}
             </select>
           </div>

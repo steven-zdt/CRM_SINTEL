@@ -4,8 +4,11 @@ Exporta un wrapper de compatibilidad para llamadas existentes.
 """
 
 from typing import Any
-from . import crud_service  # noqa: F401
+
+from apps.tenant.empresa.impl.mailbox_provider import get_mailbox_config as _get_mailbox_config_impl
+from apps.tenant.empresa.models import Empresa
 from . import business_service  # noqa: F401
+from . import crud_service  # noqa: F401
 
 from .selectors import EmpresaSelector, SedeSelector, AreaSelector
 from .business_service import EmpresaService, SedeService, AreaService
@@ -40,8 +43,6 @@ def get_empresa_emisor_data() -> dict[str, Any]:
     Returns:
         Dict con datos del emisor.
     """
-    from apps.tenant.empresa.models import Empresa
-    
     empresa = (
         Empresa.objects
         .only("id", "nit", "razon_social", "dv", "direccion", "telefono", "email_contacto")
@@ -76,5 +77,4 @@ def get_mailbox_config(config_id: int):
     """
     Obtiene configuración de buzón de correo (SSoT para maildigester).
     """
-    from apps.tenant.empresa.impl.mailbox_provider import get_mailbox_config as _get_mailbox_config
-    return _get_mailbox_config(config_id)
+    return _get_mailbox_config_impl(config_id)

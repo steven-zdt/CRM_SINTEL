@@ -20,6 +20,10 @@
 
 ## 📖 Documentación por categoría
 
+### Sede por Actividad (v3.16.0 — 2026-06-01)
+
+- [PLAN_SEDE_POR_ACTIVIDAD.md](PLAN_SEDE_POR_ACTIVIDAD.md) — Implementacion completa DT-SEDE-01..05: sede FK en gastos, facturas, proyectos, cotizaciones, inventario. Patron DSV + UUIDOrPKRelatedField + migraciones aplicadas.
+
 ### Arquitectura y Diseño
 
 - [API_FIRST.md](API_FIRST.md) — Arquitectura API-First

@@ -31,9 +31,7 @@
     get: (id) => w.http('GET', `${API_URL}${id}/`),
     create: (data) => w.http('POST', API_URL, normalizePayload(data)),
     update: (id, data) => w.http('PATCH', `${API_URL}${id}/`, normalizePayload(data)),
-    delete: (id) => w.http('DELETE', `${API_URL}${id}/`),
-    searchCuentas: (q) => w.http('GET', `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(q)}&app_origen=proveedores&activa=true`),
-    getCuentaByUuid: (uuid) => w.http('GET', `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}&app_origen=proveedores`)
+    delete: (id) => w.http('DELETE', `${API_URL}${id}/`)
   };
 
   w.AppProveedor = w.AppProveedor || {};

@@ -5,26 +5,42 @@ Tests for upload-ubl API contract.
 list endpoint does NOT include heavy XML fields, and /{id}/xml/ returns XML.
 """
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 
+from apps.public.tenants.models import Domain
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos
+from apps.tenant.perfil.models import RolTenant, TenantProfile
+from tests.tenant.base_test import SintelTenantTestCase
 
 UBL_MIN = b"""<?xml version="1.0"?><Invoice xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"><cbc:ID>FV-001</cbc:ID><cbc:IssueDate>2026-01-30</cbc:IssueDate><cac:AccountingSupplierParty><cac:Party><cac:PartyTaxScheme><cbc:CompanyID>901123299</cbc:CompanyID><cbc:RegistrationName>SINTEL</cbc:RegistrationName></cac:PartyTaxScheme></cac:Party></cac:AccountingSupplierParty><cac:AccountingCustomerParty><cac:Party><cac:PartyTaxScheme><cbc:CompanyID>900298074</cbc:CompanyID><cbc:RegistrationName>GVS</cbc:RegistrationName></cac:PartyTaxScheme></cac:Party></cac:AccountingCustomerParty><cac:LegalMonetaryTotal><cbc:TaxExclusiveAmount>1000.00</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount>1190.00</cbc:TaxInclusiveAmount><cbc:PayableAmount>1190.00</cbc:PayableAmount></cac:LegalMonetaryTotal></Invoice>"""
 
 
-class UploadUBLContractTests(TenantTestCase):
+class UploadUBLContractTests(SintelTenantTestCase):
     """Test upload-ubl API contract."""
     
     def setUp(self):
         super().setUp()
-        Empresa.objects.create(
+        self.tenant_host = f"{self.tenant.schema_name}.sintel.local"
+        connection.set_schema_to_public()
+        Domain.objects.update_or_create(
+            domain=self.tenant_host,
+            defaults={"tenant": self.tenant, "is_primary": True},
+        )
+        connection.set_schema(self.tenant.schema_name)
+
+        self.empresa = Empresa.objects.create(
             razon_social="SINTEL",
             nit="901123299",
             dv="1",
             direccion="Calle 123",
             telefono="3001234567",
+        )
+        TenantProfile.objects.update_or_create(
+            user=self.user,
+            empresa=self.empresa,
+            defaults={"rol": RolTenant.ADMIN, "cargo": "Admin"},
         )
     
     def test_post_upload_ubl_creates_factura(self):
@@ -32,7 +48,9 @@ class UploadUBLContractTests(TenantTestCase):
         url = reverse("factura-upload-ubl")
         f = SimpleUploadedFile("test.xml", UBL_MIN, content_type="text/xml")
         
-        resp = self.client.post(f"{url}?async=false", {"file": f}, format="multipart")
+        resp = self.api_client.post(
+            f"{url}?async=false", {"file": f}, format="multipart", HTTP_HOST=self.tenant_host
+        )
         
         # Should return 201 Created
         self.assertIn(resp.status_code, (200, 201))
@@ -68,7 +86,7 @@ class UploadUBLContractTests(TenantTestCase):
         )
         
         url = reverse("factura-list")
-        resp = self.client.get(url)
+        resp = self.api_client.get(url, HTTP_HOST=self.tenant_host)
         
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -104,12 +122,12 @@ class UploadUBLContractTests(TenantTestCase):
             ubl_xml="<Invoice xmlns='urn:oasis:names:specification:ubl:schema:xsd:Invoice-2'><cbc:ID>XML-001</cbc:ID></Invoice>"
         )
         
-        url = reverse("factura-xml-ubl", args=[factura.id])
-        resp = self.client.get(url)
+        url = reverse("factura-xml-ubl", args=[factura.uuid])
+        resp = self.api_client.get(url, HTTP_HOST=self.tenant_host)
         
         self.assertEqual(resp.status_code, 200)
         self.assertIn("application/xml", resp["Content-Type"])
-        self.assertIn("<Invoice>", resp.content.decode("utf-8"))
+        self.assertIn("<Invoice", resp.content.decode("utf-8"))
     
     def test_multi_tenant_isolation(self):
         """Verify that same CUFE in two tenants does not collide."""
@@ -118,7 +136,9 @@ class UploadUBLContractTests(TenantTestCase):
         url = reverse("factura-upload-ubl")
         f = SimpleUploadedFile("test.xml", UBL_MIN, content_type="text/xml")
         
-        resp = self.client.post(f"{url}?async=false", {"file": f}, format="multipart")
+        resp = self.api_client.post(
+            f"{url}?async=false", {"file": f}, format="multipart", HTTP_HOST=self.tenant_host
+        )
         
         self.assertIn(resp.status_code, (200, 201))
         

@@ -11,15 +11,18 @@ from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.clientes.services.selectors import (
     ClienteSelector,
     ContactoSelector,
+    CarteraSelector,
     LIST_FIELDS,
     DETAIL_FIELDS,
 )
 from apps.tenant.clientes.services.business_service import (
     ClienteBusinessService,
+    CarteraBusinessService,
 )
 from apps.tenant.clientes.services.crud_service import (
     ClienteCRUDService,
     ContactoCRUDService,
+    CarteraCRUDService,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,7 +80,7 @@ class ContactoClienteServiceMixin(BaseServiceMixin):
 
     @property
     def contacto_selector(self):
-        return self.selector_class()
+        return ContactoSelector()
 
     @property
     def contacto_crud(self):
@@ -91,3 +94,38 @@ class ContactoClienteServiceMixin(BaseServiceMixin):
 
 # Alias de compatibilidad
 ContactoServiceMixin = ContactoClienteServiceMixin
+
+
+class CarteraServiceMixin(BaseServiceMixin):
+    """
+    Service mixin para Cartera ViewSet.
+    """
+
+    selector_class = CarteraSelector
+    business_service_class = CarteraBusinessService
+    crud_service_class = CarteraCRUDService
+
+    @property
+    def cartera_selector(self):
+        return self.selector_class()
+
+    @property
+    def cartera_service(self):
+        return self.business_service_class()
+
+    @property
+    def cartera_crud(self):
+        return self.crud_service_class()
+
+    def get_qs_list(self):
+        empresa_id   = self._get_empresa_id_seguro()
+        req = getattr(self, 'request', None)
+        cliente_uuid = (req.query_params.get('cliente_uuid') or req.query_params.get('cliente_id')) if req else None
+        estado_pago  = self.request.query_params.get('estado_pago')
+        search       = self.request.query_params.get('search')
+        return self.selector_class.qs_list_facturas_venta(
+            empresa_id=empresa_id,
+            cliente_uuid=cliente_uuid,
+            estado_pago=estado_pago,
+            search=search,
+        )

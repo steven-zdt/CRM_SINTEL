@@ -24,7 +24,7 @@
             <select class="form-select" id="area-sede" name="sede" required>
               <option value="" disabled>-- Seleccionar Sede --</option>
               {% for s in sedes %}
-                <option value="{{ s.id }}" {% if area.sede_id == s.id %}selected{% endif %}>{{ s.nombre }}</option>
+                <option value="{{ s.uuid }}" {% if area.sede.uuid == s.uuid %}selected{% endif %}>{{ s.nombre }}</option>
               {% endfor %}
             </select>
           </div>

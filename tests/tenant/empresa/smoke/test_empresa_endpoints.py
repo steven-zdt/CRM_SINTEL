@@ -21,7 +21,14 @@ def test_mi_empresa_returns_200(client):
     
     [WARNING] MULTI-TENANT: Usa HTTP_HOST para entrar al TENANT_URLCONF correcto.
     """
-    client.defaults["HTTP_HOST"] = "home.sintel.com"
+    # Usar primer tenant activo disponible en el entorno de test
+    from apps.public.tenants.models import Client as TenantClientQ, Domain as DomainQ
+    from django_tenants.utils import get_public_schema_name
+    tenant_q = TenantClientQ.objects.exclude(schema_name=get_public_schema_name()).filter(is_active=True).first()
+    if not tenant_q:
+        pytest.skip("No hay tenants activos en la BD de test")
+    domain_q = DomainQ.objects.filter(tenant=tenant_q, is_primary=True).first()
+    client.defaults["HTTP_HOST"] = domain_q.domain if domain_q else f"{tenant_q.schema_name}.sintel.local"
     r = client.get("/api/v1/empresas/mi-empresa/")
     assert r.status_code == 200, r.content
     assert r.get("Content-Type", "").startswith("application/json"), "Response should be JSON"
@@ -34,7 +41,13 @@ def test_mailbox_configs_list_returns_200(client):
     
     [WARNING] MULTI-TENANT: Usa HTTP_HOST para entrar al TENANT_URLCONF correcto.
     """
-    client.defaults["HTTP_HOST"] = "home.sintel.com"
+    from apps.public.tenants.models import Client as TenantClientQ, Domain as DomainQ
+    from django_tenants.utils import get_public_schema_name
+    tenant_q = TenantClientQ.objects.exclude(schema_name=get_public_schema_name()).filter(is_active=True).first()
+    if not tenant_q:
+        pytest.skip("No hay tenants activos en la BD de test")
+    domain_q = DomainQ.objects.filter(tenant=tenant_q, is_primary=True).first()
+    client.defaults["HTTP_HOST"] = domain_q.domain if domain_q else f"{tenant_q.schema_name}.sintel.local"
     r = client.get("/api/v1/empresas/mailbox/configs/")
     assert r.status_code == 200, r.content
     assert r.get("Content-Type", "").startswith("application/json"), "Response should be JSON"
@@ -60,16 +73,14 @@ def test_mailbox_configs_list_and_mi_empresa():
         }
     )
     
-    # Crear dominio para el tenant (simulando home.sintel.com)
-    domain_name = "home.sintel.com"
+    # Dominio generado dinamicamente desde el schema_name del tenant de prueba
+    domain_name = f"{schema_name}.sintel.local"
     Domain.objects.get_or_create(
         domain=domain_name,
         tenant=tenant,
-        defaults={"is_primary": True}
+        defaults={"is_primary": True},
     )
-    
-    # Cliente HTTP con HTTP_HOST del tenant
-    # [WARNING] CRÍTICO: Esto hace que django-tenants resuelva el TENANT_URLCONF correcto
+
     client = Client()
     client.defaults["HTTP_HOST"] = domain_name
     

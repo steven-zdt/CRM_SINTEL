@@ -1,7 +1,7 @@
 """
-Management command to backfill accounting journal entries from all source apps.
+Management command to backfill accounting journal entries from source apps.
 
-Orchestrates all extractors (Gastos, Facturas, Inventario, Nomina) for one or all tenants.
+Orchestrates extractors (Gastos, Facturas, Nomina) for one or all tenants.
 Safe to re-run: idempotent by design (skips already-journalized documents).
 
 Usage:
@@ -18,7 +18,6 @@ from django_tenants.utils import get_tenant_model, schema_context
 from apps.tenant.contabilidad.integracion.extractores import (
     ExtractorGastos,
     ExtractorFacturas,
-    ExtractorInventario,
     ExtractorNomina,
 )
 
@@ -27,13 +26,12 @@ Tenant = get_tenant_model()
 EXTRACTORES_DISPONIBLES = {
     'gastos': ExtractorGastos,
     'facturas': ExtractorFacturas,
-    'inventario': ExtractorInventario,
     'nomina': ExtractorNomina,
 }
 
 
 class Command(BaseCommand):
-    help = 'Backfill contabilidad: genera asientos desde Gastos, Facturas, Inventario y Nomina'
+    help = 'Backfill contabilidad: genera asientos desde Gastos, Facturas y Nomina'
 
     def add_arguments(self, parser):
         parser.add_argument(

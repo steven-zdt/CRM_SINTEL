@@ -456,8 +456,8 @@ class TestDomainNormalizationEdgeCases:
         """
         Test: Normalizar dominio complejo con múltiples elementos.
         
-        Input: "HTTPS://WWW.Cliente.Sintel.Com:8000/Admin/Login/"
-        Expected: "cliente.sintel.com" (todo normalizado)
+        Input: "HTTPS://WWW.Test-Tenant-01.Sintel.Com:8000/Admin/Login/"
+        Expected: "test-tenant-01.sintel.com" (todo normalizado)
         """
         from tests.public.tenants.factories import UserFactory
         from django.urls import reverse
@@ -471,8 +471,8 @@ class TestDomainNormalizationEdgeCases:
         
         # Payload con dominio complejo
         payload = {
-            "nombre": "Cliente Complejo",
-            "dominio": "HTTPS://WWW.Cliente.Sintel.Com:8000/Admin/Login/",
+            "nombre": "Test Tenant Normalization Complex",
+            "dominio": "HTTPS://WWW.Test-Tenant-01.Sintel.Com:8000/Admin/Login/",
             "admin_user_id": admin_user.id
         }
         
@@ -487,14 +487,14 @@ class TestDomainNormalizationEdgeCases:
         
         # Assert: El dominio debe estar completamente normalizado
         domain_in_response = response.data.get("domain", {}).get("domain", "")
-        assert domain_in_response == "cliente.sintel.com", (
-            f"Expected 'cliente.sintel.com', got '{domain_in_response}'. "
+        assert domain_in_response == "test-tenant-01.sintel.com", (
+            f"Expected 'test-tenant-01.sintel.com', got '{domain_in_response}'. "
             f"Full response: {response.data}"
         )
-        
+
         # Limpieza: Eliminar el tenant creado
         from apps.public.tenants.models import Domain
-        
-        domain_in_db = Domain.objects.filter(domain="cliente.sintel.com").first()
+
+        domain_in_db = Domain.objects.filter(domain="test-tenant-01.sintel.com").first()
         if domain_in_db:
             domain_in_db.tenant.delete(force_drop=True)

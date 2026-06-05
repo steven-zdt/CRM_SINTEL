@@ -34,7 +34,7 @@ class TestProveedorIntegration:
             resolucion = ResolucionDIAN.objects.create(
                 empresa=empresa, numero_resolucion=f"RES_{username}", prefijo="G",
                 rango_desde=1, rango_hasta=1000,
-                fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True
+                fecha_resolucion="2026-01-01", fecha_inicio="2026-01-01", fecha_fin="2027-01-01", vigente=True
             )
             
             proveedor = Proveedor.objects.create(
@@ -96,7 +96,7 @@ class TestProveedorIntegration:
             "documento_soporte": {
                 "resolucion": res1.id,
                 "fecha": "2026-05-07",
-                "proveedor": prov2.id, # PROVEEDOR DE OTRO TENANT
+                "proveedor": prov2.uuid, # PROVEEDOR DE OTRO TENANT (UUID is universally unique)
                 "numero_documento_proveedor": "FACT-666",
                 "subtotal": 50000.0
             }
@@ -110,9 +110,9 @@ class TestProveedorIntegration:
         )
         
         # Debe fallar por Double Semantic Verification (DSV)
-        # El business service lanza ValidationError si el proveedor no es del tenant
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "proveedor" in str(resp.json()) or "detail" in str(resp.json())
+        # El business service lanza ValidationError/404 si el proveedor no pertenece al tenant
+        assert resp.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_404_NOT_FOUND)
+        assert "proveedor" in str(resp.json()) or "detail" in str(resp.json()) or "error" in str(resp.json())
 
     def test_list_gastos_shows_proveedor_data(self, client, tenant1):
         """Verifica que el listado de gastos incluya la razon social del proveedor."""

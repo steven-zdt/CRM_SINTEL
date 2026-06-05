@@ -12,12 +12,21 @@ from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
 from apps.tenant.api.utils import render_template_safe, resolve_tenant_empresa
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.proveedores.services.api_mixins import ProveedorServiceMixin
+from apps.tenant.proveedores.services.api_mixins import (
+    ProveedorServiceMixin,
+    CuentasPagarServiceMixin,
+)
 from apps.tenant.proveedores.api.serializers import (
     ProveedorDetailSerializer,
     ProveedorListSerializer,
+    FacturaCxPListSerializer,
+    CuentasPagarListSerializer,
+    CuentasPagarDetailSerializer,
+    CuentasPagarAbonoSerializer,
 )
-from apps.tenant.proveedores.models import Proveedor
+from apps.tenant.proveedores.models import Proveedor, CuentasPagar
+# PROVEEDORES_NIIF_CHOICES eliminado — AGENTS.md: ninguna app de negocio
+# debe tener referencias contables. Contabilidad es la unica propietaria.
 from apps.config.api.pagination import StandardResultsSetPagination
 
 logger = logging.getLogger(__name__)
@@ -61,18 +70,25 @@ class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
         return resolve_tenant_empresa(self.request, self)
 
     def list(self, request):
-        """Endpoint para Tabulator (Selector Modular)."""
+        """Endpoint para Tabulator (Selector Modular + CuentasPagar inline)."""
         empresa = self.get_empresa()
         search = request.query_params.get('search', '').strip()
-        
+
         queryset = self.proveedor_selector.get_list(empresa.id, search if search else None)
-        
+
         page = self.paginate_queryset(queryset)
+        rows = page if page is not None else list(queryset)
+
+        # CuentasPagar: una query agrupada para todos los proveedores de la pagina
+        uuids = [p.uuid for p in rows if p.uuid]
+        cuentas_pagar_map = self.proveedor_selector.get_cuentas_pagar_resumen(empresa.id, uuids)
+
+        ctx = self.get_serializer_context()
+        ctx['cuentas_pagar_map'] = cuentas_pagar_map
+
+        serializer = ProveedorListSerializer(rows, many=True, context=ctx)
         if page is not None:
-            serializer = ProveedorListSerializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-        
-        serializer = ProveedorListSerializer(queryset, many=True)
         return Response(serializer.data)
 
     def get_object(self):
@@ -177,10 +193,6 @@ class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
                 # Fallback por PK para compatibilidad
                 proveedor = self.proveedor_selector.get_by_id(empresa.id, id_instancia)
         
-        from apps.tenant.proveedores.choices.niif_proveedores_choices import (
-            PROVEEDORES_NIIF_CHOICES,
-        )
-        
         context = {
             'proveedor': proveedor,
             'empresa': empresa,
@@ -188,7 +200,6 @@ class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
             'tipo_documento_choices': Proveedor.TIPO_DOCUMENTO,
             'regimen_choices': Proveedor.REGIMEN,
             'tipo_cuenta_choices': [("AHORROS", "Ahorros"), ("CORRIENTE", "Corriente")],
-            'niif_choices': PROVEEDORES_NIIF_CHOICES,
             'modo_detalle': template_suffix == 'detalle',
         }
         
@@ -200,3 +211,191 @@ class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
     def gestor_offcanvas(self, request):
         """Alias para retrocompatibilidad."""
         return self.get_offcanvas_response(request, template_suffix='crear')
+
+
+# (CuentaPorPagarViewSet unificado en CuentasPagarViewSet)
+
+
+# ==============================================================================
+# CuentasPagar ViewSet
+# ==============================================================================
+
+class CuentasPagarViewSet(CuentasPagarServiceMixin, BaseTenantViewSet):
+    """
+    ViewSet para el sub-modulo de Cuentas por Pagar (Control de Deudas a Proveedores).
+
+    Endpoints:
+      GET  /api/v1/proveedores/cuentas-pagar/                -> list
+      GET  /api/v1/proveedores/cuentas-pagar/{uuid}/         -> retrieve
+      POST /api/v1/proveedores/cuentas-pagar/                -> create (registrar_cuenta_pagar)
+      POST /api/v1/proveedores/cuentas-pagar/{uuid}/registrar-abono/ -> registrar_abono
+      GET  /api/v1/proveedores/cuentas-pagar/dashboard-kpis/ -> dashboard_kpis
+
+    DSV: get_empresa() valida empresa_id en cada request.
+    """
+
+    queryset = CuentasPagar.objects.none()
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+
+    def get_empresa(self):
+        """Zero Trust - Obtiene la empresa del tenant actual."""
+        return resolve_tenant_empresa(self.request, self)
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return CuentasPagarListSerializer
+        return CuentasPagarDetailSerializer
+
+    def list(self, request, *args, **kwargs):
+        """
+        Lista facturas de compra (Cuentas por Pagar) de la empresa.
+
+        Fuente: Factura.naturaleza='COMPRA' — fuente de verdad (Bounded Context §18).
+        El modelo CuentasPagar se usa para gestionar abonos manuales.
+
+        Filtros opcionales:
+          ?proveedor_uuid=<uuid>  — filtrar por proveedor (Factura.proveedor_uuid)
+          ?estado_pago=SIN_PAGO|PARCIAL|PAGADA
+          ?vencidas=true          — solo facturas vencidas no pagadas
+        """
+        empresa = self.get_empresa()
+        proveedor_uuid = request.query_params.get("proveedor_uuid") or request.query_params.get("proveedor_id")
+        estado_pago    = request.query_params.get("estado_pago")
+        vencidas       = request.query_params.get("vencidas", "").lower() == "true"
+
+        qs = self.cuentas_pagar_selector.qs_list_facturas_compra(
+            empresa_id=empresa.id,
+            proveedor_uuid=proveedor_uuid,
+            estado_pago=estado_pago,
+            vencidas=vencidas,
+        )
+        page = self.paginate_queryset(qs)
+        rows = page if page is not None else list(qs)
+        serializer = FacturaCxPListSerializer(rows, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        """Detalle de una factura especifica en Cuentas por Pagar."""
+        empresa = self.get_empresa()
+        uuid_val = self.kwargs.get("uuid")
+        cuenta_pagar_obj = self.cuentas_pagar_selector.get_by_uuid(empresa_id=empresa.id, uuid_val=uuid_val)
+        
+        if not cuenta_pagar_obj:
+            raise NotFound("Registro de Cuentas por Pagar no encontrado en esta empresa.")
+        return Response(CuentasPagarDetailSerializer(cuenta_pagar_obj).data)
+
+    def create(self, request, *args, **kwargs):
+        """
+        Registra una nueva obligacion en las Cuentas por Pagar.
+        DSV: valida que el proveedor pertenezca a la empresa del tenant.
+        """
+        empresa = self.get_empresa()
+        proveedor_uuid = request.data.get("proveedor_uuid")
+        
+        if not proveedor_uuid:
+            return Response(
+                {"error": "El proveedor_uuid es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # DSV: resolver proveedor con filtro empresa
+        proveedor = Proveedor.objects.filter(
+            uuid=proveedor_uuid, empresa_id=empresa.id
+        ).only("id", "uuid", "empresa_id", "activo").first()
+        
+        if not proveedor:
+            raise NotFound("Proveedor no encontrado en esta empresa.")
+
+        # Validacion con el serializer
+        serializer = CuentasPagarDetailSerializer(data=request.data, context={'empresa_id': empresa.id})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Delegamos la creacion al Service Layer
+            cuenta_pagar_obj = self.cuentas_pagar_service.registrar_cuenta_pagar(
+                proveedor=proveedor,
+                empresa_id=empresa.id,
+                datos_cuenta_pagar=serializer.validated_data
+            )
+            return Response(
+                CuentasPagarDetailSerializer(cuenta_pagar_obj).data,
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"], url_path="registrar-abono")
+    def registrar_abono(self, request, *args, **kwargs):
+        """
+        Registra un abono parcial o total sobre una factura en las Cuentas por Pagar.
+        DSV: valida empresa via get_empresa() antes de llamar al servicio.
+        """
+        empresa = self.get_empresa()
+        uuid_val = self.kwargs.get("uuid")
+        serializer = CuentasPagarAbonoSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            cuenta_pagar_obj = self.cuentas_pagar_service.registrar_abono(
+                cuenta_pagar_uuid=uuid_val,
+                monto=serializer.validated_data["monto"],
+                observaciones=serializer.validated_data.get("observaciones", ""),
+                empresa_id=empresa.id,
+            )
+            return Response(CuentasPagarDetailSerializer(cuenta_pagar_obj).data)
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(
+        detail=False, methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas",
+    )
+    def render_offcanvas(self, request):
+        """Renderiza offcanvas de gestion de Cuentas por Pagar (HTMX FSD Compliant)."""
+        empresa = self.get_empresa()
+        uuid_val = request.query_params.get("uuid")
+        cuenta_pagar_obj = None
+        
+        if uuid_val:
+            cuenta_pagar_obj = self.cuentas_pagar_selector.get_by_uuid(empresa_id=empresa.id, uuid_val=uuid_val)
+            
+        context = {
+            "cuentas_pagar": cuenta_pagar_obj,
+            "empresa": empresa,
+        }
+        return render_template_safe(
+            context,
+            "tenant/proveedores/offcanvas_cuentas_pagar.html",
+            request=request,
+        )
+
+    @action(detail=False, methods=["get"], url_path="dashboard-kpis",
+            permission_classes=[IsTenantMember, IsTenantAdminOrReadOnly])
+    def dashboard_kpis(self, request, *args, **kwargs):
+        """
+        FASE 1 — KPIs globales de Cuentas por Pagar para el Dashboard Admin.
+
+        GET /api/v1/proveedores/cuentas-pagar/dashboard-kpis/
+
+        Retorna:
+          deuda_total_pendiente    — deuda activa total (SIN_PAGO + PARCIAL)
+          total_pagado_historico   — acumulado de pagos realizados
+          facturas_pendientes_count — facturas sin pagar o parciales
+          facturas_pagadas_count    — facturas completamente pagadas
+          deuda_vencida            — deuda con fecha_vencimiento < hoy
+          facturas_vencidas_count  — facturas vencidas no pagadas
+        """
+        empresa = self.get_empresa()
+        kpis = self.cuentas_pagar_selector.resumen_por_empresa(empresa_id=empresa.id)
+        # Serializar Decimal → str para JSON (DRF no serializa Decimal automáticamente)
+        return Response({
+            k: str(v) if hasattr(v, 'as_tuple') else v
+            for k, v in kpis.items()
+        })

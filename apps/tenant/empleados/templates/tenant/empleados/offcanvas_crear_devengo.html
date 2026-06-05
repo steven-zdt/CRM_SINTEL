@@ -195,20 +195,7 @@
         </div>
       </div>
 
-      {# ── 5. Cuenta Contable ────────────────────────────────────────────────── #}
-      <div class="mb-4">
-        <h6 class="text-primary border-bottom pb-2 mb-3">
-          <i class="bi bi-journal-check me-2"></i>Cuenta Contable
-          <small class="text-muted fw-normal ms-2">2505 — Salarios por pagar</small>
-        </h6>
-        <input type="hidden" name="cuenta_contable_uuid" id="devengo-cuenta-uuid">
-        <input type="text" class="form-control mb-2" id="devengo-cuenta-busqueda"
-               placeholder="Buscar: 2505, salarios por pagar...">
-        <div id="devengo-cuenta-resultados" class="list-group mb-2" style="max-height:200px;overflow-y:auto;"></div>
-        <div id="devengo-cuenta-label" class="text-success small fst-italic"></div>
-      </div>
-
-      {# ── 6. Observaciones ─────────────────────────────────────────────────── #}
+      {# ── 5. Observaciones ───────────────────────────────────────────────────── #}
       <div class="mb-4">
         <h6 class="text-primary border-bottom pb-2 mb-3">
           <i class="bi bi-chat-left-text me-2"></i>Observaciones
@@ -216,7 +203,7 @@
         <textarea class="form-control" id="devengo-observaciones" name="observaciones" rows="2"></textarea>
       </div>
 
-      {# ── 7. Vista previa del cálculo (HTMX partial — reactivo) ───────────── #}
+      {# ── 6. Vista previa del cálculo (HTMX partial — reactivo) ───────────── #}
       <div id="devengo-campos-calculados-wrapper" class="mb-4">
         <div class="alert alert-info">
           <i class="bi bi-info-circle me-2"></i>

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.tenant.api.utils import NormalizationMixin
-from apps.tenant.clientes.models import Cliente, ContactoCliente
+from apps.tenant.clientes.models import Cliente, ContactoCliente, Cartera
 
 
 class ClienteMiniSerializer(serializers.ModelSerializer):
@@ -33,12 +33,26 @@ class ClienteListSerializer(serializers.ModelSerializer):
     tipo_persona_display = serializers.CharField(source='get_tipo_persona_display', read_only=True)
     regimen_tributario_display = serializers.CharField(source='get_regimen_tributario_display', read_only=True)
     encargado = serializers.SerializerMethodField()
+    cartera_resumen = serializers.SerializerMethodField()
 
     def get_encargado(self, obj):
         principal = obj.contactos_prefetched[0] if hasattr(obj, 'contactos_prefetched') and obj.contactos_prefetched else None
         if principal:
             return {'nombre': principal.nombre_completo, 'email': principal.email}
         return None
+
+    def get_cartera_resumen(self, obj):
+        """Lee del contexto el dict pre-calculado por el ViewSet (cero queries extra)."""
+        cartera_map = self.context.get('cartera_map', {})
+        resumen = cartera_map.get(str(obj.uuid))
+        if not resumen:
+            return {'pendiente_count': 0, 'pendiente_monto': '0', 'cobrada_count': 0, 'total_count': 0}
+        return {
+            'pendiente_count': resumen['pendiente_count'],
+            'pendiente_monto': str(resumen['pendiente_monto']),
+            'cobrada_count':   resumen['cobrada_count'],
+            'total_count':     resumen['total_count'],
+        }
 
     class Meta:
         model = Cliente
@@ -59,9 +73,13 @@ class ClienteListSerializer(serializers.ModelSerializer):
             'telefono',
             'ciudad',
             'encargado',
-            'activo'
+            'activo',
+            'cartera_resumen',
         ]
-        read_only_fields = ['id', 'uuid', 'tipo_documento_display', 'tipo_persona_display', 'regimen_tributario_display', 'encargado']
+        read_only_fields = [
+            'id', 'uuid', 'tipo_documento_display', 'tipo_persona_display',
+            'regimen_tributario_display', 'encargado', 'cartera_resumen',
+        ]
 
 
 class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -165,44 +183,44 @@ class ClienteDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             'ciudad',
             'activo',
             'observaciones',
-            'cuenta_contable_uuid',
         ]
         read_only_fields = ['id', 'uuid']
-    
+
     def validate(self, attrs):
         """
-        Validacion completa (Zero Trust).
+        Validacion completa (Zero Trust) — FASE 4 anti-duplicidad.
         1. Normalizar strings, numeros, booleanos.
-        2. Normalizar documento para busqueda de duplicados.
-        3. Validar uniqueness: tipo_documento + numero_documento + empresa.
+        2. Normalizar documento (sin guiones/espacios/DV) para comparacion exacta.
+        3. Validar unicidad (empresa, tipo_documento, numero_documento):
+           - CREATE (instance=None): rechaza si el documento ya existe.
+           - UPDATE (instance!=None): rechaza si existe en OTRO registro (exclude pk actual).
         """
         attrs = self.normalize_data(attrs)
 
-        empresa_id = self.context.get('empresa_id')
-        
+        empresa_id       = self.context.get('empresa_id')
         numero_documento = attrs.get('numero_documento')
-        tipo_documento = attrs.get('tipo_documento')
-        
-        if numero_documento and tipo_documento:
-            numero_documento_norm = self.normalize_document_number(numero_documento)
-            attrs['numero_documento'] = numero_documento_norm
-            
-            # En update validamos conflicto de unicidad excluyendo la instancia actual.
-            if empresa_id and self.instance is not None:
-                existing = Cliente.objects.filter(
-                    empresa_id=empresa_id,
-                    tipo_documento=tipo_documento,
-                    numero_documento=numero_documento_norm
-                ).exclude(
-                    pk=self.instance.pk
-                )
-                
-                if existing.exists():
-                    raise serializers.ValidationError({
-                        'numero_documento': [
-                            f'Ya existe un cliente con el documento tipo {tipo_documento} numero {numero_documento_norm} en esta empresa'
-                        ]
-                    })
+        tipo_documento   = attrs.get('tipo_documento')
+
+        if numero_documento and tipo_documento and empresa_id:
+            num_norm = self.normalize_document_number(numero_documento)
+            attrs['numero_documento'] = num_norm
+
+            qs = Cliente.objects.filter(
+                empresa_id=empresa_id,
+                tipo_documento=tipo_documento,
+                numero_documento=num_norm,
+            )
+            if self.instance is not None:
+                # UPDATE: excluir el registro actual para no colisionar consigo mismo
+                qs = qs.exclude(pk=self.instance.pk)
+
+            if qs.only("id").exists():
+                raise serializers.ValidationError({
+                    "numero_documento": [
+                        f"Ya existe un Cliente registrado con el documento "
+                        f"{tipo_documento} {num_norm} en su organización."
+                    ]
+                })
         
         if 'nombre_comercial' in attrs and attrs['nombre_comercial']:
             attrs['nombre_comercial'] = attrs['nombre_comercial'].strip()
@@ -211,3 +229,127 @@ class ClienteDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             attrs['telefono'] = self.normalize_phone(attrs['telefono'])
 
         return attrs
+
+
+class CarteraListSerializer(serializers.ModelSerializer):
+    """Serializer representation for accounts receivable list."""
+
+    cliente_nombre = serializers.CharField(source="cliente.razon_social", read_only=True)
+    cliente_documento = serializers.CharField(source="cliente.numero_documento", read_only=True)
+    cliente_uuid = serializers.UUIDField(source="cliente.uuid", read_only=True)
+    estado_pago_display = serializers.CharField(source="get_estado_pago_display", read_only=True)
+    saldo = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = Cartera
+        fields = [
+            "id",
+            "uuid",
+            "cliente",
+            "cliente_uuid",
+            "cliente_nombre",
+            "cliente_documento",
+            "numero_factura",
+            "factura_uuid",
+            "fecha_emision",
+            "fecha_vencimiento",
+            "valor_total",
+            "valor_pagado",
+            "saldo",
+            "estado_pago",
+            "estado_pago_display",
+            "observaciones",
+        ]
+        read_only_fields = fields
+
+
+class CarteraDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer de escritura para crear/actualizar Cartera (cuentas por cobrar).
+    - saldo y estado_pago son read-only (calculados por models.Cartera.save())
+    - cliente_uuid resuelve el FK via DSV en el ViewSet
+    - factura_uuid es referencia débil (Bounded Context §18)
+    """
+    cliente_nombre    = serializers.CharField(source="cliente.razon_social", read_only=True)
+    cliente_uuid_out  = serializers.UUIDField(source="cliente.uuid",         read_only=True)
+    estado_pago_display = serializers.CharField(source="get_estado_pago_display", read_only=True)
+    saldo = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+
+    class Meta:
+        model  = Cartera
+        fields = [
+            "id", "uuid",
+            "cliente",          # FK (write: PK interno — resuelto por ViewSet via DSV)
+            "cliente_uuid_out", # UUID público del cliente (read-only)
+            "cliente_nombre",   # read-only snapshot
+            "numero_factura",
+            "factura_uuid",
+            "fecha_emision",
+            "fecha_vencimiento",
+            "valor_total",
+            "valor_pagado",
+            "saldo",            # calculado en save()
+            "estado_pago",      # calculado en save()
+            "estado_pago_display",
+            "observaciones",
+        ]
+        read_only_fields = [
+            "id", "uuid", "saldo", "estado_pago", "estado_pago_display",
+            "cliente_uuid_out", "cliente_nombre",
+        ]
+
+    def validate(self, attrs):
+        """Validaciones de negocio para creación/edición de Cartera."""
+        valor_total  = attrs.get("valor_total")
+        valor_pagado = attrs.get("valor_pagado", 0)
+        if valor_total is not None and valor_total <= 0:
+            raise serializers.ValidationError({"valor_total": "El valor total debe ser mayor a cero."})
+        if valor_pagado is not None and valor_pagado < 0:
+            raise serializers.ValidationError({"valor_pagado": "El valor pagado no puede ser negativo."})
+        if valor_total and valor_pagado and valor_pagado > valor_total:
+            raise serializers.ValidationError({"valor_pagado": "El valor pagado no puede superar el valor total."})
+        fecha_emision    = attrs.get("fecha_emision")
+        fecha_vencimiento = attrs.get("fecha_vencimiento")
+        if fecha_emision and fecha_vencimiento and fecha_vencimiento < fecha_emision:
+            raise serializers.ValidationError({"fecha_vencimiento": "La fecha de vencimiento no puede ser anterior a la de emisión."})
+        return attrs
+
+
+class FacturaCxCListSerializer(serializers.Serializer):
+    """
+    Read-only: mapea Factura.VENTA a los campos de display de la pestana Cartera.
+    Patron Pull Model Bounded Context (AGENTS.md §18) — sin FK directa.
+    """
+    uuid            = serializers.UUIDField()
+    numero_factura  = serializers.CharField(source='numero')
+    cliente_nombre  = serializers.CharField(source='receptor_razon_social')
+    cliente_documento = serializers.CharField(source='receptor_nit')
+    cliente_uuid    = serializers.UUIDField(allow_null=True)
+    fecha_emision   = serializers.DateTimeField()
+    fecha_vencimiento = serializers.DateField(source='payment_due_date', allow_null=True)
+    valor_total     = serializers.DecimalField(source='total', max_digits=15, decimal_places=2)
+    valor_pagado    = serializers.SerializerMethodField()
+    saldo           = serializers.SerializerMethodField()
+    estado_pago     = serializers.SerializerMethodField()
+    estado_pago_display = serializers.SerializerMethodField()
+
+    _ESTADO_MAP = {'NO_PAGADA': 'SIN_PAGO', 'PAGO_PARCIAL': 'PARCIAL', 'PAGADA': 'PAGADA'}
+    _DISPLAY_MAP = {'NO_PAGADA': 'Sin Pago', 'PAGO_PARCIAL': 'Pago Parcial', 'PAGADA': 'Pagada'}
+
+    def get_estado_pago(self, obj):
+        return self._ESTADO_MAP.get(obj.estado_pago, 'SIN_PAGO')
+
+    def get_estado_pago_display(self, obj):
+        return self._DISPLAY_MAP.get(obj.estado_pago, obj.estado_pago)
+
+    def get_valor_pagado(self, obj):
+        return str(obj.total) if obj.estado_pago == 'PAGADA' else '0.00'
+
+    def get_saldo(self, obj):
+        return '0.00' if obj.estado_pago == 'PAGADA' else str(obj.total)
+
+
+class CarteraAbonoSerializer(serializers.Serializer):
+    """Serializer for registering a payment/abono on cartera."""
+
+    monto = serializers.DecimalField(max_digits=15, decimal_places=2, min_value=0.01)

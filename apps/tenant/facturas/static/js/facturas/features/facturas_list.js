@@ -40,360 +40,381 @@
 
     // Formateador de moneda
     function formatearMoneda(value) {
-        if (value === null || value === undefined || value === '') return '$ 0,00';
+        if (value === null || value === undefined || value === '') return '$ 0';
         const num = parseFloat(value);
-        if (isNaN(num)) return '$ 0,00';
+        if (isNaN(num)) return '$ 0';
         return new Intl.NumberFormat('es-CO', {
             style: 'currency',
             currency: 'COP',
             minimumFractionDigits: 0,
-            maximumFractionDigits: 2
+            maximumFractionDigits: 0
         }).format(num);
     }
 
-    // Formateador de fecha
-    function formatearFecha(value) {
-        if (!value) return '---';
-        try {
-            const date = new Date(value);
-            return date.toLocaleDateString('es-CO', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-            });
-        } catch (error) {
-            return value;
-        }
+    // ── Helpers de formato ────────────────────────────────────────────────────
+    const BADGE_DIAN = {
+        'ACEPTADA':  ['bg-success',  'bi-check-circle-fill', 'Aceptada'],
+        'ENVIADA':   ['bg-info',     'bi-send-fill',         'Enviada'],
+        'BORRADOR':  ['bg-secondary','bi-pencil',            'Borrador'],
+        'RECHAZADA': ['bg-danger',   'bi-x-circle-fill',     'Rechazada'],
+        'ANULADA':   ['bg-dark',     'bi-slash-circle',      'Anulada'],
+    };
+    function badgeEstadoDIAN(estado) {
+        const [cls, ico, txt] = BADGE_DIAN[estado] || ['bg-secondary', 'bi-question-circle', estado || '---'];
+        return `<span class="badge ${cls} badge-sm"><i class="bi ${ico} me-1"></i>${txt}</span>`;
+    }
+    function badgeEstadoPago(v) {
+        if (v === 'PAGADA')       return '<span class="badge bg-success badge-sm"><i class="bi bi-check2-all me-1"></i>Pagada</span>';
+        if (v === 'PAGO_PARCIAL') return '<span class="badge bg-warning text-dark badge-sm"><i class="bi bi-clock-history me-1"></i>Parcial</span>';
+        return '<span class="badge bg-danger badge-sm"><i class="bi bi-exclamation-circle me-1"></i>Pendiente</span>';
+    }
+    function _fechaCorta(val) {
+        if (!val) return '—';
+        try { return new Date(val).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'2-digit' }); }
+        catch (_) { return val; }
     }
 
-    // Determinar estado de pago (Pagada, Pendiente, Vencida)
-    function determinarEstadoPago(rowData) {
-        const estado = rowData.estado || '';
-        const fechaVencimiento = rowData.fecha_vencimiento;
-        const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
+    // ── Columnas compactas por naturaleza ────────────────────────────────────
+    // Diseño: 7 columnas por tab — sin columnas redundantes de emisor/receptor
+    function getColumnsNaturaleza(naturaleza) {
+        const isVenta = naturaleza === 'VENTA';
+        const S = 'font-size:0.76rem;'; // sub-línea
 
-        // Si está aceptada, se considera pagada
-        if (estado === 'ACEPTADA') {
-            return { texto: 'Pagada', clase: 'bg-success' };
-        }
-
-        // Si está rechazada o anulada
-        if (estado === 'RECHAZADA' || estado === 'ANULADA') {
-            return { texto: estado === 'RECHAZADA' ? 'Rechazada' : 'Anulada', clase: 'bg-danger' };
-        }
-
-        // Si está enviada pero no aceptada
-        if (estado === 'ENVIADA') {
-            // Verificar si está vencida
-            if (fechaVencimiento) {
-                const fechaVen = new Date(fechaVencimiento);
-                fechaVen.setHours(0, 0, 0, 0);
-                if (fechaVen < hoy) {
-                    return { texto: 'Vencida', clase: 'bg-warning' };
-                }
-            }
-            return { texto: 'Pendiente', clase: 'bg-warning' };
-        }
-
-        // Borrador
-        if (estado === 'BORRADOR') {
-            return { texto: 'Borrador', clase: 'bg-secondary' };
-        }
-
-        // Default: Pendiente
-        return { texto: 'Pendiente', clase: 'bg-warning' };
-    }
-
-    // Definir columnas específicas del módulo
-    function getColumns() {
         return [
+            // 1. Número de factura + indicador NC
             {
-                title: "Nro. Factura",
+                title: "Factura",
                 field: "numero",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
-                },
-                minWidth: 150
-            },
-            {
-                title: "Naturaleza",
-                field: "naturaleza",
-                width: 120,
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="badge bg-secondary">---</span>';
-                    // ⚠️ CAPA DE UI: JavaScript (Tabulator) - Formatter con badges de colores
-                    // VENTA → badge success (verde), COMPRA → badge info (azul)
-                    const color = val === 'VENTA' ? 'success' : 'info';
-                    return `<span class="badge bg-${color}">${val}</span>`;
-                },
-                headerFilter: "select",
-                headerFilterParams: {
-                    values: {
-                        "": "Todas",
-                        "VENTA": "VENTA",
-                        "COMPRA": "COMPRA"
-                    }
+                minWidth: 140,
+                widthGrow: 1,
+                formatter(cell) {
+                    const row = cell.getRow().getData();
+                    const num = cell.getValue() || '---';
+                    const nc  = row.has_nc ? `<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">NC</span>` : '';
+                    const emi = row.fecha_emision ? `<div class="text-muted" style="${S}"><i class="bi bi-calendar2 me-1"></i>${_fechaCorta(row.fecha_emision)}</div>` : '';
+                    return `<div class="fw-semibold text-truncate" title="${num}">${num}${nc}</div>${emi}`;
                 }
             },
+            // 2. Contraparte (Cliente para Venta, Proveedor para Compra)
             {
-                title: "Emisor",
-                field: "emisor_razon_social",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
-                },
-                minWidth: 250
+                title: isVenta ? 'Cliente' : 'Proveedor',
+                field: isVenta ? 'receptor_razon_social' : 'emisor_razon_social',
+                minWidth: 180,
+                widthGrow: 2,
+                formatter(cell) {
+                    const row   = cell.getRow().getData();
+                    const nombre = isVenta ? (row.receptor_razon_social || '---') : (row.emisor_razon_social || '---');
+                    const nit    = isVenta ? (row.receptor_nit || '') : (row.emisor_nit || '');
+                    const linked = isVenta ? row.cliente_vinculado_info : row.proveedor_vinculado_info;
+                    const pin = linked ? '<i class="bi bi-link-45deg text-success me-1"></i>' : '';
+                    return `<div class="text-truncate" title="${nombre}">${pin}${nombre}</div>`
+                         + (nit ? `<div class="text-muted" style="${S}">NIT: ${nit}</div>` : '');
+                }
             },
-            {
-                title: "Receptor",
-                field: "receptor_razon_social",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
-                },
-                minWidth: 250
-            },
-            {
-                title: "Fecha Emisión",
-                field: "fecha_emision",
-                formatter: function(cell) {
-                    return formatearFecha(cell.getValue());
-                },
-                width: 130
-            },
+            // 3. Vencimiento con alerta de mora
             {
                 title: "Vencimiento",
-                field: "fecha_vencimiento",
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    if (!value) return '---';
-                    return formatearFecha(value);
-                },
-                width: 130
+                field: "payment_due_date",
+                width: 105,
+                hozAlign: "center",
+                formatter(cell) {
+                    const val = cell.getValue() || cell.getRow().getData().fecha_vencimiento;
+                    if (!val) return '<span class="text-muted">—</span>';
+                    const row  = cell.getRow().getData();
+                    const paid = row.estado_pago === 'PAGADA';
+                    const hoy  = new Date(); hoy.setHours(0,0,0,0);
+                    const vto  = new Date(val); vto.setHours(0,0,0,0);
+                    const over = !paid && vto < hoy;
+                    const txt  = _fechaCorta(val);
+                    return over
+                        ? `<span class="text-danger fw-semibold text-nowrap" style="${S}"><i class="bi bi-exclamation-triangle-fill me-1"></i>${txt}</span>`
+                        : `<span class="text-nowrap" style="${S}">${txt}</span>`;
+                }
             },
-            {
-                title: "Estado",
-                field: "dian_validation_desc",
-                formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    const estadoPago = determinarEstadoPago(rowData);
-
-                    // Si hay descripción DIAN, mostrarla
-                    if (cell.getValue()) {
-                        return `<span class="badge bg-info">${cell.getValue()}</span>`;
-                    }
-                    // Si no, mostrar estado de base de datos
-                    return `<span class="badge ${estadoPago.clase}">${estadoPago.texto}</span>`;
-                },
-                width: 200
-            },
-            {
-                title: "Estado de Pago",
-                field: "estado_pago",
-                formatter: function(cell) {
-                    const value = cell.getValue();
-                    let clase = 'bg-danger';
-                    let texto = 'No Pagada';
-
-                    if (value === 'PAGO_PARCIAL') {
-                        clase = 'bg-warning text-dark';
-                        texto = 'Pago Parcial';
-                    } else if (value === 'PAGADA') {
-                        clase = 'bg-success';
-                        texto = 'Pagada';
-                    }
-
-                    return `<span class="badge ${clase}">${texto}</span>`;
-                },
-                width: 130
-            },
-            {
-                title: "IVA",
-                field: "impuestos",
-                formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
-                },
-                hozAlign: "right",
-                width: 120
-            },
-
-            {
-                title: "Forma de Pago",
-                field: "forma_pago",
-                formatter: function(cell) {
-                    return cell.getValue() || '---';
-                },
-                width: 130
-            },
-            {
-                title: "Cotización",
-                field: "cotizacion_vinculada_info",
-                formatter: function(cell) {
-                    const info = cell.getValue();
-                    if (!info) {
-                        return '<span class="badge text-bg-light border text-muted"><i class="bi bi-dash-circle me-1"></i>Sin cotización</span>';
-                    }
-                    const label = info.label || info.codigo_unico || info.numero_cotizacion || 'Vinculada';
-                    return `<span class="badge text-bg-success" title="${label}"><i class="bi bi-link-45deg me-1"></i>${label}</span>`;
-                },
-                headerSort: false,
-                minWidth: 170
-            },
+            // 4. Total (moneda compacta)
             {
                 title: "Total",
                 field: "total",
-                formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
-                },
+                width: 120,
                 hozAlign: "right",
-                width: 150
+                formatter(cell) {
+                    return `<span class="fw-semibold text-nowrap">${formatearMoneda(cell.getValue())}</span>`;
+                }
             },
+            // 5. Estado DIAN
             {
-                title: "Acciones",
-                formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    const id = rowData.uuid; // ⚠️ v2.95: Usar UUID para lookup field (SINTEL v3.5)
-
-                    return `
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-info btn-edit-factura" data-id="${id}" title="Editar Campos Manuales">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-primary btn-view-factura" data-id="${id}" title="Ver Factura Completa">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-factura" data-id="${id}" title="Eliminar Factura">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    `;
-                },
+                title: "DIAN",
+                field: "estado",
+                width: 105,
+                hozAlign: "center",
+                formatter(cell) { return badgeEstadoDIAN(cell.getValue()); },
+                headerFilter: "select",
+                headerFilterParams: { values: { "": "Todos", "ACEPTADA":"Aceptada", "ENVIADA":"Enviada", "BORRADOR":"Borrador", "RECHAZADA":"Rechazada", "ANULADA":"Anulada" } }
+            },
+            // 6. Estado de pago
+            {
+                title: "Pago",
+                field: "estado_pago",
+                width: 100,
+                hozAlign: "center",
+                formatter(cell) { return badgeEstadoPago(cell.getValue()); },
+                headerFilter: "select",
+                headerFilterParams: { values: { "": "Todos", "NO_PAGADA":"Pendiente", "PAGO_PARCIAL":"Parcial", "PAGADA":"Pagada" } }
+            },
+            // 7. Cotización (solo Ventas)
+            ...(isVenta ? [{
+                title: "Cot.",
+                field: "cotizacion_numero",
+                width: 90,
                 headerSort: false,
                 hozAlign: "center",
-                width: 160
+                formatter(cell) {
+                    const num = cell.getValue();
+                    if (!num) return '<span class="text-muted">—</span>';
+                    return `<span class="badge text-bg-light border" title="${num}" style="font-size:0.7rem;max-width:80px;" class="text-truncate"><i class="bi bi-receipt me-1"></i>${num}</span>`;
+                }
+            }] : []),
+            // 8. Acciones
+            {
+                title: "",
+                headerSort: false,
+                hozAlign: "center",
+                width: 100,
+                formatter(cell) {
+                    const id = cell.getRow().getData().uuid;
+                    return `<div class="btn-group btn-group-sm"><button class="btn btn-outline-secondary btn-edit-factura" data-id="${id}" title="Editar"><i class="bi bi-pencil"></i></button><button class="btn btn-outline-primary btn-view-factura" data-id="${id}" title="Ver"><i class="bi bi-eye"></i></button><button class="btn btn-outline-danger btn-delete-factura" data-id="${id}" title="Eliminar"><i class="bi bi-trash"></i></button></div>`;
+                }
             }
         ];
     }
 
-    // Inicializar Tabulator usando Factory (The Engine)
-    function initTabulator() {
-        if (!w.TabulatorFactory) {
-            console.error(`${MOD} TabulatorFactory no está disponible`);
-            return;
-        }
-
-        const gridElement = d.querySelector('#grid-facturas');
-        if (!gridElement) {
-            console.warn(`${MOD} Elemento #grid-facturas no encontrado`);
-            return;
-        }
-
-        // ⚠️ Anti-Zombies v2.60: Destruir instancia previa si existe
-        if (window.SintelFacturasTables.main) {
-            try {
-                window.SintelFacturasTables.main.destroy();
-                console.log(`${MOD} Instancia zombie de Tabulator destruida`);
-            } catch (error) {
-                console.warn(`${MOD} Error al destruir instancia previa:`, error);
-            }
-        }
-
-        // ⚠️ DRY: Solo definimos lo específico, el resto viene del Factory
-        table = w.TabulatorFactory.create(
-            '#grid-facturas',
-            '/api/v1/facturas/',
-            getColumns(),
-            {
-                searchInputSelector: '#search-factura'
-            }
-        );
-
-        // ⚠️ Anti-Zombies v2.60: Guardar instancia en singleton global
-        if (table) {
-            window.SintelFacturasTables.main = table;
-            console.log(`${MOD} Tabulator inicializado y guardado en SintelFacturasTables`);
-
-            // ⚠️ Sincronizar summary cuando se carguen los datos
-            if (typeof table.on === 'function') {
-                // Sincronizar summary después de cargar datos
-                table.on('dataLoaded', () => {
-                    loadSummary();
-                });
-
-                // Sincronizar summary después de procesar datos
-                table.on('dataProcessed', () => {
-                    loadSummary();
-                });
-            }
-            
-            // Configurar rowClick: abre detalle al hacer clic en la fila (no en botones)
-            if (typeof table.on === 'function') {
-                table.on('rowClick', async (e, row) => {
-                    if (_eliminandoFactura) return;
-
-                    const rowData = row.getData();
-                    const id = rowData.uuid; // ⚠️ v2.95: Usar UUID para lookup field (SINTEL v3.5)
-                    if (!id) return;
-
-                    // Ignorar si el click fue dentro del área de botones de acción.
-                    // composedPath() devuelve la ruta real del evento (más fiable que e.target
-                    // en Tabulator, que puede apuntar al elemento de fila en vez del clickeado).
-                    const path = e.composedPath ? e.composedPath() : (e.path || []);
-                    const enBotones = path.some(el =>
-                        el.tagName === 'BUTTON' ||
-                        (el.classList && el.classList.contains('btn-group'))
-                    );
-                    if (enBotones) return;
-
-                    // Abrir vista de detalle directamente (sin btnView.click() para evitar cascada)
-                    try {
-                        const offcanvasContainer = d.getElementById('offcanvas-container-facturas');
-                        if (!offcanvasContainer) return;
-
-                        await htmx.ajax('GET', `/api/v1/facturas/gestor-offcanvas/?uuid=${id}&simple=true&readonly=true`, {
-                            target: '#offcanvas-container-facturas',
-                            swap: 'innerHTML'
-                        });
-
-                        await new Promise(resolve => setTimeout(resolve, 100));
-
-                        let offcanvasEl = d.getElementById('offcanvas-ver-factura');
-                        if (!offcanvasEl) {
-                            offcanvasEl = d.getElementById('offcanvas-factura');
-                            if (offcanvasEl) {
-                                offcanvasEl.id = 'offcanvas-ver-factura';
-                                offcanvasEl.setAttribute('aria-labelledby', 'offcanvas-ver-factura-label');
-                            }
-                        }
-
-                        if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                            const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                            if (w.VerDetalleFactura?.ver) {
-                                await w.VerDetalleFactura.ver(id);
-                            }
-                            offcanvasInstance.show();
-                        }
-                    } catch (error) {
-                        console.error(`${MOD} Error al abrir detalle desde fila:`, error);
-                    }
-                });
-            }
-        }
-
-        return table;
+    // ── Helpers UI por tab ────────────────────────────────────────────────────
+    function setTabUI(naturaleza, loading, hasData) {
+        const key = naturaleza === 'VENTA' ? 'ventas' : 'compras';
+        const spinnerEl  = d.querySelector(`[data-spinner="${key}"]`);
+        const gridEl     = d.getElementById(`grid-${key}`);
+        const emptyEl    = d.querySelector(`[data-empty-state="${key}"]`);
+        if (spinnerEl)  spinnerEl.style.display  = loading ? 'block' : 'none';
+        if (gridEl)     gridEl.style.display     = (!loading && hasData !== false) ? 'block' : 'none';
+        if (emptyEl)    emptyEl.style.display    = (!loading && hasData === false) ? 'block' : 'none';
     }
 
-    // Event Delegation para acciones del Grid
+    // ── Inicializar Tabulator VENTAS ──────────────────────────────────────────
+    // skill: tabulator.md §1 — TabulatorFactory.create()
+    function initTabulatorVentas() {
+        if (!w.TabulatorFactory) { console.error(`${MOD} TabulatorFactory no disponible`); return; }
+        if (!d.getElementById('grid-ventas')) { console.warn(`${MOD} #grid-ventas no encontrado`); return; }
+
+        if (window.SintelFacturasTables.ventas) {
+            try { window.SintelFacturasTables.ventas.destroy(); } catch (_) {}
+        }
+
+        setTabUI('VENTA', true, null);
+
+        table = w.TabulatorFactory.create(
+            '#grid-ventas',
+            getVentasUrl(),
+            getColumnsNaturaleza('VENTA'),
+            { searchInputSelector: '#search-factura', layout: 'fitColumns', rowHeight: 50 }
+        );
+
+        if (table) {
+            window.SintelFacturasTables.ventas = table;
+            // Alias para compatibilidad con código que referencia .main
+            window.SintelFacturasTables.main   = table;
+
+            table.on('dataLoaded', (data) => {
+                setTabUI('VENTA', false, data.length > 0);
+                const badge = d.getElementById('badge-count-ventas');
+                if (badge) { badge.textContent = data.length; badge.style.display = data.length ? '' : 'none'; }
+            });
+
+            // rowClick — abre detalle (misma lógica existente)
+            _bindRowClick(table);
+
+            console.log(`${MOD} Tabulator VENTAS inicializado`);
+        } else {
+            setTabUI('VENTA', false, false);
+        }
+    }
+
+    // ── Inicializar Tabulator COMPRAS ─────────────────────────────────────────
+    // skill: tabulator.md §6 — lazy init (NO auto-init en tab oculto)
+    let _comprasInitialized = false;
+    function initTabulatorCompras() {
+        if (_comprasInitialized) {
+            // Ya inicializado — solo redraw (container antes oculto)
+            if (window.SintelFacturasTables.compras?.redraw) {
+                window.SintelFacturasTables.compras.redraw(true);
+            }
+            return;
+        }
+        if (!w.TabulatorFactory) { console.error(`${MOD} TabulatorFactory no disponible`); return; }
+        if (!d.getElementById('grid-compras')) { console.warn(`${MOD} #grid-compras no encontrado`); return; }
+
+        if (window.SintelFacturasTables.compras) {
+            try { window.SintelFacturasTables.compras.destroy(); } catch (_) {}
+        }
+
+        setTabUI('COMPRA', true, null);
+
+        const tableCompras = w.TabulatorFactory.create(
+            '#grid-compras',
+            getComprasUrl(),
+            getColumnsNaturaleza('COMPRA'),
+            { searchInputSelector: '#search-factura', layout: 'fitColumns', rowHeight: 50 }
+        );
+
+        if (tableCompras) {
+            window.SintelFacturasTables.compras = tableCompras;
+            _comprasInitialized = true;
+
+            tableCompras.on('dataLoaded', (data) => {
+                setTabUI('COMPRA', false, data.length > 0);
+                const badge = d.getElementById('badge-count-compras');
+                if (badge) { badge.textContent = data.length; badge.style.display = data.length ? '' : 'none'; }
+            });
+
+            _bindRowClick(tableCompras);
+
+            console.log(`${MOD} Tabulator COMPRAS inicializado`);
+        } else {
+            setTabUI('COMPRA', false, false);
+        }
+    }
+
+    // ── rowClick reutilizable ─────────────────────────────────────────────────
+    function _bindRowClick(tbl) {
+        if (typeof tbl.on !== 'function') return;
+        tbl.on('rowClick', async (e, row) => {
+            if (_eliminandoFactura) return;
+            const rowData = row.getData();
+            const id = rowData.uuid;
+            if (!id) return;
+            const path = e.composedPath ? e.composedPath() : (e.path || []);
+            const enBotones = path.some(el => el.tagName === 'BUTTON' || (el.classList && el.classList.contains('btn-group')));
+            if (enBotones) return;
+            try {
+                await htmx.ajax('GET', `/api/v1/facturas/gestor-offcanvas/?uuid=${id}&simple=true&readonly=true`, {
+                    target: '#offcanvas-container-facturas', swap: 'innerHTML'
+                });
+                await new Promise(r => setTimeout(r, 100));
+                let offcanvasEl = d.getElementById('offcanvas-ver-factura') || d.getElementById('offcanvas-factura');
+                if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
+                    if (w.UIManager?.handleOffcanvas) { w.UIManager.handleOffcanvas(offcanvasEl, 'show'); }
+                    else { const prev = bootstrap.Offcanvas.getInstance(offcanvasEl); if (prev) prev.dispose(); new bootstrap.Offcanvas(offcanvasEl).show(); }
+                }
+            } catch (err) { console.error(`${MOD} Error al abrir detalle:`, err); }
+        });
+    }
+
+    // ── Helpers de construccion de URLs dinamicas ──
+    function getVentasUrl() {
+        let url = '/api/v1/facturas/?naturaleza=VENTA';
+        const activeBtn = d.querySelector('#filtros-pago-ventas [data-filtro-venta-pago].active');
+        if (activeBtn && activeBtn.dataset.filtroVentaPago) {
+            url += `&estado_pago=${activeBtn.dataset.filtroVentaPago}`;
+        }
+        const taxFilter = d.getElementById('filter-tipo-impuesto')?.value;
+        if (taxFilter) {
+            url += `&tipo_impuesto=${taxFilter}`;
+        }
+        return url;
+    }
+
+    function getComprasUrl() {
+        let url = '/api/v1/facturas/?naturaleza=COMPRA';
+        const activeBtn = d.querySelector('#filtros-pago-compras [data-filtro-compra-pago].active');
+        if (activeBtn && activeBtn.dataset.filtroCompraPago) {
+            url += `&estado_pago=${activeBtn.dataset.filtroCompraPago}`;
+        }
+        const taxFilter = d.getElementById('filter-tipo-impuesto')?.value;
+        if (taxFilter) {
+            url += `&tipo_impuesto=${taxFilter}`;
+        }
+        return url;
+    }
+
+    // ── Filtros rápidos por estado de pago ────────────────────────────────────
+    function initFiltrosPago() {
+        // Ventas
+        const ctrVentas = d.getElementById('filtros-pago-ventas');
+        if (ctrVentas && !ctrVentas.dataset.bound) {
+            ctrVentas.dataset.bound = 'true';
+            ctrVentas.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-filtro-venta-pago]');
+                if (!btn || !window.SintelFacturasTables.ventas) return;
+                ctrVentas.querySelectorAll('[data-filtro-venta-pago]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                window.SintelFacturasTables.ventas.replaceData(getVentasUrl());
+            });
+        }
+        // Compras
+        const ctrCompras = d.getElementById('filtros-pago-compras');
+        if (ctrCompras && !ctrCompras.dataset.bound) {
+            ctrCompras.dataset.bound = 'true';
+            ctrCompras.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-filtro-compra-pago]');
+                if (!btn || !window.SintelFacturasTables.compras) return;
+                ctrCompras.querySelectorAll('[data-filtro-compra-pago]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                window.SintelFacturasTables.compras.replaceData(getComprasUrl());
+            });
+        }
+    }
+
+    // ── Filtro por tipo de impuesto ──
+    function initFiltroImpuesto() {
+        const filterSelect = d.getElementById('filter-tipo-impuesto');
+        if (filterSelect && !filterSelect.dataset.bound) {
+            filterSelect.dataset.bound = 'true';
+            filterSelect.addEventListener('change', () => {
+                const tv = window.SintelFacturasTables.ventas;
+                if (tv && typeof tv.replaceData === 'function') {
+                    tv.replaceData(getVentasUrl());
+                }
+                const tc = window.SintelFacturasTables.compras;
+                if (tc && typeof tc.replaceData === 'function') {
+                    tc.replaceData(getComprasUrl());
+                }
+            });
+        }
+    }
+
+    // ── shown.bs.tab: lazy init Compras + redraw (skill: tabulator.md §6) ────
+    d.addEventListener('shown.bs.tab', (e) => {
+        if (e.target?.id === 'tab-compras-btn') {
+            initTabulatorCompras();
+        }
+        if (e.target?.id === 'tab-ventas-btn') {
+            if (window.SintelFacturasTables.ventas?.redraw) {
+                window.SintelFacturasTables.ventas.redraw(true);
+            }
+        }
+    });
+
+    // ── Backward compat: initTabulator() → ahora inicia ventas ───────────────
+    function initTabulator() {
+        initTabulatorVentas();
+    }
+
+    // ── Crear tabla con rowClick binding (conservado para uso interno) ────────
+    function _createTableWithRowClick(gridId, url, columns, opts) {
+        const tbl = w.TabulatorFactory.create(gridId, url, columns, opts);
+        if (tbl) _bindRowClick(tbl);
+        return tbl;
+    }
+
+    // Event Delegation para acciones del Grid (cubre #grid-ventas y #grid-compras)
     function initListEvents() {
-        const gridElement = d.querySelector('#grid-facturas');
+        const gridElement = d.getElementById('tab-facturas-content');
         if (!gridElement) {
-            console.warn(`${MOD} Elemento #grid-facturas no encontrado para eventos`);
+            console.warn(`${MOD} #tab-facturas-content no encontrado para eventos`);
             return;
         }
 
-        // ⚠️ Event Delegation: Escuchar clics en el contenedor del grid
         gridElement.addEventListener('click', async (e) => {
-            // Botón Editar (abre modal de edición de campos manuales)
+            // Botón Editar — delega al offcanvas completo (offcanvas_editar_factura.html, simple=false)
             const btnEdit = e.target.closest('.btn-edit-factura');
             if (btnEdit) {
                 e.preventDefault();
@@ -405,324 +426,10 @@
                     return;
                 }
 
-                // Guardar HTML original antes del try para usar en finally
-                const originalHTML = btnEdit.innerHTML;
-
-                try {
-                    // Loading state
-                    btnEdit.disabled = true;
-                    btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
-                    // Cargar datos de factura
-                    const response = await w.http('GET', `/api/v1/facturas/${id}/`);
-
-                    if (!response.ok) {
-                        console.error(`${MOD} Error al cargar factura:`, response);
-                        if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                            w.SintelFeedback.error('Error al cargar la factura');
-                        }
-                        btnEdit.disabled = false;
-                        btnEdit.innerHTML = originalHTML;
-                        return;
-                    }
-
-                    const factura = response.data;
-
-                    // Construir modal de edición
-                    const modalHTML = `
-                        <div class="modal fade" id="modal-editar-factura-${id}" tabindex="-1" aria-labelledby="modal-title-${id}" aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content">
-                                    <div class="modal-header bg-info text-white">
-                                        <h5 class="modal-title" id="modal-title-${id}">
-                                            <i class="bi bi-pencil-square me-2"></i>Editar Factura ${factura.numero}
-                                        </h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <div class="alert alert-info mb-3">
-                                            <small><i class="bi bi-info-circle me-2"></i>Solo puedes editar campos ingresados manualmente. Los datos del XML son de solo lectura.</small>
-                                        </div>
-
-                                        <form id="form-editar-factura-${id}">
-                                            <!-- Emisor (solo lectura) -->
-                                            <div class="mb-3">
-                                                <label class="form-label"><i class="bi bi-building me-2"></i>Emisor</label>
-                                                <input type="text" class="form-control" value="${factura.emisor_razon_social || 'N/A'}" disabled>
-                                                <small class="text-muted d-block mt-1">Este campo es de solo lectura</small>
-                                            </div>
-
-                                            <hr class="my-3">
-
-                                            <!-- Estado -->
-                                            <div class="mb-3">
-                                                <label class="form-label"><i class="bi bi-tag me-2"></i>Estado</label>
-                                                <select class="form-select" id="estado-${id}" name="estado" required>
-                                                    <option value="BORRADOR" ${factura.estado === 'BORRADOR' ? 'selected' : ''}>Borrador</option>
-                                                    <option value="ENVIADA" ${factura.estado === 'ENVIADA' ? 'selected' : ''}>Enviada</option>
-                                                    <option value="ACEPTADA" ${factura.estado === 'ACEPTADA' ? 'selected' : ''}>Aceptada</option>
-                                                    <option value="RECHAZADA" ${factura.estado === 'RECHAZADA' ? 'selected' : ''}>Rechazada</option>
-                                                    <option value="ANULADA" ${factura.estado === 'ANULADA' ? 'selected' : ''}>Anulada</option>
-                                                </select>
-                                            </div>
-
-                                            <!-- Estado de Pago -->
-                                            <div class="mb-3">
-                                                <label class="form-label"><i class="bi bi-cash-coin me-2"></i>Estado de Pago</label>
-                                                <select class="form-select" id="estado-pago-${id}" name="estado_pago" required>
-                                                    <option value="NO_PAGADA" ${factura.estado_pago === 'NO_PAGADA' ? 'selected' : ''}>No Pagada</option>
-                                                    <option value="PAGO_PARCIAL" ${factura.estado_pago === 'PAGO_PARCIAL' ? 'selected' : ''}>Pago Parcial</option>
-                                                    <option value="PAGADA" ${factura.estado_pago === 'PAGADA' ? 'selected' : ''}>Pagada</option>
-                                                </select>
-                                            </div>
-
-                                            <!-- Vencimiento -->
-                                            <div class="mb-3">
-                                                <label class="form-label"><i class="bi bi-calendar me-2"></i>Fecha de Vencimiento</label>
-                                                <input type="date" class="form-control" id="vencimiento-${id}" name="fecha_vencimiento" value="${factura.fecha_vencimiento || ''}">
-                                            </div>
-
-
-
-                                            <!-- Formas de Pago -->
-                                            <hr class="my-3">
-                                            <h6 class="text-muted mb-2"><i class="bi bi-credit-card me-2"></i>Formas de Pago</h6>
-
-                                            <div class="mb-3">
-                                                <label class="form-label small">Forma de Pago</label>
-                                                <input type="text" class="form-control form-control-sm" id="forma-pago-${id}" name="forma_pago" placeholder="Ej: Transferencia" value="${factura.forma_pago || ''}">
-                                            </div>
-
-                                            <div class="row g-2">
-                                                <div class="col-6">
-                                                    <label class="form-label small">Código Medio Pago</label>
-                                                    <input type="text" class="form-control form-control-sm" id="medio-pago-${id}" name="medio_pago_codigo" placeholder="Ej: 01" value="${factura.medio_pago_codigo || ''}">
-                                                </div>
-                                                <div class="col-6">
-                                                    <label class="form-label small">Fecha Límite Pago</label>
-                                                    <input type="date" class="form-control form-control-sm" id="payment-date-${id}" name="payment_due_date" value="${factura.payment_due_date || ''}">
-                                                </div>
-                                            </div>
-
-                                            <!-- Vinculacion Comercial -->
-                                            <hr class="my-3">
-                                            <h6 class="text-muted mb-2"><i class="bi bi-link-45deg me-2"></i>Vinculacion Comercial</h6>
-                                            <div class="mb-3">
-                                                <label class="form-label small">Cotizacion asociada</label>
-                                                <select class="form-select form-select-sm" id="cotizacion-${id}" name="cotizacion_uuid"
-                                                        data-current="${factura.cotizacion_vinculada_info?.uuid || ''}">
-                                                    <option value="">Sin cotizacion vinculada</option>
-                                                    ${factura.cotizacion_vinculada_info ? `<option value="${factura.cotizacion_vinculada_info.uuid}" selected>${factura.cotizacion_vinculada_info.label || factura.cotizacion_vinculada_info.codigo_unico || factura.cotizacion_vinculada_info.numero_cotizacion}</option>` : ''}
-                                                </select>
-                                                <small class="text-muted mt-1 d-block">
-                                                    <i class="bi bi-info-circle me-1"></i>Relacion opcional no estricta con cotizaciones.
-                                                </small>
-                                            </div>
-
-                                            <!-- Vinculacion Contable -->
-                                            <hr class="my-3">
-                                            <h6 class="text-muted mb-2"><i class="bi bi-book me-2"></i>Vinculacion Contable</h6>
-                                            <div class="mb-3 position-relative">
-                                                <label class="form-label small">Cuenta PUC nivel 6 (Cartera / Ingreso / Gasto)</label>
-                                                <div class="input-group input-group-sm">
-                                                    <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
-                                                    <input type="text" class="form-control" id="cuenta-search-${id}"
-                                                           placeholder="Buscar por codigo o nombre (ej: 1305...)">
-                                                </div>
-                                                <input type="hidden" id="cuenta-uuid-${id}" name="cuenta_contable_uuid"
-                                                       value="${factura.cuenta_contable_uuid || ''}">
-                                                <div id="cuenta-suggestions-${id}"
-                                                     class="list-group position-absolute d-none shadow"
-                                                     style="z-index:1060;max-height:160px;overflow-y:auto;width:100%;top:100%;left:0;"></div>
-                                                <small class="text-muted mt-1 d-block">
-                                                    <i class="bi bi-info-circle me-1"></i>Vincule a una cuenta de control para automatizar contabilizacion.
-                                                </small>
-                                            </div>
-                                        </form>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                        <button type="button" class="btn btn-info btn-guardar-edicion" data-id="${id}">
-                                            <i class="bi bi-check-circle me-2"></i>Guardar Cambios
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-
-                    // Insertar modal en DOM
-                    const modalContainer = document.createElement('div');
-                    modalContainer.innerHTML = modalHTML;
-                    document.body.appendChild(modalContainer);
-
-                    // Mostrar modal
-                    const modal = new bootstrap.Modal(document.getElementById(`modal-editar-factura-${id}`));
-                    modal.show();
-
-                    // Inicializar selector de cotizaciones
-                    const cotizacionSelect = document.getElementById(`cotizacion-${id}`);
-                    if (cotizacionSelect) {
-                        try {
-                            const cotRes = await w.http('GET', '/api/v1/cotizaciones/?page_size=100');
-                            if (cotRes && cotRes.ok && cotRes.data) {
-                                const cotizaciones = Array.isArray(cotRes.data) ? cotRes.data : (cotRes.data.results || []);
-                                const currentCotizacion = cotizacionSelect.dataset.current || '';
-                                cotizaciones.forEach(cotizacion => {
-                                    if (!cotizacion.uuid || cotizacionSelect.querySelector(`option[value="${cotizacion.uuid}"]`)) return;
-                                    const option = document.createElement('option');
-                                    option.value = cotizacion.uuid;
-                                    option.textContent = cotizacion.codigo_unico || cotizacion.numero_cotizacion || cotizacion.uuid;
-                                    option.selected = cotizacion.uuid === currentCotizacion;
-                                    cotizacionSelect.appendChild(option);
-                                });
-                            }
-                        } catch (error) {
-                            console.warn(`${MOD} No se pudieron cargar cotizaciones:`, error);
-                        }
-                    }
-
-                    // Inicializar buscador de cuenta contable
-                    const cuentaSearchInput = document.getElementById(`cuenta-search-${id}`);
-                    const cuentaUuidInput = document.getElementById(`cuenta-uuid-${id}`);
-                    const cuentaSuggestions = document.getElementById(`cuenta-suggestions-${id}`);
-
-                    if (cuentaSearchInput && cuentaUuidInput && cuentaSuggestions) {
-                        // Pre-cargar nombre si ya tiene UUID asignado (§18 HTTP Pull)
-                        const existingUuid = cuentaUuidInput.value.trim();
-                        if (existingUuid && w.facturasAPI && typeof w.facturasAPI.getCuentaByUuid === 'function') {
-                            w.facturasAPI.getCuentaByUuid(existingUuid).then(res => {
-                                if (res && res.ok && res.data) {
-                                    const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
-                                    if (items.length > 0) {
-                                        cuentaSearchInput.value = `${items[0].codigo} - ${items[0].nombre}`;
-                                    }
-                                }
-                            }).catch(() => {});
-                        }
-
-                        // Buscador con debounce
-                        let cuentaTimer;
-                        cuentaSearchInput.addEventListener('input', () => {
-                            const q = cuentaSearchInput.value.trim();
-                            clearTimeout(cuentaTimer);
-                            if (q.length < 2) { cuentaSuggestions.classList.add('d-none'); return; }
-                            cuentaTimer = setTimeout(async () => {
-                                if (!w.facturasAPI || typeof w.facturasAPI.searchCuentas !== 'function') return;
-                                const res = await w.facturasAPI.searchCuentas(q);
-                                if (!res || !res.ok) return;
-                                const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
-                                cuentaSuggestions.innerHTML = '';
-                                if (!items.length) { cuentaSuggestions.classList.add('d-none'); return; }
-                                items.forEach(c => {
-                                    const btn = document.createElement('button');
-                                    btn.type = 'button';
-                                    btn.className = 'list-group-item list-group-item-action small py-2';
-                                    btn.innerHTML = `<span class="fw-bold text-primary">${c.codigo}</span> - ${c.nombre}`;
-                                    btn.addEventListener('click', () => {
-                                        cuentaSearchInput.value = `${c.codigo} - ${c.nombre}`;
-                                        cuentaUuidInput.value = c.uuid;
-                                        cuentaSearchInput.classList.add('is-valid');
-                                        setTimeout(() => cuentaSearchInput.classList.remove('is-valid'), 1500);
-                                        cuentaSuggestions.classList.add('d-none');
-                                    });
-                                    cuentaSuggestions.appendChild(btn);
-                                });
-                                cuentaSuggestions.classList.remove('d-none');
-                            }, 300);
-                        });
-
-                        // Cerrar sugerencias al hacer click fuera
-                        document.addEventListener('click', function closeCuentaSugg(e) {
-                            if (!cuentaSearchInput.contains(e.target) && !cuentaSuggestions.contains(e.target)) {
-                                cuentaSuggestions.classList.add('d-none');
-                            }
-                        }, { once: false });
-
-                        // Limpiar UUID si el campo queda vacio
-                        cuentaSearchInput.addEventListener('change', () => {
-                            if (!cuentaSearchInput.value.trim()) {
-                                cuentaUuidInput.value = '';
-                            }
-                        });
-                    }
-
-                    // Manejador para guardar cambios
-                    const btnGuardar = document.querySelector(`.btn-guardar-edicion[data-id="${id}"]`);
-                    if (btnGuardar) {
-                        btnGuardar.addEventListener('click', async () => {
-                            const form = document.getElementById(`form-editar-factura-${id}`);
-                            const formData = new FormData(form);
-                            const payload = Object.fromEntries(formData);
-
-                            // Campos fecha y UUID vacíos -> null (DRF rechaza "" en DateField)
-                            const DATE_FIELDS = ['fecha_vencimiento', 'payment_due_date'];
-                            DATE_FIELDS.forEach(f => {
-                                if (f in payload && !payload[f]) payload[f] = null;
-                            });
-                            if ('cuenta_contable_uuid' in payload && !payload.cuenta_contable_uuid) {
-                                payload.cuenta_contable_uuid = null;
-                            }
-
-                            const cotizacionUuid = payload.cotizacion_uuid || null;
-                            delete payload.cotizacion_uuid;
-
-                            btnGuardar.disabled = true;
-                            btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Guardando...';
-
-                            try {
-                                const saveRes = await w.http('PATCH', `/api/v1/facturas/${id}/`, payload);
-
-                                if (!saveRes.ok) {
-                                    console.error(`${MOD} Error al guardar:`, saveRes);
-                                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                                        w.SintelFeedback.error('Error al guardar los cambios');
-                                    }
-                                } else {
-                                    if (w.facturasAPI && typeof w.facturasAPI.vincularCotizacion === 'function') {
-                                        const linkRes = await w.facturasAPI.vincularCotizacion(id, cotizacionUuid);
-                                        if (!linkRes.ok) {
-                                            console.error(`${MOD} Error al vincular cotizacion:`, linkRes);
-                                            if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                                                w.SintelFeedback.error('Cambios guardados, pero no se pudo actualizar la cotización');
-                                            }
-                                            return;
-                                        }
-                                    }
-
-                                    if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
-                                        w.SintelFeedback.success('Cambios guardados exitosamente');
-                                    }
-                                    modal.hide();
-
-                                    // Actualizar tabla
-                                    if (table && typeof table.replaceData === 'function') {
-                                        table.replaceData();
-                                    }
-
-                                    // Limpiar modal del DOM
-                                    modalContainer.remove();
-                                }
-                            } catch (error) {
-                                console.error(`${MOD} Error al guardar:`, error);
-                                if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                                    w.SintelFeedback.error('Error al guardar los cambios');
-                                }
-                            } finally {
-                                btnGuardar.disabled = false;
-                                btnGuardar.innerHTML = '<i class="bi bi-check-circle me-2"></i>Guardar Cambios';
-                            }
-                        });
-                    }
-
-                } catch (error) {
-                    console.error(`${MOD} Error al abrir editor:`, error);
-                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                        w.SintelFeedback.error('Error al abrir el editor');
-                    }
-                } finally {
-                    btnEdit.disabled = false;
-                    btnEdit.innerHTML = originalHTML;
+                if (w.AppFacturas && typeof w.AppFacturas.cargarOffcanvas === 'function') {
+                    w.AppFacturas.cargarOffcanvas(id, false);
+                } else {
+                    console.error(`${MOD} AppFacturas.cargarOffcanvas no disponible`);
                 }
                 return;
             }
@@ -775,10 +482,7 @@
                     }
 
                     if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        const offcanvasInstance = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
-                        
-                        // ⚠️ v2.61.2: Cargar datos de la factura usando verDetalleFactura
-                        // Intentar múltiples formas de acceso al módulo
+                        // Cargar datos ANTES de mostrar el offcanvas
                         if (w.VerDetalleFactura && typeof w.VerDetalleFactura.ver === 'function') {
                             await w.VerDetalleFactura.ver(id);
                         } else if (typeof window.VerDetalleFactura !== 'undefined' && typeof window.VerDetalleFactura.ver === 'function') {
@@ -786,12 +490,7 @@
                         } else if (typeof window.verDetalleFactura === 'function') {
                             await window.verDetalleFactura(id);
                         } else {
-                            console.warn(`${MOD} Función verDetalleFactura no disponible. Módulos disponibles:`, {
-                                VerDetalleFactura: typeof w.VerDetalleFactura,
-                                windowVerDetalleFactura: typeof window.VerDetalleFactura,
-                                verDetalleFactura: typeof window.verDetalleFactura
-                            });
-                            // ⚠️ Fallback: Intentar cargar datos directamente
+                            console.warn(`${MOD} Función verDetalleFactura no disponible.`);
                             try {
                                 const response = await w.http('GET', `/api/v1/facturas/${id}/`);
                                 if (response.ok && response.data) {
@@ -801,9 +500,17 @@
                                 console.error(`${MOD} Error en fallback de carga de datos:`, error);
                             }
                         }
-                        
-                        // Mostrar offcanvas después de cargar datos
-                        offcanvasInstance.show();
+
+                        // UIManager gestiona dispose + backdrops + show (AGENTS.md §26)
+                        if (w.UIManager?.handleOffcanvas) {
+                            w.UIManager.handleOffcanvas(offcanvasEl, 'show');
+                        } else {
+                            const prev = bootstrap.Offcanvas.getInstance(offcanvasEl);
+                            if (prev) prev.dispose();
+                            d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+                            d.body.style.overflow = '';
+                            new bootstrap.Offcanvas(offcanvasEl).show();
+                        }
                     } else {
                         console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);
                     }
@@ -872,19 +579,13 @@
                         }
                         
                         // ⚠️ v2.61.2: Recargar grid y asegurar que estamos en la pestaña correcta
-                        if (table && typeof table.replaceData === 'function') {
-                            // Recargar datos sin disparar eventos de click
-                            table.replaceData().then(() => {
-                                // ⚠️ v2.61.2: Desactivar flag después de recargar (con delay para evitar eventos residuales)
-                                setTimeout(() => {
-                                    _eliminandoFactura = false;
-                                }, 500);
+                        const _activeTable = window.SintelFacturasTables.ventas || window.SintelFacturasTables.compras;
+                        if (_activeTable && typeof _activeTable.replaceData === 'function') {
+                            _activeTable.replaceData().then(() => {
+                                setTimeout(() => { _eliminandoFactura = false; }, 500);
                             });
                         } else {
-                            // Si no hay tabla, desactivar flag inmediatamente
-                            setTimeout(() => {
-                                _eliminandoFactura = false;
-                            }, 500);
+                            setTimeout(() => { _eliminandoFactura = false; }, 500);
                         }
                         
                         // ⚠️ v2.61.2: Asegurar que estamos en workspace/#facturas
@@ -920,16 +621,15 @@
         console.log(`${MOD} Event delegation configurado`);
     }
 
-    // ⚠️ Recarga Reactiva: Escuchar evento personalizado
+    // Recarga Reactiva: refrescar ambas tablas tras guardar factura
     function initEventListeners() {
-        // Escuchar evento de factura guardada para refrescar el grid
         d.addEventListener('facturaGuardada', () => {
-            if (table && typeof table.replaceData === 'function') {
-                table.replaceData();
-                console.log(`${MOD} Grid refrescado tras guardar factura`);
-            } else {
-                console.warn(`${MOD} No se pudo refrescar: tabla no inicializada`);
-            }
+            const tv = window.SintelFacturasTables.ventas;
+            const tc = window.SintelFacturasTables.compras;
+            if (tv?.replaceData) tv.replaceData();
+            if (tc?.replaceData) tc.replaceData();
+            loadSummary();
+            console.log(`${MOD} Grids refrescados tras guardar factura`);
         });
 
         console.log(`${MOD} Event listeners configurados`);
@@ -945,22 +645,27 @@
             // Usar DOMUtils.onVisibleOnce si está disponible
             if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
                 w.DOMUtils.onVisibleOnce(tabElement.id ? '#' + tabElement.id : tabElement, () => {
-                    initTabulator();
+                    initTabulatorVentas();
                     initListEvents();
                     initEventListeners();
+                    initFiltrosPago();
+                    initFiltroImpuesto();
+                    loadSummary();
                 });
             } else {
-                // Fallback: Inicializar directamente
-                initTabulator();
+                initTabulatorVentas();
                 initListEvents();
                 initEventListeners();
+                initFiltrosPago();
+                initFiltroImpuesto();
+                loadSummary();
             }
         } else {
-            // Si no hay tab, inicializar directamente
-            initTabulator();
+            initTabulatorVentas();
             initListEvents();
             initEventListeners();
-            // ⚠️ Cargar summary al inicializar
+            initFiltrosPago();
+            initFiltroImpuesto();
             loadSummary();
         }
     }
@@ -969,26 +674,31 @@
     if (typeof htmx !== 'undefined') {
         d.addEventListener('htmx:beforeSwap', (event) => {
             // Si se está recargando el contenedor principal, destruir instancias
-            if (event.detail.target.id === 'tab-facturas-content' || 
-                event.detail.target.closest('#tab-facturas-content')) {
-                if (window.SintelFacturasTables.main) {
+            if (event.detail.target.id === 'tab-facturas-content' ||
+                event.detail.target.closest?.('#tab-facturas-content')) {
+                ['ventas', 'compras'].forEach(key => {
                     try {
-                        window.SintelFacturasTables.main.destroy();
-                        delete window.SintelFacturasTables.main;
-                        console.log(`${MOD} Instancia destruida por HTMX swap`);
-                    } catch (error) {
-                        console.warn(`${MOD} Error al destruir instancia en HTMX swap:`, error);
-                    }
-                }
+                        window.SintelFacturasTables[key]?.destroy();
+                        delete window.SintelFacturasTables[key];
+                    } catch (_) {}
+                });
+                window.SintelFacturasTables._comprasInitialized = false;
             }
         });
     }
 
+    // Debounce: evita que llamadas simultáneas generen requests duplicados
+    let _summaryDebounce = null;
+    function loadSummary() {
+        clearTimeout(_summaryDebounce);
+        _summaryDebounce = setTimeout(_doLoadSummary, 150);
+    }
+
     /**
      * Cargar y actualizar el resumen de facturación (Ventas Netas y Compras Netas)
-    * ⚠️ Sincroniza con el endpoint GET /api/v1/facturas/summary/
+     * Sincroniza con GET /api/v1/facturas/summary/
      */
-    async function loadSummary() {
+    async function _doLoadSummary() {
         try {
             let summaryRes;
             
@@ -1071,23 +781,23 @@
     w.FacturasListModule = {
         init,
         refresh: () => {
-            if (table && typeof table.replaceData === 'function') {
-                table.replaceData();
-            }
-            // ⚠️ Sincronizar summary después de refrescar tabla
+            const tv = window.SintelFacturasTables.ventas;
+            const tc = window.SintelFacturasTables.compras;
+            if (tv?.replaceData) tv.replaceData();
+            if (tc?.replaceData) tc.replaceData();
             loadSummary();
         },
         getTable: () => table,
-        loadSummary  // ⚠️ Exponer función para uso externo
+        loadSummary
     };
 
-    // ⚠️ Compatibilidad: Alias para uso legacy
     if (!w.FacturasModule) {
         w.FacturasModule = {
             refresh: () => {
-                if (table && typeof table.replaceData === 'function') {
-                    table.replaceData();
-                }
+                const tv = window.SintelFacturasTables.ventas;
+                const tc = window.SintelFacturasTables.compras;
+                if (tv?.replaceData) tv.replaceData();
+                if (tc?.replaceData) tc.replaceData();
             }
         };
     }

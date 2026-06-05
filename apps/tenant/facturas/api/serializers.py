@@ -6,8 +6,46 @@ Serializers para la app facturas.
 """
 from rest_framework import serializers
 
-from apps.tenant.facturas.models import Factura, ItemFactura, MailIngestionRun, NotaCredito
+from apps.tenant.facturas.models import Factura, ItemFactura, MailIngestionRun, NotaCredito, FacturaImpuesto
 from apps.tenant.facturas.services import DETAIL_FIELDS
+from apps.tenant.empresa.models import Sede
+
+
+class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
+    """Campo relacionado que acepta UUID publico o PK interno en formularios legacy."""
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if queryset is None:
+            return queryset
+        root = getattr(self, 'root', None)
+        context = getattr(root, 'context', {}) if root else {}
+        empresa_id = context.get('empresa_id')
+        if empresa_id and hasattr(queryset.model, 'empresa_id'):
+            return queryset.filter(empresa_id=empresa_id)
+        return queryset
+
+    def to_internal_value(self, data):
+        if data in (None, ''):
+            if self.allow_null:
+                return None
+            self.fail('required')
+        data_str = str(data)
+        if not data_str.isdigit():
+            queryset = self.get_queryset()
+            try:
+                return queryset.get(uuid=data_str)
+            except (TypeError, ValueError, queryset.model.DoesNotExist):
+                self.fail('does_not_exist', pk_value=data)
+        return super().to_internal_value(data)
+
+
+class FacturaImpuestoSerializer(serializers.ModelSerializer):
+    """Serializer para el desglose de impuestos de una factura (Fase 2)."""
+    class Meta:
+        model = FacturaImpuesto
+        fields = ("id", "uuid", "tipo_impuesto", "porcentaje", "base_imponible", "valor_impuesto")
+        read_only_fields = fields
 
 
 class ItemFacturaSerializer(serializers.ModelSerializer):
@@ -36,23 +74,6 @@ class ItemFacturaSerializer(serializers.ModelSerializer):
             return None
         return InventarioItemBridge.resolver_item(empresa_id, obj.item_inventario_uuid, obj.item_inventario_tipo)
 
-
-
-class FacturaListDTSerializer(serializers.ModelSerializer):
-    """
-    Serializer mínimo para Tabulator v2.40 de Facturas.
-    
-    # WARNING: OPTIMIZACIÓN: Solo campos necesarios para la tabla Tabulator.
-    [OK] Alineado con columnas definidas en facturas.page.js (Tabulator v2.40)
-    [OK] Sin campos pesados (XML, anexos)
-    """
-    emisor = serializers.CharField(source="emisor_razon_social", read_only=True)
-    receptor = serializers.CharField(source="receptor_razon_social", read_only=True)
-    
-    class Meta:
-        model = Factura
-        fields = ("id", "numero", "fecha_emision", "naturaleza", "emisor", "receptor", "total", "cufe")
-        read_only_fields = ("id", "cufe")
 
 
 class FacturaListSerializer(serializers.ModelSerializer):
@@ -89,7 +110,20 @@ class FacturaListSerializer(serializers.ModelSerializer):
 
     # Campo para mostrar Cotización vinculada (v3.10.1)
     cotizacion_vinculada_info = serializers.SerializerMethodField()
-    
+    cliente_vinculado_info = serializers.SerializerMethodField()
+    proveedor_vinculado_info = serializers.SerializerMethodField()
+
+    # DT-SEDE-02: sede para KPIs por sede
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+
+    # v3.11.0 — Pull Model Bancos: conciliacion bancaria
+    total_pagado_bancos = serializers.DecimalField(
+        max_digits=15, decimal_places=2, read_only=True
+    )
+    saldo_pendiente = serializers.DecimalField(
+        max_digits=15, decimal_places=2, read_only=True
+    )
+
     class Meta:
         model = Factura
         # # WARNING: v2.60: Campos optimizados para Tabulator con campos aplanados
@@ -117,19 +151,27 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "forma_pago",
             "medio_pago_codigo",
             "payment_due_date",
-            "cuenta_contable_uuid",
+            "cliente_uuid",
+            "cliente_vinculado_info",
+            "proveedor_uuid",
+            "proveedor_vinculado_info",
             "cotizacion_uuid",
             "cotizacion_numero",
             "cotizacion_vinculada_info",
             "has_nc",
             "nota_credito_id",
             "nota_credito_numero",
+            "sede_nombre",          # DT-SEDE-02
+            "total_pagado_bancos",  # v3.11.0 Pull Model Bancos
+            "saldo_pendiente",      # v3.11.0 Pull Model Bancos
         )
         read_only_fields = (
             "id", "uuid", "numero", "fecha_emision", "naturaleza", "cliente_nombre",
             "emisor_nit", "emisor_razon_social", "receptor_nit", "receptor_razon_social",
             "nota_credito_id", "nota_credito_numero", "has_nc", "subtotal",
             "impuestos", "total", "total_formateado", "cufe", "cotizacion_numero",
+            "cliente_vinculado_info", "proveedor_vinculado_info",
+            "total_pagado_bancos", "saldo_pendiente",
         )
     
     def get_has_nc(self, obj):
@@ -171,22 +213,77 @@ class FacturaListSerializer(serializers.ModelSerializer):
             'numero_cotizacion': obj.cotizacion_numero,
         }
 
+    def get_cliente_vinculado_info(self, obj):
+        """Retorna info de cliente resolviendo desde la app Clientes."""
+        if not obj.cliente_uuid:
+            return None
+        from apps.tenant.facturas.services.selectors import ClienteBridge
+        return ClienteBridge.obtener_cliente_por_uuid(obj.cliente_uuid, obj.empresa_id)
+
+    def get_proveedor_vinculado_info(self, obj):
+        """Retorna info de proveedor resolviendo desde la app Proveedores."""
+        if not obj.proveedor_uuid:
+            return None
+        from apps.tenant.facturas.services.selectors import ProveedorBridge
+        return ProveedorBridge.obtener_proveedor_por_uuid(obj.proveedor_uuid, obj.empresa_id)
+
 
 class FacturaDetailSerializer(serializers.ModelSerializer):
     """
     Serializer de detalle para factura (uno a uno).
-    
+
     # WARNING: v2.37: Alineado con DETAIL_FIELDS del service.
     [OK] Solo cuando el usuario abre detalle
     [OK] Acceso controlado y singular
     [OK] Incluye metadatos de anexos (no el contenido XML)
     [OK] NO incluye items (usar endpoint /items/ si es necesario)
+    DT-SEDE-02: sede con DSV para KPIs por sede.
     """
     has_ubl_xml = serializers.SerializerMethodField()
     has_application_response_xml = serializers.SerializerMethodField()
     has_pdf_file = serializers.SerializerMethodField()
     anexos_meta = serializers.SerializerMethodField()
-    
+    cliente_vinculado_info = serializers.SerializerMethodField()
+    proveedor_vinculado_info = serializers.SerializerMethodField()
+    impuestos_desglosados = FacturaImpuestoSerializer(many=True, read_only=True)
+
+    # DT-SEDE-02: sede para KPIs por sede
+    sede = UUIDOrPKRelatedField(
+        queryset=Sede.objects.none(),
+        required=False,
+        allow_null=True,
+        help_text='UUID de la sede donde se origina/recibe la factura (opcional)',
+    )
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+
+    # v3.11.0 — Pull Model Bancos: conciliacion bancaria
+    total_pagado_bancos = serializers.DecimalField(
+        max_digits=15, decimal_places=2, read_only=True
+    )
+    saldo_pendiente = serializers.DecimalField(
+        max_digits=15, decimal_places=2, read_only=True
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        empresa_id = self.context.get('empresa_id') or (
+            self.context.get('request') and getattr(self.context['request'], 'empresa_id', None)
+        )
+        if empresa_id and 'sede' in self.fields:
+            self.fields['sede'].queryset = Sede.objects.filter(
+                empresa_id=empresa_id
+            ).only('id', 'uuid', 'nombre')
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        sede = attrs.get('sede')
+        empresa_id = self.context.get('empresa_id')
+        if sede and empresa_id and sede.empresa_id != empresa_id:
+            raise serializers.ValidationError(
+                {'sede': 'La sede seleccionada no pertenece a esta empresa.'}
+            )
+        return attrs
+
     class Meta:
         model = Factura
         fields = tuple(DETAIL_FIELDS) + (
@@ -194,21 +291,38 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
             "has_application_response_xml",
             "has_pdf_file",
             "anexos_meta",
-            "cuenta_contable_uuid",
-            "cuenta_contable_label",
+            "cliente_vinculado_info",
+            "proveedor_vinculado_info",
             "cotizacion_uuid",
+            "sede",
+            "sede_nombre",
+            "impuestos_desglosados",
+            "total_pagado_bancos",   # v3.11.0
+            "saldo_pendiente",       # v3.11.0
         )
-        read_only_fields = ("id", "uuid", "created_at", "updated_at", "cufe", "qr_url", "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta", "cuenta_contable_label", "cotizacion_uuid", "cotizacion_numero")
-    
-    cuenta_contable_label = serializers.SerializerMethodField()
+        read_only_fields = (
+            "id", "uuid", "created_at", "updated_at", "cufe", "qr_url",
+            "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta",
+            "cliente_uuid", "cliente_vinculado_info",
+            "proveedor_uuid", "proveedor_vinculado_info",
+            "cotizacion_uuid", "cotizacion_numero",
+            "sede_nombre", "impuestos_desglosados",
+            "total_pagado_bancos", "saldo_pendiente",
+        )
 
-    def get_cuenta_contable_label(self, obj):
-        """
-        §18: cuenta_contable_uuid se resuelve en frontend via JS (GET /api/v1/contabilidad/cuentas-contables/?uuid=).
-        NO importar desde apps.tenant.contabilidad aqui (viola §18 Pull Model / Bounded Context).
-        Retorna None - el nombre se pre-carga en JS via getCuentaByUuid().
-        """
-        return None
+    def get_cliente_vinculado_info(self, obj):
+        """Retorna info de cliente resolviendo desde la app Clientes."""
+        if not obj.cliente_uuid:
+            return None
+        from apps.tenant.facturas.services.selectors import ClienteBridge
+        return ClienteBridge.obtener_cliente_por_uuid(obj.cliente_uuid, obj.empresa_id)
+
+    def get_proveedor_vinculado_info(self, obj):
+        """Retorna info de proveedor resolviendo desde la app Proveedores."""
+        if not obj.proveedor_uuid:
+            return None
+        from apps.tenant.facturas.services.selectors import ProveedorBridge
+        return ProveedorBridge.obtener_proveedor_por_uuid(obj.proveedor_uuid, obj.empresa_id)
     
     def get_has_ubl_xml(self, obj):
         """Indica si existe UBL XML en anexos."""
@@ -271,22 +385,14 @@ class FacturaWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Factura
         fields = (
-            "numero", "prefijo", "consecutivo", "tipo", "estado", "estado_pago", "fecha_emision", "fecha_vencimiento",
+            "numero", "prefijo", "consecutivo", "tipo", "estado", "estado_pago", "categoria",
+            "fecha_emision", "fecha_vencimiento",
             "receptor_nit", "receptor_razon_social", "receptor_direccion", "receptor_email", "receptor_telefono",
             "moneda", "subtotal", "impuestos", "total",
             "forma_pago", "medio_pago_codigo", "payment_due_date",
-            "cuenta_contable_uuid", "cotizacion_uuid",
+            "cotizacion_uuid",
         )
         read_only_fields = ("subtotal", "impuestos", "total")
-
-    def validate_cuenta_contable_uuid(self, value):
-        """
-        # WARNING: SINTEL v3.5: Sanitización de UUID.
-        Convierte "" a None para evitar errores de tipo en la base de datos.
-        """
-        if value == "":
-            return None
-        return value
 
     def validate_cotizacion_uuid(self, value):
         """

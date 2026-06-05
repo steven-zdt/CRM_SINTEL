@@ -1,6 +1,6 @@
 """
-Tests para validación de fases en Proyectos v3.3
-Valida que responsables opcionales no causen errores de validación en fases tempranas.
+Tests para validacion de fases en Proyectos v3.3
+Valida que responsables opcionales no causen errores de validacion en fases tempranas.
 """
 import pytest
 from django_tenants.utils import schema_context
@@ -15,7 +15,7 @@ from apps.tenant.perfil.models import TenantProfile
 
 @pytest.mark.django_db(databases={'default', 'tenant1'})
 class TestProyectoFaseValidation:
-    """Tests para validación de responsables por fase."""
+    """Tests para validacion de responsables por fase."""
 
     @pytest.fixture(autouse=True)
     def setup(self, tenant1):
@@ -73,7 +73,7 @@ class TestProyectoFaseValidation:
     def test_actualizar_proyecto_borrador_sin_responsables(self, tenant1):
         """
         Test: actualizar proyecto existente sin proporcionar responsables
-        (PATCH con campos vacíos no debe fallar)
+        (PATCH con campos vacios no debe fallar)
         """
         with schema_context(tenant1.schema_name):
             # Create a project first
@@ -110,7 +110,7 @@ class TestProyectoFaseValidation:
 
     def test_serializer_convierte_strings_vacios_a_none(self, tenant1):
         """
-        Test: serializer debe convertir strings vacíos a None en responsable fields
+        Test: serializer debe convertir strings vacios a None en responsable fields
         """
         with schema_context(tenant1.schema_name):
             from apps.tenant.proyectos.api.serializers import ProyectoDetailSerializer

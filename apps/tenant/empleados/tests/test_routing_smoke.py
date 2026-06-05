@@ -90,3 +90,17 @@ def test_routing_devengos_list_with_data(client, admin_user, tenant):
         pass
     else:
         pytest.fail(f"Expected 200 or 403, got {resp.status_code}")
+
+
+@pytest.mark.django_db
+def test_routing_resoluciones_dian_render_offcanvas_crear(client, admin_user, tenant):
+    """
+    Verifica que el endpoint /api/v1/empleados/resoluciones-dian/render-offcanvas/crear/ responde correctamente (200).
+    """
+    client.force_login(admin_user)
+    resp = client.get(
+        "/api/v1/empleados/resoluciones-dian/render-offcanvas/crear/",
+        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+    )
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+

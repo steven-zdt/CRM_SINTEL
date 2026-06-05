@@ -1,8 +1,12 @@
+import re
+
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import SAFE_METHODS
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -62,8 +66,6 @@ class BaseViewSet(BaseTenantViewSet):
         """
         v2.60: Verifica si el usuario tiene permisos para mutaciones (ENFORCED MODE).
         """
-        from rest_framework.permissions import SAFE_METHODS
-        
         user = request.user
         if not (user and user.is_authenticated):
             return False, "Usuario no autenticado."
@@ -227,10 +229,6 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
         try:
             return super().create(request, *args, **kwargs)
         except Exception as e:
-            import re
-
-            from django.db import IntegrityError
-            
             # Capturar IntegrityError por código duplicado
             if isinstance(e, IntegrityError):
                 error_msg = str(e)
@@ -633,3 +631,23 @@ class HistorialServicioViewSet(BaseViewSet, inv_services.HistorialServiceMixin):
 
     def partial_update(self, request, *args, **kwargs):
         return Response({"detail": "La edicion de historial de servicio no esta habilitada."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    @action(detail=True, methods=['post'], url_path='vincular-proyecto')
+    def vincular_proyecto(self, request, uuid=None):
+        """POST /api/v1/inventario/historial-servicios/{uuid}/vincular-proyecto/"""
+        import uuid as uuid_mod
+        instance = self.get_object()
+        proyecto_uuid_str = request.data.get('proyecto_uuid')
+        proyecto_nombre = request.data.get('proyecto_nombre', '')
+
+        if not proyecto_uuid_str:
+            return Response({'detail': 'proyecto_uuid es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            proyecto_uuid_val = uuid_mod.UUID(str(proyecto_uuid_str))
+        except (ValueError, AttributeError):
+            return Response({'detail': 'proyecto_uuid invalido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        instance.proyecto_uuid = proyecto_uuid_val
+        instance.proyecto_nombre = proyecto_nombre or ''
+        instance.save(update_fields=['proyecto_uuid', 'proyecto_nombre'])
+        return Response({'status': 'ok', 'proyecto_uuid': str(proyecto_uuid_val)})

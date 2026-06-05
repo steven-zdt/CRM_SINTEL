@@ -11,9 +11,7 @@ from rest_framework import serializers
 
 from ..models import DocumentoSoporte, ResolucionDIAN
 from apps.tenant.proveedores.models import Proveedor
-
-
-from apps.tenant.inventario.models import Producto, Servicio, ActivoFijo
+from apps.tenant.empresa.models import Sede
 
 class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
     """Campo relacionado que acepta UUID publico o PK interno en formularios legacy."""
@@ -208,6 +206,7 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     Serializer optimizado para Tabulator (v2.40).
     Alineado con DocumentoSoporte tras unificacion.
     WARNING: v3.7.1 - Campo UUID opaco para integracion contable (?18 Pull Model).
+    DT-SEDE-01: sede para KPIs por sede.
     """
     ds_consecutivo = serializers.IntegerField(source='consecutivo', read_only=True)
     ds_prefijo = serializers.SerializerMethodField()
@@ -219,17 +218,14 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     ds_activo = serializers.BooleanField(source='activo', read_only=True)
     ds_anulado = serializers.BooleanField(source='anulado', read_only=True)
     ds_numero_documento_proveedor = serializers.CharField(source='numero_documento_proveedor', read_only=True)
-    cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, read_only=True)
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
 
-    producto_relacionado = UUIDOrPKRelatedField(queryset=Producto.objects.all(), required=False, allow_null=True)
-    servicio_relacionado = UUIDOrPKRelatedField(queryset=Servicio.objects.all(), required=False, allow_null=True)
-    activo_relacionado = UUIDOrPKRelatedField(queryset=ActivoFijo.objects.all(), required=False, allow_null=True)
+    movimiento_inventario_uuid = serializers.UUIDField(required=False, allow_null=True)
+    movimiento_referencia = serializers.DictField(read_only=True, allow_null=True)
 
-    producto_relacionado_nombre = serializers.CharField(source='producto_relacionado.nombre', read_only=True, allow_null=True)
-    servicio_relacionado_nombre = serializers.CharField(source='servicio_relacionado.nombre', read_only=True, allow_null=True)
-    activo_relacionado_nombre = serializers.CharField(source='activo_relacionado.nombre', read_only=True, allow_null=True)
+    # DT-SEDE-01
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
 
     def get_ds_prefijo(self, obj):
         try:
@@ -261,13 +257,9 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             'ds_activo',
             'ds_anulado',
             'ds_numero_documento_proveedor',
-            'cuenta_gasto_uuid',
-            'producto_relacionado',
-            'servicio_relacionado',
-            'activo_relacionado',
-            'producto_relacionado_nombre',
-            'servicio_relacionado_nombre',
-            'activo_relacionado_nombre',
+            'movimiento_inventario_uuid',
+            'movimiento_referencia',
+            'sede_nombre',  # DT-SEDE-01
         )
         read_only_fields = fields
 
@@ -276,7 +268,7 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     """
     Serializer completo para evidencia legal y clasificacion operativa (v2.40).
     WARNING: v3.7.1 - Campo UUID opaco para integracion contable (?18 Pull Model).
-    Contrapartida orquestada por app contabilidad.
+    DT-SEDE-01: sede para KPIs por sede.
     """
     resolucion_dian = ResolucionDIANNestedSerializer(read_only=True)
     numero_documento_full = serializers.CharField(source='numero_documento', read_only=True)
@@ -285,18 +277,40 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
     prefijo = serializers.CharField(source='resolucion_dian.prefijo', read_only=True)
-    cuenta_gasto_uuid = serializers.UUIDField(allow_null=True, required=False)
-    cuenta_gasto_label = serializers.SerializerMethodField()
 
     categoria_contable_display = serializers.CharField(source='get_categoria_contable_display', read_only=True)
 
-    producto_relacionado = UUIDOrPKRelatedField(queryset=Producto.objects.all(), required=False, allow_null=True)
-    servicio_relacionado = UUIDOrPKRelatedField(queryset=Servicio.objects.all(), required=False, allow_null=True)
-    activo_relacionado = UUIDOrPKRelatedField(queryset=ActivoFijo.objects.all(), required=False, allow_null=True)
+    movimiento_inventario_uuid = serializers.UUIDField(required=False, allow_null=True)
+    movimiento_referencia = serializers.DictField(read_only=True, allow_null=True)
 
-    producto_relacionado_nombre = serializers.CharField(source='producto_relacionado.nombre', read_only=True, allow_null=True)
-    servicio_relacionado_nombre = serializers.CharField(source='servicio_relacionado.nombre', read_only=True, allow_null=True)
-    activo_relacionado_nombre = serializers.CharField(source='activo_relacionado.nombre', read_only=True, allow_null=True)
+    # DT-SEDE-01: sede para KPIs
+    sede = UUIDOrPKRelatedField(
+        queryset=Sede.objects.none(),
+        required=False,
+        allow_null=True,
+        help_text='UUID de la sede donde se origina el gasto (opcional)',
+    )
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        empresa_id = self.context.get('empresa_id') or self.context.get('request') and getattr(
+            self.context['request'], 'empresa_id', None
+        )
+        if empresa_id and 'sede' in self.fields:
+            self.fields['sede'].queryset = Sede.objects.filter(
+                empresa_id=empresa_id
+            ).only('id', 'uuid', 'nombre')
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        sede = attrs.get('sede')
+        empresa_id = self.context.get('empresa_id')
+        if sede and empresa_id and sede.empresa_id != empresa_id:
+            raise serializers.ValidationError(
+                {'sede': 'La sede seleccionada no pertenece a esta empresa.'}
+            )
+        return attrs
 
     class Meta:
         model = DocumentoSoporte
@@ -328,14 +342,10 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'activo',
             'anulado',
             'fecha_anulacion',
-            'cuenta_gasto_uuid',
-            'cuenta_gasto_label',
-            'producto_relacionado',
-            'servicio_relacionado',
-            'activo_relacionado',
-            'producto_relacionado_nombre',
-            'servicio_relacionado_nombre',
-            'activo_relacionado_nombre',
+            'movimiento_inventario_uuid',
+            'movimiento_referencia',
+            'sede',
+            'sede_nombre',
             'created_at',
             'updated_at',
         )
@@ -343,19 +353,9 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'id', 'uuid', 'empresa', 'resolucion_dian', 'prefijo', 'consecutivo',
             'vendedor_nit', 'vendedor_nombre', 'vendedor_direccion', 'vendedor_telefono',
             'subtotal', 'total_retefuente', 'total_reteica', 'total_reteiva', 'total',
-            'activo', 'anulado', 'fecha_anulacion', 'created_at', 'updated_at',
-            'producto_relacionado_nombre', 'servicio_relacionado_nombre', 'activo_relacionado_nombre'
+            'activo', 'anulado', 'fecha_anulacion', 'sede_nombre', 'created_at', 'updated_at',
         )
 
-    def get_cuenta_gasto_label(self, obj):
-        if not obj.cuenta_gasto_uuid:
-            return None
-        from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-        return CuentaContableSelector.get_label_by_uuid(
-            empresa_id=obj.empresa_id,
-            uuid=obj.cuenta_gasto_uuid
-        )
-    
 
 
 # --- Alias para compatibilidad (v2.62.0) ---

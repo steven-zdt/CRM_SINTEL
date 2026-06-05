@@ -44,15 +44,21 @@
 
     function actualizarKPIs(rows) {
         const total       = rows.length;
-        const ejecucion   = rows.filter(r => r.fase_actual === 'EJECUCION').length;
+        const ejecucion   = rows.filter(r => r.estado_tarea === 'EN_PROCESO').length;
         const completados = rows.filter(r => r.estado_tarea === 'COMPLETADO').length;
+        const pendientes  = rows.filter(r => r.estado_tarea === 'PENDIENTE').length;
         const cartera     = rows.reduce((s, r) => s + (parseFloat(r.valor_contrato_proyectado) || 0), 0);
+        const avanceProm  = total
+            ? Math.round(rows.reduce((s, r) => s + (parseFloat(r.porcentaje_avance) || 0), 0) / total)
+            : 0;
 
         const set = (id, v) => { const el = d.getElementById(id); if (el) el.textContent = v; };
         set('kpi-total',       total);
         set('kpi-ejecucion',   ejecucion);
         set('kpi-completados', completados);
+        set('kpi-pendientes',  pendientes);
         set('kpi-cartera',     fmtMoneda(cartera));
+        set('kpi-avance',      avanceProm + '%');
     }
 
     // ─── Columnas ─────────────────────────────────────────────────────────────
@@ -194,7 +200,7 @@
                 formatter: function (cell) {
                     const row   = cell.getRow().getData();
                     const ini   = fmtFecha(row.fecha_inicio);
-                    const fin   = fmtFecha(row.fecha_fin_prevista);
+                    const fin   = fmtFecha(row.fecha_fin_estimada);
                     return `
                         <div style="line-height:1.35;font-size:0.78rem;">
                           <div><i class="bi bi-calendar-event text-muted me-1"></i>${ini}</div>
@@ -231,12 +237,22 @@
                 field: "uuid",
                 headerSort: false,
                 hozAlign: "center",
-                width: 88,
+                width: 116,
                 frozen: true,
                 formatter: function (cell) {
-                    const uuid = cell.getValue();
+                    const row  = cell.getRow().getData();
+                    const uuid = row.uuid;
+                    const empUuid = row.responsable_empleado_uuid || '';
+                    const empNombre = row.responsable_actual_nombre || '';
                     return `
                         <div class="btn-group btn-group-sm">
+                          <button type="button" class="btn btn-outline-secondary btn-tareas-cortas"
+                                  data-uuid="${uuid}"
+                                  data-emp-uuid="${empUuid}"
+                                  data-emp-nombre="${empNombre}"
+                                  title="Tareas Cortas">
+                            <i class="bi bi-list-task"></i>
+                          </button>
                           <button type="button" class="btn btn-outline-primary btn-edit-proyecto"
                                   data-uuid="${uuid}" title="Editar proyecto">
                             <i class="bi bi-pencil"></i>

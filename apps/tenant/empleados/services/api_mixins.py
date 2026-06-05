@@ -6,6 +6,7 @@ SINTEL v3.10.1: Arquitectura Service Layer Modular.
 - Mantiene solo métodos service_* específicos de Empleados
 """
 from apps.tenant.api.mixins import BaseServiceMixin
+from apps.tenant.empleados.models import Empleado
 from apps.tenant.empleados.services.selectors import (
     ContratoSelector,
     DevengoSelector,
@@ -134,8 +135,6 @@ class DevengoServiceMixin(BaseServiceMixin):
 
     def service_procesar_devengo(self, serializer, instance=None):
         """Procesa creacion/actualizacion de devengo con validaciones y calculos."""
-        from apps.tenant.empleados.models import Empleado
-
         empresa_id = self.get_empresa_id()
         validated_data = serializer.validated_data
 

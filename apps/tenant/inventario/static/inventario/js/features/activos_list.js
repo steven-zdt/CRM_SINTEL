@@ -99,95 +99,129 @@
     }
 
     /**
-     * Definir columnas específicas del módulo
-     * @returns {Array} Configuración de columnas Tabulator
+     * KPI strip: muestra totales sobre los datos de la página actual
+     */
+    function _actualizarKPIs(data) {
+        const el = d.querySelector('#activos-kpis');
+        if (!el) return;
+        const total = data.length;
+        const porEstado = {};
+        let valorTotal = 0;
+        data.forEach(r => {
+            const est = r.estado || 'DESCONOCIDO';
+            porEstado[est] = (porEstado[est] || 0) + 1;
+            valorTotal += parseFloat(r.costo_adquisicion) || 0;
+        });
+        const fmt = v => new Intl.NumberFormat('es-CO', { style:'currency', currency:'COP', minimumFractionDigits:0, maximumFractionDigits:0 }).format(v);
+        const estadoMap = { ACTIVO:'success', MANTENIMIENTO:'warning', BAJA:'danger', VENDIDO:'secondary' };
+        const estadoChips = Object.entries(porEstado).map(([est, cnt]) => {
+            const cls = estadoMap[est] || 'secondary';
+            return `<div class="kpi-card border-${cls}">
+                <div class="kpi-label" style="color:var(--bs-${cls})">${est}</div>
+                <div class="kpi-val text-${cls}">${cnt}</div>
+            </div>`;
+        }).join('');
+        el.innerHTML = `
+            <div class="kpi-card">
+                <div class="kpi-label">Total</div>
+                <div class="kpi-val">${total}</div>
+            </div>
+            ${estadoChips}
+            <div class="kpi-card">
+                <div class="kpi-label">Valor Libros</div>
+                <div class="kpi-val">${fmt(valorTotal)}</div>
+            </div>
+        `;
+    }
+
+    /**
+     * Columnas — presentación compacta apilada (v3.10.4)
+     * 8 columnas → 4 columnas: Activo | Adquisición | Estado | Acciones
      */
     function getColumns() {
         return [
             {
-                title: "Placa/Código",
-                field: "codigo",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
-                },
-                width: 120,
-                headerFilter: "input"
-            },
-            {
-                title: "Nombre",
+                title: "Activo",
                 field: "nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '---';
+                formatter: function(cell) {
+                    const d = cell.getRow().getData();
+                    const cat = d.categoria_nombre
+                        ? `<span class="badge bg-light text-secondary border" style="font-size:.65rem;font-weight:500">${d.categoria_nombre}</span>`
+                        : '';
+                    const cod = d.codigo
+                        ? `<span class="font-monospace text-muted me-1" style="font-size:.72rem">${d.codigo}</span>`
+                        : '';
+                    const resp = d.responsable
+                        ? `<span class="text-muted" style="font-size:.72rem"><i class="bi bi-person me-1"></i>${d.responsable}</span>`
+                        : '';
+                    return `<div class="py-1 lh-sm">
+                        <div class="fw-semibold">${d.nombre || '—'}</div>
+                        <div class="d-flex align-items-center gap-1 mt-1">${cod}${cat}</div>
+                        ${resp ? `<div class="mt-1">${resp}</div>` : ''}
+                    </div>`;
                 },
-                minWidth: 250,
+                minWidth: 230,
                 headerFilter: "input"
             },
             {
-                title: "Categoría",
-                field: "categoria_nombre",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '<span class="text-muted">Sin categoría</span>';
-                },
-                width: 150,
-                headerFilter: "input"
-            },
-            {
-                title: "Fecha Compra",
+                title: "Adquisición",
                 field: "fecha_adquisicion",
                 formatter: function(cell) {
-                    return formatearFecha(cell.getValue());
+                    const d = cell.getRow().getData();
+                    const fecha = d.fecha_adquisicion
+                        ? new Date(d.fecha_adquisicion + 'T00:00:00').toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' })
+                        : '—';
+                    const costo = parseFloat(d.costo_adquisicion) > 0
+                        ? `<div class="fw-semibold mt-1">${formatearMoneda(d.costo_adquisicion)}</div>`
+                        : '';
+                    return `<div class="text-end lh-sm">
+                        <div class="text-muted" style="font-size:.8rem">${fecha}</div>
+                        ${costo}
+                    </div>`;
                 },
-                width: 120
-            },
-            {
-                title: "Costo",
-                field: "costo_adquisicion",
-                formatter: function(cell) {
-                    return formatearMoneda(cell.getValue());
-                },
-                width: 120,
-                hozAlign: "right"
-            },
-            {
-                title: "Responsable",
-                field: "responsable",
-                formatter: w.TabulatorFactory?.formatters?.valueOrFallback || function(cell) {
-                    return cell.getValue() || '<span class="text-muted">-</span>';
-                },
-                width: 150
+                width: 150,
+                hozAlign: "right",
+                vertAlign: "middle",
+                sorter: "date",
+                sorterParams: { format: "YYYY-MM-DD" }
             },
             {
                 title: "Estado",
                 field: "estado",
                 formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    return formatearEstado(rowData.estado, rowData.estado_display);
+                    const d = cell.getRow().getData();
+                    const ESTADO = {
+                        ACTIVO:        ['bg-success',   'bi-check-circle-fill',  'En Uso'],
+                        MANTENIMIENTO: ['bg-warning',   'bi-tools',              'Mantenimiento'],
+                        BAJA:          ['bg-danger',    'bi-x-circle-fill',      'De Baja'],
+                        VENDIDO:       ['bg-secondary', 'bi-tag-fill',           'Vendido'],
+                    };
+                    const [cls, icon, label] = ESTADO[d.estado] || ['bg-secondary', 'bi-question-circle', d.estado || '—'];
+                    return `<span class="badge ${cls}"><i class="bi ${icon} me-1"></i>${label}</span>`;
                 },
                 width: 140,
-                hozAlign: "center"
+                hozAlign: "center",
+                vertAlign: "middle"
             },
             {
-                title: "Acciones",
+                title: "",
                 field: "acciones",
                 formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    const id = rowData.id;
-                    return `
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-edit-activo" data-id="${id}" title="Editar">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-activo" data-id="${id}" title="Eliminar">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    `;
+                    const id = cell.getRow().getData().id;
+                    return `<div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary btn-edit-activo" data-id="${id}" title="Editar">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-delete-activo" data-id="${id}" title="Eliminar">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>`;
                 },
-                width: 120,
+                width: 90,
                 headerSort: false,
                 resizable: false,
                 hozAlign: "center",
-                responsive: 0,
+                vertAlign: "middle",
                 frozen: true
             }
         ];
@@ -210,17 +244,19 @@
             return null;
         }
 
-        // Configuración de la tabla
+        // Configuración de la tabla — layout compacto v3.10.4
         const tableConfig = {
             searchInputSelector: SEARCH_ID,
             pagination: true,
             paginationMode: "remote",
-            paginationSize: 10,
-            paginationSizeSelector: [10, 25, 50, 100],
-            layout: "fitColumns",
-            responsiveLayout: "hide",
+            paginationSize: 15,
+            paginationSizeSelector: [15, 30, 50, 100],
+            layout: "fitDataFill",
+            responsiveLayout: false,
+            resizeColumns: false,
             placeholder: "No hay activos fijos registrados",
-            locale: "es"
+            locale: "es",
+            rowHeight: 70
         };
 
         // Crear tabla usando TabulatorFactory
@@ -233,6 +269,13 @@
 
         // Guardar instancia en singleton global
         window.SintelInventarioTables.activos = table;
+
+        // KPI strip
+        if (table) {
+            table.on('dataLoaded', function(data) {
+                _actualizarKPIs(data);
+            });
+        }
 
         // Event Delegation para acciones del Grid
         initListEvents();

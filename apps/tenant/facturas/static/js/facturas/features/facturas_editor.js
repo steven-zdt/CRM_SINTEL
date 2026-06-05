@@ -171,25 +171,18 @@
         data.impuestos = totales.impuestos;
         data.total = totales.total;
 
-        // ⚠️ Conversión de tipos numéricos
-        if (data.consecutivo) {
-            data.consecutivo = parseInt(data.consecutivo);
-        }
-        if (data.subtotal) {
-            data.subtotal = parseFloat(data.subtotal);
-        }
-        if (data.impuestos) {
-            data.impuestos = parseFloat(data.impuestos);
-        }
-        if (data.total) {
-            data.total = parseFloat(data.total);
-        }
-
-        // [v3.7.0] Cuenta Contable
-        const cuentaUuid = d.querySelector('#factura-cuenta_contable_uuid')?.value;
-        if (cuentaUuid) {
-            data.cuenta_contable_uuid = cuentaUuid;
-        }
+        // Eliminar campos inmutables del XML (backend los rechaza con 400 en cualquier PATCH)
+        // SSoT: matches XML_IMMUTABLE_FIELDS en models.py
+        const XML_IMMUTABLE = new Set([
+            'id', 'numero', 'prefijo', 'consecutivo', 'tipo', 'naturaleza', 'fecha_emision',
+            'emisor_nit', 'emisor_razon_social', 'emisor_direccion', 'emisor_email', 'emisor_telefono',
+            'emisor_actividad_ciiu',
+            'receptor_nit', 'receptor_razon_social', 'receptor_direccion', 'receptor_email', 'receptor_telefono',
+            'moneda', 'subtotal', 'impuestos', 'total', 'cufe', 'qr_code', 'qr_url',
+            'autorizacion_numero', 'autorizacion_prefijo', 'autorizacion_rango_desde',
+            'autorizacion_rango_hasta', 'autorizacion_vigencia_inicio', 'autorizacion_vigencia_fin',
+        ]);
+        Object.keys(data).forEach(k => { if (XML_IMMUTABLE.has(k)) delete data[k]; });
 
         // Cotización (v3.10.1): incluir en PATCH estándar (editable en MANUAL_EDITABLE_FIELDS)
         const cotizacionUuid = getCotizacionUuidFromEditor();
@@ -202,6 +195,18 @@
 
     function getCotizacionUuidFromEditor() {
         const select = d.querySelector('#factura-cotizacion_uuid');
+        if (!select) return undefined;
+        return select.value || null;
+    }
+
+    function getClienteUuidFromEditor() {
+        const select = d.querySelector('#factura-cliente_uuid');
+        if (!select) return undefined;
+        return select.value || null;
+    }
+
+    function getProveedorUuidFromEditor() {
+        const select = d.querySelector('#factura-proveedor_uuid');
         if (!select) return undefined;
         return select.value || null;
     }
@@ -253,19 +258,27 @@
             return;
         }
 
-        // Validar que hay al menos un ítem
-        if (!data.items || data.items.length === 0) {
-            if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-                w.UIManager.notifyError({
-                    data: { detail: 'Debe agregar al menos un ítem a la factura.' }
-                }, MOD);
+        const id = d.querySelector('#factura-id')?.value;
+
+        // Validar que hay al menos un ítem (solo para nuevas facturas; las existentes tienen ítems de XML)
+        if (!id && (!data.items || data.items.length === 0)) {
+            if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+                w.UIManager.handleError(
+                    { ok: false, status: 422, data: { detail: 'Debe agregar al menos un ítem a la factura.' } },
+                    MOD,
+                    { errorContainerSelector: '#form-factura-feedback' }
+                );
             } else {
                 alert('Debe agregar al menos un ítem a la factura.');
             }
             return;
         }
 
-        const id = d.querySelector('#factura-id')?.value;
+        // Para facturas existentes los ítems son de XML e ignorados por el backend
+        if (id) {
+            delete data.items;
+        }
+
         const offcanvasEl = d.querySelector('#offcanvas-factura');
         
         // ⚠️ Error Boundary v2.60: Guardar estado original del botón
@@ -326,6 +339,32 @@
             }
         }
 
+        const clienteUuid = getClienteUuidFromEditor();
+        if (id && clienteUuid && w.facturasAPI && typeof w.facturasAPI.vincularCliente === 'function') {
+            const clienteRes = await w.facturasAPI.vincularCliente(id, clienteUuid);
+            if (!clienteRes.ok) {
+                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+                    w.UIManager.handleError(clienteRes, MOD, {
+                        errorContainerSelector: '#form-factura-feedback'
+                    });
+                }
+                return;
+            }
+        }
+
+        const proveedorUuid = getProveedorUuidFromEditor();
+        if (id && proveedorUuid && w.facturasAPI && typeof w.facturasAPI.vincularProveedor === 'function') {
+            const proveedorRes = await w.facturasAPI.vincularProveedor(id, proveedorUuid);
+            if (!proveedorRes.ok) {
+                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+                    w.UIManager.handleError(proveedorRes, MOD, {
+                        errorContainerSelector: '#form-factura-feedback'
+                    });
+                }
+                return;
+            }
+        }
+
         // ⚠️ v3.9.2: Guardar vinculaciones de inventario de cada ítem
         await guardarVinculacionesInventario();
 
@@ -355,10 +394,11 @@
     function initEditorEvents() {
         const form = d.querySelector('#form-factura');
         // ⚠️ Validación temprana: Si no hay formulario, es la vista de "Subir" o "Lectura"
-        if (!form) {
-            // Modo "Subir" o "Lectura" - Editor inactivo (comportamiento esperado)
-            return; // Detiene la ejecución aquí, evitando errores en cascada
-        }
+        if (!form) return;
+
+        // Guard: evitar doble inicialización en el mismo form (MutationObserver + htmx:afterSwap)
+        if (form.dataset.editorInitialized === 'true') return;
+        form.dataset.editorInitialized = 'true';
 
         // Listener para el botón de guardar
         const btnGuardar = d.querySelector('#btn-guardar-factura');
@@ -375,9 +415,18 @@
             emitirFactura();
         });
 
-        // [v3.7.0] Buscador de Cuentas Contables
-        initCuentaContableSearch();
+        // Sincronizar selects "select-shield" con sus hidden inputs (estado, categoria)
+        form.querySelectorAll('select.select-shield[data-target]').forEach(select => {
+            const hiddenInput = form.querySelector(`input[type="hidden"][name="${select.dataset.target}"]`);
+            if (!hiddenInput) return;
+            hiddenInput.value = select.value;
+            select.addEventListener('change', () => { hiddenInput.value = select.value; });
+        });
+
         initCotizacionSelect();
+        initClienteSelect();
+        initProveedorSelect();
+        initResumenPagosBancos(form);
 
 
 
@@ -439,95 +488,6 @@
         console.log(`${MOD} Event listeners del editor configurados`);
     }
 
-    /**
-     * [v3.7.0] Inicializar buscador asíncrono de cuentas contables
-     */
-    function initCuentaContableSearch() {
-        const searchInput = d.querySelector('#factura-cuenta_contable_search');
-        const uuidInput = d.querySelector('#factura-cuenta_contable_uuid');
-        const suggestions = d.querySelector('#factura-cuenta-suggestions');
-
-        if (!searchInput || !uuidInput || !suggestions) return;
-
-        let debounceTimer;
-
-        searchInput.addEventListener('input', () => {
-            const query = searchInput.value.trim();
-            clearTimeout(debounceTimer);
-
-            if (query.length < 2) {
-                suggestions.classList.add('d-none');
-                return;
-            }
-
-            debounceTimer = setTimeout(async () => {
-                // ⚠️ Aislamiento Gradual: Usar facturasAPI.searchCuentas
-                const res = await w.facturasAPI.searchCuentas(query);
-                if (res.ok && res.data) {
-                    const results = Array.isArray(res.data) ? res.data : (res.data.results || []);
-                    renderSuggestions(results);
-                }
-            }, 300);
-        });
-
-        function renderSuggestions(data) {
-            suggestions.innerHTML = '';
-            if (!data || !data.length) {
-                suggestions.classList.add('d-none');
-                return;
-            }
-
-            data.forEach(cuenta => {
-                const item = d.createElement('button');
-                item.type = 'button';
-                item.className = 'list-group-item list-group-item-action small py-2';
-                item.innerHTML = `<div><span class="fw-bold text-primary">${cuenta.codigo}</span> - ${cuenta.nombre}</div>`;
-                
-                item.addEventListener('click', () => {
-                    searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
-                    uuidInput.value = cuenta.uuid;
-                    suggestions.classList.add('d-none');
-                    // Feedback visual
-                    searchInput.classList.add('is-valid');
-                    setTimeout(() => searchInput.classList.remove('is-valid'), 2000);
-                });
-                suggestions.appendChild(item);
-            });
-            suggestions.classList.remove('d-none');
-        }
-
-        // Cerrar sugerencias al hacer click fuera
-        d.addEventListener('click', (e) => {
-            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
-                suggestions.classList.add('d-none');
-            }
-        });
-
-        // Limpiar UUID si el campo de búsqueda se vacía
-        searchInput.addEventListener('change', () => {
-            if (!searchInput.value.trim()) {
-                uuidInput.value = '';
-            }
-        });
-
-        // [v3.7.0] Pre-poblar campo de texto si hay UUID inicial (modo edición)
-        // §18: resolución via HTTP al endpoint de contabilidad, no via Python import
-        const initialUuid = uuidInput.value.trim();
-        if (initialUuid && !searchInput.value.trim()) {
-            w.facturasAPI.getCuentaByUuid(initialUuid).then(response => {
-                if (response && response.ok && response.data) {
-                    const results = Array.isArray(response.data) ? response.data : (response.data.results || []);
-                    if (results.length > 0) {
-                        const cuenta = results[0];
-                        searchInput.value = `${cuenta.codigo} - ${cuenta.nombre}`;
-                    }
-                }
-            }).catch(err => {
-                console.warn('[facturas.editor:cuenta_search] No se pudo pre-cargar cuenta:', err);
-            });
-        }
-    }
-
     async function initCotizacionSelect() {
         const select = d.querySelector('#factura-cotizacion_uuid');
         if (!select || select.dataset.loaded === 'true') return;
@@ -561,6 +521,371 @@
         } catch (error) {
             console.warn('[facturas.editor:cotizacion_select] No se pudieron cargar cotizaciones:', error);
         }
+    }
+
+    // ── CLIENTE SEARCH + QUICK CREATE ───────────────────────────────────
+
+    function initClienteSelect() {
+        // Entry point called from initEditorEvents — delegates to search + quick-create
+        initClienteSearch();
+        initQuickCreateCliente();
+    }
+
+    function initClienteSearch() {
+        const searchInput = d.querySelector('#factura-cliente_search');
+        const uuidInput = d.querySelector('#factura-cliente_uuid');
+        const suggestions = d.querySelector('#factura-cliente-suggestions');
+        if (!searchInput || !uuidInput || !suggestions) return;
+
+        let debounceTimer;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            const q = searchInput.value.trim();
+            if (q.length < 2) { suggestions.classList.add('d-none'); return; }
+            debounceTimer = setTimeout(async () => {
+                const res = await w.http('GET', `/api/v1/clientes/?search=${encodeURIComponent(q)}&page_size=10`);
+                if (!res || !res.ok) return;
+                const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
+                renderEntidadSuggestions(items, suggestions, searchInput, uuidInput, 'cliente',
+                    c => c.razon_social || c.numero_documento,
+                    c => c.numero_documento ? `Doc: ${c.numero_documento}` : '');
+            }, 280);
+        });
+
+        searchInput.addEventListener('change', () => {
+            if (!searchInput.value.trim()) {
+                uuidInput.value = '';
+                renderFichaVacia('ficha-cliente-container', 'cliente');
+                actualizarBadgeVinculado('badge-cliente-vinculado', false);
+            }
+        });
+
+        d.addEventListener('click', e => {
+            if (!suggestions.contains(e.target) && !searchInput.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
+    }
+
+    function initQuickCreateCliente() {
+        const btn = d.querySelector('#btn-quick-crear-cliente');
+        if (!btn) return;
+        btn.addEventListener('click', () => abrirModalCrearEntidad('cliente'));
+    }
+
+    // ── PROVEEDOR SEARCH + QUICK CREATE ──────────────────────────────────
+
+    function initProveedorSelect() {
+        // Entry point called from initEditorEvents — delegates to search + quick-create
+        initProveedorSearch();
+        initQuickCreateProveedor();
+    }
+
+    function initProveedorSearch() {
+        const searchInput = d.querySelector('#factura-proveedor_search');
+        const uuidInput = d.querySelector('#factura-proveedor_uuid');
+        const suggestions = d.querySelector('#factura-proveedor-suggestions');
+        if (!searchInput || !uuidInput || !suggestions) return;
+
+        let debounceTimer;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            const q = searchInput.value.trim();
+            if (q.length < 2) { suggestions.classList.add('d-none'); return; }
+            debounceTimer = setTimeout(async () => {
+                const res = await w.http('GET', `/api/v1/proveedores/?search=${encodeURIComponent(q)}&page_size=10`);
+                if (!res || !res.ok) return;
+                const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
+                renderEntidadSuggestions(items, suggestions, searchInput, uuidInput, 'proveedor',
+                    p => p.razon_social || p.numero_documento || p.nit,
+                    p => (p.numero_documento || p.nit) ? `NIT: ${p.numero_documento || p.nit}` : '');
+            }, 280);
+        });
+
+        searchInput.addEventListener('change', () => {
+            if (!searchInput.value.trim()) {
+                uuidInput.value = '';
+                renderFichaVacia('ficha-proveedor-container', 'proveedor');
+                actualizarBadgeVinculado('badge-proveedor-vinculado', false);
+            }
+        });
+
+        d.addEventListener('click', e => {
+            if (!suggestions.contains(e.target) && !searchInput.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
+    }
+
+    function initQuickCreateProveedor() {
+        const btn = d.querySelector('#btn-quick-crear-proveedor');
+        if (!btn) return;
+        btn.addEventListener('click', () => abrirModalCrearEntidad('proveedor'));
+    }
+
+    // ── SHARED HELPERS ────────────────────────────────────────────────────
+
+    function renderEntidadSuggestions(items, container, searchInput, uuidInput, tipo, labelFn, subFn) {
+        if (items.length === 0) {
+            container.innerHTML = '<div class="list-group-item small text-muted py-2">No se encontraron resultados</div>';
+        } else {
+            container.innerHTML = items.map(item => {
+                const label = labelFn(item);
+                const sub = subFn(item);
+                return `<button type="button" class="list-group-item list-group-item-action small py-2"
+                            data-uuid="${item.uuid}" data-label="${label}">
+                    <div class="fw-semibold">${label}</div>
+                    ${sub ? `<small class="text-muted">${sub}</small>` : ''}
+                </button>`;
+            }).join('');
+        }
+        container.classList.remove('d-none');
+
+        container.querySelectorAll('button[data-uuid]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                uuidInput.value = btn.dataset.uuid;
+                searchInput.value = btn.dataset.label;
+                container.classList.add('d-none');
+                actualizarBadgeVinculado(`badge-${tipo}-vinculado`, true);
+                await refreshEntidadFicha(tipo, btn.dataset.uuid);
+            });
+        });
+    }
+
+    async function refreshEntidadFicha(tipo, uuid) {
+        const endpoint = tipo === 'cliente' ? `/api/v1/clientes/${uuid}/` : `/api/v1/proveedores/${uuid}/`;
+        const containerId = tipo === 'cliente' ? 'ficha-cliente-container' : 'ficha-proveedor-container';
+        const container = d.getElementById(containerId);
+        if (!container) return;
+
+        try {
+            const res = await w.http('GET', endpoint);
+            if (!res || !res.ok || !res.data) return;
+            const data = res.data;
+            const nombre = data.razon_social || data.nombre || '';
+            const comercial = data.nombre_comercial || '';
+            const doc = data.numero_documento || data.nit || '';
+            const email = data.email || '';
+            const tel = data.telefono || '';
+
+            const iconClass = tipo === 'cliente' ? 'bi-person-fill text-primary' : 'bi-truck';
+            const iconStyle = tipo === 'cliente' ? 'background:rgba(13,110,253,.1)' : 'background:rgba(133,100,4,.12)';
+            const iconColor = tipo === 'cliente' ? '' : 'style="color:#856404;"';
+
+            container.innerHTML = `
+            <div class="card bg-light border-0">
+              <div class="card-body py-2 px-3">
+                <div class="d-flex align-items-start gap-3">
+                  <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                       style="width:42px;height:42px;${iconStyle}">
+                    <i class="bi ${iconClass} fs-5" ${iconColor}></i>
+                  </div>
+                  <div class="flex-grow-1 min-width-0">
+                    <div class="fw-semibold">${nombre}</div>
+                    ${comercial ? `<div class="text-muted small">${comercial}</div>` : ''}
+                    <div class="row g-2 mt-1">
+                      ${doc ? `<div class="col-sm-6"><span class="text-muted small"><i class="bi bi-card-text me-1"></i>Doc:</span> <span class="small fw-semibold">${doc}</span></div>` : ''}
+                      ${email ? `<div class="col-sm-6 text-truncate"><span class="text-muted small"><i class="bi bi-envelope me-1"></i></span> <span class="small">${email}</span></div>` : ''}
+                      ${tel ? `<div class="col-sm-6"><span class="text-muted small"><i class="bi bi-telephone me-1"></i></span> <span class="small">${tel}</span></div>` : ''}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+        } catch (err) {
+            console.warn(`[facturas.editor] No se pudo actualizar ficha ${tipo}:`, err);
+        }
+    }
+
+    function renderFichaVacia(containerId, tipo) {
+        const container = d.getElementById(containerId);
+        if (!container) return;
+        const icon = tipo === 'cliente' ? 'bi-person-x' : 'bi-truck';
+        const msg = tipo === 'cliente' ? 'Sin cliente vinculado. Busca o crea uno.' : 'Sin proveedor vinculado. Busca o crea uno.';
+        container.innerHTML = `<div class="text-muted small text-center py-3 border rounded bg-light">
+            <i class="bi ${icon} fs-4 d-block mb-1 text-secondary"></i>${msg}</div>`;
+    }
+
+    function actualizarBadgeVinculado(badgeId, vinculado) {
+        const badge = d.getElementById(badgeId);
+        if (!badge) return;
+        if (vinculado) {
+            badge.className = 'badge ms-auto bg-success';
+            badge.textContent = 'Vinculado';
+        } else {
+            badge.className = 'badge ms-auto bg-warning text-dark';
+            badge.textContent = 'Sin vincular';
+        }
+    }
+
+    // ── QUICK CREATE MODAL ────────────────────────────────────────────────
+
+    function abrirModalCrearEntidad(tipo) {
+        const modalId = `modal-crear-${tipo}`;
+        d.getElementById(modalId)?.remove(); // eliminar instancia anterior si existe
+
+        const isCliente = tipo === 'cliente';
+
+        // Pre-diligenciar con datos del XML de la factura (receptor→cliente, emisor→proveedor)
+        const facturaForm = d.querySelector('#form-factura');
+        const naturaleza = facturaForm?.dataset.naturaleza || '';
+        const prefill = {};
+        if (isCliente && naturaleza === 'VENTA') {
+            prefill.numero_documento = d.querySelector('[name="receptor_nit"]')?.value || '';
+            prefill.razon_social     = d.querySelector('[name="receptor_razon_social"]')?.value || '';
+            prefill.email            = d.querySelector('[name="receptor_email"]')?.value || '';
+            prefill.telefono         = d.querySelector('[name="receptor_telefono"]')?.value || '';
+        } else if (!isCliente && naturaleza === 'COMPRA') {
+            prefill.numero_documento = d.querySelector('[name="emisor_nit"]')?.value || '';
+            prefill.razon_social     = d.querySelector('[name="emisor_razon_social"]')?.value || '';
+            prefill.email            = d.querySelector('[name="emisor_email"]')?.value || '';
+            prefill.telefono         = d.querySelector('[name="emisor_telefono"]')?.value || '';
+        }
+        const hasPrefill = !!(prefill.numero_documento || prefill.razon_social);
+
+        const titulo = isCliente ? 'Nuevo Cliente' : 'Nuevo Proveedor';
+        const color = isCliente ? 'primary' : 'warning';
+        const icon = isCliente ? 'bi-person-plus' : 'bi-truck';
+
+        const regimenOpts = [
+            ['ORDINARIO', 'Régimen Ordinario'],
+            ['SIMPLE', 'Régimen Simple'],
+            ['ESPECIAL', 'Régimen Especial'],
+            ['NO_RESPONSABLE', 'No Responsable de IVA'],
+        ].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+
+        const tipoPersonaOpts = [
+            ['NATURAL', 'Persona Natural'],
+            ['JURIDICA', 'Persona Jurídica'],
+        ].map(([v, l]) => `<option value="${v}" ${!isCliente && v === 'JURIDICA' ? 'selected' : ''}>${l}</option>`).join('');
+
+        const tipoDocOpts = [
+            ['NIT', 'NIT'],
+            ['CC', 'Cédula de Ciudadanía'],
+            ['CE', 'Cédula de Extranjería'],
+            ['PASAPORTE', 'Pasaporte'],
+        ].map(([v, l]) => `<option value="${v}" ${!isCliente && v === 'NIT' ? 'selected' : ''}>${l}</option>`).join('');
+
+        const extraFields = isCliente ? `
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Tipo Persona <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" name="tipo_persona" required>${tipoPersonaOpts}</select>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Tipo Documento <span class="text-danger">*</span></label>
+              <select class="form-select form-select-sm" name="tipo_documento" required>${tipoDocOpts}</select>
+            </div>` : `
+            <div class="col-6">
+              <label class="form-label small fw-semibold">Tipo Persona</label>
+              <select class="form-select form-select-sm" name="tipo_persona">${tipoPersonaOpts}</select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-semibold">Tipo Documento</label>
+              <select class="form-select form-select-sm" name="tipo_documento">${tipoDocOpts}</select>
+            </div>`;
+
+        const html = `
+        <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+              <div class="modal-header bg-${color} ${color === 'warning' ? 'text-dark' : 'text-white'}">
+                <h5 class="modal-title"><i class="bi ${icon} me-2"></i>${titulo}${hasPrefill ? ' <span class="badge bg-light text-dark border ms-2" style="font-size:.6rem;vertical-align:middle;"><i class=\'bi bi-magic me-1\'></i>Auto</span>' : ''}</h5>
+                <button type="button" class="btn-close ${color !== 'warning' ? 'btn-close-white' : ''}" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div id="${modalId}-error" class="alert alert-danger d-none small py-2 mb-3"></div>
+                <form id="${modalId}-form">
+                  <div class="row g-3">
+                    ${extraFields}
+                    <div class="col-12">
+                      <label class="form-label small fw-semibold">Número de Documento <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control form-control-sm" name="numero_documento"
+                             placeholder="Ej: 9001234567" value="${prefill.numero_documento || ''}" required>
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label small fw-semibold">Razón Social / Nombre <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control form-control-sm" name="razon_social"
+                             placeholder="${isCliente ? 'Nombre completo o razón social' : 'Razón social del proveedor'}"
+                             value="${prefill.razon_social || ''}" required>
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label small fw-semibold">Régimen Tributario <span class="text-danger">*</span></label>
+                      <select class="form-select form-select-sm" name="regimen_tributario" required>
+                        ${regimenOpts}
+                      </select>
+                    </div>
+                    <div class="col-sm-6">
+                      <label class="form-label small fw-semibold">Email</label>
+                      <input type="email" class="form-control form-control-sm" name="email"
+                             placeholder="correo@empresa.com" value="${prefill.email || ''}">
+                    </div>
+                    <div class="col-sm-6">
+                      <label class="form-label small fw-semibold">Teléfono</label>
+                      <input type="text" class="form-control form-control-sm" name="telefono"
+                             placeholder="300 000 0000" value="${prefill.telefono || ''}">
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-${color} btn-sm" id="${modalId}-submit">
+                  <i class="bi bi-check-circle me-1"></i>Crear
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+        const wrapper = d.createElement('div');
+        wrapper.innerHTML = html;
+        d.body.appendChild(wrapper);
+
+        const modalEl = d.getElementById(modalId);
+        const bsModal = new bootstrap.Modal(modalEl);
+        bsModal.show();
+
+        modalEl.addEventListener('hidden.bs.modal', () => wrapper.remove());
+
+        d.getElementById(`${modalId}-submit`).addEventListener('click', async () => {
+            const form = d.getElementById(`${modalId}-form`);
+            const errorDiv = d.getElementById(`${modalId}-error`);
+            if (!form.checkValidity()) { form.reportValidity(); return; }
+
+            const payload = Object.fromEntries(new FormData(form));
+            // Remove empty optional strings
+            Object.keys(payload).forEach(k => { if (payload[k] === '') delete payload[k]; });
+
+            const submitBtn = d.getElementById(`${modalId}-submit`);
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Creando...';
+            errorDiv.classList.add('d-none');
+
+            const endpoint = isCliente ? '/api/v1/clientes/' : '/api/v1/proveedores/';
+            const res = await w.http('POST', endpoint, payload);
+
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Crear';
+
+            if (!res || !res.ok) {
+                const msg = res?.data ? JSON.stringify(res.data) : 'Error al crear';
+                errorDiv.textContent = msg;
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+
+            const created = res.data;
+            const uuidInput = d.querySelector(`#factura-${tipo}_uuid`);
+            const searchInput = d.querySelector(`#factura-${tipo}_search`);
+            if (uuidInput) uuidInput.value = created.uuid;
+            if (searchInput) searchInput.value = created.razon_social || created.numero_documento || '';
+
+            actualizarBadgeVinculado(`badge-${tipo}-vinculado`, true);
+            await refreshEntidadFicha(tipo, created.uuid);
+
+            if (w.SintelFeedback) w.SintelFeedback.success(`${isCliente ? 'Cliente' : 'Proveedor'} creado y vinculado`);
+            bsModal.hide();
+        });
     }
 
 
@@ -605,20 +930,16 @@
 
     // ⚠️ HTMX: Reinicializar cuando se cargue el Offcanvas vía HTMX
     // ⚠️ Validación temprana: Solo inicializa si el formulario de edición existe
+    // afterSettle: DOM estable tras swap — no usar afterSwap + setTimeout (skill htmx.md §12)
     if (typeof htmx !== 'undefined') {
-        d.addEventListener('htmx:afterSwap', (event) => {
+        d.addEventListener('htmx:afterSettle', (event) => {
             if (event.detail.target.id === 'offcanvas-container-facturas') {
-                // Pequeño delay para asegurar que el DOM esté completamente renderizado
-                setTimeout(() => {
-                    // ⚠️ Validación temprana: Solo inicializar si existe el formulario de edición
-                    const form = d.querySelector('#form-factura');
-                    if (form) {
-                        // Solo inicializar si estamos en modo edición (formulario existe)
-                        initEditorEvents();
-                        actualizarTotalesEnDOM();
-                    }
-                    // Modo "Subir" (form-upload-factura) o "Lectura": no requieren inicialización
-                }, 50);
+                const form = d.querySelector('#form-factura');
+                if (form) {
+                    initEditorEvents();
+                    actualizarTotalesEnDOM();
+                }
+                // Modo Subir (form-upload-factura) o Lectura: no requieren inicializacion
             }
         });
     }
@@ -637,5 +958,104 @@
         w.FacturasModule = {};
     }
     w.FacturasModule.emitirFactura = emitirFactura;
+
+    // ── v3.11.0: Resumen de Pagos Bancos + Bloqueo estado_pago ──────────────
+    function initResumenPagosBancos(form) {
+        const medioPagoEl  = form.querySelector('#factura-medio-pago-codigo');
+        const estadoPagoEl = form.querySelector('#factura-estado-pago');
+        const hidEstado    = form.querySelector('input[name="estado_pago"]');
+        const badgeMedio   = d.getElementById('badge-medio-pago');
+        const rpPagado     = d.getElementById('rp-pagado');
+        const rpSaldo      = d.getElementById('rp-saldo');
+        const rpAlerta     = d.getElementById('rp-alerta');
+
+        if (!medioPagoEl || !estadoPagoEl) return;
+
+        // Leer valores del servidor inyectados en data- del formulario
+        const totalPagadoBancos = parseFloat(form.dataset.totalPagadoBancos || '0') || 0;
+        const saldoPendiente    = parseFloat(form.dataset.saldoPendiente    || '0') || 0;
+
+        const COP = (v) => '$' + new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0 }).format(v);
+
+        function _aplicarReglas() {
+            const esEfectivo = medioPagoEl.value.trim() === '10';
+
+            // Actualizar badge
+            if (badgeMedio) {
+                badgeMedio.textContent  = esEfectivo ? 'Efectivo' : 'Bancario';
+                badgeMedio.className    = 'badge ms-auto ' + (esEfectivo ? 'bg-secondary' : 'bg-primary');
+                badgeMedio.style.fontSize = '.62rem';
+            }
+
+            // Actualizar indicadores numéricos
+            if (rpPagado) {
+                rpPagado.textContent  = COP(totalPagadoBancos);
+                rpPagado.className    = 'fw-bold font-monospace ' + (totalPagadoBancos > 0 ? 'text-success' : 'text-muted');
+            }
+            if (rpSaldo) {
+                rpSaldo.textContent = COP(saldoPendiente);
+                rpSaldo.className   = 'fw-bold font-monospace ' + (saldoPendiente > 0 ? 'text-danger' : 'text-success');
+            }
+
+            if (esEfectivo) {
+                // Efectivo: sin restricciones
+                estadoPagoEl.disabled = false;
+                Array.from(estadoPagoEl.options).forEach(o => o.disabled = false);
+                if (rpAlerta) rpAlerta.classList.add('d-none');
+                return;
+            }
+
+            // No efectivo: aplicar reglas según conciliacion
+            if (totalPagadoBancos === 0) {
+                // Sin conciliacion → forzar NO_PAGADA
+                estadoPagoEl.value     = 'NO_PAGADA';
+                if (hidEstado) hidEstado.value = 'NO_PAGADA';
+                Array.from(estadoPagoEl.options).forEach(o => {
+                    o.disabled = o.value !== 'NO_PAGADA';
+                });
+                if (rpAlerta) {
+                    rpAlerta.innerHTML  = '<i class="bi bi-exclamation-circle me-1"></i>Sin conciliaciones bancarias. Solo puede ser <strong>NO_PAGADA</strong>.';
+                    rpAlerta.className  = 'mt-2 alert alert-warning py-1 px-2 small';
+                    rpAlerta.classList.remove('d-none');
+                }
+            } else if (saldoPendiente <= 0) {
+                // 100% conciliado → forzar PAGADA
+                estadoPagoEl.value     = 'PAGADA';
+                if (hidEstado) hidEstado.value = 'PAGADA';
+                Array.from(estadoPagoEl.options).forEach(o => {
+                    o.disabled = o.value !== 'PAGADA';
+                });
+                if (rpAlerta) {
+                    rpAlerta.innerHTML  = '<i class="bi bi-check-circle me-1 text-success"></i>100% conciliado. Estado forzado a <strong>PAGADA</strong>.';
+                    rpAlerta.className  = 'mt-2 alert alert-success py-1 px-2 small';
+                    rpAlerta.classList.remove('d-none');
+                }
+            } else {
+                // Pago parcial
+                estadoPagoEl.value     = 'PAGO_PARCIAL';
+                if (hidEstado) hidEstado.value = 'PAGO_PARCIAL';
+                Array.from(estadoPagoEl.options).forEach(o => {
+                    o.disabled = !['PAGO_PARCIAL', 'PAGADA'].includes(o.value);
+                });
+                if (rpAlerta) {
+                    rpAlerta.innerHTML  = `<i class="bi bi-info-circle me-1"></i>Pago parcial. Saldo pendiente: <strong>${COP(saldoPendiente)}</strong>. Marcar como PAGADA solo si hay retenciones u otros ajustes.`;
+                    rpAlerta.className  = 'mt-2 alert alert-info py-1 px-2 small';
+                    rpAlerta.classList.remove('d-none');
+                }
+            }
+        }
+
+        // Sincronizar hidden input cuando el usuario cambia estado_pago manualmente
+        estadoPagoEl.addEventListener('change', () => {
+            if (hidEstado) hidEstado.value = estadoPagoEl.value;
+        });
+
+        // Reaccionar al cambio de medio de pago
+        medioPagoEl.addEventListener('input', _aplicarReglas);
+        medioPagoEl.addEventListener('change', _aplicarReglas);
+
+        // Aplicar reglas al abrir el formulario
+        _aplicarReglas();
+    }
 
 })(window, document);

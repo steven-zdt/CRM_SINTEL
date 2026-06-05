@@ -8,8 +8,8 @@ WARNING: v3.5: Service Layer Modular - Lógica de negocio del dominio Perfil.
 """
 
 # Nuevo Service Layer modular
-from apps.tenant.perfil.services.selectors import PerfilSelector
-from apps.tenant.perfil.services.crud_service import PerfilCRUDService
+from apps.tenant.perfil.services.selectors import PerfilSelector, DepartamentoSelector
+from apps.tenant.perfil.services.crud_service import PerfilCRUDService, DepartamentoCRUDService
 from apps.tenant.perfil.services.business_service import PerfilBusinessService
 from apps.tenant.perfil.models import RolTenant
 # NOTE: PerfilServiceMixin belongs to api layer (api/mixins.py), not here.
@@ -26,7 +26,9 @@ from .perfil_service import (
 __all__ = [
     # Nuevo Service Layer
     'PerfilSelector',
+    'DepartamentoSelector',
     'PerfilCRUDService',
+    'DepartamentoCRUDService',
     'PerfilBusinessService',
     # PerfilServiceMixin is in api/mixins.py (api-layer concern, not service-layer)
     'RolTenant',

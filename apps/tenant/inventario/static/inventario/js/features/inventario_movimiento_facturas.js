@@ -56,17 +56,35 @@
                     this.limpiarFactura();
                 });
             }
+
+            // Actualizar placeholder y limpiar al cambiar tipo de movimiento
+            if (this.tipoMovimientoSelect) {
+                this.tipoMovimientoSelect.addEventListener('change', () => this.actualizarPorTipo());
+            }
+        }
+
+        actualizarPorTipo() {
+            const tipo = this.tipoMovimientoSelect?.value || '';
+            let placeholder = 'Buscar factura por # o cliente...';
+            if (tipo === 'ENTRADA_COMPRA') {
+                placeholder = 'Buscar factura de compra (proveedor)...';
+            } else if (tipo === 'SALIDA_VENTA' || tipo === 'ENTRADA_DEVOLUCION') {
+                placeholder = 'Buscar factura de venta (cliente)...';
+            }
+            if (this.inputElement) {
+                this.inputElement.placeholder = placeholder;
+            }
+            this.limpiarFactura();
         }
 
         handleBusqueda(e) {
             const query = e.target.value.trim();
-
+            clearTimeout(this._debounce);
             if (query.length < 2) {
                 this.dropdownElement.classList.add('d-none');
                 return;
             }
-
-            this.buscarFacturas(query);
+            this._debounce = setTimeout(() => this.buscarFacturas(query), 300);
         }
 
         async buscarFacturas(query) {
@@ -76,11 +94,12 @@
             const tipoMovimiento = this.tipoMovimientoSelect?.value || '';
             let naturaleza = '';
 
-            if (tipoMovimiento.startsWith('ENTRADA') || tipoMovimiento.startsWith('SALIDA_VENTA')) {
-                naturaleza = 'VENTA'; // Entrada de compra, Salida por venta
-            } else if (tipoMovimiento.startsWith('SALIDA')) {
-                naturaleza = 'COMPRA'; // Compra a proveedor para vender
+            if (tipoMovimiento === 'ENTRADA_COMPRA') {
+                naturaleza = 'COMPRA';
+            } else if (tipoMovimiento === 'SALIDA_VENTA' || tipoMovimiento === 'ENTRADA_DEVOLUCION') {
+                naturaleza = 'VENTA';
             }
+            // ENTRADA_AJUSTE, SALIDA_BAJA, SALIDA_CONSUMO, ACTIVO types: sin filtro naturaleza
 
             const params = new URLSearchParams({ q: query });
             if (naturaleza) {

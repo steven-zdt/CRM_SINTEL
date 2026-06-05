@@ -136,6 +136,27 @@ class WidgetProyectosSerializer(serializers.Serializer):
     tareas_vencidas = serializers.IntegerField()
 
 
+class WidgetClientesSerializer(serializers.Serializer):
+    """Serializer para métricas de Clientes (WidgetClientesDTO)."""
+    total_clientes = serializers.IntegerField()
+    clientes_activos = serializers.IntegerField()
+    nuevos_mes = serializers.IntegerField()
+    personas_juridicas = serializers.IntegerField()
+    retenedores = serializers.IntegerField()
+
+
+class KpiSedeSerializer(serializers.Serializer):
+    """Serializer para indicadores transversales por sede."""
+    sede_uuid = serializers.CharField(allow_null=True)
+    sede_nombre = serializers.CharField()
+    gastos_total = serializers.DecimalField(max_digits=15, decimal_places=2)
+    ingresos_total = serializers.DecimalField(max_digits=15, decimal_places=2)
+    proyectos_activos = serializers.IntegerField()
+    valor_proyectos = serializers.DecimalField(max_digits=15, decimal_places=2)
+    movimientos_inventario = serializers.IntegerField()
+    margen = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+
 class DashboardMetricasSerializer(serializers.Serializer):
     """
     Serializer principal para DashboardMetricasDTO v3.9.4.
@@ -149,3 +170,4 @@ class DashboardMetricasSerializer(serializers.Serializer):
     empleados = WidgetEmpleadosSerializer()
     gastos = WidgetGastosSerializer(required=False, allow_null=True)
     proyectos = WidgetProyectosSerializer(required=False, allow_null=True)
+    clientes = WidgetClientesSerializer(required=False, allow_null=True)

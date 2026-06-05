@@ -20,6 +20,10 @@
 <script src="{% static 'inventario/js/features/movimientos_list.js' %}"></script>
 <script src="{% static 'inventario/js/features/inventario_movimiento_facturas.js' %}"></script>
 
+{# Dependencias de Proyectos para integración con Timeline (v3.9.7) #}
+<script src="{% static 'proyectos/js/proyectos.api.js' %}"></script>
+<script src="{% static 'proyectos/js/features/proyectos_editor.js' %}"></script>
+
 {# Reinicialización HTMX para Offcanvas #}
 <script>
     if (typeof htmx !== 'undefined') {

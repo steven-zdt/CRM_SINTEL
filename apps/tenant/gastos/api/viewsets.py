@@ -9,6 +9,7 @@ v2.62.0: ARQUITECTURA ESTABILIZADA.
 import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, render
 from django_filters.rest_framework import DjangoFilterBackend
@@ -27,6 +28,7 @@ from apps.tenant.gastos.services import (
     GastoBusinessService,
     ResolucionBusinessService,
 )
+from apps.tenant.gastos.services.selectors import DocumentoSelector
 
 from .serializers import (
     GastoSerializer,
@@ -56,7 +58,6 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
 
     def get_permissions(self):
         """En DEBUG, no aplicar permisos (modo desarrollo sin restricciones)."""
-        from django.conf import settings
         if settings.DEBUG:
             return []
         return [IsTenantMember(), IsTenantAdminOrReadOnly()]
@@ -117,7 +118,6 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     def destroy(self, request, *args, **kwargs):
         """Elimina un gasto fisicamente."""
         try:
-            from django.conf import settings
             if not settings.DEBUG:
                 # En produccion, el gasto debe estar anulado primero
                 instance = self.get_object()
@@ -168,15 +168,25 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
     def render_offcanvas_crear(self, request):
         """Renderiza offcanvas para crear."""
+        import datetime
         empresa_id = self.get_empresa_id()
-        
-        # v2.62.1: Pre-seleccionar resolucion activa si existe
+
         resolucion_activa = ResolucionDIAN.objects.filter(empresa_id=empresa_id, vigente=True).first()
-        
+
+        doc_soporte_siguiente = ''
+        fecha_default = datetime.date.today().isoformat()
+        if resolucion_activa:
+            preview = DocumentoSelector.get_siguiente_numero_preview(resolucion_activa)
+            doc_soporte_siguiente = preview['formateado']
+            if resolucion_activa.fecha_inicio and resolucion_activa.fecha_inicio > datetime.date.today():
+                fecha_default = resolucion_activa.fecha_inicio.isoformat()
+
         context = {
             'offcanvas_id': 'offcanvas-gasto-crear',
             'mode': 'create',
-            'resolucion_activa': resolucion_activa
+            'resolucion_activa': resolucion_activa,
+            'doc_soporte_siguiente': doc_soporte_siguiente,
+            'fecha_default': fecha_default,
         }
         return Response(context, template_name='tenant/gastos/offcanvas_crear_gasto.html')
 

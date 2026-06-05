@@ -16,8 +16,9 @@ import json
 import logging
 from datetime import datetime
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
 
@@ -148,12 +149,18 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            raise CommandError(
+                "PeligRO CRITICO: Este comando es destructivo y no puede ejecutarse "
+                "en un entorno de produccion (DEBUG=False)."
+            )
+
         formato = options["formato"]
         output_dir = options.get("output_dir")
         solo_activos = options.get("solo_activos", False)
         filtro_schema = options.get("filtro_schema")
 
-        self.stdout.write(self.style.SUCCESS("🔍 Iniciando análisis de tenants..."))
+        self.stdout.write(self.style.SUCCESS("Iniciando analisis de tenants..."))
         self.stdout.write("=" * 80)
 
         # Obtener todos los tenants (excluyendo public)
@@ -231,8 +238,6 @@ class Command(BaseCommand):
 
         # Guardar reportes
         import os
-
-        from django.conf import settings
 
         if not output_dir:
             output_dir = settings.BASE_DIR

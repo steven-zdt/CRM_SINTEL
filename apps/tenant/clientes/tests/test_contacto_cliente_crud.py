@@ -9,7 +9,7 @@ Verifies:
 from django.test import TestCase as DjangoTestCase
 
 
-class TestContactoClienteStructure:
+class TestContactoClienteStructure(DjangoTestCase):
     """Tests for ContactoCliente code structure and integration."""
 
     def test_contacto_cliente_viewset_exists(self):
@@ -54,18 +54,15 @@ class TestContactoClienteStructure:
             assert template_path.exists(), f"Template {template} not found at {template_path}"
 
     def test_contacto_cliente_js_modules_exist(self):
-        """Test: All required JavaScript modules exist."""
+        """Test: Consolidated JavaScript module exists."""
         from pathlib import Path
 
         from django.conf import settings
         
-        base_js_dir = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'static' / 'clientes' / 'js' / 'contactos'
+        base_js_dir = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'static' / 'clientes' / 'js'
         
         required_modules = [
-            'contacto_cliente_api.js',
-            'contacto_cliente_form.js',
-            'contacto_cliente_utils.js',
-            'contacto_cliente_main.js'
+            'clientes.contactos.js'
         ]
         
         for module in required_modules:
@@ -79,11 +76,17 @@ class TestContactoClienteStructure:
         from django.conf import settings
         
         workspace_template = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'core' / 'templates' / 'tenant' / 'core' / 'workspace.html'
+        clientes_list_template = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'templates' / 'tenant' / 'clientes' / 'clientes_list.html'
         
         assert workspace_template.exists(), "workspace.html not found"
         
-        content = workspace_template.read_text()
-        assert 'offcanvas-container-contactos' in content, "Offcanvas container not found in workspace.html"
+        workspace_content = workspace_template.read_text(encoding='utf-8')
+        if 'offcanvas-container-contactos' in workspace_content:
+            return
+            
+        assert clientes_list_template.exists(), "clientes_list.html not found"
+        clientes_list_content = clientes_list_template.read_text(encoding='utf-8')
+        assert 'offcanvas-container-contactos' in clientes_list_content, "Offcanvas container not found in workspace.html or clientes_list.html"
 
     def test_contacto_cliente_serializer_exists(self):
         """Test: ContactoClienteSerializer exists and has required fields."""
@@ -113,15 +116,16 @@ class TestContactoClienteStructure:
             assert field in field_names, f"Field '{field}' not found in ContactoCliente model"
 
     def test_clienteservicemixin_inherited(self):
-        """Test: ContactoClienteViewSet inherits from ClienteServiceMixin."""
-        from apps.tenant.clientes.api.viewsets import ClienteServiceMixin, ContactoClienteViewSet
+        """Test: ContactoClienteViewSet inherits from ContactoClienteServiceMixin."""
+        from apps.tenant.clientes.api.viewsets import ContactoClienteServiceMixin, ContactoClienteViewSet
         
         # Check inheritance
-        assert issubclass(ContactoClienteViewSet, ClienteServiceMixin), "ContactoClienteViewSet should inherit from ClienteServiceMixin"
-        assert hasattr(ContactoClienteViewSet, 'service'), "ContactoClienteViewSet should have 'service' attribute via mixin"
+        assert issubclass(ContactoClienteViewSet, ContactoClienteServiceMixin), "ContactoClienteViewSet should inherit from ContactoClienteServiceMixin"
+        assert hasattr(ContactoClienteViewSet, 'contacto_selector'), "ContactoClienteViewSet should have 'contacto_selector' attribute via mixin"
+        assert hasattr(ContactoClienteViewSet, 'contacto_crud'), "ContactoClienteViewSet should have 'contacto_crud' attribute via mixin"
 
-    def test_assets_contactos_loads_scripts_in_order(self):
-        """Test: assets_contactos.html loads scripts in correct dependency order."""
+    def test_assets_contactos_loads_consolidated_script(self):
+        """Test: assets_contactos.html loads the consolidated script."""
         from pathlib import Path
 
         from django.conf import settings
@@ -130,21 +134,10 @@ class TestContactoClienteStructure:
         
         assert assets_template.exists(), "assets_contactos.html not found"
         
-        content = assets_template.read_text()
+        content = assets_template.read_text(encoding='utf-8')
         
-        # Check that scripts are loaded in correct order
-        api_pos = content.find('contacto_cliente_api.js')
-        utils_pos = content.find('contacto_cliente_utils.js')
-        form_pos = content.find('contacto_cliente_form.js')
-        main_pos = content.find('contacto_cliente_main.js')
-        
-        assert api_pos > 0, "API script not found"
-        assert utils_pos > 0, "Utils script not found"
-        assert form_pos > 0, "Form script not found"
-        assert main_pos > 0, "Main script not found"
-        
-        # Verify order: api → utils → form → main
-        assert api_pos < utils_pos < form_pos < main_pos, f"Scripts not in correct order: api={api_pos}, utils={utils_pos}, form={form_pos}, main={main_pos}"
+        # Check that modern script is loaded
+        assert 'clientes.contactos.js' in content, "clientes.contactos.js script not loaded in assets_contactos.html"
 
     def test_clientes_list_updated_with_new_endpoint(self):
         """Test: clientes_list.html references the new render-offcanvas/crear endpoint."""
@@ -156,9 +149,9 @@ class TestContactoClienteStructure:
         
         assert clientes_list_template.exists(), "clientes_list.html not found"
         
-        content = clientes_list_template.read_text()
+        content = clientes_list_template.read_text(encoding='utf-8')
         
-        # Check that the new endpoint is referen ced
+        # Check that the new endpoint is referenced
         assert 'render-offcanvas/crear' in content, "New render-offcanvas/crear endpoint not found in clientes_list.html"
 
     def test_offcanvas_elemento_id_correct(self):
@@ -184,19 +177,19 @@ class TestContactoClienteIntegration(DjangoTestCase):
     """Integration tests for ContactoCliente functionality."""
 
     def test_fsd_namespace_separation(self):
-        """Test: FSD modules use separate namespaces."""
+        """Test: FSD modules use separate and correct namespaces."""
         # Verify that the JS namespace is correctly isolated
-        # window.AppContactoCliente should be used instead of mixed with clientes
+        # window.AppCliente.contactos or ContactosModule should be defined in clientes.contactos.js
         from pathlib import Path
 
         from django.conf import settings
         
-        main_js = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'static' / 'clientes' / 'js' / 'contactos' / 'contacto_cliente_main.js'
+        main_js = Path(settings.BASE_DIR) / 'apps' / 'tenant' / 'clientes' / 'static' / 'clientes' / 'js' / 'clientes.contactos.js'
         
-        if main_js.exists():
-            content = main_js.read_text()
-            # Check that window.AppContactoCliente namespace is used
-            assert 'window.AppContactoCliente' in content or 'AppContactoCliente' in content, "Should use window.AppContactoCliente namespace"
+        assert main_js.exists(), "clientes.contactos.js does not exist"
+        content = main_js.read_text(encoding='utf-8')
+        assert 'window.AppCliente.contactos' in content or 'AppCliente.contactos' in content, "Should expose AppCliente.contactos namespace"
+        assert 'window.ContactosModule' in content or 'ContactosModule' in content, "Should define window.ContactosModule"
 
     def test_no_shared_modals_monolith(self):
         """Test: No monolithic shared modals file exists (FSD compliance)."""

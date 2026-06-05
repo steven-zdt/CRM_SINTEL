@@ -108,158 +108,80 @@ class ActivateAccountView(View):
     """
 
     def get(self, request):
-        """
-        Renderiza formulario de activación de cuenta.
-        Responde tanto a GET /activate/ como a GET /api/public/v1/tenants/activate/
-        """
-        token = request.GET.get("token")
-        if not token:
-            # Si es una petición AJAX, devolver JSON
-            if request.headers.get("Accept") == "application/json":
-                return JsonResponse(
-                    {"success": False, "error": "Token de activación requerido"}, status=400
-                )
-
-            return render(
-                request,
-                "public/activate_password.html",
-                {"error": "Token de activación requerido", "token": None},
-            )
-
-        # Validar token básico (sin establecer contraseña aún)
-        try:
-            from apps.public.tenants.services.invitations import validate_invitation_token
-
-            token_data = validate_invitation_token(token)
-
-            if not token_data:
-                # Si es una petición AJAX, devolver JSON
-                if request.headers.get("Accept") == "application/json":
-                    return JsonResponse(
-                        {"success": False, "error": "Token inválido o expirado"}, status=400
-                    )
-
-                return render(
-                    request,
-                    "public/activate_password.html",
-                    {"error": "Token inválido o expirado", "token": None},
-                )
-
-            # Obtener usuario para mostrar email
-            user = User.objects.get(id=token_data["user_id"])
-
-            # Si es una petición AJAX, devolver JSON con datos del usuario
-            if request.headers.get("Accept") == "application/json":
-                return JsonResponse(
-                    {"success": True, "user_email": user.email, "token_valid": True}
-                )
-
-            return render(
-                request,
-                "public/activate_password.html",
-                {"token": token, "user_email": user.email, "error": None},
-            )
-
-        except Exception as e:
-            logger.error(f"Error validando token de activación: {e}", exc_info=True)
-
-            # Si es una petición AJAX, devolver JSON
-            if request.headers.get("Accept") == "application/json":
-                return JsonResponse(
-                    {"success": False, "error": "Error validando token de activación"}, status=500
-                )
-
-            return render(
-                request,
-                "public/activate_password.html",
-                {"error": "Error validando token de activación", "token": None},
-            )
+        """Renderiza el formulario de activacion con codigo numerico."""
+        return render(request, "public/activate_password.html", {"error": None, "user_email": ""})
 
     def post(self, request):
-        """
-        Procesa activación de cuenta y establece contraseña.
-        """
+        """Procesa activacion: valida email + codigo de 6 digitos + establece contrasena."""
         import json
+        import os
+        from django.conf import settings
 
         try:
-            # Parsear JSON del request
             data = json.loads(request.body)
-            token = data.get("token")
-            password = data.get("password")
-
-            if not token or not password:
-                return JsonResponse(
-                    {"success": False, "error": "Token y contraseña son requeridos"}, status=400
-                )
-
-            # Validar token
-            from apps.public.tenants.services.invitations import validate_invitation_token
-
-            token_data = validate_invitation_token(token)
-
-            if not token_data:
-                return JsonResponse(
-                    {"success": False, "error": "Token inválido o expirado"}, status=400
-                )
-
-            # Obtener usuario y establecer contraseña
-            user = User.objects.get(id=token_data["user_id"])
-            user.set_password(password)
-            user.is_active = True
-            user.save()
-
-            # [AUDIT] Registrar activación
-            try:
-                from apps.public.console.models import ConsoleActionLog
-                ConsoleActionLog.objects.create(
-                    action="USER_ACTIVATE",
-                    actor=user,
-                    target_user=user,
-                    metadata={"method": "token_activation", "tenant_id": token_data["tenant_id"]}
-                )
-            except Exception as audit_err:
-                logger.error(f"[AUDIT] Error registrando activación: {audit_err}")
-
-            logger.info(f"Cuenta activada exitosamente para usuario: {user.email}")
-
-            # Obtener tenant para redirección
-            from apps.public.tenants.models import Client
-
-            try:
-                tenant = Client.objects.get(id=token_data["tenant_id"])
-                tenant_domain = (
-                    tenant.domains.only("id", "domain", "is_primary").filter(is_primary=True).first()
-                )
-                
-                # [DEBUG] Incluir puerto en desarrollo si es necesario
-                from django.conf import settings
-                app_port = getattr(settings, "APP_PORT", "8000")
-                domain = tenant_domain.domain if tenant_domain else "localhost"
-                
-                if settings.DEBUG and app_port and str(app_port) not in ("80", "443"):
-                    login_url = f"http://{domain}:{app_port}/"
-                else:
-                    login_url = f"http://{domain}/"
-                    
-            except Client.DoesNotExist:
-                logger.warning(f"[WARNING] Tenant {token_data['tenant_id']} no encontrado tras activación. Usando fallback.")
-                login_url = "/"
-
-            return JsonResponse(
-                {
-                    "success": True,
-                    "message": "Cuenta activada exitosamente",
-                    "redirect_url": login_url,
-                }
-            )
-
         except json.JSONDecodeError:
-            return JsonResponse({"success": False, "error": "Formato JSON inválido"}, status=400)
+            return JsonResponse({"success": False, "error": "Formato JSON invalido"}, status=400)
+
+        email = (data.get("email") or "").strip().lower()
+        code = (data.get("code") or "").strip()
+        password = data.get("password") or ""
+
+        if not email or not code or not password:
+            return JsonResponse({"success": False, "error": "Email, codigo y contrasena son obligatorios"}, status=400)
+
+        if len(code) != 8:
+            return JsonResponse({"success": False, "error": "El codigo debe tener exactamente 8 caracteres"}, status=400)
+
+        # Validar codigo en Redis (uso unico — lo elimina al consumir)
+        from apps.public.tenants.services.invitations import validate_activation_code
+        payload = validate_activation_code(code)
+
+        if not payload:
+            return JsonResponse({"success": False, "error": "Codigo invalido o expirado"}, status=400)
+
+        # Verificar que el email coincide con el usuario del payload
+        try:
+            user = User.objects.get(pk=payload["user_id"])
         except User.DoesNotExist:
-            logger.error(f"[ERROR] Intento de activación para usuario inexistente {token_data.get('user_id')}")
             return JsonResponse({"success": False, "error": "Usuario no encontrado"}, status=404)
-        except Exception as e:
-            logger.error(f"Error activando cuenta: {e}", exc_info=True)
-            return JsonResponse(
-                {"success": False, "error": "Error interno del servidor"}, status=500
+
+        if user.email.lower() != email:
+            return JsonResponse({"success": False, "error": "El email no coincide con el codigo de activacion"}, status=400)
+
+        # Establecer contrasena y activar
+        user.set_password(password)
+        user.is_active = True
+        user.save()
+
+        # Audit
+        try:
+            from apps.public.console.models import ConsoleActionLog
+            ConsoleActionLog.objects.create(
+                action="USER_ACTIVATE",
+                actor=user,
+                target_user=user,
+                metadata={"method": "code_activation", "tenant_id": payload.get("tenant_id")},
             )
+        except Exception as audit_err:
+            logger.warning("[AUDIT] Error registrando activacion: %s", audit_err)
+
+        logger.info("Cuenta activada via codigo para usuario: %s", user.email)
+
+        # Construir redirect_url al tenant
+        from apps.public.tenants.models import Client
+        login_url = "/"
+        try:
+            tenant = Client.objects.get(pk=payload["tenant_id"])
+            tenant_domain = tenant.domains.filter(is_primary=True).only("domain").first()
+            domain = tenant_domain.domain if tenant_domain else None
+            if domain:
+                activation_base = os.getenv("ACTIVATION_BASE_URL", "").strip().rstrip("/")
+                if activation_base:
+                    login_url = f"{activation_base}/console/"
+                else:
+                    protocol = getattr(settings, "SITE_PROTOCOL", "http").lower()
+                    login_url = f"{protocol}://{domain}/login/"
+        except Client.DoesNotExist:
+            logger.warning("Tenant id=%s no encontrado tras activacion", payload.get("tenant_id"))
+
+        return JsonResponse({"success": True, "message": "Cuenta activada exitosamente", "redirect_url": login_url})

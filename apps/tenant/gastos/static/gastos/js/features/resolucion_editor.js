@@ -118,7 +118,7 @@
             rango_desde: parseInt(formData.get('rango_desde')) || 0,
             rango_hasta: parseInt(formData.get('rango_hasta')) || 0,
             fecha_resolucion: formData.get('fecha_resolucion'),
-            fecha_inicio: formData.get('fecha_inicio') || null,
+            fecha_inicio: formData.get('fecha_inicio') || new Date().toISOString().split('T')[0],
             fecha_fin: formData.get('fecha_fin'),
             clave_tecnica: formData.get('clave_tecnica'),
             vigente: form.querySelector('[name="vigente"]')?.checked || false

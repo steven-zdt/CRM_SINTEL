@@ -37,22 +37,32 @@
         try {
           const resp = await fetch('/api/v1/core/auth/consume-ott/', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            // Allow setting HttpOnly cookies from server
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ ott: ott })
           });
 
           const data = await resp.json().catch(() => ({}));
+
           if (!resp.ok) {
-            statusEl.textContent = data.detail || 'Token inválido o expirado.';
+            statusEl.textContent = data.detail || 'Token invalido o expirado.';
             return;
           }
 
-          // Tokens se entregaron como HttpOnly cookies; redirigir al workspace
+          if (data.already_activated) {
+            // Cuenta existente: el tenant fue vinculado, redirigir al login con mensaje
+            statusEl.innerHTML =
+              '<div style="color:#1971c2;font-size:.95rem;line-height:1.5;">' +
+              '<strong>Acceso listo.</strong><br>' +
+              (data.message || 'El tenant fue anadido a tu cuenta existente.') +
+              '</div>';
+            setTimeout(function () {
+              window.location.href = data.redirect_url || '/login/';
+            }, 3000);
+            return;
+          }
+
+          // Cuenta nueva: sesion establecida, ir al workspace
           window.location.href = '/workspace/';
 
         } catch (err) {

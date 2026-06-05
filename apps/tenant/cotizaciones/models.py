@@ -83,6 +83,19 @@ class Cotizacion(SintelTenantBaseModel):
     dias_configuracion = models.PositiveIntegerField(default=0)
     dias_pruebas = models.PositiveIntegerField(default=0)
 
+    # Sede — vinculacion para indicadores y KPIs por sede (DT-SEDE-04)
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cotizaciones',
+        verbose_name=_('Sede'),
+        help_text=_('Sede de la empresa que emite la cotizacion. '
+                    'Opcional — si no se asigna aplica a toda la empresa.'),
+        db_index=True,
+    )
+
     def __str__(self):
         return f"{self.numero_cotizacion} - {self.cliente or 'Sin cliente'}"
 
