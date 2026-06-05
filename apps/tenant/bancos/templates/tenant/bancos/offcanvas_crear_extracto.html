@@ -1,0 +1,97 @@
+{# offcanvas_crear_extracto.html - Offcanvas para IMPORTAR extracto bancario #}
+<style>
+  #offcanvas-extracto-crear {
+    width: 500px !important;
+  }
+  #offcanvas-extracto-crear .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-extracto-crear .section-divider {
+    margin-bottom: 1.5rem;
+  }
+  #offcanvas-extracto-crear .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+  }
+  #offcanvas-extracto-crear .form-control,
+  #offcanvas-extracto-crear .form-select {
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+  }
+  #offcanvas-extracto-crear .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-extracto-crear" aria-labelledby="offcanvas-extracto-crear-label">
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-extracto-crear-label">
+      <i class="bi bi-upload text-primary me-2"></i>Importar Extracto Bancario
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body">
+    <div id="form-extracto-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="extracto-form" data-mode="create" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="section-divider">
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="cuenta_uuid" class="form-label">Cuenta Bancaria *</label>
+            <select class="form-select" id="cuenta_uuid" name="cuenta_uuid" required>
+              <option value="">Seleccione cuenta...</option>
+              {% for cuenta in cuentas %}
+                <option value="{{ cuenta.uuid }}">{{ cuenta.nombre }} ({{ cuenta.numero }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="mes" class="form-label">Mes *</label>
+            <select class="form-select" id="mes" name="mes" required>
+              <option value="">Seleccione...</option>
+              <option value="1">Enero</option>
+              <option value="2">Febrero</option>
+              <option value="3">Marzo</option>
+              <option value="4">Abril</option>
+              <option value="5">Mayo</option>
+              <option value="6">Junio</option>
+              <option value="7">Julio</option>
+              <option value="8">Agosto</option>
+              <option value="9">Septiembre</option>
+              <option value="10">Octubre</option>
+              <option value="11">Noviembre</option>
+              <option value="12">Diciembre</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="anio" class="form-label">Año *</label>
+            <input type="number" class="form-control" id="anio" name="anio" min="2020" max="2035" value="2026" required>
+          </div>
+          <div class="col-12">
+            <label for="archivo" class="form-label">Archivo de Extracto (.xls, .xlsx) *</label>
+            <input type="file" class="form-control" id="archivo" name="archivo" accept=".xls,.xlsx" required>
+            <div class="form-text text-muted small">
+              Sube el archivo Excel con las transacciones bancarias.
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="offcanvas-footer">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="submit" class="btn btn-primary btn-sm px-4" id="btn-guardar-extracto" form="extracto-form">
+        <i class="bi bi-cloud-upload me-1"></i>Importar y Procesar
+      </button>
+    </div>
+  </div>
+</div>

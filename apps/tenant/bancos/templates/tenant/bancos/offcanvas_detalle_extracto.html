@@ -1,0 +1,341 @@
+{# offcanvas_detalle_extracto.html — Detalle Extracto + Conciliación bancaria v4.7.1 #}
+{# Panel derecho: tabla de transacciones. Click en fila → panel de conciliación con búsqueda real #}
+{% load currency_filters %}
+
+<style>
+  #offcanvas-extracto-detalle { width: min(96vw, 1100px) !important; }
+  #offcanvas-extracto-detalle .offcanvas-body { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
+
+  /* Split layout */
+  .det-split { display: flex; height: 100%; min-height: 0; }
+  .det-left  { flex: 1 1 0; min-width: 0; overflow-y: auto; padding: 1rem 1.25rem; border-right: 1px solid #dee2e6; }
+  .det-right { width: 380px; flex-shrink: 0; overflow-y: auto; background: #f8f9fa; padding: 1rem 1.25rem; display: flex; flex-direction: column; }
+
+  /* Tabla transacciones */
+  .tx-table { font-size: .8rem; border-collapse: collapse; width: 100%; }
+  .tx-table th { position: sticky; top: 0; background: #1e3a5f; color: #fff; padding: 7px 10px; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  .tx-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  .tx-table tbody tr { cursor: pointer; transition: background .1s; }
+  .tx-table tbody tr:hover { background: #e8f0fe !important; }
+  .tx-table tbody tr.tx-activa { background: #cfe2ff !important; }
+  .tx-table tbody tr.tx-activa td { border-left: 3px solid #0d6efd; }
+
+  /* Valores +/- */
+  .val-ingreso { color: #198754; font-weight: 700; font-family: monospace; }
+  .val-egreso  { color: #dc3545; font-weight: 700; font-family: monospace; }
+
+  /* Panel conciliación */
+  .conc-placeholder { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #adb5bd; text-align: center; padding: 2rem; }
+  .conc-form { display: none; flex-direction: column; gap: .75rem; }
+  .conc-form.visible { display: flex; }
+
+  /* Autocomplete */
+  .autocomplete-wrapper { position: relative; }
+  .ac-input { font-size: .82rem; }
+  .ac-dropdown { position: absolute; left: 0; right: 0; top: 100%; z-index: 1060; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.12); max-height: 220px; overflow-y: auto; display: none; }
+  .ac-dropdown.open { display: block; }
+  .ac-item { padding: 8px 12px; cursor: pointer; font-size: .8rem; border-bottom: 1px solid #f5f5f5; }
+  .ac-item:hover, .ac-item.focused { background: #e8f0fe; }
+  .ac-item .ac-name { font-weight: 600; }
+  .ac-item .ac-sub  { font-size: .72rem; color: #6c757d; }
+
+  /* Chip seleccionado */
+  .chip-selected { background: #e8f0fe; border: 1px solid #0d6efd33; border-radius: 8px; padding: 7px 10px; font-size: .78rem; display: flex; align-items: center; justify-content: space-between; }
+  .chip-selected .chip-label { font-weight: 600; color: #1e3a5f; }
+  .chip-selected .chip-sub   { font-size: .7rem; color: #6c757d; }
+  .chip-remove { background: none; border: none; color: #dc3545; cursor: pointer; font-size: 1rem; padding: 0 2px; line-height: 1; }
+
+  /* Pasos conciliación */
+  .conc-step { position: relative; padding-left: 36px; margin-bottom: .5rem; }
+  .conc-step::before { content: ''; position: absolute; left: 14px; top: 28px; bottom: 0; width: 1px; background: #dee2e6; }
+  .conc-step:last-of-type::before { display: none; }
+  .conc-step-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .conc-step-num { position: absolute; left: 0; width: 28px; height: 28px; border-radius: 50%; background: #1e3a5f; color: #fff; font-size: .72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .conc-step-num.done { background: #198754; }
+  .conc-step-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #495057; }
+  .conc-step-body { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 12px; }
+
+  @media (max-width: 768px) {
+    .det-split { flex-direction: column; }
+    .det-right { width: 100%; border-right: none; border-top: 1px solid #dee2e6; }
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-extracto-detalle"
+     aria-labelledby="offcanvas-extracto-detalle-label">
+
+  {# ── Header ────────────────────────────────────────────────────────── #}
+  <div class="offcanvas-header py-3 px-4 border-bottom"
+       style="background: linear-gradient(135deg,#1e3a5f,#0d6efd);">
+    <div>
+      <h5 class="offcanvas-title fw-bold text-white mb-0" id="offcanvas-extracto-detalle-label">
+        <i class="bi bi-bank me-2"></i>{{ extracto.cuenta.nombre }}
+      </h5>
+      <small class="text-white opacity-75">
+        {{ extracto.cuenta.numero }} &mdash; {{ extracto.get_mes_display }} / {{ extracto.anio }}
+        &mdash; Saldo inicial: {{ extracto.saldo_inicial|currency_cop }}
+        &nbsp;→&nbsp; final: {{ extracto.saldo_final|currency_cop }}
+      </small>
+    </div>
+    <div class="d-flex align-items-center gap-2 ms-2">
+      {% if extracto.procesado %}
+        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Procesado</span>
+      {% else %}
+        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Pendiente</span>
+        <button class="btn btn-sm btn-warning" id="btn-procesar-extracto-detalle" data-uuid="{{ extracto.uuid }}">
+          <i class="bi bi-cpu me-1"></i>Procesar
+        </button>
+      {% endif %}
+      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+    </div>
+  </div>
+
+  <div class="offcanvas-body">
+    <div class="det-split">
+
+      {# ══════════════ PANEL IZQUIERDO: Transacciones ══════════════ #}
+      <div class="det-left">
+
+        {# Filtros rapidos #}
+        <div class="d-flex gap-1 mb-2 flex-wrap align-items-center">
+          <span class="text-muted" style="font-size:.65rem;text-transform:uppercase;font-weight:700;letter-spacing:.04em;">Filtrar:</span>
+          <button class="btn btn-xs btn-outline-dark active" data-filtro-tx="TODOS" style="font-size:.7rem;padding:2px 8px;">Todos</button>
+          <button class="btn btn-xs btn-outline-success" data-filtro-tx="INGRESO" style="font-size:.7rem;padding:2px 8px;"><i class="bi bi-arrow-up me-1"></i>Ingresos</button>
+          <button class="btn btn-xs btn-outline-danger" data-filtro-tx="EGRESO" style="font-size:.7rem;padding:2px 8px;"><i class="bi bi-arrow-down me-1"></i>Egresos</button>
+          <button class="btn btn-xs btn-outline-info ms-auto" data-filtro-conc="PENDIENTE" style="font-size:.7rem;padding:2px 8px;"><i class="bi bi-dash-circle me-1"></i>Sin conciliar</button>
+          <button class="btn btn-xs btn-outline-secondary" data-filtro-conc="TODOS_CONC" style="font-size:.7rem;padding:2px 8px;">Todos</button>
+        </div>
+
+        {# Tabla #}
+        <div style="overflow-x:auto;">
+          <table class="tx-table" id="tabla-transacciones">
+            <thead>
+              <tr>
+                <th style="width:80px;">Fecha</th>
+                <th>Descripción</th>
+                <th style="width:70px;">Doc.</th>
+                <th style="width:85px;" class="text-end">Valor</th>
+                <th style="width:85px;" class="text-end">Saldo</th>
+                <th style="width:100px;" class="text-center">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in transacciones %}
+              <tr class="tx-row"
+                  data-uuid="{{ tx.uuid }}"
+                  data-tipo="{% if tx.valor < 0 %}EGRESO{% else %}INGRESO{% endif %}"
+                  data-conciliado="{{ tx.conciliado|yesno:'1,0' }}"
+                  data-factura-uuid="{{ tx.factura_uuid|default:'' }}"
+                  data-proveedor-uuid="{{ tx.proveedor_uuid|default:'' }}"
+                  data-cliente-uuid="{{ tx.cliente_uuid|default:'' }}"
+                  data-notas="{{ tx.notas_conciliacion|default:''|truncatechars:200 }}"
+                  data-valor="{{ tx.valor }}"
+                  data-descripcion="{{ tx.descripcion|truncatechars:80 }}">
+                <td><span class="font-monospace" style="font-size:.74rem;">{{ tx.fecha|date:"d/m/Y" }}</span></td>
+                <td>
+                  <div class="text-truncate fw-semibold" style="max-width:220px;" title="{{ tx.descripcion }}">{{ tx.descripcion }}</div>
+                  {% if tx.sucursal %}<div class="text-muted" style="font-size:.68rem;">{{ tx.sucursal }}</div>{% endif %}
+                </td>
+                <td class="text-muted font-monospace" style="font-size:.74rem;">{{ tx.dcto|default:"—" }}</td>
+                <td class="text-end {% if tx.valor < 0 %}val-egreso{% else %}val-ingreso{% endif %}">
+                  {% if tx.valor < 0 %}&minus;{% else %}+{% endif %}{{ tx.monto|currency_cop }}
+                </td>
+                <td class="text-end text-muted font-monospace" style="font-size:.76rem;">{{ tx.saldo|currency_cop }}</td>
+                <td class="text-center">
+                  {% if tx.conciliado %}
+                    <span class="badge bg-success" style="font-size:.62rem;">
+                      <i class="bi bi-check2-all me-1"></i>
+                      {% if tx.factura_uuid and tx.proveedor_uuid %}F+P{% elif tx.factura_uuid %}Factura{% elif tx.proveedor_uuid %}Proveedor{% elif tx.cliente_uuid %}Cliente{% else %}OK{% endif %}
+                    </span>
+                  {% else %}
+                    <span class="badge bg-light text-muted border" style="font-size:.62rem;"><i class="bi bi-dash me-1"></i>Pendiente</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="6" class="text-center py-5 text-muted">
+                  <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                  Sin transacciones.{% if not extracto.procesado %} Usa el botón "Procesar" para importar.{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {# ══════════════ PANEL DERECHO: Conciliación ══════════════ #}
+      <div class="det-right">
+
+        {# ── Título del panel ── #}
+        <div class="pb-2 mb-2 border-bottom d-flex align-items-center gap-2"
+             style="background:#f8f9fa;position:sticky;top:0;z-index:5;padding-top:.5rem;">
+          <div style="background:#1e3a5f;border-radius:6px;padding:5px 8px;">
+            <i class="bi bi-link-45deg text-white" style="font-size:.95rem;"></i>
+          </div>
+          <div>
+            <div style="font-size:.75rem;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.05em;">Conciliar Transacción</div>
+            <div style="font-size:.66rem;color:#6c757d;">{{ extracto.cuenta.nombre }} — {{ extracto.get_mes_display }} {{ extracto.anio }}</div>
+          </div>
+        </div>
+
+        {# Placeholder #}
+        <div class="conc-placeholder" id="conc-placeholder">
+          <i class="bi bi-arrow-left-circle-fill" style="font-size:2.5rem;margin-bottom:.75rem;opacity:.3;color:#1e3a5f;"></i>
+          <div class="fw-semibold" style="font-size:.82rem;color:#495057;">Selecciona una transacción</div>
+          <div style="font-size:.73rem;color:#adb5bd;margin-top:4px;">Haz clic en cualquier fila<br>del panel izquierdo</div>
+        </div>
+
+        {# Formulario de conciliación — flujo cíclico 3 pasos #}
+        <div class="conc-form" id="conc-form">
+
+          <input type="hidden" id="conc-uuid">
+          <input type="hidden" id="conc-factura-uuid">
+          <input type="hidden" id="conc-proveedor-uuid">
+          <input type="hidden" id="conc-cliente-uuid">
+          <input type="hidden" id="conc-tipo-movimiento"> {# INGRESO | EGRESO #}
+
+          {# ── PASO 1: Movimiento ───────────────────────────────────── #}
+          <div class="conc-step">
+            <div class="conc-step-header">
+              <span class="conc-step-num">1</span>
+              <span class="conc-step-label">Movimiento seleccionado</span>
+              <span id="conc-tipo-badge" class="ms-auto badge" style="font-size:.62rem;"></span>
+            </div>
+            <div class="conc-step-body" id="conc-tx-info">
+              <div class="fw-bold text-truncate" id="conc-tx-desc" style="font-size:.82rem;"></div>
+              <div class="d-flex justify-content-between align-items-center mt-1">
+                <span class="text-muted font-monospace" id="conc-tx-fecha" style="font-size:.72rem;"></span>
+                <span class="fw-bold font-monospace" id="conc-tx-valor" style="font-size:.95rem;"></span>
+              </div>
+            </div>
+          </div>
+
+          {# ── PASO 2: Factura (auto-filtrada por tipo) ─────────────── #}
+          <div class="conc-step" id="conc-step-factura">
+            <div class="conc-step-header">
+              <span class="conc-step-num">2</span>
+              <span class="conc-step-label" id="conc-step-factura-label">Factura</span>
+              <span class="ms-auto text-muted" style="font-size:.62rem;font-weight:400;">Opcional</span>
+            </div>
+            <div class="conc-step-body">
+              {# Tabs ocultos — controlados por JS según tipo de movimiento #}
+              <div id="tabs-tipo-factura" style="display:none;">
+                <button type="button" data-tipo-fac="VENTA"></button>
+                <button type="button" data-tipo-fac="COMPRA"></button>
+              </div>
+              <div id="chip-factura" class="chip-selected d-none mb-2">
+                <div class="min-w-0 flex-grow-1">
+                  <div class="chip-label text-truncate" id="chip-factura-label"></div>
+                  <div class="chip-sub" id="chip-factura-sub"></div>
+                </div>
+                <button type="button" class="chip-remove flex-shrink-0" data-clear="factura">×</button>
+              </div>
+              <div class="autocomplete-wrapper" id="aw-factura">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text bg-white border-end-0"><i class="bi bi-search" style="font-size:.7rem;color:#0d6efd;"></i></span>
+                  <input type="text" id="ac-factura-input" class="form-control ac-input border-start-0 ps-1"
+                         placeholder="Núm. factura, NIT o nombre…" autocomplete="off">
+                </div>
+                <div class="ac-dropdown" id="ac-factura-dd"></div>
+              </div>
+            </div>
+          </div>
+
+          {# ── PASO 3: Tercero (Cliente o Proveedor según tipo) ─────── #}
+
+          {# Proveedor — visible solo para EGRESO #}
+          <div class="conc-step d-none" id="conc-step-proveedor">
+            <div class="conc-step-header">
+              <span class="conc-step-num">3</span>
+              <span class="conc-step-label"><i class="bi bi-truck me-1" style="color:#6f42c1;"></i>Proveedor</span>
+            </div>
+            <div class="conc-step-body">
+              <div id="chip-proveedor" class="chip-selected d-none mb-2" style="border-color:#6f42c144;">
+                <div class="min-w-0 flex-grow-1">
+                  <div class="chip-label text-truncate" id="chip-proveedor-label"></div>
+                  <div class="chip-sub" id="chip-proveedor-sub"></div>
+                </div>
+                <button type="button" class="chip-remove flex-shrink-0" data-clear="proveedor">×</button>
+              </div>
+              <div class="autocomplete-wrapper" id="aw-proveedor">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text bg-white border-end-0"><i class="bi bi-search" style="font-size:.7rem;color:#6f42c1;"></i></span>
+                  <input type="text" id="ac-proveedor-input" class="form-control ac-input border-start-0 ps-1"
+                         placeholder="NIT o razón social…" autocomplete="off">
+                </div>
+                <div class="ac-dropdown" id="ac-proveedor-dd"></div>
+              </div>
+            </div>
+          </div>
+
+          {# Cliente — visible solo para INGRESO #}
+          <div class="conc-step d-none" id="conc-step-cliente">
+            <div class="conc-step-header">
+              <span class="conc-step-num">3</span>
+              <span class="conc-step-label"><i class="bi bi-person-fill me-1" style="color:#198754;"></i>Cliente</span>
+            </div>
+            <div class="conc-step-body">
+              <div id="chip-cliente" class="chip-selected d-none mb-2" style="border-color:#19875444;">
+                <div class="min-w-0 flex-grow-1">
+                  <div class="chip-label text-truncate" id="chip-cliente-label"></div>
+                  <div class="chip-sub" id="chip-cliente-sub"></div>
+                </div>
+                <button type="button" class="chip-remove flex-shrink-0" data-clear="cliente">×</button>
+              </div>
+              <div class="autocomplete-wrapper" id="aw-cliente">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text bg-white border-end-0"><i class="bi bi-search" style="font-size:.7rem;color:#198754;"></i></span>
+                  <input type="text" id="ac-cliente-input" class="form-control ac-input border-start-0 ps-1"
+                         placeholder="NIT, razón social o nombre…" autocomplete="off">
+                </div>
+                <div class="ac-dropdown" id="ac-cliente-dd"></div>
+              </div>
+            </div>
+          </div>
+
+          {# ── PASO 4: Notas ────────────────────────────────────────── #}
+          <div class="conc-step">
+            <div class="conc-step-header">
+              <span class="conc-step-num">4</span>
+              <span class="conc-step-label">
+                <i class="bi bi-pencil-square me-1" style="color:#fd7e14;"></i>Notas
+              </span>
+              <span class="ms-auto text-muted" style="font-size:.62rem;font-weight:400;">Opcional</span>
+            </div>
+            <div class="conc-step-body">
+              <textarea id="conc-notas"
+                        rows="2"
+                        class="form-control form-control-sm"
+                        placeholder="Ej: Pago cuota 3/6, factura FAC-2026-001, referencia banco 98432…"
+                        style="font-size:.8rem;resize:vertical;min-height:52px;"></textarea>
+              <div class="text-muted mt-1" style="font-size:.67rem;">
+                <i class="bi bi-info-circle me-1"></i>Se guarda junto al vínculo para trazabilidad contable.
+              </div>
+            </div>
+          </div>
+
+          {# Feedback #}
+          <div id="conc-feedback" class="d-none" style="font-size:.8rem;"></div>
+
+          {# Acciones #}
+          <div class="d-flex gap-2 mt-auto pt-2 border-top">
+            <button class="btn btn-outline-danger btn-sm" id="btn-quitar-vinculo">
+              <i class="bi bi-x-circle me-1"></i>Quitar
+            </button>
+            <button class="btn btn-primary btn-sm flex-fill fw-semibold" id="btn-guardar-vinculo">
+              <i class="bi bi-link-45deg me-1"></i>Guardar vínculo
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>{# /det-split #}
+  </div>{# /offcanvas-body #}
+
+  <div class="border-top px-4 py-2 bg-white d-flex justify-content-end">
+    <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cerrar</button>
+  </div>
+</div>

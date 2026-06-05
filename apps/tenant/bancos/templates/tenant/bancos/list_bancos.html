@@ -1,0 +1,151 @@
+{# list_bancos.html - Bancos Module UI #}
+{# Zero inline JS - logic delegated to modular JavaScript feature controllers #}
+
+<div class="card shadow-sm overflow-hidden" data-module="bancos">
+  <div class="card-header bg-white">
+    <ul class="nav nav-tabs card-header-tabs" id="bancos-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab-cuentas" data-bs-toggle="tab" data-bs-target="#tab-pane-cuentas" 
+                type="button" role="tab" aria-controls="tab-pane-cuentas" aria-selected="true">
+          <i class="bi bi-wallet2 me-2"></i>Cuentas Bancarias
+          <span data-module="cuentas" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-extractos" data-bs-toggle="tab" data-bs-target="#tab-pane-extractos" 
+                type="button" role="tab" aria-controls="tab-pane-extractos" aria-selected="false">
+          <i class="bi bi-file-earmark-bar-graph me-2"></i>Extractos Bancarios
+          <span data-module="extractos" data-loading-icon class="ms-2 d-none">
+            <i class="bi bi-hourglass-split"></i>
+          </span>
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card-body">
+    <div class="tab-content" id="bancos-tab-content">
+      
+      {# TAB 1: CUENTAS BANCARIAS #}
+      <div class="tab-pane fade show active" id="tab-pane-cuentas" role="tabpanel" 
+           aria-labelledby="tab-cuentas" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="cuentas">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-cuenta" 
+                   class="form-control" 
+                   placeholder="Buscar cuenta..."
+                   data-module="cuentas"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="cuentas" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/api/v1/bancos/cuentas/render-offcanvas/crear/" 
+                  hx-target="#offcanvas-container-bancos" 
+                  hx-swap="innerHTML"
+                  data-module="cuentas"
+                  data-create-button>
+            <i class="bi bi-plus-lg me-2"></i>Nueva Cuenta
+          </button>
+        </div>
+        
+        {# Spinner #}
+        <div data-spinner="cuentas" class="text-center py-5" style="display: none;">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando cuentas bancarias...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-cuentas" data-grid="cuentas" style="display: none; width: 100%; min-width: 0;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="cuentas" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-inbox fs-2"></i><br>No hay cuentas bancarias registradas.
+          </p>
+        </div>
+      </div>
+
+      {# TAB 2: EXTRACTOS BANCARIOS #}
+      <div class="tab-pane fade" id="tab-pane-extractos" role="tabpanel" 
+           aria-labelledby="tab-extractos" tabindex="0">
+        
+        {# Toolbar #}
+        <div class="d-flex justify-content-between align-items-center mb-3" data-module="extractos">
+          <div class="input-group input-group-sm w-auto">
+            <input type="text" 
+                   id="search-extracto" 
+                   class="form-control" 
+                   placeholder="Buscar extracto..."
+                   data-module="extractos"
+                   data-search-input>
+            <button class="btn btn-outline-secondary" type="button" 
+                    data-action="search" data-module="extractos" title="Buscar">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <button class="btn btn-primary btn-sm" 
+                  hx-get="/api/v1/bancos/extractos/render-offcanvas/crear/" 
+                  hx-target="#offcanvas-container-bancos" 
+                  hx-swap="innerHTML"
+                  data-module="extractos"
+                  data-create-button>
+            <i class="bi bi-upload me-2"></i>Importar Extracto
+          </button>
+        </div>
+        
+        {# Spinner #}
+        <div data-spinner="extractos" class="text-center py-5" style="display: none;">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+          </div>
+          <p class="mt-2 text-muted">Inicializando tabla de extractos...</p>
+        </div>
+        
+        {# Grid Container #}
+        <div id="grid-extractos" data-grid="extractos" style="display: none; width: 100%; min-width: 0;"></div>
+        
+        {# Empty State #}
+        <div data-empty-state="extractos" class="text-center py-5" style="display: none;">
+          <p class="text-muted">
+            <i class="bi bi-file-earmark-excel fs-2"></i><br>No hay extractos bancarios registrados.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Offcanvas Container #}
+<div id="offcanvas-container-bancos"></div>
+
+{# Modal de Confirmacion Eliminar #}
+<div class="modal fade" id="confirmarEliminarModalBancos" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirmar Eliminacion</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Esta seguro de que desea eliminar este registro?</p>
+        <p class="text-danger"><strong>Esta accion no se puede deshacer y puede afectar las transacciones asociadas.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar-bancos">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include 'tenant/bancos/assets_bancos.html' %}

@@ -1,0 +1,85 @@
+{# offcanvas_editar_cuenta.html - Offcanvas para EDITAR cuenta bancaria #}
+<style>
+  #offcanvas-cuenta-editar {
+    width: 500px !important;
+  }
+  #offcanvas-cuenta-editar .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-cuenta-editar .section-divider {
+    margin-bottom: 1.5rem;
+  }
+  #offcanvas-cuenta-editar .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+  }
+  #offcanvas-cuenta-editar .form-control,
+  #offcanvas-cuenta-editar .form-select {
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+  }
+  #offcanvas-cuenta-editar .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cuenta-editar" aria-labelledby="offcanvas-cuenta-editar-label">
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-cuenta-editar-label">
+      <i class="bi bi-pencil-square text-primary me-2"></i>Editar Cuenta Bancaria
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body">
+    <div id="form-cuenta-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="cuenta-form" data-mode="edit" data-uuid="{{ instance.uuid }}">
+      {% csrf_token %}
+      <div class="section-divider">
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="nombre" class="form-label">Nombre de la Cuenta *</label>
+            <input type="text" class="form-control" id="nombre" name="nombre" value="{{ instance.nombre }}" required>
+          </div>
+          <div class="col-12">
+            <label for="numero" class="form-label">Número de Cuenta *</label>
+            <input type="text" class="form-control" id="numero" name="numero" value="{{ instance.numero }}" required>
+          </div>
+          <div class="col-md-6">
+            <label for="banco" class="form-label">Banco *</label>
+            <select class="form-select" id="banco" name="banco" required>
+              <option value="">Seleccione...</option>
+              {% for val, label in bancos %}
+                <option value="{{ val }}" {% if instance.banco == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="tipo" class="form-label">Tipo de Cuenta *</label>
+            <select class="form-select" id="tipo" name="tipo" required>
+              <option value="">Seleccione...</option>
+              {% for val, label in tipos_cuenta %}
+                <option value="{{ val }}" {% if instance.tipo == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="offcanvas-footer">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="submit" class="btn btn-primary btn-sm px-4" id="btn-guardar-cuenta" form="cuenta-form">
+        <i class="bi bi-save me-1"></i>Guardar Cambios
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,85 @@
+{# offcanvas_crear_cuenta.html - Offcanvas para CREAR cuenta bancaria #}
+<style>
+  #offcanvas-cuenta-crear {
+    width: 500px !important;
+  }
+  #offcanvas-cuenta-crear .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-cuenta-crear .section-divider {
+    margin-bottom: 1.5rem;
+  }
+  #offcanvas-cuenta-crear .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+  }
+  #offcanvas-cuenta-crear .form-control,
+  #offcanvas-cuenta-crear .form-select {
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+  }
+  #offcanvas-cuenta-crear .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-cuenta-crear" aria-labelledby="offcanvas-cuenta-crear-label">
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-cuenta-crear-label">
+      <i class="bi bi-plus-circle text-primary me-2"></i>Nueva Cuenta Bancaria
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body">
+    <div id="form-cuenta-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="cuenta-form" data-mode="create">
+      {% csrf_token %}
+      <div class="section-divider">
+        <div class="row g-3">
+          <div class="col-12">
+            <label for="nombre" class="form-label">Nombre de la Cuenta *</label>
+            <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej: Cuenta Corriente Principal" required>
+          </div>
+          <div class="col-12">
+            <label for="numero" class="form-label">Número de Cuenta *</label>
+            <input type="text" class="form-control" id="numero" name="numero" placeholder="Ej: 123-456789-00" required>
+          </div>
+          <div class="col-md-6">
+            <label for="banco" class="form-label">Banco *</label>
+            <select class="form-select" id="banco" name="banco" required>
+              <option value="">Seleccione...</option>
+              {% for val, label in bancos %}
+                <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="tipo" class="form-label">Tipo de Cuenta *</label>
+            <select class="form-select" id="tipo" name="tipo" required>
+              <option value="">Seleccione...</option>
+              {% for val, label in tipos_cuenta %}
+                <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="offcanvas-footer">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="submit" class="btn btn-primary btn-sm px-4" id="btn-guardar-cuenta" form="cuenta-form">
+        <i class="bi bi-save me-1"></i>Guardar Cuenta
+      </button>
+    </div>
+  </div>
+</div>

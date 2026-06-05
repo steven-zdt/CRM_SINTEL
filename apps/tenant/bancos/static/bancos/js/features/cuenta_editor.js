@@ -1,0 +1,139 @@
+// @ts-nocheck — Vanilla JS con namespace global window.Sintel (no TypeScript)
+/**
+ * cuenta_editor.js - Gestión de Formularios CuentaBancaria
+ * Namespace: window.Sintel.Bancos.CuentaEditor
+ * ⚠️ FSD / Vanilla JS
+ */
+(function (w, d) {
+  'use strict';
+
+  const MOD = '[bancos:cuenta_editor]';
+  const API_URL = '/api/v1/bancos/cuentas/';
+  const CONTAINER_ID = '#offcanvas-container-bancos';
+
+  async function openOffcanvas(uuid = null) {
+    let container = d.querySelector(CONTAINER_ID);
+
+    if (!container) {
+      console.warn(`${MOD} Contenedor ${CONTAINER_ID} no encontrado. Creando...`);
+      container = d.createElement('div');
+      container.id = CONTAINER_ID.substring(1);
+      d.body.appendChild(container);
+    }
+
+    const url = uuid
+      ? `${API_URL}${uuid}/render-offcanvas/editar/`
+      : `${API_URL}render-offcanvas/crear/`;
+
+    console.log(`${MOD} Cargando formulario de cuenta desde: ${url}`);
+    return htmx.ajax('GET', url, { target: CONTAINER_ID, swap: 'innerHTML' });
+  }
+
+  // Interceptar settled para configurar el offcanvas
+  d.body.addEventListener('htmx:afterSettle', async (e) => {
+    const target = e.detail.target;
+    if (target && ('#' + target.id) === CONTAINER_ID) {
+      const offcanvasEl = target.querySelector('#offcanvas-cuenta-crear, #offcanvas-cuenta-editar');
+      if (!offcanvasEl) return;
+
+      console.log(`${MOD} DOM Settle detectado para cuenta, activando offcanvas...`);
+
+      if (w.UIManager?.handleOffcanvas) {
+        w.UIManager.handleOffcanvas(offcanvasEl, 'show');
+      } else {
+        // Fallback seguro: dispose + create (AGENTS.md §26 — nunca getOrCreateInstance)
+        const _p = bootstrap.Offcanvas.getInstance(offcanvasEl);
+        if (_p) _p.dispose();
+        d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+        new bootstrap.Offcanvas(offcanvasEl).show();
+      }
+
+      configurarEventos(offcanvasEl);
+    }
+  });
+
+  function buildPayload(form) {
+    const payload = {};
+    form.querySelectorAll('input, select, textarea').forEach((field) => {
+      const key = field.name;
+      if (!key || field.disabled) return;
+
+      let value = field.value;
+      if (typeof value === 'string') {
+        value = value.trim();
+      }
+      payload[key] = value;
+    });
+
+    delete payload.csrfmiddlewaretoken;
+    return payload;
+  }
+
+  function configurarEventos(container) {
+    const form = container.querySelector('#cuenta-form');
+    if (!form) return;
+
+    if (form.dataset.configured === 'true') return;
+    form.dataset.configured = 'true';
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      await guardar(form);
+    });
+
+    const btnGuardar = container.querySelector('#btn-guardar-cuenta');
+    if (btnGuardar) {
+      btnGuardar.addEventListener('click', () => form.requestSubmit());
+    }
+  }
+
+  async function guardar(form) {
+    if (!form.checkValidity()) return form.reportValidity();
+
+    if (typeof w.http !== 'function') {
+      console.error(`${MOD} window.http no disponible`);
+      w.UIManager?.notifyError?.({ data: { detail: 'Error interno: cliente HTTP no disponible.' } });
+      return;
+    }
+
+    const uuid    = form.dataset.uuid || '';
+    const payload = buildPayload(form);
+    const method  = uuid ? 'PUT' : 'POST';
+    const url     = uuid ? `${API_URL}${uuid}/` : API_URL;
+
+    const res = await w.http(method, url, payload);
+
+    if (!res.ok) {
+      return w.UIManager?.handleError(res, MOD, {
+        errorContainerSelector: '#form-cuenta-feedback'
+      });
+    }
+
+    // Éxito
+    if (w.UIManager?.showSuccess) {
+      w.UIManager.showSuccess(uuid ? 'Cuenta bancaria actualizada' : 'Cuenta bancaria creada');
+    }
+
+    // Cerrar Offcanvas
+    const offcanvasEl = form.closest('.offcanvas');
+    if (offcanvasEl) {
+      if (w.UIManager?.handleOffcanvas) {
+        w.UIManager.handleOffcanvas(offcanvasEl, 'hide');
+      } else {
+        bootstrap.Offcanvas.getInstance(offcanvasEl)?.hide();
+      }
+    }
+
+    // Refrescar lista de cuentas
+    if (w.Sintel.Bancos.CuentaList?.refresh) {
+      w.Sintel.Bancos.CuentaList.refresh();
+    }
+  }
+
+  w.Sintel = w.Sintel || {};
+  w.Sintel.Bancos = w.Sintel.Bancos || {};
+  w.Sintel.Bancos.CuentaEditor = {
+    openOffcanvas: openOffcanvas
+  };
+
+})(window, document);
