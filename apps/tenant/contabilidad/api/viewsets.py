@@ -1099,11 +1099,11 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
-        'tipo', 'reversada', 'documento_origen_app', 'documento_origen_modelo'
+        'tipo', 'naturaleza', 'reversada', 'documento_origen_app', 'documento_origen_modelo'
     ]
     search_fields = ['uuid', 'documento_origen_app', 'documento_origen_modelo']
-    ordering_fields = ['tipo', 'monto', 'fecha_creacion']
-    ordering = ['-fecha_creacion']
+    ordering_fields = ['tipo', 'monto', 'created_at']
+    ordering = ['-created_at']
     lookup_field = 'uuid'
 
     def get_queryset(self):
@@ -1111,9 +1111,9 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
         return Retencion.objects.select_related(
             'configuracion', 'asiento_contable'
         ).only(
-            'id', 'uuid', 'tipo', 'porcentaje', 'base', 'monto',
+            'id', 'uuid', 'tipo', 'porcentaje', 'base', 'monto', 'naturaleza',
             'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id',
-            'reversada', 'fecha_creacion',
+            'reversada', 'created_at',
             'configuracion__id', 'configuracion__tipo_tercero',
             'asiento_contable__uuid', 'asiento_contable__numero_asiento'
         )

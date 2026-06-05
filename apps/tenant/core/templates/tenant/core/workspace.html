@@ -151,6 +151,11 @@
             </button>
           </li>
           <li class="nav-item" role="presentation">
+            <button class="nav-link" id="contabilidad-retenciones-tab" data-bs-toggle="tab" data-bs-target="#subtab-retenciones" type="button" role="tab" aria-controls="subtab-retenciones" aria-selected="false">
+              <i class="bi bi-percent me-2"></i>Retenciones
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
             <button class="nav-link" id="contabilidad-reportes-tab" data-bs-toggle="tab" data-bs-target="#subtab-reportes" type="button" role="tab" aria-controls="subtab-reportes" aria-selected="false">
               <i class="bi bi-graph-up-arrow me-2"></i>Reportes
             </button>
@@ -172,6 +177,9 @@
           </div>
           <div class="tab-pane fade" id="subtab-libro-diario" role="tabpanel" aria-labelledby="contabilidad-libro-tab">
             {% include 'tenant/contabilidad/partials/list_libro_diario.html' %}
+          </div>
+          <div class="tab-pane fade" id="subtab-retenciones" role="tabpanel" aria-labelledby="contabilidad-retenciones-tab">
+            {% include 'tenant/contabilidad/partials/list_retenciones.html' %}
           </div>
           <div class="tab-pane fade" id="subtab-reportes" role="tabpanel" aria-labelledby="contabilidad-reportes-tab">
             {% include 'tenant/contabilidad/reporte_page.html' %}
@@ -288,6 +296,7 @@
   {% include 'tenant/contabilidad/partials/assets_asientos.html' %}
   {% include 'tenant/contabilidad/partials/assets_periodos.html' %}
   {% include 'tenant/contabilidad/partials/assets_reportes.html' %}
+  {% include 'tenant/contabilidad/partials/assets_retenciones.html' %}
   {% include 'inventario/assets_inventario.html' %}
 
   {# Módulo Perfil (Mi Perfil) - FSD SSoT #}

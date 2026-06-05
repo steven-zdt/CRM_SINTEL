@@ -40,23 +40,9 @@ TIPO_TERCERO_CHOICES = [
 
 class CatalogoMaestroNIIF(SintelTenantBaseModel):
     """
-    Catálogo Maestro de Cuentas NIIF para Colombia (SSoT).
-    
-    WARNING: POLÍTICA:
-    - Este es el catálogo oficial NIIF Colombia (Single Source of Truth)
-    - NO pertenece a ningún tenant específico (es compartido)
-    - Las cuentas de los tenants (CuentaContable) pueden referenciar este catálogo
-    - Se puebla desde apps/tenant/contabilidad/choices/choices.py
-    
-    WARNING: IMPORTANTE:
-    - Este modelo está en TENANT_APPS pero actúa como referencia estática
-    - Cada tenant tiene su propia copia del catálogo maestro
-    - Permite que cada tenant personalice su plan de cuentas anclado al estándar NIIF
-    
-    WARNING: AUTO-SETEO:
-    - Solo se requiere el campo 'codigo' al crear una instancia
-    - Los campos nombre, nivel y naturaleza se auto-completan desde CATALOGO_NIIF_COLOMBIA
-    - Estos campos son editable=False para garantizar integridad del catálogo
+    Catalogo Maestro NIIF Colombia (SSoT). Cada tenant tiene su propia copia.
+    Solo requiere 'codigo'; nombre/nivel/naturaleza son editable=False (auto-seteados desde catalogo).
+    Poblar con: python manage.py poblar_catalogo_niif
     """
     NATURALEZA_CHOICES = [
         ('D', _('Débito/Deudora')),
@@ -103,9 +89,7 @@ class CatalogoMaestroNIIF(SintelTenantBaseModel):
     
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
-    
-    
-    
+
     def get_tipo_cuenta(self):
         """
         Determina el tipo de cuenta basado en el primer dígito del código.
@@ -201,8 +185,7 @@ class CuentaContable(SintelTenantBaseModel):
         verbose_name=_('Activa'),
         help_text=_('Indica si la cuenta está habilitada para registros')
     )
-    # WARNING: ENFORCED MODE v2.40: FK NO NULA a Empresa (SSoT)
-    
+
     class Meta(SintelTenantBaseModel.Meta):
         verbose_name = _('Cuenta Contable')
         verbose_name_plural = _('Cuentas Contables')
@@ -590,9 +573,6 @@ class PeriodoContable(SintelTenantBaseModel):
         verbose_name=_('UUID'),
         help_text=_('Identificador único público para la API')
     )
-    
-    # WARNING: ENFORCED MODE v2.40: FK NO NULA a Empresa (SSoT)
-    
     
     periodo = models.CharField(
         max_length=7,
@@ -1050,16 +1030,12 @@ class Retencion(SintelTenantBaseModel):
         help_text=_('Configuración de retención que se usó para este cálculo')
     )
 
-    # Metadata
-    aplicada_por_cliente = models.BooleanField(
-        default=False,
-        verbose_name=_('Aplicada por Cliente'),
-        help_text=_('Si True, la retención es requerida por el cliente (VENTA). Si False, es requerida por el proveedor (COMPRA)')
-    )
-    aplicada_por_proveedor = models.BooleanField(
-        default=False,
-        verbose_name=_('Aplicada por Proveedor'),
-        help_text=_('Si True, la retención es requerida por el proveedor (COMPRA). Si False, es requerida por la empresa (VENTA)')
+    naturaleza = models.CharField(
+        max_length=10,
+        choices=[('VENTA', _('Venta')), ('COMPRA', _('Compra'))],
+        default='VENTA',
+        verbose_name=_('Naturaleza'),
+        help_text=_('VENTA: retencion requerida por el cliente. COMPRA: retenida al proveedor.')
     )
     reversada = models.BooleanField(
         default=False,
@@ -1075,11 +1051,6 @@ class Retencion(SintelTenantBaseModel):
         verbose_name=_('Retención Reversada Por'),
         help_text=_('Si está reversada, apunta a la retención que la reversa')
     )
-    fecha_creacion = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name=_('Fecha de Creación'),
-        help_text=_('Cuándo se creó el registro de retención')
-    )
     notas = models.TextField(
         blank=True,
         default='',
@@ -1090,10 +1061,11 @@ class Retencion(SintelTenantBaseModel):
     class Meta(SintelTenantBaseModel.Meta):
         verbose_name = _('Retención')
         verbose_name_plural = _('Retenciones')
-        ordering = ['-fecha_creacion']
+        ordering = ['-created_at']
         indexes = SintelTenantBaseModel.Meta.indexes + [
             models.Index(fields=['documento_origen_app', 'documento_origen_modelo', 'documento_origen_id']),
             models.Index(fields=['tipo', 'reversada']),
+            models.Index(fields=['naturaleza']),
             models.Index(fields=['asiento_contable']),
         ]
 

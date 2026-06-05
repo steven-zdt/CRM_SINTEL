@@ -551,11 +551,11 @@ class RetencionListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Retencion
         fields = [
-            'uuid', 'tipo', 'porcentaje', 'monto', 'documento_origen_app',
-            'documento_origen_modelo', 'documento_origen_id', 'reversada',
-            'fecha_creacion'
+            'uuid', 'tipo', 'porcentaje', 'monto', 'naturaleza',
+            'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id',
+            'reversada', 'created_at'
         ]
-        read_only_fields = ['uuid', 'fecha_creacion']
+        read_only_fields = ['uuid', 'created_at']
 
 
 class RetencionDetailSerializer(serializers.ModelSerializer):
@@ -568,15 +568,14 @@ class RetencionDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Retencion
         fields = [
-            'uuid', 'tipo', 'porcentaje', 'base', 'monto',
+            'uuid', 'tipo', 'porcentaje', 'base', 'monto', 'naturaleza',
             'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id',
             'asiento_contable', 'asiento_data',
             'configuracion', 'configuracion_data',
-            'aplicada_por_cliente', 'aplicada_por_proveedor',
             'reversada', 'retencion_reversada_por',
-            'fecha_creacion', 'notes' if hasattr(Retencion, 'notes') else 'notas'
+            'notas', 'created_at'
         ]
-        read_only_fields = ['uuid', 'fecha_creacion']
+        read_only_fields = ['uuid', 'created_at']
 
     def get_configuracion_data(self, obj):
         """Retorna datos de configuración asociada."""

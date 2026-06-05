@@ -1,11 +1,12 @@
-# AUDITORIA COMPLETA - CONTABILIDAD APP v3.9.1
+# AUDITORIA COMPLETA - CONTABILIDAD APP v3.16.1
 
-**Fecha de auditoria:** 2026-05-25 (validado contra codigo local)
+**Fecha de auditoria:** 2026-06-05 (sincronizada con models.py local — 12 modelos)
 **Estado:** Implementado y funcional con deuda tecnica documentada
 **Arquitectura:** Feature-Sliced Design (FSD) + Service Layer
 **Compliance:** AGENTS.md + NIIF PYMES Colombia
 
 > Nota de auditoria 2026-05-25: este documento fue contrastado con `models.py`, `api/viewsets.py`, `api/serializers.py`, `api/urls.py`, `services/`, `integracion/`, `tasks.py`, `templates/`, `static/` y `tests/`. Los conteos y estados inferiores reflejan el codigo local actual, no solo la intencion historica.
+> Nota de auditoria 2026-06-05 (v3.16.1): Unificacion de `Retencion.naturaleza` + sincronizacion frontend workspace/#contabilidad (tab Retenciones). Ver §15.
 
 
 ## 📑 Documentación Especializada (SSoT)
@@ -19,10 +20,6 @@
 | [🗺️ Mapas de Flujo](docs/contabilidad_flow_map.md) | Diagramas Mermaid de ciclo de vida y procesos. |
 | [🧠 Lógica de Negocio](docs/contabilidad_business_logic.md) | SSoT de reglas, validaciones y cálculos. |
 | [🛠️ Habilidades y Scripts](skills/) | Repositorio de scripts especializados y automatizaciones del módulo. |
-
----
-
-
 
 ---
 
@@ -94,9 +91,22 @@ El modo manual **no depende de `ReglaContable`**: el usuario provee la cuenta PU
 
 ### Retencion
 - Registro materializado de retenciones aplicadas a documentos origen (`Factura`, `NotaCredito`, `ItemFactura`, `DocumentoSoporte`, etc.).
+- **v3.16.1:** Campo `naturaleza = CharField(choices=['VENTA','COMPRA'])` reemplaza los dos BooleanFields mutuamente excluyentes (`aplicada_por_cliente`, `aplicada_por_proveedor`). `VENTA` = cliente retiene sobre la factura emitida; `COMPRA` = empresa retiene al proveedor. `fecha_creacion` eliminado (duplicado de `SintelTenantBaseModel.created_at`).
 - Campos de trazabilidad: `documento_origen_app`, `documento_origen_modelo`, `documento_origen_id`, `documento_origen_numero`.
 - Soporta reversas mediante campos `reversada`, `documento_reversada_*` y enlace a configuracion aplicada.
+- Indice de BD: `retencion_naturaleza_idx` en campo `naturaleza` (agregado en migration 0009).
+- `Meta.ordering = ['-created_at']` (era `['-fecha_creacion']`).
 - Expuesto por API en `/api/v1/contabilidad/retenciones/` y consultable por tercero/documento.
+
+### PlantillaContable
+- Plantilla dinamica que vincula una `ReglaContable` con un par de cuentas DEBE/HABER.
+- Campos: `regla` (FK), `cuenta_debe_codigo`, `cuenta_credito_codigo`, `activo`
+- Unicidad: una sola plantilla activa por `(empresa, regla)` via `UniqueConstraint`.
+
+### ImpuestoDocumento
+- Registro de impuestos (IVA, RETEFUENTE, etc.) aplicados a un asiento con trazabilidad polimorfica.
+- Campos: `asiento` (FK), `tipo`, `base`, `porcentaje`, `valor`, `cuenta_codigo`
+- Trazabilidad: `documento_origen_app`, `documento_origen_modelo`, `documento_origen_id`
 
 ---
 
@@ -308,7 +318,12 @@ modelo = serializers.ChoiceField(choices=['Factura', 'DocumentoSoporte', '<Model
 
 ---
 
-## 5.4 ORQUESTACIÓN DE CONTRAPARTIDAS (v3.7.1 - Arquitectura §18)
+## 5.4 ORQUESTACIÓN DE CONTRAPARTIDAS — PROPUESTA FUTURA (no implementada)
+
+> **OBSOLETO — v3.16.0:** El campo `cuenta_gasto_uuid` referenciado en el pseudocodigo inferior fue
+> **eliminado** en la refactorizacion de desacoplamiento contable (v3.16.0, jun-2026).
+> `ReglasOrquestacion` tampoco existe en `models.py`. Esta seccion es arquitectura futura planificada,
+> no codigo operativo. No implementar sin RFC aprobado.
 
 ### Contexto
 
@@ -610,13 +625,13 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 
 | Componente | Ruta | Estado |
 |-----------|------|--------|
-| Modelos | `models.py` | 10 modelos: Catalogo, Cuenta, TipoComprobante, Asiento, Movimiento, Periodo, Regla, Tarifa, ConfiguracionRetenciones, Retencion |
+| Modelos | `models.py` | 12 modelos: Catalogo, Cuenta, TipoComprobante, Asiento, Movimiento, Periodo, Regla, Tarifa, ConfiguracionRetenciones, Retencion, PlantillaContable, ImpuestoDocumento |
 | Selectors | `services/selectors.py` | ✅ Pendientes + `APP_ORIGEN_PREFIJOS` + `filtrar_cuentas_por_app_origen()` |
 | CRUD Service | `services/crud_service.py` | ✅ `crear_asiento_manual()` con `tipo_comprobante_ref_id` |
 | Business Service | `services/business_service.py` | ✅ `contabilizar_documento_manual()` + TipoComprobante numero + integracion completa + asistente IA |
-| Retenciones Service | `services/retenciones_service.py` | ✅ Pull Model de retenciones, materializacion y reversas |
-| API Viewsets | `api/viewsets.py` | 10 ViewSets: cuentas, asientos, movimientos, periodos, catalogo, tipos, pendientes, libro diario, retenciones, configuraciones |
-| API Serializers | `api/serializers.py` | ✅ `ContabilizarManualInputSerializer` con `tipo_comprobante_id` |
+| Retenciones Service | `services/retenciones_service.py` | ✅ Pull Model de retenciones, materializacion y reversas. `crear_retencion()` usa `naturaleza` (v3.16.1) |
+| API Viewsets | `api/viewsets.py` | 10 ViewSets: cuentas, asientos, movimientos, periodos, catalogo, tipos, pendientes, libro diario, retenciones, configuraciones. `RetencionViewSet.filterset_fields` incluye `naturaleza` (v3.16.1) |
+| API Serializers | `api/serializers.py` | ✅ `ContabilizarManualInputSerializer` con `tipo_comprobante_id`. `RetencionListSerializer`/`RetencionDetailSerializer` actualizados con `naturaleza`, `created_at` (v3.16.1) |
 | API URLs | `api/urls.py` | ✅ Router DRF con `pendientes`, `libro-diario`, `retenciones`, `configuraciones-retenciones` |
 | DTOs | `integracion/dtos.py` | ✅ `LineaManual` + `ComprobanteManualDTO` con `tipo_comprobante_id` |
 | Contabilizador | `integracion/contabilizador.py` | ✅ Flujo automático |
@@ -624,9 +639,9 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 | Validadores | `integracion/validadores.py` | ✅ Cuadratura, periodo, vacío |
 | Excepciones | `integracion/excepciones.py` | ✅ Jerarquía completa |
 | Extractores | `integracion/extractores/` | gastos, facturas, nomina; inventario se consume por Movimientos Recientes, no por extractor directo |
-| Templates | `templates/tenant/contabilidad/` | 31 archivos HTML bajo ruta tenant |
-| Static JS | `static/contabilidad/js/` | 14 archivos JS por dominio: asiento, cuenta, periodo, pendiente, libro, reporte |
-| Migraciones | `migrations/` | 7 migraciones presentes (`0001` a `0007`) |
+| Templates | `templates/tenant/contabilidad/` | 33 archivos HTML bajo ruta tenant (+`list_retenciones.html`, +`assets_retenciones.html`, v3.16.1) |
+| Static JS | `static/contabilidad/js/` | 17 archivos JS por dominio: asiento, cuenta, periodo, pendiente, libro, reporte, retencion (+`retencion.api.js`, +`retencion_list.js`, v3.16.1) |
+| Migraciones | `migrations/` | 9 migraciones presentes (`0001` a `0009`). `0009`: unificacion `naturaleza` en `Retencion` |
 | Mgmt Commands | `management/commands/` | `poblar_catalogo_niif`, `seed_reglas_contables`, `backfill_contabilidad`, `migrate_retenciones` |
 | Catálogo NIIF | DB (home, cliente) | ✅ 124 cuentas maestras |
 | CuentaContable nivel-6 | DB (home, cliente) | ✅ 54 cuentas seeded desde CatalogoMaestroNIIF |
@@ -756,7 +771,8 @@ services/selectors.py               ─→  Devengo (get_documento_pendiente, qs
 | `Contrato` | Ningun acceso — eliminado en VIO-002 | NO (boundary garantizado) |
 
 **Compliance Pull Model: GARANTIZADO** — 0 violaciones activas.
-| `ReglasOrquestacion` | No existe en `models.py` local; permanece como propuesta futura |
+
+> **Nota:** `ReglasOrquestacion` no existe en `models.py`; es propuesta futura (ver §5.4).
 
 ### Apps Source Status (Auditoría §18 - v3.7.1)
 
@@ -772,9 +788,9 @@ services/selectors.py               ─→  Devengo (get_documento_pendiente, qs
 
 ---
 
-## 12. CAMBIOS v3.7.5 — 2026-05-19
+## 13. HISTORIAL DE CAMBIOS v3.7.5 – v3.9.1
 
-### 12.1 Flujo Manual On-Demand — Correcciones
+### 13.1 Flujo Manual On-Demand — Correcciones
 
 #### FIX-1: Validación nivel 6 eliminada del flujo manual
 
@@ -843,7 +859,7 @@ POST /api/v1/contabilidad/cuentas-contables/sincronizar/
 
 ---
 
-### 12.2 Selector de Cuentas en Offcanvas Contabilizar
+### 13.2 Selector de Cuentas en Offcanvas Contabilizar
 
 **Archivo:** `templates/tenant/contabilidad/partials/pendiente_offcanvas_contabilizar.html`
 
@@ -875,7 +891,7 @@ Módulo Pendientes → Contabilizar Documento → [⊞] → modal → cuenta dis
 
 ---
 
-### 12.3 Grid Asientos Contables — Correcciones
+### 13.3 Grid Asientos Contables — Correcciones
 
 **Problema:** El tab "Asientos Contables" no listaba ningún registro.
 
@@ -918,7 +934,7 @@ function applyFilters() {
 
 ---
 
-### 12.5 Alineación de Menús y Subnavegación Secuencial Cíclica (v3.7.6)
+### 13.5 Alineación de Menús y Subnavegación Secuencial Cíclica (v3.7.6)
 
 **Archivo:** `apps/tenant/core/templates/tenant/core/workspace.html`
 
@@ -934,7 +950,7 @@ function applyFilters() {
 
 ---
 
-### 12.6 Estado post-correcciones v3.7.6
+### 13.6 Estado post-correcciones v3.7.6
 
 | Componente | Estado | Nota |
 |-----------|--------|------|
@@ -949,7 +965,7 @@ function applyFilters() {
 
 ---
 
-### 12.7 CRUD Periodos Contables — Correcciones (v3.7.7 — 2026-05-19)
+### 13.7 CRUD Periodos Contables — Correcciones (v3.7.7 — 2026-05-19)
 
 **Objetivo:** Habilitar el listado, creación, edición, cierre y eliminación de periodos contables desde `workspace/#contabilidad` → pestaña "Periodos Contables".
 
@@ -1076,7 +1092,7 @@ def cerrar_periodo(self, periodo_id: int, payload: Dict[str, Any]) -> Dict[str, 
 
 ---
 
-### 12.8 Libro Diario — Sincronización con AsientoContable (v3.7.8 — 2026-05-19)
+### 13.8 Libro Diario — Sincronización con AsientoContable (v3.7.8 — 2026-05-19)
 
 **Objetivo:** El módulo Libro Diario ahora muestra los **AsientoContable** del tenant filtrados por periodo contable, con búsqueda y filtros funcionales. Reemplaza la implementación ETL anterior (DocumentoEnriquecido) por consulta directa al modelo.
 
@@ -1188,7 +1204,7 @@ Parámetros soportados por `LibroDiarioAPI.list(params)`:
 
 ---
 
-### 12.9 Estado post-correcciones v3.7.8
+### 13.9 Estado post-correcciones v3.7.8
 
 | Componente | Estado | Nota |
 |-----------|--------|------|
@@ -1211,7 +1227,7 @@ Parámetros soportados por `LibroDiarioAPI.list(params)`:
 
 ---
 
-### 12.10 Revalidacion documental v3.9.1 - 2026-05-25
+### 13.10 Revalidacion documental v3.9.1 - 2026-05-25
 
 La auditoria fue revalidada contra el arbol local de `apps/tenant/contabilidad` y se actualizaron:
 
@@ -1226,7 +1242,7 @@ La auditoria fue revalidada contra el arbol local de `apps/tenant/contabilidad` 
 | Deuda tecnica | `AUD-CONT-001` a `AUD-CONT-004` corregidos; `AUD-CONT-005` y `AUD-CONT-006` quedan como limpieza legacy no productiva |
 | `ReglasOrquestacion` | No existe en codigo local; queda solo como propuesta futura |
 
-### 12.11 Contrato Inventario / Movimientos Recientes - 2026-05-25
+### 13.11 Contrato Inventario / Movimientos Recientes - 2026-05-25
 
 Se implemento la migracion de busqueda contable de Inventario al agregado `Movimientos Recientes`:
 
@@ -1245,9 +1261,9 @@ Se implemento la migracion de busqueda contable de Inventario al agregado `Movim
 
 ---
 
-## 13. ACTUALIZACION AUDITORIA v3.10.x — 2026-06-04
+## 14. ACTUALIZACION AUDITORIA v3.10.x — 2026-06-04
 
-### 13.1 Estado Global del Modulo
+### 14.1 Estado Global del Modulo
 
 **Version auditada:** v3.10.x (sincronizada con stack Sintel v4.8.0 Nominas Master-Detail)
 **Fecha:** 2026-06-04
@@ -1257,7 +1273,7 @@ Se implemento la migracion de busqueda contable de Inventario al agregado `Movim
 |-----------|-------|
 | ViewSets activos | 10 (`CuentaContable`, `AsientoContable`, `MovimientoContable`, `PeriodoContable`, `CatalogoMaestroNIIF`, `TipoComprobante`, `DocumentosPendientes`, `LibroDiario`, `Retencion`, `ConfiguracionRetenciones`) |
 | Endpoints API registrados en router | 10 prefijos en `api/urls.py` |
-| Modelos tenant | 10 (todos heredan `SintelTenantBaseModel`) |
+| Modelos tenant | 12 (todos heredan `SintelTenantBaseModel`): +PlantillaContable, +ImpuestoDocumento sin ViewSet propio |
 | Servicios | `business_service.py`, `crud_service.py`, `selectors.py`, `retenciones_service.py` |
 | Extractores activos | 4: `base.py`, `facturas.py`, `gastos.py`, `nomina.py`; `inventario.py` = no-op (timeline) |
 | Tests presentes | 6 archivos en `tests/` |
@@ -1267,7 +1283,7 @@ Se implemento la migracion de busqueda contable de Inventario al agregado `Movim
 
 ---
 
-### 13.2 Hallazgos Nuevos (2026-06-04)
+### 14.2 Hallazgos Nuevos (2026-06-04)
 
 #### NUEVO-001 — Celery Tasks verificadas
 
@@ -1341,7 +1357,7 @@ Las queries a `ConfiguracionRetenciones.objects.filter(...)` no incluyen `empres
 
 ---
 
-### 13.3 Boundary Contabilidad - Empleados (Post v3.10.2, Auditado 2026-06-04)
+### 14.3 Boundary Contabilidad - Empleados (Post v3.10.2, Auditado 2026-06-04)
 
 Estado confirmado: **GARANTIZADO — 0 violaciones activas**.
 
@@ -1352,7 +1368,7 @@ Cambios desde v3.9.1 que afectan este boundary:
 
 ---
 
-### 13.4 Integracion Nomina con Pull Model (v4.8.0)
+### 14.4 Integracion Nomina con Pull Model (v4.8.0)
 
 **Cambio en empleados:** `DevengoViewSet.get_queryset()` ahora soporta `?empleado_uuid=` para el panel Detail del Master-Detail.
 
@@ -1365,7 +1381,7 @@ Cambios desde v3.9.1 que afectan este boundary:
 
 ---
 
-### 13.5 Inventario: Confirmacion del Contrato Timeline (2026-06-04)
+### 14.5 Inventario: Confirmacion del Contrato Timeline (2026-06-04)
 
 Verificado que `ExtractorInventario` en `integracion/extractores/inventario.py` es un no-op (743 bytes). El flujo real se realiza a traves de `qs_inventario_movimientos_recientes_pendientes(empresa_id)` que invoca `get_movimientos_timeline()` del selector de inventario.
 
@@ -1375,25 +1391,23 @@ El `DocumentosPendientesViewSet.list()` procesea los items del timeline de inven
 
 ---
 
-### 13.6 Tabla de Deuda Tecnica Actualizada (2026-06-04)
+### 14.6 Tabla de Deuda Tecnica Actualizada (2026-06-04)
 
-| ID | Severidad | Archivo | Hallazgo | Estado | Accion recomendada |
-|----|-----------|---------|----------|--------|--------------------|
-| AUD-CONT-001 | Alta | `api/viewsets.py` | TipoComprobanteViewSet con `only()` y filtro empresa_id | CERRADO 2026-05-25 | - |
-| AUD-CONT-002 | Media | `api/viewsets.py` | CatalogoMaestroNIIFViewSet con `only()` | CERRADO 2026-05-25 | - |
-| AUD-CONT-003 | Media | `services/business_service.py` | `_obtener_o_crear_cuenta()` con campos minimos | CERRADO 2026-05-25 | - |
-| AUD-CONT-004 | Media | `management/commands/migrate_retenciones.py` | `.all()` y asignacion `empresa_id` | CERRADO 2026-05-25 | - |
-| AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | ABIERTO | Remover en limpieza autorizada |
-| AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | ABIERTO | Mover fuera de la app |
-| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | NUEVO 2026-06-04 | Agregar `max_retries`, `autoretry_for`, y fallback a `FailedTenantTask` |
-| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | NUEVO 2026-06-04 | Agregar `empresa_id` en `listar_retenciones_por_documento` y `obtener_retenciones_desde_tercero` |
-| AUD-CONT-009 | Baja | `api/viewsets.py:1071` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` | NUEVO 2026-06-04 | Migrar a UUID lookup (requiere migracion) |
-| AUD-CONT-010 | Baja | `api/viewsets.py:1226` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | NUEVO 2026-06-04 | Evaluar si Dual-Auth se requiere; migrar si se agregan acciones mutables |
-| AUD-CONT-011 | Info | `api/viewsets.py:1022` | Endpoint `/pendientes/asistente-ia/` presente pero sin pruebas automatizadas | NUEVO 2026-06-04 | Agregar test de integracion para el endpoint IA |
+> Filas AUD-CONT-001 a 004 cerradas en 2026-05-25. Solo se listan hallazgos abiertos.
+
+| ID | Severidad | Archivo | Hallazgo | Accion recomendada |
+|----|-----------|---------|----------|--------------------|
+| AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Remover en limpieza autorizada |
+| AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Mover fuera de la app |
+| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Agregar `max_retries`, `autoretry_for`, fallback a `FailedTenantTask` |
+| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | Agregar `empresa_id` en `listar_retenciones_por_documento` y `obtener_retenciones_desde_tercero` |
+| AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` — expone PK | Migrar a UUID lookup (requiere migracion) |
+| AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Evaluar si Dual-Auth se requiere; migrar si se agregan acciones mutables |
+| AUD-CONT-011 | Info | `api/viewsets.py` | Endpoint `/pendientes/asistente-ia/` sin pruebas automatizadas | Agregar test de integracion cuando el usuario lo pida |
 
 ---
 
-### 13.7 Compliance AGENTS.md (2026-06-04)
+### 14.7 Compliance AGENTS.md (2026-06-04)
 
 | Estandar | Estado |
 |----------|--------|
@@ -1420,4 +1434,145 @@ El `DocumentosPendientesViewSet.list()` procesea los items del timeline de inven
 
 **Auditoria actualizada:** 2026-06-04 (v3.10.x — post Nominas Master-Detail v4.8.0)
 **Proxima revision:** Cerrar AUD-CONT-007 (Celery DLQ) y AUD-CONT-008 (RetencionesService empresa_id) como prioridad media antes del siguiente sprint de produccion.
+
+---
+
+## 15. ACTUALIZACION AUDITORIA v3.16.1 — 2026-06-05
+
+### 15.1 Unificacion de Retencion.naturaleza (backend)
+
+**Motivacion:** Los campos `aplicada_por_cliente` y `aplicada_por_proveedor` eran mutuamente excluyentes y semanticamente solapados. Un solo `CharField naturaleza` es mas claro, indexable, filtrable y extensible.
+
+#### Cambios en `models.py`
+
+| Campo eliminado | Razon |
+|-----------------|-------|
+| `aplicada_por_cliente` (BooleanField) | Reemplazado por `naturaleza='VENTA'` |
+| `aplicada_por_proveedor` (BooleanField) | Reemplazado por `naturaleza='COMPRA'` |
+| `fecha_creacion` (DateTimeField) | Duplicado de `SintelTenantBaseModel.created_at` |
+
+| Campo agregado | Tipo | Detalle |
+|----------------|------|---------|
+| `naturaleza` | `CharField(max_length=10, choices=[('VENTA','Venta'),('COMPRA','Compra')], default='VENTA')` | VENTA: cliente retiene en factura emitida. COMPRA: empresa retiene al proveedor. |
+
+**Indice nuevo:** `retencion_naturaleza_idx` sobre `naturaleza` — soporta filtros frecuentes `?naturaleza=VENTA`.
+
+**Meta.ordering:** Cambiado de `['-fecha_creacion']` a `['-created_at']`.
+
+#### Migration 0009 (`0009_retencion_naturaleza.py`)
+
+```
+AddField naturaleza (default='VENTA')
+RunPython booleans_a_naturaleza:
+    aplicada_por_proveedor=True → naturaleza='COMPRA'
+    resto → VENTA (ya aplicado por default)
+RemoveField aplicada_por_cliente
+RemoveField aplicada_por_proveedor
+RemoveField fecha_creacion
+AddIndex retencion_naturaleza_idx
+AlterModelOptions ordering=['-created_at']
+```
+
+**Estrategia de rollback:** `RunPython.noop` — la migracion no es reversible automaticamente (aceptado: los booleans son un antipatron, no se restauran).
+
+#### Cambios en `services/retenciones_service.py`
+
+| Metodo | Cambio |
+|--------|--------|
+| `crear_retencion()` | Signature: `naturaleza: str = 'VENTA'` reemplaza `aplicada_por_cliente: bool`, `aplicada_por_proveedor: bool`. El objeto `Retencion` se crea con `naturaleza=naturaleza`. |
+| `reversar_retencion()` | Copia `naturaleza=retencion.naturaleza` al objeto reversal (era `aplicada_por_cliente=retencion.aplicada_por_cliente, aplicada_por_proveedor=retencion.aplicada_por_proveedor`). |
+
+#### Cambios en `api/serializers.py`
+
+| Serializer | Campos antes | Campos despues |
+|-----------|--------------|----------------|
+| `RetencionListSerializer` | `aplicada_por_cliente`, `aplicada_por_proveedor`, `fecha_creacion` | `naturaleza`, `created_at` |
+| `RetencionDetailSerializer` | idem | idem. Dead-code `'notes' if hasattr(Retencion, 'notes') else 'notas'` corregido a `'notas'` directo. `read_only_fields = ['uuid', 'created_at']` |
+
+#### Cambios en `api/viewsets.py` — `RetencionViewSet`
+
+| Atributo | Antes | Despues |
+|----------|-------|---------|
+| `filterset_fields` | `['tipo', 'reversada', 'documento_origen_app', 'documento_origen_modelo']` | `['tipo', 'naturaleza', 'reversada', 'documento_origen_app', 'documento_origen_modelo']` |
+| `ordering_fields` | `['tipo', 'monto', 'fecha_creacion']` | `['tipo', 'monto', 'created_at']` |
+| `ordering` | `['-fecha_creacion']` | `['-created_at']` |
+| `get_queryset().only()` | incluia `fecha_creacion` | incluye `naturaleza`, `created_at` |
+
+---
+
+### 15.2 Sincronizacion Frontend workspace/#contabilidad (tab Retenciones)
+
+**Motivacion:** El campo `naturaleza` en `Retencion` no tenia representacion en la UI. Se agrego un tab dedicado en `workspace/#contabilidad` para visualizar retenciones con filtros por tipo, naturaleza y estado de reversa.
+
+#### Archivos creados
+
+| Archivo | Proposito |
+|---------|-----------|
+| `static/contabilidad/js/retencion/retencion.api.js` | SSoT de endpoints. `RetencionAPI.list(params)` — soporta `tipo`, `naturaleza`, `reversada`, `search` como query params |
+| `static/contabilidad/js/retencion/features/retencion_list.js` | Tabulator con lazy init via `DOMUtils.onVisibleOnce('#subtab-retenciones')`. Filtros server-side via `ajaxParams`. Read-only (sin botones de mutacion — Pull Model) |
+| `templates/tenant/contabilidad/partials/list_retenciones.html` | Toolbar con 3 filtros (tipo, naturaleza, estado reversa) + `#grid-retencion` + nota informativa sobre Pull Model |
+| `templates/tenant/contabilidad/partials/assets_retenciones.html` | Cargador de `retencion.api.js` + `retencion_list.js` |
+
+#### Archivos modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `core/templates/tenant/core/workspace.html` | +Tab `#contabilidad-retenciones-tab` (icono `bi-percent`) en subnav de contabilidad, entre "Libro Diario" y "Reportes". +Pane `#subtab-retenciones` con include de `list_retenciones.html`. +Include de `assets_retenciones.html` en bloque de assets. |
+
+#### Columnas del grid `#grid-retencion`
+
+| Campo | Tipo display | Detalle |
+|-------|-------------|---------|
+| `tipo` | Badge color | RETEFUENTE=rojo, RETEICA=amarillo, RETEIVA=azul |
+| `naturaleza` | Badge color | VENTA=verde, COMPRA=azul |
+| `porcentaje` | Numero | 2 decimales + `%` |
+| `monto` | Moneda COP | `$X.XXX` con signo negativo para reversas |
+| `documento_origen_app/modelo/id` | Texto gris | `app / Modelo #id` |
+| `reversada` | Badge | Activa=verde, Reversada=gris |
+| `created_at` | Fecha | `es-CO` con dia, mes abreviado, ano |
+
+#### Filtros disponibles (server-side via `ajaxParams`)
+
+| Filtro | ID HTML | API param |
+|--------|---------|-----------|
+| Tipo de retencion | `#filter-tipo-retencion` | `?tipo=RETEFUENTE\|RETEICA\|RETEIVA` |
+| Naturaleza | `#filter-naturaleza-retencion` | `?naturaleza=VENTA\|COMPRA` |
+| Estado reversa | `#filter-reversada-retencion` | `?reversada=true\|false` |
+| Busqueda texto | `#search-retencion` | `?search=X` (TabulatorFactory) |
+
+**Patron de carga:** `DOMUtils.onVisibleOnce` — la tabla no se inicializa hasta que el usuario activa el tab, igual que `asiento_list.js` y `periodo_list.js`. Evita requests innecesarios al cargar el workspace.
+
+**Read-only intencionado:** No hay boton "Nueva Retencion" ni acciones CRUD. Las retenciones son creadas exclusivamente por `RetencionesService` (Pull Model). El tab es auditoria/consulta.
+
+---
+
+### 15.3 Orden del subnav Contabilidad post v3.16.1
+
+```
+1. Cuentas Contables   (#subtab-cuentas)        ← activo por defecto
+2. Periodos Contables  (#subtab-periodos)
+3. Pendientes          (#subtab-pendientes)
+4. Asientos Contables  (#subtab-asientos)
+5. Libro Diario        (#subtab-libro-diario)
+6. Retenciones         (#subtab-retenciones)     ← NUEVO v3.16.1
+7. Reportes            (#subtab-reportes)
+```
+
+---
+
+### 15.4 Tabla de Deuda Tecnica Actualizada (2026-06-05)
+
+| ID | Severidad | Archivo | Hallazgo | Estado |
+|----|-----------|---------|----------|--------|
+| AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Abierto |
+| AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Abierto |
+| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Abierto |
+| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | Abierto |
+| AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` | Abierto |
+| AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Abierto |
+| AUD-CONT-011 | Info | `api/viewsets.py` | Endpoint `/pendientes/asistente-ia/` sin pruebas automatizadas | Abierto |
+
+---
+
+**Auditoria actualizada:** 2026-06-05 (v3.16.1 — Retencion.naturaleza + tab Retenciones frontend)
 

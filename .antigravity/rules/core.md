@@ -36,7 +36,10 @@ description: Reglas Core — SINTEL v3.16.0 (referencia completa en AGENTS.md)
    - ¿Bug adyacente? → Reportar al cerrar, NO arreglar.
    - ¿Refactor tentador? → NO. Solo el objetivo.
 4. **Ejecucion basada en objetivos** — `Paso → verificar: [check de exito concreto]`.
+   El check por defecto es `py_compile` / `manage.py check` / leer el diff — **NO una suite de tests.**
 5. **Contrato de alcance** — Declarar archivos EN/FUERA de alcance antes del primer Edit (ver `behavior.md` §0).
+6. **Tests solo bajo demanda** — NO correr ni escribir tests salvo que el usuario lo pida.
+   `py_compile`/`check` son sintaxis, no tests, y se corren siempre (ver `behavior.md` §6).
 
 ## Service Layer (flujo unidireccional)
 
@@ -53,6 +56,9 @@ description: Reglas Core — SINTEL v3.16.0 (referencia completa en AGENTS.md)
 - Frontend: HTMX, Vanilla JS (namespace `window.Sintel.<App>`), Bootstrap 5, Tabulator
 
 ## Aislamiento Multi-Tenant — 3 Niveles Obligatorios (§24.5 AGENTS.md)
+
+> **Nota:** El agente no escribe tests por iniciativa (ver `behavior.md` §6). Esta regla define
+> QUE debe contener el test **cuando el usuario pide escribirlo** — nunca relaja los 3 niveles.
 
 **[OBLIGATORIO]** Toda app tenant con modelos propios DEBE tener `test_multitenant_isolation.py` verificando:
 

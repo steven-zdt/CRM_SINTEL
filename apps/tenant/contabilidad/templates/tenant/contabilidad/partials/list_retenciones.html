@@ -1,0 +1,51 @@
+{% load static %}
+{# list_retenciones.html — Listado de Retenciones v3.16.1 #}
+{# Read-only: retenciones son generadas via RetencionesService (Pull Model) #}
+<div id="ui-contabilidad-retencion" class="ui-module ui-contabilidad">
+
+  {# Toolbar #}
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="toolbar-contabilidad-retencion">
+
+    <input id="search-retencion" class="form-control form-control-sm"
+           type="search" placeholder="Buscar por app origen o UUID..."
+           style="width: 240px;" />
+
+    <select id="filter-tipo-retencion" class="form-select form-select-sm" style="width: auto;">
+      <option value="">Todos los Tipos</option>
+      <option value="RETEFUENTE">Retefuente</option>
+      <option value="RETEICA">ReteICA</option>
+      <option value="RETEIVA">ReteIVA</option>
+    </select>
+
+    <select id="filter-naturaleza-retencion" class="form-select form-select-sm" style="width: auto;">
+      <option value="">Todas las Naturalezas</option>
+      <option value="VENTA">Venta (cliente retiene)</option>
+      <option value="COMPRA">Compra (retenida al proveedor)</option>
+    </select>
+
+    <select id="filter-reversada-retencion" class="form-select form-select-sm" style="width: auto;">
+      <option value="">Todos los Estados</option>
+      <option value="false">Activas</option>
+      <option value="true">Reversadas</option>
+    </select>
+
+    <button id="btn-refrescar-retencion" class="btn btn-sm btn-outline-secondary" title="Refrescar">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+
+  </div>
+
+  {# Feedback #}
+  <div id="feedback-retencion" class="alert d-none mb-2" role="alert" aria-live="polite"></div>
+
+  {# Tabla Tabulator #}
+  <div id="grid-retencion"></div>
+
+  {# Nota informativa #}
+  <div class="mt-2 text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    Las retenciones son generadas automaticamente por el sistema al registrar facturas y gastos.
+    VENTA = retencion aplicada por el cliente. COMPRA = retenida al proveedor.
+  </div>
+
+</div>

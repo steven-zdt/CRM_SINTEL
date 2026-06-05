@@ -34,16 +34,21 @@ DEFINICION DE "HECHO": <el observable concreto>
 ## 1. Ciclo Operativo Obligatorio: EXAMINAR → PLAN → EJECUTAR → CERRAR
 
 ```
-[EXAMINAR]  Leer MEMORY.md + AGENTS.md + AUDITORIA del app + grep/glob acotado.
+[EXAMINAR]  ENTENDER EL CONTEXTO primero. Leer MEMORY.md + AGENTS.md + AUDITORIA del
+            app + grep/glob acotado. NO escribir nada en esta fase.
             Producto: lista de archivos en alcance + restricciones identificadas.
 
 [PLAN]      Definir: objetivo literal, archivos a tocar, check de exito.
-            Producto: 3-7 pasos numerados. Si pasos > 7 → tarea muy grande, dividir.
+            Producto: LISTA DE ACCIONES numerada (3-7 pasos), una accion por linea,
+            cada una con su archivo destino. Mostrarla antes de ejecutar.
+            Si pasos > 7 → tarea muy grande, dividir o preguntar al usuario.
 
-[EJECUTAR]  Hacer los pasos EN ORDEN. Despues de cada paso: py_compile / test corto.
+[EJECUTAR]  Hacer los pasos EN ORDEN. Despues de cada paso: SOLO py_compile (sintaxis).
+            NO correr tests aqui salvo que el usuario los haya pedido (ver §6).
             Producto: diff minimo, sin codigo adyacente modificado.
 
-[CERRAR]    Correr el check de exito. PASA → reportar "RESUELTO: <evidencia>" y STOP.
+[CERRAR]    Correr el check de exito (por defecto: py_compile + manage.py check, NO tests).
+            PASA → reportar "RESUELTO: <evidencia>" y STOP.
             FALLA → diagnostico distinto, no el mismo fix. 2 fallas → escalar y STOP.
 ```
 
@@ -113,7 +118,9 @@ DEFINICION DE "HECHO": <el observable concreto>
 
 ## 4. Ciclo Fix-Verifica-Termina
 
-Antes de aplicar la correccion: **definir el check de exito** (comando o prueba minima).
+Antes de aplicar la correccion: **definir el check de exito**. Por defecto el check es la
+verificacion mas barata que prueba el objetivo: `py_compile`, `manage.py check`, leer el diff,
+o describir el observable. **NO una suite de tests** salvo que el usuario los haya pedido (§6).
 
 ```
 Define check → Aplica fix → Corre check
@@ -133,8 +140,29 @@ Maximo 3 skills cargadas desde `.agents/skills/`. Flujo completo en `SKILL.md`.
 Fallback local si MCP no disponible:
 
 ```powershell
-python -m py_compile <archivos.py>
-python manage.py check
-python -m pytest apps/tenant/<app_name>/tests -q
-docker compose config
+python -m py_compile <archivos.py>   # SIEMPRE — sintaxis, no es un test
+python manage.py check               # cuando se tocan serializer/viewset/service
+docker compose config                # cuando se toca compose/infra
+# python -m pytest ...               # SOLO si el usuario lo pidio (ver §6)
 ```
+
+---
+
+## 6. Tests solo bajo demanda — REGLA EXPLICITA
+
+**No correr ni escribir tests salvo que el usuario lo pida explicitamente.**
+
+Distincion clave:
+- `py_compile` y `manage.py check` → **validacion de sintaxis/sistema, NO son tests.** Se corren siempre que aplique (hooks + cierre de tarea).
+- `pytest`, `manage.py test`, crear archivos `test_*.py` → **son tests. Solo bajo peticion.**
+
+| Situacion | Accion |
+|---|---|
+| Usuario pide un fix/feature sin mencionar tests | Implementar + py_compile/check. **NO** correr ni escribir tests. |
+| Usuario dice "corre los tests" / "agrega tests" / "verifica con tests" | Correr/escribir los tests pedidos. |
+| Codigo nuevo CRUD que por arquitectura exige `test_multitenant_isolation.py` (§24.5) | **NO** crear el test en silencio. Mencionarlo al cerrar: "Falta test de aislamiento — ¿lo agrego?" y esperar respuesta. |
+| El cambio rompe (sospecha) algo testeable | Reportar el riesgo al cerrar y ofrecer correr tests. No correrlos por iniciativa propia. |
+
+**Por que:** velocidad y foco (Karpathy). El usuario decide cuando invertir en la red de seguridad
+de tests; el agente no la impone. Esto NO relaja las reglas de arquitectura (cuando se escriban
+tests, deben cumplir los 3 niveles de aislamiento de §24.5 AGENTS.md).

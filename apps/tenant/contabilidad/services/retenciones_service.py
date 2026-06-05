@@ -151,8 +151,7 @@ class RetencionesService:
         documento_origen_modelo: str = '',
         documento_origen_id: int = 0,
         configuracion: Optional[ConfiguracionRetenciones] = None,
-        aplicada_por_cliente: bool = False,
-        aplicada_por_proveedor: bool = False,
+        naturaleza: str = 'VENTA',
         notas: str = '',
         empresa: Any = None,
         empresa_id: Optional[int] = None,
@@ -169,8 +168,7 @@ class RetencionesService:
             documento_origen_modelo: ej: 'Factura', 'ItemFactura', 'DocumentoSoporte'
             documento_origen_id: ej: 123
             configuracion: ConfiguracionRetenciones usada (opcional)
-            aplicada_por_cliente: Si es requerida por el cliente
-            aplicada_por_proveedor: Si es requerida por el proveedor
+            naturaleza: 'VENTA' (cliente retiene) o 'COMPRA' (empresa retiene al proveedor)
             notas: Notas de auditoría
             empresa: Instancia de Empresa (opcional)
             empresa_id: ID de Empresa (opcional)
@@ -199,8 +197,7 @@ class RetencionesService:
             documento_origen_modelo=documento_origen_modelo,
             documento_origen_id=documento_origen_id,
             configuracion=configuracion,
-            aplicada_por_cliente=aplicada_por_cliente,
-            aplicada_por_proveedor=aplicada_por_proveedor,
+            naturaleza=naturaleza,
             notas=notas,
         )
 
@@ -416,8 +413,7 @@ class RetencionesService:
             documento_origen_modelo=documento_reversada_modelo or retencion.documento_origen_modelo,
             documento_origen_id=documento_reversada_id or retencion.documento_origen_id,
             configuracion=retencion.configuracion,
-            aplicada_por_cliente=retencion.aplicada_por_cliente,
-            aplicada_por_proveedor=retencion.aplicada_por_proveedor,
+            naturaleza=retencion.naturaleza,
             notas=kwargs.get('notas', f'Reversal de Retencion#{retencion.uuid}'),
             retencion_reversada_por=retencion,  # Enlazar al original para cumplir con la aserción del test
         )

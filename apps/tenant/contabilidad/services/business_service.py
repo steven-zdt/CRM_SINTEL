@@ -295,16 +295,15 @@ class ContabilidadBusinessService:
         if PeriodoContable.objects.filter(empresa_id=empresa_id, periodo=periodo_val).exists():
             raise ValidationError({'periodo': f'El periodo {periodo_val} ya existe.'})
             
-        # Validar periodos anteriores abiertos
-        periodos_abiertos = PeriodoContable.objects.filter(
+        # Validar periodo inmediatamente anterior abierto
+        periodo_anterior = PeriodoContable.objects.filter(
             empresa_id=empresa_id,
-            periodo__lt=periodo_val,
-            estado='ABIERTO'
-        ).order_by('periodo')
-        if periodos_abiertos.exists():
-            primer_abierto = periodos_abiertos.first().periodo
+            periodo__lt=periodo_val
+        ).order_by('-periodo').first()
+        
+        if periodo_anterior and periodo_anterior.estado == 'ABIERTO':
             raise ValidationError({
-                'periodo': f'No se puede crear el periodo {periodo_val} porque existe un periodo anterior ({primer_abierto}) abierto. Debe cerrarlo primero.'
+                'periodo': f'No se puede crear el periodo {periodo_val} porque el periodo inmediatamente anterior ({periodo_anterior.periodo}) esta abierto. Debe cerrarlo primero.'
             })
 
         periodo = self.crud.crear_periodo(empresa_id, payload)
@@ -313,6 +312,26 @@ class ContabilidadBusinessService:
     @transaction.atomic
     def actualizar_periodo(self, periodo_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Actualiza un periodo."""
+        from apps.tenant.contabilidad.models import PeriodoContable
+        periodo = PeriodoContable.objects.get(id=periodo_id)
+        
+        nuevo_estado = payload.get('estado')
+        nuevo_periodo_val = payload.get('periodo', periodo.periodo)
+        
+        if nuevo_estado == 'ABIERTO' or (periodo.estado == 'ABIERTO' and 'periodo' in payload):
+            periodo_anterior = PeriodoContable.objects.filter(
+                empresa_id=periodo.empresa_id,
+                periodo__lt=nuevo_periodo_val
+            ).exclude(id=periodo.id).order_by('-periodo').first()
+            
+            if periodo_anterior and periodo_anterior.estado == 'ABIERTO':
+                raise ValidationError({
+                    'periodo': f'No se puede abrir el periodo {nuevo_periodo_val} porque el periodo inmediatamente anterior ({periodo_anterior.periodo}) esta abierto. Debe cerrarlo primero.'
+                })
+                
+        if periodo.estado == 'CERRADO' and nuevo_estado == 'ABIERTO':
+            raise ValidationError({'detail': 'No se puede reabrir un periodo contable que ya ha sido cerrado.'})
+            
         periodo = self.crud.actualizar_periodo(periodo_id, payload)
         return {'id': periodo.id, 'uuid': str(periodo.uuid), 'status': 'updated'}
 
