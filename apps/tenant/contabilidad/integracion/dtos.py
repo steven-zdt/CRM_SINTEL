@@ -65,6 +65,16 @@ class ImpuestoLinea:
 
 
 @dataclass(frozen=True)
+class ImpuestoDTO:
+    """Tax/retention at the document level or transaction level."""
+    tipo_impuesto: str
+    base_imponible: Decimal
+    porcentaje: Decimal
+    valor: Decimal
+    cuenta_codigo: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class LineaTransaccion:
     """
     Economic line item of transaction (invoice line, payroll deduction, etc.).
@@ -76,6 +86,8 @@ class LineaTransaccion:
     impuestos: list['ImpuestoLinea'] = field(default_factory=list)
     centro_costo_id: Optional[int] = None  # Project/cost center for reporting
     cuenta_hint: Optional[str] = None      # Override default PUC account (advanced)
+    subtotal: Decimal = Decimal('0.00')
+    total: Decimal = Decimal('0.00')
 
 
 @dataclass(frozen=True)
@@ -115,6 +127,9 @@ class TransaccionEconomica:
     observaciones: str = ""
     periodo_contable_id: Optional[int] = None  # If None, inferred from fecha
     empresa_id: Optional[int] = None           # Injected by Contabilizador from context
+    subtotal: Decimal = Decimal('0.00')
+    impuestos: list[ImpuestoDTO] = field(default_factory=list)
+    total: Decimal = Decimal('0.00')
 
 
 # ============================================================================

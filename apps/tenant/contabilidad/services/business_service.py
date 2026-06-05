@@ -295,6 +295,18 @@ class ContabilidadBusinessService:
         if PeriodoContable.objects.filter(empresa_id=empresa_id, periodo=periodo_val).exists():
             raise ValidationError({'periodo': f'El periodo {periodo_val} ya existe.'})
             
+        # Validar periodos anteriores abiertos
+        periodos_abiertos = PeriodoContable.objects.filter(
+            empresa_id=empresa_id,
+            periodo__lt=periodo_val,
+            estado='ABIERTO'
+        ).order_by('periodo')
+        if periodos_abiertos.exists():
+            primer_abierto = periodos_abiertos.first().periodo
+            raise ValidationError({
+                'periodo': f'No se puede crear el periodo {periodo_val} porque existe un periodo anterior ({primer_abierto}) abierto. Debe cerrarlo primero.'
+            })
+
         periodo = self.crud.crear_periodo(empresa_id, payload)
         return {'id': periodo.id, 'uuid': str(periodo.uuid), 'status': 'success'}
 

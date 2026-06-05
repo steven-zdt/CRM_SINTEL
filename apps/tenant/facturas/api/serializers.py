@@ -124,6 +124,11 @@ class FacturaListSerializer(serializers.ModelSerializer):
         max_digits=15, decimal_places=2, read_only=True
     )
 
+    # Retenciones read-only para backward compat (v3.7.1 Pull Model)
+    retefuente = serializers.SerializerMethodField()
+    reteica = serializers.SerializerMethodField()
+    reteiva = serializers.SerializerMethodField()
+
     class Meta:
         model = Factura
         # # WARNING: v2.60: Campos optimizados para Tabulator con campos aplanados
@@ -164,6 +169,9 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "sede_nombre",          # DT-SEDE-02
             "total_pagado_bancos",  # v3.11.0 Pull Model Bancos
             "saldo_pendiente",      # v3.11.0 Pull Model Bancos
+            "retefuente",
+            "reteica",
+            "reteiva",
         )
         read_only_fields = (
             "id", "uuid", "numero", "fecha_emision", "naturaleza", "cliente_nombre",
@@ -172,6 +180,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "impuestos", "total", "total_formateado", "cufe", "cotizacion_numero",
             "cliente_vinculado_info", "proveedor_vinculado_info",
             "total_pagado_bancos", "saldo_pendiente",
+            "retefuente", "reteica", "reteiva",
         )
     
     def get_has_nc(self, obj):
@@ -226,6 +235,18 @@ class FacturaListSerializer(serializers.ModelSerializer):
             return None
         from apps.tenant.facturas.services.selectors import ProveedorBridge
         return ProveedorBridge.obtener_proveedor_por_uuid(obj.proveedor_uuid, obj.empresa_id)
+
+    def get_retefuente(self, obj):
+        """Retorna la retención en la fuente calculada vía Pull Model."""
+        return obj.total_retencion_fuente
+
+    def get_reteica(self, obj):
+        """Retorna la retención de ICA calculada vía Pull Model."""
+        return obj.total_reteica
+
+    def get_reteiva(self, obj):
+        """Retorna la retención de IVA calculada vía Pull Model."""
+        return obj.total_reteiva
 
 
 class FacturaDetailSerializer(serializers.ModelSerializer):

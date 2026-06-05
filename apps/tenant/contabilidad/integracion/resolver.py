@@ -47,21 +47,23 @@ class ResolverCuentas:
         self,
         concepto: str,
         tipo_transaccion: str,
-        cuenta_hint: Optional[str] = None
+        cuenta_hint: Optional[str] = None,
+        lado: str = 'DEBE'
     ) -> str:
         """
         Resolve PUC account code for a transaction line.
 
         Lookup order:
         1. cuenta_hint if provided (explicit override)
-        2. ReglaContable matching (tipo_transaccion + concepto)
-        3. ReglaContable matching (tipo_transaccion + wildcard)
+        2. PlantillaContable associated with active ReglaContable (matching tipo_transaccion + concepto)
+        3. ReglaContable matching (tipo_transaccion + concepto)
         4. Raise ReglaContableNoDefinidaError
 
         Args:
             concepto: Economic concept (INGRESO_PRINCIPAL, AUXILIO_TRANSPORTE, etc.)
             tipo_transaccion: Transaction type (VENTA_FACTURA, COMPRA_GASTO, etc.)
             cuenta_hint: Optional explicit account override
+            lado: Side of the transaction ('DEBE' or 'HABER')
 
         Returns:
             PUC account code (e.g., '130505', '413501')
@@ -84,7 +86,8 @@ class ResolverCuentas:
                 # Codigo PUC directo (ej: '130505') — usar sin lookup adicional
                 return hint_str
 
-        key = (tipo_transaccion, concepto)
+        lado_norm = 'DEBE' if lado.upper() == 'DEBE' else 'HABER'
+        key = (tipo_transaccion, concepto, lado_norm)
         if key in self._cache_reglas:
             return self._cache_reglas[key]
 
@@ -100,8 +103,23 @@ class ResolverCuentas:
                 f"Regla contable no definida para {tipo_transaccion} + {concepto} (empresa {self.empresa_id})"
             )
 
-        self._cache_reglas[key] = regla.cuenta_codigo
-        return regla.cuenta_codigo
+        from ..models import PlantillaContable
+        plantilla = PlantillaContable.objects.filter(
+            empresa_id=self.empresa_id,
+            regla=regla,
+            activo=True
+        ).first()
+
+        if plantilla:
+            if lado_norm == 'DEBE':
+                res = plantilla.cuenta_debe_codigo
+            else:
+                res = plantilla.cuenta_credito_codigo
+        else:
+            res = regla.cuenta_codigo
+
+        self._cache_reglas[key] = res
+        return res
 
     def resolver_tarifa(
         self,

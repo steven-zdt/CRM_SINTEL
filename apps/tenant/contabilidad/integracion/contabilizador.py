@@ -22,7 +22,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils.timezone import now as tz_now
 
-from ..models import AsientoContable, MovimientoContable, PeriodoContable
+from ..models import AsientoContable, MovimientoContable, PeriodoContable, ImpuestoDocumento
 from .dtos import TransaccionEconomica, LineaTransaccion
 from .excepciones import AsientoYaExisteError
 from .resolver import ResolverCuentas
@@ -100,6 +100,11 @@ class Contabilizador:
                 movimiento.asiento = asiento
                 movimiento.save()
 
+            # 8. Persist taxes (ImpuestoDocumento)
+            for imp_doc in getattr(asiento, 'impuestos_documento_por_guardar', []):
+                imp_doc.asiento = asiento
+                imp_doc.save()
+
             return asiento
 
     def existe_asiento_para(
@@ -172,6 +177,22 @@ class Contabilizador:
                     movimiento_orig.debe,
                 )
                 movimiento_orig.save()
+
+            # Mirror taxes with inverted signs if present
+            for imp_orig in asiento_original.impuestos_documento.all():
+                from ..models import ImpuestoDocumento
+                ImpuestoDocumento.objects.create(
+                    empresa_id=self.empresa_id,
+                    asiento=asiento_reversal,
+                    tipo=imp_orig.tipo,
+                    base=imp_orig.base,
+                    porcentaje=imp_orig.porcentaje,
+                    valor=-imp_orig.valor,
+                    cuenta_codigo=imp_orig.cuenta_codigo,
+                    documento_origen_app=imp_orig.documento_origen_app,
+                    documento_origen_modelo=imp_orig.documento_origen_modelo,
+                    documento_origen_id=imp_orig.documento_origen_id,
+                )
 
             return asiento_reversal
 
@@ -263,6 +284,7 @@ class Contabilizador:
                 linea.concepto,
                 transaccion.tipo.value,
                 linea.cuenta_hint,
+                lado=linea.lado
             )
 
             # Build movement for principal line using lado to determine DEBE/HABER
@@ -291,6 +313,7 @@ class Contabilizador:
                 cuenta_impuesto = self.resolver.resolver_cuenta(
                     impuesto.tipo,
                     transaccion.tipo.value,
+                    lado=impuesto.lado
                 )
 
                 debe_impuesto = impuesto.valor if impuesto.lado == 'DEBE' else Decimal('0')
@@ -318,5 +341,33 @@ class Contabilizador:
         asiento.debe_total = debe_total
         asiento.haber_total = haber_total
         asiento.movimientos_por_guardar = movimientos
+
+        # Build ImpuestoDocumento instances from transaction level taxes
+        impuestos_documento = []
+        for imp_dto in transaccion.impuestos:
+            cuenta_codigo = imp_dto.cuenta_codigo
+            if not cuenta_codigo:
+                try:
+                    cuenta_codigo = self.resolver.resolver_cuenta(
+                        imp_dto.tipo_impuesto,
+                        transaccion.tipo.value,
+                        lado='HABER'
+                    )
+                except Exception:
+                    cuenta_codigo = None
+
+            imp_doc = ImpuestoDocumento(
+                empresa_id=self.empresa_id,
+                tipo=imp_dto.tipo_impuesto,
+                base=imp_dto.base_imponible,
+                porcentaje=imp_dto.porcentaje,
+                valor=imp_dto.valor,
+                cuenta_codigo=cuenta_codigo,
+                documento_origen_app=transaccion.documento_origen.app_label,
+                documento_origen_modelo=transaccion.documento_origen.modelo,
+                documento_origen_id=transaccion.documento_origen.id,
+            )
+            impuestos_documento.append(imp_doc)
+        asiento.impuestos_documento_por_guardar = impuestos_documento
 
         return asiento

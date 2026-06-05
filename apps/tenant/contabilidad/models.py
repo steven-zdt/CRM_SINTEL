@@ -1106,3 +1106,122 @@ class Retencion(SintelTenantBaseModel):
         """Recalcula el monto basado en porcentaje y base."""
         self.monto = (self.base * self.porcentaje) / Decimal('100')
         return self.monto
+
+
+class PlantillaContable(SintelTenantBaseModel):
+    """
+    Plantilla dinamica para resolver cuentas de debito y credito.
+    Coincide con la configuracion de la regla.
+    """
+    regla = models.ForeignKey(
+        'ReglaContable',
+        on_delete=models.CASCADE,
+        related_name='plantillas',
+        verbose_name=_('Regla Contable'),
+        help_text=_('Regla contable asociada')
+    )
+    cuenta_debe_codigo = models.CharField(
+        max_length=20,
+        verbose_name=_('Codigo Cuenta Debito'),
+        help_text=_('Codigo de la cuenta contable para el DEBE')
+    )
+    cuenta_credito_codigo = models.CharField(
+        max_length=20,
+        verbose_name=_('Codigo Cuenta Credito'),
+        help_text=_('Codigo de la cuenta contable para el HABER')
+    )
+    activo = models.BooleanField(
+        default=True,
+        verbose_name=_('Activo'),
+        help_text=_('Indica si esta plantilla esta activa')
+    )
+
+    class Meta(SintelTenantBaseModel.Meta):
+        verbose_name = _('Plantilla Contable')
+        verbose_name_plural = _('Plantillas Contables')
+        constraints = [
+            models.UniqueConstraint(
+                fields=['empresa', 'regla'],
+                condition=models.Q(activo=True),
+                name='%(class)s_unique_regla_activo'
+            )
+        ]
+
+    def __str__(self):
+        return f"Plantilla {self.regla} -> DEBE: {self.cuenta_debe_codigo}, HABER: {self.cuenta_credito_codigo}"
+
+
+class ImpuestoDocumento(SintelTenantBaseModel):
+    """
+    Registro de impuestos aplicados a nivel de documento con trazabilidad polimorfica.
+    """
+    asiento = models.ForeignKey(
+        'AsientoContable',
+        on_delete=models.CASCADE,
+        related_name='impuestos_documento',
+        verbose_name=_('Asiento Contable'),
+        help_text=_('Asiento contable asociado')
+    )
+    tipo = models.CharField(
+        max_length=50,
+        verbose_name=_('Tipo de Impuesto'),
+        help_text=_('Tipo de impuesto (ej. IVA, RETEFUENTE)')
+    )
+    base = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Base Imponible'),
+        help_text=_('Base sobre la cual se calcula el impuesto')
+    )
+    porcentaje = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Porcentaje'),
+        help_text=_('Porcentaje aplicado')
+    )
+    valor = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Valor'),
+        help_text=_('Valor calculado del impuesto')
+    )
+    cuenta_codigo = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        verbose_name=_('Codigo Cuenta'),
+        help_text=_('Codigo de la cuenta contable de impuesto')
+    )
+
+    # Trazabilidad polimorfica
+    documento_origen_app = models.CharField(
+        max_length=50,
+        verbose_name=_('Aplicacion Origen'),
+        help_text=_('Nombre de la app donde se origino')
+    )
+    documento_origen_modelo = models.CharField(
+        max_length=50,
+        verbose_name=_('Modelo Origen'),
+        help_text=_('Nombre del modelo origen')
+    )
+    documento_origen_id = models.PositiveIntegerField(
+        verbose_name=_('ID del Documento Origen'),
+        help_text=_('ID del documento origen')
+    )
+
+    class Meta(SintelTenantBaseModel.Meta):
+        verbose_name = _('Impuesto de Documento')
+        verbose_name_plural = _('Impuestos de Documento')
+        indexes = SintelTenantBaseModel.Meta.indexes + [
+            models.Index(fields=['documento_origen_app', 'documento_origen_modelo', 'documento_origen_id']),
+            models.Index(fields=['asiento']),
+        ]
+
+    def __str__(self):
+        return f"{self.tipo} ({self.porcentaje}%): {self.valor} - Asiento {self.asiento.id}"
