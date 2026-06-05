@@ -54,11 +54,14 @@ Do not import the target model at module import time unless the codebase already
 
 Keep serializer fields and ORM optimization fields separate.
 
+> **AGENTS.md §30 Zero-Collision Pattern:** `LIST_FIELDS`/`DETAIL_FIELDS` son usados en `Meta.fields` de serializers. NUNCA incluir notacion de traversal ORM (`campo__subcampo`) en esas constantes. Las traversals van en constantes privadas `_*_ONLY_FIELDS` solo para `.only()`.
+
 ```python
+# Campos validos para Meta.fields Y para .only() — solo atributos directos del modelo
 LIST_FIELDS = (
     "id",
     "uuid",
-    "association_field_id",
+    "association_field_id",   # FK id — valido en ambos contextos
 )
 
 DETAIL_FIELDS = (
@@ -67,19 +70,20 @@ DETAIL_FIELDS = (
     "association_field_id",
 )
 
-ASSOCIATION_ONLY_FIELDS = (
+# Traversals ORM SOLO para .only() — NUNCA en Meta.fields de serializer
+_ASSOCIATION_ONLY_FIELDS = (
     "association_field__id",
     "association_field__uuid",
     "association_field__display_code",
 )
 ```
 
-Use related fields only inside `.only()`, never inside serializer `Meta.fields`.
+Use related fields only inside `.only()`, never inside serializer `Meta.fields`. (AGENTS.md §30)
 
 ```python
 qs = SourceModel.objects.select_related("association_field").only(
     *LIST_FIELDS,
-    *ASSOCIATION_ONLY_FIELDS,
+    *_ASSOCIATION_ONLY_FIELDS,   # traversals inline — no en constantes compartidas con Meta.fields
 )
 ```
 

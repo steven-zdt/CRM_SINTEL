@@ -1,102 +1,155 @@
-# Skill: DOM ID Sync & Selectors (Hotfix v2.62.1)
+# Skill: DOM ID Sync & Selectors — SINTEL v3.16
 
-**Carga cuando:** Escribir o modificar templates HTML (Offcanvas, Modals, Formularios, Tablas) y enlazar eventos o instancias UI en módulos JavaScript.
+**Carga cuando:** Escribir o modificar templates HTML (Offcanvas, Modals, Formularios) y enlazar eventos o instancias Bootstrap en módulos JS.
 
 ---
 
-## 1. Prevención de Desincronización (Regla Principal)
+## 1. Regla Principal — Sincronización HTML ↔ JS
 
-**Raíz de Bug Histórico:** Desincronización entre los nombres de `id="..."` en los templates HTML y los selectores usados en `document.getElementById()` o librerías de UI (ej. Bootstrap Offcanvas) en JavaScript.
+**Raíz de bug histórico:** desincronización entre `id="..."` en template y selector en JS.
 
-**Acción Obligatoria:** 
-CADA VEZ que modifiques el `id` de un elemento en un template `.html` (ej. `offcanvas_crear_empleado.html`), ESTÁS OBLIGADO a realizar una búsqueda en el archivo `.js` correspondiente (`empleado_editor.js`) para actualizar el selector. Lo mismo aplica a la inversa.
+**Acción obligatoria:**
+- Al cambiar un `id` en el template → buscar y actualizar en el `.js` correspondiente
+- Al cambiar un selector en el `.js` → verificar que el `id` existe en el template
+- Herramienta: `grep -rn "offcanvas-<modelo>" apps/tenant/<app>/`
 
-## 2. Convención de Nomenclatura Estricta (Namespacing)
+---
 
-Para evitar colisiones entre distintos módulos y garantizar que el JS encuentre el DOM correcto, los IDs DEBEN incluir el nombre del modelo.
+## 2. Convención de Nomenclatura — Namespacing por Modelo
 
 ```html
-<!-- MALA PRÁCTICA (Causa colisiones si hay múltiples offcanvas en el DOM) -->
+<!-- PROHIBIDO — colisiona con otros módulos en el mismo DOM -->
 <div class="offcanvas" id="offcanvasCrear">...</div>
-<form id="formularioPrincipal">...</form>
+<form id="formulario">...</form>
+<input id="campo-nombre">
 
-<!-- BUENA PRÁCTICA (SINTEL Standard) -->
-<div class="offcanvas" id="offcanvasCrear<Modelo>">...</div>
-<form id="formCrear<Modelo>">...</form>
+<!-- OBLIGATORIO — prefijo por modelo -->
+<div class="offcanvas offcanvas-end" id="offcanvas-<modelo>-crear">...</div>
+<form id="form-crear-<modelo>" onsubmit="return false;">...</form>
+<input id="<modelo>-nombre" name="nombre">
+<input type="hidden" id="<modelo>-uuid" name="uuid">
 ```
 
-## 3. Centralización de Selectores en JavaScript
+---
 
-**PROHIBIDO:** Usar strings mágicos (`'#miFormulario'`) esparcidos por múltiples funciones en JavaScript.
-**OBLIGATORIO:** Definir los selectores del DOM como constantes en la parte superior del módulo o en un objeto de configuración (`DOM_ELEMENTS`).
+## 3. SSoT de Selectores en JS — Objeto DOM
 
 ```javascript
 // features/<modelo>_editor.js
-window.Sintel.<Modulo>.Editor = (function() {
-    // 1. Centralización (SSoT de selectores en el JS)
-    const DOM = {
-        offcanvasCrear: 'offcanvasCrear<Modelo>',
-        formCrear: 'formCrear<Modelo>',
-        btnSubmit: 'btnGuardar<Modelo>'
-    };
+window.Sintel.<App>.Editor = (function() {
 
-    let offcanvasInstance = null;
+    // SSoT de IDs — cambiar aquí si cambia el template
+    const DOM = {
+        offcanvasCrear:  'offcanvas-<modelo>-crear',
+        offcanvasEditar: 'offcanvas-<modelo>-editar',
+        formCrear:       'form-crear-<modelo>',
+        formEditar:      'form-editar-<modelo>',
+        btnGuardar:      'btn-guardar-<modelo>',
+        inputUuid:       '<modelo>-uuid',
+        container:       'offcanvas-container-<app>',
+    };
 
     function init() {
         const el = document.getElementById(DOM.offcanvasCrear);
         if (!el) {
-            console.error(`[EmpleadoEditor] CRITICAL: No se encontró el ID '${DOM.offcanvasCrear}' en el DOM.`);
+            console.error(`[<App>Editor] CRITICAL: #${DOM.offcanvasCrear} no encontrado en el DOM`);
             return;
         }
-        offcanvasInstance = new bootstrap.Offcanvas(el);
     }
-    
-    return { init };
+
+    return { init, DOM };
 })();
 ```
 
-## 4. Uso de Atributos Data (Data-Attributes) para Eventos
+---
 
-Cuando sea posible, prefiere usar `data-*` attributes en lugar de clases CSS o IDs para atar comportamiento JavaScript a botones de tablas o listas.
+## 4. Data-Attributes para Comportamiento JS
+
+Preferir `data-*` sobre IDs para atar comportamiento a múltiples elementos.
 
 ```html
-<!-- HTML -->
-<button data-action="editar-<modelo>" data-uuid="{{ <modelo>.uuid }}">Editar</button>
+<!-- Template -->
+<button data-action="editar-<modelo>"
+        data-uuid="{{ obj.uuid }}"
+        data-nombre="{{ obj.nombre }}">
+  Editar
+</button>
 ```
 
 ```javascript
-// JS
-document.addEventListener('click', (e) => {
+// JS — event delegation en lugar de listener por elemento
+document.addEventListener('click', function(e) {
     const btn = e.target.closest('[data-action="editar-<modelo>"]');
-    if (btn) {
-        const uuid = btn.dataset.uuid;
-        // ...
-    }
+    if (!btn) return;
+
+    const uuid   = btn.dataset.uuid;
+    const nombre = btn.dataset.nombre;
+    // uuid ya es string UUID — sin parseInt()
+    _abrirEditar(uuid);
 });
 ```
 
-## 5. Prevención de Condiciones de Carrera (HTMX Swap)
+---
 
-**Regla:** NUNCA actives un Offcanvas síncronamente tras `htmx.ajax`. Usa `htmx:afterSettle`.
+## 5. Condición de Carrera HTMX — Prohibición
 
 ```javascript
-// MALA PRÁCTICA
-async function openOffcanvas() {
+// PROHIBIDO — el DOM no está listo cuando se ejecuta .show()
+async function abrirOffcanvas() {
     await htmx.ajax('GET', url, { target: '#container' });
-    bootstrap.Offcanvas.getOrCreateInstance(document.querySelector('.offcanvas')).show(); // ❌ DOM no listo
+    bootstrap.Offcanvas.getOrCreateInstance(document.querySelector('.offcanvas')).show(); // ERROR
 }
 
-// BUENA PRÁCTICA
-async function openOffcanvas() {
-    return htmx.ajax('GET', url, { target: '#container', swap: 'innerHTML' });
-}
-
-document.body.addEventListener('htmx:afterSettle', (e) => {
-    if (e.detail.target?.id === 'container') {
-        const el = e.detail.target.querySelector('.offcanvas');
-        if (el) window.UIManager.handleOffcanvas(el, 'show'); // ✅
-    }
+// OBLIGATORIO — esperar htmx:afterSettle
+document.body.addEventListener('htmx:afterSettle', function(e) {
+    if (e.detail.target?.id !== 'offcanvas-container-<app>') return;
+    requestAnimationFrame(function() {
+        const el = document.getElementById('offcanvas-<modelo>-crear');
+        if (el) window.UIManager?.handleOffcanvas(el, 'show');
+    });
 });
 ```
 
-Ver gestión completa del ciclo de vida en [ui-management.md](ui-management.md).
+---
+
+## 6. Prohibición — getOrCreateInstance().show() (AGENTS.md §26)
+
+```javascript
+// PROHIBIDO — acumula backdrops en el 2do intento → pantalla negra
+bootstrap.Offcanvas.getOrCreateInstance(el).show();
+
+// OBLIGATORIO — UIManager gestiona dispose + cleanup + show
+window.UIManager.handleOffcanvas(el, 'show');
+
+// Si UIManager no disponible — fallback manual
+const prev = bootstrap.Offcanvas.getInstance(el);
+if (prev) prev.dispose();
+document.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+document.body.style.overflow = '';
+new bootstrap.Offcanvas(el).show();
+```
+
+---
+
+## 7. Verificación de IDs (comando)
+
+```bash
+# Verificar que los IDs del template existen en el JS
+grep -n 'id="offcanvas-<modelo>' apps/tenant/<app>/templates/**/*.html
+grep -n "'offcanvas-<modelo>" apps/tenant/<app>/static/**/*.js
+
+# Verificar que los selectores del JS tienen match en el template
+grep -n "getElementById\|querySelector" apps/tenant/<app>/static/**/*.js \
+  | grep "<modelo>"
+```
+
+---
+
+## 8. Checklist
+
+- [ ] IDs en templates usan prefijo del modelo: `offcanvas-<modelo>`, `form-crear-<modelo>`
+- [ ] Selectores en JS centralizados en objeto `DOM = { ... }` al inicio del módulo
+- [ ] `data-uuid` en botones de tabla — no `data-id` (evitar confusión con PK entero)
+- [ ] `htmx:afterSettle` con `requestAnimationFrame` — nunca abrir offcanvas síncronamente tras ajax
+- [ ] `UIManager.handleOffcanvas(el, 'show')` — nunca `getOrCreateInstance().show()`
+- [ ] Al cambiar ID en template: grep en JS. Al cambiar selector en JS: grep en template.

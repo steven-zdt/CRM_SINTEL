@@ -1,102 +1,151 @@
-# Skill: UI Stabilization & Offcanvas Management — SINTEL v2.62.3
+# Skill: UI Stabilization & Offcanvas Management — SINTEL v3.16
 
-**Carga cuando:** El usuario reporta inestabilidad en modales u offcanvas (se abren y cierran solos), backdrops que no desaparecen, o eventos que se disparan múltiples veces tras un swap de HTMX.
+**Carga cuando:** Offcanvas/modales con comportamiento inestable (abre y cierra solo), backdrops huérfanos, listeners duplicados tras swap HTMX.
 
 ---
 
-## 1. Problema: Inestabilidad de Ciclo de Vida (Lifecycle)
+## 1. Raíz del Problema — Ciclo de Vida HTMX + Bootstrap
 
-En aplicaciones que usan **HTMX**, los fragmentos del DOM se reemplazan dinámicamente. Si un script intenta abrir un Offcanvas de Bootstrap sobre un elemento que acaba de ser reemplazado o que aún conserva una instancia previa en memoria, se producen errores de estado ("opens and closes instantly").
+HTMX reemplaza fragmentos del DOM dinámicamente. Si un elemento Bootstrap (Offcanvas/Modal) tiene una instancia en memoria y el DOM se reemplaza, la instancia queda huérfana y produce:
+- Backdrop que no desaparece → pantalla negra / interacción bloqueada
+- Offcanvas que se abre y cierra instantáneamente
+- TypeError al intentar acceder a un elemento nulo
 
-## 2. Solución: UIManager.handleOffcanvas
+**Solución obligatoria:** usar `window.UIManager.handleOffcanvas()` — nunca `getOrCreateInstance().show()` directamente (AGENTS.md §26).
 
-Todo el manejo de Offcanvas debe delegarse al orquestador central `window.UIManager`.
+---
 
-### Patrón de Uso (General):
+## 2. Apertura Segura — UIManager.handleOffcanvas
 
 ```javascript
-/**
- * Al recibir un fragmento vía HTMX (htmx:afterSettle)
- */
-document.body.addEventListener('htmx:afterSettle', (e) => {
-    const target = e.detail.target;
-    
-    // Si el target es el contenedor esperado
-    if (target && target.id === 'mi-contenedor-offcanvas') {
-        const offcanvasEl = document.getElementById('mi-offcanvas-id');
-        
-        if (offcanvasEl && window.UIManager?.handleOffcanvas) {
-            // handleOffcanvas se encarga de:
-            // 1. Limpiar backdrops huérfanos
-            // 2. Destruir instancias previas (dispose)
-            // 3. Crear y mostrar la nueva instancia
-            window.UIManager.handleOffcanvas(offcanvasEl, 'show');
-        }
-    }
-});
+// CORRECTO — UIManager gestiona el ciclo de vida completo
+window.UIManager.handleOffcanvas(offcanvasEl, 'show');
+
+// PROHIBIDO — acumula backdrops en el 2do intento (AGENTS.md §26)
+bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
 ```
 
-## 3. Limpieza Preventiva de Backdrops
-
-Si no se usa el `UIManager`, se debe implementar manualmente la limpieza de backdrops huérfanos que bloquean la interacción:
+### Patrón completo post-HTMX swap
 
 ```javascript
-const cleanupBackdrops = () => {
-    document.querySelectorAll('.offcanvas-backdrop, .modal-backdrop').forEach(b => b.remove());
+document.body.addEventListener('htmx:afterSettle', function(e) {
+    const target = e.detail.target;
+    if (!target || target.id !== 'offcanvas-container-<app>') return;
+
+    // requestAnimationFrame garantiza que Bootstrap encuentra el elemento en el DOM
+    requestAnimationFrame(function() {
+        const offcanvasEl = document.getElementById('offcanvas-<app>');
+        if (!offcanvasEl) return;
+
+        if (window.UIManager?.handleOffcanvas) {
+            // handleOffcanvas: limpia backdrops + destruye instancia previa + crea nueva
+            window.UIManager.handleOffcanvas(offcanvasEl, 'show');
+        } else {
+            // Fallback manual si UIManager no disponible
+            _abrirOffcanvasSeguro(offcanvasEl);
+        }
+    });
+});
+
+// Fallback: apertura manual segura
+function _abrirOffcanvasSeguro(el) {
+    // 1. Destruir instancia previa si existe
+    const prev = bootstrap.Offcanvas.getInstance(el);
+    if (prev) { try { prev.dispose(); } catch(e) {} }
+
+    // 2. Limpiar backdrops huérfanos
+    document.querySelectorAll('.offcanvas-backdrop, .modal-backdrop')
+        .forEach(b => b.remove());
     document.body.style.overflow = '';
     document.body.style.paddingRight = '';
-};
+
+    // 3. Crear y mostrar nueva instancia
+    new bootstrap.Offcanvas(el).show();
+}
 ```
 
-## 4. Neutralización de Listeners Duplicados
+---
 
-Cuando HTMX reemplaza el contenido de un modal/offcanvas pero el script de inicialización se ejecuta nuevamente, los listeners de eventos (ej: botones de guardar) pueden duplicarse.
-
-**Solución: Clonación de Nodos o Delegación.**
+## 3. Cierre Seguro
 
 ```javascript
-function initFormulario() {
-    const btnGuardar = document.querySelector('#btn-guardar');
-    if (btnGuardar) {
-        // Clonar el botón para eliminar cualquier listener previo adjunto
-        const newBtn = btnGuardar.cloneNode(true);
-        btnGuardar.parentNode.replaceChild(newBtn, btnGuardar);
-        
-        newBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            await guardarDatos();
-        });
+function cerrarOffcanvas(offcanvasEl) {
+    if (window.UIManager?.handleOffcanvas) {
+        window.UIManager.handleOffcanvas(offcanvasEl, 'hide');
+    } else {
+        const instance = bootstrap.Offcanvas.getInstance(offcanvasEl);
+        if (instance) instance.hide();
     }
 }
 ```
 
-## 5. Checklist de Implementación por App
+---
 
-- [ ] ¿La app usa `UIManager.handleOffcanvas`?
-- [ ] ¿Se limpian los backdrops antes de cada `show()`?
-- [ ] ¿Se usa `htmx:afterSettle` para asegurar que el DOM esté listo?
-- [ ] ¿Los botones de acción limpian sus listeners previos (clonación)?
-- [ ] ¿Se usa `instance.dispose()` si ya existe una instancia de Bootstrap?
+## 4. Destrucción antes del swap HTMX
 
-## 6. Destrucción Segura de Componentes (Evitar TypeErrors)
-
-Cuando HTMX va a remover un elemento del DOM que tiene una instancia de Bootstrap (Offcanvas/Modal), es **obligatorio** destruir la instancia manualmente para evitar que Bootstrap intente acceder a propiedades de un elemento nulo durante las transiciones.
-
-### Implementación con htmx:beforeCleanupElement:
+Antes de que HTMX remueva el elemento del DOM, destruir la instancia Bootstrap para evitar TypeError en las transiciones.
 
 ```javascript
-document.body.addEventListener('htmx:beforeCleanupElement', (e) => {
+document.body.addEventListener('htmx:beforeCleanupElement', function(e) {
     const el = e.detail.el;
-    // Si el elemento que se va a limpiar es un offcanvas o contiene uno
-    if (el.classList.contains('offcanvas') || el.querySelector('.offcanvas')) {
-        const offcanvasEl = el.classList.contains('offcanvas') ? el : el.querySelector('.offcanvas');
-        if (window.UIManager?.destroyOffcanvas) {
-            window.UIManager.destroyOffcanvas(offcanvasEl);
-        }
+    const offcanvasEl = el.classList.contains('offcanvas')
+        ? el
+        : el.querySelector('.offcanvas');
+
+    if (!offcanvasEl) return;
+
+    if (window.UIManager?.destroyOffcanvas) {
+        window.UIManager.destroyOffcanvas(offcanvasEl);
+    } else {
+        const instance = bootstrap.Offcanvas.getInstance(offcanvasEl);
+        if (instance) { try { instance.dispose(); } catch(e) {} }
+        // Limpiar backdrops en el mismo tick síncrono
+        document.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+        document.body.style.overflow = '';
     }
 });
 ```
 
-### Método UIManager.destroyOffcanvas:
-Este método debe realizar un `dispose()` de la instancia y remover backdrops de forma síncrona.
+---
 
+## 5. Listeners Duplicados — Clonar Nodo
+
+Cuando HTMX recarga el contenido del offcanvas y el `init()` se ejecuta de nuevo, los listeners se acumulan. Solución: clonar el botón antes de añadir el listener.
+
+```javascript
+function _initBtnGuardar() {
+    const btn = document.getElementById('btn-guardar-<modelo>');
+    if (!btn) return;
+
+    // Clonar elimina todos los listeners previos adjuntos
+    const fresh = btn.cloneNode(true);
+    btn.parentNode.replaceChild(fresh, btn);
+
+    fresh.addEventListener('click', _submitForm);
+}
+```
+
+---
+
+## 6. Limpieza Manual de Backdrops (helper)
+
+```javascript
+function limpiarBackdrops() {
+    document.querySelectorAll('.offcanvas-backdrop, .modal-backdrop')
+        .forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+}
+```
+
+---
+
+## 7. Checklist
+
+- [ ] `window.UIManager.handleOffcanvas(el, 'show')` — nunca `getOrCreateInstance().show()`
+- [ ] `htmx:afterSettle` con `requestAnimationFrame` antes de abrir
+- [ ] `htmx:beforeCleanupElement` destruye instancia Bootstrap antes de swap
+- [ ] Listeners de botones clonados antes de añadir (evita duplicados)
+- [ ] `bootstrap.Offcanvas.getInstance(el)?.dispose()` antes de crear nueva instancia manual
+- [ ] Backdrops limpiados con `limpiarBackdrops()` si se detecta pantalla bloqueada

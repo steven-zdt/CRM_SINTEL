@@ -1,167 +1,285 @@
 ---
 name: crud-fsd-frontend
-description: Estándar arquitectónico para módulos CRUD Frontend (HTMX + Tabulator + Vanilla JS) de propósito general.
+description: Arquitectura CRUD Frontend completa (HTMX + Tabulator + Vanilla JS) para módulos tenant. Usar al construir o refactorizar cualquier interfaz de gestión.
 ---
 
 # Skill: Arquitectura CRUD Frontend (Feature-Sliced Design)
 
-**Carga cuando:** Construyas o refactorices interfaces de gestión (CRUD) para modelos en el entorno del Workspace (ej. cualquier entidad de negocio, catálogos, registros operacionales).
-
-## 1. Stack y Patrón Arquitectónico (Corrección del Estándar)
-
-> [!WARNING]
-> **Corrección Arquitectónica:** A diferencia de las SPA tradicionales o aplicaciones 100% HTMX, SINTEL v2.62 utiliza un modelo híbrido estricto:
-> - **HTMX (`hx-get`):** Se utiliza EXCLUSIVAMENTE para *Server-Driven UI* (ej. solicitar el HTML de los modales/offcanvas al servidor).
-> - **Vanilla JS (Fetch/JSON):** Se utiliza para TODAS las mutaciones de datos (POST, PATCH, DELETE). **NO uses `hx-post` o `hx-put`** para enviar formularios, ya que el backend DRF requiere payloads JSON estructurados y JWT en los headers.
-> - **Tabulator:** Grilla reactiva para lectura y renderizado.
-
-## 2. Estructura de Archivos (Feature-Sliced)
-
-Cada módulo debe dividirse en los siguientes namespaces dentro de `static/<app_name>/js/`:
-
-- `<app_name>.api.js`: SSoT para peticiones HTTP al DRF API.
-- `<app_name>.list.js`: Inicialización de Tabulator y delegación de eventos globales.
-- `<app_name>.editor.js`: Captura de formularios (Offcanvas) y envío de datos.
-- `<app_name>.utils.js` (Opcional): Validaciones y helpers puros.
+**Carga cuando:** Construyas o refactorices interfaces CRUD para modelos tenant (Workspace).
 
 ---
 
-## 3. Implementación de Funciones Core
+## 1. Modelo Híbrido SINTEL — Responsabilidades Separadas
 
-### A. Listar (Tabulator + Event Delegation)
-El renderizado se delega a `TabulatorFactory`. Las acciones por fila se gestionan mediante eventos, no funciones en línea.
+> **Corrección arquitectónica crítica:**
 
-```javascript
-// <app_name>.list.js
-const DOM = { grid: '#grid-entidad', search: '#search-entidad' };
+| Tecnología | Uso correcto | Prohibido |
+|---|---|---|
+| **HTMX `hx-get`** | Cargar HTML de offcanvas/partials desde el servidor | Mutaciones (POST/PATCH/DELETE) |
+| **Vanilla JS `window.http()`** | Todas las mutaciones de datos con JSON + JWT | Enviar formularios con `hx-post` |
+| **Tabulator** | Grilla reactiva, lectura y renderizado | Mutar datos directamente |
 
-// 1. Inicialización
-state.table = window.TabulatorFactory.create(
-    DOM.grid,
-    '/api/v1/<app_name>/',
-    getColumnas(),
-    { searchInputSelector: DOM.search }
-);
+---
 
-// 2. Columnas con Event Delegation
-function getColumnas() {
-    return [
-        { title: 'Nombre', field: 'nombre', widthGrow: 2 },
-        { title: 'Estado', field: 'activo', formatter: TabulatorFactory.formatters.badgeStatus },
-        {
-            title: 'Acciones',
-            formatter: () => `
-                <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary" data-action="edit"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-outline-danger" data-action="delete"><i class="bi bi-trash"></i></button>
-                </div>`,
-            cellClick: handleCellAction
-        }
-    ];
-}
+## 2. Estructura de Archivos
 
-function handleCellAction(e, cell) {
-    const action = e.target.closest('button')?.dataset.action;
-    const id = cell.getRow().getData().id;
-    
-    if (action === 'edit') abrirOffcanvasEdicion(id);
-    if (action === 'delete') w.<AppName>Utils.eliminar(id);
-}
+```
+static/<app>/js/
+  <app>.api.js          SSoT de todos los endpoints
+  features/
+    <modelo>_list.js    Tabulator + delegación de eventos
+    <modelo>_editor.js  Offcanvas + validación + submit
 ```
 
-### B. Crear / Editar (HTMX + Vanilla JS)
+---
 
-**1. Solicitud de UI (HTMX en el HTML):**
-```html
-<!-- Botón de Creación en list.html -->
-<button hx-get="/api/v1/<app_name>/render-offcanvas/crear/"
-        hx-target="#offcanvas-container-<app_name>"
-        hx-swap="innerHTML">
-    Nuevo Registro
-</button>
-```
-
-**2. Captura y Envío (Vanilla JS en editor.js):**
-> [!IMPORTANT]
-> El Offcanvas no envía datos por sí solo. `editor.js` escucha su aparición e inyecta la lógica.
+## 3. Namespace Obligatorio
 
 ```javascript
-// <app_name>.editor.js
-d.addEventListener('shown.bs.offcanvas', (e) => {
-    if (e.target.id === 'offcanvas-<app_name>') {
-        const form = d.querySelector('#form-<app_name>');
-        
-        form.addEventListener('submit', async (ev) => {
-            ev.preventDefault();
-            const data = Object.fromEntries(new FormData(form).entries());
-            const id = d.querySelector('#<app_name>-id').value;
-            
-            // Mutación vía API directa (JSON)
-            const method = id ? 'PATCH' : 'POST';
-            const url = id ? `/api/v1/<app_name>/${id}/` : `/api/v1/<app_name>/`;
-            
-            const response = await w.http(method, url, data);
-            
-            if (response.ok) {
-                // ⚠️ v2.62.3: Cerrar offcanvas usando UIManager
-                if (w.UIManager?.handleOffcanvas) {
-                    w.UIManager.handleOffcanvas(e.target, 'hide');
-                } else {
-                    bootstrap.Offcanvas.getInstance(e.target)?.hide();
-                }
-                // Notificar éxito al ecosistema
-                d.dispatchEvent(new CustomEvent('entidadGuardada'));
-            } else {
-                w.UIManager.handleError(response);
+// Patrón base — SIEMPRE encapsular en window.Sintel.<App>
+window.Sintel = window.Sintel || {};
+window.Sintel.<App> = (function() {
+    const state = { table: null };
+    const DOM = {
+        grid:         '#grid-<modelo>',
+        search:       '#search-<modelo>',
+        container:    '#offcanvas-container-<app>',
+    };
+
+    function init() {
+        _initTable();
+        _bindEvents();
+    }
+
+    return { init, state };
+})();
+```
+
+---
+
+## 4. A. Listar — Tabulator + Event Delegation
+
+```javascript
+// features/<modelo>_list.js
+(function() {
+    const state = window.Sintel.<App>.state;
+
+    function _initTable() {
+        state.table = window.TabulatorFactory.create(
+            '#grid-<modelo>',
+            '/api/v1/<app>/',
+            _getColumnas(),
+            { searchInputSelector: '#search-<modelo>' }
+        );
+    }
+
+    function _getColumnas() {
+        return [
+            { title: 'Nombre',  field: 'nombre',  widthGrow: 2 },
+            { title: 'Sede',    field: 'sede_nombre', width: 140,
+              formatter: (cell) => cell.getValue()
+                  ? `<span class="badge bg-light text-dark border">${cell.getValue()}</span>`
+                  : '<span class="text-muted small">—</span>'
+            },
+            { title: 'Estado',  field: 'activo',  width: 90, hozAlign: 'center',
+              formatter: (cell) => cell.getValue()
+                  ? '<span class="badge bg-success">Activo</span>'
+                  : '<span class="badge bg-secondary">Inactivo</span>'
+            },
+            {
+                title: 'Acciones', width: 120, hozAlign: 'center', headerSort: false,
+                formatter: () => `
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" data-action="edit" title="Editar">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" data-action="delete" title="Eliminar">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>`,
+                cellClick: _handleCellAction
             }
-        });
+        ];
+    }
+
+    function _handleCellAction(e, cell) {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const row = cell.getRow().getData();
+        if (btn.dataset.action === 'edit')   _abrirEditar(row.uuid);
+        if (btn.dataset.action === 'delete') _eliminar(row);
+    }
+
+    function _abrirEditar(uuid) {
+        htmx.ajax('GET',
+            `/api/v1/<app>/${uuid}/render-offcanvas/editar/`,
+            { target: '#offcanvas-container-<app>', swap: 'innerHTML' }
+        );
+    }
+
+    // Escuchar eventos de mutacion — recarga sin destruir la tabla
+    document.body.addEventListener('<modelo>Guardado',  () => state.table?.replaceData());
+    document.body.addEventListener('<modelo>Eliminado', () => state.table?.replaceData());
+    // HX-Trigger header del backend también puede dispararlo:
+    document.body.addEventListener('lista<App>Changed', () => state.table?.replaceData());
+})();
+```
+
+---
+
+## 5. B. Crear / Editar — HTMX carga UI, Vanilla JS envía datos
+
+**HTML (botón en list.html):**
+```html
+<button hx-get="/api/v1/<app>/render-offcanvas/crear/"
+        hx-target="#offcanvas-container-<app>"
+        hx-swap="innerHTML"
+        class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>Nuevo
+</button>
+<div id="offcanvas-container-<app>"></div>
+```
+
+**JS (editor.js) — el offcanvas envía datos cuando está visible:**
+```javascript
+// features/<modelo>_editor.js
+document.body.addEventListener('htmx:afterSettle', function(e) {
+    if (e.detail.target?.id !== 'offcanvas-container-<app>') return;
+
+    const offcanvasEl = document.getElementById('offcanvas-<app>');
+    if (!offcanvasEl) return;
+
+    // Abrir con UIManager (limpia backdrops, destruye instancias previas)
+    window.UIManager?.handleOffcanvas(offcanvasEl, 'show');
+
+    // Inyectar listener de submit una sola vez (clonar evita duplicados)
+    const btn = document.getElementById('btn-guardar-<modelo>');
+    if (btn) {
+        const fresh = btn.cloneNode(true);
+        btn.parentNode.replaceChild(fresh, btn);
+        fresh.addEventListener('click', _submitForm);
     }
 });
+
+async function _submitForm() {
+    const form = document.getElementById('form-<modelo>');
+    if (!form) return;
+
+    const uuid = document.getElementById('<modelo>-uuid')?.value || null;
+    const data = _collectData(form);
+
+    if (!_validate(data)) return;
+
+    const method = uuid ? 'PATCH' : 'POST';
+    const url    = uuid
+        ? `/api/v1/<app>/${uuid}/`
+        : `/api/v1/<app>/`;
+
+    try {
+        const res = await window.http(method, url, data);
+        if (res.ok) {
+            window.UIManager?.handleOffcanvas(
+                document.getElementById('offcanvas-<app>'), 'hide'
+            );
+            document.body.dispatchEvent(new CustomEvent('<modelo>Guardado'));
+        } else {
+            window.UIManager?.handleError(res, { contexto: '[<App>:Editor]' });
+        }
+    } catch (err) {
+        window.UIManager?.handleError(err, { contexto: '[<App>:Editor]' });
+    }
+}
+
+function _collectData(form) {
+    const fd = new FormData(form);
+    return {
+        nombre:   fd.get('nombre') || '',
+        // NUNCA: parseInt(fd.get('uuid_campo')) — ver AGENTS.md §27
+        sede:     fd.get('sede_uuid') || null,  // UUID directo, sin parseInt
+        // ... resto de campos
+    };
+}
+
+function _validate(data) {
+    if (!data.nombre?.trim()) {
+        window.UIManager?.notifyError({ data: { detail: 'El nombre es obligatorio.' } });
+        return false;
+    }
+    return true;
+}
 ```
 
-### C. Eliminar (Bloqueo Estricto)
+---
 
-> [!CAUTION]
-> **Regla Cero-Automatización:** Si un registro está `activo=true`, NO se debe auto-inactivar. El frontend debe rechazar la eliminación e instar al usuario a editar manualmente el registro.
+## 6. C. Eliminar — Bloqueo Estricto
+
+> **Regla Cero-Automatización:** Si `activo === true`, NO eliminar ni auto-inactivar.
 
 ```javascript
-// <app_name>.utils.js
-async function eliminar(id, activo) {
-    if (activo) {
-        w.UIManager.notifyError({ 
-            data: { detail: 'No se puede eliminar un registro activo. Inactívelo editando el registro primero.' }
+async function _eliminar(row) {
+    if (row.activo) {
+        window.UIManager?.notifyError({
+            data: { detail: 'No se puede eliminar un registro activo. Inactívelo primero editándolo.' }
         });
         return;
     }
 
-    // Confirmación SweetAlert
-    const confirm = await Swal.fire({ title: '¿Eliminar registro?', icon: 'warning', showCancelButton: true });
-    
-    if (confirm.isConfirmed) {
-        const res = await w.http('DELETE', `/api/v1/<app_name>/${id}/`);
-        if (res.ok) {
-            d.dispatchEvent(new CustomEvent('entidadEliminada'));
+    const confirm = await Swal.fire({
+        title: '¿Eliminar registro?',
+        text: `"${row.nombre}" será eliminado permanentemente.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+        const res = await window.http('DELETE', `/api/v1/<app>/${row.uuid}/`);
+        if (res.ok || res.status === 204) {
+            document.body.dispatchEvent(new CustomEvent('<modelo>Eliminado'));
+        } else {
+            window.UIManager?.handleError(res, { contexto: '[<App>:Delete]' });
         }
+    } catch (err) {
+        window.UIManager?.handleError(err, { contexto: '[<App>:Delete]' });
     }
 }
 ```
 
-### D. Actualizar (Sincronización Reactiva)
+---
 
-El módulo principal (`list.js`) simplemente escucha los eventos del DOM emitidos por otros submódulos y actualiza la tabla en memoria sin recargar la página:
+## 7. D. Respuesta del Backend — Ciclo Completo
 
-```javascript
-// <app_name>.list.js
-d.addEventListener('entidadGuardada', () => state.table.replaceData());
-d.addEventListener('entidadEliminada', () => state.table.replaceData());
+```python
+# ViewSet — POST crear / PATCH editar
+def perform_create(self, serializer):
+    instance = self.service_crear(serializer.validated_data, self.get_empresa_id())
+    return instance
+
+def create(self, request, *args, **kwargs):
+    serializer = self.get_serializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    instance = self.perform_create(serializer)
+    out = self.get_serializer(instance)
+    headers = self.get_success_headers(out.data)
+    resp = Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
+    resp['HX-Trigger'] = 'lista<App>Changed'   # notifica al frontend
+    return resp
 ```
 
 ---
 
-## 4. Checklist de Validación FSD
+## 8. Checklist de Validación FSD
 
-- [ ] ¿La lógica de creación reside en `editor.js` y no en el HTML?
-- [ ] ¿Los botones de creación usan `hx-get` inyectando el Offcanvas en un contenedor vacío?
-- [ ] ¿Las mutaciones (POST/PATCH) se envían como JSON vía `w.http`?
-- [ ] ¿Se disparan CustomEvents (`entidadGuardada`) tras operaciones exitosas para desacoplar el recargo de la tabla?
-- [ ] ¿El borrado valida el estado activo del registro antes de enviar la petición?
+- [ ] Mutaciones (POST/PATCH/DELETE) van por `window.http()` — nunca `hx-post`
+- [ ] Botones de creación usan `hx-get` + target a container vacío
+- [ ] `htmx:afterSettle` inicializa JS post-swap (no hay race conditions)
+- [ ] Listener de submit se clona antes de añadir (evita duplicados)
+- [ ] UUID del objeto en `<input type="hidden" id="<modelo>-uuid">` — nunca `parseInt()`
+- [ ] `_collectData` usa `fd.get('campo')` para UUIDs — nunca conversión numérica
+- [ ] Delete valida `activo` antes de enviar petición
+- [ ] Backend devuelve `HX-Trigger: lista<App>Changed` tras mutaciones exitosas
+- [ ] `document.body.dispatchEvent(new CustomEvent('<modelo>Guardado'))` en éxito
+- [ ] `state.table.replaceData()` en respuesta a eventos — no destruir/recrear
