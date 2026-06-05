@@ -1,0 +1,289 @@
+{# offcanvas_detalle_liquidacion.html — Detalle Liquidación de Prestaciones Sociales v4.6 #}
+{# Zero JS in HTML: interacciones en liquidacion_editor.js #}
+{% load currency_filters %}
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-liquidacion-detalle"
+     aria-labelledby="offcanvas-liq-detalle-label"
+     style="width: min(780px, 96vw);">
+
+  {# ── Header con gradiente ────────────────────────────────────────── #}
+  <div class="offcanvas-header py-3 px-4 border-bottom"
+       style="background: linear-gradient(135deg,#1e3a5f 0%,#0d6efd 100%);">
+    <div class="flex-grow-1 min-w-0">
+      <h5 class="offcanvas-title fw-bold text-white mb-0 text-truncate" id="offcanvas-liq-detalle-label">
+        <i class="bi bi-file-earmark-spreadsheet-fill me-2"></i>
+        {{ liquidacion.get_tipo_liquidacion_display }}
+      </h5>
+      <small class="text-white opacity-75">
+        {{ empleado.nombre_completo }} &mdash; Doc: {{ empleado.numero_documento }}
+      </small>
+    </div>
+    <div class="d-flex align-items-center gap-2 ms-2 flex-shrink-0">
+      {% if liquidacion.estado == 'PAGADO' %}
+        <span class="badge bg-success"><i class="bi bi-check2-all me-1"></i>Pagado</span>
+      {% else %}
+        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Proyectado</span>
+      {% endif %}
+      <button type="button" class="btn-close btn-close-white ms-1" data-bs-dismiss="offcanvas"></button>
+    </div>
+  </div>
+
+  <div class="offcanvas-body p-0" style="overflow-y:auto;">
+
+    {# ── KPI Strip ────────────────────────────────────────────────── #}
+    <div class="d-flex gap-0 border-bottom" style="background:#f8f9fa;">
+      <div class="flex-fill text-center py-3 border-end">
+        <div class="text-muted" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">Base Salarial</div>
+        <div class="fw-bold mt-1" style="font-size:.95rem;">{{ liquidacion.base_salarial|currency_cop }}</div>
+      </div>
+      <div class="flex-fill text-center py-3 border-end">
+        <div class="text-muted" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">Días Base</div>
+        <div class="fw-bold mt-1" style="font-size:.95rem;">{{ liquidacion.dias_base_calculo }}</div>
+      </div>
+      <div class="flex-fill text-center py-3" style="background:#0d6efd10;">
+        <div class="text-primary" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">Total Liquidado</div>
+        <div class="fw-bold text-primary mt-1" style="font-size:1.1rem;">{{ liquidacion.valor_total|currency_cop }}</div>
+      </div>
+    </div>
+
+    <div class="p-4">
+
+      {# ── Info Empleado + Contrato ─────────────────────────────── #}
+      <div class="row g-2 mb-4">
+        <div class="col-6">
+          <div class="card border-0 h-100" style="background:#f0f6ff;">
+            <div class="card-body py-2 px-3">
+              <div class="text-muted" style="font-size:.63rem;text-transform:uppercase;font-weight:700;">Empleado</div>
+              <div class="fw-bold small mt-1">{{ empleado.nombre_completo }}</div>
+              <div class="text-muted" style="font-size:.72rem;">{{ empleado.tipo_documento }}: {{ empleado.numero_documento }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="card border-0 h-100" style="background:#f0f6ff;">
+            <div class="card-body py-2 px-3">
+              <div class="text-muted" style="font-size:.63rem;text-transform:uppercase;font-weight:700;">Contrato</div>
+              <div class="fw-bold small mt-1">{{ contrato.cargo }}</div>
+              <div class="text-muted" style="font-size:.72rem;">{{ contrato.get_tipo_display }} · Desde {{ desglose.fecha_inicio_contrato|default:contrato.fecha_inicio }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="card border-0 h-100" style="background:#f8f9fa;">
+            <div class="card-body py-2 px-3">
+              <div class="text-muted" style="font-size:.63rem;text-transform:uppercase;font-weight:600;">Salario</div>
+              <div class="fw-semibold small mt-1">{{ contrato.salario_mensual|currency_cop }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="card border-0 h-100" style="background:#f8f9fa;">
+            <div class="card-body py-2 px-3">
+              <div class="text-muted" style="font-size:.63rem;text-transform:uppercase;font-weight:600;">Aux. Transp.</div>
+              <div class="fw-semibold small mt-1">{{ contrato.auxilio_transporte|currency_cop }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="card border-0 h-100" style="background:#f8f9fa;">
+            <div class="card-body py-2 px-3">
+              <div class="text-muted" style="font-size:.63rem;text-transform:uppercase;font-weight:600;">Fecha Corte</div>
+              <div class="fw-semibold small mt-1">{{ liquidacion.fecha_corte|date:"d/m/Y" }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Tabla de conceptos ───────────────────────────────────── #}
+      {% if desglose %}
+      <h6 class="text-muted mb-2" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;font-weight:700;">
+        <i class="bi bi-list-columns me-1"></i>Desglose de Conceptos
+      </h6>
+      <div class="table-responsive mb-3">
+        <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
+          <thead style="background:#1e3a5f;color:#fff;">
+            <tr>
+              <th class="py-2 ps-3">Concepto</th>
+              <th class="text-center py-2" style="width:100px;">Período</th>
+              <th class="text-center py-2" style="width:60px;">Días</th>
+              <th class="text-end py-2 pe-3" style="width:130px;">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {# Prima #}
+            <tr>
+              <td class="ps-3">
+                <span class="badge bg-info text-dark me-2" style="font-size:.6rem;width:38px;">Prima</span>
+                Prima de Servicios
+              </td>
+              <td class="text-center text-muted" style="font-size:.72rem;">
+                {% if desglose.fecha_inicio_primas %}{{ desglose.fecha_inicio_primas }}{% else %}—{% endif %}
+              </td>
+              <td class="text-center font-monospace">{{ desglose.dias_primas|default:"0" }}</td>
+              <td class="text-end pe-3 fw-semibold font-monospace">{{ desglose.valor_primas|default:"0.00"|currency_cop }}</td>
+            </tr>
+            {# Cesantías #}
+            <tr>
+              <td class="ps-3">
+                <span class="badge bg-warning text-dark me-2" style="font-size:.6rem;width:38px;">Ces.</span>
+                Cesantías
+              </td>
+              <td class="text-center text-muted" style="font-size:.72rem;">
+                {% if desglose.fecha_inicio_cesantias %}{{ desglose.fecha_inicio_cesantias }}{% else %}—{% endif %}
+              </td>
+              <td class="text-center font-monospace">{{ desglose.dias_cesantias|default:"0" }}</td>
+              <td class="text-end pe-3 fw-semibold font-monospace">{{ desglose.valor_cesantias|default:"0.00"|currency_cop }}</td>
+            </tr>
+            {# Intereses #}
+            <tr>
+              <td class="ps-3">
+                <span class="badge bg-warning text-dark me-2" style="font-size:.6rem;width:38px;">Int.</span>
+                Intereses Cesantías (12%)
+              </td>
+              <td class="text-center text-muted" style="font-size:.72rem;">—</td>
+              <td class="text-center font-monospace">{{ desglose.dias_intereses|default:"0" }}</td>
+              <td class="text-end pe-3 fw-semibold font-monospace">{{ desglose.valor_intereses|default:"0.00"|currency_cop }}</td>
+            </tr>
+            {# Vacaciones #}
+            <tr>
+              <td class="ps-3">
+                <span class="badge bg-success me-2" style="font-size:.6rem;width:38px;">Vac.</span>
+                Vacaciones
+              </td>
+              <td class="text-center text-muted" style="font-size:.72rem;">
+                {% if desglose.fecha_inicio_vacaciones %}{{ desglose.fecha_inicio_vacaciones }}{% else %}—{% endif %}
+              </td>
+              <td class="text-center font-monospace">{{ desglose.dias_vacaciones|default:"0" }}</td>
+              <td class="text-end pe-3 fw-semibold font-monospace">{{ desglose.valor_vacaciones|default:"0.00"|currency_cop }}</td>
+            </tr>
+
+            {# Subtotal prestaciones #}
+            <tr style="background:#e8f0fe;font-weight:600;">
+              <td class="ps-3" colspan="3">Subtotal Prestaciones Sociales</td>
+              <td class="text-end pe-3 font-monospace">{{ desglose.total_prestaciones|default:"0.00"|currency_cop }}</td>
+            </tr>
+
+            {# Conceptos adicionales solo en liquidación definitiva #}
+            {% if liquidacion.tipo_liquidacion == 'LIQUIDACION_DEFINITIVA' %}
+            {% if desglose.salario_pendiente and desglose.salario_pendiente != '0.00' %}
+            <tr>
+              <td class="ps-3">
+                <span class="badge bg-primary me-2" style="font-size:.6rem;width:38px;">Sal.</span>
+                Salario Días Pendientes
+              </td>
+              <td class="text-center text-muted" style="font-size:.72rem;">—</td>
+              <td class="text-center font-monospace">{{ desglose.dias_salario_pendiente|default:"0" }}</td>
+              <td class="text-end pe-3 fw-semibold font-monospace text-primary">{{ desglose.salario_pendiente|currency_cop }}</td>
+            </tr>
+            {% endif %}
+            {% if desglose.indemnizacion and desglose.indemnizacion != '0.00' %}
+            <tr>
+              <td class="ps-3">
+                <span class="badge bg-danger me-2" style="font-size:.6rem;width:38px;">Ind.</span>
+                Indemnización por Terminación
+              </td>
+              <td class="text-center text-muted" style="font-size:.72rem;">—</td>
+              <td class="text-center font-monospace">—</td>
+              <td class="text-end pe-3 fw-semibold font-monospace text-danger">{{ desglose.indemnizacion|currency_cop }}</td>
+            </tr>
+            {% endif %}
+            {% if desglose.prestamos_deducidos and desglose.prestamos_deducidos != '0.00' %}
+            <tr style="background:#fff0f0;">
+              <td class="ps-3 text-danger">
+                <i class="bi bi-dash-circle me-2"></i>Préstamos / Deudas deducidas
+              </td>
+              <td class="text-center" colspan="2">—</td>
+              <td class="text-end pe-3 fw-bold font-monospace text-danger">-{{ desglose.prestamos_deducidos|currency_cop }}</td>
+            </tr>
+            {% endif %}
+            {% endif %}
+          </tbody>
+          <tfoot>
+            <tr style="background:#1e3a5f;color:#fff;">
+              <td class="py-3 ps-3 fw-bold" style="font-size:.9rem;" colspan="3">
+                <i class="bi bi-calculator-fill me-2"></i>
+                {% if liquidacion.tipo_liquidacion == 'LIQUIDACION_DEFINITIVA' %}TOTAL NETO A PAGAR{% else %}TOTAL LIQUIDACIÓN{% endif %}
+              </td>
+              <td class="text-end pe-3 fw-bold font-monospace" style="font-size:1.05rem;">
+                {{ liquidacion.valor_total|currency_cop }}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% else %}
+      <div class="alert alert-secondary py-2 small">
+        <i class="bi bi-info-circle me-1"></i>
+        Desglose no disponible para esta liquidación.
+      </div>
+      {% endif %}
+
+      {# Observaciones #}
+      {% if liquidacion.observaciones %}
+      <div class="mb-2">
+        <div class="text-muted mb-1" style="font-size:.65rem;text-transform:uppercase;font-weight:700;">
+          <i class="bi bi-chat-left-text me-1"></i>Observaciones
+        </div>
+        <div class="bg-light border rounded p-2 small text-muted">{{ liquidacion.observaciones|linebreaksbr }}</div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  {# ── Footer con acciones ─────────────────────────────────────── #}
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="/api/v1/empleados/liquidaciones-prestaciones/{{ liquidacion.uuid }}/pdf/"
+           target="_blank"
+           class="btn btn-danger btn-sm">
+          <i class="bi bi-file-earmark-pdf me-1"></i>Generar PDF
+        </a>
+        {% if liquidacion.estado == 'PROYECTADO' %}
+        <button type="button" class="btn btn-success btn-sm"
+                id="btn-marcar-pagado-{{ liquidacion.uuid }}"
+                data-uuid="{{ liquidacion.uuid }}">
+          <i class="bi bi-check2-all me-1"></i>Marcar Pagado
+        </button>
+        {% endif %}
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-lg me-1"></i>Cerrar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+    const btn = document.querySelector('[id^="btn-marcar-pagado-"]');
+    if (!btn) return;
+    btn.addEventListener('click', async function() {
+        const uuid = this.dataset.uuid;
+        if (!confirm('¿Confirmar que esta liquidación fue pagada? Este cambio es irreversible.')) return;
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+        try {
+            const res = await window.http('PATCH',
+                `/api/v1/empleados/liquidaciones-prestaciones/${uuid}/`,
+                { estado: 'PAGADO' });
+            if (res.ok) {
+                window.UIManager?.notifySuccess('Liquidación marcada como Pagada');
+                const oc = document.getElementById('offcanvas-liquidacion-detalle');
+                if (oc && window.UIManager?.handleOffcanvas) window.UIManager.handleOffcanvas(oc, 'hide');
+                window.Sintel?.Empleados?.LiquidacionList?.reload();
+            } else {
+                window.UIManager?.notifyError(res.data?.detail || 'Error al actualizar');
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-check2-all me-1"></i>Marcar Pagado';
+            }
+        } catch(e) {
+            window.UIManager?.notifyError('Error de conexión');
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-check2-all me-1"></i>Marcar Pagado';
+        }
+    });
+})();
+</script>

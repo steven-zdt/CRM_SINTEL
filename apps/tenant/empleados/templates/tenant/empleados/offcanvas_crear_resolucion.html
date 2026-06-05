@@ -1,0 +1,109 @@
+{# offcanvas_crear_resolucion.html - Formulario para CREAR Resolucion DIAN #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-resolucion-crear" aria-labelledby="offcanvas-resolucion-crear-label" style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-resolucion-crear-label">
+      <i class="bi bi-file-earmark-lock-fill text-primary me-2"></i>
+      <span>Nueva Resolucion DIAN</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="form-resolucion-crear-feedback" class="alert d-none mb-3" role="alert"></div>
+    
+    <form id="form-resolucion-crear" onsubmit="return false;">
+      {% csrf_token %}
+      
+      {# Identificacion #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-card-text me-2"></i>Identificacion de Resolucion
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label for="resolucion-crear-numero" class="form-label text-danger fw-bold">Numero de Resolucion *</label>
+            <input type="text" class="form-control" id="resolucion-crear-numero" name="numero_resolucion" placeholder="Ej: 187640000001" required>
+          </div>
+          <div class="col-md-4">
+            <label for="resolucion-crear-prefijo" class="form-label text-danger fw-bold">Prefijo *</label>
+            <input type="text" class="form-control" id="resolucion-crear-prefijo" name="prefijo" placeholder="Ej: SETT" required>
+          </div>
+        </div>
+      </div>
+      
+      {# Rangos #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-hash me-2"></i>Rangos Autorizados
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="resolucion-crear-rango-desde" class="form-label text-danger fw-bold">Rango Desde *</label>
+            <input type="number" class="form-control" id="resolucion-crear-rango-desde" name="rango_desde" value="1" min="1" required>
+          </div>
+          <div class="col-md-6">
+            <label for="resolucion-crear-rango-hasta" class="form-label text-danger fw-bold">Rango Hasta *</label>
+            <input type="number" class="form-control" id="resolucion-crear-rango-hasta" name="rango_hasta" placeholder="Ej: 10000" min="1" required>
+          </div>
+        </div>
+      </div>
+      
+      {# Fechas #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar-event me-2"></i>Vigencias y Fechas
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="resolucion-crear-fecha-resolucion" class="form-label text-danger fw-bold">Fecha de Resolucion *</label>
+            <input type="date" class="form-control" id="resolucion-crear-fecha-resolucion" name="fecha_resolucion" required>
+          </div>
+          <div class="col-md-6">
+            <label for="resolucion-crear-fecha-inicio" class="form-label text-danger fw-bold">Inicio Aplicacion *</label>
+            <input type="date" class="form-control" id="resolucion-crear-fecha-inicio" name="fecha_inicio" required>
+          </div>
+          <div class="col-md-6">
+            <label for="resolucion-crear-fecha-fin" class="form-label text-danger fw-bold">Vencimiento *</label>
+            <input type="date" class="form-control" id="resolucion-crear-fecha-fin" name="fecha_fin" required>
+          </div>
+        </div>
+      </div>
+
+      {# Clave y Estado #}
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-shield-lock me-2"></i>Seguridad y Estado
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="resolucion-crear-clave" class="form-label">Clave Tecnica</label>
+            <input type="text" class="form-control" id="resolucion-crear-clave" name="clave_tecnica" placeholder="Clave tecnica DIAN (Opcional)">
+          </div>
+          <div class="col-md-12">
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" id="resolucion-crear-vigente" name="vigente" value="true" checked>
+              <label class="form-check-label fw-semibold" for="resolucion-crear-vigente">Establecer como Resolucion Vigente por defecto</label>
+            </div>
+            <small class="text-muted d-block mt-1">Solo una resolucion puede estar activa y vigente a la vez.</small>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-lg me-1"></i>Cancelar
+      </button>
+      <button type="button" class="btn btn-success" id="btn-guardar-resolucion-crear"
+              hx-post="/api/v1/empleados/resoluciones-dian/"
+              hx-target="#offcanvas-container-resoluciones"
+              hx-swap="none"
+              hx-include="#form-resolucion-crear"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+              hx-on::htmx:before-request="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\'></span>Guardando...';"
+              hx-on::htmx:response-error="window.UIManager&&window.UIManager.handleError&&window.UIManager.handleError(event.detail,'[resolucion.crear]',{errorContainerSelector:'#form-resolucion-crear-feedback'});">
+        <i class="bi bi-check-lg me-1"></i>Crear Resolucion
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,258 @@
+{# offcanvas_detalle_empleado.html - Offcanvas para VER DETALLE de empleado v3.10.0 #}
+{# Feature-Sliced: Template modular solo para visualizacion de detalles #}
+{# Estilos alineados con la identidad visual premium de Sintel #}
+
+<style>
+  #offcanvas-empleado-detalle {
+    width: 720px !important;
+  }
+  #offcanvas-empleado-detalle .offcanvas-body {
+    padding: 2rem;
+    background-color: #f8f9fa;
+  }
+  #offcanvas-empleado-detalle .profile-header-card {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  #offcanvas-empleado-detalle .profile-avatar-large {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid white;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  }
+  #offcanvas-empleado-detalle .profile-avatar-fallback {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: white;
+  }
+  #offcanvas-empleado-detalle .detail-section {
+    background: white;
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+  }
+  #offcanvas-empleado-detalle .section-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  #offcanvas-empleado-detalle .section-title.s-primary   { color: #0d6efd; border-color: #cfe2ff; }
+  #offcanvas-empleado-detalle .section-title.s-success   { color: #198754; border-color: #d1e7dd; }
+  #offcanvas-empleado-detalle .section-title.s-info      { color: #0dcaf0; border-color: #cff4fc; }
+  #offcanvas-empleado-detalle .section-title.s-warning   { color: #dc8500; border-color: #fff3cd; }
+  
+  #offcanvas-empleado-detalle .data-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.2rem;
+  }
+  #offcanvas-empleado-detalle .data-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #212529;
+  }
+  #offcanvas-empleado-detalle .data-value.empty {
+    color: #adb5bd;
+    font-style: italic;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end d-flex flex-column" tabindex="-1" id="offcanvas-empleado-detalle" aria-labelledby="offcanvas-empleado-detalle-label">
+
+  <div class="offcanvas-header border-bottom py-3 px-4 bg-white">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-empleado-detalle-label">
+      <i class="bi bi-person-bounding-box text-primary me-2"></i>Detalle del Empleado
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body flex-grow-1 overflow-y-auto">
+
+    <!-- Tarjeta de Perfil Resumen -->
+    <div class="profile-header-card">
+      {% if empleado.foto %}
+        <img src="{{ empleado.foto.url }}" alt="Foto de {{ empleado.primer_nombre }}" class="profile-avatar-large">
+      {% else %}
+        <div class="profile-avatar-fallback bg-primary">
+          {{ empleado.primer_nombre|slice:":1" }}{{ empleado.primer_apellido|slice:":1" }}
+        </div>
+      {% endif %}
+      <div>
+        <h4 class="fw-bold mb-1 text-dark">
+          {{ empleado.primer_nombre }} {{ empleado.segundo_nombre|default:"" }} {{ empleado.primer_apellido }} {{ empleado.segundo_apellido|default:"" }}
+        </h4>
+        <div class="d-flex align-items-center gap-2 mt-1">
+          <span class="badge {% if empleado.estado == 'ACTIVO' %}bg-success{% else %}bg-danger{% endif %}">
+            <i class="bi {% if empleado.estado == 'ACTIVO' %}bi-check-circle{% else %}bi-x-circle{% endif %} me-1"></i>
+            {{ empleado.get_estado_display }}
+          </span>
+          <span class="text-muted small">
+            <i class="bi bi-card-text me-1"></i>{{ empleado.get_tipo_documento_display }}: <strong>{{ empleado.numero_documento }}</strong>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seccion 1: Informacion Personal y Contacto -->
+    <div class="detail-section">
+      <p class="section-title s-primary">
+        <i class="bi bi-person-vcard"></i>Información Personal y Contacto
+      </p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="data-label">Primer Nombre</div>
+          <div class="data-value">{{ empleado.primer_nombre }}</div>
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Segundo Nombre</div>
+          {% if empleado.segundo_nombre %}
+            <div class="data-value">{{ empleado.segundo_nombre }}</div>
+          {% else %}
+            <div class="data-value empty">—</div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Primer Apellido</div>
+          <div class="data-value">{{ empleado.primer_apellido }}</div>
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Segundo Apellido</div>
+          {% if empleado.segundo_apellido %}
+            <div class="data-value">{{ empleado.segundo_apellido }}</div>
+          {% else %}
+            <div class="data-value empty">—</div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Correo Electrónico</div>
+          <div class="data-value">
+            <i class="bi bi-envelope text-muted me-1"></i>{{ empleado.email }}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Teléfono / Celular</div>
+          {% if empleado.telefono %}
+            <div class="data-value">
+              <i class="bi bi-telephone text-muted me-1"></i>{{ empleado.telefono }}
+            </div>
+          {% else %}
+            <div class="data-value empty">—</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Seccion 2: Ubicacion y Estructura Organizativa -->
+    <div class="detail-section">
+      <p class="section-title s-success">
+        <i class="bi bi-building"></i>Ubicación y Estructura
+      </p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="data-label">Sede</div>
+          {% if empleado.sede %}
+            <div class="data-value">
+              <i class="bi bi-geo-alt text-muted me-1"></i>{{ empleado.sede.nombre }}
+            </div>
+          {% else %}
+            <div class="data-value empty">— Sin sede asignada</div>
+          {% endif %}
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Área</div>
+          {% if empleado.area %}
+            <div class="data-value">
+              <i class="bi bi-diagram-3 text-muted me-1"></i>{{ empleado.area.nombre }}
+            </div>
+          {% else %}
+            <div class="data-value empty">— Sin área asignada</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Seccion 3: Seguridad Social -->
+    <div class="detail-section">
+      <p class="section-title s-info">
+        <i class="bi bi-shield-check"></i>Seguridad Social
+      </p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="data-label">Entidad Promotora de Salud (EPS)</div>
+          <div class="data-value">{{ empleado.get_eps_display }}</div>
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Fondo de Pensiones (AFP)</div>
+          <div class="data-value">{{ empleado.get_afp_display }}</div>
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Aseguradora de Riesgos Laborales (ARL)</div>
+          <div class="data-value">{{ empleado.get_arl_display }}</div>
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Nivel de Riesgo ARL</div>
+          <div class="data-value">Clase {{ empleado.nivel_riesgo_arl }} ({{ empleado.get_nivel_riesgo_arl_display }})</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seccion 4: Vinculacion Laboral -->
+    <div class="detail-section">
+      <p class="section-title s-warning">
+        <i class="bi bi-calendar-check"></i>Fechas de Vinculación
+      </p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="data-label">Fecha de Ingreso</div>
+          <div class="data-value">
+            <i class="bi bi-calendar-plus text-muted me-1"></i>{{ empleado.fecha_ingreso|date:"d \d\e F \d\e Y" }}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="data-label">Fecha de Retiro</div>
+          {% if empleado.fecha_retiro %}
+            <div class="data-value text-danger fw-semibold">
+              <i class="bi bi-calendar-minus me-1"></i>{{ empleado.fecha_retiro|date:"d \d\e F \d\e Y" }}
+            </div>
+          {% else %}
+            <div class="data-value empty">— Activo</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="offcanvas-footer border-top py-3 px-4 bg-white text-end">
+    <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="offcanvas">Cerrar</button>
+  </div>
+
+</div>
