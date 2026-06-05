@@ -1,0 +1,106 @@
+{# Lista del modulo Nueva Tarea. Proceso independiente dentro de Proyectos. #}
+<div id="panel-nueva-tarea"
+     class="card shadow-sm border-0">
+  <div class="card-header bg-white border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2 py-2 px-3">
+    <div>
+      <span class="fw-semibold text-dark">
+        <i class="bi bi-list-task text-primary me-2"></i>Nueva Tarea
+      </span>
+      <div id="nueva-tarea-contexto" class="text-muted small mt-0" style="font-size:0.75rem;"></div>
+    </div>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <div class="input-group input-group-sm" style="width:260px;">
+        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+        <input type="text" id="search-nueva-tarea" class="form-control border-start-0 ps-0"
+               placeholder="Buscar tarea...">
+      </div>
+      <button class="btn btn-primary btn-sm" id="btn-nueva-tarea-form" title="Nueva tarea">
+        <i class="bi bi-plus-lg me-1"></i>Nueva tarea
+      </button>
+      <button class="btn btn-outline-secondary btn-sm" id="btn-refresh-nueva-tarea" title="Refrescar">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="d-flex gap-0 border-bottom" id="nueva-tarea-kpis" style="font-size:0.75rem;">
+    <div class="flex-fill text-center py-2 border-end">
+      <div id="nt-kpi-total" class="fw-bold text-dark">-</div>
+      <div class="text-muted">Total</div>
+    </div>
+    <div class="flex-fill text-center py-2 border-end">
+      <div id="nt-kpi-proceso" class="fw-bold text-primary">-</div>
+      <div class="text-muted">En Proceso</div>
+    </div>
+    <div class="flex-fill text-center py-2 border-end">
+      <div id="nt-kpi-completada" class="fw-bold text-success">-</div>
+      <div class="text-muted">Completadas</div>
+    </div>
+    <div class="flex-fill text-center py-2">
+      <div id="nt-kpi-pendiente" class="fw-bold text-secondary">-</div>
+      <div class="text-muted">Pendientes</div>
+    </div>
+  </div>
+
+  <div class="card-body border-bottom py-2">
+    <div class="d-flex gap-2 flex-wrap" id="filtros-estado-nueva-tarea">
+      <button class="btn btn-sm btn-outline-dark active" data-estado="">
+        <i class="bi bi-grid-3x3-gap me-1"></i>Todas
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" data-estado="PENDIENTE">Pendientes</button>
+      <button class="btn btn-sm btn-outline-primary" data-estado="EN_PROCESO">En proceso</button>
+      <button class="btn btn-sm btn-outline-success" data-estado="COMPLETADA">Completadas</button>
+      <button class="btn btn-sm btn-outline-danger" data-estado="CANCELADA">Canceladas</button>
+    </div>
+  </div>
+
+  <div class="card-body p-0">
+    <div id="grid-nueva-tarea" style="min-height:360px;"></div>
+  </div>
+
+  <div id="form-nueva-tarea" class="card-footer bg-light border-top p-3" style="display:none;">
+    <div class="fw-semibold mb-2" style="font-size:0.82rem;">
+      <i class="bi bi-plus-circle text-primary me-1"></i>Nueva Tarea Corta
+    </div>
+    <div class="mb-2">
+      <input type="text" id="nt-titulo" class="form-control form-control-sm" placeholder="Titulo de la tarea *" maxlength="200">
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-md-6">
+        <select id="nt-cliente" class="form-select form-select-sm" required>
+          <option value="">Cliente destino *</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <select id="nt-empleado" class="form-select form-select-sm" required>
+          <option value="">Empleado asignado *</option>
+        </select>
+      </div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-6">
+        <input type="date" id="nt-fecha-inicio" class="form-control form-control-sm" placeholder="Inicio *">
+      </div>
+      <div class="col-6">
+        <input type="date" id="nt-fecha-fin" class="form-control form-control-sm" placeholder="Fin *">
+      </div>
+    </div>
+    <div class="mb-2">
+      <select id="nt-prioridad" class="form-select form-select-sm">
+        <option value="NORMAL">Prioridad Normal</option>
+        <option value="ALTA">Prioridad Alta</option>
+        <option value="BAJA">Prioridad Baja</option>
+      </select>
+    </div>
+    <div class="mb-2">
+      <textarea id="nt-descripcion" class="form-control form-control-sm" rows="2"
+                placeholder="Descripcion (opcional)" style="resize:none;"></textarea>
+    </div>
+    <div class="d-flex gap-2 justify-content-end">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-cancelar-nueva-tarea">Cancelar</button>
+      <button class="btn btn-primary btn-sm" id="btn-guardar-nueva-tarea">
+        <i class="bi bi-check-lg me-1"></i>Guardar
+      </button>
+    </div>
+  </div>
+</div>
