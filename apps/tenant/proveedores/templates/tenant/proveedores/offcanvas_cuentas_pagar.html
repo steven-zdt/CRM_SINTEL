@@ -1,0 +1,165 @@
+{# offcanvas_cuentas_pagar.html - Panel de Gestion de Cuentas por Pagar v3.16.1 #}
+{# Estructura Premium (Flexbox Footer, Headers Badges) #}
+
+<style>
+  #offcanvas-cuentas-pagar {
+    width: 600px !important;
+  }
+  #offcanvas-cuentas-pagar .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-cuentas-pagar .resumen-financiero {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  #offcanvas-cuentas-pagar .saldo-pendiente-destacado {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #dc3545;
+  }
+  #offcanvas-cuentas-pagar .saldo-pendiente-destacado.pagada {
+    color: #198754;
+  }
+  #offcanvas-cuentas-pagar .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+  }
+  #offcanvas-cuentas-pagar .form-control {
+    font-size: 0.9rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+  }
+  #offcanvas-cuentas-pagar .section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+    color: #0d6efd;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  #offcanvas-cuentas-pagar .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+    flex-shrink: 0;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end d-flex flex-column" tabindex="-1"
+     id="offcanvas-cuentas-pagar" aria-labelledby="offcanvas-cuentas-pagar-label">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-cuentas-pagar-label">
+      <i class="bi bi-wallet2 text-primary me-2"></i>Gestion de Cuentas por Pagar
+    </h5>
+    <div class="ms-auto me-3">
+      {% if cuentas_pagar.estado_pago == 'PAGADA' %}
+        <span class="badge bg-success">Pagada</span>
+      {% elif cuentas_pagar.estado_pago == 'PARCIAL' %}
+        <span class="badge bg-warning text-dark">Pago Parcial</span>
+      {% else %}
+        <span class="badge bg-danger">Sin Pago</span>
+      {% endif %}
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body flex-grow-1 overflow-y-auto">
+    
+    {# --- 1. Resumen de Saldos --- #}
+    <div class="resumen-financiero shadow-sm">
+      <div class="row g-3">
+        <div class="col-12">
+          <span class="text-muted small uppercase fw-bold">Proveedor</span>
+          <div class="fs-6 fw-bold text-dark">{{ cuentas_pagar.proveedor_nombre }}</div>
+        </div>
+
+        <div class="col-6">
+          <span class="text-muted small uppercase fw-bold">Factura de Compra</span>
+          <div class="fw-semibold">
+            {{ cuentas_pagar.numero_factura|default:"S/N" }}
+          </div>
+        </div>
+
+        <div class="col-6">
+          <span class="text-muted small uppercase fw-bold">Vencimiento</span>
+          <div class="fw-semibold">{{ cuentas_pagar.fecha_vencimiento }}</div>
+        </div>
+
+        <div class="col-6">
+          <span class="text-muted small uppercase fw-bold">Monto Total Factura</span>
+          <div class="fw-semibold text-secondary">
+            ${{ cuentas_pagar.valor_total|floatformat:0 }} COP
+          </div>
+        </div>
+
+        <div class="col-6">
+          <span class="text-muted small uppercase fw-bold">Saldo Pendiente</span>
+          <div class="saldo-pendiente-destacado {% if cuentas_pagar.estado_pago == 'PAGADA' %}pagada{% endif %}">
+            ${{ cuentas_pagar.saldo|floatformat:0 }} COP
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# --- 2. Formulario de Abono (Solo si no esta pagada) --- #}
+    {% if cuentas_pagar.estado_pago != 'PAGADA' %}
+      <p class="section-title">
+        <i class="bi bi-cash-coin"></i>Registrar Abono
+      </p>
+
+      <form id="form-abono-cuentas-pagar" data-cxp-uuid="{{ cuentas_pagar.uuid }}" onsubmit="return false;">
+        <div class="mb-3">
+          <label for="monto_abono_cuentas_pagar" class="form-label">Monto del Abono (COP)</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            <input type="number" 
+                   id="monto_abono_cuentas_pagar" 
+                   class="form-control" 
+                   placeholder="Ingrese el monto del pago"
+                   min="1" 
+                   max="{{ cuentas_pagar.saldo }}"
+                   step="0.01"
+                   required>
+          </div>
+          <div class="form-text">
+            Monto maximo a abonar: ${{ cuentas_pagar.saldo|floatformat:0 }} COP.
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="observaciones_abono_cuentas_pagar" class="form-label">Observaciones del Pago</label>
+          <textarea id="observaciones_abono_cuentas_pagar" class="form-control" rows="2" placeholder="Notas sobre el pago..."></textarea>
+        </div>
+      </form>
+    {% else %}
+      <div class="alert alert-success text-center" role="alert">
+        <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+        Esta obligacion de cuentas por pagar ya se encuentra completamente liquidada.
+      </div>
+    {% endif %}
+
+  </div>
+
+  <div class="offcanvas-footer d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary w-50" data-bs-dismiss="offcanvas">
+      Cancelar
+    </button>
+    {% if cuentas_pagar.estado_pago != 'PAGADA' %}
+      <button type="button" id="btn-guardar-abono-cuentas-pagar" class="btn btn-success w-50">
+        <i class="bi bi-cash-coin me-1"></i>Registrar Abono
+      </button>
+    {% endif %}
+  </div>
+
+</div>
