@@ -1080,32 +1080,91 @@ class Retencion(SintelTenantBaseModel):
         return self.monto
 
 
+# ============================================================================
+# CHOICES Motor de Plantillas Contables (Fase 3)
+# ============================================================================
+
+TIPO_MOTOR_CHOICES = [
+    ('VENTA', _('Venta')),
+    ('COMPRA', _('Compra')),
+    ('GASTO', _('Gasto')),
+    ('NOMINA', _('Nomina')),
+]
+
+NATURALEZA_LINEA_CHOICES = [
+    ('DEBE', _('Debe')),
+    ('HABER', _('Haber')),
+]
+
+ORIGEN_VALOR_CHOICES = [
+    ('SALDO_BASE', _('Saldo Base / Subtotal')),
+    ('IVA_GENERADO', _('IVA Generado')),
+    ('IVA_DESCONTABLE', _('IVA Descontable')),
+    ('RETEFUENTE', _('Retencion en la Fuente')),
+    ('RETEICA', _('Retencion ICA')),
+    ('RETEIVA', _('Retencion IVA')),
+    ('TOTAL_DOCUMENTO', _('Total Neto del Documento')),
+]
+
+
 class PlantillaContable(SintelTenantBaseModel):
     """
-    Plantilla dinamica para resolver cuentas de debito y credito.
-    Coincide con la configuracion de la regla.
+    Plantilla contable con doble modo de operacion:
+    - Modo Resolver (backward compat): regla + cuenta_debe_codigo + cuenta_credito_codigo
+    - Motor Fase 3: tipo_transaccion + lineas (LineaPlantilla) con partida doble completa
     """
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        verbose_name=_('UUID'),
+    )
+    # -- Modo Resolver (backward compat con resolver.py) --
     regla = models.ForeignKey(
         'ReglaContable',
         on_delete=models.CASCADE,
         related_name='plantillas',
+        null=True,
+        blank=True,
         verbose_name=_('Regla Contable'),
-        help_text=_('Regla contable asociada')
+        help_text=_('Regla contable asociada (modo resolver legacy)')
     )
     cuenta_debe_codigo = models.CharField(
         max_length=20,
+        null=True,
+        blank=True,
         verbose_name=_('Codigo Cuenta Debito'),
-        help_text=_('Codigo de la cuenta contable para el DEBE')
+        help_text=_('Codigo PUC para el DEBE (modo resolver legacy)')
     )
     cuenta_credito_codigo = models.CharField(
         max_length=20,
+        null=True,
+        blank=True,
         verbose_name=_('Codigo Cuenta Credito'),
-        help_text=_('Codigo de la cuenta contable para el HABER')
+        help_text=_('Codigo PUC para el HABER (modo resolver legacy)')
     )
     activo = models.BooleanField(
         default=True,
         verbose_name=_('Activo'),
         help_text=_('Indica si esta plantilla esta activa')
+    )
+
+    # -- Motor de Plantillas Fase 3 --
+    nombre = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        verbose_name=_('Nombre'),
+        help_text=_('Nombre descriptivo (ej: Venta Facturas Electronicas)')
+    )
+    tipo_transaccion = models.CharField(
+        max_length=20,
+        choices=TIPO_MOTOR_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name=_('Tipo de Transaccion'),
+        help_text=_('Tipo de documento que usa esta plantilla: VENTA, COMPRA, GASTO o NOMINA')
     )
 
     class Meta(SintelTenantBaseModel.Meta):
@@ -1114,13 +1173,95 @@ class PlantillaContable(SintelTenantBaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=['empresa', 'regla'],
-                condition=models.Q(activo=True),
+                condition=models.Q(activo=True) & models.Q(regla__isnull=False),
                 name='%(class)s_unique_regla_activo'
-            )
+            ),
+            models.UniqueConstraint(
+                fields=['empresa', 'tipo_transaccion'],
+                condition=models.Q(activo=True) & models.Q(tipo_transaccion__isnull=False),
+                name='%(class)s_unique_tipo_transaccion_activo'
+            ),
         ]
 
     def __str__(self):
+        if self.nombre:
+            return f"Plantilla {self.nombre} [{self.tipo_transaccion}]"
         return f"Plantilla {self.regla} -> DEBE: {self.cuenta_debe_codigo}, HABER: {self.cuenta_credito_codigo}"
+
+
+class LineaPlantilla(SintelTenantBaseModel):
+    """
+    Linea de una PlantillaContable que mapea un componente economico (origen_valor)
+    a una CuentaContable con naturaleza DEBE/HABER.
+
+    Motor Fase 3: el motor itera estas lineas para construir el asiento de partida
+    doble sin hardcodear cuentas PUC.
+
+    Ejemplo de configuracion VENTA:
+        origen_valor=SALDO_BASE,    naturaleza=DEBE  -> 130505 (CxC Clientes)
+        origen_valor=SALDO_BASE,    naturaleza=HABER -> 413505 (Ingresos Ventas)
+        origen_valor=IVA_GENERADO,  naturaleza=HABER -> 240805 (IVA por Pagar)
+        origen_valor=RETEFUENTE,    naturaleza=DEBE  -> 236505 (Ret. Fuente x Pagar)
+    """
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        verbose_name=_('UUID'),
+    )
+    plantilla = models.ForeignKey(
+        'PlantillaContable',
+        on_delete=models.CASCADE,
+        related_name='lineas',
+        verbose_name=_('Plantilla Contable'),
+    )
+    cuenta_contable = models.ForeignKey(
+        'CuentaContable',
+        on_delete=models.PROTECT,
+        verbose_name=_('Cuenta Contable'),
+        help_text=_('Cuenta PUC nivel 6 para este movimiento')
+    )
+    naturaleza = models.CharField(
+        max_length=5,
+        choices=NATURALEZA_LINEA_CHOICES,
+        verbose_name=_('Naturaleza'),
+        help_text=_('DEBE o HABER')
+    )
+    origen_valor = models.CharField(
+        max_length=30,
+        choices=ORIGEN_VALOR_CHOICES,
+        verbose_name=_('Origen del Valor'),
+        help_text=_('Componente economico del documento que alimenta esta cuenta')
+    )
+    porcentaje_aplicar = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('100.00'),
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name=_('Porcentaje a Aplicar'),
+        help_text=_('100 = valor completo, 50 = la mitad del componente')
+    )
+    orden = models.PositiveSmallIntegerField(
+        default=1,
+        verbose_name=_('Orden'),
+        help_text=_('Orden de aparicion en el asiento generado')
+    )
+    descripcion = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        verbose_name=_('Descripcion'),
+        help_text=_('Descripcion que aparece en el MovimientoContable')
+    )
+
+    class Meta(SintelTenantBaseModel.Meta):
+        verbose_name = _('Linea de Plantilla')
+        verbose_name_plural = _('Lineas de Plantilla')
+        ordering = ['plantilla', 'orden']
+
+    def __str__(self):
+        return f"{self.plantilla} | {self.origen_valor} -> {self.cuenta_contable} [{self.naturaleza}]"
 
 
 class ImpuestoDocumento(SintelTenantBaseModel):

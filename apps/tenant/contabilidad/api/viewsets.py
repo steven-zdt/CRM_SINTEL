@@ -65,6 +65,9 @@ from apps.tenant.contabilidad.api.serializers import (
     MovimientoContableListSerializer,
     PeriodoContableDetailSerializer,
     PeriodoContableListSerializer,
+    LineaPlantillaSerializer,
+    PlantillaContableDetailSerializer,
+    PlantillaContableListSerializer,
     RetencionDetailSerializer,
     RetencionListSerializer,
     TipoComprobanteDetailSerializer,
@@ -79,8 +82,10 @@ from apps.tenant.contabilidad.models import (
     CatalogoMaestroNIIF,
     ConfiguracionRetenciones,
     CuentaContable,
+    LineaPlantilla,
     MovimientoContable,
     PeriodoContable,
+    PlantillaContable,
     ReglaContable,
     Retencion,
     TipoComprobante,
@@ -89,6 +94,7 @@ from apps.tenant.contabilidad.services.selectors import (
     AsientoContableSelector,
     CuentaContableSelector,
     PeriodoContableSelector,
+    PlantillaContableSelector,
     TipoComprobanteSelector,
     get_asiento_by_identifier,
     get_cuenta_by_identifier,
@@ -1270,6 +1276,154 @@ class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.View
         resultado = get_libro_diario_periodo(empresa_id, fecha_inicio, fecha_fin)
         serializer = LibroDiarioSerializer(resultado)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PlantillaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+    """
+    ViewSet para PlantillaContable + LineaPlantilla (Motor Fase 3 v3.16.2).
+
+    GET  /api/v1/contabilidad/plantillas-contables/              -> listado
+    GET  /api/v1/contabilidad/plantillas-contables/{uuid}/       -> detalle con lineas
+    GET  /api/v1/contabilidad/plantillas-contables/render-offcanvas/crear/
+    GET  /api/v1/contabilidad/plantillas-contables/{uuid}/render-offcanvas/editar/
+    GET  /api/v1/contabilidad/plantillas-contables/{uuid}/render-offcanvas/detalle/
+    POST /api/v1/contabilidad/plantillas-contables/              -> crear plantilla
+    PATCH /api/v1/contabilidad/plantillas-contables/{uuid}/      -> actualizar plantilla
+    DELETE /api/v1/contabilidad/plantillas-contables/{uuid}/     -> eliminar plantilla
+    POST /api/v1/contabilidad/plantillas-contables/{uuid}/lineas/   -> agregar linea
+    DELETE /api/v1/contabilidad/plantillas-contables/{uuid}/lineas/{linea_id}/ -> eliminar linea
+    """
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['tipo_transaccion', 'activo']
+    search_fields = ['nombre', 'tipo_transaccion']
+    ordering_fields = ['tipo_transaccion', 'nombre', 'activo', 'created_at']
+    ordering = ['-activo', 'tipo_transaccion']
+
+    def get_serializer_class(self):
+        if self.action in ('retrieve', 'render_offcanvas_editar', 'render_offcanvas_detalle'):
+            return PlantillaContableDetailSerializer
+        return PlantillaContableListSerializer
+
+    def get_queryset(self):
+        empresa_id = self.get_empresa_id()
+        if self.action == 'list':
+            return PlantillaContableSelector.get_qs_list(empresa_id)
+        return PlantillaContableSelector.get_qs_detail(empresa_id)
+
+    def create(self, request, *args, **kwargs):
+        empresa_id = self.get_empresa_id()
+        data = request.data.copy()
+        try:
+            plantilla = PlantillaContable.objects.create(
+                empresa_id=empresa_id,
+                nombre=data.get('nombre') or None,
+                tipo_transaccion=data.get('tipo_transaccion') or None,
+                activo=data.get('activo', True),
+            )
+            serializer = PlantillaContableDetailSerializer(plantilla)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    def partial_update(self, request, *args, **kwargs):
+        empresa_id = self.get_empresa_id()
+        plantilla = self.get_object()
+        data = request.data
+        try:
+            if 'nombre' in data:
+                plantilla.nombre = data['nombre'] or None
+            if 'tipo_transaccion' in data:
+                plantilla.tipo_transaccion = data['tipo_transaccion'] or None
+            if 'activo' in data:
+                plantilla.activo = data['activo']
+            plantilla.save()
+            serializer = PlantillaContableDetailSerializer(plantilla)
+            return Response(serializer.data)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    def destroy(self, request, *args, **kwargs):
+        plantilla = self.get_object()
+        try:
+            plantilla.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=['post'], url_path='lineas')
+    def agregar_linea(self, request, **kwargs):
+        """POST /plantillas-contables/{uuid}/lineas/ — agrega una LineaPlantilla."""
+        empresa_id = self.get_empresa_id()
+        plantilla = self.get_object()
+        data = request.data
+        cuenta_id = data.get('cuenta_contable')
+        if not cuenta_id:
+            return Response({'detail': 'cuenta_contable es obligatorio'}, status=400)
+        try:
+            linea = LineaPlantilla.objects.create(
+                empresa_id=empresa_id,
+                plantilla=plantilla,
+                cuenta_contable_id=cuenta_id,
+                naturaleza=data.get('naturaleza', 'DEBE'),
+                origen_valor=data.get('origen_valor', 'SALDO_BASE'),
+                porcentaje_aplicar=Decimal(str(data.get('porcentaje_aplicar', '100.00'))),
+                orden=int(data.get('orden', 1)),
+                descripcion=data.get('descripcion', ''),
+            )
+            return Response(LineaPlantillaSerializer(linea).data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=['delete'], url_path=r'lineas/(?P<linea_id>\d+)')
+    def eliminar_linea(self, request, linea_id=None, **kwargs):
+        """DELETE /plantillas-contables/{uuid}/lineas/{id}/ — elimina una LineaPlantilla."""
+        plantilla = self.get_object()
+        try:
+            linea = LineaPlantilla.objects.get(id=linea_id, plantilla=plantilla)
+            linea.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except LineaPlantilla.DoesNotExist:
+            return Response({'detail': 'Linea no encontrada'}, status=404)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
+            url_path='render-offcanvas/crear')
+    def render_offcanvas_crear(self, request):
+        """HTMX: Carga offcanvas de creacion de PlantillaContable."""
+        return Response({}, template_name='tenant/contabilidad/partials/plantilla_offcanvas_form.html')
+
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
+            url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request, **kwargs):
+        """HTMX: Carga offcanvas de edicion."""
+        try:
+            plantilla = self.get_object()
+            serializer = PlantillaContableDetailSerializer(plantilla)
+            return Response(
+                {'plantilla': serializer.data},
+                template_name='tenant/contabilidad/partials/plantilla_offcanvas_form.html',
+            )
+        except Exception as e:
+            logger.error('PlantillaContableViewSet.render_offcanvas_editar: %s', e)
+            return Response({'error': str(e)}, status=500)
+
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
+            url_path='render-offcanvas/detalle')
+    def render_offcanvas_detalle(self, request, **kwargs):
+        """HTMX: Carga offcanvas de detalle."""
+        try:
+            plantilla = self.get_object()
+            serializer = PlantillaContableDetailSerializer(plantilla)
+            return Response(
+                {'plantilla': serializer.data},
+                template_name='tenant/contabilidad/partials/plantilla_offcanvas_detalle.html',
+            )
+        except Exception as e:
+            logger.error('PlantillaContableViewSet.render_offcanvas_detalle: %s', e)
+            return Response({'error': str(e)}, status=500)
 
 
 # Lista de ViewSets para registro automático en el router

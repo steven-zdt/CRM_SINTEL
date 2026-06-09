@@ -19,8 +19,10 @@ from apps.tenant.contabilidad.models import (
     CatalogoMaestroNIIF,
     ConfiguracionRetenciones,
     CuentaContable,
+    LineaPlantilla,
     MovimientoContable,
     PeriodoContable,
+    PlantillaContable,
     Retencion,
     TipoComprobante,
 )
@@ -31,6 +33,8 @@ from apps.tenant.contabilidad.services.selectors import (
     CUENTA_LIST_FIELDS,
     PERIODO_DETAIL_FIELDS,
     PERIODO_LIST_FIELDS,
+    PLANTILLA_DETAIL_FIELDS,
+    PLANTILLA_LIST_FIELDS,
 )
 
 
@@ -665,3 +669,79 @@ class LibroDiarioSerializer(serializers.Serializer):
     fecha_fin = serializers.CharField(read_only=True)
     documentos = DocumentoEnriquecidoSerializer(many=True, read_only=True)
     resumen = ResumenLibroDiarioSerializer(read_only=True)
+
+
+# ============================================================================
+# PLANTILLAS CONTABLES - Motor Fase 3 (v3.16.2)
+# ============================================================================
+
+class LineaPlantillaSerializer(serializers.ModelSerializer):
+    """Linea de partida doble de una PlantillaContable."""
+    cuenta_codigo = serializers.SerializerMethodField()
+    cuenta_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LineaPlantilla
+        fields = [
+            'id', 'orden', 'naturaleza', 'origen_valor',
+            'cuenta_contable', 'cuenta_codigo', 'cuenta_nombre',
+            'porcentaje_aplicar', 'descripcion',
+        ]
+        read_only_fields = ['id']
+
+    def get_cuenta_codigo(self, obj):
+        try:
+            return obj.cuenta_contable.codigo
+        except Exception:
+            return None
+
+    def get_cuenta_nombre(self, obj):
+        try:
+            return obj.cuenta_contable.nombre
+        except Exception:
+            return None
+
+
+class PlantillaContableListSerializer(serializers.ModelSerializer):
+    """Serializer minimo para listado de PlantillaContable."""
+    lineas_count = serializers.SerializerMethodField()
+    modo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PlantillaContable
+        fields = list(PLANTILLA_LIST_FIELDS) + ['lineas_count', 'modo']
+        read_only_fields = ['id', 'uuid', 'created_at']
+
+    def get_lineas_count(self, obj):
+        try:
+            return obj.lineas.count()
+        except Exception:
+            return 0
+
+    def get_modo(self, obj):
+        if obj.tipo_transaccion:
+            return 'MOTOR'
+        return 'RESOLVER'
+
+
+class PlantillaContableDetailSerializer(serializers.ModelSerializer):
+    """Serializer completo con lineas anidadas para detalle/edicion."""
+    lineas = LineaPlantillaSerializer(many=True, read_only=True)
+    lineas_count = serializers.SerializerMethodField()
+    modo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PlantillaContable
+        fields = list(PLANTILLA_DETAIL_FIELDS) + ['lineas', 'lineas_count', 'modo']
+        read_only_fields = ['id', 'uuid', 'created_at', 'updated_at']
+
+    def get_lineas_count(self, obj):
+        try:
+            return len(obj.lineas.all())
+        except Exception:
+            return 0
+
+    def get_modo(self, obj):
+        if obj.tipo_transaccion:
+            return 'MOTOR'
+        return 'RESOLVER'

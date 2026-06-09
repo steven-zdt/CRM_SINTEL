@@ -457,6 +457,234 @@ class ContabilidadBusinessService:
         )
         return {'id': asiento.id, 'uuid': str(asiento.uuid), 'numero': asiento.numero}
 
+    # ============================================================================
+    # MOTOR DE PLANTILLAS CONTABLES (Fase 3) — Partida Doble Completa
+    # ============================================================================
+
+    # Mapeo TipoTransaccion enum value -> tipo motor (VENTA/COMPRA/GASTO/NOMINA)
+    _TIPO_TRANSACCION_A_MOTOR: Dict[str, str] = {
+        'VENTA_FACTURA':          'VENTA',
+        'VENTA_NOTA_CREDITO':     'VENTA',
+        'VENTA_NOTA_DEBITO':      'VENTA',
+        'SALIDA_INVENTARIO_VENTA':'VENTA',
+        'RECAUDO_CLIENTE':        'VENTA',
+        'COMPRA_GASTO':           'COMPRA',
+        'COMPRA_NOTA_CREDITO':    'COMPRA',
+        'COMPRA_INVENTARIO':      'COMPRA',
+        'ACTIVO_FIJO_COMPRA':     'COMPRA',
+        'PAGO_PROVEEDOR':         'COMPRA',
+        'INVENTARIO_COSTO_VENTA': 'GASTO',
+        'BAJA_INVENTARIO':        'GASTO',
+        'AJUSTE_INVENTARIO':      'GASTO',
+        'NOMINA_LIQUIDACION':     'NOMINA',
+        'NOMINA_PROVISION':       'NOMINA',
+        'NOMINA_PAGO':            'NOMINA',
+        'NOMINA_RETIRO':          'NOMINA',
+    }
+
+    # Mapeo ORIGEN_VALOR -> tipo_impuesto en ImpuestoDTO
+    _ORIGEN_A_IMPUESTO_TIPOS: Dict[str, tuple] = {
+        'IVA_GENERADO':    ('IVA', 'IVA_GENERADO'),
+        'IVA_DESCONTABLE': ('IVA_DESCONTABLE',),
+        'RETEFUENTE':      ('RETEFUENTE',),
+        'RETEICA':         ('RETEICA',),
+        'RETEIVA':         ('RETEIVA',),
+    }
+
+    def _resolver_tipo_motor(self, tipo_transaccion_value: str) -> Optional[str]:
+        """Convierte un TipoTransaccion.value a tipo motor (VENTA/COMPRA/GASTO/NOMINA)."""
+        return self._TIPO_TRANSACCION_A_MOTOR.get(tipo_transaccion_value or '')
+
+    def _resolver_valor_origen(self, origen_valor: str, dto) -> Decimal:
+        """Resuelve el monto del DTO correspondiente a un ORIGEN_VALOR."""
+        if origen_valor == 'SALDO_BASE':
+            return Decimal(str(dto.subtotal or '0'))
+        if origen_valor == 'TOTAL_DOCUMENTO':
+            return Decimal(str(dto.total or '0'))
+        tipos_buscados = self._ORIGEN_A_IMPUESTO_TIPOS.get(origen_valor)
+        if not tipos_buscados or not getattr(dto, 'impuestos', None):
+            return Decimal('0.00')
+        return sum(
+            Decimal(str(imp.valor))
+            for imp in dto.impuestos
+            if imp.tipo_impuesto in tipos_buscados
+        ) or Decimal('0.00')
+
+    def _generar_movimientos_desde_plantilla(self, empresa_id: int, dto, lineas: list) -> List[Dict[str, Any]]:
+        """Genera movimientos a partir de LineaPlantilla + DTO. Omite lineas con valor cero."""
+        movimientos = []
+        for idx, linea in enumerate(lineas, start=1):
+            valor_bruto = self._resolver_valor_origen(linea.origen_valor, dto)
+            if valor_bruto <= Decimal('0.00'):
+                continue
+            valor = (valor_bruto * linea.porcentaje_aplicar / Decimal('100')).quantize(Decimal('0.01'))
+            if valor <= Decimal('0.00'):
+                continue
+
+            cuenta = linea.cuenta_contable
+            if not cuenta:
+                raise ValidationError({'plantilla': f'La linea {idx} ({linea.origen_valor}) no tiene cuenta contable asignada.'})
+
+            descripcion_linea = linea.descripcion or f'{linea.get_origen_valor_display()} - {dto.descripcion}'
+            movimientos.append({
+                'cuenta_id': cuenta.id,
+                'cuenta_codigo': cuenta.codigo,
+                'debe': valor if linea.naturaleza == 'DEBE' else Decimal('0.00'),
+                'haber': valor if linea.naturaleza == 'HABER' else Decimal('0.00'),
+                'descripcion': descripcion_linea,
+                'orden': idx,
+            })
+        return movimientos
+
+    def _persistir_impuestos_documento(self, asiento, dto) -> None:
+        """Bulk-inserta ImpuestoDocumento para cada impuesto del DTO con valor > 0."""
+        from apps.tenant.contabilidad.models import ImpuestoDocumento
+
+        impuestos = getattr(dto, 'impuestos', None)
+        if not impuestos:
+            return
+
+        doc_origen = getattr(dto, 'documento_origen', None)
+        app_label = getattr(doc_origen, 'app_label', '') if doc_origen else ''
+        modelo = getattr(doc_origen, 'modelo', '') if doc_origen else ''
+        doc_id = getattr(doc_origen, 'id', 0) if doc_origen else 0
+
+        registros = [
+            ImpuestoDocumento(
+                empresa_id=asiento.empresa_id,
+                asiento=asiento,
+                tipo=imp.tipo_impuesto,
+                base=Decimal(str(imp.base_imponible)),
+                porcentaje=Decimal(str(imp.porcentaje)),
+                valor=Decimal(str(imp.valor)),
+                cuenta_codigo=imp.cuenta_codigo or None,
+                documento_origen_app=app_label,
+                documento_origen_modelo=modelo,
+                documento_origen_id=doc_id or 0,
+            )
+            for imp in impuestos
+            if Decimal(str(imp.valor)) > Decimal('0.00')
+        ]
+        if registros:
+            ImpuestoDocumento.objects.bulk_create(registros, ignore_conflicts=True)
+
+    @transaction.atomic
+    def contabilizar_con_plantilla(
+        self,
+        empresa_id: int,
+        dto,
+        tipo_transaccion_override: Optional[str] = None,
+        tipo_comprobante_id: Optional[int] = None,
+        periodo_uuid: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Motor de Plantillas Contables (Fase 3).
+
+        Genera un AsientoContable con partida doble completa usando LineaPlantilla.
+        Flujo: validar periodo -> resolver plantilla -> generar movimientos -> cuadratura -> persistir.
+
+        Args:
+            empresa_id: ID de la empresa activa.
+            dto: TransaccionEconomica DTO con subtotal, impuestos, total y documento_origen.
+            tipo_transaccion_override: Si se provee, sobreescribe la deteccion automatica
+                del tipo motor desde dto.tipo.
+            tipo_comprobante_id: ID de TipoComprobante para numeracion dinamica (opcional).
+            periodo_uuid: UUID del PeriodoContable (opcional; si None no se vincula).
+
+        Returns:
+            {'id': int, 'uuid': str, 'numero': str}
+        """
+        from apps.tenant.contabilidad.services.selectors import PlantillaContableSelector
+
+        # 1. Validar periodo
+        self._validar_periodo(dto.fecha, empresa_id)
+
+        # 2. Resolver tipo motor
+        tipo_raw = tipo_transaccion_override or (
+            dto.tipo.value if hasattr(dto.tipo, 'value') else str(dto.tipo)
+        )
+        tipo_motor = self._resolver_tipo_motor(tipo_raw)
+        if not tipo_motor:
+            raise ValidationError({
+                'tipo_transaccion': (
+                    f'No se puede determinar el tipo motor para "{tipo_raw}". '
+                    'Use tipo_transaccion_override con uno de: VENTA, COMPRA, GASTO, NOMINA.'
+                )
+            })
+
+        # 3. Resolver plantilla activa
+        plantilla = PlantillaContableSelector.obtener_motor_plantilla(empresa_id, tipo_motor)
+        if not plantilla:
+            raise ValidationError({
+                'plantilla': (
+                    f'No existe PlantillaContable activa para tipo_transaccion="{tipo_motor}". '
+                    'Cree una PlantillaContable con sus LineaPlantilla en la configuracion contable.'
+                )
+            })
+
+        # 4. Generar movimientos desde lineas
+        lineas = list(plantilla.lineas.select_related('cuenta_contable').order_by('orden'))
+        if not lineas:
+            raise ValidationError({
+                'plantilla': (
+                    f'La PlantillaContable "{plantilla.nombre or tipo_motor}" no tiene '
+                    'LineaPlantilla configuradas.'
+                )
+            })
+
+        movimientos = self._generar_movimientos_desde_plantilla(empresa_id, dto, lineas)
+
+        # 5. Cuadratura obligatoria — partida doble estricta (NIIF PYMES)
+        self._validar_cuadratura(movimientos, 'APROBADO')
+
+        # 6. Numero de asiento (con TipoComprobante si se provee)
+        numero = self._generar_numero_asiento('MOTOR')
+        tipo_comp_id_resolved = None
+        if tipo_comprobante_id:
+            tipo_comp = TipoComprobante.objects.filter(
+                empresa_id=empresa_id, id=tipo_comprobante_id, activa=True
+            ).first()
+            if tipo_comp:
+                numero = tipo_comp.obtener_siguiente_numero()
+                tipo_comp_id_resolved = tipo_comp.id
+
+        # 7. Resolver periodo contable
+        periodo_id = None
+        if periodo_uuid:
+            periodo = PeriodoContable.objects.filter(
+                empresa_id=empresa_id, uuid=periodo_uuid
+            ).first()
+            if periodo:
+                periodo_id = periodo.id
+
+        # 8. Persistir via crud_service.crear_asiento_manual (soporta periodo_contable_id)
+        doc_origen = getattr(dto, 'documento_origen', None)
+        asiento = self.crud.crear_asiento_manual(
+            empresa_id=empresa_id,
+            data={
+                'numero': numero,
+                'fecha': dto.fecha,
+                'descripcion': dto.descripcion,
+                'estado': 'APROBADO',
+                'tipo_comprobante_id': tipo_comp_id_resolved,
+                'periodo_contable_id': periodo_id,
+                'documento_origen_app': getattr(doc_origen, 'app_label', '') if doc_origen else '',
+                'documento_origen_modelo': getattr(doc_origen, 'modelo', '') if doc_origen else '',
+                'documento_origen_id': getattr(doc_origen, 'id', None) if doc_origen else None,
+                'documento_origen_numero': getattr(doc_origen, 'numero', '') if doc_origen else '',
+            },
+            movimientos=movimientos,
+        )
+
+        # 9. Persistir ImpuestoDocumento (trazabilidad fiscal)
+        self._persistir_impuestos_documento(asiento, dto)
+
+        logger.info(
+            '[MotorPlantillas] Asiento %s creado para empresa=%s tipo=%s plantilla=%s',
+            asiento.numero, empresa_id, tipo_motor, plantilla.id
+        )
+        return {'id': asiento.id, 'uuid': str(asiento.uuid), 'numero': asiento.numero}
+
     @transaction.atomic
     def sincronizar_cuentas_plan(self, empresa_id: int) -> Dict[str, Any]:
         """

@@ -25,6 +25,7 @@ from .selectors import (
     verificar_periodo_cerrado,
     calcular_saldos_cuenta,
     get_tercero_movimiento,
+    PlantillaContableSelector,
 )
 from .crud_service import ContabilidadCRUDService
 from .business_service import ContabilidadBusinessService
@@ -42,6 +43,7 @@ __all__ = [
     'PeriodoContableSelector',
     'TipoComprobanteSelector',
     'ContabilidadSelector',
+    'PlantillaContableSelector',
     'get_balance_prueba',
     'verificar_periodo_cerrado',
     'calcular_saldos_cuenta',

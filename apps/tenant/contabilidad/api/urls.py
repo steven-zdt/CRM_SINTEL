@@ -24,6 +24,7 @@ from apps.tenant.contabilidad.api.viewsets import (
     DocumentosPendientesViewSet,
     MovimientoContableViewSet,
     PeriodoContableViewSet,
+    PlantillaContableViewSet,
     TipoComprobanteViewSet,
     LibroDiarioViewSet,
     RetencionViewSet,
@@ -52,6 +53,7 @@ router.register(r'pendientes', DocumentosPendientesViewSet, basename='pendientes
 router.register(r'libro-diario', LibroDiarioViewSet, basename='libro-diario')
 router.register(r'retenciones', RetencionViewSet, basename='retenciones')
 router.register(r'configuraciones-retenciones', ConfiguracionRetencionesViewSet, basename='configuraciones-retenciones')
+router.register(r'plantillas-contables', PlantillaContableViewSet, basename='plantilla-contable')
 
 
 # URLs generadas por el router

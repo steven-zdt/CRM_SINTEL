@@ -21,6 +21,7 @@ from apps.tenant.contabilidad.models import (
     CatalogoMaestroNIIF,
     MovimientoContable,
     TipoComprobante,
+    PlantillaContable,
 )
 
 # ============================================================================
@@ -67,6 +68,15 @@ TIPO_COMPROBANTE_LIST_FIELDS = (
 
 TIPO_COMPROBANTE_DETAIL_FIELDS = (
     "id", "uuid", "codigo", "nombre", "prefijo", "consecutivo_actual", "activa", "created_at",
+)
+
+PLANTILLA_LIST_FIELDS = (
+    "id", "uuid", "nombre", "tipo_transaccion", "activo", "created_at",
+)
+
+PLANTILLA_DETAIL_FIELDS = (
+    "id", "uuid", "nombre", "tipo_transaccion", "activo",
+    "cuenta_debe_codigo", "cuenta_credito_codigo", "created_at", "updated_at",
 )
 
 MOVIMIENTO_LIST_FIELDS = (
@@ -854,3 +864,74 @@ def get_libro_diario_periodo(empresa_id: int, fecha_inicio: date, fecha_fin: dat
         'documentos': [d.to_dict() for d in documentos_ordenados],
         'resumen': resumen,
     }
+
+
+class PlantillaContableSelector:
+    @staticmethod
+    def obtener_plantilla_activa(
+        empresa_id: int,
+        tipo_transaccion: str,
+        concepto: Optional[str] = None
+    ) -> Optional[PlantillaContable]:
+        """
+        Modo Resolver (legacy): obtiene plantilla activa via regla contable.
+        Usado por resolver.py para resoluciones automaticas de 2 cuentas.
+        """
+        q = Q(
+            empresa_id=empresa_id,
+            regla__tipo_transaccion=tipo_transaccion,
+            activo=True,
+            regla__activo=True
+        )
+        if concepto:
+            q &= Q(regla__concepto=concepto)
+
+        return (
+            PlantillaContable.objects.filter(q)
+            .select_related('regla')
+            .first()
+        )
+
+    @staticmethod
+    def obtener_motor_plantilla(
+        empresa_id: int,
+        tipo_motor: str,
+    ) -> Optional[PlantillaContable]:
+        """
+        Motor Fase 3: obtiene la PlantillaContable activa para el motor de
+        partida doble completa. Filtra por tipo_transaccion (VENTA/COMPRA/GASTO/NOMINA)
+        y hace prefetch de todas las lineas con sus cuentas para evitar N+1 queries.
+        """
+        return (
+            PlantillaContable.objects.filter(
+                empresa_id=empresa_id,
+                tipo_transaccion=tipo_motor,
+                activo=True,
+            )
+            .prefetch_related('lineas__cuenta_contable')
+            .first()
+        )
+
+    @staticmethod
+    def get_qs_list(empresa_id: int):
+        """Queryset optimizado para listado de PlantillaContable."""
+        return (
+            PlantillaContable.objects
+            .filter(empresa_id=empresa_id)
+            .only(*PLANTILLA_LIST_FIELDS, 'empresa_id')
+            .order_by('-activo', 'tipo_transaccion', 'nombre')
+        )
+
+    @staticmethod
+    def get_qs_detail(empresa_id: int):
+        """Queryset con lineas para detalle/edicion de PlantillaContable."""
+        return (
+            PlantillaContable.objects
+            .filter(empresa_id=empresa_id)
+            .prefetch_related(
+                'lineas__cuenta_contable',
+            )
+            .order_by('-activo', 'tipo_transaccion', 'nombre')
+        )
+
+

@@ -1,12 +1,14 @@
-# AUDITORIA COMPLETA - CONTABILIDAD APP v3.16.1
+# AUDITORIA COMPLETA - CONTABILIDAD APP v3.16.3
 
-**Fecha de auditoria:** 2026-06-05 (sincronizada con models.py local — 12 modelos)
-**Estado:** Implementado y funcional con deuda tecnica documentada
+**Fecha de auditoria:** 2026-06-05 (sincronizada con models.py local — 14 modelos)
+**Estado:** Implementado y funcional. Deuda tecnica AUD-CONT-012 RESUELTA.
 **Arquitectura:** Feature-Sliced Design (FSD) + Service Layer
 **Compliance:** AGENTS.md + NIIF PYMES Colombia
 
 > Nota de auditoria 2026-05-25: este documento fue contrastado con `models.py`, `api/viewsets.py`, `api/serializers.py`, `api/urls.py`, `services/`, `integracion/`, `tasks.py`, `templates/`, `static/` y `tests/`. Los conteos y estados inferiores reflejan el codigo local actual, no solo la intencion historica.
 > Nota de auditoria 2026-06-05 (v3.16.1): Unificacion de `Retencion.naturaleza` + sincronizacion frontend workspace/#contabilidad (tab Retenciones). Ver §15.
+> Nota de auditoria 2026-06-05 (v3.16.2): Motor de Plantillas Contables Fase 3 — `PlantillaContable` modo dual + nuevo modelo `LineaPlantilla` + metodo `contabilizar_con_plantilla()`. Ver §16.
+> **Nota de auditoria 2026-06-05 (v3.16.3) — RESOLUCION AUD-CONT-012:** API CRUD `PlantillaContableViewSet` + UI tab Plantillas + Integracion Pendientes (auto-aplicar plantillas). Fase 3 COMPLETA. Ver §17.
 
 
 ## 📑 Documentación Especializada (SSoT)
@@ -99,9 +101,18 @@ El modo manual **no depende de `ReglaContable`**: el usuario provee la cuenta PU
 - Expuesto por API en `/api/v1/contabilidad/retenciones/` y consultable por tercero/documento.
 
 ### PlantillaContable
-- Plantilla dinamica que vincula una `ReglaContable` con un par de cuentas DEBE/HABER.
-- Campos: `regla` (FK), `cuenta_debe_codigo`, `cuenta_credito_codigo`, `activo`
-- Unicidad: una sola plantilla activa por `(empresa, regla)` via `UniqueConstraint`.
+- **v3.16.2 — Modo Dual:** Opera en dos modos coexistentes:
+  - **Modo Resolver (legacy):** `regla` (FK→ReglaContable), `cuenta_debe_codigo`, `cuenta_credito_codigo` — usados por `resolver.py` para resoluciones simples 2-cuentas. Campos ahora `null=True, blank=True` para coexistir con el Motor.
+  - **Motor Fase 3:** `nombre` (CharField), `tipo_transaccion` (VENTA/COMPRA/GASTO/NOMINA) + `lineas` (FK inversa a `LineaPlantilla`).
+- Campo compartido: `activo` (BooleanField).
+- Constraints: `unique_regla_activo` (condicion `regla IS NOT NULL`), `unique_tipo_transaccion_activo` (1 plantilla activa por tipo en empresa).
+- Migrations: `0008` (creacion original), `0010` (evolucion modo dual).
+
+### LineaPlantilla (NUEVO v3.16.2)
+- Define una linea de partida doble dentro de una `PlantillaContable` del Motor Fase 3.
+- Campos: `plantilla` (FK→PlantillaContable), `cuenta_contable` (FK→CuentaContable, PROTECT), `naturaleza` (DEBE/HABER), `origen_valor` (SALDO_BASE/IVA_GENERADO/IVA_DESCONTABLE/RETEFUENTE/RETEICA/RETEIVA/TOTAL_DOCUMENTO), `porcentaje_aplicar` (Decimal default 100.00), `orden` (PositiveSmallIntegerField), `descripcion`.
+- Constraint: `unique_plantilla_origen_valor` — una sola linea por `(empresa, plantilla, origen_valor)`.
+- El Motor itera estas lineas para construir el asiento completo: `porcentaje_aplicar` permite usar fracciones del valor (ej: 50% del subtotal).
 
 ### ImpuestoDocumento
 - Registro de impuestos (IVA, RETEFUENTE, etc.) aplicados a un asiento con trazabilidad polimorfica.
@@ -126,6 +137,7 @@ api_mixins.py      → Mixins por modelo para inyectar selectors/business/crud.
 |--------|-----------|
 | `crear_asiento(empresa_id, payload)` | Asiento manual desde API directa |
 | `contabilizar_documento_manual(empresa_id, dto)` | **Flujo On-Demand** — recibe `ComprobanteManualDTO` |
+| `contabilizar_con_plantilla(empresa_id, dto, ...)` | **Motor Fase 3** — partida doble completa via `LineaPlantilla` |
 | `aprobar_asiento(asiento_id)` | Cambia BORRADOR → APROBADO validando cuadratura |
 | `buscar_catalogo_niif_por_tipo(tipo, search)` | Búsqueda NIIF para el buscador del offcanvas |
 | `sincronizar_cuentas_plan(empresa_id)` | Materializa `CatalogoMaestroNIIF` faltante en `CuentaContable` |
@@ -625,10 +637,10 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 
 | Componente | Ruta | Estado |
 |-----------|------|--------|
-| Modelos | `models.py` | 12 modelos: Catalogo, Cuenta, TipoComprobante, Asiento, Movimiento, Periodo, Regla, Tarifa, ConfiguracionRetenciones, Retencion, PlantillaContable, ImpuestoDocumento |
+| Modelos | `models.py` | 14 modelos: Catalogo, Cuenta, TipoComprobante, Asiento, Movimiento, Periodo, Regla, Tarifa, ConfiguracionRetenciones, Retencion, PlantillaContable, ImpuestoDocumento, +LineaPlantilla (v3.16.2) |
 | Selectors | `services/selectors.py` | ✅ Pendientes + `APP_ORIGEN_PREFIJOS` + `filtrar_cuentas_por_app_origen()` |
 | CRUD Service | `services/crud_service.py` | ✅ `crear_asiento_manual()` con `tipo_comprobante_ref_id` |
-| Business Service | `services/business_service.py` | ✅ `contabilizar_documento_manual()` + TipoComprobante numero + integracion completa + asistente IA |
+| Business Service | `services/business_service.py` | ✅ `contabilizar_documento_manual()` + `contabilizar_con_plantilla()` (Motor Fase 3) + TipoComprobante numero + integracion completa + asistente IA |
 | Retenciones Service | `services/retenciones_service.py` | ✅ Pull Model de retenciones, materializacion y reversas. `crear_retencion()` usa `naturaleza` (v3.16.1) |
 | API Viewsets | `api/viewsets.py` | 10 ViewSets: cuentas, asientos, movimientos, periodos, catalogo, tipos, pendientes, libro diario, retenciones, configuraciones. `RetencionViewSet.filterset_fields` incluye `naturaleza` (v3.16.1) |
 | API Serializers | `api/serializers.py` | ✅ `ContabilizarManualInputSerializer` con `tipo_comprobante_id`. `RetencionListSerializer`/`RetencionDetailSerializer` actualizados con `naturaleza`, `created_at` (v3.16.1) |
@@ -641,7 +653,7 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 | Extractores | `integracion/extractores/` | gastos, facturas, nomina; inventario se consume por Movimientos Recientes, no por extractor directo |
 | Templates | `templates/tenant/contabilidad/` | 33 archivos HTML bajo ruta tenant (+`list_retenciones.html`, +`assets_retenciones.html`, v3.16.1) |
 | Static JS | `static/contabilidad/js/` | 17 archivos JS por dominio: asiento, cuenta, periodo, pendiente, libro, reporte, retencion (+`retencion.api.js`, +`retencion_list.js`, v3.16.1) |
-| Migraciones | `migrations/` | 9 migraciones presentes (`0001` a `0009`). `0009`: unificacion `naturaleza` en `Retencion` |
+| Migraciones | `migrations/` | 11 migraciones presentes (`0001` a `0011`). `0009`: unificacion `naturaleza`. `0010`: Motor Fase 3 (PlantillaContable modo dual + LineaPlantilla). `0011`: renombrado indices auto-hash Django. |
 | Mgmt Commands | `management/commands/` | `poblar_catalogo_niif`, `seed_reglas_contables`, `backfill_contabilidad`, `migrate_retenciones` |
 | Catálogo NIIF | DB (home, cliente) | ✅ 124 cuentas maestras |
 | CuentaContable nivel-6 | DB (home, cliente) | ✅ 54 cuentas seeded desde CatalogoMaestroNIIF |
@@ -1575,4 +1587,394 @@ AlterModelOptions ordering=['-created_at']
 ---
 
 **Auditoria actualizada:** 2026-06-05 (v3.16.1 — Retencion.naturaleza + tab Retenciones frontend)
+
+---
+
+## 16. ACTUALIZACION AUDITORIA v3.16.2 — 2026-06-05 — Motor de Plantillas Fase 3
+
+### 16.1 Contexto y Motivacion
+
+Fase 3 implementa el **Motor de Plantillas Contables con Partida Doble Integrada**. A diferencia del flujo manual On-Demand (usuario asigna cuentas) y del flujo automatico ETL (extractores + ReglaContable para 2 cuentas), el Motor:
+
+- Genera asientos completos con **N lineas** (no solo DEBE-HABER binario)
+- Usa configuracion declarativa (`LineaPlantilla`) en lugar de codigo hardcodeado
+- Soporta todos los componentes fiscales: IVA, RETEFUENTE, RETEICA, RETEIVA, base gravable, total neto
+- Es invocable desde Extractores, ViewSets o management commands con el mismo contrato DTO
+
+### 16.2 Nuevos Modelos (Migration 0010 + 0011)
+
+#### PlantillaContable — Evolucion Modo Dual
+
+| Campo | Antes (0008) | Despues (0010) |
+|-------|-------------|----------------|
+| `regla` | FK NOT NULL | FK NULL BLANK (backward compat) |
+| `cuenta_debe_codigo` | CharField NOT NULL | CharField NULL BLANK |
+| `cuenta_credito_codigo` | CharField NOT NULL | CharField NULL BLANK |
+| `activo` | BooleanField | sin cambio |
+| `nombre` | — | CharField(100) NULL BLANK (Motor Fase 3) |
+| `tipo_transaccion` | — | CharField choices VENTA/COMPRA/GASTO/NOMINA NULL (Motor Fase 3) |
+
+**Constraints actualizados:**
+
+```python
+# Constraint legacy (solo aplica si regla IS NOT NULL)
+models.UniqueConstraint(
+    fields=['empresa', 'regla'],
+    condition=Q(activo=True) & Q(regla__isnull=False),
+    name='plantillacontable_unique_regla_activo'
+)
+# Constraint Motor Fase 3 (1 plantilla activa por tipo por empresa)
+models.UniqueConstraint(
+    fields=['empresa', 'tipo_transaccion'],
+    condition=Q(activo=True) & Q(tipo_transaccion__isnull=False),
+    name='plantillacontable_unique_tipo_transaccion_activo'
+)
+```
+
+**Backward compat garantizada:** `resolver.py` sigue leyendo `plantilla.cuenta_debe_codigo` y `plantilla.cuenta_credito_codigo` sin cambios.
+
+#### LineaPlantilla — Nuevo Modelo
+
+```
+modelo          : LineaPlantilla(SintelTenantBaseModel)
+plantilla       : ForeignKey(PlantillaContable, CASCADE, related_name='lineas')
+cuenta_contable : ForeignKey(CuentaContable, PROTECT)
+naturaleza      : CharField(5) choices DEBE/HABER
+origen_valor    : CharField(30) choices SALDO_BASE/IVA_GENERADO/IVA_DESCONTABLE/
+                                        RETEFUENTE/RETEICA/RETEIVA/TOTAL_DOCUMENTO
+porcentaje_aplicar : DecimalField(5,2) default=100.00 validator>=0.01
+orden           : PositiveSmallIntegerField default=1
+descripcion     : CharField(200) blank=True default=''
+constraint      : unique_plantilla_origen_valor (empresa, plantilla, origen_valor)
+```
+
+**Choices ORIGEN_VALOR y resolucion en DTO:**
+
+| ORIGEN_VALOR | Campo DTO | Descripcion |
+|---|---|---|
+| `SALDO_BASE` | `dto.subtotal` | Base gravable / subtotal sin impuestos |
+| `TOTAL_DOCUMENTO` | `dto.total` | Total neto del documento |
+| `IVA_GENERADO` | suma `impuestos` donde `tipo_impuesto in ('IVA','IVA_GENERADO')` | IVA cobrado en ventas |
+| `IVA_DESCONTABLE` | suma `impuestos` donde `tipo_impuesto='IVA_DESCONTABLE'` | IVA en compras |
+| `RETEFUENTE` | suma `impuestos` donde `tipo_impuesto='RETEFUENTE'` | Retencion en la fuente |
+| `RETEICA` | suma `impuestos` donde `tipo_impuesto='RETEICA'` | Retencion ICA |
+| `RETEIVA` | suma `impuestos` donde `tipo_impuesto='RETEIVA'` | Retencion IVA |
+
+**Lineas con valor cero son omitidas silenciosamente** — si el documento no tiene RETEFUENTE, la linea correspondiente no genera movimiento.
+
+### 16.3 Nuevos Elementos en Service Layer
+
+#### PlantillaContableSelector — Nuevo Metodo
+
+```python
+# services/selectors.py
+class PlantillaContableSelector:
+    @staticmethod
+    def obtener_motor_plantilla(empresa_id: int, tipo_motor: str) -> Optional[PlantillaContable]:
+        """
+        Motor Fase 3: filtra por tipo_transaccion con prefetch de lineas+cuentas.
+        tipo_motor: VENTA | COMPRA | GASTO | NOMINA
+        """
+        return (
+            PlantillaContable.objects.filter(
+                empresa_id=empresa_id,
+                tipo_transaccion=tipo_motor,
+                activo=True,
+            )
+            .prefetch_related('lineas__cuenta_contable')
+            .first()
+        )
+```
+
+`obtener_plantilla_activa()` (legacy) conservado sin cambios para `resolver.py`.
+
+`PlantillaContable` agregado al import top-level de `selectors.py` (antes era lazy dentro del metodo).
+
+#### ContabilidadBusinessService — Metodos Motor
+
+| Metodo | Tipo | Descripcion |
+|--------|------|-------------|
+| `contabilizar_con_plantilla(empresa_id, dto, tipo_transaccion_override, tipo_comprobante_id, periodo_uuid)` | `@transaction.atomic` | **Motor principal** — flujo completo: validar periodo → plantilla → movimientos → cuadratura → persistir → ImpuestoDocumento |
+| `_resolver_tipo_motor(tipo_transaccion_value)` | helper privado | Convierte `TipoTransaccion.value` a tipo motor (VENTA/COMPRA/GASTO/NOMINA) |
+| `_resolver_valor_origen(origen_valor, dto)` | helper privado | Extrae el monto del DTO para un ORIGEN_VALOR dado |
+| `_generar_movimientos_desde_plantilla(empresa_id, dto, lineas)` | helper privado | Itera `LineaPlantilla`, resuelve valor y arma lista de movimientos |
+| `_persistir_impuestos_documento(asiento, dto)` | helper privado | Bulk-inserta `ImpuestoDocumento` por cada impuesto del DTO con valor > 0 |
+
+**Mapeo TipoTransaccion → tipo motor:**
+
+```python
+_TIPO_TRANSACCION_A_MOTOR = {
+    'VENTA_FACTURA': 'VENTA',   'VENTA_NOTA_CREDITO': 'VENTA',
+    'SALIDA_INVENTARIO_VENTA': 'VENTA', 'RECAUDO_CLIENTE': 'VENTA',
+    'COMPRA_GASTO': 'COMPRA',   'COMPRA_INVENTARIO': 'COMPRA',
+    'ACTIVO_FIJO_COMPRA': 'COMPRA', 'PAGO_PROVEEDOR': 'COMPRA',
+    'BAJA_INVENTARIO': 'GASTO', 'AJUSTE_INVENTARIO': 'GASTO',
+    'NOMINA_LIQUIDACION': 'NOMINA', 'NOMINA_PAGO': 'NOMINA', ...
+}
+```
+
+**Flujo de `contabilizar_con_plantilla()`:**
+
+```
+1. _validar_periodo(dto.fecha, empresa_id)              — periodo no cerrado
+2. tipo_motor = _resolver_tipo_motor(dto.tipo.value)    — VENTA/COMPRA/GASTO/NOMINA
+3. plantilla = obtener_motor_plantilla(empresa_id, tipo_motor) — con prefetch lineas
+4. movimientos = _generar_movimientos_desde_plantilla() — omite lineas con valor 0
+5. _validar_cuadratura(movimientos, 'APROBADO')         — |ΣDebe - ΣHaber| < 0.01
+6. Resolver numero (TipoComprobante si hay tipo_comprobante_id)
+7. crud.crear_asiento_manual(empresa_id, data, movimientos)
+8. _persistir_impuestos_documento(asiento, dto)         — ImpuestoDocumento bulk_create
+9. Return {'id', 'uuid', 'numero'}
+```
+
+### 16.4 DTOs — Sin Cambios
+
+`TransaccionEconomica` ya tenia `subtotal`, `impuestos: list[ImpuestoDTO]`, `total` — estructura suficiente para el Motor. No se agregaron campos ni aliases para mantener YAGNI.
+
+`ImpuestoDTO.tipo_impuesto` ya contiene los valores que el Motor busca: `'IVA_GENERADO'`, `'RETEFUENTE'`, `'RETEICA'`, etc.
+
+### 16.5 Migrations
+
+| Migration | Contenido |
+|-----------|-----------|
+| `0010_motor_plantillas_fase3.py` | AlterField x3 (nullable legacy), AddField nombre+tipo_transaccion, RemoveConstraint+AddConstraint x2, CreateModel LineaPlantilla |
+| `0011_rename_..._idx.py` | Auto-generado por Django para alinear nombres de indices hash (contabilida_empresa_lp001_idx → contabilida_empresa_9ff884_idx, etc.) |
+
+Ambas migrations aplicadas a esquema `public` y a todos los schemas tenant (`fake-initial`). Verificado con `makemigrations --check`: `No changes detected`.
+
+### 16.6 Guia de Uso del Motor
+
+**Configurar una PlantillaContable para VENTA:**
+
+```python
+# 1. Crear PlantillaContable tipo VENTA
+plantilla = PlantillaContable.objects.create(
+    empresa=empresa,
+    nombre='Venta Facturas Electronicas',
+    tipo_transaccion='VENTA',
+    activo=True,
+)
+
+# 2. Agregar lineas
+LineaPlantilla.objects.create(empresa=empresa, plantilla=plantilla,
+    cuenta_contable=cuenta_cartera_clientes,  # 130505
+    naturaleza='DEBE', origen_valor='SALDO_BASE', orden=1)
+
+LineaPlantilla.objects.create(empresa=empresa, plantilla=plantilla,
+    cuenta_contable=cuenta_ingresos_ventas,   # 413505
+    naturaleza='HABER', origen_valor='SALDO_BASE', orden=2)
+
+LineaPlantilla.objects.create(empresa=empresa, plantilla=plantilla,
+    cuenta_contable=cuenta_iva_por_pagar,     # 240805
+    naturaleza='HABER', origen_valor='IVA_GENERADO', orden=3)
+
+LineaPlantilla.objects.create(empresa=empresa, plantilla=plantilla,
+    cuenta_contable=cuenta_retefuente,        # 236505
+    naturaleza='DEBE', origen_valor='RETEFUENTE', orden=4)
+```
+
+**Invocar el Motor:**
+
+```python
+from apps.tenant.contabilidad.services.business_service import ContabilidadBusinessService
+from apps.tenant.contabilidad.integracion.dtos import TransaccionEconomica, ImpuestoDTO, DocumentoOrigen
+
+dto = TransaccionEconomica(
+    tipo=TipoTransaccion.VENTA_FACTURA,
+    fecha=date(2026, 6, 5),
+    descripcion='Factura FV-001 Cliente XYZ',
+    tercero=TerceroSnapshot(...),
+    lineas=[...],
+    documento_origen=DocumentoOrigen('facturas', 'Factura', 1, 'FV-001'),
+    subtotal=Decimal('1000000'),
+    impuestos=[
+        ImpuestoDTO('IVA_GENERADO', Decimal('1000000'), Decimal('19'), Decimal('190000'), '240805'),
+        ImpuestoDTO('RETEFUENTE', Decimal('1000000'), Decimal('3.5'), Decimal('35000'), '236505'),
+    ],
+    total=Decimal('1155000'),
+)
+
+service = ContabilidadBusinessService()
+resultado = service.contabilizar_con_plantilla(
+    empresa_id=empresa.id,
+    dto=dto,
+    tipo_comprobante_id=None,  # opcional
+    periodo_uuid=None,          # opcional
+)
+# {'id': 12, 'uuid': '...', 'numero': 'MOTOR-20260605-ABCD1234'}
+```
+
+**Cuadratura resultante (ejemplo):**
+
+| Linea | Cuenta | DEBE | HABER |
+|-------|--------|------|-------|
+| 1 | 130505 CxC Clientes (SALDO_BASE) | 1.000.000 | — |
+| 2 | 413505 Ingresos Ventas (SALDO_BASE) | — | 1.000.000 |
+| 3 | 240805 IVA por Pagar (IVA_GENERADO) | — | 190.000 |
+| 4 | 236505 Retefuente (RETEFUENTE) | 35.000 | — |
+
+Cuadratura: ΣDebe = 1.035.000 ≠ ΣHaber = 1.190.000 → **DESCUADRE** (el ejemplo ilustra que la configuracion de lineas debe ser coherente — el usuario/admin debe agregar la linea de CxC por el total neto).
+
+> **Nota:** el Motor valida cuadratura estricta y lanza `ValidationError` si `|ΣDebe - ΣHaber| >= 0.01`. La responsabilidad de configurar lineas cuadradas es del administrador contable.
+
+### 16.7 Tabla de Deuda Tecnica Actualizada (2026-06-05)
+
+| ID | Severidad | Archivo | Hallazgo | Estado |
+|----|-----------|---------|----------|--------|
+| AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Abierto |
+| AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Abierto |
+| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Abierto |
+| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | Abierto |
+| AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` | Abierto |
+| AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Abierto |
+| AUD-CONT-011 | Info | `api/viewsets.py` | Endpoint `/pendientes/asistente-ia/` sin pruebas automatizadas | Abierto |
+| AUD-CONT-012 | Media | `models.py`/API | `LineaPlantilla` y `PlantillaContable` (modo Motor) sin ViewSet ni UI de configuracion | ✅ RESUELTO v3.16.3 — API CRUD + UI + Integracion Pendientes |
+| AUD-CONT-013 | Info | `services/business_service.py` | `_TIPO_TRANSACCION_A_MOTOR` es un dict de clase privado — si se agregan nuevos `TipoTransaccion` deben actualizarse aqui tambien | Bajo riesgo — actualizar junto con cada nuevo TipoTransaccion |
+
+---
+
+---
+
+## 17. RESOLUCION AUD-CONT-012 — Fase 3 Completa (2026-06-05 v3.16.3)
+
+**Severidad original:** Media  
+**Estado:** ✅ RESUELTO  
+**Causa:** `LineaPlantilla` y `PlantillaContable` (motor Fase 3) sin API CRUD ni UI de configuracion
+
+### 17.1 Implementación Backend (API CRUD)
+
+#### PlantillaContableViewSet — `/api/v1/contabilidad/plantillas-contables/`
+
+| Acción | Endpoint | Método | Descripción |
+|--------|----------|--------|-------------|
+| Listado | `/` | `GET` | Filtra por `tipo_transaccion` + `activo` |
+| Detalle | `/{uuid}/` | `GET` | Incluye todas las `LineaPlantilla` con datos de cuenta |
+| Crear | `/` | `POST` | Recibe `nombre`, `tipo_transaccion`, `activo` |
+| Actualizar | `/{uuid}/` | `PATCH` | Actualiza campos de plantilla |
+| Eliminar | `/{uuid}/` | `DELETE` | Elimina plantilla + todas sus lineas (CASCADE) |
+| Agregar Linea | `/{uuid}/lineas/` | `POST` | Payload: `cuenta_contable`, `naturaleza`, `origen_valor`, `porcentaje_aplicar`, `orden` |
+| Eliminar Linea | `/{uuid}/lineas/{linea_id}/` | `DELETE` | Elimina una linea especifica |
+| Render Form | `/render-offcanvas/crear/` | `GET` | Retorna template `plantilla_offcanvas_form.html` |
+| Render Form | `/{uuid}/render-offcanvas/editar/` | `GET` | Retorna template con datos para editar |
+| Render Detail | `/{uuid}/render-offcanvas/detalle/` | `GET` | Retorna template read-only con vista T-Cuenta |
+
+#### Serializers
+
+- **LineaPlantillaSerializer:** Anidado. Valida `porcentaje_aplicar > 0.01`. Lee-escribe líneas.
+- **PlantillaContableListSerializer:** Campos minimales + `lineas_count` + `modo` (MOTOR vs RESOLVER).
+- **PlantillaContableDetailSerializer:** Incluye `lineas: LineaPlantillaSerializer(many=True)` con vista T-Cuenta.
+
+### 17.2 Implementación Frontend (UI Configuracion)
+
+#### Tab "Plantillas" en Contabilidad (`workspace.html`)
+
+```
+Contabilidad › Plantillas
+├── Toolbar: Buscar | Filtro Tipo | Filtro Activo | [Nueva Plantilla]
+├── Alert: "Motor de Plantillas Fase 3..." (info)
+├── Grid Tabulator: Nombre | Tipo | Modo | #Lineas | Estado | Acciones
+└── Offcanvas: Crear/Editar/Detalle
+```
+
+#### Formulario Dinámica (plantilla_offcanvas_form.html)
+
+- **Crear Plantilla:** Nombre, Tipo (VENTA/COMPRA/GASTO/NOMINA), Activo
+- **Tabla de Lineas:** Orden | Naturaleza | Origen | Cuenta PUC | % | Acciones
+- **Agregar Linea:** Form anidado con autocomplete PUC + selectors origen + porcentaje
+- **Detalle:** Vista T-Cuenta (DEBE | HABER) + tabla completa + metadata
+
+#### JavaScript Modules
+
+- **plantilla.api.js:** CRUD methods (`list`, `retrieve`, `create`, `update`, `destroy`, `agregarLinea`, `eliminarLinea`)
+- **plantilla_list.js:** Tabulator grid con badgets coloreados + filtros + event delegation
+- **plantilla_editor.js:** Formul dinámica + autocomplete de cuentas + agregar/eliminar lineas inline
+- **plantilla_applicator.js:** (nuevo) Utilitario standalone para calcular montos + aplicar plantilla
+
+### 17.3 Integración en Offcanvas Pendientes (Fase 3 Magic)
+
+#### Selector de Plantilla (`pendiente_offcanvas_contabilizar.html`)
+
+```html
+<label>Plantilla Contable</label>
+<select id="selector-plantilla"><!-- cargado por JS --></select>
+<button id="btn-aplicar-plantilla">Aplicar Plantilla</button>
+```
+
+#### Flujo de Auto-Diligenciamiento
+
+1. **Cargar Plantillas:** Al abrir offcanvas → `GET /api/v1/contabilidad/plantillas-contables/?tipo_transaccion={VENTA|COMPRA|...}&activo=true`
+2. **Aplicar Plantilla:** Click en "Aplicar Plantilla" →
+   - Carga detalle de plantilla seleccionada
+   - Itera sobre `lineas` de la plantilla
+   - **Calcula monto** según `origen_valor`:
+     - `SALDO_BASE` → `subtotal * (porcentaje / 100)`
+     - `TOTAL_DOCUMENTO` → `total * (porcentaje / 100)`
+     - `IVA_GENERADO`, `RETEFUENTE`, etc. → `impuestos * (porcentaje / 100)`
+   - Llama `agregarLinea()` con datos pre-calculados
+   - Llama `recalcularTotales()` para validar cuadratura
+
+#### Ejemplo: Factura $1M + IVA 19% + Retefuente 3.5%
+
+**Plantilla VENTA:**
+```
+Linea 1: 130505 (CxC)      DEBE  SALDO_BASE    100% → $1.000.000
+Linea 2: 413505 (Ingresos) HABER SALDO_BASE    100% → $1.000.000
+Linea 3: 240805 (IVA)      HABER IVA_GENERADO  100% → $190.000
+Linea 4: 236505 (ReteF)    DEBE  RETEFUENTE    100% → $35.000
+```
+
+**Resultado tabla:**
+```
+| Linea | Cuenta    | Debe      | Haber     |
+|-------|-----------|-----------|-----------|
+| 1     | 130505    | 1.000.000 |           |
+| 2     | 413505    |           | 1.000.000 |
+| 3     | 240805    |           |   190.000 |
+| 4     | 236505    |    35.000 |           |
+| TOTAL |           | 1.035.000 | 1.190.000 | ← DESCUADRADO (el admin debe revisar la config)
+```
+
+**Nota:** La cuadratura depende de que las líneas de la plantilla estén bien configuradas. El Motor valida estrictamente.
+
+### 17.4 Archivos Modificados / Creados
+
+#### Backend
+- ✅ `api/serializers.py` — `LineaPlantillaSerializer`, `PlantillaContableListSerializer`, `PlantillaContableDetailSerializer`
+- ✅ `api/viewsets.py` — `PlantillaContableViewSet` (CRUD + acciones custom)
+- ✅ `api/urls.py` — Registro router `plantillas-contables/`
+- ✅ `services/selectors.py` — `PLANTILLA_LIST_FIELDS`, `PLANTILLA_DETAIL_FIELDS`, `PlantillaContableSelector.get_qs_list()` + `get_qs_detail()`
+
+#### Frontend
+- ✅ `static/contabilidad/js/plantilla/plantilla.api.js` (NEW)
+- ✅ `static/contabilidad/js/plantilla/features/plantilla_list.js` (NEW)
+- ✅ `static/contabilidad/js/plantilla/features/plantilla_editor.js` (NEW)
+- ✅ `static/contabilidad/js/pendiente/plantilla_applicator.js` (NEW)
+- ✅ `templates/tenant/contabilidad/partials/assets_plantillas.html` (NEW)
+- ✅ `templates/tenant/contabilidad/partials/list_plantillas.html` (NEW)
+- ✅ `templates/tenant/contabilidad/partials/plantilla_offcanvas_form.html` (NEW)
+- ✅ `templates/tenant/contabilidad/partials/plantilla_offcanvas_detalle.html` (NEW)
+- ✅ `templates/tenant/contabilidad/partials/pendiente_offcanvas_contabilizar.html` — Agregar selector + aplicador (MODIFICADO)
+- ✅ `templates/tenant/contabilidad/partials/assets_pendientes.html` — Include `plantilla_applicator.js` (MODIFICADO)
+- ✅ `templates/tenant/core/workspace.html` — Tab "Plantillas" + assets (MODIFICADO)
+
+### 17.5 Testing Checklist
+
+- [ ] Crear plantilla VENTA con 4 lineas (CxC, Ingresos, IVA, Retefuente)
+- [ ] Editar plantilla: agregar/eliminar linea
+- [ ] Detalle: verificar vista T-Cuenta
+- [ ] Listar: filtrar por tipo + activo
+- [ ] Pendiente: seleccionar plantilla → aplicar → verificar auto-llenado
+- [ ] Cuadratura: debe = haber después de aplicar
+- [ ] Generar asiento desde pendiente con plantilla aplicada
+- [ ] Verificar `LineaPlantilla.unique_plantilla_origen_valor` constraint
+
+### 17.6 Deuda Tecnica Residual
+
+Ninguna nueva deuda técnica introducida. AUD-CONT-012 **RESUELTO**.
+
+**Nota futura:** Si se agregan nuevos `TipoTransaccion` enums, actualizar `APP_TIPO_MAP` en `plantilla_applicator.js` y `pendiente_offcanvas_contabilizar.html`.
+
+---
+
+**Auditoria actualizada:** 2026-06-05 (v3.16.3 — FASE 3 COMPLETA: AUD-CONT-012 RESUELTO)
 
