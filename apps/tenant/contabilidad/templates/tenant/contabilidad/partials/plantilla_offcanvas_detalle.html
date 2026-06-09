@@ -1,0 +1,253 @@
+{% load static %}
+{# plantilla_offcanvas_detalle.html - Detalle read-only de PlantillaContable v3.16.2 #}
+{# HTMX: GET /api/v1/contabilidad/plantillas-contables/{uuid}/render-offcanvas/detalle/ #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-plantilla-detalle"
+     aria-labelledby="offcanvas-plantilla-detalle-label"
+     style="width: 95%; max-width: 860px;">
+
+  <div class="offcanvas-header border-bottom"
+       style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%);">
+    <h5 class="offcanvas-title text-white" id="offcanvas-plantilla-detalle-label">
+      <i class="bi bi-eye me-2"></i>Detalle — Plantilla Contable
+      {% if plantilla %}
+        <span class="badge ms-2 small fw-normal
+          {% if plantilla.tipo_transaccion == 'VENTA' %}bg-success
+          {% elif plantilla.tipo_transaccion == 'COMPRA' %}bg-primary
+          {% elif plantilla.tipo_transaccion == 'GASTO' %}bg-warning text-dark
+          {% elif plantilla.tipo_transaccion == 'NOMINA' %}bg-info text-dark
+          {% else %}bg-secondary{% endif %}">
+          {{ plantilla.tipo_transaccion|default:"Resolver" }}
+        </span>
+      {% endif %}
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body p-4">
+    {% if plantilla %}
+
+    {# Cabecera con datos generales #}
+    <div class="row g-3 mb-4">
+      <div class="col-12">
+        <h6 class="text-primary border-bottom pb-2 small fw-bold text-uppercase">
+          <i class="bi bi-info-circle me-1"></i>Informacion General
+        </h6>
+      </div>
+
+      <div class="col-md-5">
+        <label class="form-label small fw-bold text-muted">Nombre</label>
+        <div class="form-control-plaintext bg-light p-2 rounded small">
+          {{ plantilla.nombre|default:'<span class="text-muted fst-italic">Sin nombre</span>' }}
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label small fw-bold text-muted">Tipo de Transaccion</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">
+          {% if plantilla.tipo_transaccion %}
+            <span class="badge
+              {% if plantilla.tipo_transaccion == 'VENTA' %}bg-success
+              {% elif plantilla.tipo_transaccion == 'COMPRA' %}bg-primary
+              {% elif plantilla.tipo_transaccion == 'GASTO' %}bg-warning text-dark
+              {% elif plantilla.tipo_transaccion == 'NOMINA' %}bg-info text-dark
+              {% endif %}">
+              {{ plantilla.tipo_transaccion }}
+            </span>
+          {% else %}
+            <span class="badge bg-light text-dark border">Resolver (legacy)</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label small fw-bold text-muted">Modo</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">
+          {% if plantilla.modo == 'MOTOR' %}
+            <span class="badge bg-dark"><i class="bi bi-cpu me-1"></i>Motor</span>
+          {% else %}
+            <span class="badge bg-light text-dark border">Resolver</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label small fw-bold text-muted">Estado</label>
+        <div class="form-control-plaintext bg-light p-2 rounded">
+          {% if plantilla.activo %}
+            <span class="badge bg-success">Activa</span>
+          {% else %}
+            <span class="badge bg-danger">Inactiva</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if plantilla.cuenta_debe_codigo or plantilla.cuenta_credito_codigo %}
+      <div class="col-12">
+        <h6 class="text-muted border-bottom pb-1 small fw-bold text-uppercase">
+          <i class="bi bi-arrow-left-right me-1"></i>Modo Resolver (Legacy)
+        </h6>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-bold text-muted">Cuenta DEBE</label>
+        <div class="form-control-plaintext bg-light p-2 rounded small">
+          <code>{{ plantilla.cuenta_debe_codigo|default:'---' }}</code>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-bold text-muted">Cuenta HABER</label>
+        <div class="form-control-plaintext bg-light p-2 rounded small">
+          <code>{{ plantilla.cuenta_credito_codigo|default:'---' }}</code>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    {# Lineas de partida doble #}
+    <div class="mb-4">
+      <h6 class="text-primary border-bottom pb-2 small fw-bold text-uppercase">
+        <i class="bi bi-table me-1"></i>Lineas de Partida Doble
+        <span class="badge bg-secondary ms-1">{{ plantilla.lineas_count }}</span>
+      </h6>
+
+      {% if plantilla.lineas %}
+
+      {# Vista tipo T-Cuenta: DEBE | HABER #}
+      <div class="row g-0 mb-3">
+        <div class="col-6 border-end pe-3">
+          <div class="text-center fw-bold text-danger small border-bottom pb-1 mb-2">DEBE</div>
+          {% for linea in plantilla.lineas %}
+            {% if linea.naturaleza == 'DEBE' %}
+            <div class="d-flex justify-content-between align-items-start py-1 border-bottom">
+              <div class="small">
+                <code class="me-1">{{ linea.cuenta_codigo|default:'-' }}</code>
+                <span class="text-muted">{{ linea.cuenta_nombre|default:'' }}</span>
+                <div class="text-muted" style="font-size:0.75rem;">
+                  {% if linea.origen_valor == 'SALDO_BASE' %}Base / Subtotal
+                  {% elif linea.origen_valor == 'IVA_GENERADO' %}IVA Generado
+                  {% elif linea.origen_valor == 'IVA_DESCONTABLE' %}IVA Descontable
+                  {% elif linea.origen_valor == 'RETEFUENTE' %}Retefuente
+                  {% elif linea.origen_valor == 'RETEICA' %}ReteICA
+                  {% elif linea.origen_valor == 'RETEIVA' %}ReteIVA
+                  {% elif linea.origen_valor == 'TOTAL_DOCUMENTO' %}Total Neto
+                  {% else %}{{ linea.origen_valor }}{% endif %}
+                </div>
+              </div>
+              <span class="badge bg-danger-subtle text-danger border border-danger ms-2 flex-shrink-0">
+                {{ linea.porcentaje_aplicar|floatformat:0 }}%
+              </span>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        <div class="col-6 ps-3">
+          <div class="text-center fw-bold text-success small border-bottom pb-1 mb-2">HABER</div>
+          {% for linea in plantilla.lineas %}
+            {% if linea.naturaleza == 'HABER' %}
+            <div class="d-flex justify-content-between align-items-start py-1 border-bottom">
+              <div class="small">
+                <code class="me-1">{{ linea.cuenta_codigo|default:'-' }}</code>
+                <span class="text-muted">{{ linea.cuenta_nombre|default:'' }}</span>
+                <div class="text-muted" style="font-size:0.75rem;">
+                  {% if linea.origen_valor == 'SALDO_BASE' %}Base / Subtotal
+                  {% elif linea.origen_valor == 'IVA_GENERADO' %}IVA Generado
+                  {% elif linea.origen_valor == 'IVA_DESCONTABLE' %}IVA Descontable
+                  {% elif linea.origen_valor == 'RETEFUENTE' %}Retefuente
+                  {% elif linea.origen_valor == 'RETEICA' %}ReteICA
+                  {% elif linea.origen_valor == 'RETEIVA' %}ReteIVA
+                  {% elif linea.origen_valor == 'TOTAL_DOCUMENTO' %}Total Neto
+                  {% else %}{{ linea.origen_valor }}{% endif %}
+                </div>
+              </div>
+              <span class="badge bg-success-subtle text-success border border-success ms-2 flex-shrink-0">
+                {{ linea.porcentaje_aplicar|floatformat:0 }}%
+              </span>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      {# Tabla detallada #}
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle">
+          <thead class="table-light">
+            <tr>
+              <th class="text-center" style="width:45px">#</th>
+              <th style="width:90px">Naturaleza</th>
+              <th>Origen del Valor</th>
+              <th>Cuenta PUC</th>
+              <th class="text-end" style="width:65px">%</th>
+              <th>Descripcion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linea in plantilla.lineas %}
+            <tr>
+              <td class="text-center text-muted small">{{ linea.orden }}</td>
+              <td>
+                {% if linea.naturaleza == 'DEBE' %}
+                  <span class="badge bg-danger">DEBE</span>
+                {% else %}
+                  <span class="badge bg-success">HABER</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% if linea.origen_valor == 'SALDO_BASE' %}Base / Subtotal
+                {% elif linea.origen_valor == 'IVA_GENERADO' %}IVA Generado
+                {% elif linea.origen_valor == 'IVA_DESCONTABLE' %}IVA Descontable
+                {% elif linea.origen_valor == 'RETEFUENTE' %}Retefuente
+                {% elif linea.origen_valor == 'RETEICA' %}ReteICA
+                {% elif linea.origen_valor == 'RETEIVA' %}ReteIVA
+                {% elif linea.origen_valor == 'TOTAL_DOCUMENTO' %}Total Neto
+                {% else %}{{ linea.origen_valor }}{% endif %}
+              </td>
+              <td class="small">
+                <code class="text-primary">{{ linea.cuenta_codigo|default:'-' }}</code>
+                {% if linea.cuenta_nombre %}
+                  <span class="text-muted ms-1">{{ linea.cuenta_nombre }}</span>
+                {% endif %}
+              </td>
+              <td class="text-end small">{{ linea.porcentaje_aplicar|floatformat:2 }}%</td>
+              <td class="text-muted small">{{ linea.descripcion|default:'-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% else %}
+      <div class="text-center text-muted py-4">
+        <i class="bi bi-table display-6 d-block mb-2 opacity-25"></i>
+        <span class="small">Esta plantilla no tiene lineas de partida doble configuradas.</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {# Metadatos #}
+    <div class="row g-2 text-muted small">
+      <div class="col-md-6">
+        <i class="bi bi-calendar me-1"></i>Creada: {{ plantilla.created_at|default:'-' }}
+      </div>
+      <div class="col-md-6">
+        <i class="bi bi-clock me-1"></i>Actualizada: {{ plantilla.updated_at|default:'-' }}
+      </div>
+      <div class="col-12">
+        UUID: <code>{{ plantilla.uuid }}</code>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="alert alert-danger">No se encontro la plantilla solicitada.</div>
+    {% endif %}
+  </div>
+
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex justify-content-end">
+      <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">Cerrar</button>
+    </div>
+  </div>
+
+</div>

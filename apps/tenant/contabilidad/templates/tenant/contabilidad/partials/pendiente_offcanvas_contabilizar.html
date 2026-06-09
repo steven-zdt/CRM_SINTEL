@@ -82,6 +82,22 @@
       </div>
     </div>
 
+    {# Selector de Plantilla Contable (Fase 3) #}
+    <div class="row g-2 mb-3">
+      <div class="col-md-8">
+        <label class="form-label small fw-bold">Plantilla Contable (Fase 3)</label>
+        <select class="form-select form-select-sm" id="selector-plantilla">
+          <option value="" selected>-- Sin plantilla (carga manual) --</option>
+        </select>
+        <small class="text-muted d-block">Selecciona una plantilla para auto-llenar las líneas automáticamente.</small>
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button type="button" class="btn btn-sm btn-info w-100" id="btn-aplicar-plantilla" disabled>
+          <i class="bi bi-lightning-charge me-1"></i>Aplicar Plantilla
+        </button>
+      </div>
+    </div>
+
     {# Tabla de lineas dinamicas #}
     <div class="d-flex align-items-center justify-content-between mb-2">
       <h6 class="mb-0 small fw-bold text-primary">LINEAS DEL ASIENTO (Partida Doble)</h6>
@@ -216,8 +232,17 @@
   const API_CUENTAS = '/api/v1/contabilidad/cuentas-contables/';
   const API_CONTABILIZAR = '/api/v1/contabilidad/pendientes/contabilizar-manual/';
   const API_ASISTENTE_IA = '/api/v1/contabilidad/pendientes/asistente-ia/';
+  const API_PLANTILLAS = '/api/v1/contabilidad/plantillas-contables/';
   const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const SUGERENCIAS = {{ sugerencias_puc|safe|default:'[]' }};
+
+  // Mapeo de app_label a tipo_transaccion para cargar plantillas
+  const APP_TIPO_MAP = {
+    facturas: 'VENTA',
+    gastos: 'COMPRA',
+    empleados: 'NOMINA',
+    inventario: 'GASTO'
+  };
 
   const offcanvasEl = document.getElementById('offcanvas-pendiente-contabilizar');
   const selectComprobante = document.getElementById('asiento-tipo-comprobante');
@@ -243,6 +268,90 @@
       new window.bootstrap.Offcanvas(offcanvasEl).show();
     }
   }
+
+  // ---- CARGA DE PLANTILLAS CONTABLES (Fase 3) ----
+  const selectPlantilla = document.getElementById('selector-plantilla');
+  const btnAplicarPlantilla = document.getElementById('btn-aplicar-plantilla');
+
+  // Cargar plantillas disponibles para el tipo de transaccion
+  async function cargarPlantillas() {
+    const tipoTransaccion = APP_TIPO_MAP[APP_LABEL] || '';
+    if (!tipoTransaccion) {
+      selectPlantilla.innerHTML = '<option value="" selected>-- Sin plantilla disponible --</option>';
+      return;
+    }
+    const jwt = window.jwtAuth?.getAccessToken?.() || '';
+    try {
+      const res = await fetch(`${API_PLANTILLAS}?tipo_transaccion=${tipoTransaccion}&activo=true&page_size=100`, {
+        headers: jwt ? { 'Authorization': `Bearer ${jwt}` } : {},
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      const plantillas = data.results || [];
+      selectPlantilla.innerHTML = '<option value="" selected>-- Sin plantilla --</option>' +
+        plantillas.map(p => `<option value="${p.uuid}" data-lineas='${JSON.stringify(p.lineas || [])}'>${p.nombre || p.tipo_transaccion}</option>`).join('');
+      btnAplicarPlantilla.disabled = !plantillas.length;
+    } catch (e) {
+      console.error('[plantillas] error cargando:', e);
+    }
+  }
+
+  // Al abrir offcanvas: cargar plantillas
+  if (offcanvasEl) {
+    offcanvasEl.addEventListener('shown.bs.offcanvas', cargarPlantillas, { once: false });
+  }
+  cargarPlantillas();
+
+  // Aplicar plantilla seleccionada
+  btnAplicarPlantilla.addEventListener('click', async () => {
+    const uuid = selectPlantilla.value;
+    if (!uuid) return;
+    const opt = selectPlantilla.options[selectPlantilla.selectedIndex];
+    const lineas = opt.dataset.lineas ? JSON.parse(opt.dataset.lineas) : [];
+    if (!lineas.length) { alert('La plantilla no tiene lineas configuradas.'); return; }
+
+    // Limpiar tabla actual
+    lineasBody.innerHTML = '';
+
+    // Procesar cada línea de la plantilla
+    lineas.forEach(linea => {
+      let monto = 0;
+      switch (linea.origen_valor) {
+        case 'SALDO_BASE':
+          monto = parseFloat(DOC_SUBTOTAL) * (linea.porcentaje_aplicar / 100);
+          break;
+        case 'TOTAL_DOCUMENTO':
+          monto = parseFloat(DOC_TOTAL) * (linea.porcentaje_aplicar / 100);
+          break;
+        case 'IVA_GENERADO':
+        case 'IVA_DESCONTABLE':
+        case 'RETEFUENTE':
+        case 'RETEICA':
+        case 'RETEIVA':
+          // Todos los impuestos están en DOC_IMPUESTOS (suma total)
+          // Asume que hay un desglose o extraemos de la suma
+          monto = parseFloat(DOC_IMPUESTOS) * (linea.porcentaje_aplicar / 100);
+          break;
+        default:
+          monto = 0;
+      }
+
+      monto = Math.round(monto * 100) / 100; // Redondear a 2 decimales
+
+      // Agregar fila con monto calculado
+      agregarLinea({
+        codigo: linea.cuenta_codigo || '',
+        nombre: linea.cuenta_nombre || '',
+        debe: linea.naturaleza === 'DEBE' ? monto : 0,
+        haber: linea.naturaleza === 'HABER' ? monto : 0,
+        descripcion: linea.descripcion || `${linea.origen_valor} - ${linea.cuenta_nombre}`,
+      });
+    });
+
+    recalcularTotales();
+    if (window.notyf) window.notyf.success('Plantilla aplicada. Revisa cuadratura antes de generar.');
+  });
+  // ---- FIN PLANTILLAS ----
 
   // Lógica de Previsualización de Comprobante v3.6
   selectComprobante.addEventListener('change', () => {

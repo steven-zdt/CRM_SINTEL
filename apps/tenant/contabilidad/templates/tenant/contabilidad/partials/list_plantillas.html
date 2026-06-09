@@ -1,0 +1,72 @@
+{% load static %}
+{# list_plantillas.html - Listado de PlantillaContable v3.16.2 #}
+{# Motor Fase 3: VENTA / COMPRA / GASTO / NOMINA #}
+<div id="ui-contabilidad-plantilla" class="ui-module ui-contabilidad">
+
+  {# Toolbar #}
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="toolbar-contabilidad-plantilla">
+
+    <input id="search-plantilla" class="form-control form-control-sm"
+           type="search" placeholder="Buscar por nombre o tipo..."
+           style="width: 240px;" />
+
+    <select id="filter-tipo-plantilla" class="form-select form-select-sm" style="width: auto;">
+      <option value="">Todos los Tipos</option>
+      <option value="VENTA">Venta</option>
+      <option value="COMPRA">Compra</option>
+      <option value="GASTO">Gasto</option>
+      <option value="NOMINA">Nomina</option>
+    </select>
+
+    <select id="filter-activo-plantilla" class="form-select form-select-sm" style="width: auto;">
+      <option value="">Todos los Estados</option>
+      <option value="true">Activas</option>
+      <option value="false">Inactivas</option>
+    </select>
+
+    <button id="btn-refrescar-plantilla" class="btn btn-sm btn-outline-secondary" title="Refrescar">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+
+    <div class="ms-auto">
+      <button class="btn btn-sm btn-primary" id="btn-crear-plantilla" type="button"
+              hx-get="/api/v1/contabilidad/plantillas-contables/render-offcanvas/crear/"
+              hx-target="#offcanvas-container-plantilla"
+              hx-swap="innerHTML"
+              hx-indicator="#spinner"
+              hx-on::after-request="if(event.detail.successful){ const el=document.getElementById('offcanvas-plantilla-crear'); if(el){ if(window.UIManager?.handleOffcanvas){window.UIManager.handleOffcanvas(el,'show');}else{const p=window.bootstrap.Offcanvas.getInstance(el);if(p)p.dispose();document.querySelectorAll('.offcanvas-backdrop').forEach(b=>b.remove());new window.bootstrap.Offcanvas(el).show();} } }">
+        <i class="bi bi-plus-circle me-1"></i>Nueva Plantilla
+      </button>
+    </div>
+  </div>
+
+  {# Info Motor Fase 3 #}
+  <div class="alert alert-info alert-sm py-2 px-3 mb-3 d-flex align-items-start gap-2" role="alert">
+    <i class="bi bi-cpu-fill mt-1 flex-shrink-0"></i>
+    <div class="small">
+      <strong>Motor de Plantillas Contables (Fase 3).</strong>
+      Configura partidas dobles completas por tipo de transaccion (VENTA, COMPRA, GASTO, NOMINA).
+      El motor genera asientos automaticamente usando las lineas definidas aqui.
+      Modo <strong>Resolver</strong> = esquema legacy de 2 cuentas (backward compat).
+    </div>
+  </div>
+
+  {# Feedback #}
+  <div id="feedback-plantilla" class="alert d-none mb-2" role="alert" aria-live="polite"></div>
+  <div id="error-container-plantilla" class="alert alert-danger d-none mb-3" role="alert">
+    <div id="error-message-plantilla"></div>
+  </div>
+
+  {# Tabla Tabulator #}
+  <div id="grid-plantillas" style="max-width: 100%; overflow-x: auto;"></div>
+
+  <div class="mt-2 text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    Solo puede existir <strong>1 plantilla activa</strong> por tipo de transaccion por empresa.
+    Lineas de tipo DEBE y HABER deben cuadrar para que el motor acepte el asiento.
+  </div>
+
+</div>
+
+{# Contenedor HTMX para offcanvas #}
+<div id="offcanvas-container-plantilla"></div>

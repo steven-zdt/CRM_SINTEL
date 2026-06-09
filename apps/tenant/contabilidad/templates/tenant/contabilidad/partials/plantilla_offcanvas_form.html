@@ -1,0 +1,236 @@
+{% load static %}
+{# plantilla_offcanvas_form.html - Crear / Editar PlantillaContable v3.16.2 #}
+{# HTMX: GET /api/v1/contabilidad/plantillas-contables/render-offcanvas/crear/ #}
+{# HTMX: GET /api/v1/contabilidad/plantillas-contables/{uuid}/render-offcanvas/editar/ #}
+
+{% with modo=plantilla|yesno:"editar,crear" %}
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-plantilla-{{ modo }}"
+     aria-labelledby="offcanvas-plantilla-{{ modo }}-label"
+     style="width: 95%; max-width: 860px;">
+
+  <div class="offcanvas-header border-bottom"
+       style="background: linear-gradient(135deg, #1a237e 0%, #283593 100%);">
+    <h5 class="offcanvas-title text-white" id="offcanvas-plantilla-{{ modo }}-label">
+      <i class="bi bi-{% if plantilla %}pencil-square{% else %}cpu-fill{% endif %} me-2"></i>
+      {% if plantilla %}Editar{% else %}Nueva{% endif %} Plantilla Contable
+      {% if plantilla %}
+        <span class="badge bg-light text-dark ms-2 small fw-normal">{{ plantilla.tipo_transaccion|default:"Resolver" }}</span>
+      {% endif %}
+    </h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body p-0">
+    <div class="p-4">
+
+      {# Feedback #}
+      <div id="feedback-plantilla-{{ modo }}" class="alert alert-danger d-none mb-3" role="alert"></div>
+      {% include 'tenant/core/partials/error_handler.html' %}
+
+      {# Formulario PlantillaContable #}
+      <form id="form-plantilla-{{ modo }}" novalidate>
+        {% if plantilla %}
+        <input type="hidden" name="uuid" value="{{ plantilla.uuid }}">
+        {% endif %}
+
+        <div class="row g-3 mb-4">
+          <div class="col-12">
+            <h6 class="text-primary border-bottom pb-2 small fw-bold text-uppercase">
+              <i class="bi bi-sliders me-1"></i>Configuracion de la Plantilla
+            </h6>
+          </div>
+
+          <div class="col-md-7">
+            <label class="form-label small fw-bold">Nombre descriptivo</label>
+            <input type="text" class="form-control" name="nombre"
+                   placeholder="Ej: Ventas con IVA y Retefuente"
+                   maxlength="100"
+                   value="{% if plantilla %}{{ plantilla.nombre|default:'' }}{% endif %}">
+            <div class="form-text">Nombre libre para identificar la plantilla.</div>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label small fw-bold">Tipo de Transaccion *</label>
+            <select class="form-select" name="tipo_transaccion">
+              <option value="">-- Modo Resolver --</option>
+              <option value="VENTA"  {% if plantilla.tipo_transaccion == 'VENTA'  %}selected{% endif %}>Venta</option>
+              <option value="COMPRA" {% if plantilla.tipo_transaccion == 'COMPRA' %}selected{% endif %}>Compra</option>
+              <option value="GASTO"  {% if plantilla.tipo_transaccion == 'GASTO'  %}selected{% endif %}>Gasto</option>
+              <option value="NOMINA" {% if plantilla.tipo_transaccion == 'NOMINA' %}selected{% endif %}>Nomina</option>
+            </select>
+            <div class="form-text">Motor Fase 3 activo cuando se selecciona un tipo.</div>
+          </div>
+
+          <div class="col-md-2 d-flex align-items-end pb-1">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="activo" id="check-activo-{{ modo }}"
+                     {% if not plantilla or plantilla.activo %}checked{% endif %}>
+              <label class="form-check-label small" for="check-activo-{{ modo }}">Activa</label>
+            </div>
+          </div>
+        </div>
+
+        {# --- Seccion Lineas de Partida Doble --- #}
+        {% if plantilla %}
+        <div class="mb-4">
+          <h6 class="text-primary border-bottom pb-2 small fw-bold text-uppercase">
+            <i class="bi bi-table me-1"></i>Lineas de Partida Doble
+            <span class="badge bg-secondary ms-1">{{ plantilla.lineas_count }}</span>
+          </h6>
+
+          {# Tabla de lineas existentes #}
+          <div class="table-responsive mb-3">
+            <table class="table table-sm table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:50px">#</th>
+                  <th style="width:90px">Naturaleza</th>
+                  <th>Origen del Valor</th>
+                  <th>Cuenta PUC</th>
+                  <th style="width:70px" class="text-end">%</th>
+                  <th style="width:60px"></th>
+                </tr>
+              </thead>
+              <tbody id="tbody-lineas-plantilla">
+                {% for linea in plantilla.lineas %}
+                <tr data-linea-id="{{ linea.id }}">
+                  <td class="text-muted small">{{ linea.orden }}</td>
+                  <td>
+                    {% if linea.naturaleza == 'DEBE' %}
+                      <span class="badge bg-danger">DEBE</span>
+                    {% else %}
+                      <span class="badge bg-success">HABER</span>
+                    {% endif %}
+                  </td>
+                  <td class="small">
+                    {% if linea.origen_valor == 'SALDO_BASE' %}Base / Subtotal
+                    {% elif linea.origen_valor == 'IVA_GENERADO' %}IVA Generado
+                    {% elif linea.origen_valor == 'IVA_DESCONTABLE' %}IVA Descontable
+                    {% elif linea.origen_valor == 'RETEFUENTE' %}Retefuente
+                    {% elif linea.origen_valor == 'RETEICA' %}ReteICA
+                    {% elif linea.origen_valor == 'RETEIVA' %}ReteIVA
+                    {% elif linea.origen_valor == 'TOTAL_DOCUMENTO' %}Total Neto
+                    {% else %}{{ linea.origen_valor }}{% endif %}
+                  </td>
+                  <td class="small">
+                    <code class="me-1">{{ linea.cuenta_codigo|default:'-' }}</code>
+                    <span class="text-muted">{{ linea.cuenta_nombre|default:'' }}</span>
+                  </td>
+                  <td class="text-end small">{{ linea.porcentaje_aplicar|floatformat:0 }}%</td>
+                  <td class="text-end">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-danger btn-eliminar-linea"
+                            data-uuid="{{ plantilla.uuid }}"
+                            data-linea-id="{{ linea.id }}"
+                            title="Eliminar linea">
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center text-muted py-3">Sin lineas configuradas aun</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          {# Agregar nueva linea #}
+          <div class="card border-dashed">
+            <div class="card-header py-2 bg-light">
+              <small class="fw-bold text-muted"><i class="bi bi-plus-circle me-1"></i>Agregar Linea</small>
+            </div>
+            <div class="card-body py-3">
+              <div id="form-nueva-linea-plantilla">
+                <div class="row g-2 align-items-end">
+
+                  <div class="col-md-1">
+                    <label class="form-label form-label-sm">Orden</label>
+                    <input type="number" class="form-control form-control-sm" name="linea_orden"
+                           min="1" max="99" value="{{ plantilla.lineas_count|add:'1' }}">
+                  </div>
+
+                  <div class="col-md-2">
+                    <label class="form-label form-label-sm">Naturaleza</label>
+                    <select class="form-select form-select-sm" name="linea_naturaleza">
+                      <option value="DEBE">DEBE</option>
+                      <option value="HABER">HABER</option>
+                    </select>
+                  </div>
+
+                  <div class="col-md-3">
+                    <label class="form-label form-label-sm">Origen del Valor</label>
+                    <select class="form-select form-select-sm" name="linea_origen_valor">
+                      <option value="SALDO_BASE">Base / Subtotal</option>
+                      <option value="IVA_GENERADO">IVA Generado</option>
+                      <option value="IVA_DESCONTABLE">IVA Descontable</option>
+                      <option value="RETEFUENTE">Retefuente</option>
+                      <option value="RETEICA">ReteICA</option>
+                      <option value="RETEIVA">ReteIVA</option>
+                      <option value="TOTAL_DOCUMENTO">Total Neto</option>
+                    </select>
+                  </div>
+
+                  <div class="col-md-4 position-relative cuenta-autocomplete-wrapper">
+                    <label class="form-label form-label-sm">Cuenta PUC (auxiliar nivel 6)</label>
+                    <input type="text" class="form-control form-control-sm" id="linea-cuenta-busqueda"
+                           placeholder="Buscar por codigo o nombre..." autocomplete="off">
+                    <input type="hidden" name="linea_cuenta_id">
+                    <input type="hidden" name="linea_cuenta_codigo">
+                    <input type="hidden" name="linea_cuenta_nombre">
+                  </div>
+
+                  <div class="col-md-1">
+                    <label class="form-label form-label-sm">%</label>
+                    <input type="number" class="form-control form-control-sm" name="linea_porcentaje"
+                           min="0.01" max="100" step="0.01" value="100">
+                  </div>
+
+                  <div class="col-md-1">
+                    <label class="form-label form-label-sm d-block">&nbsp;</label>
+                    <button type="button" class="btn btn-sm btn-primary w-100"
+                            id="btn-agregar-linea-plantilla"
+                            data-uuid="{{ plantilla.uuid }}">
+                      <i class="bi bi-plus"></i>
+                    </button>
+                  </div>
+
+                  <div class="col-12">
+                    <input type="text" class="form-control form-control-sm" name="linea_descripcion"
+                           placeholder="Descripcion opcional de la linea (aparece en el MovimientoContable)">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning py-2 small">
+          <i class="bi bi-lightbulb me-1"></i>
+          <strong>Guarda la plantilla primero</strong> para poder agregar lineas de partida doble.
+        </div>
+        {% endif %}
+
+      </form>
+    </div>
+  </div>
+
+  <div class="offcanvas-footer border-top p-3 bg-light">
+    <div class="d-flex align-items-center gap-2">
+      {% if plantilla %}
+      <span class="text-muted small me-auto">
+        UUID: <code>{{ plantilla.uuid }}</code>
+      </span>
+      {% else %}
+      <span class="me-auto"></span>
+      {% endif %}
+      <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm"
+              id="btn-guardar-plantilla-{{ modo }}">
+        <i class="bi bi-save me-1"></i>{% if plantilla %}Actualizar{% else %}Crear Plantilla{% endif %}
+      </button>
+    </div>
+  </div>
+
+</div>
+{% endwith %}
