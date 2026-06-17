@@ -177,6 +177,22 @@ except Exception as e:
     logger.error(f"ERROR: ERROR INESPERADO cargando URLs de proyectos: {e}", exc_info=True)
 
 try:
+    urlpatterns.append(path('compras/', include('apps.tenant.compras.api.urls')))
+    logger.info("OK: URLs de compras registradas correctamente: /api/v1/compras/")
+except (ImportError, AttributeError) as e:
+    logger.error(f"ERROR: ERROR: No se pudieron cargar URLs de compras: {e}", exc_info=True)
+except Exception as e:
+    logger.error(f"ERROR: ERROR INESPERADO cargando URLs de compras: {e}", exc_info=True)
+
+try:
+    urlpatterns.append(path('ventas/', include('apps.tenant.ventas.api.urls')))
+    logger.info("OK: URLs de ventas registradas correctamente: /api/v1/ventas/")
+except (ImportError, AttributeError) as e:
+    logger.error(f"ERROR: No se pudieron cargar URLs de ventas: {e}", exc_info=True)
+except Exception as e:
+    logger.error(f"ERROR: ERROR INESPERADO cargando URLs de ventas: {e}", exc_info=True)
+
+try:
     urlpatterns.append(path('', include('apps.public.impuestos.api.urls')))
 except (ImportError, AttributeError) as e:
     logger.warning(f"WARNING: No se pudieron cargar URLs de impuestos: {e}")

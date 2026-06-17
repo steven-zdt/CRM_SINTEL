@@ -1,0 +1,179 @@
+{# offcanvas_detalle_orden.html — Detalle Orden de Venta v3.10.5 #}
+{# Solo lectura. Permite confirmar/facturar/anular segun el estado actual. #}
+<style>
+  #offcanvas-venta-detalle { width: 720px !important; }
+  #offcanvas-venta-detalle .badge-estado { font-size: 0.8rem; padding: 0.35em 0.7em; }
+  #offcanvas-venta-detalle .section-label {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #6c757d; margin-bottom: 0.75rem;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-venta-detalle"
+     aria-labelledby="offcanvas-venta-detalle-label">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-venta-detalle-label">
+      <i class="bi bi-eye text-primary me-2"></i>Detalle Orden de Venta
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body px-4 py-3">
+    {% if not orden %}
+      <div class="alert alert-danger">Orden no encontrada.</div>
+    {% else %}
+
+    {# Estado + Acciones de transicion #}
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        {% if orden.estado == 'BORRADOR' %}
+          <span class="badge bg-secondary badge-estado">Borrador</span>
+        {% elif orden.estado == 'CONFIRMADA' %}
+          <span class="badge bg-primary badge-estado">Confirmada</span>
+        {% elif orden.estado == 'FACTURADA' %}
+          <span class="badge bg-success badge-estado">Facturada</span>
+        {% elif orden.estado == 'ANULADA' %}
+          <span class="badge bg-danger badge-estado">Anulada</span>
+        {% endif %}
+      </div>
+
+      <div class="d-flex gap-2">
+        {% if orden.estado == 'BORRADOR' %}
+          <button type="button"
+                  class="btn btn-outline-primary btn-sm"
+                  data-venta-action="confirmar"
+                  data-venta-uuid="{{ orden.uuid }}">
+            <i class="bi bi-check-circle me-1"></i>Confirmar
+          </button>
+          <button type="button"
+                  class="btn btn-outline-danger btn-sm"
+                  data-venta-action="anular"
+                  data-venta-uuid="{{ orden.uuid }}">
+            <i class="bi bi-x-circle me-1"></i>Anular
+          </button>
+        {% elif orden.estado == 'CONFIRMADA' %}
+          <button type="button"
+                  class="btn btn-success btn-sm"
+                  data-venta-action="facturar"
+                  data-venta-uuid="{{ orden.uuid }}">
+            <i class="bi bi-receipt me-1"></i>Generar Factura
+          </button>
+          <button type="button"
+                  class="btn btn-outline-danger btn-sm"
+                  data-venta-action="anular"
+                  data-venta-uuid="{{ orden.uuid }}">
+            <i class="bi bi-x-circle me-1"></i>Anular
+          </button>
+        {% elif orden.estado == 'FACTURADA' %}
+          <a href="/api/v1/facturas/{{ orden.factura.uuid }}/"
+             class="btn btn-outline-info btn-sm" target="_blank" rel="noopener">
+            <i class="bi bi-file-earmark-check me-1"></i>Ver Factura
+          </a>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Datos generales #}
+    <div class="mb-4">
+      <div class="section-label"><i class="bi bi-info-circle me-1"></i>Informacion General</div>
+      <dl class="row row-cols-2 g-2 small">
+        <div class="col">
+          <dt class="text-muted fw-normal">Cliente</dt>
+          <dd class="fw-semibold">{{ orden.cliente.razon_social }}</dd>
+        </div>
+        <div class="col">
+          <dt class="text-muted fw-normal">Documento</dt>
+          <dd>{{ orden.cliente.numero_documento|default:"—" }}</dd>
+        </div>
+        <div class="col">
+          <dt class="text-muted fw-normal">Fecha Emision</dt>
+          <dd>{{ orden.fecha_emision|date:"d/m/Y" }}</dd>
+        </div>
+        <div class="col">
+          <dt class="text-muted fw-normal">Fecha Vencimiento</dt>
+          <dd>{{ orden.fecha_vencimiento|date:"d/m/Y"|default:"—" }}</dd>
+        </div>
+        {% if orden.observaciones %}
+        <div class="col-12">
+          <dt class="text-muted fw-normal">Observaciones</dt>
+          <dd>{{ orden.observaciones }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </div>
+
+    {# Items #}
+    <div class="mb-4">
+      <div class="section-label"><i class="bi bi-list-ul me-1"></i>Items</div>
+      <table class="table table-sm table-bordered">
+        <thead class="table-light">
+          <tr>
+            <th>Descripcion</th>
+            <th class="text-end">Cant.</th>
+            <th class="text-end">Precio Unit.</th>
+            <th class="text-end">IVA %</th>
+            <th class="text-end">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in orden.items.all %}
+          <tr>
+            <td>
+              {{ item.descripcion }}
+              {% if item.producto %}
+                <br><span class="text-muted small">Producto: {{ item.producto.nombre }}</span>
+              {% elif item.servicio %}
+                <br><span class="text-muted small">Servicio: {{ item.servicio.nombre }}</span>
+              {% endif %}
+            </td>
+            <td class="text-end">{{ item.cantidad }}</td>
+            <td class="text-end">${{ item.precio_unitario|floatformat:0 }}</td>
+            <td class="text-end">{{ item.tasa_iva }}%</td>
+            <td class="text-end fw-semibold">${{ item.subtotal|floatformat:0 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted text-center">Sin items registrados.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# Totales #}
+    <div class="d-flex justify-content-end mb-2">
+      <table class="table table-sm w-auto text-end" style="min-width:240px;">
+        <tbody>
+          <tr>
+            <td class="text-muted">Subtotal:</td>
+            <td class="fw-semibold ps-4">${{ orden.subtotal|floatformat:0 }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted">IVA:</td>
+            <td class="fw-semibold ps-4">${{ orden.impuestos|floatformat:0 }}</td>
+          </tr>
+          <tr class="fw-bold">
+            <td>Total:</td>
+            <td class="ps-4 text-primary fs-6">${{ orden.total|floatformat:0 }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# Feedback de acciones AJAX #}
+    <div id="detalle-venta-feedback" class="alert d-none mt-3" role="alert"></div>
+
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+  (function() {
+    var el = document.getElementById('offcanvas-venta-detalle');
+    if (!el) return;
+    if (window.Sintel && window.Sintel.Ventas && window.Sintel.Ventas.Editor) {
+      window.Sintel.Ventas.Editor.onDetalleLoaded(el);
+    }
+  })();
+</script>

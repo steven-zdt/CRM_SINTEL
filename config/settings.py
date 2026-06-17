@@ -83,6 +83,12 @@ SHARED_APPS = [
 # WARNING: REGLA DE ORO: NINGUNA app que comience con 'apps.public.' puede estar aquí
 # WARNING: REGLA DE ORO: TODAS las apps que comienzan con 'apps.tenant.' DEBEN estar aquí
 TENANT_APPS = [
+    # WARNING: SEGURIDAD (auditoria django-tenants): django.contrib.sessions debe estar
+    # en TENANT_APPS para evitar session leaking o invalidacion inesperada de sesion
+    # cuando el mismo usuario navega entre el esquema public y un esquema de tenant.
+    # Ver: https://django-tenants.readthedocs.io/en/latest/install.html
+    "django.contrib.sessions",  # OK: SEGURIDAD: Sesiones aisladas por esquema tenant
+
     # DRF y herramientas API (disponibles en cada tenant para APIs privadas)
     # WARNING: NOTA: Estas apps también están en SHARED_APPS porque se necesitan en ambos esquemas
     # django-tenants permite que apps estén en ambas listas (se instalan en ambos esquemas)
@@ -90,24 +96,26 @@ TENANT_APPS = [
     "django_filters",  # Filtrado para APIs privadas de cada tenant
     "drf_spectacular",  # OpenAPI schema generation para APIs privadas de cada tenant
     "djangorestframework_mcp",  # MCP server: expone ViewSets como herramientas via /mcp/
-    
+
     # WARNING: APPS PRIVADAS: Aplicaciones de negocio por tenant
     # Estas apps SOLO existen en esquemas de tenant, NUNCA en public
     "apps.tenant.core",         # Vistas core y manejadores de error (404, 403)
     "apps.tenant.empresa",      # Datos de la empresa (por tenant)
-    "apps.tenant.facturas",     # Facturación (por tenant)
+    "apps.tenant.facturas",     # Facturacion (por tenant)
     "apps.tenant.contabilidad", # Contabilidad (por tenant)
     "apps.tenant.inventario",   # Inventario (por tenant)
-    "apps.tenant.empleados",    # Empleados y nómina (por tenant)
+    "apps.tenant.empleados",    # Empleados y nomina (por tenant)
     "apps.tenant.gastos",       # Gastos operativos y de personal (por tenant)
     "apps.tenant.cotizaciones", # Cotizaciones y presupuestos (por tenant) v2.40
     "apps.tenant.proveedores",  # Proveedores y compras (por tenant)
-    "apps.tenant.clientes",    # Clientas y ventas (por tenant)
-    "apps.tenant.proyectos",   # Proyectos (por tenant)
-    "apps.tenant.landing",      # Landing page para tenants (accesible anónimamente)
+    "apps.tenant.clientes",     # Clientes y ventas (por tenant)
+    "apps.tenant.proyectos",    # Proyectos (por tenant)
+    "apps.tenant.landing",      # Landing page para tenants (accesible anonimamente)
     "apps.tenant.dashboard",    # Dashboard con control de roles
     "apps.tenant.perfil",       # Perfil privado del colaborador (por tenant)
     "apps.tenant.bancos",       # Gestion de estados bancarios y conciliacion (por tenant)
+    "apps.tenant.compras",      # Compras y ordenes de compra (por tenant)
+    "apps.tenant.ventas",       # Ordenes de Venta y facturacion directa (por tenant)
 ]
 
 # ============================================================================
@@ -161,6 +169,7 @@ _required_tenant_apps = [
     "apps.tenant.landing",
     "apps.tenant.dashboard",
     "apps.tenant.perfil",
+    "apps.tenant.compras",
 ]
 _missing_tenant_apps = [app for app in _required_tenant_apps if app not in TENANT_APPS]
 if _missing_tenant_apps:
@@ -180,23 +189,31 @@ if _missing_tenant_apps:
 # 4. TenantMainMiddleware (CRÍTICO: resuelve tenant por hostname y selecciona URLConf)
 # 5. Middlewares de seguridad y validación (después de resolución de tenant)
 MIDDLEWARE = [
+    # DESVIACION DELIBERADA de django-tenants (auditoria):
+    # La documentacion oficial exige TenantMainMiddleware en posicion #1,
+    # pero SecurityMiddleware, WhiteNoise, CORS, Sessions, ValidateALLOWED_HOSTS
+    # y ForceNoPortMiddleware DEBEN ejecutarse ANTES para normalizar HTTP_HOST
+    # (eliminando el puerto) y validar el Host header ANTES de la resolucion
+    # de tenant. Sin ForceNoPortMiddleware, 'sintel.com:8000' no matchearia
+    # ningun registro de Domain y causaria 404 en desarrollo.
+    # Ver: documentacion/arquitectura_general.md seccion 1.5
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # OK: WhiteNoise para servir staticfiles en producción
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # OK: WhiteNoise para servir staticfiles en produccion
     'corsheaders.middleware.CorsMiddleware',  # OK: CORS: Debe ir ANTES de CommonMiddleware
-    'django.contrib.sessions.middleware.SessionMiddleware',  # OK: CRÍTICO: Debe ejecutarse antes de ForceNoPortMiddleware
+    'django.contrib.sessions.middleware.SessionMiddleware',  # OK: CRITICO: Debe ejecutarse antes de ForceNoPortMiddleware
     'apps.public.core.middleware.ValidateALLOWED_HOSTSMiddleware',  # OK: SEGURIDAD: Valida Host header contra ALLOWED_HOSTS (ANTES de Django URL resolution)
-    'apps.public.core.middleware.ForceNoPortMiddleware',  # OK: ESTÁNDAR: Normaliza HTTP_HOST eliminando puerto (ANTES de TenantMainMiddleware)
-    'django_tenants.middleware.main.TenantMainMiddleware',  # OK: CRÍTICO: Identifica tenant usando HTTP_HOST normalizado y selecciona URLConf (ROOT_URLCONF o TENANT_URLCONF)
-    'apps.tenant.core.middleware.SintelExceptionMiddleware',  # OK: v2.40: Manejo centralizado de excepciones (DESPUÉS de TenantMainMiddleware para tener contexto del esquema)
-    'apps.public.tenants.middleware_urlconf.TenantSecurityAndURLConfMiddleware',  # OK: SEGURIDAD + URLConf: Protege ámbito público y establece request.urlconf (después de TenantMainMiddleware)
-    'apps.public.tenants.middleware.TenantSecurityMiddleware',  # OK: SEGURIDAD: Bloquea tenants suspendidos (debe ir después de TenantMainMiddleware)
+    'apps.public.core.middleware.ForceNoPortMiddleware',  # OK: ESTANDAR: Normaliza HTTP_HOST eliminando puerto (ANTES de TenantMainMiddleware)
+    'django_tenants.middleware.main.TenantMainMiddleware',  # OK: CRITICO: Identifica tenant usando HTTP_HOST normalizado y selecciona URLConf (ROOT_URLCONF o TENANT_URLCONF)
+    'apps.tenant.core.middleware.SintelExceptionMiddleware',  # OK: v2.40: Manejo centralizado de excepciones (DESPUES de TenantMainMiddleware para tener contexto del esquema)
+    'apps.public.tenants.middleware_urlconf.TenantSecurityAndURLConfMiddleware',  # OK: SEGURIDAD + URLConf: Protege ambito publico y establece request.urlconf (despues de TenantMainMiddleware)
+    'apps.public.tenants.middleware.TenantSecurityMiddleware',  # OK: SEGURIDAD: Bloquea tenants suspendidos (debe ir despues de TenantMainMiddleware)
     'apps.public.core.middleware.CSRFTrustedOriginMiddleware',  # OK: DESARROLLO: Permite dominios arbitrarios en CSRF_TRUSTED_ORIGINS
     'django.middleware.common.CommonMiddleware',
     'apps.public.core.middleware.DebugNoCSRFMiddleware',  # OK: DESARROLLO: Desactiva CSRF en DEBUG mode
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',  # OK: CRÍTICO: Proporciona request.user (requerido para require_tenant_membership)
-    'apps.public.tenants.authz.require_tenant_membership',  # OK: SEGURIDAD: Valida membresía del tenant para usuarios autenticados (factory funcional)
-    'apps.public.tenants.middleware_admin_guard.block_public_routes_on_tenants',  # OK: GUARD-RAIL: Bloquea /admin/, /console/ y /api/public/ en cualquier esquema ≠ public
+    'django.contrib.auth.middleware.AuthenticationMiddleware',  # OK: CRITICO: Proporciona request.user (requerido para require_tenant_membership)
+    'apps.public.tenants.authz.require_tenant_membership',  # OK: SEGURIDAD: Valida membresia del tenant para usuarios autenticados (factory funcional)
+    'apps.public.tenants.middleware_admin_guard.block_public_routes_on_tenants',  # OK: GUARD-RAIL: Bloquea /admin/, /console/ y /api/public/ en cualquier esquema != public
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -274,20 +291,14 @@ TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', _default_tenant_domain_base
 APP_PORT = os.getenv('APP_PORT', '8000')  # Solo para referencia, no se usa en construcción de URLs
 SITE_PROTOCOL = os.getenv('SITE_PROTOCOL', '')  # 'https' para forzar en todos los URL builders
 
-# Tenant configuration
-TENANT_MODEL = "tenants.Client"  # app_label es 'tenants' (último componente de 'apps.public.tenants')
-TENANT_DOMAIN_MODEL = "tenants.Domain"
+# NOTA AUDITORIA: TENANT_MODEL, TENANT_DOMAIN_MODEL y AUTH_USER_MODEL estaban declarados
+# dos veces (lineas 246-248 y aqui). Se eliminan los duplicados. SSoT = lineas 246-248.
 
 # When True, if no tenant is found for the request hostname, the system
 # will serve the public URLConf instead of raising 404. This is useful for
 # development and test environments where the Domain table may not contain
 # an entry for 'localhost' or ephemeral hosts. Default: True in DEBUG.
 SHOW_PUBLIC_IF_NO_TENANT_FOUND = os.getenv('SHOW_PUBLIC_IF_NO_TENANT_FOUND', 'True' if DEBUG else 'False') == 'True'
-
-# Custom User Model
-AUTH_USER_MODEL = "accounts.User"  # app_label.ModelName
-# IMPORTANTE: Esta configuración debe hacerse ANTES de la primera migración
-# Si ya tienes migraciones, necesitarás crear el modelo y luego hacer las migraciones
 
 # WARNING: SEGURIDAD: Backends de autenticación tenant-aware
 # El orden es importante: TenantAwareBackend debe ir ANTES de ModelBackend
@@ -360,9 +371,15 @@ WHITENOISE_AUTOREFRESH = DEBUG  # Solo en desarrollo
 # El middleware HTTPSRedirectMiddleware intenta redirigir HTTPS -> HTTP en DEBUG
 # Si el navegador fuerza HTTPS, limpiar HSTS: chrome://net-internals/#hsts
 # Para producción, configurar estas opciones en un módulo de settings separado
-SECURE_SSL_REDIRECT = False  # No forzar HTTPS en desarrollo
-SESSION_COOKIE_SECURE = False  # Cookies de sesión no requieren HTTPS en desarrollo
-CSRF_COOKIE_SECURE = False  # Cookies CSRF no requieren HTTPS en desarrollo
+SECURE_SSL_REDIRECT = False  # Nginx hace la redireccion 80->443; Django no redirige
+SESSION_COOKIE_SECURE = not DEBUG  # True en produccion (HTTPS), False en desarrollo
+CSRF_COOKIE_SECURE = not DEBUG     # True en produccion (HTTPS), False en desarrollo
+
+if not DEBUG:
+    SECURE_HSTS_SECONDS = 31536000       # 1 año
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # Cross-Origin-Opener-Policy (COOP)
 # WARNING: WARNING: El navegador mostrará un warning si usas HTTP en lugar de HTTPS
@@ -465,7 +482,7 @@ CORS_ALLOW_CREDENTIALS = True
 # CSRF: orígenes de confianza (con esquema). Separar por comas en ENV.
 _csrf_origins = os.getenv(
     "CSRF_TRUSTED_ORIGINS",
-    "http://localhost,http://127.0.0.1,http://192.168.2.15,https://192.168.2.15,https://sintel.com,https://.sintel.com,https://186.117.247.166,https://186.117.247.167",
+    "http://localhost,http://127.0.0.1,http://192.168.2.15,https://192.168.2.15,http://sintel.com,https://sintel.com,http://.sintel.com,https://.sintel.com,https://186.117.247.166,https://186.117.247.167",
 ).split(",")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins if o.strip()]
 
