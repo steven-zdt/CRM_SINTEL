@@ -13,13 +13,11 @@ x-app-base: &app-base
       condition: service_healthy
     redis:
       condition: service_healthy
-  # extra_hosts: resolucion DNS interna de subdominios tenant
-  # Agregar manualmente al crear nuevo tenant o ejecutar: python manage.py ensure_tenant_dns
-  extra_hosts:
-    - "sintel.com:192.168.2.15"
-    - "cliente.sintel.com:192.168.2.15"
-    - "putito.sintel.com:192.168.2.15"
-    - "tupapi.sintel.com:192.168.2.15"
+  # DNS apunta al servidor Windows que tiene wildcard *.sintel.com → 192.168.2.15.
+  # Cualquier tenant nuevo es resolvible dentro de los contenedores sin reiniciar.
+  dns:
+    - 192.168.2.15
+    - 8.8.8.8
 
 services:
   # Base de datos PostgreSQL
@@ -29,11 +27,13 @@ services:
     environment:
       POSTGRES_DB: ${DATABASE_NAME:-sintel}
       POSTGRES_USER: ${DATABASE_USER:-sintel}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-sintel}
+      # DEVOPS-M1: sin fallback debil — falla explicito si falta en .env
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD debe estar definido en .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      # DEVOPS-M2: solo accesible desde el propio host, no desde la red local
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "psql -U ${POSTGRES_USER:-sintel} -d ${POSTGRES_DB:-sintel} -c 'SELECT 1' -q 2>/dev/null"]
       interval: 5s
@@ -47,13 +47,37 @@ services:
     container_name: crm_sintel-redis-1
     image: redis:7.2-alpine
     ports:
-      - "6379:6379"
+      # DEVOPS-M2: solo accesible desde el propio host, no desde la red local
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 5s
+    restart: unless-stopped
+
+  # Enterprise Knowledge Graph (EKG) — grafo de arquitectura/codigo, ver tools/ekg/
+  neo4j:
+    container_name: crm_sintel-neo4j-1
+    image: neo4j:5.24-community
+    environment:
+      # EKG-M1: sin fallback debil, mismo patron que DATABASE_PASSWORD (DEVOPS-M1)
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD debe estar definido en .env}
+      NEO4J_server_memory_pagecache_size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+    volumes:
+      - neo4j_data:/data
+    ports:
+      # DEVOPS-M2: solo accesible desde el propio host, no desde la red local
+      - "127.0.0.1:7474:7474"   # HTTP browser UI
+      - "127.0.0.1:7687:7687"   # Bolt (driver)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -O /dev/null -q http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
   # Servicio web Django
@@ -68,6 +92,13 @@ services:
       - DATABASE_HOST=db
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     restart: unless-stopped
+    # DEVOPS-M3: usa el endpoint /health ya existente (config/urls_public.py)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Reverse proxy HTTPS
   nginx:
@@ -79,11 +110,19 @@ services:
       - "0.0.0.0:80:80"
       - "0.0.0.0:443:443"
     volumes:
+      - nginx_certs:/etc/nginx/certs   # cert persiste entre rebuilds
       - ./staticfiles:/app/staticfiles:ro
       - ./media:/app/media:ro
     depends_on:
       - web
     restart: unless-stopped
+    # DEVOPS-M3: wget de busybox (incluido en nginx:alpine), sin dependencias extra
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   # Worker Celery
   celery:
@@ -96,9 +135,34 @@ services:
       - DATABASE_HOST=db
     command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "high_priority,default"]
     restart: unless-stopped
+    # DEVOPS-M3: celery inspect ping falla si el worker no responde
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Cloudflare Tunnel
+  cloudflared:
+    container_name: crm_sintel-cloudflared-1
+    image: cloudflare/cloudflared:2025.5.0
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      - nginx
+
 
 
 volumes:
   postgres_data:
     name: crm_sintel_postgres_data
+    driver: local
+  nginx_certs:
+    name: crm_sintel_nginx_certs
+    driver: local
+  neo4j_data:
+    name: crm_sintel_neo4j_data
     driver: local

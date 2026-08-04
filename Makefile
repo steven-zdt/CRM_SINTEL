@@ -1,10 +1,23 @@
-.PHONY: up down shell logs makemigrations makemigrations-accounts migrate-shared migrate-tenants check-migrations fix-migrations superuser setup poblar-dian crear-empresa backup-tenant backup-all restore-tenant api-check api-schema test test-ingesta test-etl test-api test-search test-ops audit ruff bandit dj-check static-check
+.PHONY: up down down-full shell logs makemigrations makemigrations-accounts migrate-shared migrate-tenants migrate-shared-init migrate-tenants-init check-migrations fix-migrations superuser setup poblar-dian crear-empresa backup-tenant backup-all restore-tenant api-check api-schema test test-ingesta test-etl test-api test-search test-ops audit ruff bandit dj-check static-check pip-audit
 
 up:
 	docker compose up --build -d
 
 down:
-	docker compose down -v
+	docker compose down
+
+# DEVOPS-A5: "make down" ya no borra el volumen de Postgres (antes ejecutaba
+# "docker compose down -v" sin advertencia — un desarrollador que solo queria
+# detener servicios borraba su base de datos local). Usar down-full para el
+# reset completo, con confirmacion explicita.
+down-full:
+	@echo "⚠️  Esto borrara el volumen de Postgres (todos los datos locales)."
+	@read -p "Escriba 'si' para confirmar: " confirm; \
+	if [ "$$confirm" = "si" ]; then \
+		docker compose down -v; \
+	else \
+		echo "Cancelado."; \
+	fi
 
 shell:
 	docker compose exec web bash
@@ -18,10 +31,23 @@ makemigrations:
 makemigrations-accounts:
 	docker compose exec web python manage.py makemigrations accounts
 
+# [PERF-M5] --fake-initial ya no es el default: enmascaraba drift real de esquema
+# marcando la migracion inicial como aplicada si las tablas ya coincidian, en vez
+# de dejar que una migracion realmente pendiente falle de forma visible. Se
+# preserva como los targets -init explicitos de abajo, para el caso legitimo de
+# adoptar un esquema cuyas tablas ya existen fuera del historial de Django.
 migrate-shared:
-	docker compose exec web python manage.py migrate_schemas --shared --fake-initial
+	docker compose exec web python manage.py migrate_schemas --shared
 
 migrate-tenants:
+	docker compose exec web python manage.py migrate_schemas --tenant
+
+# Uso excepcional: bootstrap/adopcion de un esquema cuyas tablas ya existen
+# (coinciden con la migracion inicial) sin historial de migraciones de Django.
+migrate-shared-init:
+	docker compose exec web python manage.py migrate_schemas --shared --fake-initial
+
+migrate-tenants-init:
 	docker compose exec web python manage.py migrate_schemas --tenant --fake-initial
 
 check-migrations:
@@ -128,7 +154,7 @@ test-ops:
 	docker compose exec web pytest tests/public/impuestos/test_ops_health.py -v
 
 # Auditoría y refactor seguro
-audit: ruff bandit dj-check static-check audit-scripts
+audit: ruff bandit pip-audit dj-check static-check audit-scripts
 	@echo "✅ Auditoría completa finalizada"
 
 audit-scripts:
@@ -147,6 +173,13 @@ ruff:
 bandit:
 	@echo "🔒 Ejecutando Bandit (seguridad)..."
 	docker compose exec web python -m bandit -q -r apps -x "*/migrations/*" || true
+
+# DEVOPS-A4: escaneo de dependencias vulnerables (CVEs conocidos en requirements.txt).
+# Mismo patron `|| true` que ruff/bandit hasta triar el backlog inicial de
+# hallazgos preexistentes (ver PLAN_UNICO_CORRECCIONES.md Fase 8).
+pip-audit:
+	@echo "🔍 Ejecutando pip-audit (dependencias vulnerables)..."
+	docker compose exec web python -m pip_audit -r requirements.txt || true
 
 dj-check:
 	@echo "🔧 Ejecutando Django System Check..."
@@ -176,3 +209,24 @@ smoke:
 .PHONY: health
 health:
 	@curl -sS --fail-with-body "$(BASE_URL)/api/v1/core/health/" | jq .
+
+# ── Enterprise Knowledge Graph (EKG) — tools/ekg/ ───────────────────────────
+# Piloto: apps/tenant/compras. Ver tools/ekg/PILOT_REPORT.md para alcance actual.
+.PHONY: ekg-build
+ekg-build:
+	@echo "🕸️  Construyendo y cargando el Knowledge Graph para APP=$(APP)..."
+	@docker compose exec web python -m tools.ekg.build_graph --app $(APP)
+
+.PHONY: ekg-dry-run
+ekg-dry-run:
+	@echo "🕸️  Extrayendo el grafo para APP=$(APP) sin cargar a Neo4j (dry-run)..."
+	@docker compose exec web python -m tools.ekg.build_graph --app $(APP) --dry-run --output tools/ekg/out/$(APP).json
+
+.PHONY: ekg-validate
+ekg-validate:
+	@echo "🔎 Validando integridad del grafo (nodos huerfanos, referencias rotas)..."
+	@docker compose exec web python -m tools.ekg.validate --app $(APP)
+
+.PHONY: ekg-ask
+ekg-ask:
+	@docker compose exec web python -m tools.ekg.queries --live "$(Q)"

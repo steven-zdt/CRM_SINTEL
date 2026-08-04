@@ -14,6 +14,10 @@ venv/
 .coverage
 htmlcov/
 
+# EKG dry-run output (generated, see tools/ekg/PILOT_REPORT.md)
+tools/ekg/out/
+.cache/
+
 # Artefactos generados localmente
 staticfiles/
 media/

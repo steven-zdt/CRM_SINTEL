@@ -1,0 +1,82 @@
+# docker-compose.prod.yaml — Override de produccion para CRM Sintel
+#
+# USO:
+#   docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d --build
+#
+# Este archivo:
+#   - Reemplaza runserver por Gunicorn (WSGI de produccion)
+#   - Elimina bind-mount de codigo (la imagen es la fuente de verdad)
+#   - Quita la exposicion publica de Postgres y Redis
+#   - Mantiene solo los volumenes de datos persistentes (media, staticfiles)
+
+services:
+
+  db:
+    # Postgres NO expuesto al exterior — solo accesible dentro de la red Docker
+    ports: []
+
+  redis:
+    # Redis NO expuesto al exterior — solo accesible dentro de la red Docker
+    ports: []
+
+  neo4j:
+    # Neo4j (EKG) NO expuesto al exterior — solo accesible dentro de la red Docker
+    ports: []
+
+  web:
+    # Reemplazar el bind-mount de codigo por volumenes de datos unicamente.
+    # El codigo viene empaquetado en la imagen (COPY . /app en Dockerfile).
+    volumes:
+      - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
+
+    # DEVOPS-A3: fijar DJANGO_DEBUG=False explicito en produccion (defensa en
+    # profundidad — no depender solo del fallback en config/settings.py/SEC-C1).
+    environment:
+      - DJANGO_DEBUG=False
+
+    # Gunicorn en lugar de runserver:
+    #   workers = (2 x num_cores) + 1  →  ajustar segun el servidor
+    #   --access-logfile - / --error-logfile -  →  logs a stdout (capturados por Docker)
+    command:
+      - gunicorn
+      - config.wsgi:application
+      - --bind
+      - "0.0.0.0:8000"
+      - --workers
+      - "3"
+      - --threads
+      - "2"
+      - --timeout
+      - "120"
+      - --access-logfile
+      - "-"
+      - --error-logfile
+      - "-"
+
+    # El puerto 8000 no se publica directamente: Nginx es el unico punto de entrada.
+    ports: []
+
+  celery:
+    # El worker Celery tampoco necesita bind-mount de codigo.
+    volumes:
+      - ./media:/app/media
+    environment:
+      - DJANGO_DEBUG=False
+
+  # ── Cloudflare Tunnel ─────────────────────────────────────────────────────
+  # Crea un tunel saliente hacia Cloudflare Zero Trust.
+  # Las reglas de ingress vienen de cloudflared/config.yml (version controlado).
+  # Ver cloudflared/config.yml para instrucciones de setup y DNS.
+  cloudflared:
+    image: cloudflare/cloudflared:2025.5.0
+    # --config: usar reglas de ingress del archivo local (sobreescribe dashboard)
+    command: tunnel --no-autoupdate run --config /etc/cloudflared/config.yml
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    volumes:
+      # Config de ingress (solo lectura — nunca el archivo de credenciales)
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+    restart: unless-stopped
+    depends_on:
+      - nginx
