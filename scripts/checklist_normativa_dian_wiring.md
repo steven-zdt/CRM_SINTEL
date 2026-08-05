@@ -75,16 +75,16 @@ python manage.py migrate_schemas --shared
 pytest tests/public/impuestos/test_normativa_dian_api.py -v
 
 # 4. Verificar endpoints (requiere servidor corriendo)
-curl http://sintel.com/api/public/v1/impuestos/contribuyentes-tipos/
-curl http://sintel.com/api/public/v1/impuestos/regimenes-renta/
-curl http://sintel.com/api/public/v1/impuestos/responsabilidades-rut/
-curl http://sintel.com/api/public/v1/impuestos/perfiles-tributarios/
+curl http://sintel.net.co/api/public/v1/impuestos/contribuyentes-tipos/
+curl http://sintel.net.co/api/public/v1/impuestos/regimenes-renta/
+curl http://sintel.net.co/api/public/v1/impuestos/responsabilidades-rut/
+curl http://sintel.net.co/api/public/v1/impuestos/perfiles-tributarios/
 
 # 5. Verificar admin (requiere login staff)
-# http://sintel.com/admin/impuestos/contribuyentetipo/
-# http://sintel.com/admin/impuestos/regimenrenta/
-# http://sintel.com/admin/impuestos/responsabilidadrut/
-# http://sintel.com/admin/impuestos/perfiltributario/
+# http://sintel.net.co/admin/impuestos/contribuyentetipo/
+# http://sintel.net.co/admin/impuestos/regimenrenta/
+# http://sintel.net.co/admin/impuestos/responsabilidadrut/
+# http://sintel.net.co/admin/impuestos/perfiltributario/
 ```
 
 ## 📝 Notas de Implementación

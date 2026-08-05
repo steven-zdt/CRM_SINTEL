@@ -1,0 +1,102 @@
+{# compras_list.html - Compras Module v3.10.5 #}
+{# Zero JS in HTML - All logic in compras_list.js #}
+
+<div class="card shadow-sm" data-module="compras">
+  <div class="card-header bg-white py-3">
+    <div class="d-flex justify-content-between align-items-center">
+      <h5 class="mb-0 fw-bold text-dark">
+        <i class="bi bi-truck me-2 text-primary"></i>Órdenes de Compra
+      </h5>
+      <span data-module="compras" data-loading-icon class="ms-2 d-none">
+        <i class="bi bi-hourglass-split text-primary"></i>
+      </span>
+    </div>
+  </div>
+
+  <div class="card-body">
+    {# Toolbar #}
+    <div class="d-flex justify-content-between align-items-center mb-3" data-module="compras">
+      <div class="input-group input-group-sm w-auto">
+        <input type="text"
+               id="search-compra"
+               name="q"
+               class="form-control"
+               placeholder="Buscar orden..."
+               data-module="compras"
+               data-search-input
+               hx-get="{% url 'compras:tabla' %}"
+               hx-trigger="keyup changed delay:400ms, search"
+               hx-target="#compras-panel"
+               hx-swap="innerHTML">
+        <button class="btn btn-outline-secondary" type="button"
+                data-action="search" data-module="compras" title="Buscar">
+          <i class="bi bi-search"></i>
+        </button>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm"
+                hx-get="/api/v1/compras/plantillas/render-offcanvas/crear/"
+                hx-target="#offcanvas-container-plantillas"
+                hx-swap="innerHTML"
+                data-module="compras"
+                title="Crear plantilla de numeración">
+          <i class="bi bi-journals me-1"></i>Nueva Plantilla
+        </button>
+        <button class="btn btn-primary btn-sm"
+                hx-get="/api/v1/compras/render-offcanvas/crear/"
+                hx-target="#offcanvas-container-compras"
+                hx-swap="innerHTML"
+                data-module="compras"
+                data-create-button>
+          <i class="bi bi-plus-lg me-1"></i>Nueva Orden
+        </button>
+      </div>
+    </div>
+    
+    {# Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el
+       antiguo #compras-summary + spinner + #grid-ordenes-compra Tabulator
+       (ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS). #}
+    <div id="compras-panel"
+         data-grid="ordenes-compra"
+         hx-get="{% url 'compras:tabla' %}"
+         hx-trigger="load, compra-created from:body, compra-updated from:body"
+         hx-target="this"
+         hx-swap="innerHTML"
+         hx-boost="true">
+      <div class="text-center py-5">
+        <div class="spinner-border" role="status">
+          <span class="visually-hidden">Cargando...</span>
+        </div>
+        <p class="mt-2 text-muted">Cargando órdenes de compra...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Offcanvas Container - Ordenes #}
+<div id="offcanvas-container-compras"></div>
+
+{# Offcanvas Container - Plantillas #}
+<div id="offcanvas-container-plantillas"></div>
+
+{# Modal de Confirmacion Eliminar #}
+<div class="modal fade" id="confirmarEliminarModalCompras" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirmar Eliminación</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Está seguro de que desea eliminar esta orden de compra?</p>
+        <p class="text-danger"><strong>Esta acción no se puede deshacer y solo es permitida para órdenes en estado Borrador.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar-compras">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# assets cargados centralmente en workspace.html extra_js - no duplicar aqui #}

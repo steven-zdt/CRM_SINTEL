@@ -297,50 +297,40 @@ def process_mail_ingestion_sync(
                 else:
                     raise ValueError("No se pudo extraer DTO del XML usando document_ingest")
             else:
-                # Fallback: usar parser UBL legacy
+                # WARNING: [PERF-C3] Fallback: usar parser UBL legacy.
+                # importar_factura_desde_ubl() parsea Y PERSISTE (via FacturaCRUDService.crear,
+                # ahora atomico junto con sus ItemFactura) retornando la instancia de Factura ya
+                # creada -- NO un dict. Tratar su valor de retorno como dict (factura_data.get(...))
+                # lanzaba AttributeError en cada invocacion de esta rama, y ademas se reconstruia un
+                # "dto" para volver a persistir la MISMA factura una segunda vez via
+                # guardar_factura_desde_dto(), lo cual habria intentado un doble insert.
+                # NOTA: esta ruta de respaldo no replica la validacion de NIT-tenant
+                # (document_not_for_tenant) que sí aplica la ruta principal document_ingest;
+                # solo se activa cuando ese paquete no esta disponible en el entorno.
                 from apps.tenant.facturas.utils.ubl_parser import importar_factura_desde_ubl
-                factura_data = importar_factura_desde_ubl(xml_text)
-                
-                # Convertir a formato DTO canónico para usar guardar_factura_desde_dto
-                dto = {
-                    "numero": factura_data.get("numero"),
-                    "fecha_emision": factura_data.get("fecha_emision"),
-                    "prefijo": factura_data.get("prefijo"),
-                    "consecutivo": factura_data.get("consecutivo", 0),
-                    "emisor": {
-                        "nit": factura_data.get("emisor_nit"),
-                        "razon_social": factura_data.get("emisor_razon_social"),
-                        "direccion": factura_data.get("emisor_direccion"),
-                        "telefono": factura_data.get("emisor_telefono"),
-                        "email": factura_data.get("emisor_email"),
-                    },
-                    "receptor": {
-                        "nit": factura_data.get("receptor_nit"),
-                        "razon_social": factura_data.get("receptor_razon_social"),
-                        "direccion": factura_data.get("receptor_direccion"),
-                        "telefono": factura_data.get("receptor_telefono"),
-                        "email": factura_data.get("receptor_email"),
-                    },
-                    "totales": {
-                        "subtotal": str(factura_data.get("subtotal", "0.00")),
-                        "impuestos": str(factura_data.get("impuestos", "0.00")),
-                        "total": str(factura_data.get("total", "0.00")),
-                        "moneda": factura_data.get("moneda", "COP"),
-                    },
-                    "identificadores": {
-                        "cufe": factura_data.get("cufe"),
-                        "uuid": factura_data.get("cufe"),  # CUFE puede usarse como UUID
-                    }
-                }
-                
-                # Aplicar validación de NIT en guardar_factura_desde_dto
-                xml_bytes = xml_text.encode('utf-8')
-                payload, status_code = guardar_factura_desde_dto(
-                    dto,
-                    xml_text=xml_text,
-                    file_bytes=xml_bytes,
-                    file_type='xml'
-                )
+                from django.db import IntegrityError
+
+                try:
+                    factura_obj = importar_factura_desde_ubl(xml_text)
+                    payload, status_code = (
+                        {
+                            "id": str(factura_obj.uuid),
+                            "numero": factura_obj.numero,
+                            "naturaleza": factura_obj.naturaleza,
+                            "created": True,
+                        },
+                        201,
+                    )
+                except IntegrityError:
+                    payload, status_code = (
+                        {"error": "duplicate", "message": "Factura ya existe (numero/cufe duplicado)"},
+                        409,
+                    )
+                except ValueError as exc:
+                    payload, status_code = (
+                        {"error": "validation_error", "message": str(exc)},
+                        422,
+                    )
             
             # # WARNING: PASO 5.2: Verificar resultado de la validación
             if status_code == 422:
@@ -706,10 +696,15 @@ def preview_mail_ingestion(
                 else:
                     raise ValueError("No se pudo extraer DTO del XML usando document_ingest")
             else:
-                # Fallback: usar parser UBL legacy
+                # WARNING: [PERF-C3] Fallback: usar parser UBL legacy en modo persist=False.
+                # Este bloque es solo de PREVISUALIZACION (PASO 4.1: "extraer solo metadatos,
+                # sin persistir") -- debe recibir el dict de datos parseados, no una Factura ya
+                # creada. Con persist=True (comportamiento anterior por defecto) esta previsualizacion
+                # habria creado una Factura real en cada llamada, antes de que el usuario confirmara
+                # la importacion.
                 from apps.tenant.facturas.utils.ubl_parser import importar_factura_desde_ubl
-                factura_data = importar_factura_desde_ubl(xml_text)
-                
+                factura_data = importar_factura_desde_ubl(xml_text, persist=False)
+
                 # Convertir a formato DTO canónico
                 dto = {
                     "numero": factura_data.get("numero"),

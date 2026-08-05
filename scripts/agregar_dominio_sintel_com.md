@@ -1,27 +1,27 @@
-# Configuración del Dominio sintel.com para Tenant Público
+# Configuración del Dominio sintel.net.co para Tenant Público
 
 ## ✅ Cambios Realizados
 
 ### 1. Comando `setup_public_tenant` Actualizado
 **Archivo:** `apps/public/tenants/management/commands/setup_public_tenant.py`
 
-- Ahora crea automáticamente el dominio `sintel.com` como dominio adicional del tenant público
+- Ahora crea automáticamente el dominio `sintel.net.co` como dominio adicional del tenant público
 - Normaliza dominios quitando el puerto (django-tenants no maneja puertos en el nombre del dominio)
 
 ### 2. Configuración de Django (`config/settings.py`)
 
 #### ALLOWED_HOSTS
-- ✅ Agregado `sintel.com` y `.sintel.com` tanto en desarrollo como producción
-- ✅ Permite acceso desde `http://sintel.com:8000` (el puerto se maneja en la URL, no en el dominio)
+- ✅ Agregado `sintel.net.co` y `.sintel.net.co` tanto en desarrollo como producción
+- ✅ Permite acceso desde `http://sintel.net.co:8000` (el puerto se maneja en la URL, no en el dominio)
 
 #### CORS_ALLOWED_ORIGIN_REGEXES
-- ✅ Agregado regex para `http://sintel.com(:\d+)?$` (con puerto opcional)
+- ✅ Agregado regex para `http://sintel.net.co(:\d+)?$` (con puerto opcional)
 - ✅ Agregado regex para `http://.*\.sintel\.com(:\d+)?$` (subdominios con puerto opcional)
 
 #### CSRF_TRUSTED_ORIGINS
-- ✅ Agregado `http://sintel.com`
-- ✅ Agregado `http://sintel.com:8000`
-- ✅ Agregado `http://*.sintel.com` (cualquier subdominio)
+- ✅ Agregado `http://sintel.net.co`
+- ✅ Agregado `http://sintel.net.co:8000`
+- ✅ Agregado `http://*.sintel.net.co` (cualquier subdominio)
 
 ## 🚀 Cómo Agregar el Dominio
 
@@ -33,7 +33,7 @@ python manage.py setup_public_tenant --skip-migrations
 
 Este comando:
 - Verifica que el tenant público existe
-- Crea el dominio `sintel.com` si no existe
+- Crea el dominio `sintel.net.co` si no existe
 - Actualiza el dominio si estaba asignado a otro tenant
 
 ### Opción 2: Usar Django Shell
@@ -48,9 +48,9 @@ from apps.public.tenants.models import Client, Domain
 # Obtener el tenant público
 tenant = Client.objects.get(schema_name='public')
 
-# Crear o actualizar el dominio sintel.com
+# Crear o actualizar el dominio sintel.net.co
 domain, created = Domain.objects.get_or_create(
-    domain='sintel.com',
+    domain='sintel.net.co',
     defaults={
         'tenant': tenant,
         'is_primary': False,
@@ -58,14 +58,14 @@ domain, created = Domain.objects.get_or_create(
 )
 
 if created:
-    print(f"✅ Dominio 'sintel.com' creado")
+    print(f"✅ Dominio 'sintel.net.co' creado")
 else:
     if domain.tenant != tenant:
         domain.tenant = tenant
         domain.save()
-        print(f"✅ Dominio 'sintel.com' actualizado")
+        print(f"✅ Dominio 'sintel.net.co' actualizado")
     else:
-        print(f"ℹ️  Dominio 'sintel.com' ya existe")
+        print(f"ℹ️  Dominio 'sintel.net.co' ya existe")
 
 # Verificar
 print("\n📋 Dominios del tenant público:")
@@ -83,8 +83,8 @@ python manage.py shell < scripts/agregar_dominio_publico.py
 
 **django-tenants NO maneja puertos en el nombre del dominio.**
 
-- El dominio en la base de datos debe ser: `sintel.com` (sin puerto)
-- El puerto se especifica en la URL: `http://sintel.com:8000`
+- El dominio en la base de datos debe ser: `sintel.net.co` (sin puerto)
+- El puerto se especifica en la URL: `http://sintel.net.co:8000`
 - Django y django-tenants manejan el puerto automáticamente desde el `HTTP_HOST` header
 
 ## 🔍 Verificación
@@ -107,13 +107,13 @@ for d in domains:
     print(f"  - {d.domain} (primary: {d.is_primary})")
 ```
 
-Deberías ver `sintel.com` en la lista de dominios.
+Deberías ver `sintel.net.co` en la lista de dominios.
 
 ## 🌐 Acceso
 
 Una vez configurado, puedes acceder al tenant público desde:
 
-- `http://sintel.com:8000/` ✅
+- `http://sintel.net.co:8000/` ✅
 - `http://localhost:8000/` ✅
 - `http://127.0.0.1:8000/` ✅
 - `http://sintel.localhost:8000/` ✅ (si está configurado)
@@ -122,7 +122,7 @@ Una vez configurado, puedes acceder al tenant público desde:
 
 Si estás usando un servidor web (nginx, Apache), asegúrate de:
 
-1. **Configurar el DNS** para que `sintel.com` apunte a tu servidor
+1. **Configurar el DNS** para que `sintel.net.co` apunte a tu servidor
 2. **Configurar el proxy** para que pase el `Host` header correctamente
 3. **Configurar el puerto** en el servidor web (no en django-tenants)
 
@@ -131,7 +131,7 @@ Si estás usando un servidor web (nginx, Apache), asegúrate de:
 ```nginx
 server {
     listen 8000;
-    server_name sintel.com;
+    server_name sintel.net.co;
 
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -148,7 +148,7 @@ server {
 Si estás desarrollando localmente, puedes agregar a `/etc/hosts` (Linux/Mac) o `C:\Windows\System32\drivers\etc\hosts` (Windows):
 
 ```
-127.0.0.1    sintel.com
+127.0.0.1    sintel.net.co
 ```
 
-Luego acceder desde: `http://sintel.com:8000/`
+Luego acceder desde: `http://sintel.net.co:8000/`

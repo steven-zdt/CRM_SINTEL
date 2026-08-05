@@ -126,6 +126,24 @@
             return m ? m.pop() : '';
         }
 
+        // [ARQ-A3] Detecta si estamos en el dominio publico (sintel.net.co, localhost, IP)
+        // o en un subdominio de tenant (ADR-002 Regla 3, igual que activate.html).
+        const IS_PUBLIC_DOMAIN = (function () {
+            const host = window.location.hostname;
+            return (
+                host === 'sintel.net.co' ||
+                host === 'localhost' ||
+                /^\d+\.\d+\.\d+\.\d+$/.test(host)
+            );
+        })();
+
+        function getApiUrl(action) {
+            if (IS_PUBLIC_DOMAIN) {
+                return '/api/public/v1/auth/' + action + '/';
+            }
+            return '/api/v1/core/auth/' + action + '/';
+        }
+
         const codeInput    = document.getElementById('reset_code');
         const pass1        = document.getElementById('reset_password1');
         const pass2        = document.getElementById('reset_password2');
@@ -187,7 +205,7 @@
 
             try {
                 const csrf = getCookie('csrftoken') || '';
-                const resp = await fetch('/api/v1/core/auth/password-reset/confirm/', {
+                const resp = await fetch(getApiUrl('password-reset/confirm'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

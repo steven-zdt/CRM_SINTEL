@@ -25,10 +25,11 @@ class ResolucionCRUDService:
 
     @staticmethod
     def _invalidar_cache_vigente(empresa_id: int) -> None:
-        """Invalida cache de resolucion vigente para una empresa."""
+        """Invalida cache de resolucion vigente para la empresa del tenant activo."""
         from django.core.cache import cache
+        from django.db import connection
 
-        cache.delete(f"resolucion_vigente_{empresa_id}")
+        cache.delete(f"resolucion_vigente:{connection.schema_name}:{empresa_id}")
 
     @staticmethod
     @transaction.atomic

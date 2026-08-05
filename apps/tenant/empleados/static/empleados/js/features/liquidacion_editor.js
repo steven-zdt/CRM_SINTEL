@@ -286,14 +286,21 @@
     }
 
     // ── Escuchar carga HTMX (skill: htmx.md §2) ──────────────────────────────
-    d.body.addEventListener('htmx:afterSettle', function(evt) {
-        const target = evt.detail?.target;
-        if (!target || target.id !== CONTAINER.replace('#', '')) return;
-        const el = target.querySelector('.offcanvas');
-        if (!el) return;
-        _mostrar(el);
-        _setupOffcanvas(el);
-    });
+    // Guard: registrado en `document.body` (persiste entre recargas HTMX del
+    // modulo "empleados") — sin este guard, cada recarga del script duplica
+    // el listener y `_mostrar`/`_setupOffcanvas` se disparan N veces (FE-A1/A2).
+    if (!d.body.dataset.liquidacionEditorInitialized) {
+        d.body.dataset.liquidacionEditorInitialized = 'true';
+
+        d.body.addEventListener('htmx:afterSettle', function(evt) {
+            const target = evt.detail?.target;
+            if (!target || target.id !== CONTAINER.replace('#', '')) return;
+            const el = target.querySelector('.offcanvas');
+            if (!el) return;
+            _mostrar(el);
+            _setupOffcanvas(el);
+        });
+    }
 
     w.Sintel.Empleados.LiquidacionEditor = { open, openDetail };
 

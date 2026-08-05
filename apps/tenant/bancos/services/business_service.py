@@ -106,7 +106,8 @@ class ExtractoBancarioBusinessService:
             raise ValidationError("No se encontraron transacciones validas en el archivo.")
 
         # Clean existing transactions for this statement (idempotency guarantee)
-        TransaccionBancaria.objects.filter(extracto=extracto).delete()
+        # DSV: empresa_id anclado para evitar borrado cross-tenant si extracto fuera manipulado
+        TransaccionBancaria.objects.filter(extracto=extracto, empresa_id=extracto.empresa_id).delete()
 
         # Ingest new transactions in bulk
         TransaccionBancariaCRUDService.crear_transacciones_bulk(

@@ -37,8 +37,20 @@ COPY . /app
 RUN mkdir -p /app/static /app/media /app/staticfiles
 
 # Copiar y hacer ejecutable el entrypoint
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+COPY entrypoint.sh entrypoint-celery.sh /app/
+RUN chmod +x /app/entrypoint.sh /app/entrypoint-celery.sh
+
+# DEVOPS-A1: no correr como root. UID/GID fijos (1000) para que archivos creados
+# dentro del contenedor (staticfiles/media generados por collectstatic/uploads)
+# queden con un propietario predecible.
+# ⚠️ NO VERIFICADO EN RUNTIME (sin Docker funcional en este entorno de edicion) —
+# probar `docker compose build && docker compose up` completo antes de desplegar:
+# collectstatic, migraciones y (en dev) el bind mount `.:/app` deben seguir
+# funcionando con este usuario. Ver PLAN_UNICO_CORRECCIONES.md Fase 8 / DEVOPS-A1.
+RUN groupadd -g 1000 appuser && \
+    useradd -u 1000 -g appuser -m -s /bin/bash appuser && \
+    chown -R appuser:appuser /app
+USER appuser
 
 # Entrypoint por defecto
 ENTRYPOINT ["/app/entrypoint.sh"]

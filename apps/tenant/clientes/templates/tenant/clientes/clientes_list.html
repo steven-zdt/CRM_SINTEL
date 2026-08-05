@@ -3,88 +3,6 @@
 
 <div class="ui-module ui-clientes" role="region" aria-label="Modulo de Clientes">
 
-  {# === KPIs === #}
-  <div class="row g-3 mb-3" id="clientes-kpis">
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-people text-primary"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cl-total" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Total</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-person-check text-success"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cl-activos" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Activos</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-building text-info"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cl-juridicas" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Jurídicas</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-person text-secondary"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cl-naturales" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Naturales</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-shield-check text-warning"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cl-retenedores" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Retenedores</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-danger bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-person-x text-danger"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cl-inactivos" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Inactivos</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   {# === Tabs === #}
   <ul class="nav nav-pills gap-2 mb-3" id="clientes-tabs" role="tablist">
     <li class="nav-item" role="presentation">
@@ -129,46 +47,54 @@
         <div class="input-group input-group-sm" style="max-width:300px;">
           <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
           <input type="text" id="search-cliente" class="form-control border-start-0 ps-0"
-                 placeholder="Buscar cliente, NIT, ciudad..." data-module="clientes" data-search-input>
+                 placeholder="Buscar cliente, NIT, ciudad..."
+                 hx-get="{% url 'clientes:cliente-tabla' %}"
+                 hx-trigger="keyup changed delay:400ms, search"
+                 hx-target="#clientes-panel"
+                 hx-include="#filtros-tipo-clientes .active"
+                 name="q">
         </div>
       </div>
 
       {# Filtros por tipo #}
       <div class="d-flex gap-2 flex-wrap mb-3" id="filtros-tipo-clientes">
-        <button class="btn btn-sm btn-outline-dark active" data-filtro-cl="">
+        <button class="btn btn-sm btn-outline-dark active" data-filtro-cl=""
+                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
+                hx-include="#search-cliente" name="filtro" value="">
           <i class="bi bi-grid-3x3-gap me-1"></i>Todos
         </button>
-        <button class="btn btn-sm btn-outline-info" data-filtro-cl="JURIDICA">
+        <button class="btn btn-sm btn-outline-info" data-filtro-cl="JURIDICA"
+                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
+                hx-include="#search-cliente" name="filtro" value="JURIDICA">
           <i class="bi bi-building me-1"></i>Jurídicas
         </button>
-        <button class="btn btn-sm btn-outline-secondary" data-filtro-cl="NATURAL">
+        <button class="btn btn-sm btn-outline-secondary" data-filtro-cl="NATURAL"
+                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
+                hx-include="#search-cliente" name="filtro" value="NATURAL">
           <i class="bi bi-person me-1"></i>Naturales
         </button>
-        <button class="btn btn-sm btn-outline-warning" data-filtro-cl="RETENEDOR">
+        <button class="btn btn-sm btn-outline-warning" data-filtro-cl="RETENEDOR"
+                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
+                hx-include="#search-cliente" name="filtro" value="RETENEDOR">
           <i class="bi bi-shield-check me-1"></i>Retenedores
         </button>
-        <button class="btn btn-sm btn-outline-success" data-filtro-cl="ACTIVO">
+        <button class="btn btn-sm btn-outline-success" data-filtro-cl="ACTIVO"
+                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
+                hx-include="#search-cliente" name="filtro" value="ACTIVO">
           <i class="bi bi-check-circle me-1"></i>Activos
         </button>
-        <button class="btn btn-sm btn-outline-danger" data-filtro-cl="INACTIVO">
+        <button class="btn btn-sm btn-outline-danger" data-filtro-cl="INACTIVO"
+                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
+                hx-include="#search-cliente" name="filtro" value="INACTIVO">
           <i class="bi bi-x-circle me-1"></i>Inactivos
         </button>
       </div>
 
-      {# Grid #}
-      <div class="card shadow-sm border-0">
-        <div class="card-body p-0">
-          <div data-spinner="clientes" class="text-center py-5" style="display:none;">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-2 text-muted small">Cargando clientes...</p>
-          </div>
-          <div id="grid-clientes" data-grid="clientes" style="min-height:360px;"></div>
-          <div data-empty-state="clientes" class="text-center py-5" style="display:none;">
-            <i class="bi bi-inbox text-muted" style="font-size:2.5rem;"></i>
-            <p class="mt-2 text-muted">No hay clientes registrados</p>
-          </div>
-        </div>
-      </div>
+      {# Panel KPIs + Grid (django-tables2 + HTMX) — Fase 5-BIS #}
+      <div id="clientes-panel"
+           hx-get="{% url 'clientes:cliente-tabla' %}"
+           hx-trigger="load, cliente-updated from:body"
+           hx-target="this"></div>
     </div>
 
     {# ── TAB: CONTACTOS ────────────────────────────────────────────── #}

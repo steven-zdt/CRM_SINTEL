@@ -371,6 +371,52 @@ class RetencionesService:
         return result['total'] or Decimal('0.00')
 
     @staticmethod
+    def totales_retenciones_por_documentos(
+        documento_origen_app: str,
+        documento_origen_modelo: str,
+        documento_origen_ids: List[int],
+        empresa_id: int,
+    ) -> Dict[int, Dict[str, Decimal]]:
+        """
+        [PERF-N1] Version bulk de total_retenciones_por_documento(): una sola query
+        agrupada para N documentos en vez de N queries (una por documento/tipo).
+        Pensada para listados (Tabulator) que muestran retefuente/reteica/reteiva
+        por fila -- ver FacturaViewSet._build_retenciones_map().
+
+        Args:
+            documento_origen_app: ej: 'facturas'
+            documento_origen_modelo: ej: 'Factura'
+            documento_origen_ids: IDs de los documentos de la pagina actual
+            empresa_id: ID de empresa (requerido para Zero-Trust)
+
+        Returns:
+            {documento_origen_id: {'RETEFUENTE': Decimal, 'RETEICA': Decimal, 'RETEIVA': Decimal}}
+            Los tipos sin retencion para un documento no aparecen en su dict interno
+            (tratar como Decimal('0.00') al leer, igual que el metodo no-bulk).
+        """
+        if not empresa_id:
+            raise ValueError("empresa_id is required for Zero-Trust tenant isolation")
+
+        resultado: Dict[int, Dict[str, Decimal]] = {}
+        if not documento_origen_ids:
+            return resultado
+
+        filas = (
+            Retencion.objects.filter(
+                empresa_id=empresa_id,
+                documento_origen_app=documento_origen_app,
+                documento_origen_modelo=documento_origen_modelo,
+                documento_origen_id__in=documento_origen_ids,
+                reversada=False,
+            )
+            .values('documento_origen_id', 'tipo')
+            .annotate(total=Sum('monto'))
+        )
+        for fila in filas:
+            resultado.setdefault(fila['documento_origen_id'], {})[fila['tipo']] = fila['total'] or Decimal('0.00')
+        return resultado
+
+    @staticmethod
     def reversar_retencion(
         retencion: Retencion,
         documento_reversada_app: str = None,

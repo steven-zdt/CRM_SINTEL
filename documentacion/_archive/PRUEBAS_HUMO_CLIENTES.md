@@ -4,7 +4,7 @@
 Verificar que las funciones de **Crear**, **Editar** y **Eliminar** funcionan correctamente en el módulo de Clientes.
 
 ## Pre-requisitos
-1. Acceso al workspace: `http://[tenant].sintel.com/workspace/#clientes`
+1. Acceso al workspace: `http://[tenant].sintel.net.co/workspace/#clientes`
 2. Usuario autenticado con permisos de administrador
 3. Al menos un cliente existente en la base de datos (para pruebas de edición/eliminación)
 

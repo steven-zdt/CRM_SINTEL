@@ -27,7 +27,7 @@ class EmailServiceTestCase(TestCase):
         User = get_user_model()
         self.user = User.objects.create_user(
             username="owner_test",
-            email="owner@sintel.com",
+            email="owner@sintel.net.co",
             password="securepassword123",
         )
 

@@ -16,6 +16,7 @@
         dashboard: {
             metricas: '/api/v1/dashboard/',              // GET — métricas consolidadas
             invalidarCache: '/api/v1/dashboard/invalidar-cache/',  // POST — invalida caché (admin)
+            kpisPorSede: '/api/v1/dashboard/kpis-por-sede/',      // GET — KPIs por sede
 
             // Legacy (v3.5 compatibilidad)
             data: '/api/v1/dashboard/data/',
@@ -69,8 +70,31 @@
         return await response.json();
     }
 
+    /**
+     * Obtiene KPIs por sede.
+     * GET /api/v1/dashboard/kpis-por-sede/
+     */
+    async function obtenerKpisPorSede(fechaInicio = '', fechaFin = '') {
+        let url = API.dashboard.kpisPorSede;
+        const params = [];
+        if (fechaInicio) params.push(`fecha_inicio=${fechaInicio}`);
+        if (fechaFin) params.push(`fecha_fin=${fechaFin}`);
+        if (params.length > 0) {
+            url += '?' + params.join('&');
+        }
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: getHeaders()
+        });
+        if (!response.ok) {
+            throw new Error(`Error ${response.status}: ${response.statusText}`);
+        }
+        return await response.json();
+    }
+
     window.Sintel.Dashboard.API = API;
     window.Sintel.Dashboard.getHeaders = getHeaders;
     window.Sintel.Dashboard.obtenerMetricas = obtenerMetricas;
     window.Sintel.Dashboard.invalidarCache = invalidarCache;
+    window.Sintel.Dashboard.obtenerKpisPorSede = obtenerKpisPorSede;
 })();

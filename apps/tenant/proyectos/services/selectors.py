@@ -7,7 +7,7 @@ WARNING: SINTEL v3.5: Capa de Lectura Optimizada
 - Performance: Uso estricto de .only() y select_related/prefetch_related
 """
 from django.db import models
-from django.db.models import OuterRef, Subquery
+from django.db.models import Avg, Count, OuterRef, Q, Subquery, Sum
 from ..models import Proyecto, TareaCorta
 
 try:
@@ -58,7 +58,7 @@ TAREA_CORTA_FIELDS = [
 ]
 
 
-def qs_list(empresa_id, search=None):
+def qs_list(empresa_id, search=None, fase=None):
     """
     QuerySet optimizado para listados. Usa .only() para Zero Waste.
     """
@@ -86,7 +86,46 @@ def qs_list(empresa_id, search=None):
             models.Q(responsable_actual_nombre__icontains=search)
         )
 
+    if fase:
+        qs = qs.filter(fase_actual=fase)
+
     return qs.order_by('-updated_at')
+
+
+def kpis_list(empresa_id, search=None, fase=None):
+    """
+    Agregacion server-side de los KPIs del listado de Proyectos (Fase 5-BIS).
+    Reemplaza el calculo client-side que antes hacia proyectos_list.js sobre
+    las filas cargadas en Tabulator (dataLoaded/dataFiltered) -- con la tabla
+    paginada server-side, las filas visibles ya no son el universo completo,
+    asi que los KPIs se calculan aqui con una sola query de agregacion sobre
+    el mismo queryset filtrado (empresa_id + search + fase) que ve la tabla.
+    """
+    qs = Proyecto.objects.filter(empresa_id=empresa_id)
+
+    if search:
+        qs = qs.filter(
+            models.Q(nombre__icontains=search) |
+            models.Q(codigo__icontains=search) |
+            models.Q(cliente_nombre__icontains=search) |
+            models.Q(responsable_actual_nombre__icontains=search)
+        )
+
+    if fase:
+        qs = qs.filter(fase_actual=fase)
+
+    agg = qs.aggregate(
+        total=Count('id'),
+        ejecucion=Count('id', filter=Q(estado_tarea='EN_PROCESO')),
+        completados=Count('id', filter=Q(estado_tarea='COMPLETADO')),
+        pendientes=Count('id', filter=Q(estado_tarea='PENDIENTE')),
+        cartera=Sum('valor_contrato_proyectado'),
+        avance_prom=Avg('porcentaje_avance'),
+    )
+    agg['cartera'] = agg['cartera'] or 0
+    agg['avance_prom'] = round(agg['avance_prom'] or 0)
+    return agg
+
 
 def qs_detail(empresa_id, uuid):
     """

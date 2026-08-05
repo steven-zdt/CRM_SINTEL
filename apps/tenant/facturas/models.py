@@ -228,57 +228,60 @@ class Factura(SintelTenantBaseModel):
         """Verifica si la factura tiene una nota crédito asociada."""
         return hasattr(self, "nota_credito")
 
+    # WARNING: [ARQ-C1] Las 3 properties de retencion delegan en RetencionesService
+    # (Pull Model, ADR-001) en vez de consultar apps.tenant.contabilidad.models.Retencion
+    # directamente. Ademas de respetar la capa de servicio, RetencionesService exige
+    # empresa_id (Zero-Trust) -- las consultas directas anteriores no filtraban por
+    # empresa_id.
+
     @property
     def total_retencion_fuente(self) -> Decimal:
-        """Lee RETEFUENTE desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        """Lee RETEFUENTE desde Contabilidad via RetencionesService (v3.7.1 Pull Model)."""
         if not self.pk:
             return Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
-            total = Retencion.objects.filter(
-                tipo='RETEFUENTE',
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+            return RetencionesService.total_retenciones_por_documento(
                 documento_origen_app='facturas',
                 documento_origen_modelo='Factura',
                 documento_origen_id=self.id,
-                reversada=False
-            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
-            return Decimal(str(total))
+                empresa_id=self.empresa_id,
+                tipo='RETEFUENTE',
+            )
         except Exception:
             return Decimal('0.00')
 
     @property
     def total_reteica(self) -> Decimal:
-        """Lee RETEICA desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        """Lee RETEICA desde Contabilidad via RetencionesService (v3.7.1 Pull Model)."""
         if not self.pk:
             return Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
-            total = Retencion.objects.filter(
-                tipo='RETEICA',
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+            return RetencionesService.total_retenciones_por_documento(
                 documento_origen_app='facturas',
                 documento_origen_modelo='Factura',
                 documento_origen_id=self.id,
-                reversada=False
-            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
-            return Decimal(str(total))
+                empresa_id=self.empresa_id,
+                tipo='RETEICA',
+            )
         except Exception:
             return Decimal('0.00')
 
     @property
     def total_reteiva(self) -> Decimal:
-        """Lee RETEIVA desde Contabilidad.Retencion (v3.7.1 Pull Model)."""
+        """Lee RETEIVA desde Contabilidad via RetencionesService (v3.7.1 Pull Model)."""
         if not self.pk:
             return Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
-            total = Retencion.objects.filter(
-                tipo='RETEIVA',
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+            return RetencionesService.total_retenciones_por_documento(
                 documento_origen_app='facturas',
                 documento_origen_modelo='Factura',
                 documento_origen_id=self.id,
-                reversada=False
-            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
-            return Decimal(str(total))
+                empresa_id=self.empresa_id,
+                tipo='RETEIVA',
+            )
         except Exception:
             return Decimal('0.00')
 
@@ -433,21 +436,24 @@ class ItemFactura(SintelTenantBaseModel):
             self.es_servicio = True
         super().save(*args, **kwargs)
 
+    # WARNING: [ARQ-C1] Delegar en RetencionesService (Pull Model, ADR-001) en vez de
+    # consultar apps.tenant.contabilidad.models.Retencion directamente -- ver nota en
+    # Factura.total_retencion_fuente.
+
     @property
     def total_retefuente_item(self) -> Decimal:
         """[v3.7.1 Backward Compat] Suma total de Retencion(tipo='RETEFUENTE') para este item."""
         if not self.pk:
             return self.valor_retefuente or Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
-            total = Retencion.objects.filter(
-                tipo='RETEFUENTE',
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+            return RetencionesService.total_retenciones_por_documento(
                 documento_origen_app='facturas',
                 documento_origen_modelo='ItemFactura',
                 documento_origen_id=self.id,
-                reversada=False
-            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
-            return Decimal(str(total))
+                empresa_id=self.empresa_id,
+                tipo='RETEFUENTE',
+            )
         except Exception:
             return self.valor_retefuente or Decimal('0.00')
 
@@ -457,15 +463,14 @@ class ItemFactura(SintelTenantBaseModel):
         if not self.pk:
             return self.valor_reteiva or Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
-            total = Retencion.objects.filter(
-                tipo='RETEIVA',
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+            return RetencionesService.total_retenciones_por_documento(
                 documento_origen_app='facturas',
                 documento_origen_modelo='ItemFactura',
                 documento_origen_id=self.id,
-                reversada=False
-            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
-            return Decimal(str(total))
+                empresa_id=self.empresa_id,
+                tipo='RETEIVA',
+            )
         except Exception:
             return self.valor_reteiva or Decimal('0.00')
 
@@ -475,15 +480,14 @@ class ItemFactura(SintelTenantBaseModel):
         if not self.pk:
             return self.valor_reteica or Decimal('0.00')
         try:
-            from apps.tenant.contabilidad.models import Retencion
-            total = Retencion.objects.filter(
-                tipo='RETEICA',
+            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+            return RetencionesService.total_retenciones_por_documento(
                 documento_origen_app='facturas',
                 documento_origen_modelo='ItemFactura',
                 documento_origen_id=self.id,
-                reversada=False
-            ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
-            return Decimal(str(total))
+                empresa_id=self.empresa_id,
+                tipo='RETEICA',
+            )
         except Exception:
             return self.valor_reteica or Decimal('0.00')
 

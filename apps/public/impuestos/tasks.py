@@ -5,7 +5,9 @@ Referencia: https://docs.celeryproject.org/en/stable/django/first-steps-with-dja
 """
 
 import hashlib
+import ipaddress
 import os
+import socket
 import time
 from datetime import datetime
 from mimetypes import guess_extension
@@ -20,6 +22,36 @@ from apps.public.impuestos.services.etl.detectors import detect_kind
 from apps.public.impuestos.services.robots import check_robots
 
 UA = "SINTEL-ImpuestosBot/1.0 (+contacto@sintel.local)"  # User agent identificable
+
+
+def _validar_url_ssrf(url: str) -> None:
+    """
+    [SEC-M1] Bloquea SSRF antes de descargar url_origen (cargado por un usuario
+    STAFF via la consola, pero el worker Celery puede tener alcance de red mas
+    amplio que la capa web). Solo permite http/https hacia hosts que resuelvan
+    a IPs publicas -- rechaza loopback, link-local, privadas y reservadas.
+
+    Limitacion conocida: no protege contra DNS rebinding (la IP se resuelve aqui
+    y `requests` resuelve de nuevo al conectar); suficiente para bloquear el caso
+    comun de URL directa a metadata/red interna.
+
+    Raises:
+        ValueError: si la URL no es segura para descargar.
+    """
+    parsed = urlparse(url or "")
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Esquema de URL no permitido: {parsed.scheme!r}")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL sin host valido")
+    try:
+        resolved = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"No se pudo resolver el host: {hostname}") from exc
+    for _family, _type, _proto, _canon, sockaddr in resolved:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            raise ValueError(f"URL resuelve a una IP no permitida ({ip})")
 
 
 def _log(
@@ -92,6 +124,18 @@ def descargar_fuente(self, documento_id: int):
     _log(doc, "descarga", "INFO", f"Descarga URL: {doc.url_origen}")
 
     try:
+        # 0) [SEC-M1] Bloquear SSRF antes de cualquier red hacia url_origen
+        try:
+            _validar_url_ssrf(doc.url_origen)
+        except ValueError as exc:
+            _log(
+                doc, "descarga", "ERROR", f"URL rechazada por politica SSRF: {exc}",
+                payload={"policy": "ssrf-deny", "url": doc.url_origen},
+            )
+            doc.estado = "ERROR"
+            doc.save(update_fields=["estado"])
+            raise
+
         # 1) Verificar robots.txt
         allowed, crawl_delay = check_robots(doc.url_origen, UA)
         doc.robots_observado = bool(allowed)

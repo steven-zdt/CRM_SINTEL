@@ -178,12 +178,10 @@ class GastoBusinessService:
                     })
                 ds_data['movimiento_inventario_uuid'] = movimiento_uuid
 
-            # 1. Validar DIAN
-            fecha_doc = ds_data.get('fecha')
-            if not resolucion.esta_dentro_de_fecha(fecha_doc):
-                return False, {"error": "resolucion_vencida", "message": "Fecha fuera de rango de resolucion."}, 400
-
-            # 2. Preparar Totales (v3.7.1 Pull Model)
+            # 1. Preparar Totales (v3.7.1 Pull Model)
+            # NOTA: La fecha del documento (fecha_doc) corresponde a la fecha de la factura
+            # del proveedor y NO debe ser restringida por el rango de vigencia de la resolucion
+            # DIAN. La resolucion solo controla la numeracion consecutiva del documento soporte.
             subtotal = Decimal(str(ds_data.get('subtotal', 0)))
             ds_data['subtotal'] = subtotal
             
@@ -192,7 +190,8 @@ class GastoBusinessService:
             config_ret = RetencionesService.obtener_retenciones_desde_tercero(
                 nit=proveedor.numero_documento,
                 tipo_tercero='PROVEEDOR',
-                naturaleza='COMPRA'
+                naturaleza='COMPRA',
+                empresa_id=empresa.id
             )
             
             # Calcular retenciones iniciales para determinar el TOTAL neto

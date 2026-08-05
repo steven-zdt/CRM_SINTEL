@@ -34,7 +34,7 @@ path('login/', lambda request: redirect('admin:login'), name='login'),
 
 **Acceso:**
 - URL: `http://localhost:8000/login/` → redirige a `/admin/login/`
-- URL: `http://sintel.com/login/` → redirige a `/admin/login/` (en producción)
+- URL: `http://sintel.net.co/login/` → redirige a `/admin/login/` (en producción)
 
 ---
 
@@ -60,7 +60,7 @@ path('login/', views.TenantLoginView.as_view(), name='login'),
 
 **Acceso:**
 - URL: `http://cliente.localhost:8000/login/` (desarrollo)
-- URL: `https://cliente.sintel.com/login/` (producción)
+- URL: `https://cliente.sintel.net.co/login/` (producción)
 
 **Características:**
 - ✅ Validación de `TenantMembership` (el usuario debe pertenecer al tenant)
@@ -89,7 +89,7 @@ path("auth/login/", TenantLoginAPIView.as_view(), name="login"),
 
 **Acceso:**
 - URL: `http://cliente.localhost:8000/api/v1/landing/auth/login/` (desarrollo)
-- URL: `https://cliente.sintel.com/api/v1/landing/auth/login/` (producción)
+- URL: `https://cliente.sintel.net.co/api/v1/landing/auth/login/` (producción)
 
 **Método:** `POST`
 

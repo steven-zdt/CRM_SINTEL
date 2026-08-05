@@ -1,121 +1,31 @@
 /**
- * Feature: Listado y Tabulator - Sede v2.61
- * FSD: Logica de inicializacion y gestion de Tabulator para Sede
+ * Feature: Listado de Sede
+ * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#sedes-panel,
+ * cargada por atributos hx-get/hx-trigger declarados en empresa_list.html).
+ * Columnas viven en tables.py/views.py (server-side).
  * Namespace: window.SedeListModule
  */
 (function(w, d) {
     'use strict';
 
     const MOD = '[sede.list]';
-    let table = null;
-
-    if (!w.SintelEmpresaTables) {
-        w.SintelEmpresaTables = {};
-    }
 
     // Helper anti-backdrop-acumulado (patron inventario v3.9.0)
     function mostrarOffcanvasSeguro(el) {
-        if (!el || !w.bootstrap || !w.bootstrap.Offcanvas) return;
-        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
-        d.body.classList.remove('overflow-hidden', 'modal-open');
-        var prev = bootstrap.Offcanvas.getInstance(el);
-        if (prev) prev.dispose();
-        new bootstrap.Offcanvas(el).show();
+        // FE-A5: delega al helper SSoT (core/js/common/offcanvas.helper.js).
+        return w.Sintel && w.Sintel.Core && w.Sintel.Core.mostrarOffcanvasSeguro(el);
     }
 
-    function getColumns() {
-        return [
-            {
-                title: "Sede",
-                field: "nombre",
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">—</span>';
-                    return `<i class="bi bi-geo-alt-fill text-primary me-2"></i><span class="fw-semibold">${val}</span>`;
-                },
-                minWidth: 120
-            },
-            {
-                title: "Dirección",
-                field: "direccion",
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">—</span>';
-                    return `<i class="bi bi-house text-secondary me-1"></i><span class="small">${val}</span>`;
-                },
-                minWidth: 140
-            },
-            {
-                title: "Teléfono",
-                field: "telefono",
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">—</span>';
-                    return `<i class="bi bi-telephone text-success me-1"></i><span class="text-monospace">${val}</span>`;
-                },
-                width: 140,
-                hozAlign: "center"
-            },
-            {
-                title: "Encargado",
-                field: "encargado_nombre",
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">Sin asignar</span>';
-                    return `<i class="bi bi-person text-info me-1"></i><span>${val}</span>`;
-                },
-                minWidth: 160
-            },
-            {
-                title: "Acciones",
-                formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    const uuid = rowData.uuid;
-                    return `
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-edit-sede" data-uuid="${uuid}" title="Editar Sede">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-sede" data-uuid="${uuid}" title="Eliminar Sede">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    `;
-                },
-                headerSort: false,
-                hozAlign: "center",
-                width: 120
-            }
-        ];
-    }
-
-    function initTabulator() {
-        if (!w.TabulatorFactory) {
-            console.error(`${MOD} TabulatorFactory no disponible`);
-            return;
-        }
-        const gridElement = d.querySelector('#grid-sede');
-        if (!gridElement) {
-            console.warn(`${MOD} #grid-sede no encontrado`);
-            return;
-        }
-        if (w.SintelEmpresaTables['sede']) {
-            try { w.SintelEmpresaTables['sede'].destroy(); } catch (_) {}
-        }
-        table = w.TabulatorFactory.create('#grid-sede', '/api/v1/empresas/sedes/', getColumns(), {
-            searchInputSelector: '#search-sede'
-        });
-        if (table) w.SintelEmpresaTables['sede'] = table;
-        return table;
-    }
+    // Funcion global de refresco: dispara el evento que el panel HTMX escucha
+    // via hx-trigger="load, sede-updated from:body" (ver empresa_list.html).
+    w.refreshSedeTable = function () {
+        d.body.dispatchEvent(new CustomEvent('sede-updated'));
+    };
 
     function initListEvents() {
-        const gridElement = d.querySelector('#grid-sede');
-        if (!gridElement) return;
-
-        gridElement.addEventListener('click', async (e) => {
-            const btnEdit   = e.target.closest('.btn-edit-sede');
-            const btnDelete = e.target.closest('.btn-delete-sede');
+        d.body.addEventListener('click', async (e) => {
+            const btnEdit   = e.target.closest('#sedes-panel .btn-edit-sede');
+            const btnDelete = e.target.closest('#sedes-panel .btn-delete-sede');
 
             if (btnEdit) {
                 e.preventDefault();
@@ -167,28 +77,13 @@
 
     function initEventListeners() {
         d.addEventListener('sedeGuardada', () => {
-            table?.replaceData?.();
+            w.refreshSedeTable();
         });
     }
 
     function init() {
-        initTabulator();
         initListEvents();
         initEventListeners();
-    }
-
-    if (typeof htmx !== 'undefined') {
-        d.addEventListener('htmx:beforeSwap', (event) => {
-            if (event.detail.target.id === 'ui-empresa-list' ||
-                event.detail.target.closest?.('#ui-empresa-list')) {
-                if (w.SintelEmpresaTables['sede']) {
-                    try {
-                        w.SintelEmpresaTables['sede'].destroy();
-                        delete w.SintelEmpresaTables['sede'];
-                    } catch (_) {}
-                }
-            }
-        });
     }
 
     if (d.readyState === 'loading') {
@@ -199,8 +94,7 @@
 
     w.SedeListModule = {
         init,
-        refresh: () => table?.replaceData?.(),
-        getTable: () => table,
+        refresh: () => w.refreshSedeTable(),
         mostrarOffcanvasSeguro
     };
 

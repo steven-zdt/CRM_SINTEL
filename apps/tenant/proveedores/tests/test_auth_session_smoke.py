@@ -35,7 +35,7 @@ def tenant(db):
 
     Domain.objects.get_or_create(
         tenant=tenant_obj,
-        domain=f'{tenant_obj.schema_name}.sintel.com',
+        domain=f'{tenant_obj.schema_name}.sintel.net.co',
         defaults={'is_primary': True},
     )
 
@@ -81,25 +81,24 @@ def test_proveedores_list_session_ok(client, django_user_model, tenant):
         rol="ADMIN"
     )
     
-    # Autenticar usuario (simula login con sesión)
-    client.force_login(user)
-    
+    # django.contrib.sessions esta en TENANT_APPS (sesiones aisladas por
+    # schema, ver config/settings.py) -- force_login() debe ejecutarse
+    # dentro del schema del tenant para que la sesion se guarde en la
+    # tabla django_session correcta (la que consultara SessionMiddleware
+    # una vez el request cambie a este schema). Fuera de schema_context()
+    # la sesion se guarda en 'public' y el request subsiguiente recibe
+    # AnonymousUser -> puede enmascarar un 401 real como 404.
+    with schema_context(tenant.schema_name):
+        client.force_login(user)
+
     # Si el ViewSet acepta SessionAuthentication, NO debe devolver 401
-    # 200 si funciona correctamente, 404 si falta include en TENANT_URLCONF
-    r = client.get("/api/v1/proveedores/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
-    
+    r = client.get("/api/v1/proveedores/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+
     # Nunca debe ser 401 si la sesión está activa y SessionAuthentication está configurado
-    assert r.status_code != 401, (
-        f"El endpoint de proveedores devolvió 401 tras login. "
+    assert r.status_code == 200, (
+        f"El endpoint de proveedores no respondió 200 tras login por sesión. "
         f"Verifica que ProveedorViewSet tenga authentication_classes = [SessionAuthentication]. "
         f"Status recibido: {r.status_code}"
-    )
-    
-    # Debe ser 200 (si funciona) o 404 (si falta include en TENANT_URLCONF)
-    assert r.status_code in (200, 404), (
-        f"Status inesperado: {r.status_code}. "
-        f"Esperado: 200 (funciona) o 404 (falta include). "
-        f"401 indica que SessionAuthentication no está configurado."
     )
 
 

@@ -24,6 +24,10 @@ from .selectors import (
 
 from .business_service import (
     KardexService,
+)
+
+# [ARQ-C2] Los ServiceMixin viven en api_mixins.py, no en business_service.py.
+from .api_mixins import (
     CategoriaItemServiceMixin,
     ProductoServiceMixin,
     ServicioServiceMixin,

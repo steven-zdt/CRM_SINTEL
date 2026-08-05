@@ -3,7 +3,7 @@
 Script para diagnosticar y corregir problemas de dominio de tenant.
 
 Uso:
-    python scripts/fix_tenant_domain.py cliente.sintel.com
+    python scripts/fix_tenant_domain.py cliente.sintel.net.co
 """
 import os
 import sys
@@ -21,7 +21,7 @@ def fix_tenant_domain(hostname):
     Diagnostica y corrige el dominio de un tenant.
     
     Args:
-        hostname: Hostname completo (ej: 'cliente.sintel.com')
+        hostname: Hostname completo (ej: 'cliente.sintel.net.co')
     """
     # Normalizar hostname (quitar puerto si existe)
     normalized_host = hostname.split(':')[0]
@@ -103,7 +103,7 @@ def fix_tenant_domain(hostname):
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("Uso: python scripts/fix_tenant_domain.py <hostname>")
-        print("Ejemplo: python scripts/fix_tenant_domain.py cliente.sintel.com")
+        print("Ejemplo: python scripts/fix_tenant_domain.py cliente.sintel.net.co")
         sys.exit(1)
     
     hostname = sys.argv[1]

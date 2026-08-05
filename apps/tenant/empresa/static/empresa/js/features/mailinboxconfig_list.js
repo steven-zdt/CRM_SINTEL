@@ -14,12 +14,8 @@
 
     // Helper anti-backdrop-acumulado (patron inventario v3.9.0)
     function mostrarOffcanvasSeguro(el) {
-        if (!el || !w.bootstrap || !w.bootstrap.Offcanvas) return;
-        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
-        d.body.classList.remove('overflow-hidden', 'modal-open');
-        var prev = bootstrap.Offcanvas.getInstance(el);
-        if (prev) prev.dispose();
-        new bootstrap.Offcanvas(el).show();
+        // FE-A5: delega al helper SSoT (core/js/common/offcanvas.helper.js).
+        return w.Sintel && w.Sintel.Core && w.Sintel.Core.mostrarOffcanvasSeguro(el);
     }
 
     if (!w.SintelEmpresaTables) w.SintelEmpresaTables = {};

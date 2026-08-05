@@ -64,8 +64,8 @@
   // ── Configurar eventos del formulario crear ───────────────────────────
   function _bindCrear(container) {
     const form = container.querySelector('#extracto-form');
-    if (!form || form.dataset.bound) return;
-    form.dataset.bound = '1';
+    if (!form || form.dataset.editorInitialized) return;
+    form.dataset.editorInitialized = '1';
 
     form.addEventListener('submit', (e) => { e.preventDefault(); _guardar(form); });
     const btn = container.querySelector('#btn-guardar-extracto');
@@ -74,8 +74,8 @@
 
   // ── Configurar eventos del panel de detalle + conciliación ───────────
   function _bindDetalle(container) {
-    if (container.dataset.bound) return;
-    container.dataset.bound = '1';
+    if (container.dataset.editorInitialized) return;
+    container.dataset.editorInitialized = '1';
 
     // Botón Procesar
     const btnProcesar = container.querySelector('#btn-procesar-extracto-detalle');

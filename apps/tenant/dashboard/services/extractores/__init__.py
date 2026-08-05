@@ -10,6 +10,7 @@ from .gastos_ext import GastosExtractor
 from .proyectos_ext import ProyectosExtractor
 from .clientes_ext import ClientesExtractor
 from .sedes_ext import SedesExtractor
+from .proveedores_ext import ProveedoresExtractor
 
 __all__ = [
     'FacturasExtractor',
@@ -19,4 +20,5 @@ __all__ = [
     'ProyectosExtractor',
     'ClientesExtractor',
     'SedesExtractor',
+    'ProveedoresExtractor',
 ]

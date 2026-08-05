@@ -164,7 +164,7 @@ curl -X GET http://localhost:8000/api/v1/gastos/ \
 # Esperado: 200 OK con lista de gastos
 
 # 5. Validar Workspace UI
-# Abrir http://home.sintel.com/workspace/#gastos
+# Abrir http://home.sintel.net.co/workspace/#gastos
 # Intentar crear/editar gasto como usuario no-staff
 # Verificar en Network tab que se recibe 405
 ```

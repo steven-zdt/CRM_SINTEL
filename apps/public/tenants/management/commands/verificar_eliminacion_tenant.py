@@ -3,7 +3,7 @@ Comando de management para verificar si un tenant ha sido eliminado completament
 
 Uso:
     python manage.py verificar_eliminacion_tenant ejemplo
-    python manage.py verificar_eliminacion_tenant ejemplo --domain ejemplo.sintel.com
+    python manage.py verificar_eliminacion_tenant ejemplo --domain ejemplo.sintel.net.co
 """
 
 from django.core.management.base import BaseCommand
@@ -25,12 +25,12 @@ class Command(BaseCommand):
         parser.add_argument(
             "--domain",
             type=str,
-            help="Dominio del tenant a verificar (ej: ejemplo.sintel.com)",
+            help="Dominio del tenant a verificar (ej: ejemplo.sintel.net.co)",
         )
 
     def handle(self, *args, **options):
         schema_name = options["schema_name"]
-        domain_name = options.get("domain") or f"{schema_name}.sintel.com"
+        domain_name = options.get("domain") or f"{schema_name}.sintel.net.co"
 
         self.stdout.write(
             self.style.SUCCESS(f'\n🔍 VERIFICACIÓN: Eliminación del Tenant "{schema_name}"')

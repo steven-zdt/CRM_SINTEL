@@ -117,7 +117,7 @@ for tenant in get_active_tenants():
 [PROCESSING] Tenant: home
   [USUARIOS] 2 usuarios total:
     ✓ admin@home.com - Perfil CREADO
-    ✓ admin@sintel.com - Perfil CREADO
+    ✓ admin@sintel.net.co - Perfil CREADO
 
 [RESULTADO]
 ✅ TenantProfiles creados: 2
@@ -127,7 +127,7 @@ for tenant in get_active_tenants():
 **Validación Post-Fix:**
 ```
 ✅ admin@home.com    - TenantProfile: Cargo=Usuario, Depto=General
-✅ admin@sintel.com  - TenantProfile: Cargo=Usuario, Depto=General
+✅ admin@sintel.net.co  - TenantProfile: Cargo=Usuario, Depto=General
 ✅ Empresa ID: 1     - Accesible
 ✅ Clientes: 3       - Consultables por empresa_id
 ✅ ViewSet           - Puede filtrar clientes correctamente

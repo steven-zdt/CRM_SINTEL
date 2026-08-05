@@ -1,0 +1,140 @@
+{# offcanvas_editar_resolucion.html — Editar Resolucion DIAN v3.16.x #}
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-resolucion-editar"
+     aria-labelledby="offcanvas-resolucion-editar-label"
+     data-bs-backdrop="static">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-resolucion-editar-label">
+      <i class="bi bi-pencil-square text-warning me-2"></i>Editar Resolucion DIAN
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body px-4 py-3">
+    <div id="form-resolucion-editar-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    {% if resolucion %}
+    <form id="resolucion-editar-form" data-uuid="{{ resolucion.uuid }}">
+      {% csrf_token %}
+
+      <div class="row g-3">
+
+        <div class="col-12">
+          <label for="res-numero-resolucion" class="form-label">
+            Numero de Resolucion DIAN <span class="text-danger">*</span>
+          </label>
+          <input type="text" class="form-control" id="res-numero-resolucion"
+                 name="numero_resolucion"
+                 value="{{ resolucion.numero_resolucion }}" required>
+        </div>
+
+        <div class="col-md-6">
+          <label for="res-prefijo" class="form-label">Prefijo</label>
+          <input type="text" class="form-control" id="res-prefijo"
+                 name="prefijo"
+                 value="{{ resolucion.prefijo }}"
+                 placeholder="Ej: SETP, FE, PV">
+          <div class="form-text">Dejar vacio si no aplica.</div>
+        </div>
+
+        <div class="col-md-6">
+          <label for="res-tipo" class="form-label">Tipo de Documento <span class="text-danger">*</span></label>
+          <select id="res-tipo" class="form-select" name="tipo" required>
+            <option value="FE" {% if resolucion.tipo == 'FE' %}selected{% endif %}>Electronica</option>
+            <option value="POS" {% if resolucion.tipo == 'POS' %}selected{% endif %}>Punto de Venta POS</option>
+            <option value="PAPEL" {% if resolucion.tipo == 'PAPEL' %}selected{% endif %}>Papel</option>
+          </select>
+        </div>
+
+        <div class="col-md-6">
+          <label for="res-fecha-resolucion" class="form-label">Fecha Resolucion DIAN <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="res-fecha-resolucion"
+                 name="fecha_resolucion"
+                 value="{{ resolucion.fecha_resolucion|date:'Y-m-d' }}" required>
+        </div>
+
+        <div class="col-md-6">
+          <label for="res-rango-desde" class="form-label">Rango Desde <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="res-rango-desde"
+                 name="rango_desde" min="1"
+                 value="{{ resolucion.rango_desde }}" required>
+        </div>
+
+        <div class="col-md-6">
+          <label for="res-rango-hasta" class="form-label">Rango Hasta <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="res-rango-hasta"
+                 name="rango_hasta" min="1"
+                 value="{{ resolucion.rango_hasta }}" required>
+        </div>
+
+        <div class="col-md-6">
+          <label for="res-fecha-desde" class="form-label">Vigencia Desde <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="res-fecha-desde"
+                 name="fecha_desde"
+                 value="{{ resolucion.fecha_desde|date:'Y-m-d' }}" required>
+        </div>
+
+        <div class="col-md-6">
+          <label for="res-fecha-hasta" class="form-label">Vigencia Hasta <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="res-fecha-hasta"
+                 name="fecha_hasta"
+                 value="{{ resolucion.fecha_hasta|date:'Y-m-d' }}" required>
+        </div>
+
+        <div class="col-12 d-flex align-items-center gap-2">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="res-vigente"
+                   name="vigente" {% if resolucion.vigente %}checked{% endif %}>
+            <label class="form-check-label" for="res-vigente">Activa / Vigente</label>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="alert alert-info p-2 small">
+            <i class="bi bi-info-circle me-1"></i>
+            Consecutivo actual: <strong>{{ resolucion.consecutivo_actual }}</strong>
+            (editarlo directamente requiere contactar soporte).
+          </div>
+        </div>
+
+      </div>
+    </form>
+    {% else %}
+    <div class="alert alert-warning">Resolucion no encontrada.</div>
+    {% endif %}
+  </div>
+
+  {% if resolucion %}
+  <div style="border-top: 1px solid #dee2e6; padding: 1rem 1.5rem; background: #f8f9fa;">
+    <div class="d-flex justify-content-between align-items-center">
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              hx-get="/api/v1/ventas/resoluciones/panel/"
+              hx-target="#offcanvas-container-ventas"
+              hx-swap="innerHTML">
+        <i class="bi bi-arrow-left me-1"></i>Volver al listado
+      </button>
+      <button type="button" class="btn btn-warning btn-sm"
+              id="btn-actualizar-resolucion">
+        <i class="bi bi-floppy me-1"></i>Guardar Cambios
+      </button>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+  (function () {
+    var el = document.getElementById('offcanvas-resolucion-editar');
+    if (!el) return;
+    if (window.Sintel && window.Sintel.Ventas && window.Sintel.Ventas.ResolucionEditor) {
+      window.Sintel.Ventas.ResolucionEditor.onHtmxLoaded();
+    } else {
+      document.addEventListener('sintel:ventas:resolucion-editor:ready', function () {
+        window.Sintel.Ventas.ResolucionEditor.onHtmxLoaded();
+      }, { once: true });
+    }
+  })();
+</script>

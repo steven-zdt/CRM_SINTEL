@@ -125,7 +125,7 @@
 
 ```bash
 # Subir XML (async=true)
-curl -X POST "http://home.sintel.com/api/v1/facturas/upload-ubl/?async=true" \
+curl -X POST "http://home.sintel.net.co/api/v1/facturas/upload-ubl/?async=true" \
   -H "Cookie: sessionid=..." \
   -F "file=@factura.xml"
 
@@ -140,7 +140,7 @@ curl -X POST "http://home.sintel.com/api/v1/facturas/upload-ubl/?async=true" \
 
 ```bash
 # Consultar estado de tarea
-curl -X GET "http://home.sintel.com/api/v1/facturas/ingest/{task_id}/status/" \
+curl -X GET "http://home.sintel.net.co/api/v1/facturas/ingest/{task_id}/status/" \
   -H "Cookie: sessionid=..."
 
 # Respuesta esperada: 200 OK (cuando termine)
@@ -155,7 +155,7 @@ curl -X GET "http://home.sintel.com/api/v1/facturas/ingest/{task_id}/status/" \
 
 ```bash
 # Materializar desde DTO
-curl -X POST "http://home.sintel.com/api/v1/facturas/materialize/" \
+curl -X POST "http://home.sintel.net.co/api/v1/facturas/materialize/" \
   -H "Cookie: sessionid=..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -176,7 +176,7 @@ curl -X POST "http://home.sintel.com/api/v1/facturas/materialize/" \
 
 ```bash
 # Listar facturas (no debe contener blobs)
-curl -X GET "http://home.sintel.com/api/v1/facturas/?ordering=-fecha_emision" \
+curl -X GET "http://home.sintel.net.co/api/v1/facturas/?ordering=-fecha_emision" \
   -H "Cookie: sessionid=..."
 
 # Verificar:
@@ -188,7 +188,7 @@ curl -X GET "http://home.sintel.com/api/v1/facturas/?ordering=-fecha_emision" \
 
 ```bash
 # Detalle de factura (debe incluir anexos si están disponibles)
-curl -X GET "http://home.sintel.com/api/v1/facturas/{id}/" \
+curl -X GET "http://home.sintel.net.co/api/v1/facturas/{id}/" \
   -H "Cookie: sessionid=..."
 
 # Verificar:

@@ -35,43 +35,33 @@
         {# Toolbar #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="cuentas">
           <div class="input-group input-group-sm w-auto">
-            <input type="text" 
-                   id="search-cuenta" 
-                   class="form-control" 
+            <input type="text"
+                   id="search-cuenta"
+                   class="form-control"
                    placeholder="Buscar cuenta..."
                    data-module="cuentas"
-                   data-search-input>
-            <button class="btn btn-outline-secondary" type="button" 
-                    data-action="search" data-module="cuentas" title="Buscar">
-              <i class="bi bi-search"></i>
-            </button>
+                   hx-get="{% url 'bancos:cuenta-tabla' %}"
+                   hx-trigger="keyup changed delay:400ms, search"
+                   hx-target="#cuentas-panel"
+                   name="q">
           </div>
-          <button class="btn btn-primary btn-sm" 
-                  hx-get="/api/v1/bancos/cuentas/render-offcanvas/crear/" 
-                  hx-target="#offcanvas-container-bancos" 
+          <button class="btn btn-primary btn-sm"
+                  hx-get="/api/v1/bancos/cuentas/render-offcanvas/crear/"
+                  hx-target="#offcanvas-container-bancos"
                   hx-swap="innerHTML"
                   data-module="cuentas"
                   data-create-button>
             <i class="bi bi-plus-lg me-2"></i>Nueva Cuenta
           </button>
         </div>
-        
-        {# Spinner #}
-        <div data-spinner="cuentas" class="text-center py-5" style="display: none;">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Cargando...</span>
-          </div>
-          <p class="mt-2 text-muted">Inicializando cuentas bancarias...</p>
-        </div>
-        
-        {# Grid Container #}
-        <div id="grid-cuentas" data-grid="cuentas" style="display: none; width: 100%; min-width: 0;"></div>
-        
-        {# Empty State #}
-        <div data-empty-state="cuentas" class="text-center py-5" style="display: none;">
-          <p class="text-muted">
-            <i class="bi bi-inbox fs-2"></i><br>No hay cuentas bancarias registradas.
-          </p>
+
+        {# Tabla server-rendered (django-tables2 + HTMX) #}
+        <div id="cuentas-panel"
+             hx-get="{% url 'bancos:cuenta-tabla' %}"
+             hx-trigger="load, cuenta-updated from:body"
+             hx-target="this"
+             hx-swap="innerHTML"
+             hx-boost="true">
         </div>
       </div>
 
@@ -82,43 +72,33 @@
         {# Toolbar #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="extractos">
           <div class="input-group input-group-sm w-auto">
-            <input type="text" 
-                   id="search-extracto" 
-                   class="form-control" 
+            <input type="text"
+                   id="search-extracto"
+                   class="form-control"
                    placeholder="Buscar extracto..."
                    data-module="extractos"
-                   data-search-input>
-            <button class="btn btn-outline-secondary" type="button" 
-                    data-action="search" data-module="extractos" title="Buscar">
-              <i class="bi bi-search"></i>
-            </button>
+                   hx-get="{% url 'bancos:extracto-tabla' %}"
+                   hx-trigger="keyup changed delay:400ms, search"
+                   hx-target="#extractos-panel"
+                   name="q">
           </div>
-          <button class="btn btn-primary btn-sm" 
-                  hx-get="/api/v1/bancos/extractos/render-offcanvas/crear/" 
-                  hx-target="#offcanvas-container-bancos" 
+          <button class="btn btn-primary btn-sm"
+                  hx-get="/api/v1/bancos/extractos/render-offcanvas/crear/"
+                  hx-target="#offcanvas-container-bancos"
                   hx-swap="innerHTML"
                   data-module="extractos"
                   data-create-button>
             <i class="bi bi-upload me-2"></i>Importar Extracto
           </button>
         </div>
-        
-        {# Spinner #}
-        <div data-spinner="extractos" class="text-center py-5" style="display: none;">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Cargando...</span>
-          </div>
-          <p class="mt-2 text-muted">Inicializando tabla de extractos...</p>
-        </div>
-        
-        {# Grid Container #}
-        <div id="grid-extractos" data-grid="extractos" style="display: none; width: 100%; min-width: 0;"></div>
-        
-        {# Empty State #}
-        <div data-empty-state="extractos" class="text-center py-5" style="display: none;">
-          <p class="text-muted">
-            <i class="bi bi-file-earmark-excel fs-2"></i><br>No hay extractos bancarios registrados.
-          </p>
+
+        {# Tabla server-rendered (django-tables2 + HTMX) #}
+        <div id="extractos-panel"
+             hx-get="{% url 'bancos:extracto-tabla' %}"
+             hx-trigger="load, extracto-updated from:body"
+             hx-target="this"
+             hx-swap="innerHTML"
+             hx-boost="true">
         </div>
       </div>
     </div>

@@ -26,9 +26,9 @@ urlpatterns = [
 
 ## 🔄 Flujo de Enrutamiento
 
-### Caso 1: Usuario Anónimo accede a `cliente.sintel.com/`
+### Caso 1: Usuario Anónimo accede a `cliente.sintel.net.co/`
 
-1. **Request:** `GET /` desde `cliente.sintel.com`
+1. **Request:** `GET /` desde `cliente.sintel.net.co`
 2. **URLConf:** `config/urls_tenant.py` (TENANT_URLCONF)
 3. **Ruta:** `path('', include('apps.tenant.landing.urls'))`
 4. **Vista:** `TenantLandingView`
@@ -40,9 +40,9 @@ urlpatterns = [
 
 ---
 
-### Caso 2: Usuario Logueado accede a `cliente.sintel.com/`
+### Caso 2: Usuario Logueado accede a `cliente.sintel.net.co/`
 
-1. **Request:** `GET /` desde `cliente.sintel.com`
+1. **Request:** `GET /` desde `cliente.sintel.net.co`
 2. **URLConf:** `config/urls_tenant.py` (TENANT_URLCONF)
 3. **Ruta:** `path('', include('apps.tenant.landing.urls'))`
 4. **Vista:** `TenantLandingView`
@@ -55,9 +55,9 @@ urlpatterns = [
 
 ---
 
-### Caso 3: Usuario accede a `cliente.sintel.com/dashboard/`
+### Caso 3: Usuario accede a `cliente.sintel.net.co/dashboard/`
 
-1. **Request:** `GET /dashboard/` desde `cliente.sintel.com`
+1. **Request:** `GET /dashboard/` desde `cliente.sintel.net.co`
 2. **URLConf:** `config/urls_tenant.py` (TENANT_URLCONF)
 3. **Ruta:** `path('dashboard/', include('apps.tenant.dashboard.urls', namespace='tenant_dashboard'))`
 4. **Vista:** `DashboardIndexView`
@@ -134,19 +134,19 @@ urlpatterns = [
 
 1. **Usuario Anónimo:**
    ```bash
-   # Acceder a http://cliente.sintel.com:8000/
+   # Acceder a http://cliente.sintel.net.co:8000/
    # Resultado esperado: Landing Page visible
    ```
 
 2. **Usuario Logueado:**
    ```bash
-   # Acceder a http://cliente.sintel.com:8000/
+   # Acceder a http://cliente.sintel.net.co:8000/
    # Resultado esperado: Redirección automática a /dashboard/
    ```
 
 3. **Dashboard:**
    ```bash
-   # Acceder a http://cliente.sintel.com:8000/dashboard/
+   # Acceder a http://cliente.sintel.net.co:8000/dashboard/
    # Resultado esperado: Dashboard visible (requiere autenticación)
    ```
 

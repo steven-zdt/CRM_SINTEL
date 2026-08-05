@@ -1,0 +1,23 @@
+{% load django_tables2 %}
+{# Fragmento HTMX: filtros rapidos de pago + tabla de Facturas (Ventas o Compras
+   segun la naturaleza de la vista). Reemplaza el panel completo en cada
+   busqueda/filtro/orden/paginacion/evento facturaGuardada. #}
+
+<div class="d-flex gap-1 px-1 pt-2 pb-1 flex-wrap align-items-center border-bottom" style="background:#fafafa;">
+  <span class="text-muted me-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">Pago:</span>
+  {% for f in filtros_pago %}
+    <button type="button"
+            class="btn btn-xs {{ f.clase }}{% if f.activo %} active{% endif %}"
+            style="font-size:0.73rem;padding:2px 8px;"
+            hx-get="{{ tabla_url }}{% if f.valor %}?estado_pago={{ f.valor }}{% endif %}"
+            hx-target="closest div[data-facturas-panel]"
+            hx-include="#search-factura"
+            hx-swap="innerHTML">
+      <i class="bi {{ f.icono }} me-1"></i>{{ f.etiqueta }}
+    </button>
+  {% endfor %}
+</div>
+
+<div class="w-100" style="max-width:100%; overflow-x:auto;">
+  {% render_table table %}
+</div>

@@ -66,7 +66,7 @@ Checklist rápido:
 
 ### Regla práctica para SINTEL
 
-- **Toda request tenant debe tener `HTTP_HOST` del tenant** (p.ej. `acme.sintel.com` o el dominio que tengas en `Domain`).
+- **Toda request tenant debe tener `HTTP_HOST` del tenant** (p.ej. `acme.sintel.net.co` o el dominio que tengas en `Domain`).
 
 ---
 

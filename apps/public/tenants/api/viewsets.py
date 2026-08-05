@@ -335,19 +335,31 @@ class ClientViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            from apps.public.core.services.email_service import EmailService
+            from apps.public.tenants.services.invitations import (
+                build_activation_url,
+                generate_invitation_token,
+                send_invitation_email,
+            )
 
-            # SSoT: genera token firmado + URL tenant-especifica internamente
-            sent = EmailService.send_tenant_activation_email(user, client)
+            token = generate_invitation_token(user_id=user.id, tenant_id=client.id)
+            activation_url = build_activation_url(domain.domain, token)
+            sent = send_invitation_email(user, client, activation_url)
 
             if sent:
-                logger.info("[RESEND-INVITATION] Email encolado: user=%s, tenant=%s", user.email, client.schema_name)
+                logger.info(
+                    "[RESEND-INVITATION] Enviada: user=%s, tenant=%s",
+                    user.email, client.schema_name,
+                )
             else:
-                logger.warning("[RESEND-INVITATION] Email no enviado: user=%s, tenant=%s", user.email, client.schema_name)
+                logger.warning(
+                    "[RESEND-INVITATION] Email no enviado: user=%s, tenant=%s | url=%s",
+                    user.email, client.schema_name, activation_url,
+                )
 
             return Response(
                 {
-                    "detail": "Email de activacion reenviado al administrador.",
+                    "detail": "Invitacion reenviada.",
+                    "activation_url": activation_url,
                     "user_email": user.email,
                     "email_sent": sent,
                 },

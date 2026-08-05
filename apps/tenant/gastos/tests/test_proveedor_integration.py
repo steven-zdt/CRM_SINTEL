@@ -68,7 +68,7 @@ class TestProveedorIntegration:
             "/api/v1/gastos/",
             data=payload,
             content_type="application/json",
-            HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
         )
         
         assert resp.status_code == status.HTTP_201_CREATED
@@ -106,7 +106,7 @@ class TestProveedorIntegration:
             "/api/v1/gastos/",
             data=payload,
             content_type="application/json",
-            HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
         )
         
         # Debe fallar por Double Semantic Verification (DSV)
@@ -127,7 +127,7 @@ class TestProveedorIntegration:
             )
             
         client.force_login(user)
-        resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.com")
+        resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
         
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()['results'][0]

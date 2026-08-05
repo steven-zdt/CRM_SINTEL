@@ -1,307 +1,682 @@
 """
-Business Service para Ventas - Logica de negocio y orquestacion.
+Business Service para Ventas - Logica de negocio y orquestacion DIAN.
 
 Responsabilidades:
-- Double Semantic Verification (DSV): validar que cliente e items pertenezcan a empresa.
-- Maquina de estados de OrdenVenta.
-- Orquestar generacion de Factura via FacturaCRUDService (sin importar contabilidad).
+- Double Semantic Verification (DSV): cliente, items y resolucion pertenecen a empresa.
+- Asignacion atomica de consecutivos (select_for_update).
+- Crear Venta e ItemVenta (BORRADOR).
+- Construir DTO canonico DIAN y delegar la creacion de Factura a FacturaBusinessService.
+- Mantener desacoplamiento: ventas nunca importa modelos de facturas directamente.
 
-Lazy imports para dependencias cross-domain (facturas, inventario) para evitar
-importaciones circulares al momento de carga del modulo.
+Restricciones:
+- Todos los imports de apps externas dentro de metodos (evitar circularidad).
+- Cero emojis. Cero campos cuenta_contable_uuid.
 """
 import logging
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
 
-from apps.tenant.ventas.models import OrdenVenta, ItemOrdenVenta
-from apps.tenant.ventas.services.crud_service import OrdenVentaCRUDService
+from apps.tenant.ventas.models import Venta
+from apps.tenant.ventas.services.crud_service import VentaCRUDService
 
 logger = logging.getLogger(__name__)
 
 
-class OrdenVentaBusinessService:
+class VentaBusinessService:
     """
-    Logica de negocio centralizada para OrdenVenta.
-    SSoT para validaciones, DSV y orquestacion de procesos.
+    Orquestador de Ventas.
+
+    Flujo principal: procesar_y_facturar_venta()
+    1. DSV cliente + items + resolucion (si se provee).
+    2. Asignar consecutivo con select_for_update() (concurrencia).
+    3. Crear Venta + ItemVenta con numero_factura asignado.
+    4. Construir DTO canonico basado en la estructura XML UBL DIAN.
+    5. Invocar FacturaBusinessService.crear_factura_desde_venta().
+    6. Vincular factura y cambiar estado a FACTURADA_DIAN.
     """
 
-    # --------------------------------------------------------------------------
-    # DSV Helpers
-    # --------------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # DSV helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def _dsv_cliente(cliente_id: int, empresa_id: int) -> None:
-        """Verifica que el cliente pertenezca a la empresa (DSV)."""
+    def _dsv_cliente(cliente_uuid: str, empresa_id: int):
+        """Verifica que el Cliente exista y pertenezca a la empresa. Retorna instancia."""
         from apps.tenant.clientes.models import Cliente
-
-        existe = Cliente.objects.filter(
-            id=cliente_id,
-            empresa_id=empresa_id,
-        ).exists()
-        if not existe:
-            raise ValidationError(
-                f"El cliente id={cliente_id} no pertenece a esta empresa."
+        cliente = Cliente.objects.filter(uuid=cliente_uuid, empresa_id=empresa_id).first()
+        if not cliente:
+            raise ValueError(
+                f"Cliente con UUID {cliente_uuid} no encontrado o no pertenece a la empresa."
             )
+        return cliente
 
     @staticmethod
-    def _dsv_items(items_data: List[Dict[str, Any]], empresa_id: int) -> None:
+    def _dsv_items(items_data: list, empresa_id: int) -> list:
         """
-        Verifica DSV para cada item: producto o servicio debe pertenecer a la empresa.
-        Cada item debe referenciar exactamente uno de: producto_id, servicio_id, o ninguno
-        (item libre con solo descripcion).
+        Valida cada item: descripcion requerida, precio > 0.
+        Si viene producto_id o servicio_id, verifica pertenencia.
+        Retorna items_data enriquecidos con IDs internos (no UUIDs).
         """
         from apps.tenant.inventario.models import Producto, Servicio
 
+        errores = []
         for idx, item in enumerate(items_data):
-            producto_id = item.get("producto_id")
-            servicio_id = item.get("servicio_id")
-
-            if producto_id and servicio_id:
-                raise ValidationError(
-                    f"Item #{idx + 1}: no puede referenciar producto y servicio al mismo tiempo."
-                )
-
-            if producto_id:
-                if not Producto.objects.filter(
-                    id=producto_id,
-                    empresa_id=empresa_id,
-                ).exists():
-                    raise ValidationError(
-                        f"Item #{idx + 1}: producto id={producto_id} no pertenece a esta empresa."
-                    )
-
-            if servicio_id:
-                if not Servicio.objects.filter(
-                    id=servicio_id,
-                    empresa_id=empresa_id,
-                ).exists():
-                    raise ValidationError(
-                        f"Item #{idx + 1}: servicio id={servicio_id} no pertenece a esta empresa."
-                    )
-
-            if not item.get("descripcion", "").strip():
-                raise ValidationError(
-                    f"Item #{idx + 1}: el campo 'descripcion' es obligatorio."
-                )
-
+            if not item.get("descripcion"):
+                errores.append(f"Item {idx + 1}: descripcion es obligatoria.")
             precio = Decimal(str(item.get("precio_unitario", "0")))
-            if precio < Decimal("0"):
-                raise ValidationError(
-                    f"Item #{idx + 1}: precio_unitario no puede ser negativo."
-                )
+            if precio <= Decimal("0"):
+                errores.append(f"Item {idx + 1}: precio_unitario debe ser mayor a cero.")
+            prod_id = item.get("producto_id")
+            if prod_id:
+                prod = Producto.objects.filter(uuid=prod_id, empresa_id=empresa_id).only("id").first()
+                if not prod:
+                    errores.append(f"Item {idx + 1}: Producto {prod_id} no valido para la empresa.")
+                else:
+                    item["producto_id"] = prod.id
+            serv_id = item.get("servicio_id")
+            if serv_id:
+                serv = Servicio.objects.filter(uuid=serv_id, empresa_id=empresa_id).only("id").first()
+                if not serv:
+                    errores.append(f"Item {idx + 1}: Servicio {serv_id} no valido para la empresa.")
+                else:
+                    item["servicio_id"] = serv.id
 
-    # --------------------------------------------------------------------------
-    # Operaciones principales
-    # --------------------------------------------------------------------------
+        if errores:
+            raise ValueError(" | ".join(errores))
+
+        return items_data
 
     @staticmethod
-    @transaction.atomic
-    def crear_orden(
-        empresa,
-        data: Dict[str, Any],
-    ) -> OrdenVenta:
+    def _dsv_y_asignar_resolucion(empresa_id: int, resolucion_uuid: str):
         """
-        Crea una OrdenVenta con validacion DSV completa.
+        DSV + asignacion atomica del consecutivo de la ResolucionFacturacion.
+        Usa select_for_update() para prevenir race conditions en entornos concurrentes.
 
-        Args:
-            empresa: Instancia de Empresa (SSoT del tenant).
-            data: Debe incluir 'cliente_id' y opcionalmente 'items'.
+        Debe invocarse dentro de un bloque @transaction.atomic.
+
+        Retorna: (resolucion_instance, numero_factura_str)
         """
-        cliente_id = data.get("cliente_id") or data.get("cliente")
-        if not cliente_id:
-            raise ValidationError("El campo 'cliente' es obligatorio.")
+        from apps.tenant.ventas.models import ResolucionFacturacion
 
-        OrdenVentaBusinessService._dsv_cliente(cliente_id, empresa.id)
-
-        items_data = data.pop("items", [])
-        if items_data:
-            OrdenVentaBusinessService._dsv_items(items_data, empresa.id)
-
-        orden = OrdenVentaCRUDService.crear_orden(
-            data=data,
-            empresa=empresa,
-            items_data=items_data,
+        resolucion = (
+            ResolucionFacturacion.objects
+            .select_for_update()
+            .filter(uuid=resolucion_uuid, empresa_id=empresa_id)
+            .first()
         )
-        return orden
-
-    @staticmethod
-    @transaction.atomic
-    def actualizar_orden(
-        empresa,
-        orden: OrdenVenta,
-        data: Dict[str, Any],
-    ) -> OrdenVenta:
-        """
-        Actualiza una OrdenVenta existente con validacion DSV.
-
-        Solo permite actualizar ordenes en estado BORRADOR o CONFIRMADA.
-        """
-        if orden.estado in (OrdenVenta.Estado.FACTURADA, OrdenVenta.Estado.ANULADA):
-            raise ValidationError(
-                f"No se puede modificar una orden en estado '{orden.estado}'."
+        if not resolucion:
+            raise ValueError(
+                f"ResolucionFacturacion {resolucion_uuid} no encontrada o no pertenece a la empresa."
+            )
+        if not resolucion.vigente:
+            raise ValueError(
+                f"La resolucion {resolucion.numero_resolucion} no esta marcada como vigente."
+            )
+        if not resolucion.esta_vigente_en_fecha():
+            raise ValueError(
+                f"La resolucion {resolucion.numero_resolucion} esta fuera del rango de fechas."
+            )
+        if not resolucion.esta_en_rango():
+            raise ValueError(
+                f"La resolucion {resolucion.numero_resolucion} ha agotado su rango de consecutivos "
+                f"({resolucion.rango_desde}-{resolucion.rango_hasta})."
             )
 
-        if "cliente_id" in data or "cliente" in data:
-            cliente_id = data.get("cliente_id") or data.get("cliente")
-            OrdenVentaBusinessService._dsv_cliente(cliente_id, empresa.id)
+        numero_factura = resolucion.formar_numero()
+        resolucion.consecutivo_actual += 1
+        resolucion.save(update_fields=["consecutivo_actual"])
 
-        items_data = data.pop("items", None)
-        if items_data is not None:
-            OrdenVentaBusinessService._dsv_items(items_data, empresa.id)
+        logger.info(
+            "[VentaBS] Consecutivo asignado: %s (resolucion id=%s, siguiente=%s)",
+            numero_factura,
+            resolucion.id,
+            resolucion.consecutivo_actual,
+        )
+        return resolucion, numero_factura
 
-        return OrdenVentaCRUDService.actualizar_orden(
-            orden=orden,
-            data=data,
-            empresa=empresa,
-            items_data=items_data,
+    # ------------------------------------------------------------------
+    # Configuracion DIAN (software provider, ambiente)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _leer_config_dian() -> dict:
+        """
+        Lee la configuracion DIAN del software proveedor desde Django settings.
+        Permite sobreescribir por variable de entorno o settings.py.
+
+        Claves esperadas en settings:
+          DIAN_PROVIDER_ID        - NIT del proveedor tecnologico habilitado (ej: Sintel)
+          DIAN_SOFTWARE_ID        - UUID del software registrado en la DIAN
+          DIAN_SOFTWARE_PIN       - PIN del software para calcular SoftwareSecurityCode
+          DIAN_CL_TECN            - Clave tecnica de la autorizacion (64 hex chars)
+          DIAN_TIP_AMB            - "2" habilitacion/pruebas, "1" produccion
+          DIAN_AUTHORIZATION_ID   - NIT de la entidad autorizadora (DIAN: 800197268)
+        """
+        from django.conf import settings
+
+        return {
+            "provider_id": getattr(settings, "DIAN_PROVIDER_ID", "800197268"),
+            "software_id": getattr(settings, "DIAN_SOFTWARE_ID", "00000000-0000-0000-0000-000000000000"),
+            "software_pin": getattr(settings, "DIAN_SOFTWARE_PIN", ""),
+            "cl_tecn": getattr(settings, "DIAN_CL_TECN", ""),
+            "tip_amb": getattr(settings, "DIAN_TIP_AMB", "2"),
+            "authorization_id": getattr(settings, "DIAN_AUTHORIZATION_ID", "800197268"),
+            "customization_id": getattr(settings, "DIAN_CUSTOMIZATION_ID", "10"),
+            "profile_id": getattr(settings, "DIAN_PROFILE_ID", "DIAN 2.1"),
+        }
+
+    @staticmethod
+    def _tax_level_code_emisor(regimen_tributario: str) -> tuple:
+        """
+        Resuelve (TaxLevelCode, listName, TaxScheme_ID, TaxScheme_Name)
+        para el emisor segun su regimen tributario.
+
+        regimen_tributario -> TaxLevelCode DIAN:
+          COMUN / IVA_RESPONSABLE  -> "O-13" (Responsable de IVA) | listName "48"
+          SIMPLIFICADO / PN        -> "R-99-PN" (No responsable)  | listName "49"
+          Gran Contribuyente       -> "O-13"
+          default                  -> "R-99-PN"
+
+        Retorna: (tax_level_code, list_name, tax_scheme_id, tax_scheme_name)
+        """
+        regimen = (regimen_tributario or "").upper().strip()
+        if any(k in regimen for k in ["COMUN", "COMUN", "IVA", "GRAN"]):
+            return ("O-13", "48", "01", "IVA")
+        return ("R-99-PN", "49", "ZZ", "No aplica")
+
+    @staticmethod
+    def _tax_level_code_receptor(tipo_documento: str, tipo_persona: str = "") -> tuple:
+        """
+        Resuelve TaxLevelCode para el receptor (cliente).
+        Por convencion DIAN: "R-99-PN" para personas naturales, "O-13" para empresas con NIT.
+        Retorna: (tax_level_code, list_name, tax_scheme_id, tax_scheme_name, additional_account_id)
+        """
+        td = str(tipo_documento or "").strip()
+        if td == "31":
+            return ("O-13", "48", "01", "IVA", "1")
+        return ("R-99-PN", "49", "ZZ", "No aplica", "2")
+
+    @staticmethod
+    def _software_security_code(software_id: str, software_pin: str, num_fac: str) -> str:
+        """
+        Calcula el SoftwareSecurityCode DIAN: SHA384(SoftwareID + PIN + NumFac).
+        Ref: Anexo Tecnico FE DIAN v1.9 seccion 5.2.1.
+        """
+        import hashlib
+        cadena = software_id + software_pin + num_fac
+        return hashlib.sha384(cadena.encode("utf-8")).hexdigest()
+
+    # ------------------------------------------------------------------
+    # Construccion del DTO canonico DIAN UBL 2.1
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _construir_dto_factura(
+        empresa,
+        cliente,
+        venta: Venta,
+        items_data: list,
+        numero_factura: str = None,
+        resolucion=None,
+    ) -> dict:
+        """
+        Construye el DTO UBL 2.1 completo que el motor de generacion XML necesita.
+
+        Cubre todos los nodos del estandar DIAN:
+          - sts:DianExtensions (software, autorizacion, QR)
+          - cac:AccountingSupplierParty (emisor con TaxLevelCode)
+          - cac:AccountingCustomerParty (receptor con TaxLevelCode)
+          - cac:PaymentMeans (medio de pago)
+          - cac:TaxTotal (impuestos por tasa)
+          - cac:LegalMonetaryTotal (totales desglosados)
+          - cac:InvoiceLine[] (lineas con identificadores de producto)
+        """
+        from django.utils import timezone as tz
+
+        subtotal = venta.subtotal
+        impuestos_total = venta.impuestos
+        total = venta.total_neto
+
+        num_fac = numero_factura or str(venta.uuid)
+        ahora = tz.now()
+        fec_fac = ahora.strftime("%Y-%m-%d")
+        hor_fac = ahora.strftime("%H:%M:%S") + "-05:00"
+
+        # -- Config DIAN --
+        cfg_dian = VentaBusinessService._leer_config_dian()
+        soft_security_code = VentaBusinessService._software_security_code(
+            cfg_dian["software_id"],
+            cfg_dian["software_pin"],
+            num_fac,
         )
 
-    @staticmethod
-    @transaction.atomic
-    def confirmar_orden(orden: OrdenVenta, empresa_id: int) -> OrdenVenta:
-        """Transiciona la orden de BORRADOR a CONFIRMADA."""
-        if orden.empresa_id != empresa_id:
-            raise ValidationError("La orden no pertenece a esta empresa.")
-        if orden.estado != OrdenVenta.Estado.BORRADOR:
-            raise ValidationError(
-                f"Solo se pueden confirmar ordenes en estado BORRADOR. Estado actual: '{orden.estado}'."
-            )
-        if not orden.items.exists():
-            raise ValidationError("No se puede confirmar una orden sin items.")
+        # -- Emisor (empresa) --
+        regimen = getattr(empresa, "regimen_tributario", "") or ""
+        em_tlc, em_list_name, em_ts_id, em_ts_name = VentaBusinessService._tax_level_code_emisor(regimen)
+        nit_empresa = str(getattr(empresa, "nit", "") or "")
+        dv_empresa = str(getattr(empresa, "dv", "") or "")
 
-        orden.estado = OrdenVenta.Estado.CONFIRMADA
-        orden.save(update_fields=["estado", "updated_at"])
-        logger.info("[OrdenVentaBusiness] Confirmada orden id=%s", orden.id)
-        return orden
+        emisor = {
+            "nit": nit_empresa,
+            "dv": dv_empresa,
+            "razon_social": getattr(empresa, "razon_social", "") or "",
+            "direccion": getattr(empresa, "direccion", "") or "",
+            "ciudad": getattr(empresa, "ciudad", "") or "",
+            "departamento": getattr(empresa, "departamento", "") or "",
+            "email": getattr(empresa, "email", "") or "",
+            "telefono": getattr(empresa, "telefono", "") or "",
+            "tipo_documento": "31",
+            "additional_account_id": "1",
+            "tax_level_code": em_tlc,
+            "tax_level_list_name": em_list_name,
+            "tax_scheme_id": em_ts_id,
+            "tax_scheme_name": em_ts_name,
+        }
 
-    @staticmethod
-    @transaction.atomic
-    def generar_factura(orden: OrdenVenta, empresa_id: int) -> Tuple[bool, Any, int]:
-        """
-        Genera una Factura de Venta a partir de una OrdenVenta CONFIRMADA.
+        # -- Receptor (cliente) --
+        tipo_doc_cliente = str(getattr(cliente, "tipo_documento", "31") or "31")
+        rc_tlc, rc_list_name, rc_ts_id, rc_ts_name, rc_add_acc = VentaBusinessService._tax_level_code_receptor(
+            tipo_doc_cliente
+        )
+        receptor = {
+            "nit": getattr(cliente, "numero_documento", "") or "",
+            "razon_social": getattr(cliente, "razon_social", "") or "",
+            "email": getattr(cliente, "email", "") or "",
+            "telefono": getattr(cliente, "telefono", "") or "",
+            "direccion": getattr(cliente, "direccion", "") or "",
+            "ciudad": "",
+            "tipo_documento": tipo_doc_cliente,
+            "additional_account_id": rc_add_acc,
+            "tax_level_code": rc_tlc,
+            "tax_level_list_name": rc_list_name,
+            "tax_scheme_id": rc_ts_id,
+            "tax_scheme_name": rc_ts_name,
+        }
 
-        Flujo:
-        1. Valida que la orden sea CONFIRMADA y pertenezca a la empresa.
-        2. Prepara el payload de factura a partir de los datos de la orden.
-        3. Llama a FacturaCRUDService para crear la Factura + ItemFactura en estado BORRADOR.
-        4. Vincula la factura a la orden y cambia estado a FACTURADA.
-
-        Returns:
-            Tuple[bool, Any, int]: (exito, factura_o_detalle_error, http_status)
-        """
-        if orden.empresa_id != empresa_id:
-            return False, {"detail": "La orden no pertenece a esta empresa."}, 403
-
-        if orden.estado != OrdenVenta.Estado.CONFIRMADA:
-            return False, {
-                "detail": (
-                    f"Solo se pueden facturar ordenes CONFIRMADAS. "
-                    f"Estado actual: '{orden.estado}'."
-                )
-            }, 400
-
-        try:
-            from apps.tenant.facturas.services.crud_service import FacturaCRUDService
-            from apps.tenant.facturas.models import Factura, ItemFactura
-        except ImportError as exc:
-            logger.error("[OrdenVentaBusiness] No se pudo importar facturas: %s", exc)
-            return False, {"detail": "Modulo de facturas no disponible."}, 500
-
-        try:
-            empresa = orden.empresa
-            cliente = orden.cliente
-            items_qs = orden.items.select_related("producto", "servicio").all()
-
-            numero_borrador = f"BORR-{str(orden.uuid).replace('-', '').upper()[:16]}"
-
-            factura_data = {
-                "empresa": empresa,
-                "tipo": Factura.TipoFactura.FE,
-                "estado": Factura.Estado.BORRADOR,
-                "naturaleza": Factura.Naturaleza.VENTA,
-                "numero": numero_borrador,
-                "consecutivo": 0,
-                "fecha_emision": timezone.now(),
-                "subtotal": orden.subtotal,
-                "impuestos": orden.impuestos,
-                "total": orden.total,
-                "cliente_uuid": cliente.uuid,
-                "receptor_nombre": cliente.razon_social,
-                "receptor_nit": cliente.numero_documento,
-                "observaciones": orden.observaciones or "",
+        # -- Resolucion / autorizacion DIAN --
+        resol_data: dict = {}
+        if resolucion:
+            resol_data = {
+                "numero_autorizacion": str(getattr(resolucion, "numero_resolucion", "") or ""),
+                "prefijo": str(getattr(resolucion, "prefijo", "") or ""),
+                "desde": str(getattr(resolucion, "rango_desde", 1)),
+                "hasta": str(getattr(resolucion, "rango_hasta", 1)),
+                "fecha_inicio": str(getattr(resolucion, "fecha_desde", "")),
+                "fecha_fin": str(getattr(resolucion, "fecha_hasta", "")),
             }
 
-            factura = FacturaCRUDService.crear(factura_data=factura_data)
+        # -- Medio de pago --
+        fecha_vcto = str(venta.fecha_vencimiento) if venta.fecha_vencimiento else fec_fac
+        medio_pago = {
+            "codigo": "47",
+            "fecha_vencimiento": fecha_vcto,
+            "instruccion": "Transferencia",
+        }
 
-            items_bulk = []
-            for item in items_qs:
-                item_inventario_uuid = None
-                item_inventario_tipo = None
-                item_inventario_codigo = None
+        # -- Lineas e impuestos discriminados por tasa --
+        impuestos_por_tasa: dict = {}
+        lineas = []
+        for idx, item in enumerate(items_data):
+            cant = Decimal(str(item.get("cantidad", "1")))
+            pu = Decimal(str(item.get("precio_unitario", "0")))
+            pct_iva = Decimal(str(item.get("porcentaje_iva", "0")))
+            sub_linea = cant * pu
+            iva_linea = sub_linea * (pct_iva / Decimal("100"))
+            tasa_key = str(pct_iva)
+            impuestos_por_tasa[tasa_key] = impuestos_por_tasa.get(tasa_key, Decimal("0")) + iva_linea
 
-                if item.producto_id and item.producto:
-                    item_inventario_uuid = item.producto.uuid
-                    item_inventario_tipo = ItemFactura.TipoItemInventario.PRODUCTO
-                    item_inventario_codigo = item.producto.codigo
-                elif item.servicio_id and item.servicio:
-                    item_inventario_uuid = item.servicio.uuid
-                    item_inventario_tipo = ItemFactura.TipoItemInventario.SERVICIO
-                    item_inventario_codigo = item.servicio.codigo
+            ts_id_linea = "01" if pct_iva > Decimal("0") else "ZZ"
+            ts_name_linea = "IVA" if pct_iva > Decimal("0") else "No aplica"
 
-                subtotal_linea = item.cantidad * item.precio_unitario
-                valor_iva = subtotal_linea * (item.tasa_iva / Decimal("100"))
+            lineas.append({
+                "id": str(idx + 1),
+                "descripcion": item.get("descripcion", ""),
+                "cantidad": str(cant),
+                "valor_unitario": str(pu),
+                "porcentaje_iva": str(pct_iva),
+                "subtotal": str(sub_linea),
+                "iva": str(iva_linea),
+                "total": str(sub_linea + iva_linea),
+                "unidad": "NAL",
+                "tax_scheme_id": ts_id_linea,
+                "tax_scheme_name": ts_name_linea,
+                "seller_item_id": item.get("descripcion", "")[:20].upper().replace(" ", "-"),
+                "std_item_id": str(item.get("producto_id") or item.get("servicio_id") or (idx + 1)),
+            })
 
-                items_bulk.append(
-                    ItemFactura(
-                        empresa=empresa,
-                        factura=factura,
-                        descripcion=item.descripcion,
-                        cantidad=item.cantidad,
-                        valor_unitario=item.precio_unitario,
-                        porcentaje_iva=item.tasa_iva,
-                        valor_iva=valor_iva,
-                        subtotal=subtotal_linea,
-                        total=subtotal_linea + valor_iva,
-                        item_inventario_uuid=item_inventario_uuid,
-                        item_inventario_tipo=item_inventario_tipo,
-                        item_inventario_codigo=item_inventario_codigo,
-                        orden=1,
-                    )
-                )
+        # -- Totales desglosados (LegalMonetaryTotal) --
+        line_extension_amount = subtotal
+        tax_exclusive_amount = subtotal
+        tax_inclusive_amount = subtotal + impuestos_total
+        allowance_total = Decimal("0.00")
+        charge_total = Decimal("0.00")
+        payable_amount = tax_inclusive_amount
 
-            if items_bulk:
-                ItemFactura.objects.bulk_create(items_bulk)
+        totales = {
+            "subtotal": str(subtotal),
+            "impuestos": str(impuestos_total),
+            "total": str(total),
+            "line_extension_amount": str(line_extension_amount),
+            "tax_exclusive_amount": str(tax_exclusive_amount),
+            "tax_inclusive_amount": str(tax_inclusive_amount),
+            "allowance_total": str(allowance_total),
+            "charge_total": str(charge_total),
+            "payable_amount": str(payable_amount),
+        }
 
-            OrdenVentaCRUDService.vincular_factura(orden, factura)
+        # -- Impuestos discriminados para cac:TaxTotal --
+        impuestos_discriminados = []
+        for pct_str, val_imp in impuestos_por_tasa.items():
+            pct_d = Decimal(pct_str)
+            ts_id = "01" if pct_d > Decimal("0") else "ZZ"
+            ts_name = "IVA" if pct_d > Decimal("0") else "No aplica"
+            impuestos_discriminados.append({
+                "porcentaje": pct_str,
+                "valor": str(val_imp),
+                "base": str(subtotal),
+                "tax_scheme_id": ts_id,
+                "tax_scheme_name": ts_name,
+            })
 
-            logger.info(
-                "[OrdenVentaBusiness] Factura id=%s generada para orden id=%s",
-                factura.id,
-                orden.id,
-            )
-            return True, factura, 201
+        dto = {
+            # Metadatos del documento
+            "document_type": "FE",
+            "tipo": "FE",
+            "naturaleza": "VENTA",
+            "customization_id": cfg_dian["customization_id"],
+            "profile_id": cfg_dian["profile_id"],
+            "tip_amb": cfg_dian["tip_amb"],
+            "invoice_type_code": "01",
+            "num_fac": num_fac,
+            "fec_fac": fec_fac,
+            "hor_fac": hor_fac,
+            "moneda": "COP",
+            "observaciones": venta.observaciones or "",
+            # Partes del documento
+            "emisor": emisor,
+            "receptor": receptor,
+            # Configuracion DIAN software
+            "dian_software": {
+                "provider_id": cfg_dian["provider_id"],
+                "software_id": cfg_dian["software_id"],
+                "software_security_code": soft_security_code,
+                "authorization_id": cfg_dian["authorization_id"],
+            },
+            # Autorizacion de la resolucion
+            "resolucion": resol_data,
+            # Medio de pago
+            "medio_pago": medio_pago,
+            # Totales
+            "totales": totales,
+            # Impuestos por tasa
+            "impuestos_discriminados": impuestos_discriminados,
+            # Lineas de factura
+            "lineas": lineas,
+            # Referencias internas
+            "fecha_emision": fec_fac,
+            "fecha_vencimiento": str(venta.fecha_vencimiento) if venta.fecha_vencimiento else None,
+            "cliente_uuid": str(cliente.uuid),
+            "venta_uuid": str(venta.uuid),
+        }
 
-        except Exception as exc:
-            logger.error(
-                "[OrdenVentaBusiness] Error al generar factura para orden id=%s: %s",
-                orden.id,
-                exc,
-                exc_info=True,
-            )
-            return False, {"detail": f"Error interno al generar factura: {str(exc)}"}, 500
+        if numero_factura:
+            dto["numero_externo"] = numero_factura
+
+        return dto
+
+    # ------------------------------------------------------------------
+    # Metodo principal: crear BORRADOR
+    # ------------------------------------------------------------------
 
     @staticmethod
     @transaction.atomic
-    def anular_orden(
-        orden: OrdenVenta,
-        empresa_id: int,
-        motivo: str,
-    ) -> OrdenVenta:
-        """Anula una OrdenVenta con validacion de pertenencia."""
-        if orden.empresa_id != empresa_id:
-            raise ValidationError("La orden no pertenece a esta empresa.")
-        return OrdenVentaCRUDService.anular_orden(orden, motivo)
+    def crear_venta_borrador(empresa, payload: dict) -> tuple:
+        """
+        Crea una Venta en estado BORRADOR sin generar factura.
+        Util para UI que permite revisar antes de facturar.
+        """
+        try:
+            items_data = payload.get("items", [])
+            if not items_data:
+                return False, {"detail": "Debe incluir al menos un item."}, 400
+
+            cliente_uuid = str(payload.get("cliente", ""))
+            cliente = VentaBusinessService._dsv_cliente(cliente_uuid, empresa.id)
+            items_validos = VentaBusinessService._dsv_items(items_data, empresa.id)
+
+            # DSV proyecto (opcional)
+            proyecto = None
+            proyecto_uuid = payload.get("proyecto")
+            if proyecto_uuid:
+                from apps.tenant.proyectos.models import Proyecto
+                proyecto = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa.id).first()
+                if not proyecto:
+                    return False, {"detail": f"Proyecto {proyecto_uuid} no valido."}, 400
+
+            venta = VentaCRUDService.crear_venta(
+                empresa=empresa,
+                cliente=cliente,
+                data={
+                    "fecha_emision": payload["fecha_emision"],
+                    "fecha_vencimiento": payload.get("fecha_vencimiento"),
+                    "observaciones": payload.get("observaciones", ""),
+                    "proyecto": proyecto,
+                },
+                items_data=items_validos,
+            )
+            return True, venta, 201
+
+        except ValueError as exc:
+            return False, {"detail": str(exc)}, 400
+        except Exception as exc:
+            logger.error("[VentaBS] crear_venta_borrador error: %s", exc, exc_info=True)
+            return False, {"detail": "Error interno al crear la venta."}, 500
+
+    # ------------------------------------------------------------------
+    # Metodo principal: procesar Y facturar en un solo paso
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    @transaction.atomic
+    def procesar_y_facturar_venta(empresa, payload: dict) -> tuple:
+        """
+        Flujo completo: crea Venta + genera Factura DIAN en una sola transaccion atomica.
+
+        Pasos:
+        1. DSV cliente e items.
+        2. DSV resolucion + asignacion atomica del consecutivo (select_for_update).
+        3. Crear Venta + ItemVenta (estado BORRADOR) con numero_factura asignado.
+        4. Construir DTO canonico basado en la estructura XML UBL DIAN.
+        5. Invocar FacturaBusinessService.crear_factura_desde_venta(empresa, dto).
+        6. Vincular factura y cambiar estado a FACTURADA_DIAN.
+        7. Retornar (True, venta, 201).
+        """
+        try:
+            # -- Validaciones previas --
+            items_data = payload.get("items", [])
+            if not items_data:
+                return False, {"detail": "Debe incluir al menos un item."}, 400
+
+            cliente_uuid = str(payload.get("cliente", ""))
+            if not cliente_uuid:
+                return False, {"detail": "El campo 'cliente' es obligatorio."}, 400
+
+            fecha_emision = payload.get("fecha_emision")
+            if not fecha_emision:
+                return False, {"detail": "El campo 'fecha_emision' es obligatorio."}, 400
+
+            # -- Paso 1: DSV --
+            cliente = VentaBusinessService._dsv_cliente(cliente_uuid, empresa.id)
+            items_validos = VentaBusinessService._dsv_items(items_data, empresa.id)
+
+            proyecto = None
+            proyecto_uuid = payload.get("proyecto")
+            if proyecto_uuid:
+                from apps.tenant.proyectos.models import Proyecto
+                proyecto = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa.id).first()
+                if not proyecto:
+                    return False, {"detail": f"Proyecto {proyecto_uuid} no valido."}, 400
+
+            # -- Paso 2: DSV resolucion + asignacion de consecutivo (select_for_update) --
+            resolucion = None
+            numero_factura = None
+            resolucion_uuid = payload.get("resolucion")
+            if resolucion_uuid:
+                resolucion, numero_factura = VentaBusinessService._dsv_y_asignar_resolucion(
+                    empresa_id=empresa.id,
+                    resolucion_uuid=str(resolucion_uuid),
+                )
+
+            # -- Paso 3: crear registro Venta (BORRADOR) con resolucion y numero asignados --
+            venta = VentaCRUDService.crear_venta(
+                empresa=empresa,
+                cliente=cliente,
+                data={
+                    "fecha_emision": fecha_emision,
+                    "fecha_vencimiento": payload.get("fecha_vencimiento"),
+                    "observaciones": payload.get("observaciones", ""),
+                    "proyecto": proyecto,
+                    "resolucion": resolucion,
+                    "numero_factura": numero_factura,
+                },
+                items_data=items_validos,
+            )
+
+            # -- Paso 4: construir DTO canonico DIAN (UBL 2.1 enriquecido) --
+            dto_factura = VentaBusinessService._construir_dto_factura(
+                empresa=empresa,
+                cliente=cliente,
+                venta=venta,
+                items_data=items_validos,
+                numero_factura=numero_factura,
+                resolucion=resolucion,
+            )
+
+            # -- Paso 5a: calcular CUFE y QR --
+            from apps.tenant.facturas.services.dian.cufe import CufeService
+            cufe = CufeService.calcular_desde_dto(dto_factura)
+            qr_string = CufeService.generar_qr_string(cufe, dto_factura)
+            dto_factura["cufe"] = cufe
+            dto_factura["qr_string"] = qr_string
+
+            # -- Paso 5b: generar XML UBL 2.1 --
+            from apps.tenant.facturas.services.dian.ubl21_builder import UBL21BuilderService
+            xml_bytes = UBL21BuilderService.build(dto_factura, cufe, qr_string)
+
+            # -- Paso 5c: firmar XAdES-EPES (no-op si no hay certificado configurado) --
+            from apps.tenant.facturas.services.dian.xades_signer import XadesSignerService
+            xml_signed = XadesSignerService.sign(xml_bytes)
+
+            # -- Paso 5d: envolver en AttachedDocument + ApplicationResponse --
+            from apps.tenant.facturas.services.dian.attached_document import AttachedDocumentService
+            attached_doc_bytes = AttachedDocumentService.build(xml_signed, dto_factura, cufe)
+            app_response_bytes = AttachedDocumentService.build_application_response(
+                dto_factura, cufe, validation_code="02"
+            )
+
+            # Enriquecer DTO con el XML y los documentos de respuesta para FacturaBS
+            dto_factura["xml_content"] = xml_signed.decode("utf-8")
+            dto_factura["dian_response_xml"] = app_response_bytes.decode("utf-8")
+
+            # -- Paso 5e: delegar creacion de Factura a FacturaBusinessService --
+            from apps.tenant.facturas.services.business_service import FacturaBusinessService
+            factura = FacturaBusinessService.crear_factura_desde_venta(
+                empresa=empresa,
+                dto=dto_factura,
+            )
+
+            # -- Paso 6: vincular y cambiar estado BORRADOR -> FACTURADA_DIAN --
+            venta = VentaCRUDService.vincular_factura(venta, factura)
+
+            logger.info(
+                "[VentaBS] Venta id=%s facturada DIAN. Factura id=%s cufe=%s...",
+                venta.id,
+                factura.id,
+                cufe[:16],
+            )
+            return True, venta, 201
+
+        except ValueError as exc:
+            return False, {"detail": str(exc)}, 400
+        except Exception as exc:
+            logger.error("[VentaBS] procesar_y_facturar_venta error: %s", exc, exc_info=True)
+            return False, {"detail": f"Error al procesar la venta: {exc}"}, 500
+
+    # ------------------------------------------------------------------
+    # Anular
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    @transaction.atomic
+    def anular_venta(venta_uuid: str, empresa_id: int) -> tuple:
+        """Anula una Venta en estado BORRADOR."""
+        try:
+            venta = Venta.objects.filter(uuid=venta_uuid, empresa_id=empresa_id).first()
+            if not venta:
+                return False, {"detail": "Venta no encontrada."}, 404
+            venta = VentaCRUDService.anular_venta(venta)
+            return True, venta, 200
+        except ValueError as exc:
+            return False, {"detail": str(exc)}, 400
+        except Exception as exc:
+            logger.error("[VentaBS] anular_venta error: %s", exc, exc_info=True)
+            return False, {"detail": "Error al anular la venta."}, 500
+
+
+class ResolucionFacturacionBusinessService:
+    """Logica de negocio para ResolucionFacturacion."""
+
+    @staticmethod
+    @transaction.atomic
+    def crear_resolucion(empresa, payload: dict) -> tuple:
+        """Crea una nueva resolucion DIAN para la empresa."""
+        from apps.tenant.ventas.services.crud_service import ResolucionFacturacionCRUDService
+        try:
+            resolucion = ResolucionFacturacionCRUDService.crear_resolucion(empresa, payload)
+            return True, resolucion, 201
+        except Exception as exc:
+            logger.error("[ResolucionBS] crear_resolucion error: %s", exc, exc_info=True)
+            return False, {"detail": str(exc)}, 400
+
+    @staticmethod
+    @transaction.atomic
+    def actualizar_resolucion(resolucion_uuid: str, empresa_id: int, payload: dict) -> tuple:
+        """Actualiza una resolucion DIAN existente."""
+        from apps.tenant.ventas.models import ResolucionFacturacion
+        from apps.tenant.ventas.services.crud_service import ResolucionFacturacionCRUDService
+        try:
+            resolucion = ResolucionFacturacion.objects.filter(
+                uuid=resolucion_uuid, empresa_id=empresa_id
+            ).first()
+            if not resolucion:
+                return False, {"detail": "ResolucionFacturacion no encontrada."}, 404
+            resolucion = ResolucionFacturacionCRUDService.actualizar_resolucion(resolucion, payload)
+            return True, resolucion, 200
+        except ValueError as exc:
+            return False, {"detail": str(exc)}, 400
+        except Exception as exc:
+            logger.error("[ResolucionBS] actualizar_resolucion error: %s", exc, exc_info=True)
+            return False, {"detail": str(exc)}, 400
+
+    @staticmethod
+    @transaction.atomic
+    def eliminar_resolucion(resolucion_uuid: str, empresa_id: int) -> tuple:
+        """Elimina una resolucion DIAN sin ventas asociadas."""
+        from apps.tenant.ventas.models import ResolucionFacturacion
+        from apps.tenant.ventas.services.crud_service import ResolucionFacturacionCRUDService
+        try:
+            resolucion = ResolucionFacturacion.objects.filter(
+                uuid=resolucion_uuid, empresa_id=empresa_id
+            ).first()
+            if not resolucion:
+                return False, {"detail": "ResolucionFacturacion no encontrada."}, 404
+            ResolucionFacturacionCRUDService.eliminar_resolucion(resolucion)
+            return True, None, 204
+        except ValueError as exc:
+            return False, {"detail": str(exc)}, 400
+        except Exception as exc:
+            logger.error("[ResolucionBS] eliminar_resolucion error: %s", exc, exc_info=True)
+            return False, {"detail": str(exc)}, 500

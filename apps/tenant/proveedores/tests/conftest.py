@@ -37,7 +37,7 @@ def tenant(db):
 
     Domain.objects.get_or_create(
         tenant=tenant_obj,
-        domain=f'{tenant_obj.schema_name}.sintel.com',
+        domain=f'{tenant_obj.schema_name}.sintel.net.co',
         defaults={'is_primary': True},
     )
 
@@ -61,6 +61,14 @@ def tenant(db):
 
     if 'perfil_tenantprofile' not in tables:
         call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, 'perfil', '--noinput', verbosity=0)
+
+    with schema_context(tenant_obj.schema_name):
+        tables = set(connection.introspection.table_names())
+
+    if 'facturas_factura' not in tables:
+        # Requerido por ProveedorSelector.get_cuentas_pagar_resumen() (lee
+        # Factura.naturaleza=COMPRA como fuente de verdad de cartera).
+        call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, 'facturas', '--noinput', verbosity=0)
 
     with schema_context(tenant_obj.schema_name):
         empresa = Empresa.objects.only('id').first()

@@ -9,7 +9,7 @@
 
 ### Problema Identificado
 
-Después de la activación de un tenant privado mediante `http://cliente.sintel.com/activate?token=...`, el sistema redirigía al usuario al URLConf público (`ROOT_URLCONF`) en lugar de mantenerlo en el URLConf del tenant (`TENANT_URLCONF`).
+Después de la activación de un tenant privado mediante `http://cliente.sintel.net.co/activate?token=...`, el sistema redirigía al usuario al URLConf público (`ROOT_URLCONF`) en lugar de mantenerlo en el URLConf del tenant (`TENANT_URLCONF`).
 
 ### Causa Raíz
 
@@ -43,7 +43,7 @@ El uso de `reverse('tenant_dashboard:index')` después de `login()` podía ejecu
 
 ### Problema Identificado
 
-Al acceder a `http://home.sintel.com/activate?token=...`, el sistema mostraba:
+Al acceder a `http://home.sintel.net.co/activate?token=...`, el sistema mostraba:
 
 ```
 Page not found (404)

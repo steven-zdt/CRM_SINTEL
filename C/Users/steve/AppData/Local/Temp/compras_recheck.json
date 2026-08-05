@@ -1,0 +1,2424 @@
+{
+  "nodes": [
+    {
+      "id": "Application:compras",
+      "label": "Application",
+      "properties": {
+        "name": "compras",
+        "app_label": "tenant_compras"
+      }
+    },
+    {
+      "id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "label": "Model",
+      "properties": {
+        "name": "PlantillaOrdenCompra",
+        "app_label": "tenant_compras",
+        "defined_in": "apps/tenant/compras/models.py:11",
+        "bases": [
+          "SintelTenantBaseModel"
+        ],
+        "external": false,
+        "ordering": "['-vigente', '-created_at']",
+        "indexes": "[\n            models.Index(fields=['empresa', 'vigente']),\n        ]",
+        "constraints": "[\n            models.CheckConstraint(\n                check=models.Q(rango_hasta__gte=models.F('rango_desde')),\n                name='plantilla_oc_rango_hasta_gte_rango_desde',\n            ),\n            models.CheckConstraint(\n                check=models.Q(consecutivo_actual__gte=models.F('rango_desde')),\n                name='plantilla_oc_consecutivo_gte_rango_desde',\n            ),\n        ]"
+      }
+    },
+    {
+      "id": "Field:compras.PlantillaOrdenCompra.uuid",
+      "label": "Field",
+      "properties": {
+        "name": "uuid",
+        "type": "UUIDField",
+        "model": "PlantillaOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.PlantillaOrdenCompra.nombre",
+      "label": "Field",
+      "properties": {
+        "name": "nombre",
+        "type": "CharField",
+        "model": "PlantillaOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.PlantillaOrdenCompra.prefijo",
+      "label": "Field",
+      "properties": {
+        "name": "prefijo",
+        "type": "CharField",
+        "model": "PlantillaOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.PlantillaOrdenCompra.rango_desde",
+      "label": "Field",
+      "properties": {
+        "name": "rango_desde",
+        "type": "IntegerField",
+        "model": "PlantillaOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.PlantillaOrdenCompra.rango_hasta",
+      "label": "Field",
+      "properties": {
+        "name": "rango_hasta",
+        "type": "IntegerField",
+        "model": "PlantillaOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.PlantillaOrdenCompra.consecutivo_actual",
+      "label": "Field",
+      "properties": {
+        "name": "consecutivo_actual",
+        "type": "IntegerField",
+        "model": "PlantillaOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.PlantillaOrdenCompra.vigente",
+      "label": "Field",
+      "properties": {
+        "name": "vigente",
+        "type": "BooleanField",
+        "model": "PlantillaOrdenCompra"
+      }
+    },
+    {
+      "id": "Model:tenant_compras.OrdenCompra",
+      "label": "Model",
+      "properties": {
+        "name": "OrdenCompra",
+        "app_label": "tenant_compras",
+        "defined_in": "apps/tenant/compras/models.py:90",
+        "bases": [
+          "SintelTenantBaseModel"
+        ],
+        "external": false,
+        "ordering": "['-fecha', '-consecutivo']",
+        "indexes": "[\n            models.Index(fields=['empresa', 'fecha']),\n            models.Index(fields=['empresa', 'estado']),\n        ]",
+        "constraints": "[\n            models.UniqueConstraint(\n                fields=['empresa', 'numero_documento'],\n                name='unique_orden_compra_numero_documento'\n            ),\n            models.CheckConstraint(\n                check=models.Q(fecha_entrega__isnull=True) | models.Q(fecha_entrega__gte=models.F('fecha')),\n                name='orden_compra_fecha_entrega_gte_fecha',\n            ),\n        ]"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.uuid",
+      "label": "Field",
+      "properties": {
+        "name": "uuid",
+        "type": "UUIDField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.plantilla",
+      "label": "Field",
+      "properties": {
+        "name": "plantilla",
+        "type": "ForeignKey",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.consecutivo",
+      "label": "Field",
+      "properties": {
+        "name": "consecutivo",
+        "type": "IntegerField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.numero_documento",
+      "label": "Field",
+      "properties": {
+        "name": "numero_documento",
+        "type": "CharField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.proveedor",
+      "label": "Field",
+      "properties": {
+        "name": "proveedor",
+        "type": "ForeignKey",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Model:tenant_proveedores.Proveedor",
+      "label": "Model",
+      "properties": {
+        "name": "Proveedor",
+        "app_label": "tenant_proveedores",
+        "external": true
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.proyecto",
+      "label": "Field",
+      "properties": {
+        "name": "proyecto",
+        "type": "ForeignKey",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Model:tenant_proyectos.Proyecto",
+      "label": "Model",
+      "properties": {
+        "name": "Proyecto",
+        "app_label": "tenant_proyectos",
+        "external": true
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.documento_soporte",
+      "label": "Field",
+      "properties": {
+        "name": "documento_soporte",
+        "type": "ForeignKey",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Model:tenant_gastos.DocumentoSoporte",
+      "label": "Model",
+      "properties": {
+        "name": "DocumentoSoporte",
+        "app_label": "tenant_gastos",
+        "external": true
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.fecha",
+      "label": "Field",
+      "properties": {
+        "name": "fecha",
+        "type": "DateField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.fecha_entrega",
+      "label": "Field",
+      "properties": {
+        "name": "fecha_entrega",
+        "type": "DateField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.estado",
+      "label": "Field",
+      "properties": {
+        "name": "estado",
+        "type": "CharField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.subtotal",
+      "label": "Field",
+      "properties": {
+        "name": "subtotal",
+        "type": "DecimalField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.impuestos",
+      "label": "Field",
+      "properties": {
+        "name": "impuestos",
+        "type": "DecimalField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.total",
+      "label": "Field",
+      "properties": {
+        "name": "total",
+        "type": "DecimalField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.OrdenCompra.observaciones",
+      "label": "Field",
+      "properties": {
+        "name": "observaciones",
+        "type": "TextField",
+        "model": "OrdenCompra"
+      }
+    },
+    {
+      "id": "Model:tenant_compras.ItemOrdenCompra",
+      "label": "Model",
+      "properties": {
+        "name": "ItemOrdenCompra",
+        "app_label": "tenant_compras",
+        "defined_in": "apps/tenant/compras/models.py:226",
+        "bases": [
+          "SintelTenantBaseModel"
+        ],
+        "external": false,
+        "ordering": "['id']"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.uuid",
+      "label": "Field",
+      "properties": {
+        "name": "uuid",
+        "type": "UUIDField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.orden_compra",
+      "label": "Field",
+      "properties": {
+        "name": "orden_compra",
+        "type": "ForeignKey",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.descripcion",
+      "label": "Field",
+      "properties": {
+        "name": "descripcion",
+        "type": "CharField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.item_inventario_uuid",
+      "label": "Field",
+      "properties": {
+        "name": "item_inventario_uuid",
+        "type": "UUIDField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.cantidad",
+      "label": "Field",
+      "properties": {
+        "name": "cantidad",
+        "type": "DecimalField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.valor_unitario",
+      "label": "Field",
+      "properties": {
+        "name": "valor_unitario",
+        "type": "DecimalField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.porcentaje_iva",
+      "label": "Field",
+      "properties": {
+        "name": "porcentaje_iva",
+        "type": "DecimalField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.valor_iva",
+      "label": "Field",
+      "properties": {
+        "name": "valor_iva",
+        "type": "DecimalField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.subtotal",
+      "label": "Field",
+      "properties": {
+        "name": "subtotal",
+        "type": "DecimalField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Field:compras.ItemOrdenCompra.total",
+      "label": "Field",
+      "properties": {
+        "name": "total",
+        "type": "DecimalField",
+        "model": "ItemOrdenCompra"
+      }
+    },
+    {
+      "id": "Service:compras.selectors.PlantillaOrdenCompraSelector",
+      "label": "Service",
+      "properties": {
+        "name": "PlantillaOrdenCompraSelector",
+        "kind": "selector",
+        "defined_in": "apps/tenant/compras/services/selectors.py:45",
+        "bases": []
+      }
+    },
+    {
+      "id": "Service:compras.selectors.OrdenCompraSelector",
+      "label": "Service",
+      "properties": {
+        "name": "OrdenCompraSelector",
+        "kind": "selector",
+        "defined_in": "apps/tenant/compras/services/selectors.py:81",
+        "bases": []
+      }
+    },
+    {
+      "id": "Application:empresa",
+      "label": "Application",
+      "properties": {
+        "name": "empresa",
+        "external": true
+      }
+    },
+    {
+      "id": "Service:compras.crud_service.PlantillaOrdenCompraCRUDService",
+      "label": "Service",
+      "properties": {
+        "name": "PlantillaOrdenCompraCRUDService",
+        "kind": "crud",
+        "defined_in": "apps/tenant/compras/services/crud_service.py:14",
+        "bases": []
+      }
+    },
+    {
+      "id": "Service:compras.crud_service.OrdenCompraCRUDService",
+      "label": "Service",
+      "properties": {
+        "name": "OrdenCompraCRUDService",
+        "kind": "crud",
+        "defined_in": "apps/tenant/compras/services/crud_service.py:76",
+        "bases": []
+      }
+    },
+    {
+      "id": "Service:compras.business_service.OrdenCompraBusinessService",
+      "label": "Service",
+      "properties": {
+        "name": "OrdenCompraBusinessService",
+        "kind": "business",
+        "defined_in": "apps/tenant/compras/services/business_service.py:16",
+        "bases": []
+      }
+    },
+    {
+      "id": "Application:api",
+      "label": "Application",
+      "properties": {
+        "name": "api",
+        "external": true
+      }
+    },
+    {
+      "id": "Service:compras.api_mixins.PlantillaOrdenCompraServiceMixin",
+      "label": "Service",
+      "properties": {
+        "name": "PlantillaOrdenCompraServiceMixin",
+        "kind": "mixin",
+        "defined_in": "apps/tenant/compras/services/api_mixins.py:8",
+        "bases": [
+          "BaseServiceMixin"
+        ]
+      }
+    },
+    {
+      "id": "Service:compras.api_mixins.OrdenCompraServiceMixin",
+      "label": "Service",
+      "properties": {
+        "name": "OrdenCompraServiceMixin",
+        "kind": "mixin",
+        "defined_in": "apps/tenant/compras/services/api_mixins.py:41",
+        "bases": [
+          "BaseServiceMixin"
+        ]
+      }
+    },
+    {
+      "id": "Serializer:compras.UUIDOrPKRelatedField",
+      "label": "Serializer",
+      "properties": {
+        "name": "UUIDOrPKRelatedField",
+        "defined_in": "apps/tenant/compras/api/serializers.py:8",
+        "bases": [
+          "serializers.PrimaryKeyRelatedField"
+        ]
+      }
+    },
+    {
+      "id": "Serializer:compras.PlantillaOrdenCompraSerializer",
+      "label": "Serializer",
+      "properties": {
+        "name": "PlantillaOrdenCompraSerializer",
+        "defined_in": "apps/tenant/compras/api/serializers.py:40",
+        "bases": [
+          "serializers.ModelSerializer"
+        ]
+      }
+    },
+    {
+      "id": "Serializer:compras.ItemOrdenCompraSerializer",
+      "label": "Serializer",
+      "properties": {
+        "name": "ItemOrdenCompraSerializer",
+        "defined_in": "apps/tenant/compras/api/serializers.py:61",
+        "bases": [
+          "serializers.ModelSerializer"
+        ]
+      }
+    },
+    {
+      "id": "Serializer:compras.OrdenCompraListSerializer",
+      "label": "Serializer",
+      "properties": {
+        "name": "OrdenCompraListSerializer",
+        "defined_in": "apps/tenant/compras/api/serializers.py:82",
+        "bases": [
+          "serializers.ModelSerializer"
+        ]
+      }
+    },
+    {
+      "id": "Serializer:compras.OrdenCompraDetailSerializer",
+      "label": "Serializer",
+      "properties": {
+        "name": "OrdenCompraDetailSerializer",
+        "defined_in": "apps/tenant/compras/api/serializers.py:119",
+        "bases": [
+          "serializers.ModelSerializer"
+        ]
+      }
+    },
+    {
+      "id": "Serializer:compras.OrdenCompraCreateUpdateSerializer",
+      "label": "Serializer",
+      "properties": {
+        "name": "OrdenCompraCreateUpdateSerializer",
+        "defined_in": "apps/tenant/compras/api/serializers.py:166",
+        "bases": [
+          "serializers.ModelSerializer"
+        ]
+      }
+    },
+    {
+      "id": "ViewSet:compras.OrdenCompraViewSet",
+      "label": "ViewSet",
+      "properties": {
+        "name": "OrdenCompraViewSet",
+        "kind": "viewset",
+        "defined_in": "apps/tenant/compras/api/viewsets.py:30",
+        "bases": [
+          "OrdenCompraServiceMixin",
+          "SintelDSVMixin",
+          "BaseTenantViewSet"
+        ]
+      }
+    },
+    {
+      "id": "ViewSet:compras.PlantillaOrdenCompraViewSet",
+      "label": "ViewSet",
+      "properties": {
+        "name": "PlantillaOrdenCompraViewSet",
+        "kind": "viewset",
+        "defined_in": "apps/tenant/compras/api/viewsets.py:231",
+        "bases": [
+          "PlantillaOrdenCompraServiceMixin",
+          "SintelDSVMixin",
+          "BaseTenantViewSet"
+        ]
+      }
+    },
+    {
+      "id": "Endpoint:compras:plantillas:api",
+      "label": "Endpoint",
+      "properties": {
+        "route": "plantillas",
+        "group": "api",
+        "kind": "router"
+      }
+    },
+    {
+      "id": "Endpoint:compras:/:api",
+      "label": "Endpoint",
+      "properties": {
+        "route": "",
+        "group": "api",
+        "kind": "router"
+      }
+    },
+    {
+      "id": "Endpoint:compras::ui",
+      "label": "Endpoint",
+      "properties": {
+        "route": "",
+        "group": "ui",
+        "kind": "path",
+        "view": "OrdenCompraViewSet.as_view({'get': 'list', 'post': 'create'})"
+      }
+    },
+    {
+      "id": "Endpoint:compras:tabla/:ui",
+      "label": "Endpoint",
+      "properties": {
+        "route": "tabla/",
+        "group": "ui",
+        "kind": "path",
+        "view": "OrdenCompraTableView.as_view()"
+      }
+    },
+    {
+      "id": "Test:apps/tenant/compras/tests/conftest.py",
+      "label": "Test",
+      "properties": {
+        "path": "apps/tenant/compras/tests/conftest.py"
+      }
+    },
+    {
+      "id": "Test:apps/tenant/compras/tests/test_multitenant_isolation_tabla_html.py",
+      "label": "Test",
+      "properties": {
+        "path": "apps/tenant/compras/tests/test_multitenant_isolation_tabla_html.py"
+      }
+    },
+    {
+      "id": "Test:tests/tenant/compras/test_compras_plantillas.py",
+      "label": "Test",
+      "properties": {
+        "path": "tests/tenant/compras/test_compras_plantillas.py"
+      }
+    },
+    {
+      "id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "label": "JS",
+      "properties": {
+        "path": "apps/tenant/compras/static/compras/js/compras.api.js",
+        "namespaces": [
+          "window.Sintel.Compras",
+          "window.Sintel.Compras.API",
+          "window.Sintel.Compras.getHeaders"
+        ],
+        "dom_selectors": []
+      }
+    },
+    {
+      "id": "Endpoint:compras:/api/v1/compras/:js-literal",
+      "label": "Endpoint",
+      "properties": {
+        "route": "/api/v1/compras/",
+        "group": "js-literal",
+        "kind": "js-literal"
+      }
+    },
+    {
+      "id": "Endpoint:compras:/api/v1/compras/plantillas/:js-literal",
+      "label": "Endpoint",
+      "properties": {
+        "route": "/api/v1/compras/plantillas/",
+        "group": "js-literal",
+        "kind": "js-literal"
+      }
+    },
+    {
+      "id": "Endpoint:compras:/api/v1/compras/plantillas/render-offcanvas/crear/:js-literal",
+      "label": "Endpoint",
+      "properties": {
+        "route": "/api/v1/compras/plantillas/render-offcanvas/crear/",
+        "group": "js-literal",
+        "kind": "js-literal"
+      }
+    },
+    {
+      "id": "Endpoint:compras:/api/v1/compras/render-offcanvas/crear/:js-literal",
+      "label": "Endpoint",
+      "properties": {
+        "route": "/api/v1/compras/render-offcanvas/crear/",
+        "group": "js-literal",
+        "kind": "js-literal"
+      }
+    },
+    {
+      "id": "Endpoint:compras:/api/v1/proveedores/:js-literal",
+      "label": "Endpoint",
+      "properties": {
+        "route": "/api/v1/proveedores/",
+        "group": "js-literal",
+        "kind": "js-literal"
+      }
+    },
+    {
+      "id": "Endpoint:compras:/api/v1/proyectos/:js-literal",
+      "label": "Endpoint",
+      "properties": {
+        "route": "/api/v1/proyectos/",
+        "group": "js-literal",
+        "kind": "js-literal"
+      }
+    },
+    {
+      "id": "JS:apps/tenant/compras/static/compras/js/compras.utils.js",
+      "label": "JS",
+      "properties": {
+        "path": "apps/tenant/compras/static/compras/js/compras.utils.js",
+        "namespaces": [],
+        "dom_selectors": []
+      }
+    },
+    {
+      "id": "JS:apps/tenant/compras/static/compras/js/features/compras_editor.js",
+      "label": "JS",
+      "properties": {
+        "path": "apps/tenant/compras/static/compras/js/features/compras_editor.js",
+        "namespaces": [],
+        "dom_selectors": [
+          "#btn-agregar-item",
+          "#btn-guardar-compra",
+          "#compra-crear-form",
+          "#compra-editar-form",
+          "#fecha",
+          "#fecha_entrega",
+          "#form-compra-crear-feedback",
+          "#form-compra-editar-feedback",
+          "#items-tbody",
+          "#observaciones",
+          "#plantilla",
+          "#proveedor",
+          "#proyecto",
+          "#resumen-impuestos",
+          "#resumen-subtotal",
+          "#resumen-total",
+          ".btn-eliminar-item",
+          ".item-cantidad",
+          ".item-cantidad, .item-valor-unitario, .item-iva",
+          ".item-descripcion",
+          ".item-inventario-uuid",
+          ".item-iva",
+          ".item-row",
+          ".item-total",
+          ".item-valor-unitario",
+          ".offcanvas"
+        ]
+      }
+    },
+    {
+      "id": "JS:apps/tenant/compras/static/compras/js/features/compras_list.js",
+      "label": "JS",
+      "properties": {
+        "path": "apps/tenant/compras/static/compras/js/features/compras_list.js",
+        "namespaces": [],
+        "dom_selectors": [
+          "#btn-guardar-plantilla",
+          "#compra-crear-form",
+          "#compra-editar-form",
+          "#compras-panel",
+          "#form-plantilla-crear-feedback",
+          "#offcanvas-container-compras",
+          "#plantilla-crear-form",
+          "#plt-nombre",
+          "#plt-prefijo",
+          "#plt-preview-num",
+          "#plt-preview-rango",
+          "#plt-rango-desde",
+          "#plt-rango-hasta",
+          "#plt-vigente",
+          ".btn-cambiar-estado",
+          ".btn-delete-compra",
+          ".btn-edit-compra",
+          ".btn-view-compra",
+          ".offcanvas"
+        ]
+      }
+    },
+    {
+      "id": "Template:apps/tenant/compras/templates/tenant/compras/assets_compras.html",
+      "label": "Template",
+      "properties": {
+        "path": "apps/tenant/compras/templates/tenant/compras/assets_compras.html",
+        "ids": [],
+        "data_attrs": []
+      }
+    },
+    {
+      "id": "Template:apps/tenant/compras/templates/tenant/compras/compras_list.html",
+      "label": "Template",
+      "properties": {
+        "path": "apps/tenant/compras/templates/tenant/compras/compras_list.html",
+        "ids": [
+          "btn-confirmar-eliminar-compras",
+          "compras-panel",
+          "confirmarEliminarModalCompras",
+          "offcanvas-container-compras",
+          "offcanvas-container-plantillas",
+          "search-compra"
+        ],
+        "data_attrs": [
+          "data-action=search",
+          "data-bs-dismiss=modal",
+          "data-grid=ordenes-compra",
+          "data-module=compras"
+        ]
+      }
+    },
+    {
+      "id": "Template:apps/tenant/compras/templates/tenant/compras/list.html",
+      "label": "Template",
+      "properties": {
+        "path": "apps/tenant/compras/templates/tenant/compras/list.html",
+        "ids": [],
+        "data_attrs": []
+      }
+    },
+    {
+      "id": "Template:apps/tenant/compras/templates/tenant/compras/offcanvas_crear_compras.html",
+      "label": "Template",
+      "properties": {
+        "path": "apps/tenant/compras/templates/tenant/compras/offcanvas_crear_compras.html",
+        "ids": [
+          "btn-agregar-item",
+          "btn-guardar-compra",
+          "compra-crear-form",
+          "fecha",
+          "fecha_entrega",
+          "form-compra-crear-feedback",
+          "items-tbody",
+          "observaciones",
+          "offcanvas-compra-crear",
+          "offcanvas-compra-crear-label",
+          "plantilla",
+          "plantilla-info",
+          "proveedor",
+          "proyecto",
+          "resumen-impuestos",
+          "resumen-subtotal",
+          "resumen-total",
+          "tabla-items"
+        ],
+        "data_attrs": [
+          "data-actual={{ p.consecutivo_actual }}",
+          "data-bs-dismiss=offcanvas",
+          "data-hasta={{ p.rango_hasta }}",
+          "data-mode=create",
+          "data-prefijo={{ p.prefijo }}"
+        ]
+      }
+    },
+    {
+      "id": "Template:apps/tenant/compras/templates/tenant/compras/offcanvas_crear_plantilla.html",
+      "label": "Template",
+      "properties": {
+        "path": "apps/tenant/compras/templates/tenant/compras/offcanvas_crear_plantilla.html",
+        "ids": [
+          "btn-guardar-plantilla",
+          "form-plantilla-crear-feedback",
+          "offcanvas-plantilla-crear",
+          "offcanvas-plantilla-crear-label",
+          "plantilla-crear-form",
+          "plt-nombre",
+          "plt-prefijo",
+          "plt-preview",
+          "plt-preview-num",
+          "plt-preview-rango",
+          "plt-rango-desde",
+          "plt-rango-hasta",
+          "plt-vigente"
+        ],
+        "data_attrs": [
+          "data-bs-dismiss=offcanvas",
+          "data-mode=create"
+        ]
+      }
+    },
+    {
+      "id": "Template:apps/tenant/compras/templates/tenant/compras/offcanvas_detalle_compras.html",
+      "label": "Template",
+      "properties": {
+        "path": "apps/tenant/compras/templates/tenant/compras/offcanvas_detalle_compras.html",
+        "ids": [
+          "offcanvas-compra-detalle",
+          "offcanvas-compra-detalle-label"
+        ],
+        "data_attrs": [
+          "data-bs-dismiss=offcanvas",
+          "data-estado=ANULADA",
+          "data-estado=APROBADA",
+          "data-estado=PENDIENTE",
+          "data-estado=RECIBIDA",
+          "data-uuid={{ instance.uuid }}"
+        ]
+      }
+    },
+    {
+      "id": "Template:apps/tenant/compras/templates/tenant/compras/offcanvas_editar_compras.html",
+      "label": "Template",
+      "properties": {
+        "path": "apps/tenant/compras/templates/tenant/compras/offcanvas_editar_compras.html",
+        "ids": [
+          "btn-agregar-item",
+          "btn-guardar-compra",
+          "compra-editar-form",
+          "consecutivo",
+          "fecha",
+          "fecha_entrega",
+          "form-compra-editar-feedback",
+          "items-tbody",
+          "observaciones",
+          "offcanvas-compra-editar",
+          "offcanvas-compra-editar-label",
+          "proveedor",
+          "proyecto",
+          "resumen-impuestos",
+          "resumen-subtotal",
+          "resumen-total",
+          "tabla-items"
+        ],
+        "data_attrs": [
+          "data-bs-dismiss=offcanvas",
+          "data-mode=edit",
+          "data-uuid={{ instance.uuid }}",
+          "data-uuid={{ item.uuid }}"
+        ]
+      }
+    },
+    {
+      "id": "Template:apps/tenant/compras/templates/tenant/compras/partials/tabla_compras.html",
+      "label": "Template",
+      "properties": {
+        "path": "apps/tenant/compras/templates/tenant/compras/partials/tabla_compras.html",
+        "ids": [],
+        "data_attrs": []
+      }
+    },
+    {
+      "id": "Docker:db",
+      "label": "Docker",
+      "properties": {
+        "name": "db",
+        "image": "postgres:16-alpine",
+        "container_name": "crm_sintel-db-1"
+      }
+    },
+    {
+      "id": "Setting:DATABASE_NAME",
+      "label": "Setting",
+      "properties": {
+        "name": "DATABASE_NAME"
+      }
+    },
+    {
+      "id": "Setting:DATABASE_USER",
+      "label": "Setting",
+      "properties": {
+        "name": "DATABASE_USER"
+      }
+    },
+    {
+      "id": "Setting:DATABASE_PASSWORD",
+      "label": "Setting",
+      "properties": {
+        "name": "DATABASE_PASSWORD"
+      }
+    },
+    {
+      "id": "Docker:redis",
+      "label": "Docker",
+      "properties": {
+        "name": "redis",
+        "image": "redis:7.2-alpine",
+        "container_name": "crm_sintel-redis-1"
+      }
+    },
+    {
+      "id": "Docker:neo4j",
+      "label": "Docker",
+      "properties": {
+        "name": "neo4j",
+        "image": "neo4j:5.24-community",
+        "container_name": "crm_sintel-neo4j-1"
+      }
+    },
+    {
+      "id": "Setting:NEO4J_PASSWORD",
+      "label": "Setting",
+      "properties": {
+        "name": "NEO4J_PASSWORD"
+      }
+    },
+    {
+      "id": "Docker:web",
+      "label": "Docker",
+      "properties": {
+        "name": "web",
+        "image": "",
+        "container_name": "crm_sintel-web-1"
+      }
+    },
+    {
+      "id": "Docker:nginx",
+      "label": "Docker",
+      "properties": {
+        "name": "nginx",
+        "image": "",
+        "container_name": "crm_sintel-nginx-1"
+      }
+    },
+    {
+      "id": "Docker:celery",
+      "label": "Docker",
+      "properties": {
+        "name": "celery",
+        "image": "",
+        "container_name": "crm_sintel-celery-1"
+      }
+    },
+    {
+      "id": "Docker:cloudflared",
+      "label": "Docker",
+      "properties": {
+        "name": "cloudflared",
+        "image": "cloudflare/cloudflared:2025.5.0",
+        "container_name": "crm_sintel-cloudflared-1"
+      }
+    },
+    {
+      "id": "Setting:TUNNEL_TOKEN",
+      "label": "Setting",
+      "properties": {
+        "name": "TUNNEL_TOKEN"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#0-CRITICAL",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "CRITICAL",
+        "number": "0",
+        "title": "Cero Caracteres Especiales en Código Python",
+        "line": 14,
+        "body": "**REGLA FUNDAMENTAL - NO EMOJIS EN ARCHIVOS .PY**\n\n- **[PROHIBIDO]**: Usar emojis en CUALQUIER archivo `.py`.\n- **[PROHIBIDO]**: Caracteres especiales Unicode/multibyte en código Python.\n- **[PERMITIDO]**: Comentarios y docstrings en texto plano SOLAMENTE.\n\n- **RAZÓN**: Los emojis en código Python causan `SyntaxError` que rompen la compilación y generan `500 Internal Server Error` en Django.\n- **ALCANCE**: Aplica a TODO el proyecto - `/apps/`, `/config/`, `/tests/`, `/tools/`, `/scripts/`.\n- **VALIDACIÓN**: Toda PR debe pasar `python -m py_compile archivo.py` sin errores.\n\n> Ver tambien **§29 [ZERO-HARDCODING]** — Norma de Abstraccion que prohíbe nombres propios de tenants en codigo. Aplica a todo el proyecto con la misma prioridad que esta regla."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#1-TECH",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "TECH",
+        "number": "1",
+        "title": "Tecnologías Implementadas y Stack Base",
+        "line": 28,
+        "body": "### Patrones Implementados (Generales por App)\n\n**Frontend (`static/<app_name>/js`):**\n\n- Vanilla JavaScript ES6+ modular, bajo el namespace `window.Sintel.<App_Name>`.\n- Orquestador central: `<app_name>.main.js` (controlador raíz, delega a submódulos).\n- Submódulos especializados:\n   - `<app_name>.api.js`: Única fuente de verdad para URLs y consumo de endpoints directos (Gateway Directo, sin Facade).\n   - `<app_name>.table.js`: Inicialización y configuración de Tabulator, definición de columnas y eventos.\n   - `<app_name>.ui.js`: Manejo de DOM, ciclo de vida de Offcanvas Bootstrap, integración con HTMX, recolección de formularios y DOM Shield.\n   - `<app_name>.utils.js`: Funciones puras de formateo, validación y helpers (sin efectos secundarios).\n   - `<app_name>.sync.js` (si aplica): Orquestación de sincronización o tareas en segundo plano, emisión de eventos y feedback UI.\n- Integración nativa con HTMX para acciones asíncronas y feedback reactivo.\n- Estricto aislamiento por módulo: ningún JS cruza lógica entre modelos.\n\n**Templates (`templates/tenant/<app_name>`):**\n- Estructura Feature-Sliced: cada template corresponde a una acción o vista específica (listado, offcanvas crear/editar/detalle).\n- Partials dedicados en `partials/` para componentes reutilizables y tablas.\n- Prohibido el uso de templates monolíticos o modals compartidos entre modelos.\n- Integración directa con endpoints Gateway Directo vía HTMX (`hx-get`).\n\n**Backend Service Layer (`services/`):**\n- Modularización estricta por responsabilidad (paquete `services/`):\n   - `__init__.py`: Punto de entrada del paquete. **Re-exports EXPLÍCITOS y declarativos** de todos los símbolos públicos. **[PROHIBIDO]** `from .modulo import *` (wildcard imports). Cada símbolo debe estar listado explícitamente: `from .selectors import ClaseA, ClaseB, funcion_c`. Esto garantiza rastreabilidad y previene la exposición accidental de símbolos privados.\n   - `crud_service.py`: Acceso a datos puro y persistencia transaccional (`@transaction.atomic`). Sin lógica de negocio.\n   - `business_service.py`: Orquestación y lógica de negocio (idempotencia, validaciones semánticas, cálculos, persistencia desde DTO). Sin acceso directo a ViewSets.\n   - `selectors.py`: Consultas `GET` optimizadas (read-only). Define tuplas `LIST_FIELDS`, `DETAIL_FIELDS` como SSoT de campos, y clases `<Modelo>Selector` con `@staticmethod` que retornan QuerySets filtrados por `empresa_id` con `.only()`.\n   - `services.py`: Fachada estable que reexporta desde `business_service.py` para compatibilidad de imports existentes.\n   - se crearara un servicio por modelo item de modelo existente \n   - `api_mixins.py`: `<Modelo>ServiceMixin` que inyecta acceso estandarizado a Selectors, CRUDService y BusinessService desde el ViewSet. Metodos: `get_qs_list()`, `get_qs_detail()`, `service_crear_*()`.\n- Todos los métodos son `@staticmethod` o `@classmethod` y stateless.\n- El ViewSet hereda de `BaseTenantViewSet` (`apps.tenant.api.base`) y opcionalmente de un `<Modelo>ServiceMixin`.\n- Mixins centrales en `apps/tenant/api/mixins.py`: `SintelDSVMixin` (Double Semantic Verification con `get_empresa_id()`) y `SintelServiceMixin` (inyección de `service_class`).\n- Prohibido invocar lógica de negocio desde templates, serializers o signals.\n- Validación estricta de `empresa_id` y anti-IDOR en toda mutación.\n- Documentación y docstrings obligatorios por archivo y función.\n\nEl proyecto se rige estrictamente por este stack; queda prohibido sugerir tecnologías o librerías alternativas sin autorización:\n\n1. **Backend & Base de Datos:**\n   - **Python & Django:** Framework principal.\n   - **Django REST Framework (DRF):** Construcción de APIs (JSON y endpoints HTMX).\n   - **django-tenants:** Manejo de esquemas PostgreSQL para aislamiento Multi-Tenant.\n   - **PostgreSQL:** Base de datos relacional.\n   - **Celery:** Procesamiento asíncrono y tareas en segundo plano.\n2. **Frontend & UI:**\n   - **HTMX:** Carga dinámica del DOM y peticiones asíncronas "
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#2-ARCH",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "ARCH",
+        "number": "2",
+        "title": "Principios Generales de Arquitectura (Bounded Contexts & Zero-Trust)",
+        "line": 81,
+        "body": "1. **Comunicación Directa y Contextos Delimitados (Bounded Contexts / Gateway Directo):**\n   - Toda aplicación debe operar como un dominio aislado.\n   - El frontend y los integradores externos deben consumir exclusivamente los endpoints directos de cada app (ej. `/api/v1/<app_name>/` → `apps/tenant/<app_name>/api/`).\n   - El patrón Facade monolítico esta ELIMINADO para consumo frontend. Las rutas directas en `config/api_urls.py` son la SSoT. Los facades legacy en `core/api/v1/` estan en proceso de desmontaje y NO deben usarse para nuevas integraciones.\n2. **Aislamiento de la Capa de Presentación (`core`) y Bridge al Esquema Publico:**\n   - La app `apps/tenant/core` actua como *UI Shell* (contenedor de interfaz) y como **unico puente autorizado** entre las apps tenant y el esquema publico (`apps/public/`).\n   - **Prohibido para `core`:** Implementar logica de negocio de dominio, actuar como proxy de datos, orquestar APIs de dominios adyacentes, reescribir rutas de assets o persistir datos de otras apps.\n   - **Permitido para `core`:** Alojar helpers globales de infraestructura (ej. `UIManager`, `TabulatorFactory`, manejadores de sesion) en `apps/tenant/core/static/core/js/`.\n   - **Permitido para `core`:** Contener el modulo bridge `apps/tenant/core/services/membership.py` que encapsula TODA interaccion con `apps.public` (ver Seccion 17).\n3. **Aislamiento de Datos SSoT (Tenant-Isolation):** Todo modelo de base de datos que pertenezca a un inquilino DEBE heredar de una clase base abstracta (`SintelTenantBaseModel`) que inyecte y valide la clave de partición (`empresa_id`) a nivel de ORM.\n4. **Idempotencia por Diseño:** Toda operación de mutación (creación/actualización) o ingesta de datos DEBE ser idempotente. La base de datos debe respaldar esto mediante constraints únicos a nivel de BD; los servicios deben manejar los conflictos de forma transparente (permitiendo un *Silent Success* o *Upsert*).\n5. **Centralización del Aprovisionamiento (Core SSoT):** Todo el flujo de inicio de sesión de nuevos tenants privados, validación OTT y su interfaz de bienvenida (Onboarding) pertenecen EXCLUSIVAMENTE a la app `core` (`apps/tenant/core`). La app `landing` está despojada de responsabilidades de aprovisionamiento o seguridad, quedando solo como presentación estática."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#3-INFO",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "INFO",
+        "number": "3",
+        "title": "Única Fuente de Verdad Documental (SSoT)",
+        "line": 96,
+        "body": "1. **PASO INICIAL OBLIGATORIO:** Antes de ejecutar CUALQUIER cambio en una app, se DEBE consultar SIEMPRE de forma inicial el documento de flujo de la misma. Todas las aplicaciones tienen este documento en su directorio `.agent/`. (Ejemplo: `apps/tenant/clientes/.agent/AUDITORIA_FLUJO_CLIENTES.md`).\n2. **Documentación Global:** `documentacion/arquitectura_general.md` es la referencia suprema para infraestructura.\n3. **Flujo por Aplicación (Modularizado):** Cada `apps/<app_name>/` DEBE contener una carpeta `.agent/` con el archivo de auditoría principal.\n4. **Estructura de Documentación Modular:**\n   - Portal SSoT: `apps/<app_name>/.agent/AUDITORIA_FLUJO_*.md`\n   - Documentos de Soporte: `apps/<app_name>/.agent/docs/` (Flow Maps, Business Logic, Microtasks).\n   - Habilidades y Scripts: `apps/<app_name>/.agent/skills/` (Automatizaciones locales).\n5. **Gestión de Documentos:** Los archivos `.md` globales residen en `documentacion/`. Los específicos de app residen en su propia carpeta `.agent/docs/`."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#4-BACKEND",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "BACKEND",
+        "number": "4",
+        "title": "Capa de Datos y Optimización Backend (Zero Waste)",
+        "line": 107,
+        "body": "1. **Cero Creación de Archivos `.py` no Autorizados:** Queda PROHIBIDO crear nuevos archivos `.py` fuera de la estructura de Service Layer establecida (`services/selectors.py`, `services/crud_service.py`, `services/business_service.py`, `services/api_mixins.py`, `services/__init__.py`). Para la app `contabilidad`, la extensión autorizada adicional es `integracion/extractores/` (ver §18). Cualquier otro archivo nuevo requiere autorización explícita.\n2. **Restricción de Ambientes (`apps/public/`):** Estrictamente PROHIBIDO modificar, refactorizar o crear archivos dentro de `apps/public/` sin la aprobación explícita (requiere RFC/Issue y etiqueta `needs-admin-approval`). Toda lógica nueva debe acoplarse a la estructura existente.\n3. **Prohibición de `views.py` Tradicionales:** No usar el archivo `views.py` legacy para lógica de negocio.\n4. **Multi-Tenant Estricto (Zero-Trust SaaS):** Prohibido realizar consultas a modelos sin filtrar por la empresa del tenant (`empresa` o `empresa_id`) en las `TENANT_APPS`.\n5. **Optimización Estricta de Consultas (Zero Waste):**\n   - **ESTRICTAMENTE PROHIBIDO** el uso de `.all()`, o `.filter()` sin encadenar un `.only()` o `.defer()`.\n   - Toda consulta DEBE especificar explícitamente los campos necesarios para minimizar la saturación de memoria y cuellos de botella en la red.\n   - **Patrón DRF obligatorio:** `queryset = Model.objects.none()` a nivel de clase + override en `get_queryset()` con `.only()`/`.defer()` según la acción.\n   - **Joins obligatorios:** Toda consulta que acceda a campos de modelos relacionados DEBE encadenar `select_related('campo')` (FK / OneToOne) o `prefetch_related('campo')` (M2M / FK inversa) para evitar el problema N+1. Prohibido acceder a `obj.fk.campo` sin `select_related` previo.\n6. **Desacoplamiento Operativo:** Las relaciones (`ForeignKey`) que referencien operadores del tenant DEBEN apuntar al modelo del perfil operativo (`'perfil.TenantProfile'`), NUNCA a `settings.AUTH_USER_MODEL`. Esto aísla la autenticación global de la lógica del negocio del tenant.\n7. **Cero Efectos Secundarios Ocultos (Cero Signals):** Se prohíbe el uso de *Signals* nativas de Django para ejecutar lógica de negocio. Toda mutación dependiente debe ser orquestada explícitamente en la Capa de Servicios."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#5-CRUD-E2E",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "CRUD-E2E",
+        "number": "5",
+        "title": "Ciclo de Vida CRUD End-to-End (Service Layer Arquitecture)",
+        "line": 121,
+        "body": "Para garantizar un CRUD completo y seguro, el flujo de procesamiento de datos debe ser estrictamente unidireccional y desacoplado:\n\n1. **Captura y Protección UI (Frontend):**\n   - El payload se recopila a través de scripts especializados (`<app>_form.js`).\n   - Obligatorio aplicar el \"DOM Shield\": remover temporalmente atributos `name` de selectores visibles y capturar únicamente valores crudos/ForeignKeys desde inputs ocultos (`<input type=\"hidden\">`).\n2. **Recepción y Enrutamiento (View/ViewSet):**\n   - Responsable ÚNICAMENTE de la ingesta HTTP. Actúa **SOLO** como enrutador.\n   - Delega la validación inicial sintáctica y de tipos a los Serializers/DTOs.\n   - Las consultas ORM deben canalizarse a través de `ServiceMixin.get_qs_list()`/`get_qs_detail()` o Selectors. Minimizar imports directos de modelos en ViewSets.\n3. **Servicio de Negocio (Business Service):**\n   - El ViewSet invoca métodos del `<Modelo>ServiceMixin` que apuntan a `business_service.py`.\n   - Recibe datos validados y el contexto de seguridad inyectado (`empresa_id`).\n   - Aplica **Doble Verificación Semántica (Double Semantic Verification)**: Valida que todas las entidades/ForeignKeys referenciadas en el payload pertenezcan al tenant actual (Prevención IDOR).\n   - Ejecuta reglas de dominio, cálculos matemáticos y validación de idempotencia.\n4. **Servicio de Persistencia Transaccional (CRUD/Data Service):**\n   - Única capa con permisos para interactuar con la base de datos a nivel de escritura (`crud_service.py`).\n   - Toda creación/mutación jerárquica (operaciones compuestas o Maestro-Detalle) DEBE estar obligatoriamente envuelta en bloques transaccionales atómicos (`@transaction.atomic`).\n5. **Interfaz Reactiva y UI Feedback:**\n   - Tras la persistencia, el backend retorna estados limpios 200/201 (JSON o HTMX OOB Swap).\n   - El frontend intercepta la respuesta, muta el DOM o actualiza reactivamente las grillas en memoria (`table.replaceData()` en Tabulator), emite notificaciones (`UIManager.notifySuccess`) y libera recursos, evitando recargas completas."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#6-UI",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "UI",
+        "number": "6",
+        "title": "Interfaz de Usuario y Frontend (UI SSoT)",
+        "line": 144,
+        "body": "Regla crítica de ubicación de assets: TODOS los archivos `.html` y `.js` deben residir dentro del núcleo (nucleus) de la aplicación a la que pertenecen.\n\n- **Ruta obligatoria para apps tenant:**\n   - Templates: `apps/tenant/<app_name>/templates/tenant/<app_name>/` (prefijo `tenant/` en la ruta de templates).\n   - JS estático: `apps/tenant/<app_name>/static/<app_name>/js/`\n   - Carga de assets: Cada app define un template `assets_<app_name>.html` que centraliza la inclusión de sus scripts y estilos.\n- **Ruta obligatoria para apps public (SHARED_APPS):**\n   - Templates: `apps/public/<app_name>/templates/<app_name>/`\n   - JS estático: `apps/public/<app_name>/static/<app_name>/js/`\n- **Excepciones controladas:** Helpers globales de infraestructura en `apps/tenant/core/static/core/js/common/` (ej. `ui-manager.js`, `tabulator.factory.js`, `notyf.init.js`).\n- **HTMX y Server-Driven UI:** Las mutaciones HTMX deben originarse desde templates y endpoints ligados al mismo app. Al mover un módulo, actualizar siempre los `include` y referencias `static`."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#7-ARCHITECTURE",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "ARCHITECTURE",
+        "number": "7",
+        "title": "Arquitectura Feature-Sliced Design (FSD)",
+        "line": 158,
+        "body": "**PRINCIPIO FUNDAMENTAL:** Cada modelo de base de datos debe tener su propio ecosistema completo e independiente.\n\n### 7.1. Estructura por Modelo (Ecosistema Completo)\n1. **Templates HTML:**\n   - `offcanvas_crear_{modelo}.html`, `offcanvas_editar_{modelo}.html`, `offcanvas_detalle_{modelo}.html`, `list_{modelo}.html`.\n   - Partials reutilizables en subcarpeta `partials/` (ej. `partials/table.html`, `partials/assets_{app}.html`).\n   - **PROHIBIDO:** Archivos monolíticos como `modals.html`.\n2. **Scripts JavaScript (Patrón `features/`):**\n   - `<app_name>.api.js` (SSoT de URLs y endpoints a nivel raíz del JS de la app).\n   - Subcarpeta `features/` con archivos por modelo:\n     - `{modelo}_list.js` (Listado y tabla Tabulator).\n     - `{modelo}_editor.js` (Formularios crear/editar vía Offcanvas).\n   - Variante alternativa por app: `{app_name}.module.js` (orquestador central), `{app_name}.list.js`, `{app_name}.editor.js`, `{app_name}.utils.js`.\n   - **PROHIBIDO:** Scripts compartidos entre modelos no relacionados.\n3. **API Endpoints (HTMX Actions):**\n   - Los Offcanvas DEBEN usar `hx-get` apuntando a `render-offcanvas/crear/`, `editar/` o `detalle/`.\n   - Feedback de error inyectado localmente en el contenedor."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#8-WIZARD",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "WIZARD",
+        "number": "8",
+        "title": "Patrón Wizard y Flujo de Estado",
+        "line": 178,
+        "body": "1. **Asistente en Memoria:** La fase inicial de recolección de configuraciones complejas NO guarda en BD.\n2. **Traspaso por SessionStorage:** El JS empaqueta el payload JSON en `sessionStorage`, lanza por HTMX el Editor principal, el cual lee el storage para autollenar antes de permitir el guardado definitivo."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#9-SHIELD",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "SHIELD",
+        "number": "9",
+        "title": "Principio Zero Trust (Validación y Cálculos UI)",
+        "line": 183,
+        "body": "1. **Validación Explícita:** Nunca confiar en inputs de usuario. Normalizar numéricamente (`parseFloat(value) || 0`) para evitar propagar `NaN`.\n2. **SSoT en Cálculos:** Las validaciones matemáticas en el JS deben coincidir con la tolerancia del backend.\n3. **Serialización JSON Dura:** Los formularios Maestro-Detalle deben enviar JSON puro. Evitar que el navegador envíe el literal `'[object Object]'`."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#10-ALERT",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "ALERT",
+        "number": "10",
+        "title": "Manejo de Errores y Logging",
+        "line": 189,
+        "body": "1. **Logging Obligatorio:** Todo error debe incluir contexto: `[modulo:accion]`.\n2. **Aislamiento de Errores UI:** Las fallas de la API (DRF) deben delegarse EXCLUSIVAMENTE a `UIManager.handleError`, mapeando el array de `missing_fields` del backend."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#11-ASYNC",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "ASYNC",
+        "number": "11",
+        "title": "Procesamiento Asíncrono, DLQ y Alto Rendimiento",
+        "line": 194,
+        "body": "1. **Desacoplamiento de Carga Pesada:** Las tareas masivas, cálculos sobre datos históricos, integraciones de terceros o envíos masivos DEBEN despacharse obligatoriamente a *workers* asíncronos en Celery vía `.delay()`.\n2. **Eficiencia en Workers:** Las tareas asíncronas deben diseñarse para consumir la menor cantidad de memoria posible. Deben operar en lotes (*batching*) cuando interactúen con la base de datos y evitar cargar estructuras de datos masivas en RAM.\n3. **Tolerancia a Fallos y DLQ (Dead Letter Queues):**\n   - Toda tarea encolada en Celery debe definir políticas de reintentos (`max_retries`).\n   - Al agotar los reintentos y fallar definitivamente, el *worker* debe capturar el error y el payload original, insertándolo en un registro de base de datos (`FailedTenantTask`). Esto permite observabilidad y reenfilado manual/automatizado sin congelar ni bloquear los workers principales."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#12-HTMX-ADVANCED",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "HTMX-ADVANCED",
+        "number": "12",
+        "title": "Server-Driven UI y Out of Band Swaps (OOB)",
+        "line": 202,
+        "body": "1. **Reactividad:** Tabulator y otras interfaces deben suscribirse nativamente a respuestas HTMX (`HX-Trigger`).\n2. **Transacciones OOB:** Cuando un modal HTMX realiza un POST exitoso que afecta elementos externos, priorizar entregar una mutación DOM fuera de banda (`hx-swap-oob=\"true\"` o `HX-Trigger`).\n\n## [SaaS-DEFENSE] 13. Ciberseguridad Defensiva y Prevención IDOR\n\n1. **Verificación Continua en DML:** Nunca confiar en identificadores (IDs) proporcionados por el cliente. Todo endpoint de mutación (POST/PUT/PATCH/DELETE) debe validar que las entidades referenciadas pertenezcan al tenant autenticado (`empresa=request.user.perfil.empresa`).\n2. **Implementación via DSV:** La Doble Verificación Semántica (definida en Sección 5.3) es el mecanismo obligatorio. Se ejecuta en `business_service.py` antes de persistir.\n3. **Protección Horizontal:** Estrictamente prohibido confiar ciegamente en IDs provistos en requests HTTP sin validarlos contra el tenant."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#14-CORE-DB",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "CORE-DB",
+        "number": "14",
+        "title": "Herencia Obligatoria de Modelos SSoT",
+        "line": 213,
+        "body": "1. **SintelTenantBaseModel:** Todos los modelos del esquema tenant DEBEN heredar estrictamente de `SintelTenantBaseModel` importado desde `apps.tenant.core.models`.\n2. **Prohibición de Herencia Nativa:** Queda prohibido heredar de `models.Model` directamente.\n3. **Campos inyectados automáticamente por `SintelTenantBaseModel`:**\n   - `empresa`: `ForeignKey('empresa.Empresa', on_delete=PROTECT, null=False, blank=False, db_index=True)`.\n   - `created_at`: `DateTimeField(auto_now_add=True, db_index=True)` - Timestamp de creación.\n   - `updated_at`: `DateTimeField(auto_now=True, db_index=True)` - Timestamp de última modificación.\n4. **Índices obligatorios heredados:** `[empresa]` y `[empresa, -created_at]`. Los modelos hijos PUEDEN añadir índices adicionales en su `Meta.indexes`.\n5. **Protección en `save()`:** El modelo base sobrescribe `save()` para lanzar `ValueError` si `empresa_id` es `None`, evitando registros huérfanos.\n6. **UUID como Lookup Field:** `BaseTenantViewSet` (`apps/tenant/api/base.py`) define `lookup_field=\"uuid\"` y `lookup_url_kwarg=\"uuid\"`. Todos los ViewSets tenant heredan de esta clase para evitar exposición de PKs internos en URLs públicas."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#15-SECURITY",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "SECURITY",
+        "number": "15",
+        "title": "Seguridad, Autenticacion JWT y Roles (Dual-Auth Pattern)",
+        "line": 225,
+        "body": "### 15.1. Dual-Auth Centralizado (JWT + Session)\n\n1. **SSoT de Autenticacion:** `BaseTenantViewSet` (`apps/tenant/api/base.py`) define `authentication_classes = [JWTAuthentication, SessionAuthentication]` como unica fuente de verdad. Todos los ViewSets tenant heredan Dual-Auth automaticamente.\n   - **[PROHIBIDO]** sobrescribir `authentication_classes` en ViewSets hijos. La autenticacion se hereda de `BaseTenantViewSet` o del DRF global default (`config/settings.py` `DEFAULT_AUTHENTICATION_CLASSES`).\n   - **Excepciones explicitas:** `CoreAuthViewSet` (login/logout/from-session) usa `[SessionAuthentication]` exclusivamente. `TenantInfoView` usa `authentication_classes = []` (endpoint publico).\n2. **Orden de Prioridad:** DRF evalua `JWTAuthentication` primero (header `Authorization: Bearer`). Si no hay token o es invalido, usa `SessionAuthentication` (cookies). Esto permite que el mismo endpoint sirva tanto a clientes API/moviles como al workspace navegador.\n3. **Bridge Session-to-JWT:** El endpoint `GET /api/v1/core/auth/from-session/` genera tokens JWT validos a partir de la sesion activa, sin requerir re-autenticacion por credenciales.\n\n### 15.2. Configuracion JWT (`djangorestframework-simplejwt`)\n\n1. **Libreria:** `djangorestframework-simplejwt[blacklist]>=5.3`.\n2. **Parametros SIMPLE_JWT** (`config/settings.py`):\n   - `ACCESS_TOKEN_LIFETIME`: 15 minutos.\n   - `REFRESH_TOKEN_LIFETIME`: 7 dias.\n   - `ROTATE_REFRESH_TOKENS`: `True` (nuevo refresh en cada renovacion).\n   - `BLACKLIST_AFTER_ROTATION`: `True` (invalida refresh anterior).\n   - `ALGORITHM`: `HS256` con clave de 32+ bytes (`JWT_SECRET_KEY` env var).\n   - `AUTH_HEADER_TYPES`: `('Bearer',)`.\n3. **Endpoints de Token** (registrados en `config/api_urls.py` y `config/urls_tenant.py`):\n   - `POST /api/token/` - Obtener par access/refresh.\n   - `POST /api/token/refresh/` - Renovar access token.\n   - `POST /api/token/verify/` - Verificar validez de token.\n\n### 15.3. Frontend JWT (`window.jwtAuth`)\n\n1. **Helper Global:** El objeto `window.jwtAuth` (definido en `apps/public/console/static/js/jwt-auth.js`) gestiona tokens en `localStorage`.\n2. **Metodo correcto para inyectar Bearer en headers:**\n   ```javascript\n   const token = window.jwtAuth?.getAccessToken?.();\n   if (token) {\n       headers['Authorization'] = `Bearer ${token}`;\n   }\n   ```\n   - **[PROHIBIDO]** usar `window.jwtAuth.token` o `window.jwtAuth?.token` (la propiedad `.token` NO existe).\n   - **Metodo asincrono (con auto-refresh):** `await window.jwtAuth.getValidAccessToken()` verifica, refresca y retorna el token. Usar cuando el caller ya es `async`.\n3. **Inyeccion Automatica:** `TabulatorFactory` inyecta automaticamente `Authorization: Bearer` via `window.jwtAuth`. Los modulos `<app>.api.js` usan `getHeaders()` con `getAccessToken()`.\n\n### 15.4. Jerarquia de Roles (`TenantProfile.rol` = SSoT)\n\n1. **SSoT de Roles:** `TenantProfile.rol` (`apps/tenant/perfil/models.py`) es la UNICA fuente de verdad para permisos basados en rol dentro del tenant. `TenantMembership.rol` (esquema publico) se usa SOLO para verificar membresia cross-schema via el Bridge.\n2. **Roles definidos:**\n   - `ADMIN` - Acceso total: CRUD completo, asignar roles, configuraciones de empresa.\n   - `OPERADOR` - Lectura + escritura limitada (segun app/modelo).\n   - `VISOR` - Solo lectura.\n3. **Auto-Creacion:** Al hacer login (`CoreAuthViewSet.login()`), si el usuario no tiene `TenantProfile` en el tenant actual, se crea automaticamente con rol `VISOR`.\n\n### 15.5. Permisos Materializados (`apps/tenant/api/permissions.py`)\n\nTodas las apps tenant DEBEN importar permisos desde este modulo centralizado.\n\n1. **Membresia Cross-Schema:**\n   - `IsTenantMember`: Verifica membresia activa (`TenantMembership`) en el tenant actual via Core Membership Bridge (Seccion 17). **OBLIGATORIO** en todo ViewSet que herede de `BaseTenantViewSet`.\n2. **Basados en TenantProfile.rol (DSV):**\n   - `HasTenantRole`: Permiso generico. El ViewSet define `required_roles = ['ADMIN', '"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#16-GOVERNANCE",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "GOVERNANCE",
+        "number": "16",
+        "title": "Reglas de Gobernanza por Aplicación",
+        "line": 296,
+        "body": "1. **Módulo Privados (`apps/tenant/nombre_app`):**\n   - **Autorización Obligatoria**: Antes de realizar cualquier modificación, refactorización o creación de código en este módulo, se DEBE solicitar autorización y aprobación explícita al USUARIO.\n   - **Lectura Previa SSoT**: Es OBLIGATORIO leer el documento de auditoría `.agent/` de la app (el nombre exacto varía por app — ver la tabla en `documentacion/arquitectura_general.md` §10.2, DOC-M1) antes de proponer cambios. Toda modificación debe estar alineada con la arquitectura allí documentada."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#17-BRIDGE",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "BRIDGE",
+        "number": "17",
+        "title": "Aislamiento de Esquema Publico via Core Membership Bridge",
+        "line": 302,
+        "body": "**REGLA FUNDAMENTAL DE AISLAMIENTO CROSS-SCHEMA:**\n\n1. **SSoT del Bridge:** El modulo `apps/tenant/core/services/membership.py` es la UNICA interfaz autorizada para que las apps tenant consulten datos del esquema publico (`apps.public`). Este modulo encapsula el cambio de esquema PostgreSQL de forma segura mediante un context manager (`_PublicSchemaContext`).\n2. **Prohibicion de Imports Directos:**\n   - **ESTRICTAMENTE PROHIBIDO** que cualquier app tenant distinta de `core` importe directamente desde `apps.public`. Esto incluye `apps.public.tenants.models`, `apps.public.tenants.utils`, o cualquier otro submodulo de `apps/public/`.\n   - Ejemplo PROHIBIDO: `from apps.public.tenants.models import TenantMembership` en `apps/tenant/gastos/`.\n   - Ejemplo CORRECTO: `from apps.tenant.core.services.membership import check_membership` en `apps/tenant/gastos/`.\n3. **Operaciones Expuestas por el Bridge (API Surface):**\n   - `check_membership(user, empresa)` - Verifica membresia activa. Retorna `TenantMembership` o `None`.\n   - `check_membership_exists(user, empresa)` - Retorna `bool` para verificacion rapida.\n   - `check_admin_membership(user, empresa)` - Verifica membresia con rol ADMIN.\n   - `check_primary_admin(empresa)` - Retorna el `TenantMembership` del administrador primario.\n   - `get_user_role(user, empresa)` - Retorna el string del rol (`ADMIN`, `STAFF`, `OPERADOR`) o `None`.\n   - `get_primary_domain(empresa)` - Retorna el dominio primario del tenant.\n   - `verify_invitation(token)` - Valida un token de invitacion y retorna la invitacion activa o `None`.\n4. **Regla de Extension:** Si una app tenant necesita una nueva consulta al esquema publico, se DEBE agregar una nueva operacion al bridge (`membership.py`). Queda PROHIBIDO crear imports directos como alternativa.\n5. **Validacion Automatizada:** El tool `audit_bridge_isolation` del MCP server (`sintel_agent_unified.py`) escanea imports en todas las apps tenant para detectar violaciones a esta regla. Toda PR debe pasar esta auditoria con cero violaciones.\n6. **Excepciones:** Solo `apps/tenant/core/` y `apps/tenant/api/` (permisos centrales) pueden importar desde `apps.public`. Ninguna otra app tenant tiene esta autorizacion."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#18-CONTAB",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "CONTAB",
+        "number": "18",
+        "title": "Capa de Integración Contable Centralizada (v3.5 — Modelo Pull / Extractores)",
+        "line": 323,
+        "body": "**PRINCIPIO:** Todo asiento contable es generado EXCLUSIVAMENTE por el `Contabilizador`. Ninguna app puede crear `AsientoContable` ni `MovimientoContable` directamente. Las apps fuente NO conocen ni dependen de `contabilidad` — la extracción es activa (Pull), no pasiva (Push).\n\n### 18.1. Paquete de Integración (`apps/tenant/contabilidad/integracion/`)\n\n| Módulo | Responsabilidad |\n|---|---|\n| `dtos.py` | DTOs inmutables (`@dataclass(frozen=True)`) — contrato entre apps fuente y Contabilizador |\n| `contabilizador.py` | Orquestador único — valida, resuelve cuentas, construye y persiste asientos atómicamente |\n| `resolver.py` | Mapea (`tipo_transaccion` + `concepto`) a código PUC vía `ReglaContable` por tenant |\n| `validadores.py` | Validators stateless — cuadratura, período abierto, documento origen existe |\n| `excepciones.py` | Jerarquía `ContabilidadError` y subclases |\n| `extractores/base.py` | `AbstractExtractor` — interfaz común (ver §18.3) |\n| `extractores/gastos.py` | `ExtractorGastos` — extrae `DocumentoSoporte` pendientes |\n| `extractores/inventario.py` | `ExtractorInventario` — extrae `MovimientoInventario` pendientes |\n| `extractores/facturas.py` | `ExtractorFacturas` — extrae `Factura` ACEPTADA pendientes |\n| `extractores/nomina.py` | `ExtractorNomina` — extrae `Devengo` aprobados pendientes |\n\n### 18.2. DTOs — Contrato Inmutable\n\n```python\nTransaccionEconomica(\n    tipo=TipoTransaccion.COMPRA_GASTO,\n    fecha=date(2026, 5, 3),\n    tercero=TerceroSnapshot(...),          # Snapshot, sin FK\n    lineas=[LineaTransaccion(...)],\n    documento_origen=DocumentoOrigen(...)  # Para idempotencia\n)\nLineaTransaccion(concepto='GASTO_OPERATIVO', monto=..., lado='DEBE')   # default='DEBE'\nImpuestoLinea(tipo='RETEFUENTE', valor=..., lado='HABER')              # default='HABER'\n```\n\n- **`lado`**: controla columna del asiento (`'DEBE'` o `'HABER'`). OBLIGATORIO para cuadratura.\n- **Idempotencia**: `documento_origen` mapea a `AsientoContable.documento_origen_*`. Constraint UNIQUE en BD.\n- **`empresa_id`**: PROHIBIDO pasarlo dentro del DTO — lo inyecta el `Contabilizador` desde su contexto.\n\n### 18.3. Patrón de Integración — Modelo Pull (Extractores)\n\n**Arquitectura:** `contabilidad` extrae activamente de apps fuente. Las apps fuente no conocen ni importan de `contabilidad`.\n\n```python\n# En apps/tenant/contabilidad/integracion/extractores/base.py\nclass AbstractExtractor(ABC):\n    def __init__(self, empresa_id: int):\n        self.empresa_id = empresa_id\n        self.contabilizador = Contabilizador(empresa_id)\n\n    @abstractmethod\n    def extraer_pendientes(self) -> list[TransaccionEconomica]: ...\n\n    def contabilizar_pendientes(self) -> dict:\n        resultados = {'contabilizados': 0, 'errores': [], 'omitidos': 0}\n        for dto in self.extraer_pendientes():\n            try:\n                self.contabilizador.contabilizar(dto)\n                resultados['contabilizados'] += 1\n            except Exception as e:\n                resultados['errores'].append({'origen': str(dto.documento_origen), 'error': str(e)})\n        return resultados\n```\n\n**Activación:** Extractores se invocan desde management commands (`manage.py backfill_asientos_gastos`) o tareas Celery periódicas. Nunca desde ViewSets ni Signals.\n\n**Detección de pendientes:** Cada extractor usa `Contabilizador.existe_asiento_para(app_label, modelo, id)` para filtrar documentos ya contabilizados. La idempotencia queda delegada al `Contabilizador` — el extractor no la gestiona.\n\n### 18.4. Cuadratura Obligatoria (Ejemplo COMPRA_GASTO)\n\n```\nDEBE 51xxxx Gasto              [subtotal]\nHABER 236540 Retefuente        [retefuente]  (si > 0)\nHABER 236801 ReteICA           [reteica]     (si > 0)\nHABER 233595 CXP Proveedor     [total neto]\nTOTAL DEBE == TOTAL HABER == subtotal\n```\n\n### 18.5. Numero de Asiento — Formato Canonico\n\n- Normal: `ASI-{YYYYMMDD}-{UUID8}` — generado por `Contabilizador._construir_asiento()`.\n- Reversal: `RVER-{YYYYMMDD}-{UUID8}`.\n- PROHIBIDO que el caller externo prov"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#20-AI-AGENTS",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "AI-AGENTS",
+        "number": "20",
+        "title": "Arquitectura de Agentes IA Especializados (Asistente Contable)",
+        "line": 654,
+        "body": "### 20.1. Principio de Diseño\n\nEl asistente IA es un **método de entrada rápida** para las líneas del asiento contable en el flujo Manual On-Demand. Actúa como autocompletado inteligente: el contador revisa y confirma antes de generar. La validación local (cuadratura, nivel 6, `TipoComprobante`) siempre es la fuente de verdad final.\n\n**Contrato inmutable:**\n- Input: JSON estructurado del documento origen (montos, retenciones, tercero, app_label)\n- Output: array de `LineaManual` validadas contra el PUC del tenant, con `|ΣDebe - ΣHaber| = 0`\n- El asiento no se persiste hasta que el usuario presiona \"Generar Asiento\"\n\n### 20.2. Agentes Especializados por Dominio\n\n| Agent ID | App Label | Conocimiento NIIF | Modelo de IA |\n|----------|-----------|-------------------|--------------|\n| `FacturacionAgent` | `facturas` | Causación Factura de Venta: CxC (1305), IVA generado (240805), Retefuente (2365xx), ReteICA (2368xx), Ingresos (4135xx) | claude-haiku-4-5-20251001 |\n| `GastosAgent` | `gastos` | Causación Compra/Gasto: CxP Proveedor (2335xx), IVA descontable (240810), Retefuente (2365xx), Gastos operativos (51xx) | claude-haiku-4-5-20251001 |\n| `NominaAgent` | `empleados` | Causación Nómina: Salarios (5105xx), Aportes seguridad social (2370xx), Obligaciones laborales (25xx) | claude-haiku-4-5-20251001 |\n| `InventarioAgent` | `inventario` | Sincronización Kardex: Inventario (1435xx), CMV (6135xx), Ingresos (4135xx) | claude-haiku-4-5-20251001 |\n\nEl enrutamiento es automático: el orquestador lee `app_label` del request y filtra las cuentas PUC disponibles via `APP_ORIGEN_PREFIJOS[app_label]` antes de construir el prompt.\n\n### 20.3. Flujo de Enrutamiento (Orquestador)\n\n```\nPOST /api/v1/contabilidad/pendientes/asistente-ia/\n    │\n    ├─ AsistenteIAInputSerializer.validate()\n    │       ← app_label, modelo, documento_id, subtotal, impuestos, total, tercero\n    │\n    ├─ DocumentosPendientesViewSet.asistente_ia()\n    │       ← IsTenantMember + IsTenantAdminOrReadOnly\n    │\n    ├─ ContabilidadBusinessService.sugerir_lineas_asiento_ia(empresa_id, app_label, ctx)\n    │       ├─ filtrar_cuentas_por_app_origen(qs, app_label)  → cuentas nivel-6 del tenant\n    │       ├─ anthropic.Anthropic(api_key=ANTHROPIC_API_KEY).messages.create(...)\n    │       │       model = 'claude-haiku-4-5-20251001'\n    │       │       prompt = [tipo_label + cuentas disponibles + montos del documento]\n    │       ├─ json.loads(response)\n    │       ├─ Validar cada cuenta_codigo: CuentaContable.nivel==6, activa==True, empresa_id\n    │       └─ Validar cuadratura: |ΣDebe - ΣHaber| < 0.01\n    │\n    └─ Response({'lineas': [{cuenta_codigo, cuenta_nombre, debe, haber, descripcion}, ...]})\n```\n\n### 20.4. Prompt Engineering — Estructura Canónica\n\nEl prompt enviado al modelo Claude tiene la siguiente estructura fija:\n\n```\nEres un contador experto en NIIF PYMES Colombia con amplio conocimiento del PUC.\n\nDocumento a contabilizar:\n- Tipo: {tipo_label}           ← FacturacionAgent / GastosAgent / etc.\n- Numero: {numero}\n- Tercero: {tercero_nombre} (NIT: {tercero_nit})\n- Subtotal: $ {subtotal}\n- Impuestos/Retenciones: $ {impuestos}\n- Total a pagar/cobrar: $ {total}\n\nCuentas PUC nivel 6 disponibles para {tipo_label}:\n- 130505: Clientes nacionales (ACTIVO)\n- 510506: Salarios (GASTO)\n- ...  ← máx 50 cuentas filtradas por APP_ORIGEN_PREFIJOS[app_label]\n\nGenera las lineas del asiento contable en partida doble garantizando que\nla suma del Debe sea exactamente igual a la suma del Haber.\nResponde UNICAMENTE con un JSON valido (sin markdown, sin texto adicional):\n{\"lineas\": [{\"cuenta_codigo\": \"string\", \"debe\": 0.00, \"haber\": 0.00, \"descripcion\": \"string\"}, ...]}\n```\n\n### 20.5. Seguridad y Validaciones Post-IA\n\nToda cuenta sugerida por la IA es validada antes de ser retornada al frontend:\n1. **Existencia**: `CuentaContable.objects.filter(empresa_id=empresa_id, codigo=codigo)` — IDOR prevention\n2. **Nivel auxiliar**: `nivel == 6` — cumple NIIF PYMES y `_validar_cuentas_auxiliares()`\n3. **Activa*"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#19-MEMORY",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "MEMORY",
+        "number": "19",
+        "title": "Memory Bank y Estado a Largo Plazo (MEMORY.md)",
+        "line": 753,
+        "body": "**REGLA OBLIGATORIA PARA TODOS LOS AGENTES Y EDITORES DE CÓDIGO (Claude Code, Cursor, Copilot, Antigravity, etc.)**\n\n1. **Lectura Inicial Obligatoria:** Al iniciar cualquier sesión, tarea o contexto nuevo, el agente/editor DEBE leer el archivo `MEMORY.md` ubicado en la raíz del proyecto.\n2. **Propósito del Memory Bank:** `MEMORY.md` es la fuente canónica del estado actual del proyecto, decisiones arquitectónicas recientes (ADRs) y el progreso activo. Su objetivo es evitar refactorizaciones cíclicas y la pérdida de contexto en tareas extensas.\n3. **Mantenimiento Continuo:** Al finalizar hitos importantes, implementar cambios estructurales o resolver bugs complejos, el agente DEBE actualizar proactivamente `MEMORY.md` para reflejar el nuevo estado, garantizando que futuras sesiones hereden este conocimiento.\n4. **Inmutabilidad de ADRs:** Las decisiones listadas bajo la sección de ADRs en `MEMORY.md` no pueden ser alteradas ni refactorizadas sin autorización explícita del usuario principal.\n\n---"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#26-HTMX-OFFCANVAS",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "HTMX-OFFCANVAS",
+        "number": "26",
+        "title": "Patron Anti-Backdrop: Offcanvas + HTMX (Bootstrap 5)",
+        "line": 764,
+        "body": "**PROBLEMA:** Combinar `hx-swap=\"innerHTML\"` con `bootstrap.Offcanvas.getOrCreateInstance(el).show()` produce **pantalla negra en el segundo intento** de apertura. El swap elimina el elemento DOM pero no el `.offcanvas-backdrop` que Bootstrap dejó en `<body>`. Al volver a mostrar, se acumula un segundo backdrop → opacidad doble → pantalla completamente negra.\n\n### 26.1. Patron Obligatorio — `mostrarOffcanvasSeguro(el)`\n\n**[PROHIBIDO]** en cualquier handler que abra un offcanvas post-HTMX swap:\n```javascript\n// ❌ INCORRECTO — acumula backdrops\nbootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();\n```\n\n**[OBLIGATORIO]** usar el helper de limpieza antes de mostrar:\n```javascript\n// ✅ CORRECTO — limpia backdrops huerfanos, crea instancia fresca\nfunction mostrarOffcanvasSeguro(el) {\n    if (!el || !w.bootstrap?.Offcanvas) return;\n    d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());\n    d.body.classList.remove('overflow-hidden', 'modal-open');\n    var prev = bootstrap.Offcanvas.getInstance(el);\n    if (prev) prev.dispose();\n    new bootstrap.Offcanvas(el).show();\n}\nmostrarOffcanvasSeguro(offcanvasEl);\n```\n\nEn templates con `hx-on::after-request`, usar el helper global registrado en el template padre del modulo:\n```html\nhx-on::after-request=\"if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-id'); }\"\n```\n\n`sintelAbrirOffcanvas` encapsula identicamente la misma logica de limpieza.\n\n> **CRITICO — Regla de scope `hx-on::` (incidente 2026-06-01):**\n> `hx-on::` en un botón/form SOLO captura eventos que se disparan en ESE elemento.\n> En HTMX 1.9.x:\n> - `htmx:afterRequest` → dispara en el **elemento iniciador** → `hx-on::after-request` funciona en botones\n> - `htmx:afterSettle` → dispara en el **elemento target** (el div receptor del swap) → `hx-on::after-settle` NO funciona en botones\n>\n> **Usar `hx-on::after-request` en botones** para abrir offcanvas post-HTMX (el swap inline ocurre de forma sícrona ANTES de que se dispare `afterRequest`).\n> **Usar `document.addEventListener('htmx:afterSettle', ...)` en JS** para inicializar formularios en los módulos editor.\n\n### 26.2. Contenedores HTMX — SSoT en Template Padre\n\n**[PROHIBIDO]** declarar el mismo `id` de contenedor HTMX en dos templates distintos del mismo modulo.\n\n**Regla:** el template que incluye los sub-templates (`list_inventario.html`, etc.) es la SSoT de los contenedores HTMX:\n```html\n<!-- ✅ CORRECTO: definidos UNA SOLA VEZ en el template padre -->\n<div id=\"offcanvas-container-inventario\"></div>\n<div id=\"offcanvas-container-activos\"></div>\n<div id=\"offcanvas-container-servicios\"></div>\n```\n\nLos sub-templates incluidos (`list_productos.html`, `list_activos.html`, etc.) **NO deben** repetir estos contenedores. Duplicar un `id` en el DOM hace que HTMX apunte al primer match (dentro de un pane oculto) en vez del contenedor correcto.\n\n### 26.3. Inicializacion del Helper Global\n\nEn el template padre del modulo agregar el script de definicion:\n```html\n<script>\n(function() {\n    window.sintelAbrirOffcanvas = function(id) {\n        document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });\n        document.body.classList.remove('overflow-hidden', 'modal-open');\n        var el = document.getElementById(id);\n        if (el && window.bootstrap && window.bootstrap.Offcanvas) {\n            var prev = bootstrap.Offcanvas.getInstance(el);\n            if (prev) prev.dispose();\n            new bootstrap.Offcanvas(el).show();\n        }\n    };\n})();\n</script>\n```\n\n### 26.4. Diagnostico Rapido\n\n```bash\n# Detecta todos los getOrCreateInstance que pueden acumular backdrops\ngrep -rn \"getOrCreateInstance\" apps/tenant/*/static/*/js/ --include=\"*.js\"\n# Cada match debe ser evaluado: si viene despues de htmx.ajax o hx-swap → migrar a mostrarOffcanvasSeguro\n```\n\n---"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#27-UUID-FORMS",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "UUID-FORMS",
+        "number": "27",
+        "title": "UUID-Safe Form Submissions — PROHIBIDO parseInt en Selects de API",
+        "line": 850,
+        "body": "**PROBLEMA:** Los selects (`<select>`) cuyos options se cargan dinamicamente desde la API reciben `option.value = item.id` donde `item.id` es un **UUID string** (porque `CategoriaItemListSerializer` declara `id = serializers.UUIDField(source='uuid')`). Aplicar `parseInt()` sobre ese value extrae solo el prefijo numerico del UUID, generando un PK entero incorrecto.\n\n**Ejemplo del fallo:**\n```\nUUID del item seleccionado:  \"9abc1234-xxxx-...\"\nparseInt(\"9abc1234...\", 10) = 9              ← extrae solo el '9' inicial\nPayload enviado: { categoria: 9 }           ← entero incorrecto\nBackend: CategoriaItem.objects.get(pk=9) → DoesNotExist\nError: \"Clave primaria '9' invalida — objeto no existe\"\n```\n\n### 27.1. Patron Obligatorio en Editores JS\n\n**[PROHIBIDO]** convertir a entero cualquier campo de FK que puede ser UUID:\n```javascript\n// ❌ INCORRECTO — corrompe UUID en entero parcial\ncategoria: formData.get('categoria') ? parseInt(formData.get('categoria'), 10) : null,\ncategoria: parseInteger(formData.get('categoria')),\n```\n\n**[OBLIGATORIO]** enviar el valor crudo (string):\n```javascript\n// ✅ CORRECTO — UUIDOrPKRelatedField maneja tanto UUIDs como enteros\ncategoria: formData.get('categoria') || null,\n```\n\n`UUIDOrPKRelatedField.to_internal_value(data)` ya discrimina internamente:\n- Si `data.isdigit()` → lookup por PK entero\n- Si no → lookup por UUID: `queryset.get(uuid=data_str)`\n\nNo se necesita ninguna conversion en el frontend.\n\n### 27.2. Patron Obligatorio en Utils de Carga de Selects\n\nCuando se compara `selectedId` con `option.value` para preseleccionar, usar comparacion de strings (no enteros):\n```javascript\n// ❌ INCORRECTO — parseInt(UUID) da NaN o entero parcial\nvar selId = selectedId ? parseInt(selectedId, 10) : null;\nif (selId && cat.id === selId) { option.selected = true; }\n\n// ✅ CORRECTO — comparacion UUID-safe\nvar selId = selectedId ? String(selectedId) : null;\nif (selId && String(cat.id) === selId) { option.selected = true; }\n```\n\n### 27.3. Alcance de la Regla\n\nAplica a TODOS los campos de FK en formularios de inventario y cualquier app que use `Utils.loadCategoriasSelect` o cualquier funcion que cargue options desde la API:\n- `categoria` en Producto, Servicio, Activo Fijo\n- Cualquier campo FK con `UUIDOrPKRelatedField` en el serializer\n- Cualquier `<select>` cuyas opciones vengan de `GET /api/v1/*/`\n\n### 27.4. Diagnostico\n\n```bash\n# Detecta todos los parseInt sobre campos de formulario FK en editores JS\ngrep -rn \"parseInt.*formData\\|parseInteger.*formData\" apps/tenant/*/static/*/js/features/\n# Cada match sobre campos de FK (categoria, producto, servicio, etc.) debe ser migrado\n```\n\n---\n\n## Apendice A. Comandos de Operacion\n\n### Docker / Make (Desarrollo)\n- **Levantar servicios:** `make up` (web:8000, db:5432, redis:6379, celery)\n- **Detener:** `make down` | **Logs:** `make logs` | **Shell:** `make shell`\n- **Directo:** `docker compose up --build`\n- **REGLA CRITICA — Healthcheck PostgreSQL:** El healthcheck del servicio `db` DEBE usar `psql -c 'SELECT 1'`, NUNCA `pg_isready`. `pg_isready` solo verifica TCP y produce falso-positivo durante la inicialización del DB. Ver `skills/workflow/docker-services.md`.\n- **REGLA CRITICA — Superusuario del sistema:** El usuario administrador del dominio público (`sintel.net.co/admin/`) se crea SIEMPRE y SOLO de forma manual con `python manage.py createsuperuser [--tenant <schema>]`. NUNCA se crea automáticamente al arrancar el servidor. `ensure_admin` SOLO verifica existencia — no crea usuarios. PROHIBIDO usar `ensure_admin` para crear administradores. Para la primera instalación ejecutar `createsuperuser` manualmente.\n\n### Serializers — Obtener empresa_id (REGLA CRITICA)\n- **PROHIBIDO en serializers:** `self.context.get('request').user.perfil.empresa_id` — lanza `AttributeError: 'User' object has no attribute 'perfil'` cuando el user no tiene `TenantProfile` asociado. Afecta GET list/detail porque el serializer se ejecuta antes de cualquier guard de perfil.\n- **Patrón correcto:** Agregar `_get"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#21-KARPATHY",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "KARPATHY",
+        "number": "21",
+        "title": "Karpathy Coding Principles (Caution over Speed)",
+        "line": 966,
+        "body": "**PRINCIPIO FUNDAMENTAL:** Reducir errores comunes de LLMs mediante cautela, simplicidad y cambios quirúrgicos.\n\n1.  **Pensar antes de Codificar**: No asumir. Si hay incertidumbre, preguntar. Explicitar suposiciones. Si hay múltiples interpretaciones, presentarlas antes de elegir una.\n2.  **Simplicidad Primero**: Código mínimo necesario. Prohibido crear abstracciones para código de un solo uso o añadir \"flexibilidad\" no solicitada. Si se puede hacer en 50 líneas en vez de 200, reescribir.\n3.  **Cambios Quirúrgicos**: Tocar SOLO lo estrictamente necesario. No \"mejorar\" código adyacente ni refactorizar lo que no está roto. Empatar el estilo existente. Si se detecta código muerto no relacionado, reportarlo pero NO borrarlo sin permiso.\n4.  **Ejecución Basada en Objetivos**: Transformar tareas en metas verificables. Para tareas de múltiples pasos, definir un plan: `1. [Paso] → verificar: [check]`."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#22-CSS-ISOLATION",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "CSS-ISOLATION",
+        "number": "22",
+        "title": "Aislamiento de Estilos CSS por Aplicacion",
+        "line": 975,
+        "body": "**PRINCIPIO FUNDAMENTAL:** Los estilos visuales (CSS) de cada aplicacion son propiedad exclusiva de esa app. Ninguna app puede modificar, inyectar ni sobreescribir la apariencia visual de otra app desde el exterior. Los estilos solo pueden originarse y aplicarse desde dentro de la misma app.\n\n### 22.1. SSoT de Assets CSS por App\n\n- Todo estilo visual que afecte los templates de una app DEBE provenir EXCLUSIVAMENTE del directorio estatico de esa misma app.\n- **Ruta obligatoria (apps tenant):** `apps/tenant/<app_name>/static/<app_name>/css/`\n- **Ruta obligatoria (apps public):** `apps/public/<app_name>/static/<app_name>/css/`\n- Cada app centraliza la inclusion de sus hojas de estilo en el partial `partials/assets_<app_name>.html`. Esa es la UNICA puerta de entrada autorizada para CSS de la app.\n\n### 22.2. Prohibiciones Estrictas (Cross-App CSS)\n\n1. **[PROHIBIDO] `<link>` cross-app:** Un template de `clientes` NO puede cargar un CSS ubicado en `facturas/static/facturas/css/` ni en ninguna app distinta de `clientes`.\n2. **[PROHIBIDO] Reglas CSS cross-app:** Un archivo `gastos.css` NO puede definir reglas que apunten a selectores o clases visuales de `proveedores`, `clientes` u otra app.\n3. **[PROHIBIDO] Bloques `<style>` cross-app:** Prohibido agregar `<style>` en templates de una app con reglas que modifiquen componentes de otra app.\n4. **[PROHIBIDO] Atributos `style=\"\"` cross-app:** Prohibido usar `style=\"\"` inline en templates de una app para sobreescribir estilos definidos por otra app.\n\n**Ejemplo PROHIBIDO:**\n```html\n<!-- En apps/tenant/clientes/templates/tenant/clientes/list_cliente.html -->\n<link href=\"{% static 'facturas/css/tabla.css' %}\" rel=\"stylesheet\">\n<style>.proveedor-card { color: red; }</style>\n```\n\n**Ejemplo CORRECTO:**\n```html\n<!-- En apps/tenant/clientes/templates/tenant/clientes/list_cliente.html -->\n{% include \"tenant/clientes/partials/assets_clientes.html\" %}\n```\n\n### 22.3. Excepciones Controladas (CSS Global Autorizado)\n\n| Fuente | Razon |\n|---|---|\n| Bootstrap 5 via CDN | Sistema de diseno UI compartido — infraestructura global |\n| `apps/tenant/core/static/core/css/` | Shell UI estructural: navbar, sidebar, layout base. NUNCA reglas de apps de dominio |\n| Variables CSS `--sintel-*` del shell `core` | Tokens de diseno globales permitidos como custom properties |\n\n### 22.4. Auditoria y Cumplimiento\n\n- Toda PR que modifique archivos `.css` o templates DEBE verificar que no hay referencias cross-app en `<link href>`, `{% static %}` ni bloques `<style>`.\n- Un agente que detecte una violacion DEBE reportarla al usuario antes de continuar, sin propagarla."
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#23-JS-ISOLATION",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "JS-ISOLATION",
+        "number": "23",
+        "title": "Aislamiento de JavaScript por Aplicacion",
+        "line": 1019,
+        "body": "**PRINCIPIO FUNDAMENTAL:** El codigo JavaScript de cada aplicacion es propiedad exclusiva de esa app. Ninguna app puede importar, invocar ni extender la logica JS de otra app de dominio directamente. Los scripts solo pueden originarse y ejecutarse desde dentro de la misma app.\n\n### 23.1. SSoT de Assets JS por App\n\n- Todo script que controle la logica o UI de una app DEBE residir EXCLUSIVAMENTE en el directorio estatico de esa misma app.\n- **Ruta obligatoria (apps tenant):** `apps/tenant/<app_name>/static/<app_name>/js/`\n- **Ruta obligatoria (apps public):** `apps/public/<app_name>/static/<app_name>/js/`\n- Cada app carga sus propios scripts via el partial `partials/assets_<app_name>.html`. Esa es la UNICA puerta de entrada autorizada para JS de la app.\n- Namespace obligatorio: `window.Sintel.<AppName>` — cada app opera bajo su propio namespace global sin colisionar con otros.\n\n### 23.2. Prohibiciones Estrictas (Cross-App JS)\n\n1. **[PROHIBIDO] `<script src>` cross-app:** Un template de `clientes` NO puede cargar un `.js` ubicado en `facturas/static/facturas/js/` ni en ninguna app distinta de `clientes`.\n2. **[PROHIBIDO] Llamadas cross-namespace:** Un modulo de `gastos` NO puede invocar directamente funciones de `window.Sintel.Clientes`, `window.Sintel.Facturas` u otro namespace de app de dominio.\n3. **[PROHIBIDO] Importar modulos JS de otra app:** Prohibido referenciar funciones, clases o utilidades definidas en los archivos `.js` de otra app de dominio (ej. usar `clientes.api.js` desde `proveedores`).\n4. **[PROHIBIDO] Modificar el namespace de otra app:** Prohibido extender, sobreescribir o monkey-patchear el objeto `window.Sintel.<OtraApp>` desde fuera de esa app.\n5. **[PROHIBIDO] Eventos cross-app con acoplamiento directo:** Prohibido que una app escuche eventos HTMX o DOM disparados por otra app para ejecutar logica de negocio propia, salvo via eventos estandarizados del shell `core` (ej. `sintel:tenant-ready`).\n\n**Ejemplo PROHIBIDO:**\n```html\n<!-- En apps/tenant/clientes/templates/tenant/clientes/list_cliente.html -->\n<script src=\"{% static 'facturas/js/facturas.api.js' %}\"></script>\n<script>\n  // Llamada directa al namespace de otra app\n  window.Sintel.Proveedores.table.reload();\n</script>\n```\n\n**Ejemplo CORRECTO:**\n```html\n<!-- En apps/tenant/clientes/templates/tenant/clientes/list_cliente.html -->\n{% include \"tenant/clientes/partials/assets_clientes.html\" %}\n<script>\n  // Solo invoca el namespace propio\n  window.Sintel.Clientes.init();\n</script>\n```\n\n### 23.3. Excepciones Controladas (JS Global Autorizado)\n\n| Fuente | Razon |\n|---|---|\n| CDN: Bootstrap 5, HTMX, Tabulator, Font Awesome | Infraestructura UI compartida — permitida globalmente |\n| `apps/tenant/core/static/core/js/common/` | Helpers globales de infraestructura: `ui-manager.js`, `tabulator.factory.js`, `notyf.init.js`, `http.js` |\n| `apps/public/console/static/js/jwt-auth.js` | Helper global de autenticacion JWT — `window.jwtAuth` |\n| Eventos del shell `core` (`sintel:*`) | Canal de comunicacion inter-app autorizado via Custom Events estandarizados |\n\n### 23.4. Canal de Comunicacion Inter-App Autorizado (Custom Events)\n\nCuando una app necesita notificar a otra de un cambio de estado (ej. un cliente nuevo creado que debe reflejarse en facturas), el mecanismo autorizado es:\n\n```javascript\n// App emisora (clientes): dispara evento estandarizado\ndocument.dispatchEvent(new CustomEvent('sintel:cliente:created', { detail: { uuid } }));\n\n// App receptora (facturas): escucha el evento estandarizado\ndocument.addEventListener('sintel:cliente:created', (e) => {\n    window.Sintel.Facturas.ClienteSelector.refresh(e.detail.uuid);\n});\n```\n\n- El nombre del evento DEBE seguir el patron `sintel:<app>:<accion>`.\n- El `detail` solo expone datos minimos necesarios (UUID, estado). NUNCA objetos internos del modulo emisor.\n- La app receptora es responsable de manejar el evento con su propia logica encapsulada.\n\n### 23.5. Auditoria y Cumplimiento\n\n- Toda PR que modifique archivos `.js"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#24-TESTING",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "TESTING",
+        "number": "24",
+        "title": "Patrones Obligatorios para Tests Multi-Tenant",
+        "line": 1091,
+        "body": "**Post-mortem: Bug 2026-05-15** — Tests de permisos CRUD fallaban con `AssertionError: 405 != 201/200` para el usuario `admin_user` incluso en DEBUG. Causa: usuarios creados en esquema incorrecto, rol `STAFF` inexistente, sin `TenantProfile` en el tenant.\n\n### 24.1. Regla de Tres Esquemas\n\n| Modelo | Esquema | Como crearlo en tests |\n|--------|---------|----------------------|\n| `User` (AUTH_USER_MODEL) | **public** | `with schema_context(get_public_schema_name()): User.objects.create_user(...)` |\n| `TenantMembership` | **public** | `with schema_context(get_public_schema_name()): TenantMembership.objects.create(...)` |\n| `TenantProfile` | **tenant activo** | `TenantProfile.objects.create(...)` (sin schema_context, ya estamos en tenant) |\n| `Empresa`, `CategoriaItem`, etc. | **tenant activo** | `Empresa.objects.create(...)` directamente |\n\n**[PROHIBIDO]** Crear `User` o `TenantMembership` sin el `schema_context` del esquema public en tests de tenant. Esto causa que `request.user.is_authenticated == False` en runtime, bloqueando `_check_enforced_mode` con un falso `405`.\n\n### 24.2. SSoT de Roles (solo estos 3 existen)\n\n```\nADMIN     → TenantProfile.rol='ADMIN'     → Lectura + Escritura + Admin\nOPERADOR  → TenantProfile.rol='OPERADOR'  → Lectura + Escritura limitada\nVISOR     → TenantProfile.rol='VISOR'     → Solo lectura\n```\n\n**[PROHIBIDO]** Usar `rol='STAFF'`, `rol='USER'` o cualquier otro rol en `TenantMembership` o `TenantProfile`. No existen en `RolTenant` (`apps/tenant/perfil/models.py`) y causan fallos silenciosos de permisos.\n\n### 24.3. setUp Canónico para Tests de Permisos\n\n```python\nfrom django_tenants.utils import get_public_schema_name, schema_context\nfrom django.contrib.auth import get_user_model\nfrom rest_framework.test import APIClient\nfrom tests.tenant.base_test import SintelTenantTestCase\n\nUser = get_user_model()\n\nclass TestMiModeloCRUD(SintelTenantTestCase):\n\n    def setUp(self):\n        super().setUp()\n\n        # 1. Empresa singleton (requerida por get_empresa_singleton() y _get_empresa_id())\n        self.empresa = Empresa.objects.create(\n            razon_social=\"Test\", nit=\"900000001\", singleton_key=1\n        )\n\n        # 2. Usuarios en esquema PUBLIC\n        public_schema = get_public_schema_name()\n        with schema_context(public_schema):\n            self.admin_user = User.objects.create_user(\n                username=\"admin@test.com\", email=\"admin@test.com\", is_active=True\n            )\n            self.visor_user = User.objects.create_user(\n                username=\"visor@test.com\", email=\"visor@test.com\", is_active=True\n            )\n\n        # 3. TenantProfile en esquema TENANT (conexion ya activa desde super().setUp())\n        from apps.tenant.perfil.models import TenantProfile\n        TenantProfile.objects.create(user=self.admin_user, empresa=self.empresa, rol='ADMIN')\n        TenantProfile.objects.create(user=self.visor_user, empresa=self.empresa, rol='VISOR')\n\n        # 4. TenantMembership en esquema PUBLIC\n        with schema_context(public_schema):\n            from apps.public.tenants.models import TenantMembership\n            TenantMembership.objects.create(\n                client=self.tenant, user=self.admin_user, rol='ADMIN', is_active=True\n            )\n            TenantMembership.objects.create(\n                client=self.tenant, user=self.visor_user, rol='VISOR', is_active=True\n            )\n\n        # 5. Clientes API — UNO POR ROL (no reutilizar self.api_client)\n        domain = self.domain.domain\n        self.admin_client = APIClient(HTTP_HOST=domain)\n        self.admin_client.force_authenticate(user=self.admin_user)\n        self.visor_client = APIClient(HTTP_HOST=domain)\n        self.visor_client.force_authenticate(user=self.visor_user)\n```\n\n### 24.4. Arquitectura de _check_enforced_mode\n\n`BaseViewSet._check_enforced_mode(request)` implementa la siguiente logica en inventario:\n\n```\n¿request.user autenticado?  → No  → 405 (fallo silencioso si usuario mal creado)\n¿metodo SAFE (GET)?    "
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#25-UUID-MIGRATION",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "UUID-MIGRATION",
+        "number": "25",
+        "title": "Migracion Obligatoria de Lookup Field: PK Entero → UUID",
+        "line": 1320,
+        "body": "**PRINCIPIO:** Ningún ViewSet tenant debe exponer PKs enteros en URLs públicas. §14.6 establece `lookup_field=\"uuid\"` como el estándar heredado de `BaseTenantViewSet`. Esta sección define el diagnóstico, patrón y verificación para cualquier ViewSet que use `lookup_field='id'`.\n\n### 25.1. Regla Mandatoria\n\n**[PROHIBIDO]** Declarar `lookup_field = 'id'` o `lookup_url_kwarg = 'id'` en ViewSets que hereden de `BaseTenantViewSet`. El `lookup_field = 'uuid'` se hereda automáticamente — no redeclarar.\n\n**[OBLIGATORIO]** Todo modelo que exponga un ViewSet con lookup DEBE tener un campo `uuid`:\n```python\n# Patron canonico (AGENTS.md §25) — igual en todos los modelos conformes\nuuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)\n```\n\n### 25.2. Diagnostico\n\n```bash\n# Detecta ViewSets que sobreescriben lookup_field con 'id'\ngrep -rn \"lookup_field\\s*=\\s*['\\\"]id['\\\"]\" apps/tenant/ --include=\"*.py\"\ngrep -rn \"lookup_url_kwarg\\s*=\\s*['\\\"]id['\\\"]\" apps/tenant/ --include=\"*.py\"\n\n# Detecta modelos sin campo uuid\ngrep -rL \"uuid = models.UUIDField\" apps/tenant/*/models.py\n```\n\n### 25.3. Patron de Migracion (4 Pasos Coordinados)\n\n**Paso 1 — Modelo:** Agregar campo `uuid`.\n```python\nimport uuid as uuid_module\n# En la clase del modelo (despues de SintelTenantBaseModel):\nuuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)\n```\n\n**Paso 2 — Migracion de BD** (patron seguro, 3 fases):\n```python\n# 0. Agregar nullable\nmigrations.AddField(model_name='mimodelo', name='uuid',\n    field=models.UUIDField(db_index=True, null=True, blank=True, editable=False))\n# 1. Poblar registros existentes via SQL\nmigrations.RunPython(lambda apps, schema: schema.execute(\n    \"UPDATE <tabla> SET uuid = gen_random_uuid() WHERE uuid IS NULL;\"))\n# 2. Hacer unique y requerido\nmigrations.AlterField(model_name='mimodelo', name='uuid',\n    field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True))\n```\n\n**Paso 3 — Backend: Serializer + Selector + ViewSet:**\n- Serializer: agregar `'uuid'` a `Meta.fields` y `read_only_fields`.\n- Selector `get_detail()`: cambiar `pk=valor` → `uuid=valor`.\n- Selector `LIST_FIELDS` y `DETAIL_FIELDS`: agregar `'uuid'`.\n- ViewSet: eliminar `lookup_field = 'id'` y `lookup_url_kwarg = 'id'`.\n- Acciones `render-offcanvas/`: cambiar `Model.objects.get(id=val)` → `Model.objects.get(uuid=val)`.\n\n**Paso 4 — Frontend (coordinar en el mismo PR):**\n- `<app>.api.js`: Las funciones que construyen URLs de detalle reciben UUID desde el serializer.\n- `<modelo>_list.js`: Cambiar `data.id` → `data.uuid` al leer el identificador de Tabulator rows.\n- Templates: Cambiar `data-instance-id=\"{{ instance.id }}\"` → `data-uuid=\"{{ instance.uuid }}\"`.\n- Para edicion via formulario: `form.dataset.uuid` en lugar de `form.querySelector('[name=\"id\"]')`.\n\n### 25.4. Verificacion Post-Migracion\n\n```bash\n# No deben existir\ngrep -rn \"lookup_field.*=.*['\\\"]id['\\\"]\" apps/tenant/ --include=\"viewsets.py\"\ngrep -rn \"data.id\\b\" apps/tenant/*/static/*/js/features/*.js\ngrep -rn \"data-instance-id\" apps/tenant/ --include=\"*.html\"\n\n# Smoke test manual\ncurl -s http://tenant.local/api/v1/<app>/{UUID}/ | python3 -m json.tool  # debe dar 200\ncurl -s http://tenant.local/api/v1/<app>/1/  # debe dar 404 (integer bloqueado)\n```\n\n### 25.5. Registro de Estado por App\n\n| App | ViewSet | Estado | Notas |\n|-----|---------|--------|-------|\n| gastos | GastoViewSet | **MIGRADO** (v3.7.6) | lookup uuid, serializer uuid, JS uuid |\n| gastos | ResolucionDIANViewSet | **MIGRADO** (v3.7.6) | lookup uuid, serializer uuid, JS uuid |\n| Demás ViewSets tenant | — | CONFORMES | Heredan uuid de BaseTenantViewSet |\n\n**Actualizar esta tabla** al migrar nuevas apps o confirmar conformidad.\n\n### 25.6. Prohibiciones\n\n- **[PROHIBIDO]** Puente permanente `get_object()` que soporte PK entero. Es transitorio (max 1 sprint) y debe eliminarse una vez el frontend migra.\n- **[PROHIBIDO]** Hardcodear `/api/v1/<app>/{integer}/` en fronten"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#28-EDIT-FORM",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "EDIT-FORM",
+        "number": "28",
+        "title": "Marco de Diagnostico: Formularios de Edicion (Edit Form Fields Reset)",
+        "line": 1410,
+        "body": "**Contexto:** Aplica a cualquier app del proyecto cuando al abrir un offcanvas de edicion los campos aparecen en blanco o sin los valores almacenados en base de datos.\n\n### 28.1. Las Tres Fuentes de Datos en un Formulario de Edicion\n\nUn formulario de edicion tiene siempre estas 3 fuentes que deben coordinarse:\n\n```\n1. Template Django       → pre-renderiza con {% if instance %}...selected{% endif %}\n2. JS async catalogos    → cargarServicios(), cargarProveedores(), cargarXxx()\n3. JS async API detail   → cargarDetalles(uuid) → GET /api/v1/{app}/{uuid}/\n```\n\nCuando los campos aparecen vacios, **una fuente esta sobreescribiendo a otra** — generalmente (3) destruye (1), o existe un bloque de limpieza que no distingue \"crear\" de \"editar\".\n\n---\n\n### 28.2. Inventario de Campos por Tipo\n\nAntes de diagnosticar, clasificar cada campo roto:\n\n```\nTIPO                              MECANISMO ESPERADO EN TEMPLATE\n─────────────────────────────     ─────────────────────────────────────────────\n<input type=\"text/number/date\">   value=\"{{ instance.campo }}\"\n<textarea>                        {{ instance.campo }} entre los tags\n<select> opciones estaticas       {% if instance.campo == val %}selected{% endif %}\n<select> opciones dinamicas       data-selected=\"{{ instance.campo_uuid }}\" + JS\n<input type=\"hidden\"> (sync)      value=\"{{ instance.campo_id }}\"\n```\n\n---\n\n### 28.3. Checklist de Bugs mas Comunes\n\n#### A) Limpieza incondicional en wizard/step navigation (CRITICO)\n\n```javascript\n// BUG — borra siempre, incluyendo modo edicion\nif (stepIdx === 0) {\n    select.value = '';\n    hiddenInput.value = '';\n}\n\n// FIX — solo limpiar si es proyecto/instancia NUEVA\nif (stepIdx === 0 && !currentInstance) {\n    select.value = '';\n    hiddenInput.value = '';\n}\n```\n\n**Por que es seguro:** Cuando `irAStep()` se llama desde `cargarDetalles()`, `currentInstance` ya fue asignado (API respondio). Cuando se llama desde `init()` para una instancia nueva, `currentInstance === null`.\n\n**Buscar en el codigo:** cualquier `select.value = ''` o `input.value = ''` dentro de funciones de navegacion de pasos/tabs.\n\n---\n\n#### B) Mismatch PK entero vs UUID en selects dinamicos\n\n```javascript\n// BUG — API devuelve PK integer, select tiene valores UUID\nconst val = currentInstance.campo_id;   // → 42  (integer)\nselect.value = val;                     // falla, no existe <option value=\"42\">\n\n// FIX — exponer UUID desde serializer y usarlo en JS\n// serializers.py:\ncampo_uuid = serializers.CharField(source='campo.uuid', read_only=True, allow_null=True)\n\n// editor.js:\nconst val = currentInstance.campo_uuid;  // → \"abc-123-...\"\nselect.value = val;                      // coincide con option.value del select dinamico\n```\n\n**Regla:** Si un `<select>` se carga dinamicamente con opciones que tienen `value = UUID`, el campo del serializer que lo pre-selecciona DEBE devolver un UUID, no un PK entero.\n\n---\n\n#### C) Campo `write_only` en serializer — no llega al GET\n\n```python\n# BUG — el JS intenta leer este campo pero no viene en la respuesta GET\nextra_kwargs = { 'responsable_id': {'write_only': True} }\n```\n```javascript\nsyncSelect('responsable-select', data.responsable_id);  // → undefined, no-op\n```\n\n**Fix A:** Si el template ya pre-renderiza el select con `selected`, no hay que sincronizarlo en JS. Solo asegurar que ningun cleanup lo borre (ver §28.3.A).\n\n**Fix B:** Si no viene pre-renderizado, agregar campo read-only separado:\n```python\nresponsable_uuid = serializers.CharField(source='responsable.uuid', read_only=True, allow_null=True)\n```\n\n---\n\n#### D) Race condition entre carga de catalogo y asignacion de valor\n\n```\nEscenario A: cargarDetalles() termina ANTES que cargarCatalogo()\n  → asigna data-selected en el <select>\n  → select.value = uuid falla (no hay opciones aun)\n  → cuando cargarCatalogo() termina, lee data-selected → selecciona ✓\n\nEscenario B: cargarCatalogo() termina ANTES que cargarDetalles()\n  → opciones existen pero data-selected no esta\n  → ninguna opcion seleccionada\n  → "
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#29-ZERO-HARDCODING",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "ZERO-HARDCODING",
+        "number": "29",
+        "title": "Norma de Abstraccion Zero-Hardcoding (Escalabilidad a 1000+ Tenants)",
+        "line": 1593,
+        "body": "**REGLA FUNDAMENTAL — Aplica a TODO el proyecto: `apps/public/`, `apps/tenant/`, `tests/`, `scripts/`, `scratch/`**\n\nLa plataforma SINTEL debe poder aprovisionar y gestionar cualquier numero de tenants sin requerir la modificacion de una sola linea de codigo estatico. Esta norma define los patrones OBLIGATORIOS y los antipatrones PROHIBIDOS.\n\n---\n\n### 29.1. Antipatron A — Listas Estaticas de Tenants [PROHIBIDO]\n\n**[PROHIBIDO]** — Cualquier iteracion manual o lista hardcodeada de schemas o dominios:\n\n```python\n# PROHIBIDO\nfor schema in ['home', 'cliente', 'putito', 'empresa1']:\n    ...\ntenants = [\"public\", \"empresa_a\", \"empresa_b\"]\n```\n\n**[OBLIGATORIO]** — Sustituir SIEMPRE por consultas dinamicas al ORM del modelo `Client`:\n\n```python\n# CORRECTO\nfrom apps.public.tenants.models import Client\nfor tenant in Client.objects.exclude(schema_name='public').filter(is_active=True):\n    with tenant_context(tenant):\n        ...\n```\n\n**Variante con filtro opcional `--schema`:**\n```python\ntenants = Client.objects.exclude(schema_name='public').filter(is_active=True)\nif schema_filter:  # argumento CLI opcional\n    tenants = tenants.filter(schema_name=schema_filter)\n```\n\n---\n\n### 29.2. Antipatron B — Nombres Propios y Dominios Fijos [PROHIBIDO]\n\n**[PROHIBIDO]** — Cadenas literales apuntando a tenants especificos de produccion:\n\n```python\n# PROHIBIDO\ntenant = Client.objects.get(schema_name='home')\ndomain = Domain.objects.get(domain='cliente.sintel.net.co')\nhost = \"home.sintel.net.co\"\nurl = \"http://tupapi.sintel.net.co/api/\"\n```\n\n**[OBLIGATORIO]** — Resolver dinamicamente desde el ORM o variables de entorno:\n\n```python\n# CORRECTO\ntenant = Client.objects.exclude(schema_name='public').filter(is_active=True).first()\ndomain = Domain.objects.filter(tenant=tenant, is_primary=True).first()\nhost = domain.domain  # resuelto en runtime\nurl = f\"{protocol}://{domain.domain}/api/\"\n```\n\n**[EXCEPCION DOCUMENTADA]** — `schema_name='public'` y el dominio raiz `sintel.net.co` son la unica excepcion permitida. Son el dominio de la plataforma, no un tenant privado. Su DNS se gestiona independientemente. Esta excepcion DEBE estar marcada con comentario explicito en el codigo.\n\n---\n\n### 29.3. Antipatron C — Ejemplos Hardcodeados en Logs y Help Text [PROHIBIDO]\n\n**[PROHIBIDO]** — Ejemplos en `help=`, `print()`, docstrings que usen nombres reales de tenants:\n\n```python\n# PROHIBIDO\nhelp = \"Ejecuta el proceso. Ej: --schema cliente\"\nprint(\"Accede via: http://home.sintel.net.co/\")\nprint(\"client = Client.objects.get(schema_name='putito')\")\n```\n\n**[OBLIGATORIO]** — Usar marcadores genericos abstractos:\n\n```python\n# CORRECTO\nhelp = \"Ejecuta el proceso. Ej: --schema {schema_name}\"\nprint(\"Accede via: http://{schema}.sintel.net.co/\")\nprint(\"client = Client.objects.get(schema_name='<schema_name>')\")\n```\n\n---\n\n### 29.4. Antipatron D — Fixtures de Tests con Nombres de Produccion [PROHIBIDO]\n\n**[PROHIBIDO]** — Fixtures que referencian tenants de produccion o asumen estado de la BD real:\n\n```python\n# PROHIBIDO\ntenant = Client.objects.filter(schema_name='home').first()\ntenant = Client(schema_name='home', nombre='Home Test Tenant', ...)\ndomain = 'home.sintel.net.co'\nclient.defaults[\"HTTP_HOST\"] = \"cliente.sintel.net.co\"\n```\n\n**[OBLIGATORIO]** — Nombres claramente transaccionales que no colisionen con produccion:\n\n```python\n# CORRECTO — schema con prefijo \"test_\", nombres genericos, dominios \".sintel.local\"\nschema_name = \"test_schema_01\"\ntenant = Client(schema_name=schema_name, nombre='Test Tenant Isolation', ...)\ndomain = f\"{schema_name}.sintel.local\"\nclient.defaults[\"HTTP_HOST\"] = domain  # o f\"{self.tenant.schema_name}.sintel.local\"\n```\n\n**Convencion de nombres para fixtures de tests:**\n| Elemento | Patron correcto | Patron incorrecto |\n|---|---|---|\n| schema_name | `test_{app}_{descripcion}_01` | `home`, `cliente`, `empresa` |\n| domain | `test-{desc}-01.sintel.local` | `home.sintel.net.co`, `cliente.sintel.net.co` |\n| HTTP_HOST | `f\"{self.tenant.schema_name}.sintel.local\"` | `\"home.sintel.net.co\"` |\n| nombre Tenant"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#30-ORM-SELECTORS",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "ORM-SELECTORS",
+        "number": "30",
+        "title": "Marco de Referencia: Constantes de Selector y Serializer (Zero-Collision Pattern)",
+        "line": 1772,
+        "body": "**Aplica a:** todas las apps bajo `apps/tenant/` y `apps/public/` sin excepcion.\n\n---\n\n### 30.1. Raiz del problema — dos contextos, una sola constante\n\nLas constantes `LIST_FIELDS` / `DETAIL_FIELDS` en `services/selectors.py` son el SSoT de campos por app.\nSe usan en **dos contextos con reglas incompatibles**:\n\n| Contexto | Uso tipico | Acepta `rel__campo` |\n|---|---|---|\n| **Queryset ORM** `.only()` | `Model.objects.only(*DETAIL_FIELDS)` | SI — traversal ORM valida |\n| **Serializer** `Meta.fields` | `fields = tuple(DETAIL_FIELDS) + (...)` | NO — DRF lanza `ImproperlyConfigured` |\n\nCuando una sola constante alimenta ambos contextos, **cualquier string con `__` (doble guion bajo) la hace explotar** en tiempo de request (no de arranque — `django check` no lo detecta).\n\n> **Incidente de referencia (2026-06-01):**\n> `django.core.exceptions.ImproperlyConfigured: Field name sede__nombre is not valid\n>  for model Factura in FacturaDetailSerializer`\n\n---\n\n### 30.2. Taxonomia de strings validos por contexto\n\n| Tipo de string | Ejemplo | `.only()` ORM | `Meta.fields` serializer |\n|---|---|---|---|\n| Campo de modelo directo | `\"nombre\"`, `\"empresa_id\"`, `\"sede_id\"` | SI | SI |\n| FK id autogenerado | `\"cliente_id\"`, `\"sede_id\"` | SI | SI |\n| Traversal de relacion | `\"sede__nombre\"`, `\"cliente__uuid\"` | SI | NO |\n| Campo de serializer declarado | `\"sede_nombre\"`, `\"tipo_display\"` | NO | SI |\n\n**Regla de oro:** si el string tiene `__` (doble guion bajo), no puede estar en `LIST_FIELDS` ni `DETAIL_FIELDS` si esas constantes se usan en `Meta.fields`.\n\n---\n\n### 30.3. Patron de riesgo — detectarlo\n\nEn `api/serializers.py` de cualquier app, buscar:\n\n```python\n# PATRON DE RIESGO — la constante se pasa directo a Meta.fields\nfields = tuple(DETAIL_FIELDS) + (\"campo_extra\",)\nfields = DETAIL_FIELDS + (\"campo_extra\",)\nfields = tuple(LIST_FIELDS)\n```\n\nSi existe alguno de estos patrones, la constante referenciada **NUNCA puede contener strings con `__`**.\n\n---\n\n### 30.4. Arquitectura correcta — Zero-Collision Pattern\n\nSeparar en tres niveles en `services/selectors.py`:\n\n```python\n# ============================================================\n# NIVEL 1: Campos de modelo puro — validos en AMBOS contextos\n# Regla: solo nombres de atributos directos del modelo Django.\n#        Incluye FK ids (campo_id). NUNCA doble guion bajo.\n# ============================================================\nLIST_FIELDS = (\n    \"id\", \"uuid\", \"empresa_id\",\n    \"nombre\", \"estado\", \"fecha_creacion\",\n    \"cliente_id\",           # FK id autogenerado — valido en ambos\n    \"sede_id\",              # FK id autogenerado — valido en ambos\n)\n\nDETAIL_FIELDS = LIST_FIELDS + (\n    \"descripcion\", \"observaciones\",\n    \"created_at\", \"updated_at\",\n    # solo atributos directos del modelo — nunca rel__campo\n)\n\n# ============================================================\n# NIVEL 2: Traversals ORM — SOLO para .only(), nunca en Meta.fields\n# Prefijo _ = uso interno del modulo selector.\n# Nombrar por relacion: _<RELACION>_TRAVERSALS\n# ============================================================\n_CLIENTE_TRAVERSALS   = (\"cliente__razon_social\", \"cliente__numero_documento\")\n_SEDE_TRAVERSALS      = (\"sede__nombre\", \"sede__uuid\")\n_PROVEEDOR_TRAVERSALS = (\"proveedor__razon_social\",)\n_AREA_TRAVERSALS      = (\"area__nombre\",)\n\n# ============================================================\n# NIVEL 3: Clases Selector — usan NIVEL 1 + NIVEL 2 juntos en .only()\n# ============================================================\nclass MiModeloSelector:\n    @staticmethod\n    def qs_list(empresa_id: int):\n        return MiModelo.objects.filter(\n            empresa_id=empresa_id\n        ).select_related(\n            \"cliente\", \"sede\"    # obligatorio para cada relacion en TRAVERSALS\n        ).only(\n            *LIST_FIELDS,\n            *_CLIENTE_TRAVERSALS,   # inline — no contaminan Meta.fields\n            *_SEDE_TRAVERSALS,\n        )\n\n    @staticmethod\n    def qs_detail(empresa_id: int):\n        return MiModelo.objec"
+      }
+    },
+    {
+      "id": "Rule:AGENTS.md#31-FRONTEND-SSOT",
+      "label": "Rule",
+      "properties": {
+        "source": "AGENTS.md",
+        "tag": "FRONTEND-SSOT",
+        "number": "31",
+        "title": "Unica Fuente de Verdad para Frontend — `.agents/skills/frontend/`",
+        "line": 2064,
+        "body": "**REGLA OBLIGATORIA — Aplica a toda tarea que toque HTML, JS, HTMX, Offcanvas, Tabulator o cualquier componente UI.**\n\nAntes de escribir, modificar o revisar cualquier codigo frontend, el agente DEBE consultar los skills de frontend como unica fuente de verdad:\n\n```\n.agents/skills/frontend/\n  htmx.md              — Patrones HTMX, hx-on::, eventos, OOB, polling\n  ui-management.md     — Offcanvas/Modal lifecycle, UIManager, backdrops\n  crud-fsd.md          — Arquitectura CRUD completa (HTMX + Tabulator + Vanilla JS)\n  vanilla-js.md        — Namespace, window.http(), UUID sin parseInt, CustomEvents\n  tabulator.md         — TabulatorFactory, formatters, cellClick, replaceData\n  dom-ids-sync.md      — Sincronizacion IDs HTML ↔ JS, data-attributes\n  creacion_item_full.md — Patron completo Add Association end-to-end\n```\n\n### 31.1. Protocolo de consulta obligatorio\n\n```\nANTES de cualquier accion frontend:\n  1. Identificar categoria: HTMX / Offcanvas / JS / Tabulator / DOM\n  2. Abrir el skill correspondiente en .agents/skills/frontend/\n  3. Aplicar exactamente el patron documentado\n  4. Si el skill no cubre el caso → escalar al usuario, NO improvisar\n```\n\n### 31.2. Prohibiciones derivadas de los skills\n\n| Prohibicion | Skill de referencia |\n|---|---|\n| `bootstrap.Offcanvas.getOrCreateInstance(el).show()` sin dispose | ui-management.md §2, AGENTS.md §26 |\n| `hx-on::after-settle` en atributos de botones | htmx.md §12.1 |\n| `hx-on::after-swap` en atributos de botones | htmx.md §12.1 (usar `after-request`) |\n| `htmx:afterSwap` en `document.addEventListener` | htmx.md §12.2-B (usar `afterSettle`) |\n| `setTimeout()` como sustituto de `afterSettle` | htmx.md §12.2-B |\n| `parseInt()` sobre campos FK/UUID de API | vanilla-js.md §4, AGENTS.md §27 |\n| Traversals `campo__subcampo` en `LIST_FIELDS`/`DETAIL_FIELDS` | creacion_item_full.md, AGENTS.md §30 |\n| `new Tabulator()` directamente | tabulator.md §1 (usar TabulatorFactory) |\n| Codigo JS global sin namespace `window.Sintel.<App>` | vanilla-js.md §1 |\n\n### 31.3. Patron de apertura de offcanvas — decision tree\n\n```\n¿Desde un botón HTML con hx-get?\n  └─ hx-on::after-request=\"...UIManager.handleOffcanvas(el,'show')...\"  [htmx.md §12.1]\n\n¿Desde document.addEventListener en un modulo JS?\n  └─ htmx:afterSettle → UIManager.handleOffcanvas(el,'show')           [htmx.md §12.2-B]\n\n¿Desde htmx.ajax().then() en un modulo JS?\n  └─ UIManager.handleOffcanvas(el,'show') directamente                 [ui-management.md §2]\n\n¿UIManager no disponible? → fallback seguro:\n  const prev = bootstrap.Offcanvas.getInstance(el);\n  if (prev) prev.dispose();\n  document.querySelectorAll('.offcanvas-backdrop').forEach(b=>b.remove());\n  new bootstrap.Offcanvas(el).show();\n```\n\n### 31.4. Enforcement\n\nAl iniciar cualquier tarea con cambios de UI, el agente debe declarar en su respuesta:\n> \"Consultado: .agents/skills/frontend/[archivo.md] — patron [seccion]\"\n\nSi no puede determinar el patron correcto leyendo los skills, escalar al usuario antes de implementar."
+      }
+    },
+    {
+      "id": "Document:MEMORY.md#ADR-001",
+      "label": "Document",
+      "properties": {
+        "source": "MEMORY.md",
+        "adr": "ADR-001",
+        "title": "Feature-Sliced Design (FSD)",
+        "line": 11,
+        "body": "*   Cada modelo tiene un ecosistema aislado en el frontend y backend.\n    *   Prohibido compartir plantillas monolíticas (ej. `modals.html`)."
+      }
+    },
+    {
+      "id": "Document:MEMORY.md#ADR-002",
+      "label": "Document",
+      "properties": {
+        "source": "MEMORY.md",
+        "adr": "ADR-002",
+        "title": "Service Layer Pura",
+        "line": 14,
+        "body": "*   `crud_service.py`: Única capa con transacciones a BD.\n    *   `business_service.py`: Única capa para lógica, idempotencia y validación IDOR.\n    *   `selectors.py`: Única capa para queries GET, uso estricto de `.only()`."
+      }
+    },
+    {
+      "id": "Document:MEMORY.md#ADR-003",
+      "label": "Document",
+      "properties": {
+        "source": "MEMORY.md",
+        "adr": "ADR-003",
+        "title": "Aislamiento Multi-Tenant (Zero-Trust)",
+        "line": 18,
+        "body": "*   Todo modelo tenant hereda de `SintelTenantBaseModel` obligatoriamente.\n    *   Toda mutación DML filtra y valida explícitamente `empresa_id`."
+      }
+    },
+    {
+      "id": "Document:MEMORY.md#ADR-004",
+      "label": "Document",
+      "properties": {
+        "source": "MEMORY.md",
+        "adr": "ADR-004",
+        "title": "Bridge de Esquema Público",
+        "line": 21,
+        "body": "*   Solo `apps/tenant/core` y `apps/tenant/api` pueden interactuar con el esquema `public`.\n    *   Las demás apps usan `apps.tenant.core.services.membership`."
+      }
+    },
+    {
+      "id": "Document:MEMORY.md#ADR-005",
+      "label": "Document",
+      "properties": {
+        "source": "MEMORY.md",
+        "adr": "ADR-005",
+        "title": "Integración Contable Unificada",
+        "line": 24,
+        "body": "*   Ningún módulo crea `AsientoContable` directamente.\n    *   Todos delegan a `Contabilizador(empresa_id).contabilizar(dto)`."
+      }
+    },
+    {
+      "id": "Document:MEMORY.md#ADR-006",
+      "label": "Document",
+      "properties": {
+        "source": "MEMORY.md",
+        "adr": "ADR-006",
+        "title": "Frontend Reactivo (Server-Driven)",
+        "line": 27,
+        "body": "*   Grillas: migracion en curso de Tabulator a `django-tables2` + HTMX (server-rendered, decision 2026-08-03 — ver `documentacion/PLAN_UNICO_CORRECCIONES.md` Fase 5-BIS). `gastos`, `facturas`, `compras` ya migradas; ~16 apps siguen en Tabulator hasta que la expansion continue.\n    *   HTMX para acciones asíncronas y Out-of-Band (OOB) swaps.\n    *   Offcanvas: siempre via `window.Sintel.Core.mostrarOffcanvasSeguro(el)` (`core/js/common/offcanvas.helper.js`), nunca `getOrCreateInstance()` directo.\n\n---\n\n## 📌 2. Contexto de Implementaciones Recientes\n\n*   **2026-05-04 | Módulo Proyectos:** Se implementó control de errores SQL explícito (`IntegrityError`) convirtiendo violaciones 500 en respuestas 400 controladas en `save_proyecto`.\n*   **2026-05-04 | Módulo Facturas:** Expansión del `FacturaListSerializer` para incluir snapshots históricos (`emisor_razon_social`, `receptor_razon_social`). UI en Tabulator actualizada, deprecando la columna redundante \"Cliente\".\n*   **2026-05-04 | Módulo Clientes (Hotfix v2.62.1):** \n    *   **UI/Frontend:** Sincronización de IDs DOM en Offcanvas y creación de SSoT inmutable en JavaScript (`DOM`).\n    *   **Backend (DRF):** Resolución de error 500 (`TypeError: unexpected keyword argument 'id'`) igualando la firma de las acciones (`id=None`) con `lookup_url_kwarg='id'`.\n    *   **Backend (Service Layer):** Resolución de error 500 (`AttributeError: no attribute 'contacto_selector'`) mediante la herencia estricta de `ContactoClienteServiceMixin` en el `ClienteViewSet` para asegurar la inyección de dependencias entre dominios relacionados.\n*   **2026-05-06 | Modulo Gastos + Docker:** Se corrigio el arranque Docker forzando `DATABASE_HOST=db` en `web` y `celery`. Se estabilizo `apps/tenant/gastos` corrigiendo referencias ORM, templates HTMX, contrato JSON de creacion, cache de resolucion sin signals, fallback de empresa para sesiones y compatibilidad de `DocumentoSoporte`. Validado con `py_compile`, `manage.py check`, `pytest apps/tenant/gast"
+      }
+    },
+    {
+      "id": "Document:docs/ADR-001-retention-pull-model.md",
+      "label": "Document",
+      "properties": {
+        "source": "docs/ADR-001-retention-pull-model.md",
+        "title": "ADR-001: Retencion Pull Model (v3.7.1)"
+      }
+    },
+    {
+      "id": "Document:docs/ADR-002-public-schema-api-dual-registration.md",
+      "label": "Document",
+      "properties": {
+        "source": "docs/ADR-002-public-schema-api-dual-registration.md",
+        "title": "ADR-002: Registro Dual de Endpoints en Schemas Publico y Tenant"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/backend/app-origen-prefijos-sso-t.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/backend/app-origen-prefijos-sso-t.md",
+        "title": "Skill: APP_ORIGEN_PREFIJOS — Single Source of Truth (SSoT)"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/backend/celery-async.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/backend/celery-async.md",
+        "title": "Skill: Celery Async & Background Tasks — SINTEL v2.62"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/backend/data-migration.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/backend/data-migration.md",
+        "title": "Skill: Data Migration & Zero Waste — SINTEL v2.62"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/backend/django-tenant.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/backend/django-tenant.md",
+        "title": "Skill: Django Multi-Tenant — SINTEL v2.62"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/backend/drf-serializers.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/backend/drf-serializers.md",
+        "title": "Skill: DRF Serializers — SINTEL v2.62"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/backend/drf-viewset.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/backend/drf-viewset.md",
+        "title": "Skill: DRF ViewSet — SINTEL v2.62"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/backend/service-layer.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/backend/service-layer.md",
+        "title": "Skill: Service Layer — SINTEL v2.62"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/frontend/creacion_item_full.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/frontend/creacion_item_full.md",
+        "title": "SINTEL Add Association"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/frontend/crud-fsd.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/frontend/crud-fsd.md",
+        "title": "Skill: Arquitectura CRUD Frontend (Feature-Sliced Design)"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/frontend/dom-ids-sync.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/frontend/dom-ids-sync.md",
+        "title": "Skill: DOM ID Sync & Selectors — SINTEL v3.16"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/frontend/htmx.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/frontend/htmx.md",
+        "title": "Skill: HTMX — SINTEL v3.16"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/frontend/htmx_hypermedia-systems-.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/frontend/htmx_hypermedia-systems-.md",
+        "title": "I: HYPERMEDIA CONCEPTS {#i:-hypermedia-concepts}"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/frontend/tabulator.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/frontend/tabulator.md",
+        "title": "Skill: Tabulator.js — SINTEL v3.16"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/frontend/ui-management.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/frontend/ui-management.md",
+        "title": "Skill: UI Stabilization & Offcanvas Management — SINTEL v3.16"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/frontend/vanilla-js.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/frontend/vanilla-js.md",
+        "title": "Skill: Vanilla JS — SINTEL v3.16"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/testing/api.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/testing/api.md",
+        "title": "Skill: Testing API — Django Tenants + DRF (SINTEL v1.0)"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/testing/django.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/testing/django.md",
+        "title": "Skill: Testing Django — General (SINTEL v1.0)"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/workflow/antigravity-mcp.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/workflow/antigravity-mcp.md",
+        "title": "Skill: Antigravity + MCP Workflow"
+      }
+    },
+    {
+      "id": "Rule:.agents/skills/workflow/docker-services.md#skill",
+      "label": "Rule",
+      "properties": {
+        "source": ".agents/skills/workflow/docker-services.md",
+        "title": "Skill: Docker Services & Healthchecks — SINTEL"
+      }
+    },
+    {
+      "id": "Document:apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md",
+      "label": "Document",
+      "properties": {
+        "source": "apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md",
+        "title": "AUDITORIA DE FLUJO DE TRABAJO - MODULO DE COMPRAS"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Field:compras.PlantillaOrdenCompra.uuid",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Field:compras.PlantillaOrdenCompra.nombre",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Field:compras.PlantillaOrdenCompra.prefijo",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Field:compras.PlantillaOrdenCompra.rango_desde",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Field:compras.PlantillaOrdenCompra.rango_hasta",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Field:compras.PlantillaOrdenCompra.consecutivo_actual",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Field:compras.PlantillaOrdenCompra.vigente",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.uuid",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.plantilla",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Field:compras.OrdenCompra.plantilla",
+      "target_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "rel_type": "REFERENCES",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.consecutivo",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.numero_documento",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.proveedor",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Field:compras.OrdenCompra.proveedor",
+      "target_id": "Model:tenant_proveedores.Proveedor",
+      "rel_type": "REFERENCES",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.proyecto",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Field:compras.OrdenCompra.proyecto",
+      "target_id": "Model:tenant_proyectos.Proyecto",
+      "rel_type": "REFERENCES",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.documento_soporte",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Field:compras.OrdenCompra.documento_soporte",
+      "target_id": "Model:tenant_gastos.DocumentoSoporte",
+      "rel_type": "REFERENCES",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.fecha",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.fecha_entrega",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.estado",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.subtotal",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.impuestos",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.total",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Field:compras.OrdenCompra.observaciones",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.uuid",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.orden_compra",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Field:compras.ItemOrdenCompra.orden_compra",
+      "target_id": "Model:tenant_compras.OrdenCompra",
+      "rel_type": "REFERENCES",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.descripcion",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.item_inventario_uuid",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.cantidad",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.valor_unitario",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.porcentaje_iva",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.valor_iva",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.subtotal",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.ItemOrdenCompra",
+      "target_id": "Field:compras.ItemOrdenCompra.total",
+      "rel_type": "HAS_FIELD",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.selectors.PlantillaOrdenCompraSelector",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.selectors.OrdenCompraSelector",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Application:empresa",
+      "rel_type": "IMPORTS",
+      "properties": {
+        "module": "apps.tenant.empresa.models",
+        "name": "Empresa",
+        "line": 9,
+        "in_file": "crud_service"
+      }
+    },
+    {
+      "source_id": "Service:compras.crud_service.PlantillaOrdenCompraCRUDService",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.crud_service.OrdenCompraCRUDService",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.business_service.OrdenCompraBusinessService",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.business_service.OrdenCompraBusinessService",
+      "target_id": "Service:compras.crud_service.OrdenCompraCRUDService",
+      "rel_type": "CALLS",
+      "properties": {
+        "methods": [
+          "actualizar_orden",
+          "cambiar_estado",
+          "crear_orden",
+          "eliminar_orden"
+        ]
+      }
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Application:api",
+      "rel_type": "IMPORTS",
+      "properties": {
+        "module": "apps.tenant.api.mixins",
+        "name": "BaseServiceMixin",
+        "line": 2,
+        "in_file": "api_mixins"
+      }
+    },
+    {
+      "source_id": "Service:compras.api_mixins.PlantillaOrdenCompraServiceMixin",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.api_mixins.OrdenCompraServiceMixin",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.UUIDOrPKRelatedField",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.PlantillaOrdenCompraSerializer",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.PlantillaOrdenCompraSerializer",
+      "target_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.ItemOrdenCompraSerializer",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.ItemOrdenCompraSerializer",
+      "target_id": "Model:tenant_compras.ItemOrdenCompra",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.OrdenCompraListSerializer",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.OrdenCompraListSerializer",
+      "target_id": "Model:tenant_compras.OrdenCompra",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.OrdenCompraDetailSerializer",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.OrdenCompraDetailSerializer",
+      "target_id": "Model:tenant_compras.OrdenCompra",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.OrdenCompraCreateUpdateSerializer",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Serializer:compras.OrdenCompraCreateUpdateSerializer",
+      "target_id": "Model:tenant_compras.OrdenCompra",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.OrdenCompraViewSet",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.PlantillaOrdenCompraViewSet",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.OrdenCompraViewSet",
+      "target_id": "Service:compras.api_mixins.OrdenCompraServiceMixin",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.OrdenCompraViewSet",
+      "target_id": "Serializer:compras.OrdenCompraListSerializer",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.OrdenCompraViewSet",
+      "target_id": "Serializer:compras.OrdenCompraCreateUpdateSerializer",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.OrdenCompraViewSet",
+      "target_id": "Serializer:compras.OrdenCompraDetailSerializer",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.PlantillaOrdenCompraViewSet",
+      "target_id": "Service:compras.api_mixins.PlantillaOrdenCompraServiceMixin",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.PlantillaOrdenCompraViewSet",
+      "target_id": "Serializer:compras.PlantillaOrdenCompraSerializer",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.PlantillaOrdenCompraViewSet",
+      "target_id": "Endpoint:compras:plantillas:api",
+      "rel_type": "EXPOSES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.OrdenCompraViewSet",
+      "target_id": "Endpoint:compras:/:api",
+      "rel_type": "EXPOSES",
+      "properties": {}
+    },
+    {
+      "source_id": "ViewSet:compras.OrdenCompraViewSet",
+      "target_id": "Endpoint:compras::ui",
+      "rel_type": "EXPOSES",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_proveedores.Proveedor",
+      "target_id": "Test:apps/tenant/compras/tests/test_multitenant_isolation_tabla_html.py",
+      "rel_type": "TESTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Test:apps/tenant/compras/tests/test_multitenant_isolation_tabla_html.py",
+      "rel_type": "TESTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.crud_service.PlantillaOrdenCompraCRUDService",
+      "target_id": "Test:tests/tenant/compras/test_compras_plantillas.py",
+      "rel_type": "TESTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.selectors.PlantillaOrdenCompraSelector",
+      "target_id": "Test:tests/tenant/compras/test_compras_plantillas.py",
+      "rel_type": "TESTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.PlantillaOrdenCompra",
+      "target_id": "Test:tests/tenant/compras/test_compras_plantillas.py",
+      "rel_type": "TESTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_proveedores.Proveedor",
+      "target_id": "Test:tests/tenant/compras/test_compras_plantillas.py",
+      "rel_type": "TESTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Model:tenant_compras.OrdenCompra",
+      "target_id": "Test:tests/tenant/compras/test_compras_plantillas.py",
+      "rel_type": "TESTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Service:compras.business_service.OrdenCompraBusinessService",
+      "target_id": "Test:tests/tenant/compras/test_compras_plantillas.py",
+      "rel_type": "TESTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "target_id": "Endpoint:compras:/api/v1/compras/:js-literal",
+      "rel_type": "CONSUMES",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "target_id": "Endpoint:compras:/api/v1/compras/plantillas/:js-literal",
+      "rel_type": "CONSUMES",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "target_id": "Endpoint:compras:/api/v1/compras/plantillas/render-offcanvas/crear/:js-literal",
+      "rel_type": "CONSUMES",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "target_id": "Endpoint:compras:/api/v1/compras/render-offcanvas/crear/:js-literal",
+      "rel_type": "CONSUMES",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "target_id": "Endpoint:compras:/api/v1/proveedores/:js-literal",
+      "rel_type": "CONSUMES",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "target_id": "Endpoint:compras:/api/v1/proyectos/:js-literal",
+      "rel_type": "CONSUMES",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.utils.js",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/features/compras_editor.js",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/features/compras_list.js",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/assets_compras.html",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/assets_compras.html",
+      "target_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/assets_compras.html",
+      "target_id": "JS:apps/tenant/compras/static/compras/js/compras.utils.js",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/assets_compras.html",
+      "target_id": "JS:apps/tenant/compras/static/compras/js/features/compras_list.js",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/assets_compras.html",
+      "target_id": "JS:apps/tenant/compras/static/compras/js/features/compras_editor.js",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/compras_list.html",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/list.html",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/list.html",
+      "target_id": "Template:apps/tenant/compras/templates/tenant/compras/compras_list.html",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/offcanvas_crear_compras.html",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/offcanvas_crear_plantilla.html",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/offcanvas_detalle_compras.html",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/offcanvas_editar_compras.html",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Template:apps/tenant/compras/templates/tenant/compras/partials/tabla_compras.html",
+      "target_id": "Application:compras",
+      "rel_type": "BELONGS_TO",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:db",
+      "target_id": "Setting:DATABASE_NAME",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:db",
+      "target_id": "Setting:DATABASE_USER",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:db",
+      "target_id": "Setting:DATABASE_PASSWORD",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:neo4j",
+      "target_id": "Setting:NEO4J_PASSWORD",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:web",
+      "target_id": "Docker:db",
+      "rel_type": "DEPENDS_ON",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:web",
+      "target_id": "Docker:redis",
+      "rel_type": "DEPENDS_ON",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:nginx",
+      "target_id": "Docker:web",
+      "rel_type": "DEPENDS_ON",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:celery",
+      "target_id": "Docker:db",
+      "rel_type": "DEPENDS_ON",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:celery",
+      "target_id": "Docker:redis",
+      "rel_type": "DEPENDS_ON",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:cloudflared",
+      "target_id": "Docker:nginx",
+      "rel_type": "DEPENDS_ON",
+      "properties": {}
+    },
+    {
+      "source_id": "Docker:cloudflared",
+      "target_id": "Setting:TUNNEL_TOKEN",
+      "rel_type": "USES",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#0-CRITICAL",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#5-CRUD-E2E",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#7-ARCHITECTURE",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#14-CORE-DB",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#15-SECURITY",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#17-BRIDGE",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#26-HTMX-OFFCANVAS",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#27-UUID-FORMS",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#22-CSS-ISOLATION",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#23-JS-ISOLATION",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#24-TESTING",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:AGENTS.md#30-ORM-SELECTORS",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Document:MEMORY.md#ADR-006",
+      "rel_type": "DOCUMENTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:.agents/skills/backend/django-tenant.md#skill",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:.agents/skills/frontend/dom-ids-sync.md#skill",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Rule:.agents/skills/frontend/tabulator.md#skill",
+      "rel_type": "GOVERNED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "Application:compras",
+      "target_id": "Document:apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md",
+      "rel_type": "DOCUMENTED_BY",
+      "properties": {}
+    },
+    {
+      "source_id": "JS:apps/tenant/compras/static/compras/js/compras.api.js",
+      "target_id": "Endpoint:compras:plantillas:api",
+      "rel_type": "CONSUMES",
+      "properties": {}
+    }
+  ]
+}

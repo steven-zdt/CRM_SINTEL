@@ -59,7 +59,7 @@ INFO ✅ Token de invitación generado: user_id=X, tenant_id=Y, ttl=24 horas
 ### 2. Construcción de URL
 
 ```
-INFO ✅ URL de activación construida: http://tenant.sintel.com/activate?token=...
+INFO ✅ URL de activación construida: http://tenant.sintel.net.co/activate?token=...
 ```
 
 ### 3. Inicio del Envío
@@ -170,8 +170,8 @@ Cuando se crea un tenant desde la consola, los logs muestran:
 INFO 📧 Iniciando proceso de invitación por email: user=email@example.com, tenant=schema_name
 INFO 🔑 Generando token de invitación para user_id=X, tenant_id=Y
 INFO ✅ Token de invitación generado (TTL: 24 horas)
-INFO 🌐 Construyendo URL de activación para dominio: tenant.sintel.com
-INFO ✅ URL de activación construida: http://tenant.sintel.com/activate?token=...
+INFO 🌐 Construyendo URL de activación para dominio: tenant.sintel.net.co
+INFO ✅ URL de activación construida: http://tenant.sintel.net.co/activate?token=...
 INFO 📤 Invocando send_invitation_email para user=email@example.com
 INFO ✅ PROCESO DE INVITACIÓN COMPLETADO: user=..., tenant=..., activation_url=...
 ```

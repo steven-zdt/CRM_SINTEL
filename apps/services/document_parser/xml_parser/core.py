@@ -21,7 +21,12 @@ def parse_xml_bytes(xml_bytes: bytes) -> etree._Element:
         ValueError: Si el XML no es válido
     """
     try:
-        parser = etree.XMLParser(recover=True, encoding='utf-8')
+        # WARNING: [SEC-A3] resolve_entities=False/load_dtd=False/no_network=True
+        # bloquean XXE/expansion de entidades sobre XML de origen externo.
+        parser = etree.XMLParser(
+            recover=True, encoding='utf-8',
+            resolve_entities=False, load_dtd=False, no_network=True,
+        )
         root = etree.fromstring(xml_bytes, parser=parser)
         return root
     except Exception as e:

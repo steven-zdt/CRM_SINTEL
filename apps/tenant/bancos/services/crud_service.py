@@ -57,6 +57,12 @@ class ExtractoBancarioCRUDService:
         mes = data.get("mes")
         anio = data.get("anio")
 
+        # DSV: verify cuenta belongs to empresa — last line of defense against FK injection
+        if cuenta is not None and cuenta.empresa_id != empresa.id:
+            raise ValidationError(
+                "La cuenta bancaria seleccionada no existe o no pertenece a esta empresa."
+            )
+
         if ExtractoBancario.objects.filter(
             empresa=empresa, cuenta=cuenta, mes=mes, anio=anio
         ).exists():

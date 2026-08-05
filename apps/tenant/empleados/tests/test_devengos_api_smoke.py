@@ -64,7 +64,7 @@ def test_devengos_list_smoke(client, admin_user, tenant):
     client.force_login(admin_user)
     
     # La ruta se incluirá más adelante en TENANT_URLCONF (/api/v1/devengos/)
-    resp = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     
     # 200 si el router está incluido, 404 si aún no se incluyó
     assert resp.status_code in (200, 404), f"Expected 200 or 404, got {resp.status_code}"
@@ -129,7 +129,7 @@ def test_devengos_create_smoke(client, admin_user, tenant):
         "/api/v1/devengos/",
         data=payload,
         content_type="application/json",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
     )
     
     # 201 si el router está incluido y funciona, 404 si aún no se incluyó
@@ -251,7 +251,7 @@ def test_devengos_multitenancy_isolation(client, admin_user, tenant, tenant_fact
     client.force_login(admin_user)
     
     # Verificar que tenant1 solo ve su devengo (si el router está incluido)
-    resp1 = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp1 = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     if resp1.status_code == 200:
         data1 = resp1.json()
         results1 = data1.get("results", data1) if isinstance(data1, dict) else data1
@@ -262,7 +262,7 @@ def test_devengos_multitenancy_isolation(client, admin_user, tenant, tenant_fact
                 assert empleado1.id in empleado_ids or len(empleado_ids) == 0
     
     # Verificar que tenant2 solo ve su devengo
-    resp2 = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant2.schema_name}.sintel.com")
+    resp2 = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant2.schema_name}.sintel.net.co")
     if resp2.status_code == 200:
         data2 = resp2.json()
         results2 = data2.get("results", data2) if isinstance(data2, dict) else data2
@@ -385,7 +385,7 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     # 2a. Validacion de parametros requeridos
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
     )
     assert resp.status_code == 400
     assert "fecha_inicio y fecha_fin son requeridos" in resp.json()["error"]
@@ -393,7 +393,7 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     # 2b. Validacion de fechas invalidas
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=invalid-date&fecha_fin=2026-02-28",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
     )
     assert resp.status_code == 400
     assert "Formato de fecha invalido" in resp.json()["error"]
@@ -401,7 +401,7 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     # 2c. Validacion de rango de fecha incorrecto
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-28&fecha_fin=2026-02-01",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
     )
     assert resp.status_code == 400
     assert "fecha_inicio no puede ser mayor que fecha_fin" in resp.json()["error"]
@@ -409,7 +409,7 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     # 2d. Peticion valida - Deben retornar Juan y no Pedro
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-01&fecha_fin=2026-02-28",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -465,7 +465,7 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     # Peticion desde tenant2 no debe ver empleados de tenant1
     resp_tenant2 = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-01&fecha_fin=2026-02-28",
-        HTTP_HOST=f"{tenant2.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant2.schema_name}.sintel.net.co"
     )
     assert resp_tenant2.status_code == 200
     data2 = resp_tenant2.json()

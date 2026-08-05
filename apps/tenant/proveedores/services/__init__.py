@@ -1,10 +1,18 @@
 """
-Servicios de proveedores v3.5 - Modular Export.
+Servicios de proveedores v3.5+ - Modular Export.
+Incluye v3.17.0: Representante Business Service.
 """
-from .selectors import ProveedorSelector, LIST_FIELDS, DETAIL_FIELDS
-from .crud_service import ProveedorCRUDService
-from .business_service import ProveedorBusinessService
-from .api_mixins import ProveedorServiceMixin
+from .selectors import (
+    ProveedorSelector,
+    RepresentanteSelector,
+    LIST_FIELDS,
+    DETAIL_FIELDS,
+    LIST_FIELDS_REPRESENTANTE,
+    DETAIL_FIELDS_REPRESENTANTE,
+)
+from .crud_service import ProveedorCRUDService, RepresentanteCRUDService
+from .business_service import ProveedorBusinessService, RepresentanteBusinessService
+from .api_mixins import ProveedorServiceMixin, RepresentanteServiceMixin
 from .services import (
     crear_proveedor as _svc_crear_proveedor,
     actualizar_proveedor as _svc_actualizar_proveedor,
@@ -26,12 +34,21 @@ def qs_list(empresa_id, search=None):
     return _svc_qs_list(empresa_id, search)
 
 __all__ = [
+    # Proveedor (v3.5+)
     "ProveedorSelector",
     "ProveedorCRUDService",
     "ProveedorBusinessService",
     "ProveedorServiceMixin",
     "LIST_FIELDS",
     "DETAIL_FIELDS",
+    # Representante (v3.17.0)
+    "RepresentanteSelector",
+    "RepresentanteCRUDService",
+    "RepresentanteBusinessService",
+    "RepresentanteServiceMixin",
+    "LIST_FIELDS_REPRESENTANTE",
+    "DETAIL_FIELDS_REPRESENTANTE",
+    # Legacy
     "crear_proveedor",
     "actualizar_proveedor",
     "qs_list",

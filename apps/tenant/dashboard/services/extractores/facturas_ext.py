@@ -19,7 +19,7 @@ class FacturasExtractor:
         try:
             from apps.tenant.facturas.services.selectors import FacturaSelectors
 
-            qs = FacturaSelectors.qs_list(empresa_id)
+            qs = FacturaSelectors.qs_list(empresa_id).filter(estado='ACEPTADA')
             total_facturas = qs.count()
 
             # Pendientes = no pagadas completamente

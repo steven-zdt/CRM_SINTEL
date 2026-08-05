@@ -394,7 +394,10 @@ class DepartamentoViewSet(BaseTenantViewSet):
     """
     ViewSet para Departamento.
     """
-    permission_classes = [IsTenantAdminOrReadOnly]
+    # WARNING: [SEC-A4] IsTenantMember agregado -- IsTenantAdminOrReadOnly solo no
+    # valida membresia en SAFE_METHODS (permite lectura a cualquier autenticado de
+    # cualquier tenant).
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = Departamento.objects.none()
 
     def get_serializer_class(self):

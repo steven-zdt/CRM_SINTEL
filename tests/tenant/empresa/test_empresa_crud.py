@@ -33,4 +33,3 @@ class TestEmpresaCrud(SintelTenantTestCase):
         assert r.status_code == 200
         assert "results" in r.data
         assert r.data["count"] >= 1
-

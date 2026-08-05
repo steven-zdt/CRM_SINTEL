@@ -77,13 +77,13 @@ docker compose exec web python manage.py makemigrations
 docker compose exec web python manage.py migrate_schemas --shared
 
 # 3. Setup del tenant público
-docker compose exec web python manage.py setup_public_tenant --domain sintel.com
+docker compose exec web python manage.py setup_public_tenant --domain sintel.net.co
 
 # 4. Poblar catálogo DIAN
 docker compose exec web python manage.py poblar_catalogo_dian
 
 # 5. Crear superusuario por defecto
-docker compose exec web python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser(username='admin', email='admin@sintel.com', password='admin') if not User.objects.filter(email='admin@sintel.com').exists() else print('Superusuario ya existe')"
+docker compose exec web python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser(username='admin', email='admin@sintel.net.co', password='admin') if not User.objects.filter(email='admin@sintel.net.co').exists() else print('Superusuario ya existe')"
 ```
 
 ---
@@ -152,7 +152,7 @@ Una vez completados todos los pasos, tu proyecto SINTEL estará completamente re
 
 **Credenciales por defecto:**
 - **Usuario:** admin
-- **Email:** admin@sintel.com
+- **Email:** admin@sintel.net.co
 - **Contraseña:** admin
 
 **URLs:**
@@ -166,7 +166,7 @@ Una vez completados todos los pasos, tu proyecto SINTEL estará completamente re
 
 1. **Orden de Migraciones:** `accounts` debe migrarse antes que `tenants` y el resto de apps.
 2. **Esquema Público:** Se crea con `migrate_schemas --shared` antes de crear tenants.
-3. **Tenant Público:** Se crea con `setup_public_tenant --domain sintel.com`.
+3. **Tenant Público:** Se crea con `setup_public_tenant --domain sintel.net.co`.
 4. **Superusuario:** Se crea automáticamente si no existe.
 
 ---

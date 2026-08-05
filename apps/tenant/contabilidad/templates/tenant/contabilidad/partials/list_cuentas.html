@@ -1,18 +1,23 @@
 {% load static %}
-{# list_cuentas.html estandarizado para módulo contabilidad cuentas v2.60 #}
-{# ⚠️ v2.60: Migrado de DataTables a Tabulator Factory v2.40 #}
+{# list_cuentas.html — modulo contabilidad cuentas #}
+{# Fase 5-BIS: tabla server-rendered (django-tables2 + HTMX), reemplaza Tabulator #}
 {# ⚠️ Feature-Sliced Architecture: Template dedicado para listado #}
-{# ⚠️ v2.60: HTMX + Offcanvas (sin modales legacy) #}
 <div id="ui-contabilidad-cuentas-list" class="ui-module ui-contabilidad">
   <!-- Toolbar -->
   <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-contabilidad-cuentas">
     <input id="search-cuenta" class="form-control form-control-sm"
-           type="search" placeholder="Buscar por código o nombre..." />
-    
-    <button id="btn-refrescar-cuentas" class="btn btn-sm btn-outline-secondary">
+           type="search" placeholder="Buscar por código o nombre..."
+           hx-get="{% url 'contabilidad:cuenta-tabla' %}"
+           hx-trigger="keyup changed delay:400ms, search"
+           hx-target="#cuentas-panel"
+           name="q" />
+
+    <button id="btn-refrescar-cuentas" class="btn btn-sm btn-outline-secondary"
+            hx-get="{% url 'contabilidad:cuenta-tabla' %}"
+            hx-target="#cuentas-panel">
       <i class="bi bi-arrow-clockwise"></i> Refrescar
     </button>
-    
+
     <div id="actions-contabilidad-cuentas" class="ms-auto d-flex gap-2">
       <button class="btn btn-sm btn-primary" id="btn-crear-cuenta" type="button"
               hx-get="/api/v1/contabilidad/cuentas-contables/render-offcanvas/crear/"
@@ -23,20 +28,25 @@
       </button>
     </div>
   </div>
-  
+
   <!-- Feedback -->
   <div id="feedback-contabilidad-cuentas-list" class="alert d-none" role="alert"
        aria-live="polite"></div>
-  
+
   {# ⚠️ v2.60: Contenedor de errores para validación visual #}
   <div id="error-container-cuentas" class="alert alert-danger d-none mb-3" role="alert">
     <div id="error-message-cuentas"></div>
     <ul id="missing-fields-list-cuentas" class="mb-0 mt-2"></ul>
   </div>
-  
-  <!-- Tabla Tabulator -->
-  <!-- ⚠️ v2.61: Límites de ancho para evitar expansión horizontal infinita -->
-  <div id="grid-cuentas" style="max-width: 100%; overflow-x: auto;"></div>
+
+  <!-- Tabla server-rendered (django-tables2 + HTMX) -->
+  <div id="cuentas-panel"
+       hx-get="{% url 'contabilidad:cuenta-tabla' %}"
+       hx-trigger="load, cuenta-updated from:body"
+       hx-target="this"
+       hx-swap="innerHTML"
+       hx-boost="true">
+  </div>
 </div>
 
 {# ⚠️ v2.60: Contenedor HTMX para Offcanvas #}

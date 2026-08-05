@@ -104,13 +104,13 @@ Dentro del shell de Django:
 ```python
 from django.contrib.auth import get_user_model
 User = get_user_model()
-if not User.objects.filter(email='admin@sintel.com').exists():
+if not User.objects.filter(email='admin@sintel.net.co').exists():
     User.objects.create_superuser(
         username='admin',
-        email='admin@sintel.com',
+        email='admin@sintel.net.co',
         password='admin'
     )
-    print('Superusuario creado: admin / admin@sintel.com / admin')
+    print('Superusuario creado: admin / admin@sintel.net.co / admin')
 else:
     print('Superusuario ya existe')
 exit()
@@ -203,7 +203,7 @@ Una vez completados todos los pasos, tu proyecto SINTEL estará completamente re
 
 **Credenciales por defecto:**
 - **Usuario:** admin
-- **Email:** admin@sintel.com
+- **Email:** admin@sintel.net.co
 - **Contraseña:** admin
 
 **URLs:**

@@ -396,6 +396,20 @@ class AsientoContable(SintelTenantBaseModel):
             models.Index(fields=['tipo_comprobante', 'numero_comprobante']),  # WARNING: NORMATIVA: Trazabilidad
             models.Index(fields=['documento_origen_app', 'documento_origen_modelo', 'documento_origen_id']),  # v3.0: Idempotencia
         ]
+        # WARNING: [PERF-C1] Respaldo de idempotencia a nivel de base de datos.
+        # Contabilizador._validar_no_existe() ya verifica con un .exists() antes de
+        # guardar, pero sin esta constraint dos transacciones concurrentes pueden pasar
+        # ambas el .exists() antes de que cualquiera haga commit (race condition) y
+        # generar dos asientos para el mismo documento origen. Se excluyen los reversales
+        # (documento_origen_reversado=True) porque estos reutilizan intencionalmente el
+        # mismo documento_origen_* que el asiento original (ver Contabilizador.reversar_asiento).
+        constraints = [
+            models.UniqueConstraint(
+                fields=['empresa', 'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id'],
+                condition=models.Q(documento_origen_reversado=False, documento_origen_id__isnull=False),
+                name='uniq_asiento_documento_origen_no_reversado',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.numero} - {self.fecha}"
@@ -856,6 +870,15 @@ class ConfiguracionRetenciones(SintelTenantBaseModel):
         ('COMPRA', _('Compra (PO)')),
     ]
 
+    # WARNING: [ARQ-A1] UUID para lookup público (no expone PK interno) — AGENTS.md §25
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        verbose_name=_('UUID'),
+        help_text=_('Identificador único público para la API')
+    )
     tipo_tercero = models.CharField(
         max_length=20,
         choices=TIPO_TERCERO_CHOICES,

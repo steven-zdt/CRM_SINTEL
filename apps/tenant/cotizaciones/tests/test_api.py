@@ -47,7 +47,7 @@ def test_api_crear_cotizacion(tenant, factory_empresa, factory_cliente):
                 }
             ]
         }
-        client.credentials(HTTP_HOST=f'{tenant.schema_name}.sintel.com')
+        client.credentials(HTTP_HOST=f'{tenant.schema_name}.sintel.net.co')
         url = reverse('cotizacion-list')
         response = client.post(url, payload, format='json')
         assert response.status_code in (200, 201), response.content

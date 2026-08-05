@@ -132,7 +132,7 @@ print(f"LOGOUT_REDIRECT_URL: {settings.LOGOUT_REDIRECT_URL}")
 
 ```bash
 # Probar acceso a /admin/login/ desde un tenant privado
-curl -I http://home.sintel.com:8000/admin/login/
+curl -I http://home.sintel.net.co:8000/admin/login/
 # Debe retornar: HTTP/1.1 302 Found (redirige a /)
 ```
 
@@ -140,7 +140,7 @@ curl -I http://home.sintel.com:8000/admin/login/
 
 ```bash
 # Probar acceso a / desde un tenant privado
-curl -I http://home.sintel.com:8000/
+curl -I http://home.sintel.net.co:8000/
 # Debe retornar: HTTP/1.1 200 OK (muestra landing page)
 ```
 
@@ -148,14 +148,14 @@ curl -I http://home.sintel.com:8000/
 
 ### ⚠️ Esquema Público
 
-El esquema público (`sintel.com` o `localhost`) **SÍ** usa `/admin/login/` porque:
+El esquema público (`sintel.net.co` o `localhost`) **SÍ** usa `/admin/login/` porque:
 - Es el admin de Django estándar
 - Gestiona tenants, usuarios globales, catálogo DIAN, etc.
 - No tiene landing page personalizada
 
 ### ✅ Tenants Privados
 
-Los tenants privados (`home.sintel.com`, `cliente.sintel.com`, etc.) **NO** usan `/admin/login/` porque:
+Los tenants privados (`home.sintel.net.co`, `cliente.sintel.net.co`, etc.) **NO** usan `/admin/login/` porque:
 - Tienen landing page personalizada (`/`)
 - Tienen login personalizado (`/login/`)
 - El admin de tenant (`/admin/`) es aislado y solo muestra modelos de `TENANT_APPS`

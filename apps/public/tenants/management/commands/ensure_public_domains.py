@@ -3,7 +3,7 @@ Comando de management para asegurar que los dominios del tenant público existan
 
 Este comando es idempotente y no destructivo:
 - Crea dominios que no existen
-- Marca sintel.com como primario si está en la lista
+- Marca sintel.net.co como primario si está en la lista
 - NO elimina dominios existentes
 - NO modifica dominios que ya están correctamente configurados
 
@@ -11,7 +11,7 @@ Uso:
     python manage.py ensure_public_domains
 
 Variables de entorno:
-    PUBLIC_TENANT_DOMAINS: Lista de dominios separados por coma (default: sintel.com,localhost,127.0.0.1)
+    PUBLIC_TENANT_DOMAINS: Lista de dominios separados por coma (default: sintel.net.co,localhost,127.0.0.1)
     PUBLIC_DOMAIN_PROTECT: Si es True, no modifica dominios existentes (default: False)
 """
 
@@ -55,7 +55,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # Obtener lista de dominios desde variables de entorno o argumento
         domains_str = options.get("domains") or os.getenv(
-            "PUBLIC_TENANT_DOMAINS", "sintel.com,localhost,127.0.0.1"
+            "PUBLIC_TENANT_DOMAINS", "sintel.net.co,localhost,127.0.0.1"
         )
         protect = os.getenv("PUBLIC_DOMAIN_PROTECT", "False").lower() == "true"
         dry_run = options.get("dry_run", False)

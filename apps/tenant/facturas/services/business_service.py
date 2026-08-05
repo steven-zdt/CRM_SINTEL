@@ -53,8 +53,124 @@ def clean_nit(nit_str):
 
 class FacturaBusinessService:
     """
-    Servicio de lógica de negocio para Facturas.
+    Servicio de logica de negocio para Facturas.
     """
+
+    @staticmethod
+    @transaction.atomic
+    def crear_factura_desde_venta(empresa, dto: dict):
+        """
+        Crea una Factura de Venta electronica a partir del DTO canonico generado
+        por VentaBusinessService._construir_dto_factura().
+
+        El DTO debe contener:
+          - emisor.nit / emisor.razon_social (snapshot empresa)
+          - receptor.nit / receptor.razon_social (snapshot cliente)
+          - totales.subtotal, totales.impuestos, totales.total
+          - fecha_emision, lineas[], cliente_uuid, venta_uuid
+
+        Genera un numero de factura provisional BORR-VTA-{uuid8} hasta que
+        la DIAN asigne el numero definitivo en el proceso de firma y envio.
+        Retorna la instancia de Factura creada.
+        """
+        from django.db.models import Max
+        import uuid as uuid_lib
+
+        emisor = dto.get("emisor", {})
+        receptor = dto.get("receptor", {})
+        totales = dto.get("totales", {})
+        lineas = dto.get("lineas", [])
+
+        # Numero provisional unico
+        venta_uuid_str = dto.get("venta_uuid", str(uuid_lib.uuid4()))
+        numero_provisional = "BORR-VTA-" + venta_uuid_str.replace("-", "").upper()[:12]
+
+        # Consecutivo dentro de facturas VENTA de la empresa.
+        # WARNING: [PERF-C2] select_for_update() sobre la fila Empresa (singleton por
+        # tenant) serializa la asignacion de consecutivo entre transacciones concurrentes,
+        # sin bloquear la tabla Factura (que crece sin limite). Mismo patron de lock sobre
+        # entidad "contenedora" que ResolucionDIAN en gastos/services/crud_service.py.
+        empresa_locked = Empresa.objects.select_for_update().get(pk=empresa.pk)
+        max_consec = (
+            Factura.objects.filter(empresa=empresa_locked, naturaleza=Factura.Naturaleza.VENTA)
+            .aggregate(m=Max("consecutivo"))["m"]
+        ) or 0
+        consecutivo = max_consec + 1
+
+        # Resolucion DIAN para poblar campos de autorizacion
+        resol = dto.get("resolucion", {})
+        num_definitivo = dto.get("numero_externo") or dto.get("num_fac") or numero_provisional
+
+        factura_data = {
+            "empresa": empresa,
+            "numero": num_definitivo,
+            "consecutivo": consecutivo,
+            "tipo": Factura.TipoFactura.FE,
+            "estado": Factura.Estado.BORRADOR,
+            "naturaleza": Factura.Naturaleza.VENTA,
+            "fecha_emision": timezone.now(),
+            "fecha_vencimiento": dto.get("fecha_vencimiento") or None,
+            "emisor_nit": emisor.get("nit", ""),
+            "emisor_razon_social": emisor.get("razon_social", ""),
+            "emisor_direccion": emisor.get("direccion", ""),
+            "emisor_email": emisor.get("email", ""),
+            "emisor_telefono": emisor.get("telefono", ""),
+            "receptor_nit": receptor.get("nit", ""),
+            "receptor_razon_social": receptor.get("razon_social", ""),
+            "receptor_email": receptor.get("email", ""),
+            "subtotal": Decimal(str(totales.get("subtotal", "0"))),
+            "impuestos": Decimal(str(totales.get("impuestos", "0"))),
+            "total": Decimal(str(totales.get("total", "0"))),
+            "moneda": dto.get("moneda", "COP"),
+            "cliente_uuid": dto.get("cliente_uuid"),
+            # Campos DIAN generados en Fase 5 (None en vez de "" para campos unique/integer)
+            "cufe": dto.get("cufe") or None,
+            "qr_url": dto.get("qr_string") or None,
+            "xml_content": dto.get("xml_content") or None,
+            "dian_response_xml": dto.get("dian_response_xml") or None,
+            # Datos de autorizacion de la resolucion
+            "autorizacion_numero": resol.get("numero_autorizacion") or None,
+            "autorizacion_prefijo": resol.get("prefijo") or None,
+            "autorizacion_rango_desde": int(resol["desde"]) if resol.get("desde") else None,
+            "autorizacion_rango_hasta": int(resol["hasta"]) if resol.get("hasta") else None,
+            "autorizacion_vigencia_inicio": resol.get("fecha_inicio") or None,
+            "autorizacion_vigencia_fin": resol.get("fecha_fin") or None,
+        }
+
+        factura = FacturaCRUDService.crear(factura_data)
+
+        # Crear ItemFactura por cada linea del DTO
+        from apps.tenant.facturas.models import ItemFactura
+        items_a_crear = []
+        for idx, linea in enumerate(lineas):
+            cant = Decimal(str(linea.get("cantidad", "1")))
+            pu = Decimal(str(linea.get("valor_unitario", "0")))
+            pct_iva = Decimal(str(linea.get("porcentaje_iva", "0")))
+            sub = cant * pu
+            iva_val = sub * (pct_iva / Decimal("100"))
+            items_a_crear.append(
+                ItemFactura(
+                    empresa=empresa,
+                    factura=factura,
+                    linea_id=str(idx + 1),
+                    descripcion=linea.get("descripcion", ""),
+                    cantidad=cant,
+                    valor_unitario=pu,
+                    porcentaje_iva=pct_iva,
+                    valor_iva=iva_val,
+                    subtotal=sub,
+                    total=sub + iva_val,
+                )
+            )
+        if items_a_crear:
+            ItemFactura.objects.bulk_create(items_a_crear)
+
+        logger.info(
+            "[FacturaBS] Factura creada desde Venta: numero=%s id=%s",
+            factura.numero,
+            factura.id,
+        )
+        return factura
 
     @staticmethod
     def normalize_document_number(value: str | None) -> str:

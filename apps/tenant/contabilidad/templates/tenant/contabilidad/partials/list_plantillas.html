@@ -8,9 +8,19 @@
 
     <input id="search-plantilla" class="form-control form-control-sm"
            type="search" placeholder="Buscar por nombre o tipo..."
-           style="width: 240px;" />
+           style="width: 240px;"
+           hx-get="{% url 'contabilidad:plantilla-tabla' %}"
+           hx-trigger="keyup changed delay:400ms, search"
+           hx-target="#plantillas-panel"
+           hx-include="#filter-tipo-plantilla, #filter-activo-plantilla"
+           name="q" />
 
-    <select id="filter-tipo-plantilla" class="form-select form-select-sm" style="width: auto;">
+    <select id="filter-tipo-plantilla" class="form-select form-select-sm" style="width: auto;"
+            hx-get="{% url 'contabilidad:plantilla-tabla' %}"
+            hx-trigger="change"
+            hx-target="#plantillas-panel"
+            hx-include="#search-plantilla, #filter-activo-plantilla"
+            name="tipo_transaccion">
       <option value="">Todos los Tipos</option>
       <option value="VENTA">Venta</option>
       <option value="COMPRA">Compra</option>
@@ -18,13 +28,20 @@
       <option value="NOMINA">Nomina</option>
     </select>
 
-    <select id="filter-activo-plantilla" class="form-select form-select-sm" style="width: auto;">
+    <select id="filter-activo-plantilla" class="form-select form-select-sm" style="width: auto;"
+            hx-get="{% url 'contabilidad:plantilla-tabla' %}"
+            hx-trigger="change"
+            hx-target="#plantillas-panel"
+            hx-include="#search-plantilla, #filter-tipo-plantilla"
+            name="activo">
       <option value="">Todos los Estados</option>
       <option value="true">Activas</option>
       <option value="false">Inactivas</option>
     </select>
 
-    <button id="btn-refrescar-plantilla" class="btn btn-sm btn-outline-secondary" title="Refrescar">
+    <button id="btn-refrescar-plantilla" class="btn btn-sm btn-outline-secondary" title="Refrescar"
+            hx-get="{% url 'contabilidad:plantilla-tabla' %}"
+            hx-target="#plantillas-panel">
       <i class="bi bi-arrow-clockwise"></i>
     </button>
 
@@ -57,8 +74,14 @@
     <div id="error-message-plantilla"></div>
   </div>
 
-  {# Tabla Tabulator #}
-  <div id="grid-plantillas" style="max-width: 100%; overflow-x: auto;"></div>
+  {# Tabla server-rendered (django-tables2 + HTMX) #}
+  <div id="plantillas-panel"
+       hx-get="{% url 'contabilidad:plantilla-tabla' %}"
+       hx-trigger="load, plantilla-updated from:body"
+       hx-target="this"
+       hx-swap="innerHTML"
+       hx-boost="true">
+  </div>
 
   <div class="mt-2 text-muted small">
     <i class="bi bi-info-circle me-1"></i>

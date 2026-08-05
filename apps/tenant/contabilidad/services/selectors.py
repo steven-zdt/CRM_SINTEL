@@ -10,8 +10,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, List, Optional, Tuple
 
-from django.db.models import Q, Sum, F, DecimalField
-from django.db.models.functions import Coalesce
+from django.db.models import Q, Sum
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.contabilidad.models import (
@@ -459,8 +458,21 @@ def qs_inventario_movimientos_recientes_pendientes(empresa_id: int):
     Contrato v3.9.2: Contabilidad consume exclusivamente el agregado
     Inventario/Movimientos Recientes (`get_movimientos_timeline`). No consulta
     Producto, Servicio, ActivoFijo ni MovimientoInventario directamente.
+
+    WARNING: [PERF-M2] `get_movimientos_timeline` traia TODO el historico del
+    tenant (sin filtro de fecha) solo para diferenciar contra los IDs ya
+    contabilizados en Python -- crecia linealmente con la antiguedad del tenant.
+    Se acota a los ultimos ~2 anos (730 dias): un documento pendiente de
+    contabilizar mas antiguo que eso indicaria un problema de proceso mayor que
+    esta funcion no esta pensada para resolver. Si el equipo necesita revisar un
+    backlog mas antiguo, debe hacerse con un comando dedicado (fuera de este
+    chequeo periodico), no ampliando esta ventana.
     """
+    from datetime import timedelta
+    from django.utils import timezone
     from apps.tenant.inventario.services.selectors import get_movimientos_timeline
+
+    desde = timezone.now() - timedelta(days=730)
 
     ya_ids_por_modelo = {}
     rows = AsientoContable.objects.filter(
@@ -475,7 +487,7 @@ def qs_inventario_movimientos_recientes_pendientes(empresa_id: int):
         ya_ids_por_modelo.setdefault(modelo, set()).add(doc_id)
 
     pendientes = []
-    for item in get_movimientos_timeline(empresa_id=empresa_id):
+    for item in get_movimientos_timeline(empresa_id=empresa_id, desde=desde):
         modelo = item.get('modelo_origen')
         documento_id = item.get('documento_id')
         if not modelo or not documento_id:
@@ -542,65 +554,6 @@ def verificar_periodo_cerrado(fecha: Any, empresa_id: int) -> Tuple[bool, Option
     if periodo:
         return True, periodo.periodo
     return False, None
-
-def calcular_saldos_cuenta(cuenta_id: int, fecha_hasta: Optional[Any] = None) -> dict:
-    """Calcula saldo de una cuenta sumando movimientos."""
-    qs = MovimientoContable.objects.filter(cuenta_id=cuenta_id).only('debe', 'haber')
-    if fecha_hasta:
-        qs = qs.filter(asiento__fecha__lte=fecha_hasta)
-
-    aggregation = qs.aggregate(
-        total_debe=Coalesce(Sum('debe'), Decimal('0.00'), output_field=DecimalField()),
-        total_haber=Coalesce(Sum('haber'), Decimal('0.00'), output_field=DecimalField()),
-        count=Sum(1)
-    )
-
-    total_debe = aggregation['total_debe']
-    total_haber = aggregation['total_haber']
-    saldo = total_debe - total_haber
-    
-    return {
-        'total_debe': total_debe,
-        'total_haber': total_haber,
-        'saldo_neto': saldo,
-        'saldo_deudor': saldo if saldo > 0 else Decimal('0.00'),
-        'saldo_acreedor': abs(saldo) if saldo < 0 else Decimal('0.00'),
-        'movimientos_count': aggregation['count'] or 0,
-    }
-
-def get_balance_prueba(empresa_id: int, fecha_hasta: Optional[Any] = None) -> dict:
-    """Genera balance de prueba agrupado por cuenta."""
-    qs = CuentaContable.objects.filter(
-        empresa_id=empresa_id, 
-        activa=True, 
-        nivel=6
-    ).only('id', 'codigo', 'nombre', 'tipo').order_by('codigo')
-
-    filas = []
-    total_debitos = Decimal('0.00')
-    total_creditos = Decimal('0.00')
-
-    for cuenta in qs:
-        saldo_info = calcular_saldos_cuenta(cuenta.id, fecha_hasta)
-        filas.append({
-            'codigo': cuenta.codigo,
-            'nombre': cuenta.nombre,
-            'tipo': cuenta.tipo,
-            'debe_total': str(saldo_info['saldo_deudor']),
-            'haber_total': str(saldo_info['saldo_acreedor']),
-            'saldo': str(saldo_info['saldo_neto'])
-        })
-        total_debitos += saldo_info['saldo_deudor']
-        total_creditos += saldo_info['saldo_acreedor']
-
-    return {
-        'cuentas': filas,
-        'totales': {
-            'debe_total': str(total_debitos),
-            'haber_total': str(total_creditos),
-            'diferencia': str(total_debitos - total_creditos)
-        }
-    }
 
 def get_tercero_movimiento(tipo_tercero: str, tercero_id: int) -> Optional[Any]:
     """Obtiene el objeto del tercero segun tipo e ID. Solo CLIENTE y PROVEEDOR.

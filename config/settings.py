@@ -25,7 +25,13 @@ if len(SECRET_KEY) < 50:
     )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
+# WARNING: [SEC-C1] El valor por defecto DEBE ser 'False' (fail-closed).
+# Varios controles de seguridad (IsTenantMember, HasTenantRole, IsTenantProfileAdmin,
+# IsTenantProfileOperadorOrAdmin, IsTenantAdminOrReadOnly en apps/tenant/api/permissions.py,
+# SintelDSVMixin.get_empresa_id en apps/tenant/api/mixins.py y DebugNoCSRFMiddleware en
+# apps/public/core/middleware.py) relajan sus verificaciones cuando DEBUG=True. Un despliegue
+# que omita DJANGO_DEBUG en el entorno debe caer siempre en el modo seguro, nunca en el permisivo.
+DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
 
 
 # Application definition
@@ -65,7 +71,7 @@ SHARED_APPS = [
     "django_filters",  # Filtrado para APIs públicas
     "drf_spectacular",  # OpenAPI schema generation para APIs públicas
     "djangorestframework_mcp",  # MCP server: expone ViewSets como herramientas via /mcp/
-    "corsheaders",  # CORS para subdominios dinámicos (sintel.com)
+    "corsheaders",  # CORS para subdominios dinámicos (sintel.net.co)
     
     # Django contrib apps (necesarias para admin y funcionalidad base)
     "django.contrib.contenttypes",  # Requerido por admin y relaciones genéricas
@@ -94,6 +100,7 @@ TENANT_APPS = [
     # django-tenants permite que apps estén en ambas listas (se instalan en ambos esquemas)
     "rest_framework",  # DRF para APIs privadas de cada tenant
     "django_filters",  # Filtrado para APIs privadas de cada tenant
+    "django_tables2",  # Tablas server-rendered + HTMX (piloto: apps.tenant.gastos, ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS)
     "drf_spectacular",  # OpenAPI schema generation para APIs privadas de cada tenant
     "djangorestframework_mcp",  # MCP server: expone ViewSets como herramientas via /mcp/
 
@@ -194,7 +201,7 @@ MIDDLEWARE = [
     # pero SecurityMiddleware, WhiteNoise, CORS, Sessions, ValidateALLOWED_HOSTS
     # y ForceNoPortMiddleware DEBEN ejecutarse ANTES para normalizar HTTP_HOST
     # (eliminando el puerto) y validar el Host header ANTES de la resolucion
-    # de tenant. Sin ForceNoPortMiddleware, 'sintel.com:8000' no matchearia
+    # de tenant. Sin ForceNoPortMiddleware, 'sintel.net.co:8000' no matchearia
     # ningun registro de Domain y causaria 404 en desarrollo.
     # Ver: documentacion/arquitectura_general.md seccion 1.5
     'django.middleware.security.SecurityMiddleware',
@@ -220,8 +227,8 @@ MIDDLEWARE = [
 
 # WARNING: CONFIGURACIÓN CRÍTICA: URLs separadas para público y privado
 # django-tenants usa ROOT_URLCONF para el esquema 'public' y TENANT_URLCONF para tenants
-ROOT_URLCONF = 'config.urls_public'  # URLs para esquema público (sintel.com)
-TENANT_URLCONF = 'config.urls_tenant'  # URLs para tenants privados (cliente.sintel.com)
+ROOT_URLCONF = 'config.urls_public'  # URLs para esquema público (sintel.net.co)
+TENANT_URLCONF = 'config.urls_tenant'  # URLs para tenants privados (cliente.sintel.net.co)
 
 TEMPLATES = [
     {
@@ -268,20 +275,20 @@ AUTH_USER_MODEL = "accounts.User"
 # Dominio base del SaaS para construcción automática de subdominios
 # 
 # REGLA DE ORO:
-# - El dominio base se configura desde variable de entorno o usa 'sintel.com' por defecto
+# - El dominio base se configura desde variable de entorno o usa 'sintel.net.co' por defecto
 # - En DEV: Puede ser 'sintel.localhost' (configurable desde .env)
-# - En PROD: 'sintel.com' (configurable desde .env)
+# - En PROD: 'sintel.net.co' (configurable desde .env)
 # 
 # POLÍTICA ESTRICTA:
-# - El tenant PÚBLICO siempre responde en {TENANT_DOMAIN_BASE} (ej: sintel.com)
-# - Los tenants PRIVADOS siempre usan subdominios: {schema_name}.{TENANT_DOMAIN_BASE} (ej: cliente.sintel.com)
+# - El tenant PÚBLICO siempre responde en {TENANT_DOMAIN_BASE} (ej: sintel.net.co)
+# - Los tenants PRIVADOS siempre usan subdominios: {schema_name}.{TENANT_DOMAIN_BASE} (ej: cliente.sintel.net.co)
 # - NO se permiten dominios arbitrarios o FQDN personalizados
 # - Los subdominios se activan automáticamente y son accesibles desde el navegador
-# WARNING: DOMINIO PRINCIPAL Y DEFINITIVO: sintel.com
-# sintel.com es el dominio principal y definitivo para el tenant público en TODOS los entornos
-# Para desarrollo local, añadir sintel.com a /etc/hosts (Linux/Mac) o hosts de Windows
-# Los tenants privados usan subdominios: {schema_name}.sintel.com
-_default_tenant_domain_base = 'sintel.com'  # WARNING: DOMINIO PRINCIPAL Y DEFINITIVO
+# WARNING: DOMINIO PRINCIPAL Y DEFINITIVO: sintel.net.co
+# sintel.net.co es el dominio principal y definitivo para el tenant público en TODOS los entornos
+# Para desarrollo local, añadir sintel.net.co a /etc/hosts (Linux/Mac) o hosts de Windows
+# Los tenants privados usan subdominios: {schema_name}.sintel.net.co
+_default_tenant_domain_base = 'sintel.net.co'  # WARNING: DOMINIO PRINCIPAL Y DEFINITIVO
 TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', _default_tenant_domain_base)
 
 # Puerto de la aplicación (solo para referencia, NO se usa en dominios)
@@ -341,6 +348,10 @@ STATICFILES_DIRS = [
 MEDIA_URL = '/media/'  # URL base para archivos media
 MEDIA_ROOT = BASE_DIR / 'media'  # Directorio donde se almacenan los archivos subidos
 
+# django-tables2: plantilla Bootstrap 5 por defecto para todas las tablas server-rendered
+# (reemplazo de Tabulator/DataTables — ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS)
+DJANGO_TABLES2_TEMPLATE = "django_tables2/bootstrap5.html"
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -393,7 +404,7 @@ else:
     SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin-allow-popups'
 
 # --- Configuración Dinámica de Dominios (SINTEL) ---
-# Permite tráfico desde cualquier subdominio de sintel.com
+# Permite tráfico desde cualquier subdominio de sintel.net.co
 # Configuración de seguridad para dominios dinámicos multi-tenant
 
 import re
@@ -409,35 +420,35 @@ Seguridad Host Header (prod) y soporte HTTPS detrás de proxy.
 # 1. ALLOWED HOSTS (Configuración dinámica basada en DEBUG)
 # WARNING: POLÍTICA ESTRICTA DE SUBDOMINIOS:
 # - El punto inicial (.) actúa como wildcard estándar de Django
-# - Acepta cualquier subdominio del dominio base (ej: cliente.sintel.com, ejemplo.sintel.com)
-# - El dominio base sin punto es para el tenant público (ej: sintel.com)
+# - Acepta cualquier subdominio del dominio base (ej: cliente.sintel.net.co, ejemplo.sintel.net.co)
+# - El dominio base sin punto es para el tenant público (ej: sintel.net.co)
 # - Los subdominios se activan automáticamente al crear un tenant
 # WARNING: SEGURIDAD: En producción, usar lista explícita desde ENV (NO usar '*')
-# WARNING: v2.60: Siempre incluir sintel.com y dominios públicos para permitir acceso desde ambos dominios
+# WARNING: v2.60: Siempre incluir sintel.net.co y dominios públicos para permitir acceso desde ambos dominios
 base_allowed_hosts = (
-    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,192.168.2.15,sintel.com,186.117.247.166,186.117.247.167").split(",")
+    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,192.168.2.15,sintel.net.co,186.117.247.166,186.117.247.167").split(",")
     if DEBUG
-    else os.getenv("ALLOWED_HOSTS", "sintel.com,.sintel.com,186.117.247.166,186.117.247.167").split(",")
+    else os.getenv("ALLOWED_HOSTS", "sintel.net.co,.sintel.net.co,186.117.247.166,186.117.247.167").split(",")
 )
 
 # Limpiar espacios y filtrar vacíos
 ALLOWED_HOSTS = [h.strip() for h in base_allowed_hosts if h.strip()]
 
-# WARNING: v2.60: Asegurar que sintel.com siempre esté incluido (para acceso desde dominio público)
-if 'sintel.com' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('sintel.com')
+# WARNING: v2.60: Asegurar que sintel.net.co siempre esté incluido (para acceso desde dominio público)
+if 'sintel.net.co' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('sintel.net.co')
 
 # En desarrollo, agregar hosts adicionales si no están en ENV
 if DEBUG:
     _dev_hosts = [
-        f".{TENANT_DOMAIN_BASE}",  # .sintel.com o .localhost (acepta cualquier subdominio)
-        TENANT_DOMAIN_BASE,  # sintel.com o localhost (dominio base - tenant público)
+        f".{TENANT_DOMAIN_BASE}",  # .sintel.net.co o .localhost (acepta cualquier subdominio)
+        TENANT_DOMAIN_BASE,  # sintel.net.co o localhost (dominio base - tenant público)
         "localhost",  # Para desarrollo local estándar
         ".localhost",  # WARNING: CRÍTICO: Permite subdominios locales (cliente.localhost, etc.)
         "127.0.0.1",  # Para desarrollo local estándar
-        "sintel.com",  # Dominio de producción (también disponible en desarrollo)
-        ".sintel.com",
-        "sintel.com.co",
+        "sintel.net.co",  # Dominio de producción (también disponible en desarrollo)
+        ".sintel.net.co",
+        "sintel.com.co",  # Variante de dominio .com.co (distinta de sintel.com/sintel.net.co)
         "testserver",
         "test.sintel.local",  # Soporte para tests
         "192.168.2.15",  # IP local del servidor (acceso desde red interna)
@@ -454,15 +465,15 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Regex para validar origen (más seguro que CORS_ORIGIN_ALLOW_ALL)
 CORS_ALLOWED_ORIGIN_REGEXES = [
     rf"^https://.*\.{re.escape(TENANT_DOMAIN_BASE)}$",
-    r"^https://.*\.sintel\.com$",  # Cualquier subdominio de sintel.com en HTTPS
+    r"^https://.*\.sintel\.net\.co$",  # Cualquier subdominio de sintel.net.co en HTTPS
 ]
 
 # En desarrollo, también permitir HTTP
 if DEBUG:
     CORS_ALLOWED_ORIGIN_REGEXES.extend([
         rf"^http://.*\.{re.escape(TENANT_DOMAIN_BASE)}$",
-        r"^http://.*\.sintel\.com(:\d+)?$",  # Cualquier subdominio de sintel.com en HTTP (con puerto opcional)
-        r"^http://sintel\.com(:\d+)?$",  # Dominio sintel.com en HTTP (con puerto opcional)
+        r"^http://.*\.sintel\.net\.co(:\d+)?$",  # Cualquier subdominio de sintel.net.co en HTTP (con puerto opcional)
+        r"^http://sintel\.net\.co(:\d+)?$",  # Dominio sintel.net.co en HTTP (con puerto opcional)
     ])
     # También permitir localhost e IP local en desarrollo
     CORS_ALLOWED_ORIGIN_REGEXES.extend([
@@ -482,7 +493,7 @@ CORS_ALLOW_CREDENTIALS = True
 # CSRF: orígenes de confianza (con esquema). Separar por comas en ENV.
 _csrf_origins = os.getenv(
     "CSRF_TRUSTED_ORIGINS",
-    "http://localhost,http://127.0.0.1,http://192.168.2.15,https://192.168.2.15,http://sintel.com,https://sintel.com,http://.sintel.com,https://.sintel.com,https://186.117.247.166,https://186.117.247.167",
+    "http://localhost,http://127.0.0.1,http://192.168.2.15,https://192.168.2.15,http://sintel.net.co,https://sintel.net.co,http://.sintel.net.co,https://.sintel.net.co,https://186.117.247.166,https://186.117.247.167",
 ).split(",")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins if o.strip()]
 
@@ -494,9 +505,9 @@ if DEBUG:
         "http://127.0.0.1",
         "http://127.0.0.1:8000",
         f"http://{TENANT_DOMAIN_BASE}",
-        "http://sintel.com",  # Dominio de producción (también disponible en desarrollo)
-        "http://sintel.com:8000",  # Dominio con puerto 8000 para desarrollo
-        "http://*.sintel.com:8000",  # Todos los subdominios tenant en desarrollo
+        "http://sintel.net.co",  # Dominio de producción (también disponible en desarrollo)
+        "http://sintel.net.co:8000",  # Dominio con puerto 8000 para desarrollo
+        "http://*.sintel.net.co:8000",  # Todos los subdominios tenant en desarrollo
         "http://192.168.2.15",  # IP local del servidor
         "https://192.168.2.15",
         "http://192.168.2.15:8000",
@@ -507,8 +518,8 @@ if DEBUG:
 else:
     # En producción, agregar orígenes HTTPS explícitos si no están en ENV
     _prod_csrf_origins = [
-        "https://sintel.com",         # Dominio público principal
-        "https://.sintel.com.co",     # Subdominios de sintel.com
+        "https://sintel.net.co",         # Dominio público principal
+        "https://.sintel.com.co",        # Variante de dominio .com.co (distinta de sintel.net.co)
         "https://186.117.247.166",    # IP pública del servidor (acceso directo por IP)
         "https://186.117.247.167",    # IP pública del servidor (acceso directo por IP)
     ]

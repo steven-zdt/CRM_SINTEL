@@ -325,3 +325,104 @@ class CuentasPagar(SintelTenantBaseModel):
             self.estado_pago = "PARCIAL"
 
         super().save(*args, **kwargs)
+
+
+class Representante(SintelTenantBaseModel):
+    """
+    Representante legal o encargado autorizado de un Proveedor.
+
+    SSoT: apps.tenant.empresa (Empresa FK), apps.tenant.proveedores (Proveedor FK)
+    Campos heredados de SintelTenantBaseModel: empresa, created_at, updated_at
+    Patrón: 1 Proveedor → N Representantes (pero normalmente 1 es principal)
+    """
+
+    TIPO_DOCUMENTO = [
+        ("CC", "Cedula de ciudadania"),
+        ("CE", "Cedula de extranjeria"),
+        ("PA", "Pasaporte"),
+        ("NIT", "NIT"),
+    ]
+
+    # --- UUID Lookup Field (AGENTS.md SS14) ---
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        db_index=True,
+        editable=False,
+    )
+
+    # --- SSoT: Empresa (multi-tenant isolation) ---
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="representantes_proveedor",
+        db_index=True,
+        help_text="SSoT Empresa del tenant",
+    )
+
+    # --- SSoT: Proveedor (parent) ---
+    proveedor = models.ForeignKey(
+        Proveedor,
+        on_delete=models.CASCADE,
+        related_name="representantes",
+        db_index=True,
+        help_text="Proveedor al que representa",
+    )
+
+    # --- Identificacion ---
+    tipo_documento = models.CharField(
+        max_length=5,
+        choices=TIPO_DOCUMENTO,
+        default="CC",
+        help_text="Tipo de documento de identificacion",
+    )
+    numero_documento = models.CharField(
+        max_length=32,
+        help_text="Numero de documento (sin digito verificador)",
+    )
+    nombre_completo = models.CharField(
+        max_length=255,
+        help_text="Nombre completo de la persona",
+    )
+
+    # --- Contacto ---
+    email_contacto = models.EmailField(
+        blank=True,
+        help_text="Email de contacto directo",
+    )
+    telefono_contacto = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Numero de telefono de contacto",
+    )
+
+    # --- Organizacional ---
+    cargo = models.CharField(
+        max_length=100,
+        default="Representante Legal",
+        help_text="Titulo o rol en la organizacion",
+    )
+    es_principal = models.BooleanField(
+        default=True,
+        help_text="Si es True, es el representante principal para correspondencia oficial",
+    )
+
+    class Meta:
+        verbose_name = "Representante"
+        verbose_name_plural = "Representantes"
+        ordering = ["-es_principal", "nombre_completo"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["empresa", "proveedor", "numero_documento"],
+                name="uniq_representante_empresa_proveedor_doc",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["empresa", "proveedor"]),
+            models.Index(fields=["empresa", "es_principal"]),
+            models.Index(fields=["numero_documento"]),
+            models.Index(fields=["email_contacto"]),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre_completo} ({self.numero_documento}) — {self.proveedor.razon_social}"

@@ -15,6 +15,11 @@
     let _metricas = null;
     let _ultimaActualizacion = 0;
     let _inicializado = false;
+    let _sedeTable = null;
+    let _sedeFiltros = {
+        fecha_inicio: '',
+        fecha_fin: ''
+    };
 
     // ── Formatters ──────────────────────────────────────────────────────────
 
@@ -47,9 +52,11 @@
             renderizarWidgetInventario();
             renderizarWidgetEmpleados();
             renderizarWidgetGastos();
+            renderizarWidgetProveedores();
             renderizarWidgetProyectos();
             renderizarWidgetClientes();
             actualizarHeader();
+            inicializarTablaSedes();
             _inicializado = true;
         } catch (error) {
             console.error(`${MOD} Error:`, error);
@@ -199,6 +206,26 @@
         );
     }
 
+    function renderizarWidgetProveedores() {
+        const el = d.getElementById('widget-proveedores');
+        if (!el) return;
+        const prov = _metricas?.proveedores;
+        if (!prov) {
+            el.innerHTML = widgetCard('bi-truck','bg-danger bg-opacity-10','text-danger','Proveedores','Cartera pendiente','<div class="col-12"><p class="text-muted small mb-0">Sin datos de proveedores</p></div>');
+            return;
+        }
+        el.innerHTML = widgetCard(
+            'bi-truck',
+            'bg-danger bg-opacity-10',
+            'text-danger',
+            'Proveedores',
+            'Cartera pendiente',
+            metricCol('Proveedores', num(prov.total_provedores), '') +
+            metricCol('Por Pagar', COP(prov.cartera_pendiente), 'text-danger') +
+            metricCol('Total Gastos', COP(prov.total_gastos), 'text-warning', '12')
+        );
+    }
+
     // ── Header / timestamp ──────────────────────────────────────────────────
 
     function actualizarHeader() {
@@ -222,7 +249,7 @@
                 <i class="bi bi-arrow-clockwise me-1"></i>Reintentar
             </button></div>`;
         // Mostrar placeholders de error en widgets vacíos
-        ['widget-facturas','widget-inventario','widget-empleados','widget-gastos','widget-proyectos'].forEach(id => {
+        ['widget-facturas','widget-inventario','widget-empleados','widget-gastos','widget-proyectos','widget-clientes','widget-proveedores'].forEach(id => {
             const el = d.getElementById(id);
             if (el && el.classList.contains('dashboard-widget-placeholder')) {
                 el.innerHTML = '<div class="d-flex align-items-center justify-content-center h-100 text-muted small py-4"><i class="bi bi-dash-circle me-2"></i>Sin datos</div>';
@@ -254,6 +281,72 @@
         setupRefreshBtn();
         inicializar();
     });
+
+    function inicializarTablaSedes() {
+        const container = d.getElementById('table-kpis-sede');
+        if (!container) return;
+
+        if (_sedeTable) {
+            _sedeTable.replaceData();
+            return;
+        }
+
+        const columns = [
+            { title: "Sede", field: "sede_nombre", width: 220, responsive: 0, formatter: function(cell) {
+                const value = cell.getValue();
+                const uuid = cell.getRow().getData().sede_uuid;
+                if (!uuid) {
+                    return `<span class="text-muted fst-italic">${value}</span>`;
+                }
+                return `<strong>${value}</strong>`;
+            }},
+            { title: "Ingresos", field: "ingresos_total", formatter: function(cell) {
+                return COP(cell.getValue());
+            }, horizAlign: "right" },
+            { title: "Gastos", field: "gastos_total", formatter: function(cell) {
+                return COP(cell.getValue());
+            }, horizAlign: "right" },
+            { title: "Margen", field: "margen", formatter: function(cell) {
+                const val = parseFloat(cell.getValue()) || 0;
+                const formatted = COP(val);
+                if (val > 0) return `<span class="text-success fw-bold">${formatted}</span>`;
+                if (val < 0) return `<span class="text-danger fw-bold">${formatted}</span>`;
+                return `<span>${formatted}</span>`;
+            }, horizAlign: "right" },
+            { title: "Proyectos Activos", field: "proyectos_activos", horizAlign: "center", formatter: function(cell) {
+                const val = parseInt(cell.getValue()) || 0;
+                return val > 0 ? `<span class="badge bg-primary">${val}</span>` : `<span class="text-muted">-</span>`;
+            }},
+            { title: "Valor Proyectos", field: "valor_proyectos", formatter: function(cell) {
+                return COP(cell.getValue());
+            }, horizAlign: "right" },
+            { title: "Movs. Inventario", field: "movimientos_inventario", horizAlign: "center", formatter: function(cell) {
+                const val = parseInt(cell.getValue()) || 0;
+                return val > 0 ? `<span class="badge bg-info text-dark">${val}</span>` : `<span class="text-muted">-</span>`;
+            }}
+        ];
+
+        _sedeTable = w.TabulatorFactory.create('#table-kpis-sede', '/api/v1/dashboard/kpis-por-sede/', columns, {
+            pagination: false,
+            ajaxParams: function() {
+                return _sedeFiltros;
+            }
+        });
+
+        // Configurar botón de filtro
+        const btnFiltrar = d.getElementById('btn-filtrar-sede');
+        const inputInicio = d.getElementById('sede-filtro-inicio');
+        const inputFin = d.getElementById('sede-filtro-fin');
+
+        if (btnFiltrar && inputInicio && inputFin && !btnFiltrar.dataset.bound) {
+            btnFiltrar.dataset.bound = 'true';
+            btnFiltrar.addEventListener('click', () => {
+                _sedeFiltros.fecha_inicio = inputInicio.value;
+                _sedeFiltros.fecha_fin = inputFin.value;
+                _sedeTable.replaceData(); // Recarga la tabla con los nuevos parámetros
+            });
+        }
+    }
 
     // ── Export ───────────────────────────────────────────────────────────────
 

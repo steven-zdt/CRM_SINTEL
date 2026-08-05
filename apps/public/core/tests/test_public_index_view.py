@@ -34,14 +34,14 @@ class TestPublicIndexView(TestCase):
         self.url = reverse("public_index")
 
         self.normal_user = User.objects.create_user(
-            username="normal@sintel.com",
-            email="normal@sintel.com",
+            username="normal@sintel.net.co",
+            email="normal@sintel.net.co",
             password="S3cur3Pass!",
             is_active=True,
         )
         self.staff_user = User.objects.create_user(
-            username="staff@sintel.com",
-            email="staff@sintel.com",
+            username="staff@sintel.net.co",
+            email="staff@sintel.net.co",
             password="S3cur3Pass!",
             is_staff=True,
             is_active=True,
@@ -111,7 +111,7 @@ class TestPublicIndexView(TestCase):
         )
         Domain.objects.create(
             tenant=tenant,
-            domain="testmember.sintel.com",
+            domain="testmember.sintel.net.co",
             is_primary=True,
         )
         TenantMembership.objects.create(

@@ -1,0 +1,108 @@
+name: CI - Tests, Lint & Security
+
+# [DEVOPS-C1] Antes de este workflow, ningun job de CI ejecutaba la suite de
+# pytest (329 archivos), ruff, bandit ni `manage.py check`. verify-core.yml y
+# verify-phase5.yml solo corren scripts Node.js de auditoria de contaminacion
+# de core y de fase 5; no reemplazan este gate.
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  test-and-quality:
+    name: Pytest + Django Check + Ruff + Bandit
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sintel
+          POSTGRES_USER: sintel
+          POSTGRES_PASSWORD: sintel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sintel"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      # WARNING: [SEC-C1] DEBUG=False en CI a proposito -- ejercita las
+      # verificaciones reales de IsTenantMember/HasTenantRole/DSV en vez del
+      # atajo de desarrollo. Los tests ya crean TenantMembership/TenantProfile
+      # reales (ver apps/tenant/gastos/tests/test_multitenant_isolation.py).
+      DJANGO_DEBUG: "False"
+      DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production-0123456789abcdef0123456789
+      JWT_SECRET_KEY: Y2ktb25seS1qd3Qtc2VjcmV0LWtleS1ub3QtZm9yLXByb2R1Y3Rpb24tdXNl
+      DATABASE_NAME: sintel
+      DATABASE_USER: sintel
+      DATABASE_PASSWORD: sintel
+      DATABASE_HOST: localhost
+      DATABASE_PORT: "5432"
+      REDIS_URL: redis://localhost:6379/0
+      TENANT_DOMAIN_BASE: sintel.net.co
+      ALLOWED_HOSTS: "localhost,127.0.0.1,.sintel.net.co"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpq-dev libxml2-dev libxslt1-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # ruff/bandit/pip-audit ya estan en requirements.txt desde Fase 8
+          # (DEVOPS-A4) — antes se instalaban aqui por separado porque faltaban
+          # del archivo (ver REPORTE_FASE_1.md, hallazgo relacionado con DEVOPS-C1).
+          pip install -r requirements.txt
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Ruff (lint)
+        # WARNING: no bloqueante todavia -- no hay visibilidad de cuantas
+        # violaciones preexistentes tiene el repo (~1400 archivos .py) porque
+        # este entorno no pudo ejecutar ruff antes de este cambio. Quitar
+        # continue-on-error una vez que el equipo confirme una corrida limpia
+        # o triage las violaciones existentes.
+        continue-on-error: true
+        run: python -m ruff check apps config
+
+      - name: Bandit (security scan)
+        continue-on-error: true
+        run: python -m bandit -q -r apps -x "*/migrations/*,*/tests/*"
+
+      - name: pip-audit (dependencias vulnerables)
+        # DEVOPS-A4: mismo patron continue-on-error que ruff/bandit hasta que
+        # el equipo triage el backlog inicial de CVEs preexistentes en
+        # requirements.txt (nunca escaneado antes de este cambio).
+        continue-on-error: true
+        run: python -m pip_audit -r requirements.txt
+
+      - name: Run pytest
+        run: pytest

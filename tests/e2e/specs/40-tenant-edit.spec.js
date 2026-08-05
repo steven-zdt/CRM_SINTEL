@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
 test('Edit Tenant funciona desde la consola pública', async ({ page }) => {
-  const publicUrl = process.env.E2E_PUBLIC_URL || 'http://sintel.com:8000';
+  const publicUrl = process.env.E2E_PUBLIC_URL || 'http://sintel.net.co:8000';
   const adminUser = process.env.E2E_ADMIN_USER || 'admin';
   const adminPass = process.env.E2E_ADMIN_PASS || 'admin';
 

@@ -35,9 +35,9 @@ def test_workspace_401_handler_does_not_redirect_for_noncritical_modules(client,
     
     # Si los ViewSets aceptan SessionAuthentication, NO deben devolver 401
     # 200 si funciona correctamente, 404 si falta include en TENANT_URLCONF
-    r1 = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
-    r2 = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
-    r3 = client.get("/api/v1/proveedores/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    r1 = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    r2 = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    r3 = client.get("/api/v1/proveedores/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     
     # Nunca deben ser 401 si la sesión está activa y SessionAuthentication está configurado
     assert r1.status_code != 401, (

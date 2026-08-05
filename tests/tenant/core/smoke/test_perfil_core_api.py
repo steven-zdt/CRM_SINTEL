@@ -6,15 +6,18 @@ en el TENANT_URLCONF y responden correctamente desde el dominio del tenant.
 
 Referencia: SINTEL v2.30 - Core API como orquestador único de la UI privada.
 """
-import pytest
 import json
-from django.test import Client
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django_tenants.utils import schema_context
-from apps.public.tenants.models import Client as TenantClient, Domain
-from apps.tenant.perfil.models import TenantProfile
+
+import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import Client
 from django.utils import timezone
+from django_tenants.utils import schema_context
+
+from apps.public.tenants.models import Client as TenantClient
+from apps.public.tenants.models import Domain
+from apps.tenant.perfil.models import TenantProfile
 
 User = get_user_model()
 
@@ -26,6 +29,12 @@ def test_core_mi_perfil_get_returns_200(client):
     
     [WARNING] MULTI-TENANT: Usa HTTP_HOST para entrar al TENANT_URLCONF correcto.
     """
+    try:
+        import cryptography  # noqa: F401
+        import playwright  # noqa: F401
+    except Exception:
+        pytest.skip("Skipping heavy smoke test: missing playwright/cryptography")
+
     # Crear tenant de prueba
     schema_name = "tenant_test_core_mi_perfil_get"
     tenant, created = TenantClient.objects.get_or_create(
@@ -38,7 +47,7 @@ def test_core_mi_perfil_get_returns_200(client):
     )
     
     # Crear dominio para el tenant
-    domain_name = "test-core-perfil.sintel.com"
+    domain_name = "test-core-perfil.sintel.net.co"
     Domain.objects.get_or_create(
         domain=domain_name,
         tenant=tenant,
@@ -50,13 +59,6 @@ def test_core_mi_perfil_get_returns_200(client):
         try:
             user = User.objects.create_user(
                 username="testuser",
-        import pytest
-
-        try:
-            import playwright  # noqa: F401
-            import cryptography  # noqa: F401
-        except Exception:
-            pytest.skip("Skipping heavy smoke test: missing playwright/cryptography", allow_module_level=True)
                 email="test@example.com",
                 password="testpass123",
                 first_name="Test",
@@ -120,7 +122,7 @@ def test_core_mi_perfil_patch_json_returns_200(client):
     )
     
     # Crear dominio para el tenant
-    domain_name = "test-core-perfil-patch.sintel.com"
+    domain_name = "test-core-perfil-patch.sintel.net.co"
     Domain.objects.get_or_create(
         domain=domain_name,
         tenant=tenant,
@@ -197,7 +199,7 @@ def test_core_mi_perfil_patch_multipart_returns_200(client):
     )
     
     # Crear dominio para el tenant
-    domain_name = "test-core-perfil-multipart.sintel.com"
+    domain_name = "test-core-perfil-multipart.sintel.net.co"
     Domain.objects.get_or_create(
         domain=domain_name,
         tenant=tenant,
@@ -280,7 +282,7 @@ def test_core_mi_perfil_configuracion_patch_returns_200(client):
     )
     
     # Crear dominio para el tenant
-    domain_name = "test-core-perfil-config.sintel.com"
+    domain_name = "test-core-perfil-config.sintel.net.co"
     Domain.objects.get_or_create(
         domain=domain_name,
         tenant=tenant,

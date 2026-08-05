@@ -40,7 +40,7 @@ def tenant(db):
 
     Domain.objects.get_or_create(
         tenant=tenant_obj,
-        domain=f'{tenant_obj.schema_name}.sintel.com',
+        domain=f'{tenant_obj.schema_name}.sintel.net.co',
         defaults={'is_primary': True},
     )
 

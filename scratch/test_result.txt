@@ -290,7 +290,7 @@ Running migrations:
   Applying token_blacklist.0013_alter_blacklistedtoken_options_and_more...
  OK
 ----------------------------- Captured stderr call -----------------------------
-[INFO] apps.public.tenants.middleware_urlconf: OK: TenantSecurityAndURLConfMiddleware inicializado | Public schema: public | Allowed public domains: ['0.0.0.0', '127.0.0.1', '192.168.2.15', 'localhost', 'sintel.com', 'testserver']
+[INFO] apps.public.tenants.middleware_urlconf: OK: TenantSecurityAndURLConfMiddleware inicializado | Public schema: public | Allowed public domains: ['0.0.0.0', '127.0.0.1', '192.168.2.15', 'localhost', 'sintel.net.co', 'testserver']
 [INFO] apps.services.document_ingest.app_router: app_parser_registered
 [INFO] apps.services.document_ingest.app_router: app_parser_registered
 [INFO] apps.services.document_ingest.app_router: app_parser_registered
@@ -393,7 +393,7 @@ Running migrations:
 [INFO] apps.tenant.gastos.services.crud_service: [DocumentoCRUD] Creado documento ID=1, consecutivo=1
 [INFO] apps.tenant.gastos.services.business_service: [GastoBusinessService:procesar_gasto] Exito! ID=1, Total Neto=100000.00
 ------------------------------ Captured log call -------------------------------
-INFO     apps.public.tenants.middleware_urlconf:middleware_urlconf.py:75 OK: TenantSecurityAndURLConfMiddleware inicializado | Public schema: public | Allowed public domains: ['0.0.0.0', '127.0.0.1', '192.168.2.15', 'localhost', 'sintel.com', 'testserver']
+INFO     apps.public.tenants.middleware_urlconf:middleware_urlconf.py:75 OK: TenantSecurityAndURLConfMiddleware inicializado | Public schema: public | Allowed public domains: ['0.0.0.0', '127.0.0.1', '192.168.2.15', 'localhost', 'sintel.net.co', 'testserver']
 INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
 INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered
 INFO     apps.services.document_ingest.app_router:app_router.py:38 app_parser_registered

@@ -160,7 +160,7 @@ curl -X PATCH http://localhost:8000/api/v1/core/empresa/ \
 
 ### Paso 4: Validar Workspace UI
 
-1. Abrir `http://home.sintel.com/workspace/#empresa`
+1. Abrir `http://home.sintel.net.co/workspace/#empresa`
 2. Crear/Editar empresa
 3. Verificar en Network tab que solo se usa `PATCH /api/v1/core/empresa/`
 4. Verificar que no aparecen llamadas a `/api/v1/empresas/` (POST/PATCH/PUT)

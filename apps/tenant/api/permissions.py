@@ -56,13 +56,13 @@ class IsTenantMember(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        # Fallback para desarrollo (v2.62.1)
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # En DEBUG se omite la verificacion de membresia pero NO la autenticacion.
         from django.conf import settings
         if settings.DEBUG:
             return True
-
-        if not request.user or not request.user.is_authenticated:
-            return False
 
         tenant = getattr(request, 'tenant', None)
         if not tenant:
@@ -93,13 +93,13 @@ class HasTenantRole(permissions.BasePermission):
     """
 
     def has_permission(self, request, view) -> bool:
-        # Fallback para desarrollo (v2.62.1)
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # En DEBUG se omite la verificacion de rol pero NO la autenticacion.
         from django.conf import settings
         if settings.DEBUG:
             return True
-
-        if not request.user or not request.user.is_authenticated:
-            return False
 
         perfil = _get_perfil(request.user)
         if not perfil:
@@ -123,13 +123,14 @@ class IsTenantProfileAdmin(permissions.BasePermission):
     """
 
     def has_permission(self, request, view) -> bool:
-        # Fallback para desarrollo (v2.62.1)
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # En DEBUG se omite la verificacion de rol pero NO la autenticacion.
         from django.conf import settings
         if settings.DEBUG:
             return True
 
-        if not request.user or not request.user.is_authenticated:
-            return False
         perfil = _get_perfil(request.user)
         if not perfil:
             return False
@@ -146,13 +147,14 @@ class IsTenantProfileOperadorOrAdmin(permissions.BasePermission):
     """
 
     def has_permission(self, request, view) -> bool:
-        # Fallback para desarrollo (v2.62.1)
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # En DEBUG se omite la verificacion de rol pero NO la autenticacion.
         from django.conf import settings
         if settings.DEBUG:
             return True
 
-        if not request.user or not request.user.is_authenticated:
-            return False
         perfil = _get_perfil(request.user)
         if not perfil:
             return False
@@ -188,16 +190,16 @@ class IsTenantAdminOrReadOnly(permissions.BasePermission):
     message = "Solo usuarios ADMIN del tenant pueden crear/editar/eliminar."
 
     def has_permission(self, request, view):
-        # Fallback para desarrollo (v2.62.1) — permitir TODO en DEBUG
-        from django.conf import settings
-        if settings.DEBUG:
-            return True
-
         from rest_framework.permissions import SAFE_METHODS
 
         user = getattr(request, "user", None)
         if not (user and user.is_authenticated):
             return False
+
+        # En DEBUG se omiten las verificaciones de rol pero NO la autenticacion.
+        from django.conf import settings
+        if settings.DEBUG:
+            return True
 
         if request.method in SAFE_METHODS:
             return True
@@ -206,5 +208,5 @@ class IsTenantAdminOrReadOnly(permissions.BasePermission):
         if hasattr(view, '_check_enforced_mode'):
             return True
 
-        # En producción, verificar si es ADMIN
+        # En produccion, verificar si es ADMIN
         return IsTenantAdmin().has_permission(request, view)

@@ -1,14 +1,21 @@
-import io
 import datetime
+import io
+
 import pandas as pd
-from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from tests.tenant.base_test import SintelTenantTestCase
-from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario, TransaccionBancaria
-from apps.tenant.bancos.services.crud_service import ExtractoBancarioCRUDService
+
+from apps.tenant.bancos.models import (
+    CuentaBancaria,
+    ExtractoBancario,
+    TransaccionBancaria,
+)
 from apps.tenant.bancos.services.business_service import ExtractoBancarioBusinessService
+from apps.tenant.bancos.services.crud_service import ExtractoBancarioCRUDService
+from tests.tenant.base_test import SintelTenantTestCase
+
 
 class TestExtractoBancarioCRUD(SintelTenantTestCase):
     """
@@ -55,7 +62,7 @@ class TestExtractoBancarioCRUD(SintelTenantTestCase):
         return SimpleUploadedFile(
             "extracto.xlsx",
             output.read(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     def test_create_extracto_via_service(self):
@@ -93,7 +100,7 @@ class TestExtractoBancarioCRUD(SintelTenantTestCase):
         rows = [
             ["01/04", "CONSIGNACION", "BOGOTA", "12345", 5000.00, 10000.00],
             ["15/04", "RETIRO CAJERO", "MEDELLIN", "", -2000.00, 8000.00],
-            ["NOT A DATE", "INFO ROW", "", "", 0.00, 0.00]
+            ["NOT A DATE", "INFO ROW", "", "", 0.00, 0.00],
         ]
         excel_file = self._create_mock_excel(rows)
         extracto.archivo_s3 = excel_file
@@ -102,11 +109,11 @@ class TestExtractoBancarioCRUD(SintelTenantTestCase):
         # 3. Process
         count = ExtractoBancarioBusinessService.procesar_archivo_extracto(extracto)
         self.assertEqual(count, 2)
-        
+
         # Verify database records
         txs = TransaccionBancaria.objects.filter(extracto=extracto).order_by("fecha")
         self.assertEqual(txs.count(), 2)
-        
+
         tx1 = txs[0]
         self.assertEqual(tx1.fecha, datetime.date(2026, 4, 1))
         self.assertEqual(tx1.descripcion, "CONSIGNACION")
@@ -120,10 +127,12 @@ class TestExtractoBancarioCRUD(SintelTenantTestCase):
         excel_file_2 = self._create_mock_excel(rows)
         extracto.archivo_s3 = excel_file_2
         extracto.save()
-        
+
         count_2 = ExtractoBancarioBusinessService.procesar_archivo_extracto(extracto)
         self.assertEqual(count_2, 2)
-        self.assertEqual(TransaccionBancaria.objects.filter(extracto=extracto).count(), 2)
+        self.assertEqual(
+            TransaccionBancaria.objects.filter(extracto=extracto).count(), 2
+        )
 
     def test_process_invalid_excel(self):
         """Test: Processing invalid structure should raise validation error."""
@@ -136,9 +145,7 @@ class TestExtractoBancarioCRUD(SintelTenantTestCase):
             saldo_final=8000.00,
         )
         # Invalid shape: < 6 columns
-        rows = [
-            ["01/04", "CONSIGNACION", "BOGOTA"]
-        ]
+        rows = [["01/04", "CONSIGNACION", "BOGOTA"]]
         excel_file = self._create_mock_excel(rows)
         extracto.archivo_s3 = excel_file
         extracto.save()
@@ -179,12 +186,16 @@ class TestExtractoBancarioCRUD(SintelTenantTestCase):
         extracto.archivo_s3 = excel_file
         extracto.save()
 
-        process_url = reverse("bancos-extractos-procesar", kwargs={"uuid": extracto_uuid})
+        process_url = reverse(
+            "bancos-extractos-procesar", kwargs={"uuid": extracto_uuid}
+        )
         response = self.api_client.post(process_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
         # Verify transaction ingested
-        self.assertEqual(TransaccionBancaria.objects.filter(extracto=extracto).count(), 1)
+        self.assertEqual(
+            TransaccionBancaria.objects.filter(extracto=extracto).count(), 1
+        )
 
         # 4. DELETE
         response = self.api_client.delete(detail_url)

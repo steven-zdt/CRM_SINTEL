@@ -1,12 +1,12 @@
 FROM nginx:alpine
 
-# Generar certificado autofirmado para desarrollo local
-RUN apk add --no-cache openssl && \
-    mkdir -p /etc/nginx/certs && \
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-      -keyout /etc/nginx/certs/sintel.key \
-      -out /etc/nginx/certs/sintel.crt \
-      -subj "/CN=*.sintel.com/O=Sintel/C=CO" \
-      -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:192.168.2.15,DNS:sintel.com,DNS:*.sintel.com"
+# openssl necesario para generar el cert en el entrypoint
+RUN apk add --no-cache openssl
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# El cert se genera en /etc/nginx/certs/ SOLO si no existe (entrypoint).
+# El directorio es un volumen Docker persistente → sobrevive rebuilds.
+ENTRYPOINT ["/docker-entrypoint.sh"]

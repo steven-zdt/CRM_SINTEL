@@ -1,18 +1,3 @@
-"""
-ViewSet para Ventas — OrdenVenta.
-
-Endpoints REST + acciones HTMX:
-- GET  /api/v1/ventas/                        Lista paginada (Tabulator)
-- GET  /api/v1/ventas/{uuid}/                  Detalle
-- POST /api/v1/ventas/                         Crear orden
-- PATCH/PUT /api/v1/ventas/{uuid}/             Actualizar (solo BORRADOR/CONFIRMADA)
-- DELETE /api/v1/ventas/{uuid}/                Anular (logico)
-- POST /api/v1/ventas/{uuid}/confirmar/        BORRADOR -> CONFIRMADA
-- POST /api/v1/ventas/{uuid}/facturar/         CONFIRMADA -> FACTURADA (genera Factura)
-- POST /api/v1/ventas/{uuid}/anular/           -> ANULADA
-- GET  /api/v1/ventas/render-offcanvas/crear/  HTML offcanvas crear (HTMX)
-- GET  /api/v1/ventas/render-offcanvas/detalle/ HTML offcanvas detalle (HTMX)
-"""
 import datetime
 import logging
 
@@ -24,28 +9,24 @@ from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.ventas.api.serializers import (
-    OrdenVentaCreateUpdateSerializer,
-    OrdenVentaDetailSerializer,
-    OrdenVentaListSerializer,
+    ResolucionFacturacionSerializer,
+    VentaDetailSerializer,
+    VentaListSerializer,
 )
-from apps.tenant.ventas.models import OrdenVenta
-from apps.tenant.ventas.services import OrdenVentaBusinessService
-from apps.tenant.ventas.services.api_mixins import OrdenVentaServiceMixin
+from apps.tenant.ventas.models import ResolucionFacturacion, Venta
+from apps.tenant.ventas.services.api_mixins import (
+    ResolucionFacturacionServiceMixin,
+    VentaServiceMixin,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class OrdenVentaViewSet(OrdenVentaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
-    """
-    ViewSet para gestion de Ordenes de Venta.
-    Dual-Auth: JWT (API) + Session (HTMX/browser).
-    """
-
-    queryset = OrdenVenta.objects.none()
-    serializer_class = OrdenVentaDetailSerializer
+class VentaViewSet(VentaServiceMixin, BaseTenantViewSet):
+    queryset = Venta.objects.none()
+    serializer_class = VentaDetailSerializer
     lookup_field = "uuid"
     lookup_url_kwarg = "uuid"
     pagination_class = StandardResultsSetPagination
@@ -53,27 +34,21 @@ class OrdenVentaViewSet(OrdenVentaServiceMixin, SintelDSVMixin, BaseTenantViewSe
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     renderer_classes = [JSONRenderer]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["observaciones"]
-    ordering_fields = ["fecha_emision", "total", "created_at"]
+    search_fields = ["observaciones", "numero_factura"]
+    ordering_fields = ["fecha_emision", "total_neto", "created_at"]
     ordering = ["-created_at"]
-
-    # ------------------------------------------------------------------
-    # QuerySet y Serializador
-    # ------------------------------------------------------------------
 
     def get_queryset(self):
         if not hasattr(self, "action") or self.action is None:
-            return OrdenVenta.objects.none()
+            return Venta.objects.none()
         if self.action == "list":
             return self.get_qs_list()
         return self.get_qs_detail()
 
     def get_serializer_class(self):
         if self.action == "list":
-            return OrdenVentaListSerializer
-        if self.action in ("create", "update", "partial_update"):
-            return OrdenVentaCreateUpdateSerializer
-        return OrdenVentaDetailSerializer
+            return VentaListSerializer
+        return VentaDetailSerializer
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -84,167 +59,91 @@ class OrdenVentaViewSet(OrdenVentaServiceMixin, SintelDSVMixin, BaseTenantViewSe
         return ctx
 
     def get_object(self):
-        """DSV: valida que el objeto pertenezca a la empresa del tenant."""
         uuid_val = self.kwargs.get(self.lookup_url_kwarg)
         empresa_id = self._get_empresa_id_seguro()
-        obj = OrdenVenta.objects.filter(
-            uuid=uuid_val,
-            empresa_id=empresa_id,
-        ).first()
+        obj = Venta.objects.filter(uuid=uuid_val, empresa_id=empresa_id).first()
         if not obj:
-            logger.warning(
-                "[OrdenVentaViewSet:DSV] UUID %s no encontrado para empresa %s",
-                uuid_val,
-                empresa_id,
-            )
             from rest_framework.exceptions import NotFound
-            raise NotFound("Orden de venta no encontrada en su organizacion.")
+            raise NotFound("Venta no encontrada en su organizacion.")
         self.check_object_permissions(self.request, obj)
         return obj
 
     # ------------------------------------------------------------------
-    # CRUD estandar
+    # CRUD
     # ------------------------------------------------------------------
 
     def create(self, request, *args, **kwargs):
         empresa = self._get_empresa()
         if not empresa:
             return Response(
-                {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
+                {"detail": "No se pudo determinar la empresa activa."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
-        serializer = OrdenVentaCreateUpdateSerializer(
-            data=request.data,
-            context={"empresa_id": empresa.id, "request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-
-        validated = dict(serializer.validated_data)
-        items_raw = validated.pop("items", [])
-        validated["cliente_id"] = validated.pop("cliente").id if "cliente" in validated else None
-
-        items_data = [
-            {
-                "descripcion": item.get("descripcion", ""),
-                "cantidad": str(item.get("cantidad", "1")),
-                "precio_unitario": str(item.get("precio_unitario", "0")),
-                "tasa_iva": str(item.get("tasa_iva", "0")),
-                "producto_id": item.get("producto_id"),
-                "servicio_id": item.get("servicio_id"),
-            }
-            for item in items_raw
-        ]
-        validated["items"] = items_data
-
-        try:
-            orden = self.service_crear_orden(validated, empresa)
-        except Exception as exc:
-            return self.handle_service_error(exc)
-
-        out = OrdenVentaDetailSerializer(orden, context=self.get_serializer_context())
+        payload = request.data if isinstance(request.data, dict) else dict(request.data)
+        ok, result, status_code = self.service_crear_borrador(empresa, payload)
+        if not ok:
+            return Response(result, status=status_code)
+        out = VentaDetailSerializer(result, context=self.get_serializer_context())
         return Response(out.data, status=status.HTTP_201_CREATED)
 
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop("partial", False)
-        orden = self.get_object()
+    def destroy(self, request, *args, **kwargs):
+        venta = self.get_object()
+        empresa_id = self._get_empresa_id_seguro()
+        ok, result, status_code = self.service_anular_venta(str(venta.uuid), empresa_id)
+        if not ok:
+            return Response(result, status=status_code)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # ------------------------------------------------------------------
+    # Acciones de estado
+    # ------------------------------------------------------------------
+
+    @action(detail=True, methods=["post"], url_path="procesar-facturar")
+    def procesar_facturar(self, request, uuid=None):
         empresa = self._get_empresa()
+        if not empresa:
+            return Response(
+                {"detail": "No se pudo determinar la empresa activa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        venta = self.get_object()
+        payload = request.data if isinstance(request.data, dict) else dict(request.data)
+        payload["cliente"] = str(venta.cliente.uuid) if not payload.get("cliente") else payload["cliente"]
+        payload["fecha_emision"] = payload.get("fecha_emision") or str(venta.fecha_emision)
+        payload.setdefault("fecha_vencimiento", str(venta.fecha_vencimiento) if venta.fecha_vencimiento else None)
+        payload.setdefault("observaciones", venta.observaciones or "")
 
-        serializer = OrdenVentaCreateUpdateSerializer(
-            orden,
-            data=request.data,
-            partial=partial,
-            context={"empresa_id": empresa.id, "request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-
-        validated = dict(serializer.validated_data)
-        items_raw = validated.pop("items", None)
-        if "cliente" in validated:
-            validated["cliente_id"] = validated.pop("cliente").id
-
-        if items_raw is not None:
-            validated["items"] = [
+        if not payload.get("items"):
+            payload["items"] = [
                 {
-                    "descripcion": item.get("descripcion", ""),
-                    "cantidad": str(item.get("cantidad", "1")),
-                    "precio_unitario": str(item.get("precio_unitario", "0")),
-                    "tasa_iva": str(item.get("tasa_iva", "0")),
-                    "producto_id": item.get("producto_id"),
-                    "servicio_id": item.get("servicio_id"),
+                    "descripcion": item.descripcion,
+                    "cantidad": str(item.cantidad),
+                    "precio_unitario": str(item.precio_unitario),
+                    "porcentaje_iva": str(item.porcentaje_iva),
+                    "producto_id": str(item.producto.uuid) if item.producto_id else None,
+                    "servicio_id": str(item.servicio.uuid) if item.servicio_id else None,
                 }
-                for item in items_raw
+                for item in venta.items.select_related("producto", "servicio").all()
             ]
 
-        try:
-            orden = self.service_actualizar_orden(orden, validated, empresa)
-        except Exception as exc:
-            return self.handle_service_error(exc)
-
-        out = OrdenVentaDetailSerializer(orden, context=self.get_serializer_context())
-        return Response(out.data, status=status.HTTP_200_OK)
-
-    def partial_update(self, request, *args, **kwargs):
-        kwargs["partial"] = True
-        return self.update(request, *args, **kwargs)
-
-    def destroy(self, request, *args, **kwargs):
-        orden = self.get_object()
-        try:
-            motivo = request.data.get("motivo", "Eliminacion solicitada por usuario.")
-            self.service_anular_orden(orden, motivo)
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Exception as exc:
-            return self.handle_service_error(exc)
-
-    # ------------------------------------------------------------------
-    # Acciones de maquina de estados
-    # ------------------------------------------------------------------
-
-    @action(detail=True, methods=["post"], url_path="confirmar")
-    def confirmar(self, request, uuid=None):
-        """Transiciona la orden: BORRADOR -> CONFIRMADA."""
-        orden = self.get_object()
-        try:
-            orden = self.service_confirmar_orden(orden)
-            out = OrdenVentaDetailSerializer(orden, context=self.get_serializer_context())
-            return Response(out.data, status=status.HTTP_200_OK)
-        except Exception as exc:
-            return self.handle_service_error(exc)
-
-    @action(detail=True, methods=["post"], url_path="facturar")
-    def facturar(self, request, uuid=None):
-        """Genera Factura electronica desde la orden CONFIRMADA."""
-        orden = self.get_object()
-        try:
-            success, result, status_code = self.service_generar_factura(orden)
-            if not success:
-                return Response(result, status=status_code)
-            from apps.tenant.facturas.api.serializers import FacturaSerializer
-            try:
-                out = FacturaSerializer(result).data
-            except Exception:
-                out = {"factura_id": result.id, "factura_uuid": str(result.uuid)}
-            return Response(
-                {"message": "Factura generada correctamente.", "factura": out},
-                status=status.HTTP_201_CREATED,
-            )
-        except Exception as exc:
-            return self.handle_service_error(exc)
+        ok, result, status_code = self.service_procesar_y_facturar(empresa, payload)
+        if not ok:
+            return Response(result, status=status_code)
+        out = VentaDetailSerializer(result, context=self.get_serializer_context())
+        return Response(out.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="anular")
     def anular(self, request, uuid=None):
-        """Anula la orden (estado ANULADA, inmutable)."""
-        orden = self.get_object()
-        motivo = request.data.get("motivo", "")
-        try:
-            self.service_anular_orden(orden, motivo)
-            return Response({"message": "Orden anulada correctamente."}, status=status.HTTP_200_OK)
-        except Exception as exc:
-            return self.handle_service_error(exc)
+        venta = self.get_object()
+        empresa_id = self._get_empresa_id_seguro()
+        ok, result, status_code = self.service_anular_venta(str(venta.uuid), empresa_id)
+        if not ok:
+            return Response(result, status=status_code)
+        out = VentaDetailSerializer(result, context=self.get_serializer_context())
+        return Response(out.data, status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------
-    # Acciones de renderizado HTMX
+    # HTMX offcanvas renders
     # ------------------------------------------------------------------
 
     @action(
@@ -254,21 +153,24 @@ class OrdenVentaViewSet(OrdenVentaServiceMixin, SintelDSVMixin, BaseTenantViewSe
         url_path="render-offcanvas/crear",
     )
     def render_offcanvas_crear(self, request):
-        """Renderiza el offcanvas de creacion de orden (HTMX)."""
         from apps.tenant.clientes.models import Cliente
+        from apps.tenant.ventas.services.selectors import ResolucionFacturacionSelector
 
         empresa_id = self._get_empresa_id_seguro()
-        clientes_qs = Cliente.objects.filter(
-            empresa_id=empresa_id,
-            activo=True,
-        ).only("id", "uuid", "razon_social", "numero_documento").order_by("razon_social")
+        clientes_qs = (
+            Cliente.objects.filter(empresa_id=empresa_id, activo=True)
+            .only("id", "uuid", "razon_social", "numero_documento")
+            .order_by("razon_social")
+        )
+        resoluciones_qs = ResolucionFacturacionSelector.get_vigentes(empresa_id)
 
         return Response(
             {
                 "clientes": clientes_qs,
+                "resoluciones": resoluciones_qs,
                 "fecha_default": datetime.date.today().isoformat(),
             },
-            template_name="tenant/ventas/offcanvas_crear_orden.html",
+            template_name="tenant/ventas/offcanvas_crear_venta.html",
         )
 
     @action(
@@ -278,24 +180,150 @@ class OrdenVentaViewSet(OrdenVentaServiceMixin, SintelDSVMixin, BaseTenantViewSe
         url_path="render-offcanvas/detalle",
     )
     def render_offcanvas_detalle(self, request):
-        """Renderiza el offcanvas de detalle de una orden (HTMX)."""
-        orden_uuid = request.query_params.get("uuid")
+        venta_uuid = request.query_params.get("uuid")
         empresa_id = self._get_empresa_id_seguro()
-
-        orden = (
-            OrdenVenta.objects.filter(uuid=orden_uuid, empresa_id=empresa_id)
-            .select_related("cliente", "factura")
+        venta = (
+            Venta.objects.filter(uuid=venta_uuid, empresa_id=empresa_id)
+            .select_related("cliente", "proyecto", "factura_asociada", "resolucion")
             .prefetch_related("items", "items__producto", "items__servicio")
             .first()
         )
-
-        if not orden:
-            return Response(
-                {"error": "Orden no encontrada."},
-                template_name="tenant/ventas/offcanvas_detalle_orden.html",
-            )
-
         return Response(
-            {"orden": orden},
-            template_name="tenant/ventas/offcanvas_detalle_orden.html",
+            {"venta": venta},
+            template_name="tenant/ventas/offcanvas_detalle_venta.html",
+        )
+
+
+class ResolucionFacturacionViewSet(ResolucionFacturacionServiceMixin, BaseTenantViewSet):
+    queryset = ResolucionFacturacion.objects.none()
+    serializer_class = ResolucionFacturacionSerializer
+    lookup_field = "uuid"
+    lookup_url_kwarg = "uuid"
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+    renderer_classes = [JSONRenderer]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ["fecha_resolucion", "vigente", "created_at"]
+    ordering = ["-vigente", "-fecha_resolucion"]
+
+    def get_queryset(self):
+        if not hasattr(self, "action") or self.action is None:
+            return ResolucionFacturacion.objects.none()
+        if self.action == "list":
+            return self.get_qs_list()
+        return self.get_qs_detail()
+
+    def get_object(self):
+        uuid_val = self.kwargs.get(self.lookup_url_kwarg)
+        empresa_id = self._get_empresa_id_seguro()
+        obj = ResolucionFacturacion.objects.filter(uuid=uuid_val, empresa_id=empresa_id).first()
+        if not obj:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("ResolucionFacturacion no encontrada en su organizacion.")
+        self.check_object_permissions(self.request, obj)
+        return obj
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        try:
+            ctx["empresa_id"] = self.get_empresa_id()
+        except Exception:
+            ctx["empresa_id"] = None
+        return ctx
+
+    # ------------------------------------------------------------------
+    # CRUD
+    # ------------------------------------------------------------------
+
+    def create(self, request, *args, **kwargs):
+        empresa = self._get_empresa()
+        if not empresa:
+            return Response(
+                {"detail": "No se pudo determinar la empresa activa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        payload = request.data if isinstance(request.data, dict) else dict(request.data)
+        ok, result, status_code = self.service_crear_resolucion(empresa, payload)
+        if not ok:
+            return Response(result, status=status_code)
+        out = ResolucionFacturacionSerializer(result, context=self.get_serializer_context())
+        return Response(out.data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        resolucion = self.get_object()
+        empresa_id = self._get_empresa_id_seguro()
+        payload = request.data if isinstance(request.data, dict) else dict(request.data)
+        ok, result, status_code = self.service_actualizar_resolucion(
+            str(resolucion.uuid), empresa_id, payload
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        out = ResolucionFacturacionSerializer(result, context=self.get_serializer_context())
+        return Response(out.data, status=status.HTTP_200_OK)
+
+    def update(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        resolucion = self.get_object()
+        empresa_id = self._get_empresa_id_seguro()
+        ok, result, status_code = self.service_eliminar_resolucion(str(resolucion.uuid), empresa_id)
+        if not ok:
+            return Response(result, status=status_code)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # ------------------------------------------------------------------
+    # HTMX offcanvas renders
+    # ------------------------------------------------------------------
+
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="panel",
+    )
+    def render_panel(self, request):
+        empresa_id = self._get_empresa_id_seguro()
+        resoluciones = (
+            ResolucionFacturacion.objects.filter(empresa_id=empresa_id)
+            .only(
+                "id", "uuid", "numero_resolucion", "prefijo", "tipo",
+                "fecha_resolucion", "fecha_desde", "fecha_hasta",
+                "rango_desde", "rango_hasta", "consecutivo_actual", "vigente",
+            )
+            .order_by("-vigente", "-fecha_resolucion")
+        )
+        return Response(
+            {"resoluciones": resoluciones},
+            template_name="tenant/ventas/panel_resoluciones.html",
+        )
+
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/crear",
+    )
+    def render_offcanvas_crear(self, request):
+        return Response(
+            {},
+            template_name="tenant/ventas/offcanvas_crear_resolucion.html",
+        )
+
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
+    def render_offcanvas_editar(self, request):
+        resolucion_uuid = request.query_params.get("uuid")
+        empresa_id = self._get_empresa_id_seguro()
+        resolucion = ResolucionFacturacion.objects.filter(
+            uuid=resolucion_uuid, empresa_id=empresa_id
+        ).first()
+        return Response(
+            {"resolucion": resolucion},
+            template_name="tenant/ventas/offcanvas_editar_resolucion.html",
         )

@@ -2,7 +2,7 @@
 
 ## 📋 Resumen Ejecutivo
 
-**Problema:** Después de la activación de un tenant privado mediante el link `http://cliente.sintel.com/activate?token=...`, el sistema está redirigiendo al usuario al URLConf público (`ROOT_URLCONF`) en lugar de mantenerlo en el URLConf del tenant (`TENANT_URLCONF`).
+**Problema:** Después de la activación de un tenant privado mediante el link `http://cliente.sintel.net.co/activate?token=...`, el sistema está redirigiendo al usuario al URLConf público (`ROOT_URLCONF`) en lugar de mantenerlo en el URLConf del tenant (`TENANT_URLCONF`).
 
 **Impacto:** Los tenants privados no pueden acceder a sus rutas privadas después de la activación, siendo direccionados incorrectamente a rutas públicas como `/console/`.
 
@@ -15,7 +15,7 @@
 ### 1. Flujo Actual de Activación
 
 ```
-1. Usuario accede a: http://cliente.sintel.com/activate?token=...
+1. Usuario accede a: http://cliente.sintel.net.co/activate?token=...
 2. TenantMainMiddleware resuelve tenant correctamente → TENANT_URLCONF activo
 3. ActivateOwnerView procesa el formulario
 4. Usuario se loguea: login(request, user)
@@ -177,7 +177,7 @@ def form_valid(self, form):
 
 ### Por Qué Esta Solución Funciona
 
-1. **URL Absoluta:** Al usar una URL absoluta con el dominio del tenant (`http://cliente.sintel.com/dashboard/`), garantizamos que:
+1. **URL Absoluta:** Al usar una URL absoluta con el dominio del tenant (`http://cliente.sintel.net.co/dashboard/`), garantizamos que:
    - El navegador hace una nueva request con el `HTTP_HOST` correcto
    - El middleware `TenantMainMiddleware` resuelve el tenant correctamente
    - El `TENANT_URLCONF` se activa automáticamente
@@ -198,7 +198,7 @@ def test_activation_redirects_to_tenant_dashboard():
     # 1. Crear tenant
     # 2. Generar token
     # 3. POST a /activate/ con token
-    # 4. Verificar que el redirect es a http://tenant.sintel.com/dashboard/
+    # 4. Verificar que el redirect es a http://tenant.sintel.net.co/dashboard/
     # 5. Verificar que la nueva request usa TENANT_URLCONF
 ```
 

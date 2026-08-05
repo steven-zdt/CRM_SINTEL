@@ -1,0 +1,96 @@
+{% load static %}
+{# list_ventas.html — Compact UI alineado con list_factura.html #}
+{# Fase 5-BIS: tabla server-rendered (django-tables2 + HTMX), reemplaza Tabulator #}
+
+<style>
+  /* ── Tabla compacta (scoped a ui-ventas) ─────────────────────────── */
+  .ui-ventas .table { font-size: 0.82rem; }
+  .ui-ventas .btn-group-sm .btn { padding: 2px 6px; font-size: 0.72rem; }
+  .ui-ventas .badge-sm { font-size: 0.7rem !important; padding: 0.22em 0.5em; }
+  /* Filtros de estado */
+  .ui-ventas .btn-xs { padding: 2px 8px; font-size: 0.73rem; line-height: 1.4; border-radius: 4px; }
+  .ui-ventas .btn-xs.active { box-shadow: inset 0 2px 4px rgba(0,0,0,.12); }
+</style>
+
+<div id="tab-ventas-content" class="ui-module ui-ventas">
+
+  {# ── Toolbar ─────────────────────────────────────────────────────────── #}
+  <div id="toolbar-ventas" class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary btn-sm"
+              id="btn-nueva-venta"
+              hx-get="/api/v1/ventas/render-offcanvas/crear/"
+              hx-target="#offcanvas-container-ventas"
+              hx-swap="innerHTML">
+        <i class="bi bi-plus-lg me-1"></i>Nueva Venta
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              id="btn-resoluciones-dian"
+              hx-get="/api/v1/ventas/resoluciones/panel/"
+              hx-target="#offcanvas-container-ventas"
+              hx-swap="innerHTML"
+              title="Gestionar Resoluciones DIAN">
+        <i class="bi bi-card-checklist me-1"></i>Resoluciones DIAN
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              id="btn-refresh-ventas" title="Refrescar"
+              hx-get="{% url 'ventas:tabla' %}" hx-target="#ventas-panel" hx-include="#search-venta, [data-filtro-venta-estado].active">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+    <div class="input-group input-group-sm" style="max-width:280px;">
+      <span class="input-group-text bg-white border-end-0">
+        <i class="bi bi-search text-muted" style="font-size:0.8rem;"></i>
+      </span>
+      <input type="text" id="search-venta"
+             class="form-control border-start-0 ps-0"
+             placeholder="Buscar cliente, numero..."
+             hx-get="{% url 'ventas:tabla' %}"
+             hx-trigger="keyup changed delay:400ms, search"
+             hx-target="#ventas-panel"
+             hx-include="[data-filtro-venta-estado].active"
+             name="q">
+    </div>
+  </div>
+
+  <div id="feedback-ventas-list" class="alert d-none mb-2" role="alert" aria-live="polite"></div>
+
+  {# Filtros rapidos por estado #}
+  <div class="d-flex gap-1 px-3 pt-2 pb-2 flex-wrap align-items-center border-bottom mb-3"
+       id="filtros-estado-ventas" style="background:#fafafa;">
+    <span class="text-muted me-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">Estado:</span>
+    <button class="btn btn-xs btn-outline-dark active" data-filtro-venta-estado="" name="estado" value=""
+            hx-get="{% url 'ventas:tabla' %}" hx-target="#ventas-panel" hx-include="#search-venta"
+            style="font-size:0.73rem;padding:2px 8px;">
+      Todas
+    </button>
+    <button class="btn btn-xs btn-outline-secondary" data-filtro-venta-estado="BORRADOR" name="estado" value="BORRADOR"
+            hx-get="{% url 'ventas:tabla' %}" hx-target="#ventas-panel" hx-include="#search-venta"
+            style="font-size:0.73rem;padding:2px 8px;">
+      <i class="bi bi-pencil me-1"></i>Borrador
+    </button>
+    <button class="btn btn-xs btn-outline-success" data-filtro-venta-estado="FACTURADA_DIAN" name="estado" value="FACTURADA_DIAN"
+            hx-get="{% url 'ventas:tabla' %}" hx-target="#ventas-panel" hx-include="#search-venta"
+            style="font-size:0.73rem;padding:2px 8px;">
+      <i class="bi bi-check2-circle me-1"></i>Facturada DIAN
+    </button>
+    <button class="btn btn-xs btn-outline-danger" data-filtro-venta-estado="ANULADA" name="estado" value="ANULADA"
+            hx-get="{% url 'ventas:tabla' %}" hx-target="#ventas-panel" hx-include="#search-venta"
+            style="font-size:0.73rem;padding:2px 8px;">
+      <i class="bi bi-x-circle me-1"></i>Anulada
+    </button>
+  </div>
+
+  {# Tabla server-rendered (django-tables2 + HTMX) #}
+  <div id="ventas-panel"
+       hx-get="{% url 'ventas:tabla' %}"
+       hx-trigger="load, venta-updated from:body"
+       hx-target="this"
+       hx-swap="innerHTML"
+       hx-boost="true">
+  </div>
+
+</div>{# /tab-ventas-content #}
+
+{# Contenedor HTMX para offcanvas #}
+<div id="offcanvas-container-ventas"></div>

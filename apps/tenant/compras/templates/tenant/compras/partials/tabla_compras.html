@@ -1,0 +1,41 @@
+{% load django_tables2 %}
+{# Fragmento HTMX: KPIs + tabla de Ordenes de Compra. Reemplaza #compras-panel completo. #}
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card bg-light border-0 shadow-sm">
+      <div class="card-body p-3">
+        <span class="text-muted small d-block mb-1">Total Órdenes</span>
+        <h4 class="mb-0 fw-bold">{{ kpi_total_ordenes }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-light border-0 shadow-sm">
+      <div class="card-body p-3">
+        <span class="text-muted small d-block mb-1">Monto Total</span>
+        <h4 class="mb-0 fw-bold text-primary">${{ kpi_monto_total|floatformat:0 }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-light border-0 shadow-sm">
+      <div class="card-body p-3">
+        <span class="text-muted small d-block mb-1">Aprobadas</span>
+        <h4 class="mb-0 fw-bold text-success">{{ kpi_aprobadas }}</h4>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card bg-light border-0 shadow-sm">
+      <div class="card-body p-3">
+        <span class="text-muted small d-block mb-1">Pendientes</span>
+        <h4 class="mb-0 fw-bold text-warning">{{ kpi_pendientes }}</h4>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="w-100" style="max-width:100%; overflow-x:auto;">
+  {% render_table table %}
+</div>

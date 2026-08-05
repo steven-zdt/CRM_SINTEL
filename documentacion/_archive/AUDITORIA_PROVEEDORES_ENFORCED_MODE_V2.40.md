@@ -164,7 +164,7 @@ curl -X GET http://localhost:8000/api/v1/proveedores/ \
 # Esperado: 200 OK con lista de proveedores
 
 # 5. Validar Workspace UI
-# Abrir http://home.sintel.com/workspace/#proveedores
+# Abrir http://home.sintel.net.co/workspace/#proveedores
 # Intentar crear/editar proveedor como usuario no-staff
 # Verificar en Network tab que se recibe 405
 ```

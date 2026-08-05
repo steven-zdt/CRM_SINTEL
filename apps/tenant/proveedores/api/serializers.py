@@ -13,8 +13,8 @@ from rest_framework import serializers
 
 from apps.tenant.api.utils import NormalizationMixin
 from apps.tenant.empresa.models import Empresa
-from ..models import Proveedor, CuentasPagar
-from ..services import DETAIL_FIELDS, LIST_FIELDS
+from ..models import Proveedor, CuentasPagar, Representante
+from ..services import DETAIL_FIELDS, LIST_FIELDS, DETAIL_FIELDS_REPRESENTANTE, LIST_FIELDS_REPRESENTANTE
 
 
 # ==============================================================================
@@ -337,7 +337,45 @@ class CuentasPagarAbonoSerializer(serializers.Serializer):
         help_text="Monto a abonar a la factura"
     )
     observaciones = serializers.CharField(
-        required=False, 
-        allow_blank=True, 
+        required=False,
+        allow_blank=True,
         default=""
     )
+
+
+# ==============================================================================
+# REPRESENTANTE SERIALIZERS — v3.17.0 (nueva entidad)
+# ==============================================================================
+
+class RepresentanteListSerializer(serializers.ModelSerializer):
+    """
+    Serializer optimizado para listados de representantes (Tabulator).
+    Campos minimos para tabla: nombre, documento, cargo, es_principal.
+    """
+    tipo_documento_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
+
+    class Meta:
+        model = Representante
+        fields = tuple(LIST_FIELDS_REPRESENTANTE) + ("tipo_documento_display",)
+        read_only_fields = ("uuid", "id", "created_at") + ("tipo_documento_display",)
+
+
+class RepresentanteDetailSerializer(ProveedorNormalizationMixin, serializers.ModelSerializer):
+    """
+    Serializer completo para detalle/edición de Representantes.
+    Aplica NormalizationMixin y validaciones DSV.
+    """
+    tipo_documento_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
+    proveedor_nombre = serializers.CharField(source='proveedor.razon_social', read_only=True)
+
+    class Meta:
+        model = Representante
+        fields = tuple(DETAIL_FIELDS_REPRESENTANTE) + ("tipo_documento_display", "proveedor_nombre")
+        read_only_fields = ("uuid", "id", "empresa_id", "proveedor_id", "created_at", "updated_at", "tipo_documento_display", "proveedor_nombre")
+
+    def validate(self, attrs):
+        """
+        Normalización + validaciones específicas de Representante.
+        """
+        attrs = self.normalize_data(attrs)
+        return attrs

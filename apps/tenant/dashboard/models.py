@@ -1,12 +1,11 @@
-"""
-Modelos para Dashboard v3.9.4 — Snapshots de métricas.
-Opcional: para histórico de métricas calculadas por Celery Beat.
-"""
+import uuid as uuid_module
 from decimal import Decimal
 
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 from apps.tenant.core.models import SintelTenantBaseModel
+
 
 
 class SnapshotMetricaDiaria(SintelTenantBaseModel):
@@ -14,6 +13,22 @@ class SnapshotMetricaDiaria(SintelTenantBaseModel):
     Snapshot diario de métricas consolidadas.
     Generado por Celery Beat cada noche para histórico/analytics.
     """
+
+    # WARNING: [ARQ-A2] Excepcion documentada e intencional a SintelTenantBaseModel
+    # (que inyecta empresa con on_delete=PROTECT). EmpresaViewSet.destroy() (STAFF/ADMIN
+    # unicamente, ver apps/tenant/empresa/api/viewsets.py) permite eliminar la Empresa
+    # del tenant; estos snapshots son datos analiticos derivados/regenerables y deben
+    # desaparecer junto con la empresa, no bloquear su eliminacion.
+    empresa = models.ForeignKey(
+        'empresa.Empresa',
+        on_delete=models.CASCADE,
+        related_name='dashboard_snapshots',
+        verbose_name=_('Empresa'),
+        null=False,
+        blank=False,
+        db_index=True,
+    )
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
 
     fecha = models.DateField(auto_now=False, db_index=True)
 
@@ -29,6 +44,16 @@ class SnapshotMetricaDiaria(SintelTenantBaseModel):
     total_productos = models.IntegerField(default=0)
     productos_bajo_stock = models.IntegerField(default=0)
     valor_inventario = models.DecimalField(
+        max_digits=15, decimal_places=2, default=Decimal('0.00')
+    )
+
+    # Provedores
+    total_provedores = models.IntegerField(default=0)
+    total_gastos = models.DecimalField(
+        max_digits=15, decimal_places=2, default=Decimal('0.00')
+    )
+
+    cartera_pendiente = models.DecimalField(
         max_digits=15, decimal_places=2, default=Decimal('0.00')
     )
 

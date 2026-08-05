@@ -1,0 +1,34 @@
+{% load django_tables2 %}
+{# Fragmento HTMX: header + tabla Detail (historial de nominas del empleado seleccionado). #}
+{# Reemplaza #nomina-detail-panel completo -- se recarga entero porque el header depende del empleado. #}
+
+<div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between"
+     style="background: var(--bs-tertiary-bg); min-height: 46px;">
+  {% if empleado %}
+    <span class="small fw-semibold text-muted">
+      <i class="bi bi-person-check-fill me-1 text-primary"></i>
+      <strong>{{ empleado.primer_nombre }} {{ empleado.primer_apellido }}</strong>
+      <span class="text-muted ms-2 fw-normal">({{ table.paginator.count }} nómina{{ table.paginator.count|pluralize }})</span>
+    </span>
+    <button type="button" class="btn btn-sm btn-success btn-nueva-nomina-header"
+            data-empleado-uuid="{{ empleado.uuid }}"
+            data-empleado-nombre="{{ empleado.primer_nombre }} {{ empleado.primer_apellido }}">
+      <i class="bi bi-plus-circle-fill me-1"></i>Nueva Nómina
+    </button>
+  {% else %}
+    <span class="small fw-semibold text-muted">
+      <i class="bi bi-clock-history me-1"></i>Historial de nóminas
+    </span>
+  {% endif %}
+</div>
+
+{% if empleado %}
+<div class="flex-grow-1" style="overflow-y:auto;">
+  {% render_table table %}
+</div>
+{% else %}
+<div class="flex-grow-1 d-flex flex-column align-items-center justify-content-center text-muted small">
+  <i class="bi bi-arrow-left-circle" style="font-size:1.5rem; opacity:.35;"></i>
+  <p class="mt-2 mb-0">Selecciona un empleado para ver su historial</p>
+</div>
+{% endif %}

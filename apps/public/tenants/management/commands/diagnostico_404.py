@@ -15,23 +15,19 @@ class Command(BaseCommand):
         parser.add_argument(
             "--host",
             type=str,
-            default=None,
-            help="Hostname a diagnosticar, ej: {schema}.sintel.com o {schema}.localhost:8000. "
-                 "Si se omite, lista todos los tenants registrados.",
+            default="home.localhost:8000",
+            help="Hostname a diagnosticar (por defecto: home.localhost:8000)",
         )
 
     def handle(self, *args, **options):
-        host = options.get("host")
+        host = options["host"]
         self.stdout.write(self.style.MIGRATE_HEADING("=== DIAGNÓSTICO 404 TENANTS ==="))
-        self._print_clients_and_domains()
+        self.stdout.write(f"Host a diagnosticar: {host}")
         self.stdout.write("")
 
-        if not host:
-            self.stdout.write(self.style.WARNING(
-                "Usa --host {schema}.sintel.com para diagnosticar un hostname especifico."
-            ))
-            return
+        self._print_clients_and_domains()
 
+        self.stdout.write("")
         self._simulate_resolution(host)
 
     # ------------------------------------------------------------------

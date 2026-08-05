@@ -1,0 +1,186 @@
+{# offcanvas_crear_venta.html — Crear Venta v3.16.x #}
+<style>
+  #offcanvas-venta-crear { width: 800px !important; }
+  #offcanvas-venta-crear .section-title {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #0d6efd;
+    border-bottom: 2px solid #e9ecef; padding-bottom: 0.5rem; margin-bottom: 1rem;
+  }
+  #offcanvas-venta-crear .offcanvas-footer {
+    border-top: 1px solid #dee2e6; padding: 1rem 1.5rem; background: #f8f9fa;
+  }
+  #offcanvas-venta-crear .table-items th {
+    font-size: 0.75rem; font-weight: 600; color: #6c757d;
+    text-transform: uppercase; background-color: #f8f9fa;
+  }
+  #offcanvas-venta-crear .form-label {
+    font-size: 0.8rem; font-weight: 600; color: #495057; margin-bottom: 0.3rem;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-venta-crear"
+     aria-labelledby="offcanvas-venta-crear-label"
+     data-bs-backdrop="static">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-venta-crear-label">
+      <i class="bi bi-bag-plus text-primary me-2"></i>Nueva Venta
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body px-4 py-3">
+    <div id="form-venta-crear-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="venta-crear-form" data-mode="create">
+      {% csrf_token %}
+
+      {# ── Datos Generales ─────────────────────────────────────────────── #}
+      <div class="mb-4">
+        <p class="section-title"><i class="bi bi-file-earmark-text me-1"></i>Informacion General</p>
+        <div class="row g-3">
+
+          <div class="col-md-12">
+            <label for="venta-cliente" class="form-label">Cliente <span class="text-danger">*</span></label>
+            <select id="venta-cliente" name="cliente" class="form-select" required>
+              <option value="">-- Seleccione un cliente --</option>
+              {% for c in clientes %}
+                <option value="{{ c.id }}"
+                        data-uuid="{{ c.uuid }}"
+                        data-doc="{{ c.numero_documento }}">
+                  {{ c.razon_social }}
+                  {% if c.numero_documento %} — {{ c.numero_documento }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <input type="hidden" id="venta-cliente-uuid" name="_cliente_uuid" value="">
+          </div>
+
+          <div class="col-md-6">
+            <label for="venta-fecha-emision" class="form-label">Fecha Emision <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="venta-fecha-emision"
+                   name="fecha_emision" value="{{ fecha_default }}" required>
+          </div>
+
+          <div class="col-md-6">
+            <label for="venta-fecha-vencimiento" class="form-label">Fecha Vencimiento</label>
+            <input type="date" class="form-control" id="venta-fecha-vencimiento"
+                   name="fecha_vencimiento">
+          </div>
+
+          <div class="col-12">
+            <label for="venta-observaciones" class="form-label">Observaciones</label>
+            <textarea class="form-control" id="venta-observaciones"
+                      name="observaciones" rows="2" placeholder="Observaciones adicionales..."></textarea>
+          </div>
+
+          <div class="col-12">
+            <label for="venta-resolucion" class="form-label">
+              <i class="bi bi-card-checklist text-success me-1"></i>Resolucion DIAN
+              <span class="text-muted fw-normal">(requerida para facturar)</span>
+            </label>
+            <select id="venta-resolucion" class="form-select" name="resolucion">
+              <option value="" data-uuid="">-- Sin resolucion (solo borrador) --</option>
+              {% for r in resoluciones %}
+                <option value="{{ r.id }}"
+                        data-uuid="{{ r.uuid }}"
+                        data-prefijo="{{ r.prefijo }}"
+                        data-consecutivo="{{ r.consecutivo_actual }}">
+                  {% if r.prefijo %}{{ r.prefijo }} — {% endif %}
+                  Res. {{ r.numero_resolucion }}
+                  | Rango {{ r.rango_desde }}–{{ r.rango_hasta }}
+                  | Siguiente: {{ r.consecutivo_actual }}
+                </option>
+              {% empty %}
+                <option disabled>No hay resoluciones vigentes. Cree una primero.</option>
+              {% endfor %}
+            </select>
+            <div class="form-text text-muted" id="venta-resolucion-info"></div>
+          </div>
+
+        </div>
+      </div>
+
+      {# ── Items de la Venta ─────────────────────────────────────────────── #}
+      <div class="mb-4">
+        <p class="section-title"><i class="bi bi-list-ul me-1"></i>Items</p>
+
+        <div id="venta-items-tabla-container">
+          <table class="table table-sm table-bordered table-items" id="tabla-items-venta">
+            <thead>
+              <tr>
+                <th style="min-width:200px;">Descripcion</th>
+                <th style="width:90px;">Cant.</th>
+                <th style="width:130px;">Precio Unit.</th>
+                <th style="width:90px;">IVA %</th>
+                <th style="width:120px;">Subtotal</th>
+                <th style="width:48px;"></th>
+              </tr>
+            </thead>
+            <tbody id="venta-items-body">
+              {# Filas agregadas via venta_editor.js #}
+            </tbody>
+          </table>
+        </div>
+
+        <button type="button" class="btn btn-outline-secondary btn-sm mt-2"
+                id="btn-agregar-item-venta">
+          <i class="bi bi-plus-lg me-1"></i>Agregar Item
+        </button>
+
+        {# Totales #}
+        <div class="mt-3 d-flex justify-content-end">
+          <table class="table table-sm w-auto text-end" style="min-width:250px;">
+            <tbody>
+              <tr>
+                <td class="text-muted">Subtotal:</td>
+                <td class="fw-semibold ps-4" id="venta-display-subtotal">$0</td>
+              </tr>
+              <tr>
+                <td class="text-muted">IVA:</td>
+                <td class="fw-semibold ps-4" id="venta-display-iva">$0</td>
+              </tr>
+              <tr class="fw-bold">
+                <td>Total:</td>
+                <td class="ps-4 text-primary" id="venta-display-total">$0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </form>
+  </div>
+
+  <div class="offcanvas-footer">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary btn-sm"
+              data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="button" class="btn btn-outline-primary btn-sm"
+              id="btn-guardar-borrador">
+        <i class="bi bi-floppy me-1"></i>Guardar Borrador
+      </button>
+      <button type="button" class="btn btn-success btn-sm"
+              id="btn-facturar-dian">
+        <i class="bi bi-send-check me-1"></i>Guardar y Facturar DIAN
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  (function() {
+    var el = document.getElementById('offcanvas-venta-crear');
+    if (!el) return;
+    if (window.Sintel && window.Sintel.Ventas && window.Sintel.Ventas.Editor) {
+      window.Sintel.Ventas.Editor.onHtmxLoaded();
+    } else {
+      document.addEventListener('sintel:ventas:editor:ready', function() {
+        window.Sintel.Ventas.Editor.onHtmxLoaded();
+      }, { once: true });
+    }
+  })();
+</script>

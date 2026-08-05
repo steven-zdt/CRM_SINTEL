@@ -1,10 +1,12 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from tests.tenant.base_test import SintelTenantTestCase
+
 from apps.tenant.bancos.models import CuentaBancaria
 from apps.tenant.bancos.services.crud_service import CuentaBancariaCRUDService
 from apps.tenant.bancos.services.selectors import CuentaBancariaSelector
+from tests.tenant.base_test import SintelTenantTestCase
+
 
 class TestCuentaBancariaCRUD(SintelTenantTestCase):
     """
@@ -15,6 +17,7 @@ class TestCuentaBancariaCRUD(SintelTenantTestCase):
         super().setUp()
         # Create a default Empresa since the viewset / mixins require it.
         from apps.tenant.empresa.models import Empresa
+
         self.empresa = Empresa.objects.create(
             razon_social="Test Empresa SINTEL",
             nit="900000111",
@@ -27,6 +30,7 @@ class TestCuentaBancariaCRUD(SintelTenantTestCase):
         )
         # Link user profile to this company
         from apps.tenant.perfil.models import TenantProfile
+
         self.profile = TenantProfile.objects.create(
             user=self.user,
             empresa=self.empresa,

@@ -8,12 +8,12 @@
 
 ## ❌ Problema Reportado
 
-Al acceder a `http://home.sintel.com/activate?token=...`, el sistema muestra:
+Al acceder a `http://home.sintel.net.co/activate?token=...`, el sistema muestra:
 
 ```
 Page not found (404)
 Request Method: GET
-Request URL: http://home.sintel.com/activate?token=...
+Request URL: http://home.sintel.net.co/activate?token=...
 Using the URLconf defined in config.urls_public, Django tried these URL patterns...
 ```
 
@@ -35,7 +35,7 @@ Se ejecutó el script `scripts/auditoria_completa_routing.py` con los siguientes
 - ✅ Backend correcto: `django_tenants.postgresql_backend`
 
 #### ✅ Dominios en Base de Datos (Correcto)
-- ✅ Dominio `home.sintel.com` existe en BD
+- ✅ Dominio `home.sintel.net.co` existe en BD
 - ✅ Asociado a tenant privado `home` (schema: `home`)
 - ✅ Es dominio primario (`is_primary=True`)
 - ✅ Tenant activo (`is_active=True`)
@@ -113,7 +113,7 @@ MIDDLEWARE = [
 
 1. **Acceder a `/activate/` en tenant privado:**
    ```bash
-   curl -H "Host: home.sintel.com" http://localhost/activate/?token=test
+   curl -H "Host: home.sintel.net.co" http://localhost/activate/?token=test
    ```
 
 2. **Resultado esperado:**
@@ -126,7 +126,7 @@ MIDDLEWARE = [
 ```python
 def test_activate_route_uses_tenant_urlconf():
     """Verifica que /activate/ usa TENANT_URLCONF para tenants privados."""
-    client = Client(HTTP_HOST='home.sintel.com')
+    client = Client(HTTP_HOST='home.sintel.net.co')
     response = client.get('/activate/?token=test')
     
     # No debe ser 404
@@ -143,7 +143,7 @@ def test_activate_route_uses_tenant_urlconf():
 - ✅ `TenantMainMiddleware` resuelve el tenant correctamente
 - ✅ `TenantURLConfMiddleware` establece `request.urlconf` para tenants privados
 - ✅ Orden del middleware correcto
-- ✅ Dominio `home.sintel.com` existe en BD
+- ✅ Dominio `home.sintel.net.co` existe en BD
 - ✅ Ruta `/activate/` existe en `apps.tenant.landing.urls`
 - ⏳ **Pendiente:** Pruebas en producción
 
@@ -158,12 +158,12 @@ def test_activate_route_uses_tenant_urlconf():
 
 2. **Verificar que el middleware funciona:**
    ```bash
-   docker compose exec web python scripts/auditoria_completa_routing.py home.sintel.com
+   docker compose exec web python scripts/auditoria_completa_routing.py home.sintel.net.co
    ```
 
 3. **Probar acceso a `/activate/`:**
    ```bash
-   curl -H "Host: home.sintel.com" http://localhost/activate/?token=test
+   curl -H "Host: home.sintel.net.co" http://localhost/activate/?token=test
    ```
 
 4. **Monitorear logs:**

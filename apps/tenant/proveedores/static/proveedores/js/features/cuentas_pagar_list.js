@@ -162,7 +162,7 @@
       select.addEventListener('change', function() {
         if (table) {
           updateUI(true, false, 0);
-          table.setData().catch(err => console.warn(`${MOD} Error al aplicar filtro de estado:`, err));
+          table.replaceData().catch(err => console.warn(`${MOD} Error al aplicar filtro de estado:`, err));
         }
       });
     }

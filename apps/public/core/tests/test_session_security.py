@@ -23,7 +23,7 @@ class SessionSecurityTestCase(TestCase):
         User = get_user_model()
         self.user = User.objects.create_user(
             username="security_test_user",
-            email="security@sintel.com",
+            email="security@sintel.net.co",
             password="securepassword123",
         )
 

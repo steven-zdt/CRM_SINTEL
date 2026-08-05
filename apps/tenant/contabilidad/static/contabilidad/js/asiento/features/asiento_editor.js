@@ -494,6 +494,13 @@
   }
 
   function init() {
+    // Guard: attachEditorListeners() registra listeners delegados en `document`
+    // (no en un form de vida corta) — sin este guard, cada recarga HTMX del
+    // modulo "asiento" via HTMX vuelve a ejecutar este script y duplica los
+    // listeners globales, disparando handleSave() N veces por click (FE-A1/A2).
+    if (d.body.dataset.asientoEditorInitialized) return;
+    d.body.dataset.asientoEditorInitialized = 'true';
+
     attachEditorListeners();
     loadTiposComprobante();
     loadInitialMovimientos();

@@ -293,7 +293,7 @@ if (d.readyState === 'loading') {
 ### Testing
 
 Para probar el módulo:
-1. Abrir workspace: `http://home.sintel.com/workspace/#empresa`
+1. Abrir workspace: `http://home.sintel.net.co/workspace/#empresa`
 2. Verificar que DataTable carga correctamente
 3. Probar "Crear Empresa" (debe usar PATCH singleton)
 4. Probar "Editar Empresa" (debe usar PATCH singleton)

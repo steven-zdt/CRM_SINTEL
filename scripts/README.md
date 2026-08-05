@@ -36,7 +36,7 @@ chmod +x scripts/reconstruir_db.sh
 
 4. **Bootstrapping:**
    - Ejecuta `setup_public_tenant` (Crea tenant público y dominio)
-   - Crea superusuario por defecto: `admin` / `admin@sintel.com` / `admin`
+   - Crea superusuario por defecto: `admin` / `admin@sintel.net.co` / `admin`
 
 5. **Verificación Final:**
    - Muestra el estado del sistema (tenant público, dominios, superusuario)

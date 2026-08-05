@@ -7,6 +7,7 @@ WARNING: FALLBACK: En desarrollo, genera clave automática si no está configura
 """
 import logging
 import os
+import pathlib
 
 from cryptography.fernet import Fernet
 from django.conf import settings
@@ -15,6 +16,14 @@ log = logging.getLogger("security.crypto")
 
 # Clave Fernet (32 bytes base64-encoded)
 _FERNET_KEY = None
+
+# WARNING: [SEC-M3] Cache local (gitignored) de la clave de desarrollo generada
+# automaticamente. Sin esto, cada reinicio de proceso generaba una clave nueva
+# en memoria y volvia indescifrable cualquier password ya cifrado con la clave
+# anterior (perdida de datos silenciosa). Solo se usa cuando DEBUG=True y
+# MAILCFG_FERNET_KEY no esta configurada -- produccion sigue exigiendo la
+# variable de entorno y falla si falta (sin cambios).
+_DEV_KEY_CACHE_PATH = pathlib.Path(settings.BASE_DIR) / ".cache" / "fernet_dev_key.bin"
 
 
 def get_fernet_key():
@@ -43,12 +52,32 @@ def get_fernet_key():
             log.error(f"Error validando MAILCFG_FERNET_KEY: {e}")
             raise ValueError("MAILCFG_FERNET_KEY no es una clave Fernet válida")
     
-    # Fallback: generar clave para desarrollo (no persistente)
+    # Fallback: generar clave para desarrollo, persistida en disco local para que
+    # sobreviva reinicios de proceso (ver _DEV_KEY_CACHE_PATH).
     if settings.DEBUG:
+        try:
+            if _DEV_KEY_CACHE_PATH.exists():
+                _FERNET_KEY = _DEV_KEY_CACHE_PATH.read_bytes()
+                Fernet(_FERNET_KEY)  # validar que sigue siendo una clave valida
+                log.warning(
+                    "WARNING: DESARROLLO: Clave Fernet leida desde cache local (%s). "
+                    "En producción, configure MAILCFG_FERNET_KEY en variables de entorno.",
+                    _DEV_KEY_CACHE_PATH,
+                )
+                return _FERNET_KEY
+        except Exception:
+            log.warning("Cache local de clave Fernet invalida, se regenerara.")
+
         _FERNET_KEY = Fernet.generate_key()
+        try:
+            _DEV_KEY_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _DEV_KEY_CACHE_PATH.write_bytes(_FERNET_KEY)
+        except OSError as exc:
+            log.warning("No se pudo persistir la clave Fernet de desarrollo: %s", exc)
         log.warning(
-            "WARNING: DESARROLLO: Generada clave Fernet automática (no persistente). "
-            "En producción, configure MAILCFG_FERNET_KEY en variables de entorno."
+            "WARNING: DESARROLLO: Generada clave Fernet automática, persistida en %s. "
+            "En producción, configure MAILCFG_FERNET_KEY en variables de entorno.",
+            _DEV_KEY_CACHE_PATH,
         )
         return _FERNET_KEY
     

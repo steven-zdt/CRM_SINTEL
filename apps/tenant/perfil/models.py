@@ -83,6 +83,11 @@ class TenantProfile(SintelTenantBaseModel):
         help_text=_('Usuario global al que pertenece este perfil (reside en esquema public)')
     )
 
+    # WARNING: [ARQ-A2] Excepcion documentada e intencional a SintelTenantBaseModel
+    # (que inyecta empresa con on_delete=PROTECT). EmpresaViewSet.destroy() (STAFF/ADMIN
+    # unicamente, ver apps/tenant/empresa/api/viewsets.py) permite eliminar la Empresa
+    # del tenant; un TenantProfile no tiene sentido sin la empresa a la que pertenece y
+    # debe desaparecer junto con ella, no bloquear su eliminacion.
     empresa = models.ForeignKey(
         'empresa.Empresa',
         on_delete=models.CASCADE,

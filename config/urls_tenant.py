@@ -1,7 +1,7 @@
 """
 URL configuration for sintel_project - Tenants Privados.
 
-WARNING: IMPORTANTE: Este archivo se usa cuando se accede a un tenant privado (ej: cliente.sintel.com).
+WARNING: IMPORTANTE: Este archivo se usa cuando se accede a un tenant privado (ej: cliente.sintel.net.co).
 django-tenants usa este archivo como TENANT_URLCONF para todos los tenants.
 
 ESTE ARCHIVO SOLO CARGA EN DOMINIOS PRIVADOS (TENANTS)
@@ -13,10 +13,10 @@ WARNING: ARQUITECTURA API-FIRST (v2.30):
 
 Rutas privadas disponibles:
 - WARNING: v2.30: Vistas HTML Django eliminadas (/, /login/ ya no existen)
-- cliente.sintel.com/activate/?token=... -> Shell estático de activación (HTML/JS que consume la API)
-- cliente.sintel.com/dashboard/ -> DashboardIndexView (dashboard con control de roles)
-- cliente.sintel.com/api/v1/ -> APIs REST del tenant (facturas, contabilidad, empresa)
-- cliente.sintel.com/api/v1/landing/ -> APIs REST de landing/login/activación (API-First)
+- cliente.sintel.net.co/activate/?token=... -> Shell estático de activación (HTML/JS que consume la API)
+- cliente.sintel.net.co/dashboard/ -> DashboardIndexView (dashboard con control de roles)
+- cliente.sintel.net.co/api/v1/ -> APIs REST del tenant (facturas, contabilidad, empresa)
+- cliente.sintel.net.co/api/v1/landing/ -> APIs REST de landing/login/activación (API-First)
 
 WARNING: REGLA DE NEGOCIO (v2.30): 
 - WARNING: Vistas HTML eliminadas - toda la funcionalidad está en /api/v1/landing/
@@ -60,7 +60,7 @@ class TenantRootView(View):
     
     WARNING: PÁGINA PRINCIPAL DEL TENANT: "/" SIEMPRE redirige a /static/tenant/landing/index.html
     
-    Esta es la página principal para TODOS los tenants (cliente.sintel.com, etc.).
+    Esta es la página principal para TODOS los tenants (cliente.sintel.net.co, etc.).
     La página muestra información del tenant y un botón de login.
     
     Redirige según el estado de autenticación:
@@ -181,6 +181,8 @@ urlpatterns = [
     path('ui/proyectos/', include('apps.tenant.proyectos.urls', namespace='proyectos')),
     path('ui/clientes/', include('apps.tenant.clientes.urls', namespace='clientes')),
     path('ui/bancos/', include('apps.tenant.bancos.urls', namespace='bancos')),
+    path('ui/compras/', include('apps.tenant.compras.urls', namespace='compras')),
+    path('ui/ventas/', include('apps.tenant.ventas.urls', namespace='ventas')),
     # WARNING: v2.30: Facturas migrado a API-First - UI deprecada
     # path('ui/facturas/', include('apps.tenant.facturas.urls_ui')),
     # WARNING: v2.61: Contabilidad migrado a API-First - URLs migradas a api/urls.py

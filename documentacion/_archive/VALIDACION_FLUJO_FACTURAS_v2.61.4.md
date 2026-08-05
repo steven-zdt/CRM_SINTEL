@@ -10,7 +10,7 @@
 
 ### Error Reportado
 ```
-GET http://home.sintel.com/api/v1/facturas/facturas/summary/ 404 (Not Found)
+GET http://home.sintel.net.co/api/v1/facturas/facturas/summary/ 404 (Not Found)
 ```
 
 **Causa Raíz:** URLs duplicadas en la capa JavaScript del frontend.

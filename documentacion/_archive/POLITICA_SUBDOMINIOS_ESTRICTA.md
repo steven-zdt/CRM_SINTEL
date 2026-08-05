@@ -4,8 +4,8 @@
 
 Garantizar una arquitectura de dominios consistente y predecible:
 
-1. **Tenant Público:** Siempre responde en `{TENANT_DOMAIN_BASE}` (ej: `sintel.com`)
-2. **Tenants Privados:** Siempre usan subdominios: `{schema_name}.{TENANT_DOMAIN_BASE}` (ej: `home.sintel.com`)
+1. **Tenant Público:** Siempre responde en `{TENANT_DOMAIN_BASE}` (ej: `sintel.net.co`)
+2. **Tenants Privados:** Siempre usan subdominios: `{schema_name}.{TENANT_DOMAIN_BASE}` (ej: `home.sintel.net.co`)
 3. **NO se permiten dominios arbitrarios o FQDN personalizados**
 
 ## ⚙️ Configuración
@@ -15,9 +15,9 @@ Garantizar una arquitectura de dominios consistente y predecible:
 **Ubicación:** `config/settings.py`
 
 ```python
-# En PROD: 'sintel.com'
+# En PROD: 'sintel.net.co'
 # En DEV: 'sintel.localhost' (o lo que dicte .env)
-TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', 'sintel.localhost' if DEBUG else 'sintel.com')
+TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', 'sintel.localhost' if DEBUG else 'sintel.net.co')
 ```
 
 **Regla de Oro:**
@@ -31,8 +31,8 @@ TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', 'sintel.localhost' if DEBUG
 ```python
 # Acepta cualquier subdominio del dominio base
 ALLOWED_HOSTS = [
-    f".{TENANT_DOMAIN_BASE}",  # .sintel.com (acepta cualquier subdominio)
-    TENANT_DOMAIN_BASE,  # sintel.com (dominio base - tenant público)
+    f".{TENANT_DOMAIN_BASE}",  # .sintel.net.co (acepta cualquier subdominio)
+    TENANT_DOMAIN_BASE,  # sintel.net.co (dominio base - tenant público)
     "localhost",
     "127.0.0.1",
 ]
@@ -48,7 +48,7 @@ La función `crear_tenant()` construye automáticamente el dominio como subdomin
 
 ```python
 # Input: schema_name = 'home'
-# Output: dominio = 'home.sintel.com' (o 'home.sintel.localhost' en dev)
+# Output: dominio = 'home.sintel.net.co' (o 'home.sintel.localhost' en dev)
 dominio_esperado = f"{schema_name}.{settings.TENANT_DOMAIN_BASE}"
 ```
 
@@ -130,9 +130,9 @@ client, domain, login_url = crear_tenant(
     schema_name='home'  # Opcional, se genera desde 'nombre' si no se proporciona
 )
 
-# El dominio será automáticamente: 'home.sintel.com' (o 'home.sintel.localhost' en dev)
-print(f"Dominio: {domain.domain}")  # 'home.sintel.com'
-print(f"Login URL: {login_url}")  # 'http://home.sintel.com/'
+# El dominio será automáticamente: 'home.sintel.net.co' (o 'home.sintel.localhost' en dev)
+print(f"Dominio: {domain.domain}")  # 'home.sintel.net.co'
+print(f"Login URL: {login_url}")  # 'http://home.sintel.net.co/'
 ```
 
 ### Garantizar Dominio del Tenant Público
@@ -162,13 +162,13 @@ dominio_home = 'home.sintel.localhost'
 ### Producción (DEBUG=False)
 
 ```python
-TENANT_DOMAIN_BASE = 'sintel.com'
+TENANT_DOMAIN_BASE = 'sintel.net.co'
 
 # Tenant público
-dominio_publico = 'sintel.com'
+dominio_publico = 'sintel.net.co'
 
 # Tenant privado 'home'
-dominio_home = 'home.sintel.com'
+dominio_home = 'home.sintel.net.co'
 ```
 
 ## ⚠️ Restricciones
@@ -176,15 +176,15 @@ dominio_home = 'home.sintel.com'
 1. **NO se permiten FQDN arbitrarios:**
    - ❌ `mi-empresa.com` (no es subdominio)
    - ❌ `empresa.local` (no es subdominio)
-   - ✅ `empresa.sintel.com` (subdominio válido)
+   - ✅ `empresa.sintel.net.co` (subdominio válido)
 
 2. **NO se permiten puntos en `schema_name`:**
    - ❌ `schema_name='mi.empresa'` (rechazado)
-   - ✅ `schema_name='mi-empresa'` (aceptado, genera `mi-empresa.sintel.com`)
+   - ✅ `schema_name='mi-empresa'` (aceptado, genera `mi-empresa.sintel.net.co`)
 
 3. **El tenant público NO puede ser un subdominio:**
-   - ❌ `public.sintel.com` (incorrecto)
-   - ✅ `sintel.com` (correcto)
+   - ❌ `public.sintel.net.co` (incorrecto)
+   - ✅ `sintel.net.co` (correcto)
 
 ## 🔍 Troubleshooting
 
@@ -203,7 +203,7 @@ python manage.py ensure_public_domain
 
 **Solución:** Usa guiones en lugar de puntos:
 ```python
-schema_name='mi-empresa'  # Genera 'mi-empresa.sintel.com'
+schema_name='mi-empresa'  # Genera 'mi-empresa.sintel.net.co'
 ```
 
 ### Error: "El dominio ya está en uso"

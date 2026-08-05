@@ -671,7 +671,7 @@ docker compose exec web python manage.py showmigrations | grep bancos
 docker compose exec web python manage.py migrate_schemas
 
 # Probar endpoint conciliar directamente
-curl -X PATCH http://cliente.sintel.com:8000/api/v1/bancos/transacciones/{uuid}/conciliar/ \
+curl -X PATCH http://cliente.sintel.net.co:8000/api/v1/bancos/transacciones/{uuid}/conciliar/ \
   -H "Authorization: Bearer {token}" \
   -H "Content-Type: application/json" \
   -d '{"factura_uuid":"xxx","conciliado":true,"notas_conciliacion":"Pago cuota 3/6"}'

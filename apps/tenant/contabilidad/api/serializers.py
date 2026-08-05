@@ -516,10 +516,10 @@ class ConfiguracionRetencionesListSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfiguracionRetenciones
         fields = [
-            'id', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'id', 'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
             'porcentaje_por_defecto', 'activa', 'naturaleza', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'uuid', 'created_at']
 
 
 class ConfiguracionRetencionesDetailSerializer(serializers.ModelSerializer):
@@ -531,11 +531,11 @@ class ConfiguracionRetencionesDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConfiguracionRetenciones
         fields = [
-            'id', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'id', 'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
             'porcentaje_por_defecto', 'cuenta_retencion', 'cuenta_retencion_data',
             'activa', 'naturaleza', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'uuid', 'created_at', 'updated_at']
 
     def get_cuenta_retencion_data(self, obj):
         """Retorna datos de cuenta contable asociada."""
@@ -597,7 +597,7 @@ class RetencionDetailSerializer(serializers.ModelSerializer):
         if obj.asiento_contable:
             return {
                 'uuid': str(obj.asiento_contable.uuid),
-                'numero_asiento': obj.asiento_contable.numero_asiento,
+                'numero_asiento': obj.asiento_contable.numero,
                 'fecha': obj.asiento_contable.fecha.isoformat(),
             }
         return None

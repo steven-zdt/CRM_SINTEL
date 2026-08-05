@@ -66,6 +66,7 @@ class RetencionesServiceTestCase(TenantAPITestCase):
             nit=nit,
             tipo_tercero='CLIENTE',
             naturaleza='VENTA',
+            empresa_id=self.empresa.id,
         )
 
         self.assertTrue(resultado['aplica_retefuente'])
@@ -91,6 +92,7 @@ class RetencionesServiceTestCase(TenantAPITestCase):
             nit=nit,
             tipo_tercero='CLIENTE',
             naturaleza='VENTA',
+            empresa_id=self.empresa.id,
         )
 
         self.assertTrue(resultado['aplica_retefuente'])
@@ -117,6 +119,7 @@ class RetencionesServiceTestCase(TenantAPITestCase):
             nit=nit_denormalizado,
             tipo_tercero='PROVEEDOR',
             naturaleza='COMPRA',
+            empresa_id=self.empresa.id,
         )
 
         self.assertTrue(resultado['aplica_reteica'])
@@ -217,6 +220,7 @@ class RetencionesServiceTestCase(TenantAPITestCase):
             documento_origen_app='facturas',
             documento_origen_modelo='Factura',
             documento_origen_id=doc_id,
+            empresa_id=self.empresa.id,
         )
 
         self.assertEqual(len(retenciones), 3)
@@ -254,6 +258,7 @@ class RetencionesServiceTestCase(TenantAPITestCase):
             documento_origen_app='facturas',
             documento_origen_modelo='Factura',
             documento_origen_id=doc_id,
+            empresa_id=self.empresa.id,
         )
 
         self.assertEqual(total, Decimal('150.00'))
@@ -284,6 +289,7 @@ class RetencionesServiceTestCase(TenantAPITestCase):
             documento_origen_app='facturas',
             documento_origen_modelo='Factura',
             documento_origen_id=doc_id,
+            empresa_id=self.empresa.id,
             tipo='RETEFUENTE',
         )
 
@@ -328,7 +334,8 @@ class RetencionesServiceTestCase(TenantAPITestCase):
         )
 
         encontrada = RetencionesService.obtener_retencion_por_uuid(
-            uuid=retencion.uuid
+            uuid=retencion.uuid,
+            empresa_id=self.empresa.id,
         )
 
         self.assertEqual(encontrada.id, retencion.id)
@@ -340,7 +347,8 @@ class RetencionesServiceTestCase(TenantAPITestCase):
         inexistente_uuid = uuid_module.uuid4()
 
         encontrada = RetencionesService.obtener_retencion_por_uuid(
-            uuid=inexistente_uuid
+            uuid=inexistente_uuid,
+            empresa_id=self.empresa.id,
         )
 
         self.assertIsNone(encontrada)

@@ -24,7 +24,7 @@ Este documento valida la lógica de URLs para tenants privados y propone un plan
 ### Estructura Actual (TENANT_URLCONF)
 
 **Archivo:** `config/urls_tenant.py`  
-**Se activa cuando:** Se accede a un dominio de tenant privado (ej: `cliente.sintel.com`)
+**Se activa cuando:** Se accede a un dominio de tenant privado (ej: `cliente.sintel.net.co`)
 
 ```python
 # Estructura de urlpatterns en config/urls_tenant.py
@@ -60,7 +60,7 @@ urlpatterns = [
 ### Flujo de Resolución de URLs
 
 ```
-cliente.sintel.com/api/v1/core/auth/login/
+cliente.sintel.net.co/api/v1/core/auth/login/
   ↓
 TenantMainMiddleware (identifica tenant)
   ↓

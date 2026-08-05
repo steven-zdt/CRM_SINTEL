@@ -40,7 +40,7 @@ def root_view(request):
     Esto mantiene la arquitectura API-First (las APIs siguen en /api/*),
     pero hace que la experiencia de usuario sea:
       - http://localhost:8000/           -> /console/ (dashboard público)
-      - http://sintel.com:8000/         -> /console/ del tenant sintel.com (si está configurado)
+      - http://sintel.net.co:8000/         -> /console/ del tenant sintel.net.co (si está configurado)
     """
     # Redirige siempre a la consola del esquema actual.
     # En el esquema public será el dashboard global; en un esquema tenant_*

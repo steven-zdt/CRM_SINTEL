@@ -3,10 +3,11 @@ Smoke tests para Landing vía Core (info, activate).
 
 [WARNING] POLÍTICA v2.30: Validar que Core expone landing/info y landing/auth/activate correctamente.
 """
-from rest_framework import status
-from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
+from rest_framework import status
+from rest_framework.test import APIClient
+
 from apps.public.tenants.models import TenantMembership
 from apps.public.tenants.services.invitations import generate_invitation_token, verify_invitation_token
 from tests.tenant.base_test import SintelTenantTestCase
@@ -19,8 +20,8 @@ class TestCoreLandingIntegration(SintelTenantTestCase):
         import pytest
 
         try:
-            import playwright  # noqa: F401
             import cryptography  # noqa: F401
+            import playwright  # noqa: F401
         except Exception:
             pytest.skip("Skipping heavy smoke test: missing playwright/cryptography", allow_module_level=True)
     

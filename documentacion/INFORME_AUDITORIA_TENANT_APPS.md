@@ -1,5 +1,7 @@
 # Informe de Auditoria — Apps Tenant: Integracion, UUID y empresa FK
 
+> WARNING: [DOC-A5, 2026-08-03] **Documento historico, no es fuente canonica.** Los 3 hallazgos que este informe dejo abiertos seguian sin resolver 6+ semanas despues (uno de ellos, `servicio_asociado` en `proyectos`, tiene hoy 15+ referencias activas — contradice el propio criterio de remocion del informe original). Para el estado actual y verificado del proyecto, ver `documentacion/AUDITORIA_ENTERPRISE_2026-07-26.md` y `documentacion/PLAN_UNICO_CORRECCIONES.md`. Se conserva aqui como registro historico, no como referencia a seguir.
+
 **Fecha:** 2026-06-01
 **Version:** v3.16.0
 **Auditor:** Claude Code (claude-sonnet-4-6)

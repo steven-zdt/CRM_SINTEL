@@ -1,6 +1,6 @@
 import pytest
-from django.core.management import call_command
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 
 
 @pytest.mark.django_db
@@ -15,4 +15,3 @@ def test_ensure_admin_idempotent():
     call_command("ensure_admin")
 
     assert User.objects.filter(username="admin").count() == 1
-

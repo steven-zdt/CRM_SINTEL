@@ -1,20 +1,53 @@
-eliminar todas las migraciones
-Get-ChildItem -Path ".\apps" -Filter "*.py" -Recurse | Where-Object { $_.FullName -match "\\migrations\\" -and $_.Name -ne "__init__.py" } | Remove-Item -Force
-Get-ChildItem -Path "." -Filter "__pycache__" -Recurse | Remove-Item -Force -Recurse   
+================================================================================
+COMANDOS PARA OPERAR EL PROYECTO SINtel - Multi-tenant SaaS
 ================================================================================
 
-git config --unset extensions.worktreeConfig
-rmdir /s /q %APPDATA%\Antigravity\Cache
+⌨️ CONFIGURACIÓN DE TERMINAL - COPIAR Y PEGAR
+================================================================================
 
-C:\Windows\System32\drivers\etc\hosts
+📖 GUÍA COMPLETA: Ver archivo documentacion/CONFIGURACION_TERMINAL.md para instrucciones detalladas
 
-docker compose up -d db redis
+# MÉTODO RÁPIDO - Windows Terminal (Recomendado):
+# 1. Abrir Windows Terminal
+# 2. Presionar Ctrl + , (abre configuración)
+# 3. Buscar "Atajos de teclado" o "Keyboard shortcuts"
+# 4. Buscar "copy" y hacer clic en el ícono de lápiz
+# 5. Presionar Ctrl + C cuando pida la combinación
+# 6. Repetir para "paste" con Ctrl + V
+# 7. Guardar cambios
 
-docker compose run --rm web python manage.py makemigrations accounts tenant_core tenants
+# OPCIONES DISPONIBLES:
+# Opción A: Ctrl+Shift+C para copiar (mantiene Ctrl+C para interrumpir)
+# Opción B: Ctrl+C para copiar (pierde función de interrumpir)
+# Opción C: copyOnSelect: true (copia automáticamente al seleccionar)
 
-docker compose run --rm web python manage.py makemigrations
+# Windows PowerShell/CMD - Atajos de teclado:
+# - COPIAR: Ctrl + Shift + C (o seleccionar texto y Enter)
+# - PEGAR: Ctrl + Shift + V (o clic derecho)
 
-docker compose run --rm web python manage.py migrate_schemas
+# Alternativa: Usar Git Bash (incluido con Git for Windows)
+# - Ctrl+C: Copiar
+# - Ctrl+V: Pegar
+# - Ctrl+Insert: Copiar
+# - Shift+Insert: Pegar
+
+# PowerShell - Habilitar selección rápida (QuickEdit Mode):
+# Click derecho en la barra de título > Propiedades > Opciones
+# Marcar "Modo de selección rápida"
+
+# Para copiar texto sin formato desde terminal:
+# - Seleccionar texto con el mouse
+# - Presionar Enter (en modo QuickEdit)
+# - O usar Ctrl+Shift+C
+
+# Para pegar en terminal:
+# - Click derecho en la terminal
+# - O Ctrl+Shift+V
+# - O Shift+Insert
+
+# ARCHIVO DE CONFIGURACIÓN:
+# Ver windows_terminal_settings.json para ejemplo completo de configuración JSON
+
 
 📦 INICIALIZACIÓN Y CONFIGURACIÓN
 ================================================================================
@@ -24,7 +57,6 @@ pip install -r requirements.txt
     
 # 1. Copiar archivo de entorno (primera vez)
 cp .env.sample .env
-.\venv.host.bak\Scripts\Activate.ps1
 
 # 2. Editar variables de entorno si es necesario
 # Windows (notepad)
@@ -58,11 +90,7 @@ make up
 # Chrome: chrome://net-internals/#hsts
 # Buscar "localhost" y eliminarlo
 
-#docker compose down --rmi local -v --remove-orphans
-
-
 # Levantar en segundo plano (detached)
- docker compose build --no-cache     
 docker compose up -d --build
 
 # Detener todos los servicios
@@ -154,10 +182,9 @@ docker compose exec web python manage.py migrate_schemas --shared
 
 docker compose exec web python manage.py setup_public_tenant
 docker compose exec web python manage.py migrate_schemas --tenant
-docker compose exec web python manage.py makemigrations
 docker compose run --rm web python manage.py makemigrations accounts
 docker compose exec web python manage.py migrate_schemas --tenant
-docker compose exec web python manage.py migrate_schemas --schema=all
+docker compose exec web python manage.py migrate_schemas --tenant=<schema_name>
 
     docker compose exec web    python manage.py migrate_schemas --shared --fake-initial
     docker compose exec web   python manage.py migrate_schemas --tenant --fake-initial
@@ -172,7 +199,7 @@ docker compose exec web python manage.py showmigrations apps.public.impuestos
 docker compose exec web python manage.py makemigrations <app_name>
 # Ejemplo:
 > docker compose exec web python manage.py makemigrations --shared
-docker compose exec web python manage.py makemigrations tenants1
+docker compose exec web python manage.py makemigrations tenants
 docker compose exec web python manage.py makemigrations facturas
 
 # Ver estado de las migraciones
@@ -187,7 +214,7 @@ docker compose exec web python manage.py showmigrations --schema=<tenant_schema>
 ================================================================================
 
 # Crear superusuario
-
+docker compose exec web python manage.py createsuperuser
 # o usando Makefile
 make superuser
 
@@ -309,8 +336,6 @@ docker system df
 # Reconstruir contenedor sin caché
 docker compose build --no-cache web
 
-docker-compose build --no-cache web
-
 # Reiniciar todo desde cero (CUIDADO: borra datos)
 docker compose down -v
 docker compose up --build
@@ -384,182 +409,3 @@ NOTAS IMPORTANTES
 - Para desarrollo, el código se monta como volumen, los cambios son inmediatos
 
 ================================================================================
-
-
-
-
-
-### DT-PUB-02 — Tests básicos para `EmailService` y `PublicIndexView`
-
-**Problema:** `apps/public/core/` sin tests. `EmailService` es crítico para activaciones y resets de contraseña (AGENTS.md menciona que modificaciones requieren prueba rigurosa).
-
-**Acciones:**
-1. Crear `apps/public/core/tests/`:
-   - `test_email_service.py` — mock `send_mail`, verificar contexto de templates
-   - `test_public_index_view.py` — redirección por estado de autenticación (anon → login, staff → console, member → workspace)
-2. Ejecutar: `make test-file FILE="apps/public/core/tests/"`
-
----
-
-## FASE 4 — Consolidación de Infraestructura y Deuda de Baja Prioridad
-
-**Objetivo:** Eliminar duplicación de código en admin/console, consolidar management commands, y limpiar dead code de JS de bajo riesgo.
-
-**Criterio de completación:** Sin duplicados funcionales detectables por grep, 0 dead code JS reportado por linter.
-
----
-
-### DT-PUB-03 — Refactorizar `delete_model` en `ClientAdmin` para delegar a `hard_delete_tenant`
-
-**Problema:** `ClientAdmin.delete_model()` duplica validaciones que ya están en `hard_delete_tenant()`. Viola el principio DRY y puede desincronizarse.
-
-**Acciones:**
-1. Leer `apps/public/tenants/admin.py:delete_model()` y `deletion_service.py:hard_delete_tenant()`
-2. Reducir `delete_model()` a:
-   ```python
-   def delete_model(self, request, obj):
-       from apps.public.tenants.services.deletion_service import hard_delete_tenant
-       hard_delete_tenant(client_id=obj.id, actor_user_id=request.user.pk)
-   ```
-3. Mantener solo la validación de `is_active` en el admin como guard visual (antes de llamar al servicio)
-
-**Archivo afectado:** `apps/public/tenants/admin.py`
-
----
-
-### DT-PUB-04 — Consolidar `UsersDataTableView` con `UserAdminViewSet`
-
-**Problema:** `apps/public/console/api/views.py:UsersDataTableView` duplica operaciones de `apps/public/accounts/api/viewsets.py:UserAdminViewSet`. Dos implementaciones del mismo CRUD.
-
-**Acciones:**
-1. Auditar diferencias entre ambas implementaciones
-2. Migrar funcionalidad de `UsersDataTableView` a una nueva acción `@action` en `UserAdminViewSet` para DataTables
-3. Actualizar `console/api/urls.py` para apuntar al ViewSet unificado
-4. Actualizar frontend `users_list.html` si cambia el endpoint
-5. Eliminar `UsersDataTableView` duplicada
-
-**Archivos afectados:**
-- `apps/public/console/api/views.py` (reducir)
-- `apps/public/accounts/api/viewsets.py` (agregar acción DataTables)
-- `apps/public/console/api/urls.py` (actualizar ruta)
-
----
-
-### DT-PUB-05 — Revisar y deprecar management commands de diagnóstico en tenants
-
-**Problema:** 28 management commands en `tenants/management/commands/`. Varios son de diagnóstico/debugging que no deberían estar activos en producción.
-
-**Acciones:**
-1. Categorizar los 28 commands como: `PRODUCCION` | `MANTENIMIENTO` | `DIAGNOSTICO_SOLO_DEV`
-2. Los `DIAGNOSTICO_SOLO_DEV` (e.g., `diagnostico_404.py`, `analizar_tenants_prueba.py`):
-   - Agregar guard: `if not settings.DEBUG: raise CommandError("Solo disponible en DEBUG=True")`
-3. Los duplicados funcionales (e.g., `fix_tenant_domain.py` vs `fix_tenant_domains.py`):
-   - Consolidar en el más completo, agregar `--deprecated` flag al otro
-4. Documentar en `apps/public/tenants/management/commands/README.md`
-
----
-
-### DT-INV-08 — Eliminar dead code en `activos_editor.js`
-
-**Problema:** `initCodigoPrefijo()` y `setupCuentaAutocomplete` para `#activo-cuenta-activo-busqueda` son dead code silencioso — el template ya no tiene esos inputs, el guard `if (d.querySelector(...))` evita errores pero el código existe sin propósito.
-
-**Acciones:**
-1. Verificar que `#activo-cuenta-activo-busqueda` no existe en `offcanvas_activo.html`:
-   ```bash
-   grep "activo-cuenta-activo-busqueda" apps/tenant/inventario/templates/inventario/offcanvas_activo.html
-   ```
-2. Si confirma que no existe: eliminar `initCodigoPrefijo()` de `activos_editor.js` y la llamada correspondiente en `init()`
-
-**Archivo afectado:** `apps/tenant/inventario/static/inventario/js/features/activos_editor.js`
-
----
-
-### DT-FACT-10 — Tests unitarios para `utils/ubl_parser.py`
-
-**Problema:** El parser UBL no tiene tests directos. Es código crítico (parsing de XML de la DIAN) sin cobertura.
-
-**Acciones:**
-1. Crear `apps/tenant/facturas/tests/test_ubl_parser.py`
-2. Fixtures: XMLs de facturas de venta DIAN (tipos FE, NC, ND)
-3. Test cases: parse campos básicos, parse retenciones, parse errores de formato
-4. Usar XMLs existentes en `facturas_xml/` si se mantienen como fixtures
-
----
-
-### DT-FACT-12 — Evaluar y normalizar imports lazy en `api/viewsets.py`
-
-**Problema:** `ingest_service` y tareas Celery se importan dentro de métodos. AGENTS.md prohíbe imports dentro de `def` (TL;DR Imports). Evaluar si el lazy loading es realmente necesario para Celery.
-
-**Acciones:**
-1. Leer `apps/tenant/facturas/api/viewsets.py` — identificar todos los imports lazy
-2. Para cada uno: determinar si el lazy loading es por circularidad o por performance
-3. Los que NO tienen circularidad → mover a imports globales
-4. Los que sí la tienen → documentar con comentario explicando el motivo (excepción justificada)
-
-**Archivo afectado:** `apps/tenant/facturas/api/viewsets.py`
-
-**Regla AGENTS.md:** TL;DR Imports — SIEMPRE globales
-
----
-
-## Matriz de Priorización
-
-```
-IMPACTO ALTO + ESFUERZO BAJO → FASE 1 (hacer primero)
-IMPACTO ALTO + ESFUERZO ALTO → FASE 1 (planificar cuidadosamente)
-IMPACTO MEDIO + ESFUERZO BAJO → FASE 2-3
-IMPACTO BAJO + ESFUERZO BAJO  → FASE 4
-```
-
-| Fase | Items | Esfuerzo estimado | Riesgo |
-|---|---|---|---|
-| **1** | DT-FACT-01, DT-FACT-02, DT-FACT-11, DT-GAST-01 | ~3–5 días | MEDIO (fragmentar código activo) |
-| **2** | DT-FACT-05, DT-FACT-06, DT-GAST-06, DT-PUB-01 | ~2–3 días | BAJO (eliminar DEPRECATED + crear tests) |
-| **3** | DT-FACT-03, DT-FACT-04, DT-FACT-09, DT-INV-04, DT-INV-05, DT-GAST-04, DT-GAST-08, DT-PUB-02 | ~3–4 días | MUY BAJO (limpieza pura) |
-| **4** | DT-PUB-03, DT-PUB-04, DT-PUB-05, DT-INV-08, DT-FACT-10, DT-FACT-12 | ~2–3 días | MUY BAJO (consolidación) |
-
-**Esfuerzo total estimado:** 10–15 días de desarrollo
-
----
-
-## Verificaciones Obligatorias por Fase (AGENTS.md compliance)
-
-Antes de cerrar cada fase, ejecutar:
-
-```bash
-# 1. Compilación Python (hook PostToolUse — AGENTS.md §4.6)
-python -m py_compile apps/tenant/<app>/models.py
-python -m py_compile apps/tenant/<app>/api/serializers.py
-python -m py_compile apps/tenant/<app>/api/viewsets.py
-
-# 2. Django system check
-python manage.py check
-
-# 3. Migraciones pendientes (si hubo cambios en models.py)
-python manage.py makemigrations --check
-
-# 4. Tests del módulo afectado
-make test-file FILE="apps/tenant/<app>/tests/"
-
-# 5. Grep de referencias eliminadas
-grep -r "campo_eliminado\|funcion_eliminada" apps/ --include="*.py" | grep -v migration
-
-# 6. Sin emojis en .py (AGENTS.md Regla Fundamental)
-grep -rn "[\U0001F000-\U0001FFFF]" apps/tenant/<app>/ --include="*.py"
-```
-
----
-
-## Notas de Alineamiento con AGENTS.md
-
-| Sección AGENTS.md | Items de deuda relacionados |
-|---|---|
-| §0 No emojis en .py | Verificación en todos los items que tocan .py |
-| §1 Service Layer unidireccional | DT-FACT-01, DT-INV-05 (separar servicios) |
-| §3.1 FSD un ecosistema por modelo | DT-FACT-01, DT-INV-05 |
-| §4.5 Karpathy — Simplicidad | DT-FACT-01, DT-FACT-02, DT-FACT-03, DT-GAST-04 |
-| §23 Aislamiento JS | DT-FACT-02, DT-FACT-03, DT-GAST-04 |
-| §13 IDOR Prevention + DSV | DT-GAST-06 (tests de aislamiento) |
-| TL;DR Imports globales | DT-GAST-08, DT-FACT-12 |
-| §3.9 Tests obligatorios | DT-GAST-06, DT-PUB-01, DT-PUB-02, DT-FACT-10 |
-| §14 Modelos limpios (sin campos zombie) | DT-GAST-01, DT-FACT-05, DT-FACT-06 |

@@ -13,18 +13,23 @@ WARNING: v2.61.8: Dual-Auth Pattern (JWT + Session)
 from rest_framework import viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 
 class RelaxedJWTAuthentication(JWTAuthentication):
     """
-    Extensión de JWTAuthentication que no bloquea con 401 en modo DEBUG
-    si el token es inválido o ha expirado. Permite que la petición
-    continúe como AnonymousUser para ser manejada por los fallbacks de desarrollo.
+    Extension de JWTAuthentication que no bloquea con 401 en modo DEBUG
+    si el token es invalido o ha expirado. Permite que la peticion
+    continue como AnonymousUser para ser manejada por los fallbacks de desarrollo.
+
+    CORRECCION AUDITORIA: Solo captura excepciones JWT especificas (InvalidToken,
+    TokenError) en lugar del catch-all 'Exception' para no enmascarar
+    errores de infraestructura en desarrollo.
     """
     def authenticate(self, request):
         try:
             return super().authenticate(request)
-        except Exception:
+        except (InvalidToken, TokenError):
             from django.conf import settings
             if settings.DEBUG:
                 return None
@@ -37,7 +42,7 @@ class BaseTenantViewSet(viewsets.ModelViewSet):
 
     WARNING: IMPORTANTE:
     - lookup_field="uuid" garantiza que las URLs usen UUID en lugar de PK
-    - RelaxedJWTAuthentication: Permite bypass en DEBUG para facilitar integración.
+    - RelaxedJWTAuthentication: Permite bypass en DEBUG para facilitar integracion.
     - SessionAuthentication: Workspace navegador, HTMX, CSRF.
     """
     lookup_field = "uuid"

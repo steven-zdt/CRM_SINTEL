@@ -48,14 +48,14 @@ def _build_primary_domain(schema_name: str, dominio_fqdn: str | None = None) -> 
         dominio_fqdn: Dominio proporcionado (opcional, puede ser None o vacío)
     
     Returns:
-        str: Dominio FQDN normalizado y validado (ej: "cliente.sintel.com")
+        str: Dominio FQDN normalizado y validado (ej: "cliente.sintel.net.co")
     
     Raises:
         ValidationError: Si el dominio autogenerado no es válido
     """
     from django.conf import settings
     
-    base = getattr(settings, 'TENANT_DOMAIN_BASE', 'sintel.com')
+    base = getattr(settings, 'TENANT_DOMAIN_BASE', 'sintel.net.co')
     
     # Si no viene dominio o está vacío, autogenerar.
     # Sanitizar schema_name para uso en labels DNS (no se permiten underscores u otros caracteres).

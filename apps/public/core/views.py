@@ -1,7 +1,7 @@
 """
 Vistas core para el esquema público.
 
-Landing page y redirección inteligente para el dominio público (sintel.com).
+Landing page y redirección inteligente para el dominio público (sintel.net.co).
 """
 
 from django.shortcuts import redirect
@@ -11,7 +11,7 @@ from django.views.generic import TemplateView
 
 class PublicIndexView(TemplateView):
     """
-    Vista índice para el dominio público (sintel.com).
+    Vista índice para el dominio público (sintel.net.co).
 
     Renderiza la landing page profesional para usuarios anónimos.
     Si el usuario está autenticado y es staff, redirige a la consola de gestión.

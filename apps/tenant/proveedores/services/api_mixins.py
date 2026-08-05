@@ -9,15 +9,20 @@ from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.proveedores.services.selectors import (
     ProveedorSelector,
     CuentasPagarSelector,
+    RepresentanteSelector,
     LIST_FIELDS,
     DETAIL_FIELDS,
+    LIST_FIELDS_REPRESENTANTE,
+    DETAIL_FIELDS_REPRESENTANTE,
 )
 from apps.tenant.proveedores.services.business_service import (
     ProveedorBusinessService,
     CuentasPagarBusinessService,
+    RepresentanteBusinessService,
 )
 from apps.tenant.proveedores.services.crud_service import (
     ProveedorCRUDService,
+    RepresentanteCRUDService,
 )
 
 
@@ -85,3 +90,26 @@ class CuentasPagarServiceMixin:
     @property
     def cuentas_pagar_service(self):
         return CuentasPagarBusinessService()
+
+
+class RepresentanteServiceMixin(BaseServiceMixin):
+    """
+    Service mixin para Representante ViewSet (v3.17.0).
+    Inyecta selector, business service y CRUD service.
+    """
+
+    selector_class = RepresentanteSelector
+    business_service_class = RepresentanteBusinessService
+    crud_service_class = RepresentanteCRUDService
+
+    @property
+    def representante_selector(self):
+        return self.selector_class()
+
+    @property
+    def representante_service(self):
+        return self.business_service_class()
+
+    @property
+    def representante_crud(self):
+        return self.crud_service_class()

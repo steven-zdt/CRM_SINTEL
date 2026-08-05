@@ -7,7 +7,7 @@ Por favor ingrese el nombre de usuario y la clave correctos para obtener cuenta 
 Observe que ambos campos pueden ser sensibles a mayúsculas.
 ```
 
-**URL:** `http://home.sintel.com:8000/admin/login/`  
+**URL:** `http://home.sintel.net.co:8000/admin/login/`  
 **Usuario esperado:** `admin@home.com`
 
 ## 🔧 Pasos de Diagnóstico
@@ -182,7 +182,7 @@ El warning sobre `Cross-Origin-Opener-Policy` es un aviso del navegador, no un e
 
 **Solución temporal (desarrollo):**
 - Ignorar el warning (no afecta la funcionalidad)
-- Usar `localhost` en lugar de `sintel.com` para desarrollo local
+- Usar `localhost` en lugar de `sintel.net.co` para desarrollo local
 
 **Solución en producción:**
 - Configurar HTTPS
@@ -206,7 +206,7 @@ Este comando verifica automáticamente:
 ## 📋 Checklist de Verificación
 
 - [ ] Tenant 'home' existe y está activo
-- [ ] Dominio 'home.sintel.com' está asociado al tenant
+- [ ] Dominio 'home.sintel.net.co' está asociado al tenant
 - [ ] Usuario 'admin@home.com' existe
 - [ ] Usuario está activo (`is_active=True`)
 - [ ] Usuario tiene contraseña configurada

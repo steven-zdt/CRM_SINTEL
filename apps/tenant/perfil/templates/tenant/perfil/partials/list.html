@@ -14,7 +14,7 @@
                     hx-target="#offcanvas-container-perfil"
                     hx-swap="innerHTML"
                     hx-indicator="#spinner"
-                    hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-perfil-crear'); if(el) bootstrap.Offcanvas.getOrCreateInstance(el).show(); }">
+                    hx-on::after-request="if(event.detail.successful){ window.Sintel?.Core?.mostrarOffcanvasSeguro('offcanvas-perfil-crear'); }">
                 <i class="bi bi-person-plus me-1"></i> Nuevo Perfil
             </button>
             <button class="btn btn-outline-secondary" id="btn-refrescar-perfil" title="Refrescar datos">
@@ -24,15 +24,23 @@
         <div id="perfil-list-feedback" class="small fw-bold text-end"></div>
     </div>
 
-    {# Input de busqueda para Tabulator #}
+    {# Busqueda server-side (django-tables2 + HTMX) #}
     <div class="mb-3">
-        <input type="text" id="search-perfil" class="form-control" placeholder="Buscar por nombre, cargo o departamento...">
+        <input type="text" id="search-perfil" class="form-control" placeholder="Buscar por nombre, cargo o departamento..."
+               hx-get="{% url 'perfil_ui:perfil-tabla' %}"
+               hx-trigger="keyup changed delay:400ms, search"
+               hx-target="#perfiles-panel"
+               name="q">
     </div>
 
-    {# Contenedor para Tabulator (no tabla HTML) #}
+    {# Tabla server-rendered (django-tables2 + HTMX) — Fase 5-BIS #}
     <div class="card shadow-sm border-0">
         <div class="card-body p-0">
-            <div id="grid-perfil" class="flex-grow-1" style="min-height: 400px;"></div>
+            <div id="perfiles-panel"
+                 hx-get="{% url 'perfil_ui:perfil-tabla' %}"
+                 hx-trigger="load, perfil-updated from:body"
+                 hx-target="this"
+                 style="min-height: 400px;"></div>
         </div>
     </div>
 

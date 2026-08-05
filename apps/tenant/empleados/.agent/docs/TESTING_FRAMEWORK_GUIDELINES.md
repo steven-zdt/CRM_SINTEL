@@ -115,8 +115,8 @@ def test_multitenancy_isolation(client, admin_user, tenant, tenant_factory):
     client.force_login(admin_user)
     
     # Evaluar aislamiento mediante HTTP_HOST
-    resp1 = client.get("/api/v1/ruta/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
-    resp2 = client.get("/api/v1/ruta/", HTTP_HOST=f"{tenant2.schema_name}.sintel.com")
+    resp1 = client.get("/api/v1/ruta/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    resp2 = client.get("/api/v1/ruta/", HTTP_HOST=f"{tenant2.schema_name}.sintel.net.co")
     
     # Validar que resp1 NO contenga datos de resp2
 ```

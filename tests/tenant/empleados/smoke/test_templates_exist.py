@@ -3,9 +3,11 @@ Smoke test: Verifica que los templates de empleados existen y son accesibles.
 
 Test no invasivo que solo verifica la estructura de archivos.
 """
+
 from pathlib import Path
-from django.test import SimpleTestCase
+
 from django.template.loader import get_template
+from django.test import SimpleTestCase
 
 
 class EmpleadosTemplatesSmokeTest(SimpleTestCase):
@@ -35,17 +37,13 @@ class EmpleadosTemplatesSmokeTest(SimpleTestCase):
         """Verifica que la estructura de directorios y archivos FSD es correcta."""
         base_path = Path("apps/tenant/empleados/templates/tenant/empleados")
         self.assertTrue(base_path.exists(), f"El directorio {base_path} no existe")
-        
+
         required_files = [
             "empleados_list.html",
             "offcanvas_crear_empleado.html",
             "offcanvas_editar_empleado.html",
-            "assets_empleados.html"
+            "assets_empleados.html",
         ]
         for filename in required_files:
             file_path = base_path / filename
-            self.assertTrue(
-                file_path.exists(),
-                f"El archivo {file_path} no existe"
-            )
-
+            self.assertTrue(file_path.exists(), f"El archivo {file_path} no existe")

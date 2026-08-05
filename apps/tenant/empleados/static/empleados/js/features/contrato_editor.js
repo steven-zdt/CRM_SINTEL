@@ -57,13 +57,8 @@
      * Listener para activar offcanvas tras inyección HTMX
      */
     function _mostrarOffcanvasSeguro(el) {
-        if (!el || !w.bootstrap?.Offcanvas) return;
-        d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
-        d.body.classList.remove('overflow-hidden', 'modal-open');
-        d.body.style.overflow = '';
-        d.body.style.paddingRight = '';
-        const oc = bootstrap.Offcanvas.getOrCreateInstance(el);
-        oc.show();
+        // FE-A5: delega al helper SSoT (core/js/common/offcanvas.helper.js).
+        return w.Sintel?.Core?.mostrarOffcanvasSeguro(el);
     }
 
     /**
@@ -142,48 +137,56 @@
         console.log(`${MOD} Formulario ${formId} inicializado`);
     }
 
-    /**
-     * Handler global para botones de guardar contrato.
-     * Detecta por button ID (no form ID) — el boton lleva hx-post/hx-patch directamente.
-     */
-    d.body.addEventListener('htmx:afterRequest', function(evt) {
-        const target = evt.target;
-        const isContratoBtn =
-            target.id === 'btn-guardar-contrato-crear' ||
-            target.id === 'btn-guardar-contrato-editar';
+    // Guard: setupOffcanvasLoadListener() y el listener de abajo registran
+    // ambos en `document.body` (persiste entre recargas HTMX del modulo
+    // "empleados") — sin este guard, cada recarga del script duplica el
+    // flujo completo de "guardar contrato" (FE-A1/A2).
+    if (!d.body.dataset.contratoEditorInitialized) {
+        d.body.dataset.contratoEditorInitialized = 'true';
 
-        if (!isContratoBtn) return;
+        /**
+         * Handler global para botones de guardar contrato.
+         * Detecta por button ID (no form ID) — el boton lleva hx-post/hx-patch directamente.
+         */
+        d.body.addEventListener('htmx:afterRequest', function(evt) {
+            const target = evt.target;
+            const isContratoBtn =
+                target.id === 'btn-guardar-contrato-crear' ||
+                target.id === 'btn-guardar-contrato-editar';
 
-        // Siempre restaurar el boton (exito o error)
-        const esCrear = target.id === 'btn-guardar-contrato-crear';
-        target.disabled = false;
-        target.innerHTML = esCrear
-            ? '<i class="bi bi-check-lg me-1"></i>Crear Contrato'
-            : '<i class="bi bi-check-lg me-1"></i>Actualizar Contrato';
+            if (!isContratoBtn) return;
 
-        if (!evt.detail.successful) return;
+            // Siempre restaurar el boton (exito o error)
+            const esCrear = target.id === 'btn-guardar-contrato-crear';
+            target.disabled = false;
+            target.innerHTML = esCrear
+                ? '<i class="bi bi-check-lg me-1"></i>Crear Contrato'
+                : '<i class="bi bi-check-lg me-1"></i>Actualizar Contrato';
 
-        // 1. Cerrar Offcanvas
-        const offcanvasEl = d.querySelector('.offcanvas.show');
-        if (offcanvasEl) {
-            bootstrap.Offcanvas.getInstance(offcanvasEl)?.hide();
-        }
+            if (!evt.detail.successful) return;
 
-        // 2. Notificar exito
-        let msg = esCrear ? 'Contrato creado correctamente' : 'Contrato actualizado correctamente';
-        try {
-            const resp = JSON.parse(evt.detail.xhr.response);
-            if (resp.message) msg = resp.message;
-        } catch(_) {}
-        window.UIManager?.notifySuccess(msg);
+            // 1. Cerrar Offcanvas
+            const offcanvasEl = d.querySelector('.offcanvas.show');
+            if (offcanvasEl) {
+                bootstrap.Offcanvas.getInstance(offcanvasEl)?.hide();
+            }
 
-        // 3. Recargar tablas
-        window.Sintel.Empleados.ContratoList?.reload();
-        window.Sintel.Empleados.EmpleadoList?.reload();
-    });
+            // 2. Notificar exito
+            let msg = esCrear ? 'Contrato creado correctamente' : 'Contrato actualizado correctamente';
+            try {
+                const resp = JSON.parse(evt.detail.xhr.response);
+                if (resp.message) msg = resp.message;
+            } catch(_) {}
+            window.UIManager?.notifySuccess(msg);
 
-    // Inicializar listeners
-    setupOffcanvasLoadListener();
+            // 3. Recargar tablas
+            window.Sintel.Empleados.ContratoList?.reload();
+            window.Sintel.Empleados.EmpleadoList?.reload();
+        });
+
+        // Inicializar listeners
+        setupOffcanvasLoadListener();
+    }
 
     // Exportar al namespace
     window.Sintel = window.Sintel || {};

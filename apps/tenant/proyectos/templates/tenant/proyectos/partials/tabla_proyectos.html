@@ -1,0 +1,91 @@
+{% load django_tables2 %}
+{# Fragmento HTMX: KPIs + tabla de Proyectos. Reemplaza #proyectos-panel completo. #}
+
+<div class="row g-3 mb-3" id="proyectos-kpis">
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+        <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+          <i class="bi bi-folder2-open text-primary"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.total }}</div>
+          <div class="small text-muted text-truncate">Total Proyectos</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+        <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+          <i class="bi bi-lightning-charge text-warning"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.ejecucion }}</div>
+          <div class="small text-muted text-truncate">En Ejecucion</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+        <div class="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+          <i class="bi bi-hourglass-split text-secondary"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.pendientes }}</div>
+          <div class="small text-muted text-truncate">Pendientes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+        <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+          <i class="bi bi-check2-circle text-success"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.completados }}</div>
+          <div class="small text-muted text-truncate">Completados</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+        <div class="rounded-circle bg-purple bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;background:rgba(111,66,193,.1) !important;">
+          <i class="bi bi-bar-chart-line" style="color:#6f42c1;"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.avance_prom }}%</div>
+          <div class="small text-muted text-truncate">Avance Prom.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+        <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+          <i class="bi bi-cash-stack text-info"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fw-bold lh-1 mb-1" style="font-size:0.9rem;">$ {{ kpis.cartera|floatformat:0 }}</div>
+          <div class="small text-muted text-truncate">Cartera Total</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-0">
+    <div class="w-100" style="max-width:100%; overflow-x:auto;">
+      {% render_table table %}
+    </div>
+  </div>
+</div>

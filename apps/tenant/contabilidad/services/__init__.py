@@ -21,9 +21,7 @@ from .selectors import (
     PeriodoContableSelector,
     TipoComprobanteSelector,
     ContabilidadSelector,
-    get_balance_prueba,
     verificar_periodo_cerrado,
-    calcular_saldos_cuenta,
     get_tercero_movimiento,
     PlantillaContableSelector,
 )
@@ -44,9 +42,7 @@ __all__ = [
     'TipoComprobanteSelector',
     'ContabilidadSelector',
     'PlantillaContableSelector',
-    'get_balance_prueba',
     'verificar_periodo_cerrado',
-    'calcular_saldos_cuenta',
     'get_tercero_movimiento',
 
     # Services

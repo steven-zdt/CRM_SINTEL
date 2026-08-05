@@ -5,12 +5,12 @@ WARNING: IMPORTANTE: Este archivo se usa SOLO cuando se accede al esquema 'publi
 django-tenants usa este archivo como ROOT_URLCONF para el dominio público.
 
 Rutas públicas disponibles:
-- sintel.com/ -> PublicIndexView (redirección inteligente)
-- sintel.com/admin/ -> Admin de Django
-- sintel.com/console/ -> Consola de administración (requiere staff)
-- sintel.com/api/public/v1/ -> APIs REST públicas
-- sintel.com/api/admin/v1/ -> APIs REST de administración (requiere staff)
-- sintel.com/api/token/ -> Autenticación JWT
+- sintel.net.co/ -> PublicIndexView (redirección inteligente)
+- sintel.net.co/admin/ -> Admin de Django
+- sintel.net.co/console/ -> Consola de administración (requiere staff)
+- sintel.net.co/api/public/v1/ -> APIs REST públicas
+- sintel.net.co/api/admin/v1/ -> APIs REST de administración (requiere staff)
+- sintel.net.co/api/token/ -> Autenticación JWT
 """
 from django.contrib import admin
 from django.contrib.auth import logout as auth_logout
@@ -59,29 +59,6 @@ def health_view(request):
         'database': db_status,
         'version': '1.0',
     }, status=200 if db_status == 'ok' else 503)
-
-
-def debug_headers_view(request):
-    """
-    Temporary debug endpoint: echo selected request headers and META.
-    Use only for local debugging and remove after inspection.
-    """
-    # Collect a safe subset of headers/META to avoid leaking secrets in logs.
-    meta = request.META
-    data = {
-        'HTTP_HOST': meta.get('HTTP_HOST'),
-        'HTTP_AUTHORIZATION': meta.get('HTTP_AUTHORIZATION'),
-        'REMOTE_ADDR': meta.get('REMOTE_ADDR'),
-        'SERVER_NAME': meta.get('SERVER_NAME'),
-        'wsgi.url_scheme': meta.get('wsgi.url_scheme'),
-        'REQUEST_METHOD': meta.get('REQUEST_METHOD'),
-    }
-    # Also include Django's request.headers dict for clarity
-    try:
-        headers = {k: v for k, v in request.headers.items()}
-    except Exception:
-        headers = {}
-    return JsonResponse({'meta': data, 'headers': headers}, status=200)
 
 
 urlpatterns = [

@@ -48,6 +48,14 @@
 <!-- ⚠️ RUTA: core/js/common/ (no tenant/core/js/) porque está en apps/tenant/core/static/core/js/common/ -->
 <script src="{% static 'core/js/common/tabulator.factory.js' %}"></script>
 
+<!-- ========================================== -->
+<!-- 3.5) OFFCANVAS HELPER (FE-A5) - Global    -->
+<!-- ========================================== -->
+<!-- SSoT: window.Sintel.Core.mostrarOffcanvasSeguro — consolida las 16 -->
+<!-- reimplementaciones locales detectadas en la auditoria 2026-07-26. -->
+<!-- REQUERIDO: cargar antes de cualquier modulo que abra offcanvas. -->
+<script src="{% static 'core/js/common/offcanvas.helper.js' %}"></script>
+
 <!-- ====================== -->
 <!-- 4) SHIM __DEBUG__      -->
 <!-- ====================== -->

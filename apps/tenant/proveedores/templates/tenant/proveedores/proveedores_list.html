@@ -28,6 +28,18 @@
         <i class="bi bi-journal-check me-2"></i>Cuentas por Pagar
       </button>
     </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link py-2 px-3 fw-semibold border-0"
+              id="subtab-representantes-btn"
+              data-bs-toggle="tab"
+              data-bs-target="#subtab-representantes"
+              type="button"
+              role="tab"
+              aria-controls="subtab-representantes"
+              aria-selected="false">
+        <i class="bi bi-person-check me-2"></i>Representantes
+      </button>
+    </li>
   </ul>
 
   <div class="tab-content" id="proveedores-tab-content">
@@ -47,10 +59,14 @@
                        id="search-proveedor"
                        class="form-control"
                        placeholder="Buscar proveedor..."
-                       data-module="proveedores"
-                       data-search-input>
-                <button class="btn btn-outline-secondary" type="button"
-                        data-action="search" data-module="proveedores" title="Buscar">
+                       hx-get="{% url 'proveedores:proveedor-tabla' %}"
+                       hx-trigger="keyup changed delay:400ms, search"
+                       hx-target="#proveedores-panel"
+                       name="q">
+                <button class="btn btn-outline-secondary" type="button" title="Buscar"
+                        hx-get="{% url 'proveedores:proveedor-tabla' %}"
+                        hx-target="#proveedores-panel"
+                        hx-include="#search-proveedor">
                   <i class="bi bi-search"></i>
                 </button>
               </div>
@@ -69,21 +85,11 @@
         </div>
 
         <div class="card-body p-0">
-          {# Spinner #}
-          <div data-spinner="proveedores" class="text-center py-5" style="display: none;">
-            <div class="spinner-border" role="status">
-              <span class="visually-hidden">Cargando...</span>
-            </div>
-            <p class="mt-2 text-muted">Inicializando tabla de proveedores...</p>
-          </div>
-
-          {# Grid Tabulator #}
-          <div id="grid-proveedores" data-grid="proveedores" style="display: none;"></div>
-
-          {# Empty State #}
-          <div data-empty-state="proveedores" class="text-center py-5" style="display: none;">
-            <p class="text-muted"><i class="bi bi-inbox"></i> No hay proveedores registrados</p>
-          </div>
+          {# Panel Tabla server-rendered (django-tables2 + HTMX) — Fase 5-BIS #}
+          <div id="proveedores-panel"
+               hx-get="{% url 'proveedores:proveedor-tabla' %}"
+               hx-trigger="load, proveedor-updated from:body"
+               hx-target="this"></div>
         </div>
       </div>
     </div>
@@ -140,9 +146,17 @@
         </div>
       </div>
     </div>
+
+    {# ── TAB 3: Representantes ──────────────────────────────────────── #}
+    <div class="tab-pane fade" id="subtab-representantes" role="tabpanel" aria-labelledby="subtab-representantes-btn">
+      {% include 'tenant/proveedores/partials/representantes_directory.html' %}
+    </div>
   </div>
 </div>
 
 {# OFFCANVAS CONTAINER (HTMX Injection) #}
 <div id="offcanvas-container-proveedores"></div>
 <div id="offcanvas-container-cuentas-pagar"></div>
+
+{# Offcanvas form Representante — cargado permanentemente para directorio + detalle #}
+{% include "tenant/proveedores/offcanvas_representante_form.html" %}

@@ -170,11 +170,19 @@
         </div>
         <div class="card-body">
           <div class="mb-3">
-            <input type="text" id="search-sede" class="form-control" placeholder="Buscar por nombre, dirección, ciudad o encargado...">
+            <input type="text" id="search-sede" class="form-control" placeholder="Buscar por nombre, dirección, ciudad o encargado..."
+                   hx-get="{% url 'empresa_ui:sede-tabla' %}"
+                   hx-trigger="keyup changed delay:400ms, search"
+                   hx-target="#sedes-panel"
+                   name="q">
           </div>
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-              <div id="grid-sede" style="min-height: 300px; min-width: 0; overflow: hidden;"></div>
+              <div id="sedes-panel"
+                   hx-get="{% url 'empresa_ui:sede-tabla' %}"
+                   hx-trigger="load, sede-updated from:body"
+                   hx-target="this"
+                   style="min-height: 300px; min-width: 0;"></div>
             </div>
           </div>
         </div>

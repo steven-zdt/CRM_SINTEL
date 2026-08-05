@@ -106,7 +106,7 @@ fi
 echo ""
 print_step "Creando superusuario por defecto..."
 echo "Username: admin"
-echo "Email: admin@sintel.com"
+echo "Email: admin@sintel.net.co"
 echo "Password: admin"
 
 # Usar Python para crear el superusuario de forma no interactiva
@@ -127,7 +127,7 @@ try:
     user = User.objects.get(username='admin')
     print("⚠️  El usuario 'admin' ya existe. Actualizando contraseña...")
     user.set_password('admin')
-    user.email = 'admin@sintel.com'
+    user.email = 'admin@sintel.net.co'
     user.is_staff = True
     user.is_superuser = True
     user.save()
@@ -136,7 +136,7 @@ except User.DoesNotExist:
     # Crear nuevo usuario
     user = User.objects.create_superuser(
         username='admin',
-        email='admin@sintel.com',
+        email='admin@sintel.net.co',
         password='admin'
     )
     print("✅ Usuario 'admin' creado correctamente")
@@ -144,7 +144,7 @@ except IntegrityError as e:
     print(f"⚠️  Error de integridad al crear usuario: {e}")
     print("   Intentando actualizar usuario existente...")
     try:
-        user = User.objects.get(email='admin@sintel.com')
+        user = User.objects.get(email='admin@sintel.net.co')
         user.username = 'admin'
         user.set_password('admin')
         user.is_staff = True

@@ -232,9 +232,10 @@ class ExtractoBancarioViewSet(ExtractoBancarioServiceMixin, SintelDSVMixin, Base
         extracto = self.get_object()
         empresa_id = self.get_empresa_id()
 
-        # Pre-cargar las transacciones con select_related para el template
+        # Pre-cargar transacciones con DSV empresa_id explicito (no confiar solo en la FK de extracto)
         transacciones = (
-            extracto.transacciones
+            TransaccionBancaria.objects
+            .filter(extracto=extracto, empresa_id=empresa_id)
             .only(
                 'id', 'uuid', 'fecha', 'descripcion', 'sucursal', 'dcto',
                 'valor', 'saldo', 'conciliado',

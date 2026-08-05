@@ -33,88 +33,6 @@
   <div class="tab-content" id="proyectos-subtab-content">
     <div class="tab-pane fade show active" id="tab-pane-proyectos-list" role="tabpanel" aria-labelledby="tab-proyectos-list" tabindex="0">
 
-      {# === KPIs === #}
-      <div class="row g-3 mb-3" id="proyectos-kpis">
-        <div class="col-6 col-md-4 col-xl-2">
-          <div class="card border-0 shadow-sm h-100">
-            <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-              <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-                <i class="bi bi-folder2-open text-primary"></i>
-              </div>
-              <div class="min-w-0">
-                <div id="kpi-total" class="fs-4 fw-bold lh-1 mb-1">-</div>
-                <div class="small text-muted text-truncate">Total Proyectos</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-          <div class="card border-0 shadow-sm h-100">
-            <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-              <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-                <i class="bi bi-lightning-charge text-warning"></i>
-              </div>
-              <div class="min-w-0">
-                <div id="kpi-ejecucion" class="fs-4 fw-bold lh-1 mb-1">-</div>
-                <div class="small text-muted text-truncate">En Ejecucion</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-          <div class="card border-0 shadow-sm h-100">
-            <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-              <div class="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-                <i class="bi bi-hourglass-split text-secondary"></i>
-              </div>
-              <div class="min-w-0">
-                <div id="kpi-pendientes" class="fs-4 fw-bold lh-1 mb-1">-</div>
-                <div class="small text-muted text-truncate">Pendientes</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-          <div class="card border-0 shadow-sm h-100">
-            <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-              <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-                <i class="bi bi-check2-circle text-success"></i>
-              </div>
-              <div class="min-w-0">
-                <div id="kpi-completados" class="fs-4 fw-bold lh-1 mb-1">-</div>
-                <div class="small text-muted text-truncate">Completados</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-          <div class="card border-0 shadow-sm h-100">
-            <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-              <div class="rounded-circle bg-purple bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;background:rgba(111,66,193,.1) !important;">
-                <i class="bi bi-bar-chart-line" style="color:#6f42c1;"></i>
-              </div>
-              <div class="min-w-0">
-                <div id="kpi-avance" class="fs-4 fw-bold lh-1 mb-1">-</div>
-                <div class="small text-muted text-truncate">Avance Prom.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-          <div class="card border-0 shadow-sm h-100">
-            <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-              <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-                <i class="bi bi-cash-stack text-info"></i>
-              </div>
-              <div class="min-w-0">
-                <div id="kpi-cartera" class="fw-bold lh-1 mb-1" style="font-size:0.9rem;">-</div>
-                <div class="small text-muted text-truncate">Cartera Total</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {# === Toolbar === #}
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3" id="toolbar-proyectos">
         <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -132,28 +50,44 @@
         <div class="input-group input-group-sm" style="max-width:320px;">
           <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
           <input type="text" id="search-proyecto" class="form-control border-start-0 ps-0"
-                 placeholder="Buscar proyecto, codigo, cliente...">
+                 placeholder="Buscar proyecto, codigo, cliente..."
+                 hx-get="{% url 'proyectos:proyecto-tabla' %}"
+                 hx-trigger="keyup changed delay:400ms, search"
+                 hx-target="#proyectos-panel"
+                 hx-include="#filtros-fase-proyectos .active"
+                 name="q">
         </div>
       </div>
 
       {# === Filtros por Fase === #}
       <div class="d-flex gap-2 flex-wrap mb-3" id="filtros-fase-proyectos">
-        <button class="btn btn-sm btn-outline-dark active" data-fase="">
+        <button class="btn btn-sm btn-outline-dark active" data-fase=""
+                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
+                hx-include="#search-proyecto" name="fase" value="">
           <i class="bi bi-grid-3x3-gap me-1"></i>Todos
         </button>
-        <button class="btn btn-sm btn-outline-secondary" data-fase="BORRADOR">Borrador</button>
-        <button class="btn btn-sm btn-outline-info" data-fase="INICIO">Inicio</button>
-        <button class="btn btn-sm btn-outline-primary" data-fase="PLANEACION">Planeacion</button>
-        <button class="btn btn-sm btn-outline-warning" data-fase="EJECUCION">Ejecucion</button>
-        <button class="btn btn-sm btn-outline-success" data-fase="CIERRE">Cierre</button>
+        <button class="btn btn-sm btn-outline-secondary" data-fase="BORRADOR"
+                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
+                hx-include="#search-proyecto" name="fase" value="BORRADOR">Borrador</button>
+        <button class="btn btn-sm btn-outline-info" data-fase="INICIO"
+                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
+                hx-include="#search-proyecto" name="fase" value="INICIO">Inicio</button>
+        <button class="btn btn-sm btn-outline-primary" data-fase="PLANEACION"
+                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
+                hx-include="#search-proyecto" name="fase" value="PLANEACION">Planeacion</button>
+        <button class="btn btn-sm btn-outline-warning" data-fase="EJECUCION"
+                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
+                hx-include="#search-proyecto" name="fase" value="EJECUCION">Ejecucion</button>
+        <button class="btn btn-sm btn-outline-success" data-fase="CIERRE"
+                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
+                hx-include="#search-proyecto" name="fase" value="CIERRE">Cierre</button>
       </div>
 
-      {# === Grid === #}
-      <div class="card shadow-sm border-0">
-        <div class="card-body p-0">
-          <div id="grid-proyectos" class="w-100"></div>
-        </div>
-      </div>
+      {# === Panel KPIs + Grid (django-tables2 + HTMX) — Fase 5-BIS === #}
+      <div id="proyectos-panel"
+           hx-get="{% url 'proyectos:proyecto-tabla' %}"
+           hx-trigger="load, proyecto-updated from:body"
+           hx-target="this"></div>
     </div>
 
     <div class="tab-pane fade" id="tab-pane-proyectos-nueva-tarea" role="tabpanel" aria-labelledby="tab-proyectos-nueva-tarea" tabindex="0">

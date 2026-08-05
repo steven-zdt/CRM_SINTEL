@@ -19,7 +19,7 @@ Usage:
 import uuid
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils.timezone import now as tz_now
 
 from ..models import AsientoContable, MovimientoContable, PeriodoContable, ImpuestoDocumento
@@ -77,35 +77,67 @@ class Contabilizador:
         Raises:
             Various ContabilidadError subclasses on validation failure
         """
-        with transaction.atomic():
-            # 1. Resolve period from transaction date
-            periodo = self._resolver_periodo(transaccion.fecha)
-            validar_periodo_abierto(periodo)
+        try:
+            with transaction.atomic():
+                # 1. Resolve period from transaction date
+                periodo = self._resolver_periodo(transaccion.fecha)
+                validar_periodo_abierto(periodo)
 
-            # 3. Check idempotence: no entry exists for this source document
-            self._validar_no_existe(transaccion.documento_origen)
+                # 3. Check idempotence: no entry exists for this source document
+                self._validar_no_existe(transaccion.documento_origen)
 
-            # 4. Build balanced entry with resolved accounts
-            asiento = self._construir_asiento(transaccion, periodo)
+                # 4. Build balanced entry with resolved accounts
+                asiento = self._construir_asiento(transaccion, periodo)
 
-            # 5. Validate balanced and non-empty
-            validar_no_vacio(asiento.debe_total, asiento.haber_total)
-            validar_cuadratura(asiento.debe_total, asiento.haber_total)
+                # 5. Validate balanced and non-empty
+                validar_no_vacio(asiento.debe_total, asiento.haber_total)
+                validar_cuadratura(asiento.debe_total, asiento.haber_total)
 
-            # 6. Persist
-            asiento.save()
+                # 6. Persist
+                asiento.save()
 
-            # 7. Persist movements
-            for movimiento in asiento.movimientos_por_guardar:
-                movimiento.asiento = asiento
-                movimiento.save()
+                # 7. Persist movements
+                # WARNING: [PERF-A2] bulk_create en vez de .save() por linea -- un
+                # extractor procesando un backlog de cientos de documentos pendientes
+                # llama contabilizar() una vez por documento; cada linea individual
+                # guardada con .save() multiplica los INSERTs (ver
+                # extractores/base.py:contabilizar_pendientes). Ninguno de los 2
+                # modelos tiene save() propio (solo el de SintelTenantBaseModel, que
+                # valida empresa_id -- ya viene seteado explicitamente al construir
+                # cada instancia en _construir_asiento(), asi que bulk_create es seguro
+                # aqui). Sigue habiendo una escritura a BD por asiento (no se agrupan
+                # movimientos de distintos documentos), preservando el aislamiento de
+                # fallos por documento que ya tenia el codigo original.
+                movimientos = asiento.movimientos_por_guardar
+                for movimiento in movimientos:
+                    movimiento.asiento = asiento
+                if movimientos:
+                    MovimientoContable.objects.bulk_create(movimientos)
 
-            # 8. Persist taxes (ImpuestoDocumento)
-            for imp_doc in getattr(asiento, 'impuestos_documento_por_guardar', []):
-                imp_doc.asiento = asiento
-                imp_doc.save()
+                # 8. Persist taxes (ImpuestoDocumento)
+                impuestos_doc = getattr(asiento, 'impuestos_documento_por_guardar', [])
+                for imp_doc in impuestos_doc:
+                    imp_doc.asiento = asiento
+                if impuestos_doc:
+                    ImpuestoDocumento.objects.bulk_create(impuestos_doc)
 
-            return asiento
+                return asiento
+        except IntegrityError as exc:
+            # WARNING: [PERF-C1] Respaldo del UniqueConstraint
+            # uniq_asiento_documento_origen_no_reversado (AsientoContable.Meta).
+            # El .exists() de _validar_no_existe() no es atomico frente a otra
+            # transaccion concurrente contabilizando el mismo documento_origen; si
+            # ambas lo pasan antes de hacer commit, la constraint de base de datos
+            # rechaza el segundo INSERT. Se traduce a AsientoYaExisteError para que
+            # el llamador (p. ej. BaseExtractor.contabilizar_pendientes) lo trate
+            # igual que la ruta normal de idempotencia (conteo en "omitidos").
+            if 'uniq_asiento_documento_origen_no_reversado' in str(exc):
+                raise AsientoYaExisteError(
+                    f"Asiento contable ya existe para {transaccion.documento_origen.app_label}."
+                    f"{transaccion.documento_origen.modelo}[{transaccion.documento_origen.id}] "
+                    f"(detectado por constraint de base de datos ante condicion de carrera)"
+                ) from exc
+            raise
 
     def existe_asiento_para(
         self,

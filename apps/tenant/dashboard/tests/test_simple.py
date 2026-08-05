@@ -9,6 +9,7 @@ from apps.tenant.dashboard.services.dtos import (
     WidgetInventarioDTO,
     WidgetEmpleadosDTO,
     WidgetGastosDTO,
+    WidgetProveedoresDTO,
     DashboardMetricasDTO,
 )
 from apps.tenant.dashboard.api.serializers import DashboardMetricasSerializer
@@ -63,6 +64,17 @@ class DTOTests(TestCase):
         )
         self.assertEqual(dto.total_gastos_mes, Decimal('100000.00'))
         self.assertEqual(dto.gastos_pendientes, 5)
+
+    def test_widget_proveedores_dto_creacion(self):
+        """Test: crear WidgetProveedoresDTO correctamente."""
+        dto = WidgetProveedoresDTO(
+            total_provedores=5,
+            total_gastos=Decimal('150000.00'),
+            cartera_pendiente=Decimal('50000.00')
+        )
+        self.assertEqual(dto.total_provedores, 5)
+        self.assertEqual(dto.total_gastos, Decimal('150000.00'))
+        self.assertEqual(dto.cartera_pendiente, Decimal('50000.00'))
 
     def test_dashboard_metricas_dto_completo(self):
         """Test: crear DashboardMetricasDTO completo."""
@@ -125,6 +137,41 @@ class DTOTests(TestCase):
         self.assertIsNotNone(dto.gastos)
         self.assertEqual(dto.gastos.total_gastos_mes, Decimal('100000'))
 
+    def test_dashboard_metricas_dto_con_proveedores(self):
+        """Test: DashboardMetricasDTO con proveedores incluidos."""
+        facturas = WidgetFacturasDTO(
+            total_facturas=10, facturas_pendientes=3, facturas_vencidas=1,
+            ingresos_mes=Decimal('500000'), ingresos_promedio=Decimal('50000')
+        )
+        inventario = WidgetInventarioDTO(
+            total_productos=50, productos_bajo_stock=5, movimientos_mes=100,
+            valor_inventario=Decimal('1000000'), rotacion_promedio=Decimal('2.0')
+        )
+        empleados = WidgetEmpleadosDTO(
+            total_empleados=20, empleados_activos=18, nominas_pendientes=2,
+            total_nómina_mes=Decimal('5000000')
+        )
+        proveedores = WidgetProveedoresDTO(
+            total_provedores=5,
+            total_gastos=Decimal('150000'),
+            cartera_pendiente=Decimal('50000')
+        )
+
+        dto = DashboardMetricasDTO(
+            empresa_nombre='Test Corp',
+            empresa_nit='1234567890',
+            fecha_actualizacion='2026-05-23T10:00:00',
+            facturas=facturas,
+            inventario=inventario,
+            empleados=empleados,
+            proveedores=proveedores
+        )
+
+        self.assertIsNotNone(dto.proveedores)
+        self.assertEqual(dto.proveedores.total_provedores, 5)
+        self.assertEqual(dto.proveedores.total_gastos, Decimal('150000'))
+        self.assertEqual(dto.proveedores.cartera_pendiente, Decimal('50000'))
+
 
 class SerializerTests(TestCase):
     """Tests para Serializers — validar serialización correcta."""
@@ -161,6 +208,43 @@ class SerializerTests(TestCase):
         self.assertEqual(data['facturas']['total_facturas'], 10)
         self.assertEqual(data['inventario']['total_productos'], 50)
         self.assertEqual(data['empleados']['total_empleados'], 20)
+
+    def test_serializer_dashboard_metricas_con_proveedores(self):
+        """Test: serializar DashboardMetricasDTO con proveedores correctamente."""
+        facturas = WidgetFacturasDTO(
+            total_facturas=10, facturas_pendientes=3, facturas_vencidas=1,
+            ingresos_mes=Decimal('500000'), ingresos_promedio=Decimal('50000')
+        )
+        inventario = WidgetInventarioDTO(
+            total_productos=50, productos_bajo_stock=5, movimientos_mes=100,
+            valor_inventario=Decimal('1000000'), rotacion_promedio=Decimal('2.0')
+        )
+        empleados = WidgetEmpleadosDTO(
+            total_empleados=20, empleados_activos=18, nominas_pendientes=2,
+            total_nómina_mes=Decimal('5000000')
+        )
+        proveedores = WidgetProveedoresDTO(
+            total_provedores=5,
+            total_gastos=Decimal('150000'),
+            cartera_pendiente=Decimal('50000')
+        )
+
+        dto = DashboardMetricasDTO(
+            empresa_nombre='Test Corp',
+            empresa_nit='1234567890',
+            fecha_actualizacion='2026-05-23T10:00:00',
+            facturas=facturas,
+            inventario=inventario,
+            empleados=empleados,
+            proveedores=proveedores
+        )
+
+        serializer = DashboardMetricasSerializer(dto)
+        data = serializer.data
+
+        self.assertEqual(data['proveedores']['total_provedores'], 5)
+        self.assertEqual(data['proveedores']['total_gastos'], '150000.00')
+        self.assertEqual(data['proveedores']['cartera_pendiente'], '50000.00')
 
     def test_serializer_decimal_formatting(self):
         """Test: serializer formatea decimales correctamente."""

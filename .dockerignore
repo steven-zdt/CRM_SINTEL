@@ -1,0 +1,45 @@
+# Secretos y configuracion local — NUNCA deben llegar a una capa de imagen (DEVOPS-A2)
+.env
+.env.*
+!.env.example
+
+# Control de versiones
+.git/
+.gitignore
+
+# Entornos y caches locales
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.cache/
+
+# Artefactos generados localmente (se regeneran dentro del contenedor)
+staticfiles/
+media/
+scratch/
+brain/
+ARTIFACTS/
+
+# Salidas temporales de pruebas y depuracion
+pytest_*.txt
+pytest_*.log
+test_*.txt
+test_*.log
+debug_*.txt
+*.sqlite3
+*.log
+
+# Documentacion (no requerida para runtime)
+documentacion/_archive/
+
+# Configuracion local de asistentes/IDEs
+.claude/
+.vscode/
+.idea/

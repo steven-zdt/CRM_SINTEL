@@ -55,7 +55,7 @@ Este script verifica:
 
 ### Crear Tenant de Prueba
 
-1. **Acceder a la consola pública**: `http://sintel.com/console/tenants/new/`
+1. **Acceder a la consola pública**: `http://sintel.net.co/console/tenants/new/`
 2. **Completar formulario**:
    - Nombre: "Empresa Test"
    - Schema: "empresa_test"

@@ -20,6 +20,7 @@ from apps.public.impuestos.api.serializers import (
     CodigoTributarioSerializer,
     ConceptoRetencionSerializer,
     ContribuyenteTipoSerializer,
+    NormaTributariaListSerializer,
     NormaTributariaSerializer,
     PerfilTributarioSerializer,
     RegimenRentaSerializer,
@@ -160,6 +161,22 @@ class NormaTributariaViewSet(BaseReadOnly):
     filterset_fields = ["articulo", "impuesto", "tema", "vigencia_desde", "vigencia_hasta"]
     search_fields = ["articulo", "tema", "impuesto", "texto_plano"]
     ordering = ["vigencia_desde", "articulo"]
+
+    # WARNING: [PERF-A3] texto_html/texto_plano son TextField con el articulo legal
+    # completo -- se excluyen del listado (endpoint publico AllowAny de alto trafico)
+    # y solo se sirven en retrieve. El resto de catalogos de esta app usan
+    # fields="__all__" con columnas pequenas (codigo/nombre/descripcion/etc.), donde
+    # .only() no reduciria nada real -- ver REPORTE_FASE_4.md.
+    def get_serializer_class(self):
+        if self.action == "list":
+            return NormaTributariaListSerializer
+        return NormaTributariaSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action == "list":
+            return qs.defer("texto_html", "texto_plano")
+        return qs
 
 
 class SearchView(APIView):

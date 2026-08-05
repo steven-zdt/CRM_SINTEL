@@ -170,21 +170,30 @@ async function waitForTabulatorFactory(maxMs = 5000) {
 
 ## 7. Container HTML
 
+⛔ **El `id` del grid y los `data-spinner`/`data-grid`/`data-empty-state` deben ser ÚNICOS en TODO el workspace, no solo dentro del módulo.** El workspace es una SPA: todos los tabs coexisten en el DOM (ocultos con `display:none`). Un ID repetido hace que `querySelector('#grid-X')` agarre el grid oculto de otro módulo y la tabla se vea vacía. Ver **dom-ids-sync.md §2.1**.
+
+`facturas/list_factura.html` ya ocupa `#grid-compras` y `#grid-ventas` (facturas de compra/venta). NO usar `<app>` genérico cuando colisione — usar el nombre del listado concreto.
+
 ```html
-{# Template lista #}
-<div id="grid-<modelo>" data-grid="<app>"></div>
+{# Template lista — usar nombre del listado concreto, verificar unicidad con grep antes #}
+<div id="grid-<listado-unico>" data-grid="<listado-unico>"></div>
 
 {# Spinner mientras carga #}
-<div data-spinner="<app>" class="text-center py-5 d-none">
+<div data-spinner="<listado-unico>" class="text-center py-5 d-none">
   <div class="spinner-border text-primary"></div>
   <p class="text-muted mt-2 small">Cargando...</p>
 </div>
 
 {# Empty state #}
-<div data-empty-state="<app>" class="text-center py-5 d-none">
+<div data-empty-state="<listado-unico>" class="text-center py-5 d-none">
   <i class="bi bi-inbox fs-1 text-muted"></i>
   <p class="text-muted mt-2">No hay registros</p>
 </div>
+```
+
+```bash
+# Antes de crear el grid: el ID debe NO existir todavía en ningun template
+grep -rn 'id="grid-<listado-unico>"' apps/ --include=*.html   # esperado: 0 resultados
 ```
 
 ---
@@ -214,3 +223,4 @@ Tabulator espera el formato DRF estándar:
 | `data-action` en botones | Event delegation — no onclick inline ni `cellClick` global |
 | `cellClick` en columna de acciones | Específico por columna — no en config global de la tabla |
 | Container existe antes de init | `if (!document.querySelector('#grid-X')) return;` |
+| ID de grid único en TODO el workspace | `grep -rn 'id="grid-X"' apps/` debe dar 1 match. Colisión con sub-grids de facturas → tabla vacía. Ver dom-ids-sync.md §2.1 |

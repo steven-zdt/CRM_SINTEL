@@ -1027,10 +1027,20 @@
         }
 
         // 1. Submit del formulario
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            guardarProyecto();
-        });
+        // Guard adicional (FE-A2): `editorEventsInitialized` se resetea al
+        // cerrar el offcanvas para permitir reinicializar en la siguiente
+        // apertura, pero si el offcanvas/form NO se recrea (mismo nodo DOM
+        // reutilizado), ese reset permitia volver a registrar el submit sobre
+        // el mismo <form> -> doble POST confirmado en produccion (auditoria
+        // 2026-07-26). Este guard ata la proteccion al nodo <form> real, no
+        // solo al flag de modulo que ya se demostro insuficiente.
+        if (!form.dataset.submitBound) {
+            form.dataset.submitBound = 'true';
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                guardarProyecto();
+            });
+        }
 
         // 2. Sincronización dinámica de selectores bajo el principio "DOM Shield"
         const setupSelectorSync = (selectId, idInputId, nameInputId, extractNamePattern = null) => {
@@ -1320,17 +1330,23 @@
     }
 
     // Escuchar el evento de click en avanzar fase en todo el documento
-    d.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.btn-avanzar-fase-action');
-        if (btn) {
-            const targetFase = btn.getAttribute('data-target-fase');
-            // ⚠️ Guardar cambios sucios del formulario de forma silenciosa antes de avanzar de fase
-            const guardadoExitoso = await guardarProyecto(true);
-            if (guardadoExitoso) {
-                await avanzarFaseProyecto(targetFase);
+    // Guard: registrado en `document`, persiste entre recargas HTMX del
+    // modulo "proyectos" — sin este guard, cada recarga del script duplica
+    // el listener global (FE-A1/A2).
+    if (!d.body.dataset.avanzarFaseListenerInitialized) {
+        d.body.dataset.avanzarFaseListenerInitialized = 'true';
+        d.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.btn-avanzar-fase-action');
+            if (btn) {
+                const targetFase = btn.getAttribute('data-target-fase');
+                // ⚠️ Guardar cambios sucios del formulario de forma silenciosa antes de avanzar de fase
+                const guardadoExitoso = await guardarProyecto(true);
+                if (guardadoExitoso) {
+                    await avanzarFaseProyecto(targetFase);
+                }
             }
-        }
-    });
+        });
+    }
 
     if (d.readyState === 'loading') {
         d.addEventListener('DOMContentLoaded', init);
@@ -1418,13 +1434,13 @@
                 const categDisplay = item.categoria_display || item.categoria;
                 const btnEliminar = enCierre ? '' : `
                     <button type="button" class="btn btn-xs btn-outline-danger"
-                            onclick="window.Sintel.ProyectosPresupuesto.eliminar('${item.id}')"
+                            onclick="window.Sintel.ProyectosPresupuesto.eliminar('${item.uuid}')"
                             title="Eliminar">
                         <i class="bi bi-trash"></i>
                     </button>
                 `;
                 html += `
-                    <tr data-id="${item.id}">
+                    <tr data-uuid="${item.uuid}">
                         <td>${categDisplay}</td>
                         <td><small>${item.descripcion || '—'}</small></td>
                         <td style="text-align: center;"><small>${item.cantidad}</small></td>
@@ -1594,14 +1610,14 @@
                     const prioridadClase = this._getPrioridadClase(tarea.prioridad);
                     const btnCambiarEstado = enCierre ? '' : `
                         <button type="button" class="btn btn-xs btn-outline-secondary"
-                                onclick="window.Sintel.TareasDiarias.mostrarMenuEstado('${tarea.id}')"
+                                onclick="window.Sintel.TareasDiarias.mostrarMenuEstado('${tarea.uuid}')"
                                 title="Cambiar estado">
                             <i class="bi bi-arrow-repeat"></i>
                         </button>
                     `;
                     const btnEliminar = enCierre ? '' : `
                         <button type="button" class="btn btn-xs btn-outline-danger"
-                                onclick="window.Sintel.TareasDiarias.eliminar('${tarea.id}')"
+                                onclick="window.Sintel.TareasDiarias.eliminar('${tarea.uuid}')"
                                 title="Eliminar">
                             <i class="bi bi-trash"></i>
                         </button>
@@ -1612,7 +1628,7 @@
                         : tarea.fecha_inicio;
 
                     html += `
-                        <div class="card mb-2 border-${prioridadClase} border-opacity-25" data-tarea-id="${tarea.id}">
+                        <div class="card mb-2 border-${prioridadClase} border-opacity-25" data-tarea-uuid="${tarea.uuid}">
                             <div class="card-body p-2">
                                 <div class="d-flex justify-content-between align-items-start gap-2">
                                     <div class="flex-grow-1">

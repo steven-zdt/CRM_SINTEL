@@ -1,320 +1,95 @@
 /**
- * periodo_list.js - Feature List para PeriodoContable v2.60
- * ⚠️ Feature-Sliced Design: Encargado exclusivamente de renderizar la tabla Tabulator
- * ⚠️ TabulatorFactory v2.40: Usa obligatoriamente TabulatorFactory, cero inicializaciones manuales
- * 
- * Dependencias globales requeridas:
- * - TabulatorFactory (definido en tabulator.factory.js)
- * - DOMUtils: onVisibleOnce()
- * - PeriodoAPI (definido en periodo.api.js)
+ * periodo_list.js - Feature List para PeriodoContable
+ * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#periodos-panel,
+ * cargada por atributos hx-get/hx-trigger declarados en list_periodos.html).
+ * Este archivo solo maneja: acciones de fila (ver/editar/cerrar/eliminar),
+ * apertura de offcanvas, y el disparo del evento que hace que HTMX vuelva a
+ * pedir la tabla al backend tras una mutacion. Columnas/orden/paginacion/
+ * filtros viven en tables.py/views.py (server-side) -- no reimplementar aqui.
  */
 (function (w, d) {
   'use strict';
 
-  const MOD = '[periodo.list]';
-  const TABLE_SELECTOR = '#grid-periodos';
-  const SEARCH_SELECTOR = '#search-periodo';
-  const FILTER_ESTADO_SELECTOR = '#filter-estado-periodo';
+  const PANEL_SELECTOR = '#periodos-panel';
   const API_URL = '/api/v1/contabilidad/periodos-contables/';
-  const TAB_ID = '#subtab-periodos';
-  let table = null;
 
-  // Helper: Formatear fecha
-  function formatDateTime(isoStr) {
-    if (!isoStr) return '-';
-    try {
-      const dt = new Date(isoStr);
-      if (Number.isNaN(dt.getTime())) return '-';
-      return dt.toLocaleString('es-CO');
-    } catch {
-      return '-';
+  function showOffcanvas(id) {
+    const el = d.getElementById(id);
+    if (!el) return;
+    if (w.UIManager?.handleOffcanvas) {
+      w.UIManager.handleOffcanvas(el, 'show');
+    } else {
+      const p = w.bootstrap?.Offcanvas?.getInstance(el);
+      if (p) p.dispose();
+      d.querySelectorAll('.offcanvas-backdrop').forEach((b) => b.remove());
+      new w.bootstrap.Offcanvas(el).show();
     }
   }
 
-  /**
-   * Define las columnas de la tabla Tabulator
-   */
-  function getColumns() {
-    return [
-      {
-        title: "Periodo",
-        field: "periodo",
-        headerFilter: "input",
-        headerFilterPlaceholder: "Buscar periodo...",
-        formatter: function(cell) {
-          const val = cell.getValue();
-          return val || '---';
-        }
-      },
-      {
-        title: "Fecha Inicio",
-        field: "fecha_inicio",
-        formatter: function(cell) {
-          const val = cell.getValue();
-          if (!val) return '---';
-          try {
-            return new Date(val).toLocaleDateString('es-CO');
-          } catch (e) {
-            return val;
-          }
-        }
-      },
-      {
-        title: "Fecha Fin",
-        field: "fecha_fin",
-        formatter: function(cell) {
-          const val = cell.getValue();
-          if (!val) return '---';
-          try {
-            return new Date(val).toLocaleDateString('es-CO');
-          } catch (e) {
-            return val;
-          }
-        }
-      },
-      {
-        title: "Estado",
-        field: "estado",
-        formatter: function(cell) {
-          const val = cell.getValue();
-          if (!val) return '---';
-          
-          const badges = {
-            'ABIERTO': '<span class="badge bg-success">Abierto</span>',
-            'CERRADO': '<span class="badge bg-danger">Cerrado</span>'
-          };
-          
-          return badges[val] || `<span class="badge bg-light text-dark">${val}</span>`;
-        }
-      },
-      {
-        title: "Cerrado Por",
-        field: "cerrado_por",
-        formatter: function(cell) {
-          const val = cell.getValue();
-          return val || '---';
-        }
-      },
-      {
-        title: "Fecha Cierre",
-        field: "fecha_cierre",
-        formatter: function(cell) {
-          return formatDateTime(cell.getValue());
-        }
-      },
-      {
-        title: "Acciones",
-        formatter: function(cell) {
-          const rowData = cell.getRow().getData();
-          const periodoId = rowData.id || '';
-          if (!periodoId) return '-';
-          
-          const estado = rowData.estado || 'ABIERTO';
-          
-          let cerrarBtn = '';
-          if (estado === 'ABIERTO') {
-            cerrarBtn = `<button class="btn btn-sm btn-warning btn-cerrar-periodo" data-id="${periodoId}" title="Cerrar periodo">
-              <i class="bi bi-lock"></i>
-            </button>`;
-          }
-          
-          return `
-            <div class="btn-group">
-              <button class="btn btn-sm btn-secondary btn-ver-periodo" data-id="${periodoId}" title="Ver detalle">
-                <i class="bi bi-eye"></i>
-              </button>
-              <button class="btn btn-sm btn-primary btn-editar-periodo" data-id="${periodoId}" title="Editar">
-                <i class="bi bi-pencil"></i>
-              </button>
-              ${cerrarBtn}
-              <button class="btn btn-sm btn-danger btn-eliminar-periodo" data-id="${periodoId}" title="Eliminar">
-                <i class="bi bi-trash"></i>
-              </button>
-            </div>
-          `;
-        },
-        headerSort: false,
-        hozAlign: "right",
-        width: 200
-      }
-    ];
+  function htmxLoad(url, offcanvasId) {
+    if (typeof htmx === 'undefined') return;
+    htmx.ajax('GET', url, { target: '#offcanvas-container-periodo', swap: 'innerHTML' })
+      .then(() => showOffcanvas(offcanvasId));
   }
 
-  /**
-   * Inicializa la tabla Tabulator usando TabulatorFactory v2.40
-   * ⚠️ CRÍTICO: Usa TabulatorFactory.create(), cero inicializaciones manuales
-   */
-  function initTable() {
-    if (!w.TabulatorFactory) {
-      console.error(MOD, 'TabulatorFactory no está disponible');
-      return null;
-    }
-
-    const tableEl = d.querySelector(TABLE_SELECTOR);
-    if (!tableEl) {
-      console.error(MOD, 'Tabla no encontrada:', TABLE_SELECTOR);
-      return null;
-    }
-
-    // ⚠️ v2.60: Usar TabulatorFactory v2.40 obligatoriamente
-    table = w.TabulatorFactory.create(
-      TABLE_SELECTOR,
-      API_URL,
-      getColumns(),
-      {
-        searchInputSelector: SEARCH_SELECTOR,
-        paginationSize: 10,
-        ajaxParams: function() {
-          const estado = d.querySelector(FILTER_ESTADO_SELECTOR)?.value || '';
-          return estado ? { estado } : {};
-        }
-      }
-    );
-
-    return table;
-  }
-
-  /**
-   * Recarga la tabla con los filtros actuales como parametros de API.
-   */
-  function applyFilters() {
-    if (!table || typeof table.replaceData !== 'function') return;
-    table.replaceData();
-  }
-
-  /**
-   * Event delegation para acciones de la tabla
-   */
   function attachTableListeners() {
-    // Ver detalle
-    d.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('.btn-ver-periodo');
-      if (btn) {
-        ev.preventDefault();
-        const id = btn.dataset.id;
-        if (id && typeof htmx !== 'undefined') {
-          htmx.ajax('GET', `${API_URL}${id}/render-offcanvas/detalle/`, {
-            target: '#offcanvas-container-periodo',
-            swap: 'innerHTML'
-          }).then(() => {
-            const offcanvasEl = d.getElementById('offcanvas-periodo-detalle');
-            if (offcanvasEl && w.bootstrap && w.bootstrap.Offcanvas) {
-              // dispose + show seguro (AGENTS.md §26 / ui-management.md §2)
-              if (w.UIManager?.handleOffcanvas) { w.UIManager.handleOffcanvas(offcanvasEl, 'show'); }
-              else { const _p = w.bootstrap.Offcanvas.getInstance(offcanvasEl); if (_p) _p.dispose(); d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove()); new w.bootstrap.Offcanvas(offcanvasEl).show(); }
-            }
-          });
-        }
-      }
-    });
+    const panel = d.querySelector(PANEL_SELECTOR);
+    if (!panel) return;
 
-    // Editar
-    d.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('.btn-editar-periodo');
-      if (btn) {
-        ev.preventDefault();
-        const id = btn.dataset.id;
-        if (id && typeof htmx !== 'undefined') {
-          htmx.ajax('GET', `${API_URL}${id}/render-offcanvas/editar/`, {
-            target: '#offcanvas-container-periodo',
-            swap: 'innerHTML'
-          }).then(() => {
-            const offcanvasEl = d.getElementById('offcanvas-periodo-editar');
-            if (offcanvasEl && w.bootstrap && w.bootstrap.Offcanvas) {
-              // dispose + show seguro (AGENTS.md §26 / ui-management.md §2)
-              if (w.UIManager?.handleOffcanvas) { w.UIManager.handleOffcanvas(offcanvasEl, 'show'); }
-              else { const _p = w.bootstrap.Offcanvas.getInstance(offcanvasEl); if (_p) _p.dispose(); d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove()); new w.bootstrap.Offcanvas(offcanvasEl).show(); }
-            }
-          });
-        }
-      }
-    });
+    panel.addEventListener('click', (ev) => {
+      const btnVer = ev.target.closest('.btn-ver-periodo');
+      const btnEditar = ev.target.closest('.btn-editar-periodo');
+      const btnCerrar = ev.target.closest('.btn-cerrar-periodo');
+      const btnEliminar = ev.target.closest('.btn-eliminar-periodo');
 
-    // Cerrar periodo
-    d.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('.btn-cerrar-periodo');
-      if (btn) {
+      if (btnVer) {
         ev.preventDefault();
-        const id = btn.dataset.id;
-        if (id && w.PeriodoEditor && typeof w.PeriodoEditor.cerrar === 'function') {
-          w.PeriodoEditor.cerrar(id);
-        }
+        const uuid = btnVer.dataset.uuid;
+        if (uuid) htmxLoad(`${API_URL}${uuid}/render-offcanvas/detalle/`, 'offcanvas-periodo-detalle');
+        return;
       }
-    });
 
-    // Eliminar
-    d.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('.btn-eliminar-periodo');
-      if (btn) {
+      if (btnEditar) {
         ev.preventDefault();
-        const id = btn.dataset.id;
-        if (id && confirm('¿Está seguro de que desea eliminar este periodo contable?')) {
+        const uuid = btnEditar.dataset.uuid;
+        if (uuid) htmxLoad(`${API_URL}${uuid}/render-offcanvas/editar/`, 'offcanvas-periodo-editar');
+        return;
+      }
+
+      if (btnCerrar) {
+        ev.preventDefault();
+        const uuid = btnCerrar.dataset.uuid;
+        if (uuid && w.PeriodoEditor && typeof w.PeriodoEditor.cerrar === 'function') {
+          w.PeriodoEditor.cerrar(uuid);
+        }
+        return;
+      }
+
+      if (btnEliminar) {
+        ev.preventDefault();
+        const uuid = btnEliminar.dataset.uuid;
+        if (uuid && confirm('¿Está seguro de que desea eliminar este periodo contable?')) {
           if (w.PeriodoEditor && typeof w.PeriodoEditor.delete === 'function') {
-            w.PeriodoEditor.delete(id);
+            w.PeriodoEditor.delete(uuid);
           }
         }
       }
     });
-
-    // Filtro de estado
-    const filterEstado = d.querySelector(FILTER_ESTADO_SELECTOR);
-    if (filterEstado) {
-      filterEstado.addEventListener('change', () => {
-        applyFilters();
-      });
-    }
-
-    // Botón refrescar
-    const btnRefresh = d.querySelector('#btn-refrescar-periodos');
-    if (btnRefresh) {
-      btnRefresh.addEventListener('click', () => {
-        if (table && typeof table.replaceData === 'function') {
-          table.replaceData();
-        }
-      });
-    }
   }
 
-  /**
-   * Inicialización lazy con DOMUtils.onVisibleOnce
-   */
   function init() {
-    if (!w.TabulatorFactory) {
-      console.error(MOD, 'TabulatorFactory no está disponible');
-      return;
-    }
-
-    if (!w.DOMUtils || typeof w.DOMUtils.onVisibleOnce !== 'function') {
-      console.error(MOD, 'DOMUtils.onVisibleOnce no está disponible');
-      return;
-    }
-
-    // Inicializar tabla cuando el tab sea visible
-    w.DOMUtils.onVisibleOnce(TAB_ID, () => {
-      table = initTable();
-      attachTableListeners();
-    });
+    attachTableListeners();
   }
 
-  // Inicializar cuando el DOM esté listo
   if (d.readyState === 'loading') {
     d.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
     init();
   }
 
-  // Exportar API pública
-  if (typeof w !== 'undefined') {
-    w.PeriodoList = Object.freeze({
-      init,
-      reload: () => {
-        if (table && typeof table.replaceData === 'function') {
-          table.replaceData();
-        } else {
-          init();
-        }
-      },
-      getTable: () => table
-    });
-  }
+  // Exportar API pública -- PeriodoEditor llama a reload() tras crear/editar/cerrar/eliminar
+  w.PeriodoList = Object.freeze({
+    init,
+    reload: () => d.body.dispatchEvent(new CustomEvent('periodo-updated')),
+  });
 })(window, document);

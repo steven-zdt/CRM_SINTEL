@@ -43,7 +43,7 @@ class ValidateALLOWED_HOSTSMiddleware:
             if allowed_host == '*':
                 return True
             if allowed_host.startswith('.'):
-                # .sintel.com matches sintel.com and test.sintel.com
+                # .sintel.net.co matches sintel.net.co and test.sintel.net.co
                 if host_only == allowed_host[1:] or host_only.endswith(allowed_host):
                     return True
             elif '*' in allowed_host:
@@ -94,7 +94,7 @@ class ForceNoPortMiddleware:
     django-tenants intente resolver el inquilino.
 
     WARNING: ESTANDAR: Puerto 80 (HTTP) - Sin puertos explicitos
-    - Los dominios en la BD NUNCA tienen puerto (ej: {schema}.localhost, {schema}.sintel.com)
+    - Los dominios en la BD NUNCA tienen puerto (ej: {schema}.localhost, {schema}.sintel.net.co)
     - El navegador puede enviar :8000, pero Django lo ignora
     - Este middleware garantiza que django-tenants siempre busque strings limpios
 
@@ -142,7 +142,7 @@ class HTTPSRedirectMiddleware:
     WARNING: LIMITACION: Si el navegador intenta una conexion SSL/TLS directa,
     el servidor HTTP no puede procesarla y falla antes de que este middleware
     pueda intervenir. En ese caso, el usuario debe:
-    1. Usar HTTP explicitamente: http://{schema}.sintel.com (NO https://) - puerto 80 implicito
+    1. Usar HTTP explicitamente: http://{schema}.sintel.net.co (NO https://) - puerto 80 implicito
     2. Limpiar HSTS del navegador: chrome://net-internals/#hsts
     """
 

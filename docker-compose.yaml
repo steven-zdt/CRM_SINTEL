@@ -13,7 +13,7 @@ x-app-base: &app-base
       condition: service_healthy
     redis:
       condition: service_healthy
-  # DNS apunta al servidor Windows que tiene wildcard *.sintel.com → 192.168.2.15.
+  # DNS apunta al servidor Windows que tiene wildcard *.sintel.net.co → 192.168.2.15.
   # Cualquier tenant nuevo es resolvible dentro de los contenedores sin reiniciar.
   dns:
     - 192.168.2.15

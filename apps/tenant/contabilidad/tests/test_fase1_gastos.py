@@ -72,12 +72,15 @@ class TestDTOLadoField(TestCase):
         self.assertEqual(impuesto.lado, 'DEBE')
 
 
-class TestContabilizadorLadoHandling(TestCase):
+class TestContabilizadorLadoHandling(TenantAPITestCase):
     """Test Contabilizador correctly distributes amounts to DEBE/HABER based on lado field."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.empresa_id = 1
+        super().setUp()
+        from apps.tenant.empresa.models import Empresa
+        self.empresa = Empresa.objects.first()
+        self.empresa_id = self.empresa.id
         self.contabilizador = Contabilizador(empresa_id=self.empresa_id)
 
     def test_transaccion_gasto_con_lado_debe_haber(self):
@@ -181,6 +184,14 @@ class TestContabilizadorLadoHandling(TestCase):
         ResolverCuentas.resolver_cuenta maps (concepto, tipo_transaccion) to PUC.
         This test verifies the resolver receives correct inputs from DTO.
         """
+        from apps.tenant.contabilidad.models import ReglaContable
+        ReglaContable.objects.create(
+            empresa=self.empresa,
+            tipo_transaccion=TipoTransaccion.COMPRA_GASTO.value,
+            concepto='GASTO_OPERATIVO',
+            cuenta_codigo='510506',
+            activo=True
+        )
         resolver = self.contabilizador.resolver
 
         # Test resolving GASTO_OPERATIVO for COMPRA_GASTO
@@ -191,6 +202,7 @@ class TestContabilizadorLadoHandling(TestCase):
         # If no ReglaContable, resolver will try cuenta_hint or raise error
         # This test just verifies the call signature
         self.assertIsNotNone(cuenta)
+        self.assertEqual(cuenta, '510506')
 
 
 class TestGastoTransaccionEconomicaConstruction(TestCase):

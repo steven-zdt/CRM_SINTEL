@@ -174,14 +174,14 @@ class {App}PageSmokeTestCase(SintelTenantTestCase):
     def test_{app}_page_requires_login(self):
         """Verifica que la página requiere autenticación."""
         url = reverse('tenant-{app}-page')
-        response = self.client.get(url, HTTP_HOST='test-tenant.sintel.com')
+        response = self.client.get(url, HTTP_HOST='test-tenant.sintel.net.co')
         self.assertIn(response.status_code, [302, 401])
 
     def test_{app}_page_renders_template(self):
         """Verifica que la página renderiza el template correcto."""
         self.client.force_login(self.user)
         url = reverse('tenant-{app}-page')
-        response = self.client.get(url, HTTP_HOST='test-tenant.sintel.com')
+        response = self.client.get(url, HTTP_HOST='test-tenant.sintel.net.co')
         
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'tenant/{app}/page.html')

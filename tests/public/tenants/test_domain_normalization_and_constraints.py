@@ -1,7 +1,7 @@
 import pytest
 
-from apps.public.tenants.utils import normalize_domain
 from apps.public.tenants.models import Client, Domain
+from apps.public.tenants.utils import normalize_domain
 
 
 @pytest.mark.django_db
@@ -30,4 +30,3 @@ def test_domain_global_uniqueness():
     # Mismo FQDN para otro tenant debe violar unicidad global de domain
     with pytest.raises(Exception):
         Domain.objects.create(tenant=c2, domain="x.localhost", is_primary=True)
-

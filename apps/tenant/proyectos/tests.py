@@ -68,7 +68,7 @@ class TestFase3FrontendFSD(TestCase):
         import os
         template_path = 'apps/tenant/proyectos/templates/tenant/proyectos/'
         
-        assert os.path.exists(f'{template_path}list.html')
+        assert os.path.exists(f'{template_path}proyectos_list.html')
         assert os.path.exists(f'{template_path}offcanvas_form.html')
 
     def test_javascript_namespace(self):

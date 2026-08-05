@@ -6,7 +6,7 @@ Uso:
 
 Este comando:
 - Identifica dominios sin TLD o con formato incorrecto
-- Los corrige al formato <schema>.<TENANT_DOMAIN_BASE> (ej: cliente.sintel.com)
+- Los corrige al formato <schema>.<TENANT_DOMAIN_BASE> (ej: cliente.sintel.net.co)
 - Normaliza y valida el FQDN antes de guardar
 - Muestra un resumen de cambios realizados
 """
@@ -35,7 +35,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+        base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         dry_run = options["dry_run"]
         force = options["force"]
 

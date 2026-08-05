@@ -1,7 +1,4 @@
-"""
-Celery tasks para Dashboard v3.9.4
-Snapshots históricos + invalidación de caché
-"""
+from decimal import Decimal
 from celery import shared_task
 from django.core.cache import cache
 from django.utils import timezone
@@ -25,7 +22,7 @@ def crear_snapshot_metricas_diarias(self):
         from apps.tenant.dashboard.models import SnapshotMetricaDiaria
         from apps.tenant.dashboard.services.business_service import DashboardBusinessService
 
-        logger.info("📊 [Dashboard] Iniciando creación de snapshots diarios...")
+        logger.info("[Dashboard] Iniciando creacion de snapshots diarios...")
 
         hoy = timezone.now().date()
         empresas_procesadas = 0
@@ -51,22 +48,25 @@ def crear_snapshot_metricas_diarias(self):
                     total_empleados=metricas.empleados.total_empleados,
                     empleados_activos=metricas.empleados.empleados_activos,
                     nominas_pendientes=metricas.empleados.nominas_pendientes,
+                    total_provedores=metricas.proveedores.total_provedores if metricas.proveedores else 0,
+                    total_gastos=metricas.proveedores.total_gastos if metricas.proveedores else Decimal('0.00'),
+                    cartera_pendiente=metricas.proveedores.cartera_pendiente if metricas.proveedores else Decimal('0.00'),
                     generado_por='celery-beat'
                 )
 
                 empresas_procesadas += 1
-                logger.debug(f"✅ Snapshot creado para empresa {empresa.id} ({empresa.nombre})")
+                logger.debug(f"Snapshot creado para empresa {empresa.id} ({empresa.razon_social})")
 
             except Exception as e:
                 empresas_error += 1
                 logger.warning(
-                    f"⚠️ Error creando snapshot para empresa {empresa.id}: {str(e)}",
+                    f"Error creando snapshot para empresa {empresa.id}: {str(e)}",
                     exc_info=True
                 )
                 # Continuar con siguiente empresa en lugar de fallar todo
 
         logger.info(
-            f"📊 [Dashboard] Snapshots completados: {empresas_procesadas} OK, {empresas_error} errores"
+            f"[Dashboard] Snapshots completados: {empresas_procesadas} OK, {empresas_error} errores"
         )
 
         return {
@@ -78,7 +78,7 @@ def crear_snapshot_metricas_diarias(self):
 
     except Exception as e:
         logger.error(
-            f"❌ [Dashboard] Error crítico en crear_snapshot_metricas_diarias: {str(e)}",
+            f"[Dashboard] Error critico en crear_snapshot_metricas_diarias: {str(e)}",
             exc_info=True
         )
         # Reintentar hasta 3 veces
@@ -97,7 +97,7 @@ def limpiar_snapshots_antiguos(self, dias=90):
         from apps.tenant.dashboard.models import SnapshotMetricaDiaria
         from datetime import timedelta
 
-        logger.info(f"🗑️ [Dashboard] Limpiando snapshots más antiguos que {dias} días...")
+        logger.info(f"[Dashboard] Limpiando snapshots mas antiguos que {dias} dias...")
 
         fecha_corte = timezone.now().date() - timedelta(days=dias)
 
@@ -108,7 +108,7 @@ def limpiar_snapshots_antiguos(self, dias=90):
 
         registros_eliminados = resultado[0]  # Count de registros eliminados
 
-        logger.info(f"🗑️ [Dashboard] Snapshots eliminados: {registros_eliminados}")
+        logger.info(f"[Dashboard] Snapshots eliminados: {registros_eliminados}")
 
         return {
             'status': 'success',
@@ -118,7 +118,7 @@ def limpiar_snapshots_antiguos(self, dias=90):
 
     except Exception as e:
         logger.error(
-            f"❌ [Dashboard] Error limpiando snapshots: {str(e)}",
+            f"[Dashboard] Error limpiando snapshots: {str(e)}",
             exc_info=True
         )
         raise
@@ -135,7 +135,7 @@ def invalidar_cache_todas_empresas(self):
     try:
         from apps.tenant.empresa.models import Empresa
 
-        logger.info("🔄 [Dashboard] Invalidando caché para todas las empresas...")
+        logger.info("[Dashboard] Invalidando cache para todas las empresas...")
 
         empresas = Empresa.objects.all().values_list('id', flat=True)
         invalidadas = 0
@@ -145,7 +145,7 @@ def invalidar_cache_todas_empresas(self):
             DashboardBusinessService.invalidar_cache(empresa_id)
             invalidadas += 1
 
-        logger.info(f"🔄 [Dashboard] Caché invalidado para {invalidadas} empresas")
+        logger.info(f"[Dashboard] Cache invalidado para {invalidadas} empresas")
 
         return {
             'status': 'success',
@@ -154,7 +154,7 @@ def invalidar_cache_todas_empresas(self):
 
     except Exception as e:
         logger.error(
-            f"❌ [Dashboard] Error invalidando caché: {str(e)}",
+            f"[Dashboard] Error invalidando cache: {str(e)}",
             exc_info=True
         )
         raise

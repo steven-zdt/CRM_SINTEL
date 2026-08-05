@@ -404,6 +404,12 @@
         const form = d.querySelector(SELECTORS.FORM);
         if (!form) return;
 
+        // Guard (FE-A1): w.MovimientosEditor.init() se expone para invocarse
+        // externamente por cada apertura del offcanvas — este guard evita
+        // duplicar listeners si algun caller lo invoca mas de una vez.
+        if (form.dataset.editorInitialized) return;
+        form.dataset.editorInitialized = 'true';
+
         // Cambio de categoria → fetch dinamico
         const catSelect = d.querySelector(SELECTORS.CATEGORIA);
         if (catSelect) {

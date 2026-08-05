@@ -1,7 +1,8 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.10.4
-**Ultima actualizacion:** 2026-05-29
+**Version:** 3.16.4
+**Ultima actualizacion:** 2026-08-05 — agregada regla de gobernanza sobre `dependencies` de migraciones y `app_label` en §5.3 (incidente real en `proyectos` migracion 0020, bloqueaba el arranque completo del proyecto; ver `apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` FIX v3.10.5 y `.agents/skills/backend/django-tenant.md`)
+**Actualizacion previa:** 2026-08-03 (DOC-A1 — sincronizado tras cerrar Fases 1-6, 8, 9 de `documentacion/PLAN_UNICO_CORRECCIONES.md`; ver ese documento y sus `REPORTE_FASE_*.md` para el detalle de cada cambio)
 **Fuente canonica:** `documentacion/arquitectura_general.md`
 **Reglas de desarrollo:** `AGENTS.md` (raiz del proyecto)
 **Estado actual del proyecto:** `MEMORY.md` (raiz del proyecto)
@@ -57,7 +58,7 @@ SINTEL es un ERP SaaS multi-tenant para gestion contable y facturacion electroni
 | Contenedores | Docker + Docker Compose |
 | Servidor WSGI | Gunicorn |
 | Proxy inverso | Nginx (produccion) |
-| DNS interno | Windows Server 2022 wildcard `*.sintel.com → 192.168.2.15` |
+| DNS interno | Windows Server 2022 wildcard `*.sintel.net.co → 192.168.2.15` |
 | Autenticacion asimetrica | HS256 JWT via variable de entorno `JWT_SECRET_KEY` |
 
 ### 1.4. Directorio `config/` — Nucleo de Configuracion
@@ -79,8 +80,8 @@ El directorio `config/` es el nucleo de configuracion del proyecto. Toda la orqu
 ```
 request → TenantMiddleware → hostname match → set schema PostgreSQL
 
-admin.sintel.com   →  public schema    →  urls_public.py
-empresa.sintel.com →  tenant schema    →  urls_tenant.py
+admin.sintel.net.co   →  public schema    →  urls_public.py
+empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 192.168.2.15       →  public (fallback) →  soporte IP en DEBUG
 ```
 
@@ -100,7 +101,7 @@ empresa.sintel.com →  tenant schema    →  urls_tenant.py
 
 **Total public models: 17**
 
-### 2.2. Esquema Tenant (`TENANT_APPS`) — 13 apps de negocio activas
+### 2.2. Esquema Tenant (`TENANT_APPS`) — 14 apps de negocio activas
 
 | App | App Label | Modelos | Migraciones | Responsabilidad |
 |---|---|---|---|---|
@@ -117,9 +118,14 @@ empresa.sintel.com →  tenant schema    →  urls_tenant.py
 | `apps/tenant/proveedores/` | `proveedores` | Proveedor | 7 | Terceros proveedores, documentos soporte |
 | `apps/tenant/proyectos/` | `proyectos` | Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, TareaCorta, TareaDiariaProyecto | 18 | Gestion de proyectos, presupuesto, tareas cortas |
 | `apps/tenant/dashboard/` | `dashboard` | SnapshotMetricaDiaria | 1 | Dashboard ejecutivo, metricas consolidadas |
+| `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria | 1 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
+| `apps/tenant/compras/` | `compras` | PlantillaOrdenCompra, OrdenCompra, ItemOrdenCompra | 3 | Ordenes de compra a proveedores (agregada 2026-06-17, ver `.agent/AUDITORIA_FLUJO_COMPRAS.md`) |
+| `apps/tenant/ventas/` | `ventas` | ResolucionFacturacion, Venta, ItemVenta | 3 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
 
-**Total tenant models: 52 activos (+ 1 abstract)**  
-**Total migraciones: 125 (tenant) + 8 (public) = 133 total**
+**Total tenant models: 52 activos (+ 1 abstract) + 6 de `compras`/`ventas` (ver DOC-C1 en `documentacion/REPORTE_FASE_1.md`)**
+**Total migraciones: 125 (tenant) + 8 (public) = 133 total + 6 de `compras`/`ventas`**
+
+> WARNING: [DOC-C1] Este inventario y sus totales estaban desactualizados (faltaban `compras` y `ventas`, ambas ya activas en `TENANT_APPS` desde 2026-06-17). Los totales de arriba solo se corrigieron para sumar las dos apps agregadas; un recuento completo de §2, §9 y §10 (migraciones reales por app, endpoints, cobertura de tests) queda pendiente para la Fase 8 (Documentación) del plan de remediacion — ver `documentacion/PLAN_REMEDIACION.md`.
 
 ### 2.3. Apps de Infraestructura Tenant (sin modelos de negocio)
 
@@ -392,6 +398,10 @@ Todos los archivos `.html` y `.js` deben residir dentro del nucleo de la app a l
 
 Cada app define un template `assets_<app>.html` que centraliza la inclusion de sus scripts y estilos. Prohibidos: scripts compartidos entre modelos no relacionados, templates monoliticos, referencias cruzadas de assets entre apps.
 
+**Helper global `offcanvas.helper.js` (FE-A5, PLAN_UNICO_CORRECCIONES.md Fase 5):** `apps/tenant/core/static/core/js/common/offcanvas.helper.js` expone `window.Sintel.Core.mostrarOffcanvasSeguro(elOrId)` — SSoT que reemplaza las 16 reimplementaciones locales encontradas en la auditoria 2026-07-26. Se carga globalmente desde `assets_core.html`, antes de cualquier modulo. Todo codigo nuevo que abra un Bootstrap Offcanvas debe usar este helper en vez de reimplementar el patron dispose+create.
+
+**Estado dual de `http.js` (FE-M4, deuda documentada, no resuelta):** existen 2 versiones de `http.js` cargadas ambas en el shell del workspace: `core/static/js/http.js` (SSoT moderno, inyecta JWT) y `core/static/core/js/lib/http.js` (version "legacy" que gana por orden de carga en `assets_core.html`/`workspace.html`). La version legacy **no se elimino** (ver `REPORTE_FASE_1.md`, hallazgo FE-C3) porque es la unica que maneja correctamente `FormData` (subida de archivos) y expone `window.getCookie`, del que dependen ~20 features. El fix aplicado en Fase 1 inyecto el JWT tambien en la version legacy, cerrando el bug de seguridad sin tocar el resto de su comportamiento. Consolidar ambas en un solo archivo sigue pendiente (Fase 6/7 del plan de correcciones).
+
 ### 5.3. Prohibiciones de Gobernanza
 
 | Regla | Detalle |
@@ -409,6 +419,7 @@ Cada app define un template `assets_<app>.html` que centraliza la inclusion de s
 | `getOrCreateInstance().show()` HTMX | PROHIBIDO — acumula backdrops; usar `mostrarOffcanvasSeguro(el)` |
 | `setData()` sin args en Tabulator | Usar `replaceData()` para forzar nuevo fetch del servidor |
 | `py_compile` hook | PostToolUse hook valida toda edicion `.py`. Corregir antes de continuar |
+| Nombre de carpeta en `dependencies` de migraciones | PROHIBIDO — usar el `app_label` real (`grep label apps/tenant/<app>/apps.py`), no el nombre de carpeta. 10 de 17 apps tenant sobre-escriben `label` (ver `.agents/skills/backend/django-tenant.md`). Incidente real: migracion `0020` de `proyectos` referenciaba `('proyectos', ...)` en vez de `('tenant_proyectos', ...)`, bloqueando `migrate_schemas` — y por tanto el arranque de `web` — para todo el proyecto. Ver `apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` (FIX v3.10.5). Mejor practica: dejar que `makemigrations` genere `dependencies` automaticamente |
 
 ### 5.4. Principios de Idempotencia
 
@@ -535,7 +546,7 @@ python manage.py poblar_catalogo_niif
 - Contabilidad es la unica propietaria de mapeos PUC
 - Las apps fuente son Pure Pull (zero coupling)
 - Los extractores resuelven cuentas exclusivamente via `ReglaContable`
-- `REFACTORIZAR_DESACOPLAMIENTO_CONTABLE_FRAMEWORK.md` es el checklist reutilizable
+- El checklist de esta refactorización no quedó formalizado en un documento aparte (referencia rota a `REFACTORIZAR_DESACOPLAMIENTO_CONTABLE_FRAMEWORK.md` retirada en Fase 9, DOC-A4 — el archivo nunca existió)
 
 ---
 
@@ -605,6 +616,8 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | `/api/v1/clientes/` | clientes | Cliente, ContactoCliente |
 | `/api/v1/cotizaciones/` | cotizaciones | Cotizacion, CotizacionItem |
 | `/api/v1/proyectos/` | proyectos | Proyecto, TareaCorta, AsignacionPersonal |
+| `/api/v1/compras/` | compras | OrdenCompra, ItemOrdenCompra, PlantillaOrdenCompra |
+| `/api/v1/ventas/` | ventas | Venta, ItemVenta, ResolucionFacturacion |
 | `/api/v1/impuestos/` (public) | impuestos | Catalogo DIAN |
 
 **Formato de respuesta paginada (estandar DRF):**
@@ -635,7 +648,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | Modelo base tenant | `apps/tenant/core/models.py:SintelTenantBaseModel` | Herencia obligatoria para todos los modelos tenant |
 | Bridge cross-schema | `apps/tenant/core/services/membership.py` | Unica interfaz autorizada para consultar esquema public |
 | ADR Retenciones | `docs/ADR-001-retention-pull-model.md` | Contabilidad owns Retencion, Pull Model |
-| ADR Desacoplamiento Contable | `REFACTORIZAR_DESACOPLAMIENTO_CONTABLE_FRAMEWORK.md` | Checklist de eliminacion de campos contables en apps fuente |
+| ADR Dual-Registration API Publica | `docs/ADR-002-public-schema-api-dual-registration.md` | Endpoints accesibles desde `home.sintel.net.co` — registro dual public/tenant |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
@@ -656,26 +669,35 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | `proveedores` | `apps/tenant/proveedores/` | `apps/tenant/proveedores/.agent/AUDITORIA_FLUJO_COMPLETO_PROVE.md` |
 | `proyectos` | `apps/tenant/proyectos/` | `apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` |
 | `dashboard` | `apps/tenant/dashboard/` | `apps/tenant/dashboard/.agent/` |
+| `bancos` | `apps/tenant/bancos/` | `apps/tenant/bancos/.agent/AUDITORIA_FLUJO_COMPLETO.md` |
+| `compras` | `apps/tenant/compras/` | `apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md` |
+| `ventas` | `apps/tenant/ventas/` | `apps/tenant/ventas/.agent/ARQUITECTURA_VENTAS.md` |
+| `landing` | `apps/tenant/landing/` | `apps/tenant/landing/.agent/AUDITORIA_FLUJO_LANDING.md` |
 
 ### 10.3. Cobertura de Tests
 
-| App | Archivos de Test | Cobertura |
-|---|---|---|
-| facturas | 23 | ✅ Alta |
-| core | 10 | ✅ Alta |
-| empleados | 9 | ✅ Alta |
-| contabilidad | 7 | ✅ Media-Alta |
-| clientes | 7 | ✅ Media-Alta |
-| gastos | 7 | ✅ Media-Alta |
-| empresa | 5 | ✅ Media |
-| cotizaciones | 5 | ✅ Media |
-| proveedores | 5 | ✅ Media |
-| proyectos | 4 | ✅ Media |
-| dashboard | 4 | ✅ Media |
-| api | 2 | ✅ Media |
-| perfil | 1 | ⚠️ Baja |
-| inventario | 0 | ❌ Sin tests |
-| **Total** | **89** | **92% cobertura de apps** |
+> WARNING: [DOC-A2] Tabla recontada el 2026-08-03 (`apps/tenant/<app>/tests/` + `tests/tenant/<app>/`, ambas ubicaciones donde el proyecto reparte tests por app). No incluye suites cross-cutting no atribuibles a una sola app (`tests/api`, `tests/celery*`, `tests/general`, `tests/multitenant`, `tests/smoke`, etc.) — el total real de archivos de test en todo el repositorio es **336** (vs. 329 reportado por la auditoría de 2026-07-26; la diferencia son tests nuevos agregados durante las Fases 5/5-BIS de este plan). Recuento final por app pendiente de Fase 7 (backfill de `test_multitenant_isolation.py`), que es cuando estos numeros vuelven a moverse de forma significativa.
+
+| App | Archivos de Test (in-app + centralizado) | `test_multitenant_isolation.py`? |
+|---|---:|---|
+| core | 55 | — |
+| facturas | 38 | Parcial (`test_multitenant_isolation_tabla_html.py`, Fase 5-BIS) |
+| empresa | 23 | — |
+| empleados | 8 | — |
+| gastos | 8 | ✅ Completo (3 niveles) |
+| dashboard | 11 | — |
+| contabilidad | 7 | — |
+| clientes | 6 | — |
+| perfil | 4 | — |
+| inventario | 4 | — |
+| landing | 20 | — |
+| cotizaciones | 3 | — |
+| proveedores | 3 | — |
+| proyectos | 3 | — |
+| bancos | 3 | ✅ Completo (3 niveles) |
+| compras | 2 | Parcial (`test_multitenant_isolation_tabla_html.py`, Fase 5-BIS) |
+| ventas | 1 | ✅ (Fase 1) |
+| **Total atribuido por app** | **199** | **2 completos / 3 parciales de ~17 apps** |
 
 ---
 

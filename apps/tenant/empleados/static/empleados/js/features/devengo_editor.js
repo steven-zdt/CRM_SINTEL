@@ -13,11 +13,42 @@
     const API_URL      = '/api/v1/empleados/';
     const CONTAINER_ID = 'offcanvas-container-nominas';
 
+    // Estado: indica si se está cargando un empleado preseleccionado
+    let _precargarEmpleado = false;
+    let _empleadoPreseleccionado = null;
+
     // ── Abrir formulario unificado ────────────────────────────────────────────
 
     async function open() {
-        const url = `${API_URL}devengos/render-offcanvas/crear/`;
-        console.log(`${MOD} Abriendo formulario unificado: ${url}`);
+        const empleado = w.Sintel?.Empleados?.NominaList?.getEmpleadoSeleccionado?.();
+        let url = `${API_URL}devengos/render-offcanvas/crear/`;
+
+        if (empleado?.uuid) {
+            url += `?empleado=${encodeURIComponent(empleado.uuid)}`;
+            _precargarEmpleado = true;
+            _empleadoPreseleccionado = empleado;
+        } else {
+            _precargarEmpleado = false;
+            _empleadoPreseleccionado = null;
+        }
+
+        console.log(`${MOD} Abriendo formulario: url=${url}, precargar=${_precargarEmpleado}`);
+        try {
+            await htmx.ajax('GET', url, { target: `#${CONTAINER_ID}`, swap: 'innerHTML' });
+        } catch (err) {
+            console.error(`${MOD} Error cargando formulario:`, err);
+            w.UIManager?.notifyError('Error al cargar el formulario de nómina');
+        }
+    }
+
+    // Abrir formulario con empleado específico (llamado desde botón Nueva en Master)
+    async function openParaEmpleado(uuid, nombre) {
+        if (!uuid) return;
+        _precargarEmpleado = true;
+        _empleadoPreseleccionado = { uuid, nombre: nombre || 'Empleado' };
+
+        const url = `${API_URL}devengos/render-offcanvas/crear/?empleado=${encodeURIComponent(uuid)}`;
+        console.log(`${MOD} Abriendo formulario para empleado: ${nombre} (${uuid})`);
         try {
             await htmx.ajax('GET', url, { target: `#${CONTAINER_ID}`, swap: 'innerHTML' });
         } catch (err) {
@@ -108,12 +139,21 @@
     function _mostrarOffcanvasSeguro(el) {
         if (!el || !w.bootstrap?.Offcanvas) return;
         d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
-        d.body.classList.remove('overflow-hidden', 'modal-open');
+        d.body.classList.remove('overflow-hidden', 'modal-open', 'offcanvas-open');
         d.body.style.overflow = '';
         d.body.style.paddingRight = '';
         const prev = bootstrap.Offcanvas.getInstance(el);
         if (prev) { try { prev.dispose(); } catch (_) {} }
-        bootstrap.Offcanvas.getOrCreateInstance(el).show();
+        // Tick minimo para que Bootstrap complete cualquier ciclo interno pendiente
+        // antes de crear la nueva instancia (evita null.scroll en offcanvas.js)
+        setTimeout(() => {
+            if (!el.isConnected) return;
+            try {
+                bootstrap.Offcanvas.getOrCreateInstance(el).show();
+            } catch (e) {
+                console.warn(`${MOD} Error mostrando offcanvas:`, e);
+            }
+        }, 0);
     }
 
     // ── Preview calculo (HTMX programatico) ──────────────────────────────────
@@ -124,8 +164,13 @@
 
         const fi = d.getElementById('devengo-fecha_inicio')?.value;
         const ff = d.getElementById('devengo-fecha_fin_field')?.value;
-        const fp = d.getElementById('devengo-fecha_pago')?.value;
-        if (!fi || !ff || !fp) return;
+        if (!fi || !ff) return;
+
+        // fecha_pago no es requerida por el backend para el preview;
+        // si el usuario aún no la ha llenado, usamos fecha_fin como fallback.
+        const fpEl = d.getElementById('devengo-fecha_pago');
+        const fp   = fpEl?.value || ff;
+        if (fpEl && !fpEl.value) fpEl.value = ff;
 
         const wrapper = d.getElementById('devengo-campos-calculados-wrapper');
         if (!wrapper) return;
@@ -160,6 +205,85 @@
         });
     }
 
+    // ── Cargar info de empleado preseleccionado (FASE 2) ──────────────────────
+
+    async function _cargarInfoEmpleadoPreseleccionado(empleadoUuid) {
+        const api = w.Sintel?.Empleados?.API;
+        if (!api) {
+            console.warn(`${MOD} API no disponible para cargar empleado preseleccionado`);
+            return;
+        }
+
+        try {
+            const resp = await fetch(api.devengos.infoEmpleado(empleadoUuid), {
+                headers: { 'Accept': 'application/json' }
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                w.SintelFeedback?.error(err.error || 'Error cargando información del empleado');
+                return;
+            }
+
+            const data = await resp.json();
+            const empInput   = d.getElementById('devengo-empleado-id');
+            const contrInput = d.getElementById('devengo-contrato-id');
+            const infoPanel  = d.getElementById('panel-info-empleado');
+            const docDisplay = d.getElementById('preselected-emp-doc');
+
+            // Establecer campos ocultos con los IDs necesarios
+            if (empInput)   empInput.value   = data.empleado.id;
+            if (contrInput) contrInput.value = data.contrato.id;
+
+            // Actualizar documento en el badge de preselección
+            if (docDisplay) {
+                docDisplay.textContent = `Doc: ${data.empleado.numero_documento}`;
+            }
+
+            // Actualizar panel de info con todos los datos del empleado
+            const setText = (id, val) => {
+                const el = d.getElementById(id);
+                if (el) el.textContent = val || '—';
+            };
+            setText('info-numero-documento', data.empleado.numero_documento);
+            setText('info-eps',              data.empleado.eps_label);
+            setText('info-afp',              data.empleado.afp_label);
+            setText('info-arl',              data.empleado.arl_label);
+            setText('info-cargo',            data.contrato.cargo);
+            setText('info-tipo-contrato',    data.contrato.tipo);
+
+            // Actualizar referencias de horas semanales
+            const hs = data.contrato.horas_semanales || 42;
+            const hsRef = d.getElementById('he-ref-hs');
+            if (hsRef) {
+                hsRef.dataset.hsContrato = hs;
+                hsRef.textContent        = hs;
+            }
+
+            // Mostrar panel de información
+            if (infoPanel) infoPanel.classList.remove('d-none');
+
+            // Disparar preview-calculo si ya hay fechas ingresadas
+            const fiInput = d.getElementById('devengo-fecha_inicio');
+            const ffInput = d.getElementById('devengo-fecha_fin_field');
+            if (fiInput?.value && ffInput?.value) {
+                const dlInput = d.getElementById('devengo-dias_laborados');
+                if (dlInput && !dlInput.value) {
+                    dlInput.value = calcularDias(fiInput.value, ffInput.value);
+                }
+                // Garantizar fecha_pago antes de disparar (el usuario puede no haberla tocado)
+                const fpInput = d.getElementById('devengo-fecha_pago');
+                if (fpInput && !fpInput.value) fpInput.value = ffInput.value;
+                setTimeout(triggerPreviewCalculo, 300);
+            }
+
+            console.log(`${MOD} Empleado preseleccionado cargado: ${data.empleado.numero_documento}`);
+        } catch (err) {
+            console.error(`${MOD} Error cargando empleado preseleccionado:`, err);
+            w.SintelFeedback?.error('Error al cargar la información del empleado');
+        }
+    }
+
     // ── Setup del formulario unificado ────────────────────────────────────────
 
     function setupFormUnificado() {
@@ -175,6 +299,39 @@
         const infoPanel  = d.getElementById('panel-info-empleado');
 
         if (!fiInput || !ffInput || !selectEmp) return;
+
+        // FASE 2: Si se precargó un empleado desde el Master-Detail,
+        // saltamos el selector general y cargamos los datos automáticamente.
+        if (_precargarEmpleado && _empleadoPreseleccionado?.uuid) {
+            selectEmp.disabled = true;
+            selectEmp.classList.add('d-none');
+
+            // Inyectar nombre del empleado como badge en el contenedor dedicado
+            const container = d.getElementById('empleado-preseleccionado-label');
+            if (container) {
+                container.innerHTML = `
+                    <div class="p-3 bg-primary-subtle rounded-2 border border-primary-subtle">
+                        <div class="text-primary small fw-semibold mb-2">
+                            <i class="bi bi-lock-fill me-1"></i>Empleado seleccionado del Master
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="fw-bold text-primary">${_empleadoPreseleccionado.nombre}</div>
+                                <span class="small text-primary-emphasis" id="preselected-emp-doc">Cargando...</span>
+                            </div>
+                            <span class="badge bg-primary text-white">
+                                <i class="bi bi-check-circle me-1"></i>Fijo
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (infoPanel) infoPanel.classList.remove('d-none');
+
+            // Cargar información del empleado automáticamente
+            _cargarInfoEmpleadoPreseleccionado(_empleadoPreseleccionado.uuid);
+        }
 
         // ── Actualizar panel de dias (reactivo) ───────────────────────────────
         function actualizarDias() {
@@ -248,6 +405,12 @@
 
         // ── Cargar info del empleado seleccionado + contrato activo ──────────
         async function cargarInfoEmpleado() {
+            // FASE 2: Si está preseleccionado, no permitir cambio (bloqueado)
+            if (_precargarEmpleado) {
+                console.log(`${MOD} Modo preseleccionado: selector bloqueado`);
+                return;
+            }
+
             const empId = selectEmp.value;
 
             if (!empId) {
@@ -318,13 +481,40 @@
         }
 
         // ── Event listeners ───────────────────────────────────────────────────
-        fiInput.addEventListener('change', () => { resetEmpleado(); cargarEmpleados(); });
-        ffInput.addEventListener('change', () => {
-            if (ffInput.value && !fpInput?.value) fpInput.value = ffInput.value;
+
+        // Helper para modo preseleccionado: actualiza días y dispara preview
+        // SIN borrar el contrato ni recargar el selector de empleados.
+        function _onFechaCambiadaPreseleccionado() {
+            const dias = actualizarDias();
+            if (dias > 0 && dlInput && !dlInput.value) dlInput.value = dias;
+            if (contrInput?.value && dias > 0) setTimeout(triggerPreviewCalculo, 150);
+        }
+
+        fiInput.addEventListener('change', () => {
+            if (_precargarEmpleado) { _onFechaCambiadaPreseleccionado(); return; }
             resetEmpleado();
             cargarEmpleados();
         });
+
+        ffInput.addEventListener('change', () => {
+            if (ffInput.value && !fpInput?.value) fpInput.value = ffInput.value;
+            if (_precargarEmpleado) { _onFechaCambiadaPreseleccionado(); return; }
+            resetEmpleado();
+            cargarEmpleados();
+        });
+
         selectEmp.addEventListener('change', cargarInfoEmpleado);
+
+        // Disparar preview cuando dias_laborados cambia en modo preseleccionado
+        // (complementa el hx-trigger del template que sólo aplica a eventos nativos del browser)
+        if (dlInput) {
+            dlInput.addEventListener('change', () => {
+                if (_precargarEmpleado && contrInput?.value) {
+                    setTimeout(triggerPreviewCalculo, 100);
+                }
+            });
+        }
+
         setupHorasExtras();
     }
 
@@ -442,6 +632,20 @@
     // ── Listener post-HTMX: activa offcanvas y configura form ────────────────
 
     function setupOffcanvasLoadListener() {
+        // Destruir la instancia Bootstrap del offcanvas ANTES de que HTMX reemplace el DOM.
+        // Sin esto, el elemento viejo queda con listeners activos (backdrop transitionend)
+        // que disparan accesos nulos → offcanvas.js:116 Cannot read null.scroll.
+        d.body.addEventListener('htmx:beforeSwap', function(evt) {
+            if (!evt.detail.target || evt.detail.target.id !== CONTAINER_ID) return;
+            const oldEl = evt.detail.target.querySelector('.offcanvas');
+            if (oldEl) {
+                const oldInst = w.bootstrap?.Offcanvas?.getInstance(oldEl);
+                if (oldInst) { try { oldInst.dispose(); } catch (_) {} }
+            }
+            d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
+            d.body.classList.remove('offcanvas-open', 'modal-open', 'overflow-hidden');
+        });
+
         d.body.addEventListener('htmx:afterSettle', function(evt) {
             const target = evt.detail.target;
             if (!target || target.id !== CONTAINER_ID) return;
@@ -452,12 +656,30 @@
             console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
             _mostrarOffcanvasSeguro(offcanvasEl);
             setupFormUnificado();
+
+            // FASE 4: Limpieza al cerrar offcanvas
+            offcanvasEl.addEventListener('hide.bs.offcanvas', () => {
+                console.log(`${MOD} Cerrando offcanvas - limpiando estado preseleccionado`);
+                _precargarEmpleado = false;
+                _empleadoPreseleccionado = null;
+
+                // Resetear campos ocultos
+                const empInput   = d.getElementById('devengo-empleado-id');
+                const contrInput = d.getElementById('devengo-contrato-id');
+                if (empInput)   empInput.value   = '';
+                if (contrInput) contrInput.value = '';
+
+                // Limpiar panel de info
+                const infoPanel = d.getElementById('panel-info-empleado');
+                if (infoPanel) infoPanel.classList.add('d-none');
+            }, { once: true });
         });
     }
 
     // ── Listener guardar nomina (exito / error) ───────────────────────────────
 
     function setupHTMXListeners() {
+        // Listener para éxito en guardado de nómina
         d.body.addEventListener('htmx:afterRequest', function(evt) {
             const target = evt.target;
             if (target.id !== 'btn-guardar-devengo') return;
@@ -467,33 +689,58 @@
 
             if (evt.detail.successful) {
                 const oc = d.getElementById('offcanvas-devengo');
-                if (oc) bootstrap.Offcanvas.getInstance(oc)?.hide();
-                w.UIManager?.notifySuccess('Nómina registrada correctamente');
-                w.Sintel?.Empleados?.EmpleadoList?.reload();
-                w.Sintel?.Empleados?.NominaList?.reload();
+
+                // Cerrar offcanvas con transición suave
+                if (oc) {
+                    const bsOc = bootstrap.Offcanvas.getInstance(oc);
+                    if (bsOc) {
+                        bsOc.hide();
+                    }
+                }
+
+                // Notificar éxito y recargar ambas tablas
+                w.UIManager?.notifySuccess('✓ Nómina registrada correctamente');
+
+                // Recargar Master (lista de empleados con nóminas)
+                setTimeout(() => {
+                    w.Sintel?.Empleados?.NominaList?.reload();
+                }, 200);
+
+                console.log(`${MOD} Nómina guardada exitosamente - sincronizando tablas`);
             }
         });
 
+        // Listener para errores en preview-calculo
         d.body.addEventListener('htmx:responseError', function(evt) {
             const target = evt.detail.target;
             if (!target || target.id !== 'devengo-campos-calculados-wrapper') return;
+
             let msg = 'Error al calcular la nómina. Verifique los datos.';
-            try { msg = JSON.parse(evt.detail.xhr.responseText).error || msg; } catch (_) {}
+            try {
+                const resp = JSON.parse(evt.detail.xhr.responseText);
+                msg = resp.error || resp.detail || msg;
+            } catch (_) {}
+
             target.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>${msg}
+                <div class="alert alert-danger small">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Error:</strong> ${msg}
                 </div>`;
         });
     }
 
     // ── Bootstrap ─────────────────────────────────────────────────────────────
-
-    setupHTMXListeners();
-    setupOffcanvasLoadListener();
+    // Guard: ambas funciones registran listeners en `document.body` (persiste
+    // entre recargas HTMX del modulo "empleados") — sin este guard, cada
+    // recarga del script duplica el flujo completo de guardado (FE-A1/A2).
+    if (!d.body.dataset.devengoEditorInitialized) {
+        d.body.dataset.devengoEditorInitialized = 'true';
+        setupHTMXListeners();
+        setupOffcanvasLoadListener();
+    }
 
     w.Sintel = w.Sintel || {};
     w.Sintel.Empleados = w.Sintel.Empleados || {};
-    w.Sintel.Empleados.DevengoEditor = { open, openDevengoOffcanvas: open, triggerPreviewCalculo };
+    w.Sintel.Empleados.DevengoEditor = { open, openParaEmpleado, openDevengoOffcanvas: open, triggerPreviewCalculo };
     w.DevengosEditor = w.Sintel.Empleados.DevengoEditor;
 
 })(window, document);

@@ -24,10 +24,10 @@ npx playwright install chromium
 ### Modo headless (por defecto)
 ```bash
 # Variable de entorno opcional
-E2E_BASE_URL=http://demo.sintel.com:8000 \
+E2E_BASE_URL=http://demo.sintel.net.co:8000 \
 E2E_USER=test_user \
 E2E_PASS=test_pass \
-E2E_PUBLIC_URL=http://sintel.com:8000 \
+E2E_PUBLIC_URL=http://sintel.net.co:8000 \
 E2E_ADMIN_USER=admin \
 E2E_ADMIN_PASS=admin \
 npm test
@@ -69,10 +69,10 @@ tests/e2e/
 
 | Variable | Descripción | Defecto |
 |----------|---|---|
-| `E2E_BASE_URL` | URL base del tenant demo | `http://demo.sintel.com:8000` |
+| `E2E_BASE_URL` | URL base del tenant demo | `http://demo.sintel.net.co:8000` |
 | `E2E_USER` | Usuario de prueba del tenant | `test_user` |
 | `E2E_PASS` | Contraseña del usuario | `test_pass` |
-| `E2E_PUBLIC_URL` | URL base de la consola pública | `http://sintel.com:8000` |
+| `E2E_PUBLIC_URL` | URL base de la consola pública | `http://sintel.net.co:8000` |
 | `E2E_ADMIN_USER` | Usuario admin de consola pública | `admin` |
 | `E2E_ADMIN_PASS` | Contraseña del admin | `admin` |
 
@@ -129,10 +129,10 @@ jobs:
       - name: Run E2E tests
         run: cd tests/e2e && npm test
         env:
-          E2E_BASE_URL: 'http://demo.sintel.com:8000'
+          E2E_BASE_URL: 'http://demo.sintel.net.co:8000'
           E2E_USER: 'test_user'
           E2E_PASS: 'test_pass'
-          E2E_PUBLIC_URL: 'http://sintel.com:8000'
+          E2E_PUBLIC_URL: 'http://sintel.net.co:8000'
           E2E_ADMIN_USER: 'admin'
           E2E_ADMIN_PASS: 'admin'
 

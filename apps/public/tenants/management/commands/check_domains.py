@@ -15,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--domain",
             type=str,
-            help="Verificar un dominio específico (ej: ejemplo.sintel.com)",
+            help="Verificar un dominio específico (ej: ejemplo.sintel.net.co)",
         )
 
     def handle(self, *args, **options):

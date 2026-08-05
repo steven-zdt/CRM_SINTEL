@@ -1,9 +1,10 @@
 {% load static %}
-{# assets_proveedores.html - Assets del módulo Proveedores v3.7 #}
+{# assets_proveedores.html - Assets del módulo Proveedores v3.17.0 #}
 {# Orden de carga crítico: API primero (requerido por features) #}
 
 {# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'proveedores/js/proveedores.api.js' %}"></script>
+<script src="{% static 'proveedores/js/representante.api.js' %}"></script>
 
 {# BLOQUE 2: Features - Módulos Feature-Sliced Architecture #}
 <script src="{% static 'proveedores/js/proveedores.utils.js' %}"></script>
@@ -11,4 +12,6 @@
 <script src="{% static 'proveedores/js/proveedores_main.js' %}"></script>
 <script src="{% static 'proveedores/js/features/cuentas_pagar_list.js' %}"></script>
 <script src="{% static 'proveedores/js/features/cuentas_pagar_editor.js' %}"></script>
+<script src="{% static 'proveedores/js/features/representante_list.js' %}"></script>
+<script src="{% static 'proveedores/js/features/representante_editor.js' %}"></script>
 

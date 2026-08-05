@@ -19,7 +19,7 @@ Implementar múltiples capas de seguridad para proteger el ámbito público (`sc
 **Configuración:**
 ```python
 ALLOWED_PUBLIC_DOMAINS = frozenset([
-    'sintel.com',      # Dominio de producción
+    'sintel.net.co',      # Dominio de producción
     'localhost',       # Desarrollo local
     '127.0.0.1',       # Desarrollo local (IP)
     '0.0.0.0',         # Desarrollo local (bind all)
@@ -35,7 +35,7 @@ ALLOWED_PUBLIC_DOMAINS = frozenset([
 
 **Protección:**
 - ✅ Bloquea subdominios intentando acceder al esquema público
-- ✅ Ejemplo: `cliente.sintel.com` NO puede acceder al público
+- ✅ Ejemplo: `cliente.sintel.net.co` NO puede acceder al público
 - ✅ Ejemplo: `test.localhost` NO puede acceder al público (solo `localhost` exacto)
 
 **Código:**
@@ -93,7 +93,7 @@ def _normalize_host(self, request):
 **Ejemplo de Log:**
 ```
 🚨 BLOQUEO PÚBLICO (Capa 1 - Whitelist): 
-Host 'cliente.sintel.com' no está en ALLOWED_PUBLIC_DOMAINS | 
+Host 'cliente.sintel.net.co' no está en ALLOWED_PUBLIC_DOMAINS | 
 Tenant: public | 
 Path: /console/ | 
 IP: 192.168.1.100
@@ -107,28 +107,28 @@ IP: 192.168.1.100
 
 **Validaciones:**
 1. ✅ Host debe estar en `ALLOWED_PUBLIC_DOMAINS`
-2. ✅ Host NO debe terminar en `.sintel.com` (subdominio)
+2. ✅ Host NO debe terminar en `.sintel.net.co` (subdominio)
 3. ✅ Host NO debe ser subdominio de `localhost`
 4. ✅ Establece `request.urlconf = ROOT_URLCONF`
 
 **Bloqueo:**
-- ❌ `cliente.sintel.com` → 404
+- ❌ `cliente.sintel.net.co` → 404
 - ❌ `test.localhost` → 404
 - ❌ `cualquier-dominio.com` → 404
-- ✅ `sintel.com` → Permitido
+- ✅ `sintel.net.co` → Permitido
 - ✅ `localhost` → Permitido (desarrollo)
 
 ### Ámbito Privado (`schema != 'public'`)
 
 **Validaciones:**
-1. ✅ Host debe terminar en `.sintel.com` (producción) O
+1. ✅ Host debe terminar en `.sintel.net.co` (producción) O
 2. ✅ Host debe contener indicador de desarrollo (`localhost`, `127.0.0.1`)
 3. ✅ Establece `request.urlconf = TENANT_URLCONF`
 
 **Bloqueo:**
-- ❌ `sintel.com` → 403 (dominio público no puede acceder a tenant privado)
+- ❌ `sintel.net.co` → 403 (dominio público no puede acceder a tenant privado)
 - ❌ `cualquier-dominio.com` → 403
-- ✅ `cliente.sintel.com` → Permitido
+- ✅ `cliente.sintel.net.co` → Permitido
 - ✅ `cliente.localhost` → Permitido (desarrollo)
 
 ---
@@ -164,13 +164,13 @@ IP: 192.168.1.100
 
 ### Caso 1: Acceso Público desde Dominio Permitido
 ```
-Request: GET http://sintel.com/console/
+Request: GET http://sintel.net.co/console/
 Resultado: ✅ Permitido (ROOT_URLCONF)
 ```
 
 ### Caso 2: Acceso Público desde Subdominio
 ```
-Request: GET http://cliente.sintel.com/console/
+Request: GET http://cliente.sintel.net.co/console/
 Resultado: ❌ 404 (Bloqueado - Capa 2)
 ```
 
@@ -182,13 +182,13 @@ Resultado: ❌ 404 (Bloqueado - Capa 1)
 
 ### Caso 4: Acceso Privado desde Dominio Correcto
 ```
-Request: GET http://cliente.sintel.com/dashboard/
+Request: GET http://cliente.sintel.net.co/dashboard/
 Resultado: ✅ Permitido (TENANT_URLCONF)
 ```
 
 ### Caso 5: Acceso Privado desde Dominio Público
 ```
-Request: GET http://sintel.com/dashboard/
+Request: GET http://sintel.net.co/dashboard/
 Resultado: ❌ 403 (Bloqueado - dominio público no puede acceder a tenant privado)
 ```
 

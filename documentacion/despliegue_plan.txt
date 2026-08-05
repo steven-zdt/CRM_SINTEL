@@ -1,0 +1,126 @@
+Al desplegar este tipo de sistemas multi-tenant y orquestar agentes de IA especializados (como el FacturacionAgent y GastosAgent), la seguridad, el aislamiento de red y la correcta propagación de los hostnames son críticos. El uso de Cloudflare Tunnels (Zero Trust) es, en efecto, la estrategia recomendada, ya que evita exponer puertos directamente a internet y gestiona los certificados SSL de forma transparente.
+
+A continuación, presento la validación arquitectónica para producción y el plan minucioso de despliegue.
+
+1. Validación de la Arquitectura para Despliegue
+Para que django-tenants funcione correctamente a través de un túnel, la infraestructura debe cumplir ciertos requisitos que tu diseño ya anticipa, pero que requieren configuración específica en Cloudflare:
+
+Resolución de Hostname: django-tenants identifica al cliente basándose en el dominio (ej. empresa.sintel.net.co). Cloudflare Tunnel debe configurarse con un Wildcard DNS y pasar el encabezado Host original intacto hacia Nginx/Gunicorn.
+
+Terminación SSL: Cloudflare manejará el HTTPS. Tu Gunicorn/Nginx interno recibirá tráfico HTTP. Debes asegurar que Django confíe en los encabezados X-Forwarded-Proto que envía Cloudflare para construir URLs correctas (especialmente para la paginación de Tabulator y DRF).
+
+WebSockets/Asincronía: Aunque usas HTMX y Celery/Redis para tareas en segundo plano, si en el futuro los agentes de IA requieren respuestas por streaming (SSE/WebSockets), Cloudflare Tunnels lo soporta nativamente sin configuración extra profunda.
+
+2. Plan Minucioso de Despliegue mediante Cloudflare Tunnels
+Este plan asume que dispones de un servidor Linux (Ubuntu/Debian) con Docker y Docker Compose instalados.
+
+Fase 1: Preparación del Entorno Host y Variables
+Antes de levantar el túnel, la aplicación debe estar lista para recibir tráfico local.
+
+Clonar y configurar el repositorio: Ubica el código fuente en el servidor (ej. /opt/sintel).
+
+Configurar .env de Producción: Asegúrate de definir las variables críticas que dicta tu arquitectura.
+
+Fragmento de código
+# /opt/sintel/.env
+DEBUG=False
+SECRET_KEY=tu_clave_secreta_django
+JWT_SECRET_KEY=tu_clave_secreta_hs256_jwt
+ANTHROPIC_API_KEY=tu_api_key_para_los_agentes
+DATABASE_URL=postgres://user:pass@db:5432/sintel
+CELERY_BROKER_URL=redis://redis:6379/0
+ALLOWED_HOSTS=.sintel.net.co,admin.sintel.net.co
+Ajustar settings.py para Proxy Inverso:
+Dado que Cloudflare es un proxy, añade esto en tu configuración de Django para que confíe en el esquema original:
+
+Python
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+Fase 2: Levantar la Infraestructura Base (Docker)
+Construir las imágenes y levantar los servicios backend: Utiliza los comandos provistos en tu documentación.
+
+Bash
+cd /opt/sintel
+make up -d  # Esto levanta web, db, redis, celery, nginx
+Ejecutar Migraciones Globales:
+
+Bash
+docker compose exec web python manage.py migrate_schemas --shared
+docker compose exec web python manage.py migrate_schemas
+Poblar Catálogos Base (Impuestos y Contabilidad):
+
+Bash
+docker compose exec web python manage.py seed_reglas_contables
+docker compose exec web python manage.py poblar_catalogo_niif
+Fase 3: Configuración de Cloudflare y Wildcards
+Dado que usas esquemas tenant por subdominio, necesitas que Cloudflare enrute cualquier subdominio al túnel.
+
+Accede a Cloudflare Zero Trust Dashboard > Networks > Tunnels.
+
+Crea un nuevo túnel llamado sintel-erp-prod.
+
+Cloudflare te proporcionará un comando de instalación. No lo instales directamente en el host; lo añadiremos como un contenedor de Docker para mantener el aislamiento.
+
+Copia el Token del túnel proporcionado por la interfaz de Cloudflare.
+
+Fase 4: Integración de cloudflared en Docker Compose
+En lugar de instalar el demonio en el servidor, añade el servicio cloudflared a tu archivo docker-compose.yml.
+
+Añade el servicio a docker-compose.yml:
+
+YAML
+services:
+  # ... tus otros servicios (web, db, redis, celery, nginx)
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=tu_token_copiado_en_el_paso_anterior
+    restart: unless-stopped
+    depends_on:
+      - nginx
+Aplica los cambios: docker compose up -d cloudflared.
+
+Fase 5: Enrutamiento Ingress en Cloudflare
+Ahora debes indicarle al túnel qué tráfico enviar a tu contenedor Nginx (el cual, según tu documento, hace de proxy inverso para Gunicorn y sirve archivos con WhiteNoise).
+
+En el Dashboard de Cloudflare Zero Trust, ve a la configuración de tu túnel (sintel-erp-prod) > pestaña Public Hostname.
+
+Configurar dominio principal (Admin):
+
+Subdomain: admin
+
+Domain: sintel.net.co
+
+Service: http://nginx:80 (Apunta al nombre del contenedor Nginx en la red de Docker).
+
+Configurar Wildcard para los Tenants (Crítico):
+
+Subdomain: *
+
+Domain: sintel.net.co
+
+Service: http://nginx:80
+
+Nota: Para usar Wildcard en Cloudflare Tunnels, es posible que Cloudflare requiera que añadas un registro CNAME en tu DNS regular que apunte * a <UUID_DEL_TUNEL>.cfargotunnel.com.
+
+Ajustes Adicionales (Additional Application Settings):
+
+Bajo HTTP Settings, habilita HTTP Host Header y déjalo dinámico (en blanco) para que el túnel pase empresa.sintel.net.co intacto a Nginx y el TenantMiddleware de Django lo reconozca.
+
+Fase 6: Pruebas y Validación Final
+Crear el tenant principal (Admin/Public):
+
+Bash
+docker compose exec web python manage.py ensure_public_domains
+docker compose exec web python manage.py createsuperuser
+Crear el primer tenant de negocio de prueba:
+
+Bash
+make crear-empresa NOMBRE="Demo" DOMINIO="demo" EMAIL="admin@demo.sintel.net.co"
+Navega a https://admin.sintel.net.co y comprueba que accedes a la consola global.
+
+Navega a https://demo.sintel.net.co y comprueba que el TenantMiddleware resuelve el esquema correctamente y carga el login de la empresa.
+
+¿El Nginx actual configurado en tu repositorio ya incluye directivas proxy_set_header Host $host; para asegurar que el Wildcard pase correctamente hasta Gunicorn, o te gustaría que revisemos esa configuración de Nginx en detalle?

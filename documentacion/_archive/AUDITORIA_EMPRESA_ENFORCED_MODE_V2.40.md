@@ -217,7 +217,7 @@ curl -X PATCH http://localhost:8000/api/v1/core/empresa/ \
 # Esperado: 201 Created (si no existe) o 200 OK (si existe)
 
 # 5. Validar Workspace UI
-# Abrir http://home.sintel.com/workspace/#empresa
+# Abrir http://home.sintel.net.co/workspace/#empresa
 # Crear/Editar empresa
 # Verificar en Network tab que solo se usa PATCH /api/v1/core/empresa/
 ```

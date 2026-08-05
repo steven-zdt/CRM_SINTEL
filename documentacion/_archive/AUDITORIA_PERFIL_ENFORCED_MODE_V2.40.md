@@ -196,7 +196,7 @@ curl -X PATCH http://localhost:8000/api/v1/core/mi-perfil/ \
 # Esperado: 200 OK con perfil actualizado
 
 # 5. Validar Workspace UI
-# Abrir http://home.sintel.com/workspace/#perfil
+# Abrir http://home.sintel.net.co/workspace/#perfil
 # Ver/Editar perfil
 # Verificar en Network tab que solo se usa /api/v1/core/mi-perfil/
 ```

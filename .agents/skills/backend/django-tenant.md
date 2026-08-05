@@ -83,6 +83,32 @@ docker compose exec web python manage.py migrate_schemas
 docker compose exec web python manage.py migrate_schemas --shared
 ```
 
+### PROHIBIDO: usar el nombre de carpeta en `dependencies` cuando el app tiene `label` propio
+
+`AppConfig.label` (no el nombre de la carpeta bajo `apps/tenant/`) es el namespace real que Django
+usa para resolver `dependencies = [('<app_label>', '000N_...')]` entre migraciones. Escribir a mano
+`dependencies` con el nombre de carpeta cuando la app sobre-escribe su `label` rompe
+`migrate_schemas` con `NodeNotFoundError` y bloquea el arranque de **todo** el proyecto, no solo
+esa app (incidente real: `apps/tenant/proyectos/migrations/0020...py` tenia
+`('proyectos', '0019_proyecto_sede')` en vez de `('tenant_proyectos', ...)` — ver
+`apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` FIX v3.10.5).
+
+**Antes de escribir `dependencies` a mano, verificar:**
+```bash
+grep -n "label" apps/tenant/<app>/apps.py
+```
+
+Apps que SI sobre-escriben `label` (usar `tenant_<nombre>` en `dependencies`, NO el nombre de
+carpeta): `clientes`, `compras`, `core`, `cotizaciones`, `empleados`, `gastos`, `inventario`,
+`proveedores`, `proyectos`, `ventas`.
+
+Apps que usan el default de Django (el nombre de carpeta SI es el `app_label` correcto):
+`bancos`, `contabilidad`, `dashboard`, `empresa`, `facturas`, `landing`, `perfil`.
+
+**Mejor practica:** dejar que `makemigrations` genere `dependencies` automaticamente — Django
+siempre resuelve el `app_label` correcto por si mismo. Este bug solo aparece cuando se edita o
+crea `dependencies` a mano.
+
 ## Bridge a Esquema Público
 
 ```python

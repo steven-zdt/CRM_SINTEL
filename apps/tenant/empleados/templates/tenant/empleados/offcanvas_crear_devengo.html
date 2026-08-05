@@ -15,8 +15,8 @@
 
     <form id="form-devengo" method="POST" onsubmit="return false;">
       {% csrf_token %}
-      <input type="hidden" id="devengo-empleado-id"  name="empleado">
-      <input type="hidden" id="devengo-contrato-id"  name="contrato">
+      <input type="hidden" id="devengo-empleado-id"  name="empleado"{% if empleado %} value="{{ empleado.id }}"{% endif %}>
+      <input type="hidden" id="devengo-contrato-id"  name="contrato"{% if contrato %} value="{{ contrato.id }}"{% endif %}>
       <input type="hidden" id="devengo-periodo_mes"  name="periodo_mes">
 
       {# ── 1. Período y Empleado ─────────────────────────────────────────────── #}
@@ -44,8 +44,8 @@
         {# Estado reactivo dias — poblado por JS #}
         <div id="wrapper-dias-estado" class="mb-3"></div>
 
-        {# Selector de empleado — habilitado tras ingresar período válido #}
-        <div class="row g-3">
+        {# Selector de empleado — habilitado tras ingresar período válido (o preseleccionado) #}
+        <div class="row g-3 mb-3">
           <div class="col-md-8">
             <label for="devengo-select-empleado" class="form-label fw-bold text-danger">Empleado *</label>
             <select id="devengo-select-empleado" class="form-select" disabled>
@@ -54,32 +54,38 @@
           </div>
         </div>
 
-        {# Panel informativo del empleado — aparece al seleccionar (JS lo puebla) #}
-        <div id="panel-info-empleado" class="d-none mt-3 p-3 bg-light rounded-2 border">
+        {# Contenedor donde se inyecta el label de preselección (JS) #}
+        <div id="empleado-preseleccionado-label" class="mb-3"></div>
+
+        {# Panel informativo del empleado — aparece al seleccionar o al preseleccionar (JS lo puebla) #}
+        <div id="panel-info-empleado" class="d-none mt-3 p-3 bg-success-subtle rounded-2 border border-success-subtle">
+          <div class="small mb-2 fw-semibold text-success">
+            <i class="bi bi-check-circle-fill me-1"></i>Información del Empleado
+          </div>
           <div class="row g-2 small">
-            <div class="col-md-4">
+            <div class="col-md-6">
               <span class="text-muted">Documento:</span>
-              <span id="info-numero-documento" class="fw-semibold ms-1">—</span>
+              <span id="info-numero-documento" class="fw-semibold ms-1 d-block">—</span>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <span class="text-muted">EPS:</span>
-              <span id="info-eps" class="fw-semibold ms-1">—</span>
+              <span id="info-eps" class="fw-semibold ms-1 d-block">—</span>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <span class="text-muted">AFP:</span>
-              <span id="info-afp" class="fw-semibold ms-1">—</span>
+              <span id="info-afp" class="fw-semibold ms-1 d-block">—</span>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <span class="text-muted">ARL:</span>
-              <span id="info-arl" class="fw-semibold ms-1">—</span>
+              <span id="info-arl" class="fw-semibold ms-1 d-block">—</span>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <span class="text-muted">Cargo:</span>
-              <span id="info-cargo" class="fw-semibold ms-1">—</span>
+              <span id="info-cargo" class="fw-semibold ms-1 d-block">—</span>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <span class="text-muted">Tipo contrato:</span>
-              <span id="info-tipo-contrato" class="fw-semibold ms-1">—</span>
+              <span id="info-tipo-contrato" class="fw-semibold ms-1 d-block">—</span>
             </div>
           </div>
         </div>
@@ -219,7 +225,7 @@
       <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Cancelar</button>
       <button type="button" class="btn btn-primary" id="btn-guardar-devengo"
               hx-post="/api/v1/empleados/devengos/"
-              hx-target="#grid-empleados"
+              hx-target="#empleados-panel"
               hx-swap="none"
               hx-include="#form-devengo"
               hx-on::htmx:before-request="

@@ -523,9 +523,9 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
         WARNING: v2.95: Sobrescribir create para manejar errores y validaciones.
         """
         try:
-            # WARNING: DEBUG: Log de datos recibidos
-            logger.info(f"[ContratoViewSet] Datos recibidos en create: {request.data}")
-            logger.info(f"[ContratoViewSet] Tipo de datos: {type(request.data)}")
+            # WARNING: [SEC-M6] Solo nombres de campo y tipo, no valores (salario y
+            # demas datos del contrato son sensibles/PII).
+            logger.info(f"[ContratoViewSet] Campos recibidos en create: {list(request.data.keys()) if hasattr(request.data, 'keys') else type(request.data).__name__}")
             
             # Validar que el campo empleado este presente
             if 'empleado' not in request.data:
@@ -1000,9 +1000,9 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         Si existe una nomina para el mismo empleado y periodo, retorna error 409 Conflict.
         """
         try:
-            # WARNING: DEBUG: Log de datos recibidos
-            logger.info(f"[DevengoViewSet] Datos recibidos en create: {request.data}")
-            logger.info(f"[DevengoViewSet] Tipo de datos: {type(request.data)}")
+            # WARNING: [SEC-M6] Solo nombres de campo y tipo, no valores (montos de
+            # devengo son datos salariales/PII).
+            logger.info(f"[DevengoViewSet] Campos recibidos en create: {list(request.data.keys()) if hasattr(request.data, 'keys') else type(request.data).__name__}")
 
             duplicate_error = self.service_validar_duplicado(request.data)
             if duplicate_error:
@@ -1154,40 +1154,41 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         WARNING: v2.60: Endpoint para previsualizar calculo de nomina en tiempo real (HTMX Partial).
         Devuelve un partial HTML con los valores calculados actualizados.
         """
-        # Template para errores (opcional, si queremos mostrar error dentro del wrapper)
         ERROR_TEMPLATE = 'tenant/empleados/devengo_error_partial.html'
-        
-        # WARNING: v2.60: SSoT - Obtener empresa desde el contexto del tenant (BaseTenantViewSet)
+        PENDING_TEMPLATE = 'tenant/empleados/devengo_pending_partial.html'
+
         empresa = self.get_empresa()
-        
         if not empresa:
             return Response(
                 {"error": "No se encontro configuracion de Empresa para este tenant."},
                 status=status.HTTP_403_FORBIDDEN,
-                template_name=ERROR_TEMPLATE
+                template_name=ERROR_TEMPLATE,
             )
-        
+
         empresa_id = empresa.id
-        
+
         try:
-            # WARNING: v2.60: Extraer datos del request.POST (HTMX envia datos como form-data)
-            # Soporta tanto request.data (DRF) como request.POST (HTMX form-data)
-            contrato_id = request.data.get('contrato') or request.POST.get('contrato')
+            contrato_id    = request.data.get('contrato')     or request.POST.get('contrato')
             dias_laborados = request.data.get('dias_laborados') or request.POST.get('dias_laborados')
-            periodo_mes = request.data.get('periodo_mes') or request.POST.get('periodo_mes')
-            fecha_pago = request.data.get('fecha_pago') or request.POST.get('fecha_pago')
+            periodo_mes    = request.data.get('periodo_mes')  or request.POST.get('periodo_mes')
+            fecha_pago     = request.data.get('fecha_pago')   or request.POST.get('fecha_pago')
             horas_trabajadas = request.data.get('horas_trabajadas') or request.POST.get('horas_trabajadas')
-            
-            # WARNING: v2.60: Validar datos requeridos
+
+            # Estado transiente normal del formulario reactivo HTMX:
+            # el contrato se carga async; si aún no llegó, devolvemos placeholder 200.
             if not contrato_id:
-                return Response({
-                    "error": "El campo 'contrato' es obligatorio. Asegurese de que el empleado tenga un contrato activo."
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
+                return Response(
+                    {"mensaje": "Seleccione un empleado para calcular el neto a pagar."},
+                    status=status.HTTP_200_OK,
+                    template_name=PENDING_TEMPLATE,
+                )
+
             if not dias_laborados:
-                return Response({
-                    "error": "El campo 'dias_laborados' es obligatorio."
-                }, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"mensaje": "Ingrese los dias laborados para previsualizar el calculo."},
+                    status=status.HTTP_200_OK,
+                    template_name=PENDING_TEMPLATE,
+                )
             
             # WARNING: v2.60: Zero Trust - Obtener contrato ACTIVO validando empresa_id
             try:
@@ -1196,22 +1197,21 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                     raise Contrato.DoesNotExist
             except Contrato.DoesNotExist:
                 return Response({
-                    "error": "Contrato no encontrado o no esta activo. Verifique que el contrato pertenezca a este tenant y este en estado ACTIVO."
-                }, status=status.HTTP_404_NOT_FOUND)
-            
+                    "error": "Contrato no encontrado o no esta activo."
+                }, status=status.HTTP_404_NOT_FOUND, template_name=ERROR_TEMPLATE)
+
             # WARNING: v2.60: Validar dias laborados (permite decimales 0.5-30)
             try:
                 dias_laborados = Decimal(str(dias_laborados))
             except (ValueError, InvalidOperation):
                 return Response({
-                    "error": "Los dias laborados deben ser un numero valido"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Sin limite superior: v4.0 elimino el tope de 30 dias (rige solapamiento de fechas)
+                    "error": "Los dias laborados deben ser un numero valido."
+                }, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
+
             if dias_laborados < Decimal('0.5'):
                 return Response({
-                    "error": "Los dias laborados deben ser al menos 0.5"
-                }, status=status.HTTP_400_BAD_REQUEST)
+                    "error": "Los dias laborados deben ser al menos 0.5."
+                }, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
 
             # WARNING: v2.60: Validar horas trabajadas si se proporciona
             horas_trabajadas_decimal = None
@@ -1220,14 +1220,13 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
                     horas_trabajadas_decimal = Decimal(str(horas_trabajadas))
                     if horas_trabajadas_decimal < 0:
                         return Response({
-                            "error": "Las horas trabajadas no pueden ser negativas"
-                        }, status=status.HTTP_400_BAD_REQUEST)
+                            "error": "Las horas trabajadas no pueden ser negativas."
+                        }, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
                 except (ValueError, InvalidOperation):
                     return Response({
-                        "error": "Las horas trabajadas deben ser un numero valido"
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                        "error": "Las horas trabajadas deben ser un numero valido."
+                    }, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
 
-            # Obtener valores opcionales (con valores por defecto 0 para evitar None)
             # WARNING: v2.60: Normalizacion de decimales usando Decimal para precision
             try:
                 otros_devengos = Decimal(str(request.data.get('otros_devengos', 0) or request.POST.get('otros_devengos', 0) or 0))
@@ -1236,15 +1235,14 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             except (ValueError, InvalidOperation, TypeError) as e:
                 return Response({
                     "error": f"Error en formato de datos numericos: {str(e)}"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # WARNING: v2.60: Validar que el prestamo a descontar no sea mayor al disponible en el contrato
+                }, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
+
             if prestamos > 0:
                 prestamo_disponible = Decimal(str(contrato.prestamos_empresa or 0))
                 if prestamos > prestamo_disponible:
                     return Response({
-                        "error": f"El monto a descontar (${prestamos:,.2f}) no puede ser mayor al prestamo disponible en el contrato (${prestamo_disponible:,.2f})"
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                        "error": f"El monto a descontar (${prestamos:,.2f}) supera el prestamo disponible en el contrato (${prestamo_disponible:,.2f})."
+                    }, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
             
             # WARNING: v2.60: Calcular usando NominaCalculationService.calcular_liquidacion (SSoT - Normativa Colombiana)
             # WARNING: Zero Trust: Pasar empresa_id para validacion
@@ -1273,9 +1271,8 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             neto_pagar = Decimal(calculo['neto_pagar'])
             if neto_pagar < 0:
                 return Response({
-                    "error": f"El neto a pagar no puede ser negativo (${neto_pagar:,.2f}). Revise los descuentos y prestamos.",
-                    "calculo": calculo
-                }, status=status.HTTP_400_BAD_REQUEST)
+                    "error": f"El neto a pagar no puede ser negativo (${neto_pagar:,.2f}). Revise los descuentos y prestamos."
+                }, status=status.HTTP_400_BAD_REQUEST, template_name=ERROR_TEMPLATE)
             
             # Retornar partial HTML con los valores calculados
             context = {
@@ -1531,18 +1528,13 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         Retorna contrato activo + datos del empleado para el formulario unificado de nomina.
         """
         empresa = self.get_empresa()
-        empleado_id_raw = request.query_params.get('empleado')
-        if not empleado_id_raw:
+        empleado_param = request.query_params.get('empleado')
+        if not empleado_param:
             return Response({'error': 'empleado es requerido'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            eid = int(empleado_id_raw)
-        except (ValueError, TypeError):
-            return Response({'error': 'ID invalido'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
             emp = Empleado.objects.filter(
-                empresa_id=empresa.id, pk=eid, estado='ACTIVO'
+                empresa_id=empresa.id, uuid=empleado_param, estado='ACTIVO'
             ).only(
                 'id', 'uuid', 'primer_nombre', 'primer_apellido',
                 'numero_documento', 'eps', 'afp', 'arl'
@@ -1588,18 +1580,18 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             return Response({"error": "Sin tenant asignado"}, status=403)
         
         context = {'empresa_id': empresa.id}
-        empleado_id = request.query_params.get('empleado')
-        
-        if empleado_id:
-            empleado = EmpleadoSelector.get_by_id(empresa.id, empleado_id)
-            context['empleado'] = empleado
-            contrato_activo = ContratoSelector.get_activo_for_empleado(
-                empresa.id,
-                empleado.id,
-            )
-            if contrato_activo:
-                context['contrato'] = contrato_activo
-                
+        empleado_param = request.query_params.get('empleado')
+
+        if empleado_param:
+            try:
+                empleado = EmpleadoSelector.get_detail(empresa.id, empleado_param)
+                context['empleado'] = empleado
+                contrato_activo = ContratoSelector.get_activo_for_empleado(empresa.id, empleado.id)
+                if contrato_activo:
+                    context['contrato'] = contrato_activo
+            except Empleado.DoesNotExist:
+                pass
+
         # Inject defaults if present
         context['periodo_mes_default'] = request.query_params.get('periodo_mes', '')
         context['fecha_inicio_default'] = request.query_params.get('fecha_inicio', '')

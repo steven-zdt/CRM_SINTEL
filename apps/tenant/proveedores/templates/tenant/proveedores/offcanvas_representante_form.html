@@ -1,0 +1,237 @@
+{# offcanvas_representante_form.html - Crear/Editar Representante v3.17.1 #}
+
+<style>
+  #offcanvas-representante {
+    width: 560px !important;
+  }
+  #offcanvas-representante .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-representante .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+  }
+  #offcanvas-representante .form-control,
+  #offcanvas-representante .form-select {
+    font-size: 0.9rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+  }
+  #offcanvas-representante .section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+    color: #0d6efd;
+  }
+  #offcanvas-representante .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+    flex-shrink: 0;
+  }
+  #offcanvas-representante .proveedor-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 0.9rem;
+    background: #f0f7ff;
+    border: 1px solid #b8d4f5;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    color: #0a4fa8;
+    font-weight: 500;
+  }
+  #offcanvas-representante .proveedor-badge .badge-icon {
+    width: 28px;
+    height: 28px;
+    background: #0d6efd;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: white;
+    font-size: 0.75rem;
+  }
+  #offcanvas-representante .ac-proveedor-item:hover {
+    background: #f8f9fa;
+  }
+  #offcanvas-representante #proveedor-ac-dd {
+    z-index: 1055;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end d-flex flex-column" tabindex="-1"
+     id="offcanvas-representante" aria-labelledby="offcanvas-representante-label">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-representante-label">
+      <i class="bi bi-person-check text-primary me-2"></i>
+      <span id="offcanvas-titulo-accion">Nuevo Representante</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body flex-grow-1 overflow-y-auto">
+    <form id="form-representante" class="needs-validation" novalidate>
+      {% csrf_token %}
+
+      {# ── SECCIÓN: PROVEEDOR ──────────────────────────────────────── #}
+      <div class="section-title">
+        <i class="bi bi-truck me-1"></i>Proveedor
+      </div>
+
+      {# Modo Directorio: autocomplete de proveedor (v3.17.2) #}
+      <div id="proveedor-selector-container" class="mb-4 d-none">
+        <label class="form-label">
+          Proveedor <span class="text-danger">*</span>
+        </label>
+
+        {# Campo de busqueda autocomplete #}
+        <div id="aw-proveedor" class="position-relative">
+          <div class="input-group">
+            <span class="input-group-text bg-light border-end-0">
+              <i class="bi bi-search text-muted" style="font-size:.85rem;"></i>
+            </span>
+            <input type="text" class="form-control border-start-0" id="proveedor-ac-input"
+                   placeholder="Buscar por razón social o NIT..." autocomplete="off" />
+          </div>
+          <div id="proveedor-ac-dd"
+               class="position-absolute w-100 bg-white border border-top-0 rounded-bottom shadow-sm"
+               style="display:none; top:100%;"></div>
+        </div>
+
+        {# Chip del proveedor seleccionado #}
+        <div id="proveedor-chip" class="d-none mt-2 proveedor-badge">
+          <div class="badge-icon"><i class="bi bi-building"></i></div>
+          <div class="flex-grow-1">
+            <div id="proveedor-chip-nombre" class="fw-semibold"></div>
+            <div id="proveedor-chip-doc" class="text-muted" style="font-size:.72rem;"></div>
+          </div>
+          <button type="button" class="btn btn-sm btn-link p-0 text-danger ms-1"
+                  id="btn-limpiar-proveedor" title="Cambiar proveedor">
+            <i class="bi bi-x-circle-fill" style="font-size:1rem;"></i>
+          </button>
+        </div>
+
+        <input type="hidden" id="proveedor-uuid-hidden" value="" />
+        <div class="form-text text-muted mt-1">
+          <i class="bi bi-info-circle me-1"></i>
+          Escriba para buscar el proveedor al que pertenece este encargado.
+        </div>
+      </div>
+
+      {# Modo Detalle Proveedor: badge con nombre del proveedor #}
+      <div id="proveedor-info-container" class="mb-4 d-none">
+        <label class="form-label">Proveedor Asociado</label>
+        <div class="proveedor-badge">
+          <div class="badge-icon">
+            <i class="bi bi-building"></i>
+          </div>
+          <div class="flex-grow-1">
+            <div id="proveedor-nombre-display" class="fw-semibold">—</div>
+            <div class="text-muted" style="font-size:0.75rem;">Representante de este proveedor</div>
+          </div>
+          <i class="bi bi-check-circle-fill text-success"></i>
+        </div>
+      </div>
+
+      {# ── SECCIÓN: IDENTIFICACIÓN ─────────────────────────────────── #}
+      <div class="section-title">
+        <i class="bi bi-person-vcard me-1"></i>Identificación del Encargado
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-5">
+          <label for="tipo_documento" class="form-label">
+            Tipo Doc. <span class="text-danger">*</span>
+          </label>
+          <select class="form-select" id="tipo_documento" name="tipo_documento" required>
+            <option value="">-- Tipo --</option>
+            <option value="CC">Cédula (CC)</option>
+            <option value="CE">Extranjería (CE)</option>
+            <option value="PA">Pasaporte (PA)</option>
+            <option value="NIT">NIT</option>
+          </select>
+          <div class="invalid-feedback">Seleccione tipo.</div>
+        </div>
+        <div class="col-7">
+          <label for="numero_documento" class="form-label">
+            Número Documento <span class="text-danger">*</span>
+          </label>
+          <input type="text" class="form-control" id="numero_documento" name="numero_documento"
+                 placeholder="Ej: 1234567890" required />
+          <div class="invalid-feedback">Ingrese el número de documento.</div>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="nombre_completo" class="form-label">
+          Nombre Completo <span class="text-danger">*</span>
+        </label>
+        <input type="text" class="form-control" id="nombre_completo" name="nombre_completo"
+               placeholder="Ej: Juan Pérez Rodríguez" required />
+        <div class="invalid-feedback">Ingrese el nombre completo.</div>
+      </div>
+
+      <div class="mb-3">
+        <label for="cargo" class="form-label">
+          Cargo / Rol <span class="text-danger">*</span>
+        </label>
+        <input type="text" class="form-control" id="cargo" name="cargo"
+               placeholder="Ej: Gerente General, Director Comercial" required />
+        <div class="invalid-feedback">Ingrese el cargo.</div>
+      </div>
+
+      {# ── SECCIÓN: CONTACTO ───────────────────────────────────────── #}
+      <div class="section-title">
+        <i class="bi bi-envelope me-1"></i>Información de Contacto
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-6">
+          <label for="email_contacto" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email_contacto" name="email_contacto"
+                 placeholder="contacto@empresa.com" />
+        </div>
+        <div class="col-6">
+          <label for="telefono_contacto" class="form-label">Teléfono</label>
+          <input type="tel" class="form-control" id="telefono_contacto" name="telefono_contacto"
+                 placeholder="+57 300 000 0000" />
+        </div>
+      </div>
+
+      {# ── PRINCIPAL ────────────────────────────────────────────────── #}
+      <div class="form-check form-switch mt-3 p-3 bg-light rounded-3 border">
+        <input class="form-check-input" type="checkbox" role="switch"
+               id="es_principal" name="es_principal" value="true" />
+        <label class="form-check-label fw-semibold" for="es_principal">
+          <i class="bi bi-star-fill text-warning me-1"></i>
+          Encargado Principal
+        </label>
+        <div class="form-text text-muted">
+          Persona de contacto oficial para notificaciones y correspondencia con este proveedor.
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <div class="offcanvas-footer d-flex gap-2">
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="offcanvas">
+      <i class="bi bi-x-circle me-1"></i>Cancelar
+    </button>
+    <button type="button" class="btn btn-sm btn-primary ms-auto" id="btn-guardar-representante">
+      <i class="bi bi-check-circle me-1"></i>Guardar Encargado
+    </button>
+  </div>
+
+</div>

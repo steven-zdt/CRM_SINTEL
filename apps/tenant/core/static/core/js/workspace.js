@@ -44,6 +44,8 @@
             'clientes': '👤 Clientes',
             'cotizaciones': '📝 Cotizaciones',
             'proyectos': '📋 Proyectos',
+            'ventas': 'Ventas',
+            'compras': 'Compras',
             'perfil': '👤 Perfil',
             'mailinbox': '📧 Correo Entrante'
           };

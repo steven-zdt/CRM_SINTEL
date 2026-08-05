@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """
-Script de verificación para acceso al dominio público (sintel.com).
+Script de verificación para acceso al dominio público (sintel.net.co).
 
 Verifica:
 1. Tenant público existe
-2. Dominio sintel.com está registrado
-3. ALLOWED_HOSTS incluye sintel.com
+2. Dominio sintel.net.co está registrado
+3. ALLOWED_HOSTS incluye sintel.net.co
 4. URLs públicas están configuradas
 5. Middlewares están en orden correcto
 
@@ -45,33 +45,33 @@ def check_public_tenant():
 
 
 def check_public_domain(public):
-    """Verifica que el dominio sintel.com está registrado."""
-    print("\n🔍 Verificando dominio sintel.com...")
+    """Verifica que el dominio sintel.net.co está registrado."""
+    print("\n🔍 Verificando dominio sintel.net.co...")
     try:
-        domain = Domain.objects.get(domain='sintel.com', tenant=public)
-        print(f"  [OK] Dominio 'sintel.com' encontrado:")
+        domain = Domain.objects.get(domain='sintel.net.co', tenant=public)
+        print(f"  [OK] Dominio 'sintel.net.co' encontrado:")
         print(f"     - Tenant: {domain.tenant.nombre}")
         print(f"     - Primary: {domain.is_primary}")
         return domain
     except Domain.DoesNotExist:
-        print("  [ERROR] ERROR: Dominio 'sintel.com' no encontrado para el tenant público")
+        print("  [ERROR] ERROR: Dominio 'sintel.net.co' no encontrado para el tenant público")
         print("     Ejecuta: python scripts/add_sintel_domain.py")
         return None
 
 
 def check_allowed_hosts():
-    """Verifica que ALLOWED_HOSTS incluye sintel.com."""
+    """Verifica que ALLOWED_HOSTS incluye sintel.net.co."""
     print("\n🔍 Verificando ALLOWED_HOSTS...")
     allowed_hosts = settings.ALLOWED_HOSTS
-    has_sintel = 'sintel.com' in allowed_hosts or '.sintel.com' in allowed_hosts
+    has_sintel = 'sintel.net.co' in allowed_hosts or '.sintel.net.co' in allowed_hosts
     
     if has_sintel:
-        print(f"  [OK] ALLOWED_HOSTS incluye sintel.com")
+        print(f"  [OK] ALLOWED_HOSTS incluye sintel.net.co")
         print(f"     ALLOWED_HOSTS: {allowed_hosts}")
     else:
-        print(f"  [ERROR] ERROR: ALLOWED_HOSTS no incluye sintel.com")
+        print(f"  [ERROR] ERROR: ALLOWED_HOSTS no incluye sintel.net.co")
         print(f"     ALLOWED_HOSTS actual: {allowed_hosts}")
-        print("     Añade 'sintel.com' y '.sintel.com' a ALLOWED_HOSTS en config/settings.py")
+        print("     Añade 'sintel.net.co' y '.sintel.net.co' a ALLOWED_HOSTS en config/settings.py")
     
     return has_sintel
 
@@ -124,7 +124,7 @@ def check_middleware_order():
 def main():
     """Ejecuta todas las verificaciones."""
     print("=" * 60)
-    print("🔍 VERIFICACIÓN DE ACCESO AL DOMINIO PÚBLICO (sintel.com)")
+    print("🔍 VERIFICACIÓN DE ACCESO AL DOMINIO PÚBLICO (sintel.net.co)")
     print("=" * 60)
     
     # 1. Verificar tenant público
@@ -132,7 +132,7 @@ def main():
     if not public:
         return 1
     
-    # 2. Verificar dominio sintel.com
+    # 2. Verificar dominio sintel.net.co
     domain = check_public_domain(public)
     if not domain:
         return 1
@@ -156,9 +156,9 @@ def main():
     if all_ok:
         print("[OK] Todas las verificaciones pasaron correctamente")
         print("\n[IDEA] Si aún tienes problemas de acceso:")
-        print("   1. Verifica que sintel.com apunta a tu servidor (DNS o /etc/hosts)")
-        print("   2. Inicia sesión como usuario staff en http://sintel.com/admin/")
-        print("   3. Accede a http://sintel.com/console/tenants/")
+        print("   1. Verifica que sintel.net.co apunta a tu servidor (DNS o /etc/hosts)")
+        print("   2. Inicia sesión como usuario staff en http://sintel.net.co/admin/")
+        print("   3. Accede a http://sintel.net.co/console/tenants/")
         print("   4. Verifica que las migraciones del esquema public están aplicadas:")
         print("      python manage.py migrate_schemas --shared")
         return 0

@@ -24,7 +24,7 @@ from django_tenants.utils import schema_context
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def make_host(tenant):
-    return f"{tenant.schema_name}.sintel.com"
+    return f"{tenant.schema_name}.sintel.net.co"
 
 
 EMPLEADO_PAYLOAD = {

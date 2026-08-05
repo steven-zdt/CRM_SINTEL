@@ -279,7 +279,7 @@ login_url = f"{protocol}://{login_domain}/"
 
 **Resultado:**
 - Desarrollo: `http://acme.localhost:8000/`
-- Producción: `https://acme.sintel.com/`
+- Producción: `https://acme.sintel.net.co/`
 
 ---
 
@@ -397,7 +397,7 @@ http://{schema_name}.{TENANT_DOMAIN_BASE}:{PORT}/
 
 **Ejemplo:**
 - Desarrollo: `http://acme.localhost:8000/`
-- Producción: `https://acme.sintel.com/`
+- Producción: `https://acme.sintel.net.co/`
 
 ### Flujo de Acceso
 

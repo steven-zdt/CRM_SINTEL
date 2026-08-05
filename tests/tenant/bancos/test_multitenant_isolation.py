@@ -1,12 +1,14 @@
 from django.urls import reverse
+from django_tenants.utils import schema_context
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from django_tenants.utils import schema_context
-from tests.tenant.base_test import SintelTenantTestCase
-from apps.tenant.empresa.models import Empresa
-from apps.tenant.perfil.models import TenantProfile
+
 from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario
 from apps.tenant.bancos.services.selectors import CuentaBancariaSelector
+from apps.tenant.empresa.models import Empresa
+from apps.tenant.perfil.models import TenantProfile
+from tests.tenant.base_test import SintelTenantTestCase
+
 
 class TestBancosMultitenantIsolation(SintelTenantTestCase):
     """
@@ -27,7 +29,7 @@ class TestBancosMultitenantIsolation(SintelTenantTestCase):
             regimen_tributario="Responsable de IVA",
             moneda="COP",
         )
-        
+
         # Link user profile to Empresa A
         self.profile = TenantProfile.objects.create(
             user=self.user,
@@ -45,20 +47,24 @@ class TestBancosMultitenantIsolation(SintelTenantTestCase):
 
         # Create Tenant B and its objects in its own schema
         from django.db import connection
-        from apps.public.tenants.models import Client as TenantClient, Domain
-        
+
+        from apps.public.tenants.models import Client as TenantClient
+        from apps.public.tenants.models import Domain
+
         # Save current schema to restore it later
         original_schema = connection.schema_name
         connection.set_schema_to_public()
-        
+
         self.tenant_b = TenantClient.objects.create(
             schema_name="test_tenant_b_bancos",
             nombre="Test Tenant B Bancos",
             is_active=True,
-            on_trial=True
+            on_trial=True,
         )
-        Domain.objects.create(domain="tenant-b-bancos.localhost", tenant=self.tenant_b, is_primary=True)
-        
+        Domain.objects.create(
+            domain="tenant-b-bancos.localhost", tenant=self.tenant_b, is_primary=True
+        )
+
         # Restore the original schema context
         connection.set_schema(original_schema)
 
@@ -98,7 +104,7 @@ class TestBancosMultitenantIsolation(SintelTenantTestCase):
         Assert that creating a statement for Company A referencing Company B's account is rejected.
         """
         list_url = reverse("bancos-extractos-list")
-        
+
         # Payload attempts to create an extracto for Company A but pointing to self.cuenta_b_uuid (Company B)
         data = {
             "cuenta": str(self.cuenta_b_uuid),
@@ -107,13 +113,17 @@ class TestBancosMultitenantIsolation(SintelTenantTestCase):
             "saldo_inicial": "1000.00",
             "saldo_final": "2000.00",
         }
-        
+
         response = self.api_client.post(list_url, data, format="json")
-        
+
         # It must be rejected with 400 Bad Request, 404 Not Found, or 422 Unprocessable Entity
         self.assertIn(
             response.status_code,
-            [status.HTTP_400_BAD_REQUEST, status.HTTP_404_NOT_FOUND, status.HTTP_422_UNPROCESSABLE_ENTITY]
+            [
+                status.HTTP_400_BAD_REQUEST,
+                status.HTTP_404_NOT_FOUND,
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+            ],
         )
 
     def test_level_3_cross_talk_prevention(self):
@@ -121,8 +131,10 @@ class TestBancosMultitenantIsolation(SintelTenantTestCase):
         Level 3: Cross-talk prevention.
         Assert that details of Company B's account cannot be retrieved or deleted by Company A's user.
         """
-        detail_url = reverse("bancos-cuentas-detail", kwargs={"uuid": str(self.cuenta_b_uuid)})
-        
+        detail_url = reverse(
+            "bancos-cuentas-detail", kwargs={"uuid": str(self.cuenta_b_uuid)}
+        )
+
         # GET request from Company A's authenticated client
         response = self.api_client.get(detail_url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

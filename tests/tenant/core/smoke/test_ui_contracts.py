@@ -5,6 +5,7 @@ Smoke tests para contratos UI (solo JSON, sin HTML).
 """
 from rest_framework import status
 from rest_framework.test import APIClient
+
 from tests.tenant.base_test import SintelTenantTestCase
 
 
@@ -16,8 +17,8 @@ class TestUIContracts(SintelTenantTestCase):
 import pytest
 
 try:
-    import playwright  # noqa: F401
     import cryptography  # noqa: F401
+    import playwright  # noqa: F401
 except Exception:
     pytest.skip("Skipping heavy smoke test: missing playwright/cryptography", allow_module_level=True)
         endpoints = [

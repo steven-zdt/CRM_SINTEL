@@ -231,6 +231,12 @@
    * Inicialización
    */
   function init() {
+    // Guard: attachEditorListeners() registra listeners delegados en `document`
+    // — sin este guard, cada recarga HTMX del modulo "periodo" vuelve a ejecutar
+    // este script y duplica los listeners globales (FE-A1/A2).
+    if (d.body.dataset.periodoEditorInitialized) return;
+    d.body.dataset.periodoEditorInitialized = 'true';
+
     attachEditorListeners();
   }
 

@@ -44,13 +44,13 @@ python scripts/setup_public_domain.py
    - Nombre: "SINTEL Public"
 
 2. **Crea/Verifica dominios**:
-   - `sintel.com` (dominio principal, `is_primary=True`)
+   - `sintel.net.co` (dominio principal, `is_primary=True`)
    - `localhost` (desarrollo)
    - `127.0.0.1` (desarrollo)
    - `0.0.0.0` (desarrollo)
 
 3. **Establece dominio primario**:
-   - Si no existe un dominio primario, establece `sintel.com` como primario.
+   - Si no existe un dominio primario, establece `sintel.net.co` como primario.
 
 ## ✅ Verificación
 
@@ -58,7 +58,7 @@ Después de ejecutar el script, deberías ver:
 
 ```
 ✅ Tenant público 'public' creado exitosamente (ID: X)
-✅ Dominio 'sintel.com' creado exitosamente (ID: Y, Primary: True)
+✅ Dominio 'sintel.net.co' creado exitosamente (ID: Y, Primary: True)
 ✅ Dominio 'localhost' creado exitosamente (ID: Z, Primary: False)
 ...
 ```

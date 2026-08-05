@@ -19,7 +19,7 @@ upstream django_app {
 server {
     listen 80;
     listen [::]:80;
-    server_name sintel.com *.sintel.com;
+    server_name sintel.net.co *.sintel.net.co;
 
     # Redirigir todo a HTTPS
     return 301 https://$host$request_uri;
@@ -29,7 +29,7 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name sintel.com *.sintel.com;
+    server_name sintel.net.co *.sintel.net.co;
 
     # Certificados TLS (ajustar rutas según tu configuración)
     ssl_certificate     /etc/ssl/sintel/fullchain.pem;

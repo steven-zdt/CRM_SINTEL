@@ -6,7 +6,7 @@ WARNING: v2.30: API-First - Este comando facilita pruebas del flujo de activaci√
 Uso:
     python manage.py owner_activation_reset_and_token \
         --email owner@<dominio> \
-        --tenant-domain <schema>.sintel.com \
+        --tenant-domain <schema>.sintel.net.co \
         --ttl-minutes 60
 
 O por schema:
@@ -32,7 +32,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--email", type=str, required=True, help="Email del owner a resetear")
         parser.add_argument(
-            "--tenant-domain", type=str, help="FQDN del tenant (ej: {schema}.sintel.com)"
+            "--tenant-domain", type=str, help="FQDN del tenant (ej: {schema}.sintel.net.co)"
         )
         parser.add_argument("--schema", type=str, help="schema_name del tenant (ej: {schema_name})")
         parser.add_argument(

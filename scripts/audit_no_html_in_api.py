@@ -43,7 +43,7 @@ def check_endpoint(client, endpoint, tenant_domain):
     Args:
         client: Django test client
         endpoint: Ruta del endpoint (ej: '/api/v1/empresas/')
-        tenant_domain: Dominio del tenant (ej: 'cliente.sintel.com')
+        tenant_domain: Dominio del tenant (ej: 'cliente.sintel.net.co')
     
     Returns:
         tuple: (success: bool, message: str)
@@ -110,7 +110,7 @@ def run_audit():
                     nombre='Tenant de Prueba'
                 )
                 Domain.objects.create(
-                    domain='test.sintel.com',
+                    domain='test.sintel.net.co',
                     tenant=tenant,
                     is_primary=True
                 )

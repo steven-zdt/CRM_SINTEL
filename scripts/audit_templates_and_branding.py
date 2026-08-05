@@ -16,7 +16,7 @@ from typing import List, Dict, Tuple
 # Configuración
 BASE_DIR = Path(__file__).resolve().parent.parent
 TENANT_APPS_DIR = BASE_DIR / "apps" / "tenant"
-BRANDING_HARDCODES = ["SINTEL", "ACME", "Mi Empresa", "sintel.com"]
+BRANDING_HARDCODES = ["SINTEL", "ACME", "Mi Empresa", "sintel.net.co"]
 ALLOWED_EXTENSIONS = [".html", ".py", ".js", ".css"]
 EXCLUDE_PATTERNS = [
     "**/tests/**",

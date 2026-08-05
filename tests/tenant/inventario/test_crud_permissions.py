@@ -18,20 +18,24 @@ CORRECCIONES v3.5:
 - lookup_field compatible con ViewSet (usa kwargs['pk'])
 - MovimientoInventario: crear() via Service Layer (perform_create delega)
 """
+
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import connection
+from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_context
 from rest_framework import status
 from rest_framework.test import APIClient
-from django.urls import reverse
 
-from tests.tenant.base_test import SintelTenantTestCase
-from apps.tenant.inventario.models import (
-    ActivoFijo, CategoriaItem, MovimientoInventario, Producto
-)
 from apps.tenant.empresa.models import Empresa
+from apps.tenant.inventario.models import (
+    ActivoFijo,
+    CategoriaItem,
+    MovimientoInventario,
+    Producto,
+)
+from tests.tenant.base_test import SintelTenantTestCase
 
 User = get_user_model()
 
@@ -48,7 +52,7 @@ class InventarioPermissionsMixin:
     Esta diferencia de esquema requiere manejo explicito de schema_context.
     """
 
-    def _create_user_in_public(self, username, email, password='testpass123'):
+    def _create_user_in_public(self, username, email, password="testpass123"):
         """Crea un User en el esquema public."""
         public_schema = get_public_schema_name()
         with schema_context(public_schema):
@@ -68,6 +72,7 @@ class InventarioPermissionsMixin:
         esquema del tenant (lo maneja TenantTestCase automaticamente).
         """
         from apps.tenant.perfil.models import TenantProfile
+
         profile = TenantProfile.objects.create(
             user=user,
             empresa=empresa,
@@ -105,40 +110,41 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
             nit="900123456",
             direccion="Calle Test 123",
             telefono="1234567",
-            singleton_key=1
+            singleton_key=1,
         )
 
         # Crear usuarios en esquema public
         self.admin_user = self._create_user_in_public(
-            username="admin_inv@test.com",
-            email="admin_inv@test.com"
+            username="admin_inv@test.com", email="admin_inv@test.com"
         )
         self.operador_user = self._create_user_in_public(
-            username="operador_inv@test.com",
-            email="operador_inv@test.com"
+            username="operador_inv@test.com", email="operador_inv@test.com"
         )
         self.visor_user = self._create_user_in_public(
-            username="visor_inv@test.com",
-            email="visor_inv@test.com"
+            username="visor_inv@test.com", email="visor_inv@test.com"
         )
 
         # Crear TenantProfile en el esquema del tenant (conexion ya en tenant)
-        self._create_tenant_profile(self.admin_user, self.empresa, 'ADMIN')
-        self._create_tenant_profile(self.operador_user, self.empresa, 'OPERADOR')
-        self._create_tenant_profile(self.visor_user, self.empresa, 'VISOR')
+        self._create_tenant_profile(self.admin_user, self.empresa, "ADMIN")
+        self._create_tenant_profile(self.operador_user, self.empresa, "OPERADOR")
+        self._create_tenant_profile(self.visor_user, self.empresa, "VISOR")
 
         # Crear membresías en esquema public
         public_schema = get_public_schema_name()
         with schema_context(public_schema):
             from apps.public.tenants.models import TenantMembership
+
             TenantMembership.objects.create(
-                client=self.tenant, user=self.admin_user, rol='ADMIN', is_active=True
+                client=self.tenant, user=self.admin_user, rol="ADMIN", is_active=True
             )
             TenantMembership.objects.create(
-                client=self.tenant, user=self.operador_user, rol='OPERADOR', is_active=True
+                client=self.tenant,
+                user=self.operador_user,
+                rol="OPERADOR",
+                is_active=True,
             )
             TenantMembership.objects.create(
-                client=self.tenant, user=self.visor_user, rol='VISOR', is_active=True
+                client=self.tenant, user=self.visor_user, rol="VISOR", is_active=True
             )
 
         # Clientes API para cada rol
@@ -151,35 +157,56 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
 
     def test_admin_can_create(self):
         """ADMIN puede crear categorias (201 Created)."""
-        url = reverse('inv-categorias-list')
-        response = self.admin_client.post(url, {
-            'nombre': 'Categoria ADMIN Test',
-            'aplicacion': 'PRODUCTO',
-            'activo': True
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED,
-                         f"Esperado 201, obtenido {response.status_code}: {response.data}")
-        self.assertEqual(response.data.get('nombre'), 'Categoria ADMIN Test')
+        url = reverse("inv-categorias-list")
+        response = self.admin_client.post(
+            url,
+            {
+                "nombre": "Categoria ADMIN Test",
+                "aplicacion": "PRODUCTO",
+                "activo": True,
+            },
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+            f"Esperado 201, obtenido {response.status_code}: {response.data}",
+        )
+        self.assertEqual(response.data.get("nombre"), "Categoria ADMIN Test")
 
     def test_operador_cannot_create(self):
         """OPERADOR NO puede crear categorias (405)."""
-        url = reverse('inv-categorias-list')
-        response = self.operador_client.post(url, {
-            'nombre': 'Categoria OPERADOR Test',
-            'aplicacion': 'PRODUCTO',
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED,
-                         f"Esperado 405, obtenido {response.status_code}: {response.data}")
+        url = reverse("inv-categorias-list")
+        response = self.operador_client.post(
+            url,
+            {
+                "nombre": "Categoria OPERADOR Test",
+                "aplicacion": "PRODUCTO",
+            },
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+            f"Esperado 405, obtenido {response.status_code}: {response.data}",
+        )
 
     def test_visor_cannot_create(self):
         """VISOR NO puede crear categorias (405)."""
-        url = reverse('inv-categorias-list')
-        response = self.visor_client.post(url, {
-            'nombre': 'Categoria VISOR Test',
-            'aplicacion': 'PRODUCTO',
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED,
-                         f"Esperado 405, obtenido {response.status_code}: {response.data}")
+        url = reverse("inv-categorias-list")
+        response = self.visor_client.post(
+            url,
+            {
+                "nombre": "Categoria VISOR Test",
+                "aplicacion": "PRODUCTO",
+            },
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+            f"Esperado 405, obtenido {response.status_code}: {response.data}",
+        )
 
     # --- Actualizacion ---
 
@@ -187,54 +214,64 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
         """ADMIN puede actualizar categorias (200 OK)."""
         item = CategoriaItem.objects.create(
             empresa=self.empresa,
-            nombre='Categoria Para Actualizar',
-            aplicacion='PRODUCTO'
+            nombre="Categoria Para Actualizar",
+            aplicacion="PRODUCTO",
         )
-        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
-        response = self.admin_client.patch(url, {
-            'nombre': 'Categoria Actualizada'
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK,
-                         f"Esperado 200, obtenido {response.status_code}: {response.data}")
-        self.assertEqual(response.data.get('nombre'), 'Categoria Actualizada')
+        url = reverse("inv-categorias-detail", kwargs={"uuid": item.uuid})
+        response = self.admin_client.patch(
+            url, {"nombre": "Categoria Actualizada"}, format="json"
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+            f"Esperado 200, obtenido {response.status_code}: {response.data}",
+        )
+        self.assertEqual(response.data.get("nombre"), "Categoria Actualizada")
 
     def test_visor_cannot_update(self):
         """VISOR NO puede actualizar categorias (405)."""
         item = CategoriaItem.objects.create(
             empresa=self.empresa,
-            nombre='Categoria Protegida Update',
-            aplicacion='PRODUCTO'
+            nombre="Categoria Protegida Update",
+            aplicacion="PRODUCTO",
         )
-        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
-        response = self.visor_client.patch(url, {'nombre': 'Modificada'}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED,
-                         f"Esperado 405, obtenido {response.status_code}: {response.data}")
+        url = reverse("inv-categorias-detail", kwargs={"uuid": item.uuid})
+        response = self.visor_client.patch(url, {"nombre": "Modificada"}, format="json")
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+            f"Esperado 405, obtenido {response.status_code}: {response.data}",
+        )
 
     # --- Eliminacion ---
 
     def test_admin_can_delete(self):
         """ADMIN puede eliminar categorias (204 No Content)."""
         item = CategoriaItem.objects.create(
-            empresa=self.empresa,
-            nombre='Categoria A Eliminar',
-            aplicacion='PRODUCTO'
+            empresa=self.empresa, nombre="Categoria A Eliminar", aplicacion="PRODUCTO"
         )
-        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
+        url = reverse("inv-categorias-detail", kwargs={"uuid": item.uuid})
         response = self.admin_client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT,
-                         f"Esperado 204, obtenido {response.status_code}: {response.data}")
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_204_NO_CONTENT,
+            f"Esperado 204, obtenido {response.status_code}: {response.data}",
+        )
 
     def test_visor_cannot_delete(self):
         """VISOR NO puede eliminar categorias (405)."""
         item = CategoriaItem.objects.create(
             empresa=self.empresa,
-            nombre='Categoria Protegida Delete',
-            aplicacion='PRODUCTO'
+            nombre="Categoria Protegida Delete",
+            aplicacion="PRODUCTO",
         )
-        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
+        url = reverse("inv-categorias-detail", kwargs={"uuid": item.uuid})
         response = self.visor_client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED,
-                         f"Esperado 405, obtenido {response.status_code}")
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+            f"Esperado 405, obtenido {response.status_code}",
+        )
         # Verificar que no fue eliminada
         self.assertTrue(CategoriaItem.objects.filter(uuid=item.uuid).exists())
 
@@ -243,34 +280,40 @@ class TestCategoriaItemCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
     def test_all_roles_can_read_list(self):
         """Todos los roles pueden leer el listado de categorias (200)."""
         CategoriaItem.objects.create(
-            empresa=self.empresa, nombre='Cat Lectura', aplicacion='PRODUCTO'
+            empresa=self.empresa, nombre="Cat Lectura", aplicacion="PRODUCTO"
         )
-        url = reverse('inv-categorias-list')
+        url = reverse("inv-categorias-list")
         for label, client in [
-            ('ADMIN', self.admin_client),
-            ('OPERADOR', self.operador_client),
-            ('VISOR', self.visor_client),
+            ("ADMIN", self.admin_client),
+            ("OPERADOR", self.operador_client),
+            ("VISOR", self.visor_client),
         ]:
             with self.subTest(rol=label):
                 response = client.get(url)
-                self.assertEqual(response.status_code, status.HTTP_200_OK,
-                                 f"[{label}] Esperado 200, obtenido {response.status_code}")
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_200_OK,
+                    f"[{label}] Esperado 200, obtenido {response.status_code}",
+                )
 
     def test_all_roles_can_read_detail(self):
         """Todos los roles pueden leer el detalle de una categoria (200)."""
         item = CategoriaItem.objects.create(
-            empresa=self.empresa, nombre='Cat Detalle', aplicacion='PRODUCTO'
+            empresa=self.empresa, nombre="Cat Detalle", aplicacion="PRODUCTO"
         )
-        url = reverse('inv-categorias-detail', kwargs={'uuid': item.uuid})
+        url = reverse("inv-categorias-detail", kwargs={"uuid": item.uuid})
         for label, client in [
-            ('ADMIN', self.admin_client),
-            ('OPERADOR', self.operador_client),
-            ('VISOR', self.visor_client),
+            ("ADMIN", self.admin_client),
+            ("OPERADOR", self.operador_client),
+            ("VISOR", self.visor_client),
         ]:
             with self.subTest(rol=label):
                 response = client.get(url)
-                self.assertEqual(response.status_code, status.HTTP_200_OK,
-                                 f"[{label}] Esperado 200, obtenido {response.status_code}")
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_200_OK,
+                    f"[{label}] Esperado 200, obtenido {response.status_code}",
+                )
 
 
 # ==============================================================================
@@ -292,29 +335,28 @@ class TestActivoFijoCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
             nit="900123457",
             direccion="Calle Test 456",
             telefono="7654321",
-            singleton_key=1
+            singleton_key=1,
         )
 
         self.admin_user = self._create_user_in_public(
-            username="admin_activos@test.com",
-            email="admin_activos@test.com"
+            username="admin_activos@test.com", email="admin_activos@test.com"
         )
         self.visor_user = self._create_user_in_public(
-            username="visor_activos@test.com",
-            email="visor_activos@test.com"
+            username="visor_activos@test.com", email="visor_activos@test.com"
         )
 
-        self._create_tenant_profile(self.admin_user, self.empresa, 'ADMIN')
-        self._create_tenant_profile(self.visor_user, self.empresa, 'VISOR')
+        self._create_tenant_profile(self.admin_user, self.empresa, "ADMIN")
+        self._create_tenant_profile(self.visor_user, self.empresa, "VISOR")
 
         public_schema = get_public_schema_name()
         with schema_context(public_schema):
             from apps.public.tenants.models import TenantMembership
+
             TenantMembership.objects.create(
-                client=self.tenant, user=self.admin_user, rol='ADMIN', is_active=True
+                client=self.tenant, user=self.admin_user, rol="ADMIN", is_active=True
             )
             TenantMembership.objects.create(
-                client=self.tenant, user=self.visor_user, rol='VISOR', is_active=True
+                client=self.tenant, user=self.visor_user, rol="VISOR", is_active=True
             )
 
         domain = self.domain.domain
@@ -323,42 +365,62 @@ class TestActivoFijoCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
 
     def test_admin_can_create_activo(self):
         """ADMIN puede crear activos fijos (201 Created)."""
-        url = reverse('inv-activos-list')
-        response = self.admin_client.post(url, {
-            'codigo': 'ACT-001',
-            'nombre': 'Laptop Dell Latitude',
-            'costo_adquisicion': '3500000.00',
-            'estado': 'ACTIVO',
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED,
-                         f"Esperado 201, obtenido {response.status_code}: {response.data}")
-        self.assertEqual(response.data.get('codigo'), 'ACT-001')
+        url = reverse("inv-activos-list")
+        response = self.admin_client.post(
+            url,
+            {
+                "codigo": "ACT-001",
+                "nombre": "Laptop Dell Latitude",
+                "costo_adquisicion": "3500000.00",
+                "estado": "ACTIVO",
+            },
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+            f"Esperado 201, obtenido {response.status_code}: {response.data}",
+        )
+        self.assertEqual(response.data.get("codigo"), "ACT-001")
 
     def test_visor_cannot_create_activo(self):
         """VISOR NO puede crear activos fijos (405)."""
-        url = reverse('inv-activos-list')
-        response = self.visor_client.post(url, {
-            'codigo': 'ACT-002',
-            'nombre': 'Laptop HP',
-            'costo_adquisicion': '2500000.00',
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED,
-                         f"Esperado 405, obtenido {response.status_code}: {response.data}")
+        url = reverse("inv-activos-list")
+        response = self.visor_client.post(
+            url,
+            {
+                "codigo": "ACT-002",
+                "nombre": "Laptop HP",
+                "costo_adquisicion": "2500000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+            f"Esperado 405, obtenido {response.status_code}: {response.data}",
+        )
 
     def test_all_roles_can_read_activos(self):
         """Todos los roles pueden listar activos fijos (200)."""
         ActivoFijo.objects.create(
             empresa=self.empresa,
-            codigo='ACT-READ-001',
-            nombre='Activo Lectura',
-            costo_adquisicion=Decimal('1000.00')
+            codigo="ACT-READ-001",
+            nombre="Activo Lectura",
+            costo_adquisicion=Decimal("1000.00"),
         )
-        url = reverse('inv-activos-list')
-        for label, client in [('ADMIN', self.admin_client), ('VISOR', self.visor_client)]:
+        url = reverse("inv-activos-list")
+        for label, client in [
+            ("ADMIN", self.admin_client),
+            ("VISOR", self.visor_client),
+        ]:
             with self.subTest(rol=label):
                 response = client.get(url)
-                self.assertEqual(response.status_code, status.HTTP_200_OK,
-                                 f"[{label}] Esperado 200, obtenido {response.status_code}")
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_200_OK,
+                    f"[{label}] Esperado 200, obtenido {response.status_code}",
+                )
 
 
 # ==============================================================================
@@ -385,36 +447,33 @@ class TestMovimientoInventarioCRUD(InventarioPermissionsMixin, SintelTenantTestC
             nit="900123458",
             direccion="Calle Test 789",
             telefono="1122334",
-            singleton_key=1
+            singleton_key=1,
         )
 
         self.admin_user = self._create_user_in_public(
-            username="admin_movs@test.com",
-            email="admin_movs@test.com"
+            username="admin_movs@test.com", email="admin_movs@test.com"
         )
         self.visor_user = self._create_user_in_public(
-            username="visor_movs@test.com",
-            email="visor_movs@test.com"
+            username="visor_movs@test.com", email="visor_movs@test.com"
         )
 
-        self._create_tenant_profile(self.admin_user, self.empresa, 'ADMIN')
-        self._create_tenant_profile(self.visor_user, self.empresa, 'VISOR')
+        self._create_tenant_profile(self.admin_user, self.empresa, "ADMIN")
+        self._create_tenant_profile(self.visor_user, self.empresa, "VISOR")
 
         public_schema = get_public_schema_name()
         with schema_context(public_schema):
             from apps.public.tenants.models import TenantMembership
+
             TenantMembership.objects.create(
-                client=self.tenant, user=self.admin_user, rol='ADMIN', is_active=True
+                client=self.tenant, user=self.admin_user, rol="ADMIN", is_active=True
             )
             TenantMembership.objects.create(
-                client=self.tenant, user=self.visor_user, rol='VISOR', is_active=True
+                client=self.tenant, user=self.visor_user, rol="VISOR", is_active=True
             )
 
         # Crear categoria y producto de prueba
         self.categoria = CategoriaItem.objects.create(
-            empresa=self.empresa,
-            nombre="CAT-MOVIMIENTO",
-            aplicacion="PRODUCTO"
+            empresa=self.empresa, nombre="CAT-MOVIMIENTO", aplicacion="PRODUCTO"
         )
         self.producto = Producto.objects.create(
             empresa=self.empresa,
@@ -422,7 +481,7 @@ class TestMovimientoInventarioCRUD(InventarioPermissionsMixin, SintelTenantTestC
             codigo="PROD-MOV-TEST",
             nombre="Producto Movimiento Test",
             unidad="UND",
-            precio_venta=Decimal("1000.00")
+            precio_venta=Decimal("1000.00"),
         )
 
         domain = self.domain.domain
@@ -431,60 +490,86 @@ class TestMovimientoInventarioCRUD(InventarioPermissionsMixin, SintelTenantTestC
 
     def test_admin_can_create_movimiento(self):
         """ADMIN puede crear movimientos de inventario (201 Created)."""
-        url = reverse('inv-movimientos-list')
-        response = self.admin_client.post(url, {
-            'producto': self.producto.pk,
-            'tipo': 'ENTRADA_AJUSTE',
-            'cantidad': '10.000',
-            'costo_unitario': '1000.00',
-            'origen_referencia': 'REF-TEST-001'
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED,
-                         f"Esperado 201, obtenido {response.status_code}: {response.data}")
-        self.assertEqual(response.data.get('tipo'), 'ENTRADA_AJUSTE')
+        url = reverse("inv-movimientos-list")
+        response = self.admin_client.post(
+            url,
+            {
+                "producto": self.producto.pk,
+                "tipo": "ENTRADA_AJUSTE",
+                "cantidad": "10.000",
+                "costo_unitario": "1000.00",
+                "origen_referencia": "REF-TEST-001",
+            },
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+            f"Esperado 201, obtenido {response.status_code}: {response.data}",
+        )
+        self.assertEqual(response.data.get("tipo"), "ENTRADA_AJUSTE")
 
     def test_visor_cannot_create_movimiento(self):
         """VISOR NO puede crear movimientos de inventario (405)."""
-        url = reverse('inv-movimientos-list')
-        response = self.visor_client.post(url, {
-            'producto': self.producto.pk,
-            'tipo': 'ENTRADA_AJUSTE',
-            'cantidad': '5.000',
-            'costo_unitario': '1000.00',
-        }, format='json')
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED,
-                         f"Esperado 405, obtenido {response.status_code}: {response.data}")
+        url = reverse("inv-movimientos-list")
+        response = self.visor_client.post(
+            url,
+            {
+                "producto": self.producto.pk,
+                "tipo": "ENTRADA_AJUSTE",
+                "cantidad": "5.000",
+                "costo_unitario": "1000.00",
+            },
+            format="json",
+        )
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+            f"Esperado 405, obtenido {response.status_code}: {response.data}",
+        )
 
     def test_all_roles_can_read_movimientos(self):
         """Todos los roles pueden listar movimientos (200)."""
         MovimientoInventario.objects.create(
             empresa=self.empresa,
             producto=self.producto,
-            tipo='ENTRADA_AJUSTE',
-            cantidad=Decimal('10.000'),
-            costo_unitario=Decimal('1000.00'),
-            origen_referencia='REF-READ-001'
+            tipo="ENTRADA_AJUSTE",
+            cantidad=Decimal("10.000"),
+            costo_unitario=Decimal("1000.00"),
+            origen_referencia="REF-READ-001",
         )
-        url = reverse('inv-movimientos-list')
-        for label, client in [('ADMIN', self.admin_client), ('VISOR', self.visor_client)]:
+        url = reverse("inv-movimientos-list")
+        for label, client in [
+            ("ADMIN", self.admin_client),
+            ("VISOR", self.visor_client),
+        ]:
             with self.subTest(rol=label):
                 response = client.get(url)
-                self.assertEqual(response.status_code, status.HTTP_200_OK,
-                                 f"[{label}] Esperado 200, obtenido {response.status_code}")
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_200_OK,
+                    f"[{label}] Esperado 200, obtenido {response.status_code}",
+                )
 
     def test_movimiento_detail_readable(self):
         """El detalle de un movimiento es legible por cualquier rol."""
         movimiento = MovimientoInventario.objects.create(
             empresa=self.empresa,
             producto=self.producto,
-            tipo='ENTRADA_AJUSTE',
-            cantidad=Decimal('5.000'),
-            costo_unitario=Decimal('500.00'),
-            origen_referencia='REF-DETAIL-001'
+            tipo="ENTRADA_AJUSTE",
+            cantidad=Decimal("5.000"),
+            costo_unitario=Decimal("500.00"),
+            origen_referencia="REF-DETAIL-001",
         )
-        url = reverse('inv-movimientos-detail', kwargs={'uuid': movimiento.uuid})
-        for label, client in [('ADMIN', self.admin_client), ('VISOR', self.visor_client)]:
+        url = reverse("inv-movimientos-detail", kwargs={"uuid": movimiento.uuid})
+        for label, client in [
+            ("ADMIN", self.admin_client),
+            ("VISOR", self.visor_client),
+        ]:
             with self.subTest(rol=label):
                 response = client.get(url)
-                self.assertEqual(response.status_code, status.HTTP_200_OK,
-                                 f"[{label}] Esperado 200, obtenido {response.status_code}")
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_200_OK,
+                    f"[{label}] Esperado 200, obtenido {response.status_code}",
+                )

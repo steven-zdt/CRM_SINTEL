@@ -16,7 +16,7 @@ const jwtAuth = {
      */
     isPublicHost() {
         const hostname = window.location.hostname;
-        return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'sintel.com' || hostname.endsWith('.sintel.com') === false;
+        return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'sintel.net.co' || hostname.endsWith('.sintel.net.co') === false;
     },
 
     /**

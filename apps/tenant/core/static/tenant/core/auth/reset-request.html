@@ -74,7 +74,25 @@
                 const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
                 return m ? m.pop() : '';
             }
-            
+
+            // [ARQ-A3] Detecta si estamos en el dominio publico (sintel.net.co, localhost, IP)
+            // o en un subdominio de tenant (ADR-002 Regla 3, igual que activate.html).
+            const IS_PUBLIC_DOMAIN = (function () {
+                const host = window.location.hostname;
+                return (
+                    host === 'sintel.net.co' ||
+                    host === 'localhost' ||
+                    /^\d+\.\d+\.\d+\.\d+$/.test(host)
+                );
+            })();
+
+            function getApiUrl(action) {
+                if (IS_PUBLIC_DOMAIN) {
+                    return '/api/public/v1/auth/' + action + '/';
+                }
+                return '/api/v1/core/auth/' + action + '/';
+            }
+
             const resetForm = document.getElementById('reset_request_form');
             const submitBtn = document.getElementById('reset_submit_btn');
             const resetError = document.getElementById('reset_error');
@@ -106,7 +124,7 @@
                 
                 try {
                     const csrftoken = getCookie('csrftoken') || '';
-                    const url = '/api/v1/core/auth/password-reset/request/';
+                    const url = getApiUrl('password-reset/request');
                     
                     console.log('[reset-request] Enviando solicitud a:', url);
                     console.log('[reset-request] Email:', email);

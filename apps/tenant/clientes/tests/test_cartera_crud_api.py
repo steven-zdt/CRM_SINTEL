@@ -116,7 +116,7 @@ def test_cartera_api_endpoints(client, admin_user, tenant):
         )
 
     # 1. Test GET list
-    resp = client.get("/api/v1/clientes/cartera/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp = client.get("/api/v1/clientes/cartera/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     assert resp.status_code == 200
     data = resp.json()
     assert "results" in data
@@ -124,7 +124,7 @@ def test_cartera_api_endpoints(client, admin_user, tenant):
     assert data["results"][0]["numero_factura"] == "FE-456"
 
     # 2. Test GET kpis
-    resp = client.get("/api/v1/clientes/cartera/kpis/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp = client.get("/api/v1/clientes/cartera/kpis/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     assert resp.status_code == 200
     kpis = resp.json()
     assert Decimal(kpis["pendiente_monto"]) == Decimal("500.00")
@@ -135,7 +135,7 @@ def test_cartera_api_endpoints(client, admin_user, tenant):
         f"/api/v1/clientes/cartera/{cartera.uuid}/registrar-abono/",
         data={"monto": "200.00"},
         content_type="application/json",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
     )
     assert resp.status_code == 200
     res_data = resp.json()

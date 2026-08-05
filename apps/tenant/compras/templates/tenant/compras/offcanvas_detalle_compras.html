@@ -1,0 +1,235 @@
+{# offcanvas_detalle_compras.html - Offcanvas para VER DETALLE de Orden de Compra v3.10.5 #}
+<style>
+  #offcanvas-compra-detalle {
+    width: 800px !important;
+  }
+  #offcanvas-compra-detalle .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-compra-detalle .section-divider {
+    margin-bottom: 1.75rem;
+  }
+  #offcanvas-compra-detalle .info-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 0.15rem;
+    letter-spacing: 0.02em;
+  }
+  #offcanvas-compra-detalle .info-value {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #212529;
+  }
+  #offcanvas-compra-detalle .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #0d6efd;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  #offcanvas-compra-detalle .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+  }
+  #offcanvas-compra-detalle .table-items th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    background-color: #f8f9fa;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-compra-detalle" aria-labelledby="offcanvas-compra-detalle-label">
+    <div class="offcanvas-header border-bottom py-3 px-4">
+        <div class="d-flex align-items-center">
+            <h5 class="offcanvas-title fw-semibold me-3" id="offcanvas-compra-detalle-label">
+                <i class="bi bi-file-earmark-text text-primary me-2"></i>Orden de Compra: {{ instance.consecutivo }}
+            </h5>
+            {# Badge de Estado #}
+            {% if instance.estado == 'BORRADOR' %}
+                <span class="badge bg-secondary">Borrador</span>
+            {% elif instance.estado == 'PENDIENTE' %}
+                <span class="badge bg-warning text-dark">Pendiente</span>
+            {% elif instance.estado == 'APROBADA' %}
+                <span class="badge bg-success">Aprobada</span>
+            {% elif instance.estado == 'RECIBIDA' %}
+                <span class="badge bg-info text-dark">Recibida</span>
+            {% elif instance.estado == 'ANULADA' %}
+                <span class="badge bg-danger">Anulada</span>
+            {% endif %}
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+
+    <div class="offcanvas-body">
+        {# ── Sección: Datos Generales ───────────────────────────── #}
+        <div class="section-divider">
+            <p class="section-title">Información General</p>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="info-label">Consecutivo</div>
+                    <div class="info-value fw-bold text-primary">{{ instance.consecutivo }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="info-label">Fecha Emisión</div>
+                    <div class="info-value">{{ instance.fecha|date:'d/m/Y' }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="info-label">Fecha Entrega</div>
+                    <div class="info-value">
+                        {% if instance.fecha_entrega %}
+                            {{ instance.fecha_entrega|date:'d/m/Y' }}
+                        {% else %}
+                            <span class="text-muted italic">No definida</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ── Sección: Relaciones ────────────────────────────────── #}
+        <div class="section-divider">
+            <p class="section-title">Asociaciones y Proveedor</p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="info-label">Proveedor</div>
+                    <div class="info-value fw-semibold">{{ instance.proveedor.razon_social }}</div>
+                    <div class="text-muted small">NIT: {{ instance.proveedor.numero_documento }}</div>
+                </div>
+                <div class="col-md-6">
+                    <div class="info-label">Proyecto</div>
+                    <div class="info-value">
+                        {% if instance.proyecto %}
+                            {{ instance.proyecto.nombre }}
+                        {% else %}
+                            <span class="text-muted small">Ninguno</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ── Sección: Documento Soporte ─────────────────────────── #}
+        {% if instance.documento_soporte %}
+        <div class="section-divider">
+            <p class="section-title">Documento Soporte Relacionado</p>
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <div class="card border border-info-subtle bg-info-subtle p-3 rounded-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <h6 class="mb-1 text-info-emphasis fw-bold">Factura de Compra / Documento Soporte</h6>
+                                <p class="mb-0 text-muted small">Documento No: {{ instance.documento_soporte.numero_documento }} | Total: ${{ instance.documento_soporte.total }}</p>
+                            </div>
+                            <span class="badge bg-info text-dark">Vinculado</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Sección: Items de la Orden ─────────────────────────── #}
+        <div class="section-divider">
+            <p class="section-title">Detalle de Items</p>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm align-middle table-items">
+                    <thead>
+                        <tr>
+                            <th style="width: 45%;">Descripción</th>
+                            <th style="width: 15%;" class="text-end">Cantidad</th>
+                            <th style="width: 20%;" class="text-end">Val. Unitario</th>
+                            <th style="width: 10%;" class="text-end">IVA %</th>
+                            <th style="width: 15%;" class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in instance.items.all %}
+                        <tr>
+                            <td class="text-wrap">{{ item.descripcion }}</td>
+                            <td class="text-end">{{ item.cantidad }}</td>
+                            <td class="text-end">${{ item.valor_unitario }}</td>
+                            <td class="text-end">{{ item.porcentaje_iva }}%</td>
+                            <td class="text-end fw-semibold">${{ item.total }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-3">No hay items registrados.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# ── Sección: Totales y Observaciones ───────────────────── #}
+        <div class="section-divider">
+            <div class="row g-3">
+                <div class="col-md-7">
+                    <div class="info-label">Observaciones</div>
+                    <div class="p-3 bg-light rounded-3 text-wrap border" style="min-height: 100px; font-size: 0.875rem;">
+                        {% if instance.observaciones %}
+                            {{ instance.observaciones|linebreaksbr }}
+                        {% else %}
+                            <span class="text-muted italic">Sin observaciones</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card bg-light border-0 shadow-sm">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between mb-2 small text-muted">
+                                <span>Subtotal:</span>
+                                <span>${{ instance.subtotal }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2 small text-muted">
+                                <span>Impuestos (IVA):</span>
+                                <span>${{ instance.impuestos }}</span>
+                            </div>
+                            <hr class="my-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-bold text-dark">Total Neto:</span>
+                                <h4 class="mb-0 fw-bold text-primary">${{ instance.total }}</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="offcanvas-footer">
+        <div class="d-flex justify-content-between w-100">
+            <div>
+                {# Botones de acciones según estado #}
+                {% if instance.estado == 'BORRADOR' %}
+                    <button type="button" class="btn btn-warning btn-sm btn-cambiar-estado" data-estado="PENDIENTE" data-uuid="{{ instance.uuid }}">
+                        <i class="bi bi-clock me-1"></i>Enviar a Aprobación
+                    </button>
+                {% elif instance.estado == 'PENDIENTE' %}
+                    <button type="button" class="btn btn-success btn-sm btn-cambiar-estado me-2" data-estado="APROBADA" data-uuid="{{ instance.uuid }}">
+                        <i class="bi bi-check-circle me-1"></i>Aprobar
+                    </button>
+                    <button type="button" class="btn btn-danger btn-sm btn-cambiar-estado" data-estado="ANULADA" data-uuid="{{ instance.uuid }}">
+                        <i class="bi bi-x-circle me-1"></i>Anular
+                    </button>
+                {% elif instance.estado == 'APROBADA' %}
+                    <button type="button" class="btn btn-info btn-sm btn-cambiar-estado me-2 text-dark" data-estado="RECIBIDA" data-uuid="{{ instance.uuid }}">
+                        <i class="bi bi-box-seam me-1"></i>Marcar Recibida
+                    </button>
+                    <button type="button" class="btn btn-danger btn-sm btn-cambiar-estado" data-estado="ANULADA" data-uuid="{{ instance.uuid }}">
+                        <i class="bi bi-x-circle me-1"></i>Anular
+                    </button>
+                {% endif %}
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cerrar</button>
+        </div>
+    </div>
+</div>

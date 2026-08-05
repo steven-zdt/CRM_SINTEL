@@ -6,6 +6,7 @@ Arquitectura v2.19:
 - TENANT_URLCONF = 'config.urls_tenant' para dominios privados.
 - apps.tenant.landing actúa como router principal para /, /login/ y /logout/.
 """
+
 from django.test import Client as TestClient
 from django.urls import reverse
 
@@ -43,7 +44,9 @@ class TenantLandingRoutingTests(SintelTenantTestCase):
 
         # El nombre del tenant debe aparecer en la página (cuando Empresa esté configurada se reflejará ahí;
         # mientras tanto, usamos el nombre del tenant de prueba en los asserts de contenido de forma laxa)
-        self.assertIn(self.tenant.schema_name.split("_")[0], response.content.decode().lower())
+        self.assertIn(
+            self.tenant.schema_name.split("_")[0], response.content.decode().lower()
+        )
 
         # Link de login debe apuntar a la URL namespaced del tenant
         expected_login_url = reverse("tenant_landing:login")
@@ -85,4 +88,3 @@ class TenantLandingRoutingTests(SintelTenantTestCase):
             200,
             f"/login/ en dominio {domain_host} debe devolver 200.",
         )
-

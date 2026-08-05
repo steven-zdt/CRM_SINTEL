@@ -62,7 +62,7 @@ for model, model_admin in admin.site._registry.items():
 
 ### 3. Acceso al Admin
 
-- **URL:** `http://cliente.sintel.com:8000/admin/`
+- **URL:** `http://cliente.sintel.net.co:8000/admin/`
 - **Admin Site:** `tenant_admin_site` (aislado)
 - **Modelos visibles:** Solo modelos de `TENANT_APPS`
 - **Modelos NO visibles:** Client, Domain, User (del esquema público)
@@ -115,7 +115,7 @@ for model, model_admin in admin.site._registry.items():
 
 1. **Acceder al Admin de Tenant:**
    ```bash
-   # URL: http://home.sintel.com:8000/admin/
+   # URL: http://home.sintel.net.co:8000/admin/
    # Debe mostrar solo modelos de tenant (Empresa, Factura, etc.)
    # NO debe mostrar Client, Domain, etc.
    ```
@@ -173,8 +173,8 @@ print(tenant_admin_site.is_registered(Domain))    # Debe ser False
    - Si necesitas personalizar el admin de tenant, puedes registrar el modelo directamente en `tenant_admin_site`
 
 3. **Admin Global vs Tenant Admin:**
-   - `admin.site` → Admin del esquema público (sintel.com/admin/)
-   - `tenant_admin_site` → Admin de tenants privados (cliente.sintel.com/admin/)
+   - `admin.site` → Admin del esquema público (sintel.net.co/admin/)
+   - `tenant_admin_site` → Admin de tenants privados (cliente.sintel.net.co/admin/)
 
 ---
 

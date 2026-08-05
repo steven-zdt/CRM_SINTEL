@@ -39,13 +39,13 @@ Cuando Django recibe una petición a `http://home.localhost:8000/`:
 
 En `config/settings.py`:
 ```python
-TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', 'localhost' if DEBUG else 'sintel.com')
+TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', 'localhost' if DEBUG else 'sintel.net.co')
 ```
 
 **Regla de construcción de dominios:**
 - Dominio esperado para tenant `home`: `home.{TENANT_DOMAIN_BASE}`
 - En desarrollo: `home.localhost`
-- En producción: `home.sintel.com`
+- En producción: `home.sintel.net.co`
 
 #### 3.2. Señal de Creación de Dominios
 

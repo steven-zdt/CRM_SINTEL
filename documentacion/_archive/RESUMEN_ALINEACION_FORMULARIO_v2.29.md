@@ -8,7 +8,7 @@
 
 ## 🎯 Objetivo Cumplido
 
-Eliminar campos de contraseña del formulario de creación de tenants en `http://sintel.com/console/tenants/new/` y alinear completamente con la política v2.29: **Onboarding sin Contraseñas - Activación Exclusiva**.
+Eliminar campos de contraseña del formulario de creación de tenants en `http://sintel.net.co/console/tenants/new/` y alinear completamente con la política v2.29: **Onboarding sin Contraseñas - Activación Exclusiva**.
 
 ---
 
@@ -84,7 +84,7 @@ const formData = {
 
 ### 1. Usuario Accede al Formulario
 ```
-URL: http://sintel.com/console/tenants/new/
+URL: http://sintel.net.co/console/tenants/new/
 ```
 
 ### 2. Completa el Formulario

@@ -25,11 +25,15 @@ mirror layer implementing ADR-002 (spot-check #12), and a recurring "sibling pac
 structural gap confirmed in three places across `contabilidad`/`cotizaciones` (spot-checks
 #13/#15) that argues for a general fix rather than one-off patches.
 
-**Not yet done:** loading a live Neo4j (this environment has no `docker` binary — see
-"What still needs the user" below). Governance rules (Fase 20 of the original spec) are
-**deliberately not yet written into `AGENTS.md`/`CLAUDE.md`** — full app coverage removes the
-main reason to wait, but the live-Neo4j load and the known gaps below (django-tables2 views,
-sibling packages, `contabilidad/integracion/`) should be weighed first; see the roadmap.
+**Update (2026-08-05, smoke-test session):** Docker became available; the live Neo4j load is now
+done too - all 17 apps loaded into a real Neo4j, 2,506 nodes / 3,597 edges, exact match to the
+offline prediction (see "DONE" section below). Two more real bugs found and fixed getting there
+(a `requirements.txt` tree-sitter version pin without the API this pipeline needs, and an
+unrelated pre-existing Django migration app-label typo that blocked the app from starting at
+all). Governance rules (Fase 20 of the original spec) are **still deliberately not written into
+`AGENTS.md`/`CLAUDE.md`** — full app coverage and the verified live load remove the two biggest
+reasons to wait, but the known gaps below (django-tables2 views, sibling packages,
+`contabilidad/integracion/`) should be weighed first; see the roadmap.
 
 ## Rollout spot-check #1: `ventas` (2026-08-04)
 
@@ -602,39 +606,64 @@ pins this down so it can't silently regress into a false claim later.
   see the module docstrings in `extract_docs.py` and `extract_templates.py`), not a shortcut
   around the "no regex" rule for actual code relationships.
 
-## What still needs the user (this sandbox has no Docker)
+## DONE (2026-08-05 smoke-test session): live Neo4j load verified end-to-end
 
-```bash
-# 1. Add NEO4J_PASSWORD to your real .env (see .env.example)
-# 2. Bring up the new neo4j service alongside the existing stack:
-make up
-# 3. Build and load every extracted app's graph for real (one shared graph in Neo4j):
-for app in compras ventas facturas proveedores proyectos gastos clientes inventario \
-           empresa empleados perfil core contabilidad bancos cotizaciones dashboard landing; do
-  make ekg-build APP=$app
-done
-# 4. Sanity-check it loaded (from the neo4j browser at http://localhost:7474, or):
-make ekg-ask APP=compras Q=viewsets_using_serializer
+Docker became available in a later session. Ran `docker compose up --build -d`, loaded all 17
+apps via `python -m tools.ekg.build_graph --app <name>` (no `NEO4J_PASSWORD`/`NEO4J_URI`/
+`NEO4J_USER` in `.env` at first - added them, matching `.env.example`), and queried the live
+database directly:
+
+```
+MATCH (n) RETURN count(n)        -> 2506
+MATCH ()-[r]->() RETURN count(r) -> 3597
+MATCH (m:Model {external: true}) RETURN m.id -> only Model:settings.AUTH_USER_MODEL
 ```
 
-Each `make ekg-build` call should print `Loaded <N> nodes and <M> edges for app=<name>` matching
-the counts in `tools/ekg/out/<app>.json` from this pilot's local dry runs (e.g. `Loaded 151
-nodes and 130 edges for app=compras`) — if your counts differ, the codebase has changed since
-this report was written, which is expected and fine; re-run `python -m tools.ekg.build_graph
---app <name> --dry-run` to see the new numbers before trusting a `make ekg-ask` answer against
-them. After loading all 17, the total in Neo4j should match this report's final merged count:
-**2,506 nodes, 3,597 edges** (`MATCH (n) RETURN count(n)` / `MATCH ()-->() RETURN count(*)` in
-the Neo4j browser) - a mismatch would mean something changed in the codebase between this report
-and your load, not a bug in the loader itself (already verified idempotent and order-independent
-against the in-memory graph, see spot-check #8).
+**Exact match to every number this report predicted from the offline merge**, including the one
+remaining harmless stub. A canned question (`viewsets_using_serializer` for
+`OrdenCompraListSerializer`) run as live Cypher returned `OrdenCompraViewSet`, matching the
+offline `queries.py` answer from spot-check #1. This closes the one item every earlier version
+of this report listed as "not yet done" - the pipeline is now verified correct against a real
+Neo4j, not just the in-memory `Graph` model.
 
-## Roadmap (rollout done: 17/17 apps — remaining work is depth, not breadth)
+Two bugs surfaced getting the live load working, both fixed, neither an EKG design flaw:
 
-1. **Live Neo4j load** - the one thing this sandbox genuinely could not do. The user runs
-   `make up` (brings up the new `neo4j` service) then `make ekg-build APP=<name>` per app (or a
-   small loop over all 17). Verify the loaded graph matches the dry-run JSON node/edge counts in
-   this report (`tools/ekg/out/*.json`) for at least a few apps before trusting `make ekg-ask`
-   against it.
+1. **`requirements.txt` pinned `tree-sitter>=0.23,<0.24`, a version without `QueryCursor`** - the
+   class every extractor's queries run through. This was invisible all rollout because local
+   testing happened against whatever `pip install tree-sitter` resolved to outside the pin
+   (0.26.0), never against the actual pinned range. Fixed to `>=0.25,<0.27` (with
+   `tree-sitter-python`/`tree-sitter-javascript` bumped to match, `>=0.25,<0.26`) and confirmed
+   working after a container rebuild. Lesson for the roadmap: this class of bug (tested-against
+   different version than pinned) can't be caught without actually building the Docker image at
+   least once - added as a checklist item.
+2. **A pre-existing, unrelated migration bug blocked the `web` container from starting at all**:
+   `apps/tenant/proyectos/migrations/0020_itempresupuesto_tareadiaria_uuid.py` declared its
+   dependency as `('proyectos', '0019_proyecto_sede')` instead of `('tenant_proyectos', ...)` -
+   every sibling migration in that same app correctly uses `tenant_proyectos` (confirmed via
+   grep), and a repo-wide scan found no other instance of this exact typo. The same class of bug
+   as this pilot's own spot-check #1 (`ventas`) and spot-check #3 (`proveedores`) fixes - Django's
+   real `app_label` vs. the bare app folder name - just found in application code instead of the
+   EKG tool. Not an EKG file; fixed directly since it blocked all further smoke testing.
+
+Also ran the repo's actual smoke suite (`make smoke`'s three components, `make` itself isn't on
+this shell's PATH so run via the underlying `docker compose exec` commands directly):
+`audit-scripts` (4 non-blocking `|| true` scripts - pre-existing findings backlog, unrelated to
+this session, including one false positive flagging `tools/ekg/extract_templates.py`'s
+`HTMLParser` subclass as a "Parser outside apps/services/xml_*" - harmless, not fixed),
+`smoke-xml-pipeline` (4/4 tests fail on pre-existing, unrelated broken imports/signature
+mismatches in `apps/tenant/facturas/tests/test_xml_pipeline_canonical.py` - not touched, out of
+scope, flagged for the user), `test-api` (7/7 passed), plus `manage.py check --deploy` (0 errors,
+6 expected local-dev warnings).
+
+Docker Compose stack (`db`, `redis`, `neo4j`, `web`, `celery`, `nginx`, `cloudflared`) was left
+running after this session; `nginx` reports `unhealthy` (its healthcheck expects the
+`*.sintel.net.co` wildcard DNS setup this sandbox doesn't have) but doesn't block anything -
+`web`/`db`/`redis`/`neo4j`/`celery` are all healthy.
+
+## Roadmap (rollout done: 17/17 apps, live Neo4j load verified — remaining work is depth, not breadth)
+
+1. ~~Live Neo4j load~~ **DONE** (see above) - 2,506 nodes / 3,597 edges in the real database,
+   exact match to the offline prediction.
 2. Design (don't rush) a general fix for the "sibling package/file" gap - confirmed three times
    across two apps (`contabilidad/integracion/`, `cotizaciones/configuracion/`,
    `cotizaciones/ui_views.py`, spot-checks #13/#15), not a one-off. Two sub-problems, likely two
@@ -653,10 +682,10 @@ against the in-memory graph, see spot-check #8).
    `*/tabla*/` gap showed up in every Fase-5-BIS-migrated app checked (`compras`, `facturas`,
    `gastos`, `bancos`, at minimum) and will keep showing up as more apps migrate off Tabulator.
 5. Write the Fase 20 governance rule into `AGENTS.md`/`CLAUDE.md` ("consult the graph before
-   modifying code"). Full app coverage removes the main reason this was deferred - but do items
-   2-4 first, or the rule would bind the project to a graph with known, documented holes in
-   exactly the areas (accounting integration, django-tables2 UI, nested sub-apps) most likely to
-   matter for a real code change.
+   modifying code"). Full app coverage plus the verified live load remove the main reasons this
+   was deferred - but do items 2-4 first, or the rule would bind the project to a graph with
+   known, documented holes in exactly the areas (accounting integration, django-tables2 UI,
+   nested sub-apps) most likely to matter for a real code change.
 6. Wire `make ekg-build` into a pre-commit or CI hook for the Fase 19 continuous-sync goal, so
    the graph doesn't silently drift from the code the way this rollout found it hadn't yet.
 7. GraphRAG/embeddings (Fase 18) only after the above - it indexes what's already extracted, it
@@ -665,3 +694,29 @@ against the in-memory graph, see spot-check #8).
    `apps/services/` were never in scope for this pilot. The Bridge pattern (AGENTS.md §17) means
    the public schema is architecturally significant to every tenant app's story, not a separate
    concern.
+9. Fix `apps/tenant/facturas/tests/test_xml_pipeline_canonical.py` (4/4 failing - pre-existing,
+   unrelated to EKG, found while smoke-testing this work; see the smoke-test session note above)
+   and investigate the ~1600 `audit_templates_and_branding.py` / 15
+   `audit_tenant_ui_compliance.py` findings surfaced by `make smoke`'s audit scripts - both
+   predate this session and are marked non-blocking (`|| true`), but weren't re-verified as part
+   of this rollout's scope.
+10. **Model `ViewSet` -> `Template` rendering** (the `render-offcanvas/crear|editar|detalle/`
+    actions, `TemplateHTMLRenderer`). `REL_RENDERS` already exists in `schema.py` but no
+    extractor populates it - found running a real dead-code audit against the live graph
+    (`documentacion/AUDITORIA_CODIGO_MUERTO_EKG_2026-08-05.md`): the "orphan Template" query
+    flagged 125 of ~140 templates project-wide (essentially every offcanvas), because the only
+    Template-reachability the graph currently models is `{% include %}` and `<script src>` -
+    not a ViewSet's render action returning that template as its HTTP response. This makes
+    "which templates are truly unused" currently unanswerable from the graph; fixing it means
+    scanning ViewSet action bodies for template name references, similar in spirit to the
+    ViewSet-direct-call fix from spot-check with services. Do this before ever trusting a
+    template-deletion recommendation from the graph again.
+11. Also found auditing the graph for dead code (extraction gaps, not app bugs, all now fixed -
+    see `documentacion/AUDITORIA_CODIGO_MUERTO_EKG_2026-08-05.md` §1.1 for the four confirmed
+    patterns and their test coverage): mixin class-attribute injection
+    (`business_service_class = X`), module-qualified base classes (`module.ClassName`), direct
+    ViewSet-to-Selector calls bypassing the mixin, and `SERVICE_KIND_OTHER` files never being
+    scanned for intra-file Business->CRUD delegation. Two related gaps found but **not** fixed
+    (noted for a future pass): JS-to-JS ES module `import` statements aren't tracked (only
+    `<script src>`/`{% static %}` in HTML), and lazy/local imports inside function bodies aren't
+    scanned for cross-app `IMPORTS` edges (only module-level imports are).

@@ -58,7 +58,7 @@ class TenantAPITestCase(TenantTestCase):
             primary_domain_qs = Domain.objects.filter(tenant=self.tenant, is_primary=True)
             if primary_domain_qs.exists():
                 primary_domain = primary_domain_qs.first()
-                primary_domain.domain = f"{self.tenant.schema_name}.sintel.com"
+                primary_domain.domain = f"{self.tenant.schema_name}.sintel.net.co"
                 primary_domain.save()
         except Exception:
             # Best-effort: si no existe o falla, continuar (TenantClient puede aún resolver)
@@ -132,7 +132,7 @@ class TenantAPITestCase(TenantTestCase):
         if 'HTTP_HOST' not in kwargs:
             # Usar el dominio del tenant para que django-tenants seleccione el esquema correcto
             try:
-                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.com"
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.net.co"
             except Exception:
                 kwargs['HTTP_HOST'] = 'testserver'
         # Incluir JWT Authorization por defecto si existe y no fue proporcionada
@@ -157,7 +157,7 @@ class TenantAPITestCase(TenantTestCase):
             kwargs['content_type'] = 'application/json'
         if 'HTTP_HOST' not in kwargs:
             try:
-                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.com"
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.net.co"
             except Exception:
                 kwargs['HTTP_HOST'] = 'testserver'
         if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:
@@ -181,7 +181,7 @@ class TenantAPITestCase(TenantTestCase):
             kwargs['content_type'] = 'application/json'
         if 'HTTP_HOST' not in kwargs:
             try:
-                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.com"
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.net.co"
             except Exception:
                 kwargs['HTTP_HOST'] = 'testserver'
         if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:
@@ -205,7 +205,7 @@ class TenantAPITestCase(TenantTestCase):
             kwargs['content_type'] = 'application/json'
         if 'HTTP_HOST' not in kwargs:
             try:
-                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.com"
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.net.co"
             except Exception:
                 kwargs['HTTP_HOST'] = 'testserver'
         if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:
@@ -225,7 +225,7 @@ class TenantAPITestCase(TenantTestCase):
         """
         if 'HTTP_HOST' not in kwargs:
             try:
-                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.com"
+                kwargs['HTTP_HOST'] = f"{self.tenant.schema_name}.sintel.net.co"
             except Exception:
                 kwargs['HTTP_HOST'] = 'testserver'
         if getattr(self, 'jwt_token', None) and 'HTTP_AUTHORIZATION' not in kwargs:

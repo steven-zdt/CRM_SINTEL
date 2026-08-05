@@ -170,7 +170,7 @@ curl -X GET http://localhost:8000/api/v1/empleados/ \
 # Esperado: 200 OK con lista de empleados
 
 # 5. Validar Workspace UI
-# Abrir http://home.sintel.com/workspace/#empleados
+# Abrir http://home.sintel.net.co/workspace/#empleados
 # Intentar crear/editar empleado como usuario no-staff
 # Verificar en Network tab que se recibe 405
 ```

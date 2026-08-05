@@ -2,7 +2,7 @@
 
 ## ❌ Problema
 
-Al acceder a `http://home.sintel.com:8000/`, se obtiene un error 404 (Page not found) en lugar de mostrar la landing page del tenant.
+Al acceder a `http://home.sintel.net.co:8000/`, se obtiene un error 404 (Page not found) en lugar de mostrar la landing page del tenant.
 
 ## 🔍 Diagnóstico
 
@@ -16,8 +16,8 @@ El problema ocurre porque django-tenants no identifica correctamente el tenant c
    ```
 
 2. **Dominio configurado:** ✅
-   - Dominio principal: `home.sintel.com`
-   - Dominio con puerto: `home.sintel.com:8000` (agregado como solución temporal)
+   - Dominio principal: `home.sintel.net.co`
+   - Dominio con puerto: `home.sintel.net.co:8000` (agregado como solución temporal)
 
 ## ✅ Solución Implementada
 
@@ -29,7 +29,7 @@ Para desarrollo, puedes agregar el dominio con puerto explícitamente:
 docker compose exec web python manage.py fix_tenant_domain --schema home --port 8000
 ```
 
-Esto crea un dominio adicional `home.sintel.com:8000` que django-tenants puede identificar directamente.
+Esto crea un dominio adicional `home.sintel.net.co:8000` que django-tenants puede identificar directamente.
 
 **Ventajas:**
 - Solución rápida y directa
@@ -56,8 +56,8 @@ django-tenants debería manejar automáticamente los puertos. Si el problema per
    ```python
    # config/settings.py
    ALLOWED_HOSTS = [
-       '.sintel.com',  # ✅ Acepta cualquier subdominio
-       'sintel.com',
+       '.sintel.net.co',  # ✅ Acepta cualquier subdominio
+       'sintel.net.co',
        'localhost',
        '127.0.0.1',
    ]
@@ -101,9 +101,9 @@ for d in domains:
 
 Después de aplicar la solución, verifica:
 
-1. ✅ Acceder a `http://home.sintel.com:8000/` muestra la landing page
-2. ✅ Acceder a `http://home.sintel.com:8000/dashboard/` funciona (si estás autenticado)
-3. ✅ Acceder a `http://home.sintel.com:8000/api/v1/empresa/empresas/` funciona
+1. ✅ Acceder a `http://home.sintel.net.co:8000/` muestra la landing page
+2. ✅ Acceder a `http://home.sintel.net.co:8000/dashboard/` funciona (si estás autenticado)
+3. ✅ Acceder a `http://home.sintel.net.co:8000/api/v1/empresa/empresas/` funciona
 
 ## ⚠️ Notas Importantes
 

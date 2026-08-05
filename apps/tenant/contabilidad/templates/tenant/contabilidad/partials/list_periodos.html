@@ -1,25 +1,35 @@
 {% load static %}
-{# contabilidad_periodos_list.html estandarizado para módulo contabilidad periodos v2.61 #}
-{# ⚠️ v2.61: Migrado a Tabulator Factory v2.40 #}
+{# list_periodos.html — modulo contabilidad periodos #}
+{# Fase 5-BIS: tabla server-rendered (django-tables2 + HTMX), reemplaza Tabulator #}
 {# ⚠️ Feature-Sliced Architecture: Template dedicado para listado #}
-{# ⚠️ v2.61: HTMX + Offcanvas (sin modales legacy) #}
 <div id="ui-contabilidad-periodos-list" class="ui-module ui-contabilidad">
   <!-- Toolbar -->
   <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-contabilidad-periodos">
     <input id="search-periodo" class="form-control form-control-sm"
-           type="search" placeholder="Buscar por periodo..." />
-    
-    {# ⚠️ v2.61: Filtro de Estado #}
-    <select id="filter-estado-periodo" class="form-select form-select-sm" style="width: auto;">
+           type="search" placeholder="Buscar por periodo..."
+           hx-get="{% url 'contabilidad:periodo-tabla' %}"
+           hx-trigger="keyup changed delay:400ms, search"
+           hx-target="#periodos-panel"
+           hx-include="#filter-estado-periodo"
+           name="q" />
+
+    <select id="filter-estado-periodo" class="form-select form-select-sm" style="width: auto;"
+            hx-get="{% url 'contabilidad:periodo-tabla' %}"
+            hx-trigger="change"
+            hx-target="#periodos-panel"
+            hx-include="#search-periodo"
+            name="estado">
       <option value="">Todos los Estados</option>
       <option value="ABIERTO">Abiertos</option>
       <option value="CERRADO">Cerrados</option>
     </select>
-    
-    <button id="btn-refrescar-periodos" class="btn btn-sm btn-outline-secondary">
+
+    <button id="btn-refrescar-periodos" class="btn btn-sm btn-outline-secondary"
+            hx-get="{% url 'contabilidad:periodo-tabla' %}"
+            hx-target="#periodos-panel">
       <i class="bi bi-arrow-clockwise"></i> Refrescar
     </button>
-    
+
     <div id="actions-contabilidad-periodos" class="ms-auto d-flex gap-2">
       <button class="btn btn-sm btn-primary" id="btn-crear-periodo" type="button"
               hx-get="/api/v1/contabilidad/periodos-contables/render-offcanvas/crear/"
@@ -30,20 +40,25 @@
       </button>
     </div>
   </div>
-  
+
   <!-- Feedback -->
   <div id="feedback-contabilidad-periodos-list" class="alert d-none" role="alert"
        aria-live="polite"></div>
-  
+
   {# ⚠️ v2.61: Contenedor de errores para validación visual #}
   <div id="error-container-periodos" class="alert alert-danger d-none mb-3" role="alert">
     <div id="error-message-periodos"></div>
     <ul id="missing-fields-list-periodos" class="mb-0 mt-2"></ul>
   </div>
-  
-  <!-- Tabla Tabulator -->
-  <!-- ⚠️ v2.61: Límites de ancho para evitar expansión horizontal infinita -->
-  <div id="grid-periodos" style="max-width: 100%; overflow-x: auto;"></div>
+
+  <!-- Tabla server-rendered (django-tables2 + HTMX) -->
+  <div id="periodos-panel"
+       hx-get="{% url 'contabilidad:periodo-tabla' %}"
+       hx-trigger="load, periodo-updated from:body"
+       hx-target="this"
+       hx-swap="innerHTML"
+       hx-boost="true">
+  </div>
 </div>
 
 {# ⚠️ v2.61: Contenedor HTMX para Offcanvas #}

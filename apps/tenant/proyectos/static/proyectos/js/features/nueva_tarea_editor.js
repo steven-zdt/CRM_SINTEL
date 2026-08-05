@@ -194,8 +194,13 @@
     }
 
     function init() {
-        if (initialized) return;
+        // Guard: `initialized` es una variable de modulo — se resetea cada vez
+        // que este script se re-ejecuta (recarga HTMX del modulo "proyectos"),
+        // asi que por si sola no evita duplicar el listener en `document` entre
+        // recargas — se ancla tambien a `document.body` (FE-A1/A2).
+        if (initialized || d.body.dataset.nuevaTareaEditorInitialized) return;
         initialized = true;
+        d.body.dataset.nuevaTareaEditorInitialized = 'true';
         bindEvents();
     }
 

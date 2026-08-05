@@ -391,12 +391,18 @@ def _normalizar_fecha(val):
     return _dt.datetime.min
 
 
-def get_movimientos_timeline(empresa_id: int, search: str = None) -> list:
+def get_movimientos_timeline(empresa_id: int, search: str = None, desde=None) -> list:
     """
     Combina MovimientoInventario (PRODUCTO/ACTIVO_FIJO) y HistorialServicio (SERVICIO)
     en una lista unificada ordenada cronologicamente descendente.
     Retorna lista de dicts con estructura comun para MovimientoUnificadoListSerializer.
     Patron: Ledger Universal — trazabilidad completa del modulo Inventario.
+
+    Args:
+        desde: [PERF-M2] fecha/datetime opcional -- si se provee, acota ambos
+            querysets a created_at >= desde. None (default) preserva el
+            comportamiento historico sin filtro para los llamadores existentes
+            (p.ej. la UI de "ver historial completo" de inventario).
     """
     qs_mov = (
         MovimientoInventario.objects
@@ -404,6 +410,8 @@ def get_movimientos_timeline(empresa_id: int, search: str = None) -> list:
         .select_related('producto', 'activo_fijo')
         .only(*MOVIMIENTO_LIST_FIELDS)
     )
+    if desde:
+        qs_mov = qs_mov.filter(created_at__gte=desde)
     if search:
         qs_mov = qs_mov.filter(
             Q(producto__nombre__icontains=search) |
@@ -423,6 +431,8 @@ def get_movimientos_timeline(empresa_id: int, search: str = None) -> list:
             'proyecto_uuid', 'proyecto_nombre',
         )
     )
+    if desde:
+        qs_hist = qs_hist.filter(fecha_registro__gte=desde)
     if search:
         qs_hist = qs_hist.filter(
             Q(servicio__nombre__icontains=search) |

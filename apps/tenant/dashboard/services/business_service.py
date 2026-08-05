@@ -19,6 +19,7 @@ from apps.tenant.dashboard.services.extractores import (
     ProyectosExtractor,
     ClientesExtractor,
     SedesExtractor,
+    ProveedoresExtractor,
 )
 
 
@@ -45,17 +46,19 @@ class DashboardBusinessService:
     @staticmethod
     def obtener_metricas_consolidadas(empresa_id: int) -> DashboardMetricasDTO:
         """
-        Obtiene todas las métricas del dashboard de forma asíncrona.
-        Implementa caché Redis para evitar consultas repetidas.
+        Obtiene todas las metricas del dashboard.
+        Implementa cache Redis para evitar consultas repetidas.
 
         Args:
             empresa_id: ID de la empresa (Double Semantic Verification)
 
         Returns:
-            DashboardMetricasDTO con métricas consolidadas
+            DashboardMetricasDTO con metricas consolidadas
         """
-        # Intenta leer del caché primero
-        cache_key = f"dashboard:metricas:{empresa_id}"
+        # Cache key incluye schema_name para aislar datos entre tenants.
+        # empresa_id NO es globalmente unico — cada schema resetea el auto-increment.
+        from django.db import connection
+        cache_key = f"dashboard:metricas:{connection.schema_name}:{empresa_id}"
         cached = cache.get(cache_key)
         if cached:
             return cached
@@ -73,6 +76,7 @@ class DashboardBusinessService:
             inventario_dto = InventarioExtractor.extraer_metricas(empresa_id)
             empleados_dto = EmpleadosExtractor.extraer_metricas(empresa_id)
             gastos_dto = GastosExtractor.extraer_metricas(empresa_id)
+            proveedores_dto = ProveedoresExtractor.extraer_metricas(empresa_id)
             proyectos_dto = ProyectosExtractor.extraer_metricas(empresa_id)
             clientes_dto = ClientesExtractor.extraer_metricas(empresa_id)
 
@@ -85,6 +89,7 @@ class DashboardBusinessService:
                 inventario=inventario_dto,
                 empleados=empleados_dto,
                 gastos=gastos_dto,
+                proveedores=proveedores_dto,
                 proyectos=proyectos_dto,
                 clientes=clientes_dto,
             )
@@ -104,24 +109,26 @@ class DashboardBusinessService:
             from decimal import Decimal
             from apps.tenant.dashboard.services.dtos import (
                 WidgetFacturasDTO, WidgetInventarioDTO, WidgetEmpleadosDTO,
-                WidgetGastosDTO, WidgetProyectosDTO, WidgetClientesDTO,
+                WidgetGastosDTO, WidgetProveedoresDTO, WidgetProyectosDTO, WidgetClientesDTO,
             )
             return DashboardMetricasDTO(
-                empresa_nombre="—",
-                empresa_nit="—",
+                empresa_nombre="-",
+                empresa_nit="-",
                 fecha_actualizacion=timezone.now().isoformat(),
                 facturas=WidgetFacturasDTO(0, 0, 0, Decimal('0'), Decimal('0')),
                 inventario=WidgetInventarioDTO(0, 0, 0, Decimal('0'), Decimal('0')),
                 empleados=WidgetEmpleadosDTO(0, 0, 0, Decimal('0')),
                 gastos=WidgetGastosDTO(Decimal('0'), 0, 0, Decimal('0')),
+                proveedores=WidgetProveedoresDTO(0, Decimal('0'), Decimal('0')),
                 proyectos=WidgetProyectosDTO(0, 0, 0, 0),
                 clientes=WidgetClientesDTO(0, 0, 0, 0, 0),
             )
 
     @staticmethod
     def invalidar_cache(empresa_id: int):
-        """Invalida el caché de métricas para una empresa."""
-        cache_key = f"dashboard:metricas:{empresa_id}"
+        """Invalida el cache de metricas para la empresa del tenant activo."""
+        from django.db import connection
+        cache_key = f"dashboard:metricas:{connection.schema_name}:{empresa_id}"
         cache.delete(cache_key)
 
     @staticmethod

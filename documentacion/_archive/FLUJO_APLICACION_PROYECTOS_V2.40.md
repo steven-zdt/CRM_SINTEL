@@ -317,7 +317,7 @@ workspace.html
 
 ### Navegación por Hash
 
-- **URL Pattern**: `http://home.sintel.com/workspace/#cotizaciones`
+- **URL Pattern**: `http://home.sintel.net.co/workspace/#cotizaciones`
 - **Limpieza Automática**: Elimina parámetros obsoletos (`aplicar_descuento`, `porcentaje_descuento`)
 - **Historial**: Soporte para navegación back/forward del navegador
 

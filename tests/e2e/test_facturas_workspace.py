@@ -11,8 +11,13 @@ Requisitos:
 - playwright install (si no está instalado)
 - Servidor Django corriendo en http://localhost:8000 (o configurar BASE_URL)
 """
+
 import pytest
-pytest.skip("E2E deshabilitado temporalmente en CI (playwright no instalado)", allow_module_level=True)
+
+pytest.skip(
+    "E2E deshabilitado temporalmente en CI (playwright no instalado)",
+    allow_module_level=True,
+)
 from playwright.sync_api import Page, expect
 
 
@@ -20,7 +25,7 @@ from playwright.sync_api import Page, expect
 def authenticated_page(page: Page, live_server):
     """
     Página autenticada para tests E2E.
-    
+
     Nota: Requiere que live_server esté configurado y que haya un usuario de prueba.
     """
     # TODO: Implementar login si es necesario
@@ -33,7 +38,7 @@ def authenticated_page(page: Page, live_server):
 def test_facturas_workspace_upload_xml(page: Page, live_server):
     """
     E2E: Subir archivo XML desde el workspace.
-    
+
     Flujo:
     1. Navegar a /workspace/#facturas
     2. Clic en "Importar UBL XML"
@@ -43,16 +48,16 @@ def test_facturas_workspace_upload_xml(page: Page, live_server):
     """
     # Navegar al workspace
     page.goto(f"{live_server.url}/workspace/#facturas")
-    
+
     # Esperar a que cargue la vista de facturas
     page.wait_for_selector('[data-test="btn-importar"]', timeout=5000)
-    
+
     # Clic en botón Importar
     page.click('[data-test="btn-importar"]')
-    
+
     # Esperar a que aparezca el modal
     page.wait_for_selector('[data-test="import-modal"]', timeout=2000)
-    
+
     # Crear archivo XML de prueba en memoria
     xml_content = """<?xml version="1.0" encoding="UTF-8"?>
     <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
@@ -72,26 +77,28 @@ def test_facturas_workspace_upload_xml(page: Page, live_server):
       </cac:LegalMonetaryTotal>
       <cbc:DocumentCurrencyCode>COP</cbc:DocumentCurrencyCode>
     </Invoice>"""
-    
+
     # Subir archivo
     file_input = page.locator('[data-test="input-xml-file"]')
-    file_input.set_input_files({
-        "name": "test.xml",
-        "mimeType": "application/xml",
-        "buffer": xml_content.encode('utf-8')
-    })
-    
+    file_input.set_input_files(
+        {
+            "name": "test.xml",
+            "mimeType": "application/xml",
+            "buffer": xml_content.encode("utf-8"),
+        }
+    )
+
     # Clic en Confirmar
     page.click('[data-test="btn-confirm-import"]')
-    
+
     # Esperar a que se cierre el modal (éxito) o aparezca error
     page.wait_for_timeout(2000)
-    
+
     # Verificar que no hay error modal visible
     error_modal = page.locator('[data-test="import-error-modal"]')
     if error_modal.is_visible():
         # Si hay error, verificar formato minimal
-        error_body = error_modal.locator('.modal-body')
+        error_body = error_modal.locator(".modal-body")
         expect(error_body).to_contain_text("error", use_inner_text=True)
     else:
         # Si no hay error, verificar que la tabla se actualizó
@@ -106,21 +113,21 @@ def test_facturas_workspace_upload_missing_file_shows_error(page: Page, live_ser
     """
     page.goto(f"{live_server.url}/workspace/#facturas")
     page.wait_for_selector('[data-test="btn-importar"]', timeout=5000)
-    
+
     page.click('[data-test="btn-importar"]')
     page.wait_for_selector('[data-test="import-modal"]', timeout=2000)
-    
+
     # Intentar importar sin seleccionar archivo
     page.click('[data-test="btn-confirm-import"]')
-    
+
     # Esperar respuesta
     page.wait_for_timeout(2000)
-    
+
     # Verificar que aparece error modal con formato minimal
     error_modal = page.locator('[data-test="import-error-modal"]')
     expect(error_modal).to_be_visible()
-    
-    error_body = error_modal.locator('.modal-body')
+
+    error_body = error_modal.locator(".modal-body")
     # Verificar formato minimal: solo message y code
     expect(error_body).to_contain_text("missing_xml", use_inner_text=True)
 
@@ -134,7 +141,7 @@ def test_facturas_workspace_view_detail(page: Page, live_server):
     # Por ahora, solo verificar que el botón existe y es clickeable
     page.goto(f"{live_server.url}/workspace/#facturas")
     page.wait_for_selector('[data-test="tbl-facturas"]', timeout=5000)
-    
+
     # Buscar botón "Ver" en la tabla
     view_buttons = page.locator('[data-test="btn-ver"]')
     if view_buttons.count() > 0:
@@ -151,17 +158,17 @@ def test_facturas_workspace_delete(page: Page, live_server):
     # TODO: Requiere que haya facturas en la tabla
     page.goto(f"{live_server.url}/workspace/#facturas")
     page.wait_for_selector('[data-test="tbl-facturas"]', timeout=5000)
-    
+
     # Buscar botón "Eliminar" en la tabla
     delete_buttons = page.locator('[data-test="btn-eliminar"]')
     if delete_buttons.count() > 0:
         delete_buttons.first().click()
-        
+
         # Esperar confirmación
         page.wait_for_timeout(500)
-        
+
         # Confirmar eliminación (si hay diálogo)
         # page.keyboard.press('Enter')  # Si hay confirm()
-        
+
         # Verificar que la fila desaparece o se recarga la tabla
         page.wait_for_timeout(2000)

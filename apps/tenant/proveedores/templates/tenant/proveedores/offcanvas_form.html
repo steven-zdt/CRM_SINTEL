@@ -101,6 +101,12 @@
         <i class="bi bi-file-invoice-dollar me-1"></i>Facturas de Compra
       </button>
     </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-representantes-btn" data-bs-toggle="tab"
+              data-bs-target="#tab-representantes" type="button" role="tab" aria-selected="false">
+        <i class="bi bi-person-check me-1"></i>Representantes
+      </button>
+    </li>
   </ul>
   {% endif %}
 
@@ -450,6 +456,12 @@
       </div>
 
     </div>{# /tab-compras #}
+
+    {# Tab: Representantes #}
+    <div class="tab-pane fade p-3" id="tab-representantes" role="tabpanel" tabindex="0">
+      {% include "tenant/proveedores/partials/list_representantes.html" %}
+    </div>{# /tab-representantes #}
+
     {% endif %}
   </div>
 
@@ -467,3 +479,24 @@
   </div>
 
 </div>
+
+{# Assets para Representantes v3.17.0 #}
+{% if modo_detalle %}
+  {% include "tenant/proveedores/partials/assets_representantes.html" %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const proveedorUuid = document.getElementById('offcanvas-proveedor')?.dataset.proveedorUuid;
+      if (proveedorUuid) {
+        // Cargar tabla de representantes cuando se abre el tab
+        const tabRepresentantesBtn = document.getElementById('tab-representantes-btn');
+        if (tabRepresentantesBtn) {
+          tabRepresentantesBtn.addEventListener('shown.bs.tab', function() {
+            window.Sintel.Proveedores.Representante.cargarTabla(proveedorUuid);
+          });
+          // Cargar también en el contexto del form
+          document.getElementById('form-representante').dataset.proveedorUuid = proveedorUuid;
+        }
+      }
+    });
+  </script>
+{% endif %}

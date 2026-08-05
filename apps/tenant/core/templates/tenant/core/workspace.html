@@ -96,9 +96,9 @@
         {% include 'tenant/clientes/clientes_list.html' %}
       </section>
 
-      {# Módulo Ventas v3.10.5 - Feature-Sliced Architecture #}
+      {# Modulo Ventas v3.16.x - Feature-Sliced Architecture #}
       <section id="tab-ventas" class="workspace-tab" style="display: none;">
-        {% include 'tenant/ventas/list_ordenes.html' %}
+        {% include 'tenant/ventas/list_ventas.html' %}
       </section>
 
       {# Módulo Proveedores v3.17.0 - Feature-Sliced Architecture + Representantes #}
@@ -211,7 +211,7 @@
 
       {# Módulo Inventario (Refactorizado v3.5) #}
       <section id="tab-inventario" class="workspace-tab" style="display: none;">
-        {% include 'inventario/list_inventario.html' %}
+        {% include 'tenant/inventario/list_inventario.html' %}
       </section>
 
       {# Módulo Perfil (Mi Perfil) - FSD SSoT #}
@@ -319,7 +319,7 @@
   {% include 'tenant/contabilidad/partials/assets_reportes.html' %}
   {% include 'tenant/contabilidad/partials/assets_retenciones.html' %}
   {% include 'tenant/contabilidad/partials/assets_plantillas.html' %}
-  {% include 'inventario/assets_inventario.html' %}
+  {% include 'tenant/inventario/assets_inventario.html' %}
 
   {# Módulo Perfil (Mi Perfil) - FSD SSoT #}
   {% include 'tenant/perfil/partials/assets_perfil.html' %}

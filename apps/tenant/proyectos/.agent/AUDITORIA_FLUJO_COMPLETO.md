@@ -1,8 +1,8 @@
 # AUDITORIA_FLUJO_COMPLETO.md — Proyectos
 
-## Fecha: 2026-05-25
+## Fecha: 2026-08-05
 ## Modulo: tenant/proyectos
-## Version: v3.10.3 (imports globales consolidados) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2
+## Version: v3.10.5 (fix dependencies migracion 0020) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2
 
 ---
 
@@ -484,12 +484,84 @@ except ProtectedError as e:
 | 0007 | UUID field en Proyecto — M3-PASO1 |
 | 0008 | ItemPresupuestoProyecto + campos planeados — M5-Presupuesto Manual |
 | **0018** | **TareaCorta.cliente FK: PROTECT → SET_NULL (v3.10.4)** |
+| **0020** | **uuid en ItemPresupuestoProyecto/TareaDiariaProyecto — dependencies corregido (v3.10.5, ver FIX abajo)** |
 
 **Comandos para aplicar:**
 ```bash
 make makemigrations
 make migrate-tenants
 ```
+
+---
+
+## FIX v3.10.5 (2026-08-05) — Migracion 0020: dependencies con app_label incorrecto bloqueaba el arranque completo
+
+### Contexto
+
+`docker compose up` fallaba en el paso de migraciones con:
+```
+django.db.migrations.exceptions.NodeNotFoundError: Migration tenant_proyectos.0020_itempresupuesto_tareadiaria_uuid
+dependencies reference nonexistent parent node ('proyectos', '0019_proyecto_sede')
+```
+
+El contenedor `web` no arrancaba en ningun escenario (dev limpio o existente) hasta corregir esto — bloqueaba TODO, no solo `proyectos`.
+
+### Causa raiz
+
+`apps/tenant/proyectos/apps.py` declara:
+```python
+label = 'tenant_proyectos'
+```
+
+`AppConfig.label` (no el nombre de la carpeta `proyectos`) es el namespace real que Django usa para
+resolver `dependencies` entre migraciones. `0020_itempresupuesto_tareadiaria_uuid.py` fue escrita
+con el nombre de carpeta en vez del label real:
+
+```python
+# INCORRECTO — 'proyectos' no es un app_label registrado, es solo el nombre de la carpeta
+dependencies = [
+    ('proyectos', '0019_proyecto_sede'),
+]
+```
+
+Todas las demas migraciones de este modulo (0010, 0011, 0012, 0014, 0017, 0018, 0019, etc.) usan
+correctamente `'tenant_proyectos'`. Fue un typo aislado en un solo archivo — verificado con
+`grep -rn "('proyectos', '" apps/tenant/*/migrations/*.py` (sin otros hallazgos en todo el repo,
+en ninguna de las 10 apps que sobre-escriben su `label`).
+
+### Solucion
+
+```python
+# apps/tenant/proyectos/migrations/0020_itempresupuesto_tareadiaria_uuid.py
+dependencies = [
+    ('tenant_proyectos', '0019_proyecto_sede'),  # antes: ('proyectos', ...)
+]
+```
+
+### Como evitarlo en el futuro
+
+**Antes de escribir `dependencies` a mano en cualquier migracion, verificar el `app_label` real:**
+```bash
+grep -n "label" apps/tenant/<app>/apps.py
+```
+
+Si no hay linea `label = ...`, Django usa el default (el nombre de la carpeta, ej. `facturas`,
+`empresa`, `bancos`). Si SI hay `label = 'tenant_X'` explicito (como en `proyectos`), ESE es el
+valor que va en `dependencies`, nunca el nombre de la carpeta. Ver tambien
+`.agents/skills/backend/django-tenant.md` (seccion "Migraciones Multi-Tenant") para la lista
+completa de apps con `label` sobre-escrito.
+
+**Mejor aun:** dejar que `makemigrations` genere el archivo automaticamente — Django siempre
+resuelve el `app_label` correcto por si mismo. Este bug solo ocurre cuando se edita o crea el
+`dependencies` de una migracion a mano.
+
+### Como se detecto
+
+Encontrado en una sesion de pruebas de humo (`docker compose up`), no durante desarrollo normal
+— la migracion llevaba tiempo en el repo sin que nadie corriera `migrate_schemas` desde cero en un
+entorno limpio. Recordatorio: `make migrate-tenants`/`migrate_schemas` debe correrse (o al menos
+`manage.py migrate_schemas --check`) antes de mergear cualquier migracion nueva, no asumir que
+"aplica en mi entorno local ya migrado" significa que el grafo de dependencias es valido.
 
 ---
 
@@ -504,5 +576,6 @@ make migrate-tenants
 | v3.5.2 | 2026-05-20 | M5: Presupuesto Manual (Fase 2 Planeación), 8 Critical Fixes, 21 tests totales |
 | v3.10.3 | 2026-05-25 | Imports globales: crud_service (IntegrityError+ValidationError), business_service (date + 5 cross-app models via try/except guards), viewsets (logging + 6 cross-app), serializers (sys + FacturaInterAppAPI); models.py lazy stays justified (Django app loading) |
 | **v3.10.4** | **2026-05-28** | **TareaCorta.cliente FK PROTECT → SET_NULL** (mig 0018). Permite eliminar clientes inactivos aunque tengan TareaCortas vinculadas. FK → NULL preserva snapshot `cliente_nombre`. `crud_service.delete_cliente()` captura `ProtectedError` residual con mensaje 400. |
+| **v3.10.5** | **2026-08-05** | **Fix `dependencies` migracion 0020**: usaba `('proyectos', ...)` (nombre de carpeta) en vez de `('tenant_proyectos', ...)` (app_label real), bloqueando el arranque completo del proyecto (`NodeNotFoundError` en `migrate_schemas`). Ver FIX v3.10.5 arriba para causa raiz y como evitarlo. |
 
-*Auditoría actualizada el 2026-05-28 | SINTEL v3.10.4 — Status: PRODUCTION READY ✅*
+*Auditoría actualizada el 2026-08-05 | SINTEL v3.10.5 — Status: PRODUCTION READY ✅*

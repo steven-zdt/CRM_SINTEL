@@ -1,0 +1,172 @@
+{# offcanvas_detalle_venta.html — Detalle de Venta v3.16.x #}
+{% load humanize %}
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-venta-detalle"
+     aria-labelledby="offcanvas-venta-detalle-label"
+     data-bs-backdrop="true">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-venta-detalle-label">
+      <i class="bi bi-bag-check text-primary me-2"></i>Detalle de Venta
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body px-4 py-3">
+    <div id="detalle-venta-feedback" class="alert d-none mb-3" role="alert"></div>
+
+    {% if venta %}
+      {# ── Estado badge ──────────────────────────────────────────────── #}
+      <div class="mb-3">
+        {% if venta.estado == 'BORRADOR' %}
+          <span class="badge bg-secondary fs-6">Borrador</span>
+        {% elif venta.estado == 'FACTURADA_DIAN' %}
+          <span class="badge bg-success fs-6">Facturada DIAN</span>
+        {% elif venta.estado == 'ANULADA' %}
+          <span class="badge bg-danger fs-6">Anulada</span>
+        {% endif %}
+      </div>
+
+      {# ── Info General ─────────────────────────────────────────────── #}
+      <div class="row g-2 mb-4 small">
+        <div class="col-6">
+          <span class="text-muted d-block">Cliente</span>
+          <strong>{{ venta.cliente.razon_social }}</strong>
+          <div class="text-muted" style="font-size:0.78rem;">{{ venta.cliente.numero_documento }}</div>
+        </div>
+        <div class="col-6">
+          <span class="text-muted d-block">Fecha Emision</span>
+          <strong>{{ venta.fecha_emision|date:"d M Y" }}</strong>
+        </div>
+        {% if venta.fecha_vencimiento %}
+        <div class="col-6">
+          <span class="text-muted d-block">Fecha Vencimiento</span>
+          <strong>{{ venta.fecha_vencimiento|date:"d M Y" }}</strong>
+        </div>
+        {% endif %}
+        {% if venta.proyecto %}
+        <div class="col-6">
+          <span class="text-muted d-block">Proyecto</span>
+          <strong>{{ venta.proyecto.nombre }}</strong>
+        </div>
+        {% endif %}
+        {% if venta.observaciones %}
+        <div class="col-12">
+          <span class="text-muted d-block">Observaciones</span>
+          <span>{{ venta.observaciones }}</span>
+        </div>
+        {% endif %}
+      </div>
+
+      {# ── Numero Factura y Resolucion ─────────────────────────────── #}
+      {% if venta.numero_factura %}
+      <div class="alert alert-info p-2 small mb-3">
+        <i class="bi bi-hash me-1"></i>
+        <strong>Numero Factura:</strong> {{ venta.numero_factura }}
+        {% if venta.resolucion %}
+          <span class="text-muted ms-2">
+            (Res. {{ venta.resolucion.numero_resolucion }}{% if venta.resolucion.prefijo %} — {{ venta.resolucion.prefijo }}{% endif %})
+          </span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ── Factura asociada ─────────────────────────────────────────── #}
+      {% if venta.factura_asociada %}
+      <div class="alert alert-success p-2 small mb-4">
+        <i class="bi bi-receipt-cutoff me-1"></i>
+        <strong>Factura DIAN:</strong>
+        {{ venta.factura_asociada.numero }}
+        {% if venta.factura_asociada.cufe %}
+          <div class="text-muted mt-1" style="font-size:0.72rem; word-break:break-all;">
+            CUFE: {{ venta.factura_asociada.cufe }}
+          </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# ── Items ────────────────────────────────────────────────────── #}
+      <div class="mb-4">
+        <p class="small fw-bold text-uppercase text-muted mb-2">Items</p>
+        <table class="table table-sm table-bordered">
+          <thead class="table-light">
+            <tr>
+              <th>Descripcion</th>
+              <th class="text-end">Cant.</th>
+              <th class="text-end">Precio</th>
+              <th class="text-end">IVA%</th>
+              <th class="text-end">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in venta.items.all %}
+            <tr>
+              <td>{{ item.descripcion }}</td>
+              <td class="text-end">{{ item.cantidad }}</td>
+              <td class="text-end">${{ item.precio_unitario|floatformat:0|intcomma }}</td>
+              <td class="text-end">{{ item.porcentaje_iva }}%</td>
+              <td class="text-end">${{ item.subtotal|floatformat:0|intcomma }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-muted text-center">Sin items</td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot class="fw-semibold">
+            <tr>
+              <td colspan="4" class="text-end text-muted">Subtotal:</td>
+              <td class="text-end">${{ venta.subtotal|floatformat:0|intcomma }}</td>
+            </tr>
+            <tr>
+              <td colspan="4" class="text-end text-muted">IVA:</td>
+              <td class="text-end">${{ venta.impuestos|floatformat:0|intcomma }}</td>
+            </tr>
+            <tr class="table-primary">
+              <td colspan="4" class="text-end fw-bold">Total Neto:</td>
+              <td class="text-end fw-bold">${{ venta.total_neto|floatformat:0|intcomma }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+    {% else %}
+      <div class="alert alert-warning">Venta no encontrada.</div>
+    {% endif %}
+  </div>
+
+  {% if venta %}
+  <div style="border-top: 1px solid #dee2e6; padding: 1rem 1.5rem; background: #f8f9fa;">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary btn-sm"
+              data-bs-dismiss="offcanvas">Cerrar</button>
+      {% if venta.estado == 'BORRADOR' %}
+        <button type="button" class="btn btn-danger btn-sm"
+                data-venta-action="anular"
+                data-venta-uuid="{{ venta.uuid }}">
+          <i class="bi bi-x-circle me-1"></i>Anular
+        </button>
+        <button type="button" class="btn btn-success btn-sm"
+                data-venta-action="facturar-dian"
+                data-venta-uuid="{{ venta.uuid }}">
+          <i class="bi bi-send-check me-1"></i>Facturar DIAN
+        </button>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+  (function() {
+    var el = document.getElementById('offcanvas-venta-detalle');
+    if (!el) return;
+    if (window.Sintel && window.Sintel.Ventas && window.Sintel.Ventas.Editor) {
+      window.Sintel.Ventas.Editor.onDetalleLoaded(el);
+    } else {
+      document.addEventListener('sintel:ventas:editor:ready', function() {
+        window.Sintel.Ventas.Editor.onDetalleLoaded(el);
+      }, { once: true });
+    }
+  })();
+</script>

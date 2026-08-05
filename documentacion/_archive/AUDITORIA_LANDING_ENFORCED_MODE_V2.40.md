@@ -145,7 +145,7 @@ curl -X GET "http://localhost:8000/api/v1/landing/auth/activate/?token=..."
 # Esperado: 200 OK con información del usuario y tenant
 
 # 3. Validar Landing Page UI
-# Abrir http://home.sintel.com/
+# Abrir http://home.sintel.net.co/
 # Verificar que la landing page carga correctamente
 ```
 

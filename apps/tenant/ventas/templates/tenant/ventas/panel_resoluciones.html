@@ -1,0 +1,125 @@
+{# panel_resoluciones.html — Panel de gestion de Resoluciones DIAN v3.16.x #}
+
+<style>
+  #offcanvas-resoluciones-panel { width: 760px !important; }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-resoluciones-panel"
+     aria-labelledby="offcanvas-resoluciones-panel-label"
+     data-bs-backdrop="true">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-resoluciones-panel-label">
+      <i class="bi bi-card-checklist text-success me-2"></i>Resoluciones de Facturacion DIAN
+    </h5>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-success btn-sm"
+              hx-get="/api/v1/ventas/resoluciones/render-offcanvas/crear/"
+              hx-target="#offcanvas-container-ventas"
+              hx-swap="innerHTML">
+        <i class="bi bi-plus-lg me-1"></i>Nueva Resolucion
+      </button>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+  </div>
+
+  <div class="offcanvas-body px-4 py-3">
+
+    <div id="panel-resoluciones-feedback" class="alert d-none mb-3" role="alert"></div>
+
+    {% if resoluciones %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Prefijo / Numero Resolucion</th>
+            <th>Tipo</th>
+            <th>Rango Autorizado</th>
+            <th>Vigencia</th>
+            <th class="text-center">Estado</th>
+            <th class="text-center" style="width:100px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in resoluciones %}
+          <tr>
+            <td>
+              {% if r.prefijo %}
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle me-1">{{ r.prefijo }}</span>
+              {% endif %}
+              <span class="fw-semibold small">{{ r.numero_resolucion }}</span>
+            </td>
+            <td><span class="text-muted small">{{ r.get_tipo_display }}</span></td>
+            <td>
+              <div class="small fw-semibold">{{ r.rango_desde }} – {{ r.rango_hasta }}</div>
+              <div class="text-muted" style="font-size:0.72rem;">Siguiente: <strong>{{ r.consecutivo_actual }}</strong></div>
+            </td>
+            <td>
+              <div class="small">{{ r.fecha_desde|date:"d/m/Y" }}</div>
+              <div class="text-muted" style="font-size:0.72rem;">al {{ r.fecha_hasta|date:"d/m/Y" }}</div>
+            </td>
+            <td class="text-center">
+              {% if r.vigente %}
+                <span class="badge bg-success">Activa</span>
+              {% else %}
+                <span class="badge bg-secondary">Inactiva</span>
+              {% endif %}
+              {% if r.consecutivo_actual > r.rango_hasta %}
+                <span class="badge bg-danger d-block mt-1" style="font-size:0.7rem;">Agotada</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary"
+                        hx-get="/api/v1/ventas/resoluciones/render-offcanvas/editar/?uuid={{ r.uuid }}"
+                        hx-target="#offcanvas-container-ventas"
+                        hx-swap="innerHTML"
+                        title="Editar resolucion">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-outline-danger"
+                        data-action="eliminar-resolucion"
+                        data-uuid="{{ r.uuid }}"
+                        data-numero="{{ r.numero_resolucion }}"
+                        title="Eliminar resolucion">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-card-checklist fs-1 d-block mb-3 text-muted"></i>
+      <p class="mb-3">No hay resoluciones de facturacion registradas.</p>
+      <button class="btn btn-success btn-sm"
+              hx-get="/api/v1/ventas/resoluciones/render-offcanvas/crear/"
+              hx-target="#offcanvas-container-ventas"
+              hx-swap="innerHTML">
+        <i class="bi bi-plus-lg me-1"></i>Crear primera Resolucion
+      </button>
+    </div>
+    {% endif %}
+
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    var el = document.getElementById('offcanvas-resoluciones-panel');
+    if (!el) return;
+    if (window.Sintel && window.Sintel.Ventas && window.Sintel.Ventas.ResolucionEditor) {
+      window.Sintel.Ventas.ResolucionEditor.onPanelLoaded();
+    } else {
+      document.addEventListener('sintel:ventas:resolucion-editor:ready', function () {
+        window.Sintel.Ventas.ResolucionEditor.onPanelLoaded();
+      }, { once: true });
+    }
+  })();
+</script>

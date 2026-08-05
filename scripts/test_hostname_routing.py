@@ -3,8 +3,8 @@
 Script de prueba para verificar el enrutamiento por hostname con requests reales.
 
 Este script simula requests HTTP con diferentes hostnames para verificar que:
-1. sintel.com → ROOT_URLCONF (urls_public)
-2. <schema>.sintel.com → TENANT_URLCONF (urls_tenant)
+1. sintel.net.co → ROOT_URLCONF (urls_public)
+2. <schema>.sintel.net.co → TENANT_URLCONF (urls_tenant)
 3. La ruta /activate/ está disponible en tenants privados
 
 Uso:
@@ -39,15 +39,15 @@ def test_hostname_routing():
     print(f"   TENANT_URLCONF: {settings.TENANT_URLCONF}")
     
     # 2. Verificar dominio público
-    print("\n2. Verificando dominio público (sintel.com)...")
+    print("\n2. Verificando dominio público (sintel.net.co)...")
     with schema_context('public'):
         public = TenantClient.objects.get(schema_name='public')
-        sintel_domain = Domain.objects.filter(tenant=public, domain='sintel.com').first()
+        sintel_domain = Domain.objects.filter(tenant=public, domain='sintel.net.co').first()
         
         if sintel_domain and sintel_domain.is_primary:
-            print("   [OK] sintel.com existe y es primario")
+            print("   [OK] sintel.net.co existe y es primario")
         else:
-            print("   [ERROR] sintel.com NO existe o NO es primario")
+            print("   [ERROR] sintel.net.co NO existe o NO es primario")
             print("   [IDEA] Ejecuta: python manage.py ensure_public_domains")
             return 1
     
@@ -72,9 +72,9 @@ def test_hostname_routing():
     # 4. Probar enrutamiento con Client de Django
     print("\n4. Probando enrutamiento con Django Test Client...")
     
-    # 4a. Request a sintel.com (público)
-    print("\n   a) Request a sintel.com/console/tenants/ (debe usar ROOT_URLCONF):")
-    client_public = Client(HTTP_HOST='sintel.com')
+    # 4a. Request a sintel.net.co (público)
+    print("\n   a) Request a sintel.net.co/console/tenants/ (debe usar ROOT_URLCONF):")
+    client_public = Client(HTTP_HOST='sintel.net.co')
     try:
         response = client_public.get('/console/tenants/')
         if response.status_code in [200, 302, 403]:  # 200 OK, 302 redirect, 403 forbidden (sin auth)
@@ -168,11 +168,11 @@ def test_hostname_routing():
     print("=" * 60)
     print("[OK] Configuración de enrutamiento verificada")
     print("\n[IDEA] Para pruebas reales de enrutamiento:")
-    print("   1. Accede a http://sintel.com/console/tenants/ (ROOT_URLCONF)")
+    print("   1. Accede a http://sintel.net.co/console/tenants/ (ROOT_URLCONF)")
     if test_domain_name:
         print(f"   2. Accede a http://{test_domain_name}/activate/ (TENANT_URLCONF)")
     print("\n   Prueba con curl:")
-    print("   curl -H 'Host: sintel.com' http://localhost:8000/console/tenants/")
+    print("   curl -H 'Host: sintel.net.co' http://localhost:8000/console/tenants/")
     if test_domain_name:
         print(f"   curl -H 'Host: {test_domain_name}' http://localhost:8000/activate/?token=test")
     

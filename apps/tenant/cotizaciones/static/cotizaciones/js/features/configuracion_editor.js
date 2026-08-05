@@ -97,8 +97,13 @@
    * Inicialización de eventos para botones de guardado
    */
   function attachListeners() {
-    if (w.Sintel.Cotizaciones.features.configuracionEditor._listenersAttached) return;
-    
+    // Guard en `document.body` (no en el objeto w.Sintel.*.configuracionEditor:
+    // ese objeto se redeclara mas abajo en cada carga del script, asi que un
+    // flag guardado ahi nunca sobrevive a la siguiente ejecucion — quedaba
+    // siempre en false y el guard anterior era un no-op, FE-A1).
+    if (d.body.dataset.configuracionEditorInitialized) return;
+    d.body.dataset.configuracionEditorInitialized = 'true';
+
     d.addEventListener('click', function(e) {
       const btnCrear = e.target.closest('#btn-configuracion-crear-submit');
       if (btnCrear) {
@@ -114,15 +119,12 @@
         return;
       }
     });
-
-    w.Sintel.Cotizaciones.features.configuracionEditor._listenersAttached = true;
   }
 
   // Exportar feature
   w.Sintel.Cotizaciones.features.configuracionEditor = {
     init: attachListeners,
-    save: handleSave,
-    _listenersAttached: false
+    save: handleSave
   };
 
   // Auto-init

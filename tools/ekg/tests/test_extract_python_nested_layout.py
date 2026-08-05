@@ -82,6 +82,55 @@ def test_module_qualified_router_register_reference_resolves():
     assert graph.nodes[exposes[0].source_id].properties["name"] == "DashboardViewSet"
 
 
+def test_module_qualified_base_class_resolves_to_sibling_mixin():
+    """apps/tenant/inventario/api/viewsets.py declares
+    `class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin)`
+    - a module-qualified base class reference, not a bare name. Looking it
+    up in class_to_node/service_nodes by the raw qualified text never
+    matched, so every ViewSet in inventario using this import style looked
+    unwired to its ServiceMixin - a dead-code false positive caught while
+    running a real audit against the live graph. See _base_class_name()."""
+    graph = extract_app_python("inventario", PROJECT_ROOT)
+    viewset_id = schema.viewset_id("inventario", "ProductoViewSet")
+    mixin_id = schema.service_id("inventario", "api_mixins", "ProductoServiceMixin")
+    uses = [e for e in graph.edges if e.source_id == viewset_id and e.target_id == mixin_id and e.rel_type == schema.REL_USES]
+    assert len(uses) == 1
+
+
+def test_viewset_direct_selector_call_resolves():
+    """contabilidad/api/viewsets.py calls `CuentaContableSelector
+    .get_qs_list(...)` directly from CuentaContableViewSet, bypassing the
+    ServiceMixin class-attribute injection pattern entirely. Without
+    scanning ViewSet bodies for these direct calls, CuentaContableSelector
+    (and any Service only ever reached this way) looked unreferenced - the
+    third distinct dead-code false positive caught auditing the graph in
+    one session (see also test_mixin_uses_business_service_via_class_
+    attribute_injection and test_module_qualified_base_class_resolves_to_
+    sibling_mixin)."""
+    graph = extract_app_python("contabilidad", PROJECT_ROOT)
+    viewset_id = schema.viewset_id("contabilidad", "CuentaContableViewSet")
+    selector_id = schema.service_id("contabilidad", "selectors", "CuentaContableSelector")
+    uses = [e for e in graph.edges if e.source_id == viewset_id and e.target_id == selector_id and e.rel_type == schema.REL_USES]
+    assert len(uses) == 1
+
+
+def test_other_kind_files_get_calls_scanned_too():
+    """proyectos/services/presupuesto_service.py isn't one of the 4
+    canonical FSD filenames, so it gets kind=SERVICE_KIND_OTHER. It still
+    has the exact same intra-file Business->CRUD delegation pattern as
+    business_service.py (`PresupuestoCRUDService.save_item(item)` called
+    from PresupuestoBusinessService in the same file), which the CALLS
+    scan used to skip entirely because it was restricted to kind=business.
+    Fourth and final dead-code false positive of this family caught in one
+    audit session (see also the mixin-injection, qualified-base-class, and
+    ViewSet-direct-call fixes above)."""
+    graph = extract_app_python("proyectos", PROJECT_ROOT)
+    business_id = schema.service_id("proyectos", "presupuesto_service", "PresupuestoBusinessService")
+    crud_id = schema.service_id("proyectos", "presupuesto_service", "PresupuestoCRUDService")
+    calls = [e for e in graph.edges if e.source_id == business_id and e.target_id == crud_id and e.rel_type == schema.REL_CALLS]
+    assert len(calls) == 1
+
+
 def test_mail_ingestion_apiviews_extracted_and_exposed():
     graph = _graph()
     node_id = schema.viewset_id("facturas", "MailIngestionRunCreateAPIView")

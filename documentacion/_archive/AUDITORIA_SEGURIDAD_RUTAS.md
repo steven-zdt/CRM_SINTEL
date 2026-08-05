@@ -155,8 +155,8 @@ def _is_public_only_route(self, path):
    ```
 
 2. **Verificar en Producción:**
-   - Acceder a `http://home.sintel.com:8000/console/` → Debe devolver `404`
-   - Acceder a `http://sintel.com:8000/console/` → Debe funcionar (esquema público)
+   - Acceder a `http://home.sintel.net.co:8000/console/` → Debe devolver `404`
+   - Acceder a `http://sintel.net.co:8000/console/` → Debe funcionar (esquema público)
 
 3. **Monitoreo Continuo:**
    - Ejecutar tests de penetración en CI/CD

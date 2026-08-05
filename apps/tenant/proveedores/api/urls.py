@@ -8,7 +8,7 @@ import logging
 
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import ProveedorViewSet, CuentasPagarViewSet
+from .viewsets import ProveedorViewSet, CuentasPagarViewSet, RepresentanteViewSet
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,10 @@ router = DefaultRouter()
 # Sub-modulo Cuentas por Pagar
 router.register(r"cuentas-pagar", CuentasPagarViewSet, basename="cuentas-pagar")
 
+# Sub-modulo Representantes (v3.17.0)
+# Endpoint: /api/v1/proveedores/representantes/ + filtro ?proveedor_uuid=...
+router.register(r"representantes", RepresentanteViewSet, basename="representante")
+
 # ViewSet principal de proveedores — SIEMPRE AL FINAL con prefijo vacio
 router.register(r"", ProveedorViewSet, basename="proveedor")
 
@@ -28,7 +32,7 @@ urlpatterns = router.urls
 
 if urlpatterns:
     logger.info(
-        "OK: ProveedorViewSet + CuentasPagarViewSet (CxP unificado) registrados. URLs: %d",
+        "OK: ProveedorViewSet + CuentasPagarViewSet (CxP) + RepresentanteViewSet (v3.17.0) registrados. URLs: %d",
         len(urlpatterns),
     )
 else:

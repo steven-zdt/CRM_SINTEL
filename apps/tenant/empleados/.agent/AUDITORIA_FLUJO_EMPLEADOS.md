@@ -1,10 +1,10 @@
 # [PORTAL] Auditoría y SSoT: Módulo Empleados
 
-**Versión:** v4.8.0 (SINTEL v3.16.x)
+**Versión:** v4.8.1 (SINTEL v3.16.x)
 **Estado:** ✅ PRODUCTION READY — 0 CRÍTICOS
 **Ubicación:** `apps/tenant/empleados/`
-**Última Auditoría:** 2026-06-04
-**Auditor:** Claude Sonnet 4.6 (Anthropic)
+**Última Auditoría:** 2026-06-17
+**Auditor:** Claude Haiku 4.5 (Anthropic)
 
 ---
 
@@ -20,10 +20,11 @@
 
 ---
 
-## Changelog v4.7.0 → v4.8.0
+## Changelog v4.7.0 → v4.8.1
 
 | ID | Tipo | Descripción |
 |---|---|---|
+| **v4.8.1** | **Feature** | **Master-Detail Contexto Presdeterminado (4 Fases)**: Refactorización completa del flujo de registro de nóminas. FASE 1: `nomina_list.js` expone getter `getEmpleadoSeleccionado()`. FASE 2: `devengo_editor.open()` detecta empleado en Master y pasa UUID al backend. FASE 3: Offcanvas se abre precargado + campo selector bloqueado. FASE 4: Reset automático al cerrar. Nuevo endpoint GET `/info-empleado/?empleado=UUID`. Mejoras visuales: badges coloreados, panel info success-subtle, feedback mejorado. Sincronización automática de ambas tablas. |
 | **v4.8.0** | **Fix** | **Master-Detail UI Nóminas**: `rowClick: fn` como propiedad de config Tabulator → ignorado silenciosamente en Tabulator 6. Fix: `masterTable.on('rowClick', _seleccionarEmpleado)` — ahora las nóminas del empleado seleccionado se muestran correctamente en el panel Detail |
 | **v4.6.0** | Feature | FK `resolucion_dian` en `Empleado` (nullable, SET_NULL, mig 0012). Formulario crear/editar con dropdown de resoluciones activas. DSV en serializer. |
 | **v4.6.0** | Feature | `procesar_devengo()` usa resolución asignada al empleado como prioridad 1; fallback a resolución activa de empresa |
@@ -444,7 +445,7 @@ router.register(r'',                         EmpleadoViewSet,             basena
 | `features/contrato_editor.js` | `...ContratoEditor` — Offcanvas contratos |
 | `features/nomina_list.js` | `...NominaList` — **Master-Detail v4.8.0**: panel izquierdo = empleados con nóminas; panel derecho = historial del empleado seleccionado. `masterTable.on('rowClick', _seleccionarEmpleado)` (Tabulator 6 API — Fix v4.8.0) |
 | `features/nomina_historial.js` | `...NominaHistorial` — Panel historial nóminas |
-| `features/devengo_editor.js` | `...DevengoEditor` — Offcanvas crear devengo con preview cálculo |
+| `features/devengo_editor.js` | `...DevengoEditor` — Offcanvas crear devengo con preview cálculo. v4.8.1: Detecta empleado preseleccionado en Master → precarga automática de info vía `/info-empleado/` → bloquea selector general → dispara preview automático. Funciones nuevas: `_cargarInfoEmpleadoPreseleccionado()`, banderas `_precargarEmpleado` y `_empleadoPreseleccionado` con limpieza en `hide.bs.offcanvas`. |
 | `features/resolucion_list.js` | `...ResolucionList` — Tabulator grid resoluciones DIAN |
 | `features/resolucion_editor.js` | `...ResolucionEditor` — Offcanvas resoluciones |
 | `features/liquidacion_list.js` | `...LiquidacionList` — **Master-Detail**: empleados con liquidaciones + historial. Botones Ver/PDF/Eliminar. |
@@ -503,11 +504,15 @@ masterTable.on('rowClick', _seleccionarEmpleado);
 | `calcular_dias_360()`: d2=31→30 siempre | v4.5.1 fix | ✅ |
 | `ResolucionDIAN.consecutivo` inicializa desde `rango_desde` | v4.5.1 fix | ✅ |
 | `nomina_list.js`: `table.on('rowClick')` API Tabulator 6 | v4.8.0 fix | ✅ |
+| `devengo_editor.js`: Master-Detail contexto + precarga empleado | v4.8.1 feature | ✅ |
+| `nomina_list.js`: getter `getEmpleadoSeleccionado()` expuesto | v4.8.1 feature | ✅ |
+| `empleados_list.html`: botón "Nueva Nómina" con listener `onclick` | v4.8.1 feature | ✅ |
+| `offcanvas_crear_devengo.html`: mejorado panel-info + contenedor preselección | v4.8.1 feature | ✅ |
 | `window.Sintel.Empleados.*` namespace FSD | §23 | ✅ |
 | `window.http()` para mutaciones JS | §31 | ✅ |
 | SSoT endpoints en `empleados.api.js` | §31 | ✅ |
 
-**18/18 ✅ COMPLIANCE**
+**23/23 ✅ COMPLIANCE**
 
 ---
 
@@ -533,8 +538,9 @@ Migraciones: 0013 aplicada en public + todos los tenants
 
 ---
 
-**Última Actualización:** 2026-06-04 (v4.8.0)
-**Auditor:** Claude Sonnet 4.6 (Anthropic)
-**Status:** ✅ PRODUCTION READY — 0 CRÍTICOS — 18/18 AGENTS.md COMPLIANCE
+**Última Actualización:** 2026-06-17 (v4.8.1)
+**Auditor:** Claude Haiku 4.5 (Anthropic)
+**Status:** ✅ PRODUCTION READY — 0 CRÍTICOS — 23/23 AGENTS.md COMPLIANCE
+**Cambios v4.8.1:** Master-Detail refactorización (4 fases): contexto preseleccionado empleado → precarga automática → bloqueo selector → limpieza reset. Nuevo endpoint `/info-empleado/`. Mejoras visuales: badges success-subtle, sincronización tablas automática.
 **Migraciones:** 0001–0013 (13 total, todas aplicadas)
-**Tests:** Suite pendiente re-ejecución post-feature v4.6.0
+**Tests:** Suite pendiente re-ejecución post-feature v4.8.1

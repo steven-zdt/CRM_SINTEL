@@ -75,7 +75,7 @@ def test_api_list_proveedores_smoke(client, django_user_model, tenant):
     client.force_login(user)
     
     # 200 si TENANT_URLCONF ya incluye /api/v1/proveedores/
-    resp = client.get("/api/v1/proveedores/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp = client.get("/api/v1/proveedores/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     assert resp.status_code in (200, 404), f"Expected 200 or 404, got {resp.status_code}"
 
 

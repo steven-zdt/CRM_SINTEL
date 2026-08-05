@@ -148,6 +148,12 @@
             return;
         }
 
+        // Guard (FE-A2): init() [MutationObserver/DOMContentLoaded] y el
+        // listener htmx:afterSettle pueden llamar initEditorEvents() para el
+        // mismo form — sin esto, el submit queda registrado 2 veces.
+        if (form.dataset.editorInitialized) return;
+        form.dataset.editorInitialized = 'true';
+
         // Listener para el botón de guardar
         const btnGuardar = d.querySelector('#btn-guardar-empresa');
         if (btnGuardar) {

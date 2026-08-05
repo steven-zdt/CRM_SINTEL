@@ -1,61 +1,55 @@
-"""
-Serializers para Ventas — OrdenVenta e ItemOrdenVenta.
-
-Sigue el patron FSD de SINTEL v3.10.5:
-- UUIDOrPKRelatedField para cliente (acepta UUID publico o PK interno).
-- Campos read_only calculados por el CRUD service (subtotal, impuestos, total).
-- Items anidados en el serializer de detalle y creacion.
-"""
-from decimal import Decimal
-
 from rest_framework import serializers
 
-from apps.tenant.ventas.models import ItemOrdenVenta, OrdenVenta
+from apps.tenant.ventas.models import ItemVenta, ResolucionFacturacion, Venta
 
 
-class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
-    """
-    Campo relacionado que acepta UUID publico o ID entero de Django.
-    Filtra el queryset por empresa_id (DSV al nivel de serializacion).
-    """
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if qs is None:
-            return qs
-        root = getattr(self, "root", None)
-        context = getattr(root, "context", {}) if root else {}
-        empresa_id = context.get("empresa_id")
-        if empresa_id and hasattr(qs.model, "empresa_id"):
-            return qs.filter(empresa_id=empresa_id)
-        return qs
-
-    def to_internal_value(self, data):
-        if data in (None, ""):
-            if self.allow_null:
-                return None
-            self.fail("required")
-        data_str = str(data)
-        if not data_str.isdigit():
-            qs = self.get_queryset()
-            try:
-                return qs.get(uuid=data_str)
-            except (TypeError, ValueError, qs.model.DoesNotExist):
-                self.fail("does_not_exist", pk_value=data)
-        return super().to_internal_value(data)
-
-
-class ItemOrdenVentaSerializer(serializers.ModelSerializer):
-    """Serializer para items de OrdenVenta (lectura y escritura)."""
+class ResolucionFacturacionSerializer(serializers.ModelSerializer):
+    numero_formado = serializers.SerializerMethodField()
+    tipo_display = serializers.CharField(source="get_tipo_display", read_only=True)
+    agotada = serializers.SerializerMethodField()
 
     class Meta:
-        model = ItemOrdenVenta
+        model = ResolucionFacturacion
+        fields = (
+            "id",
+            "uuid",
+            "numero_resolucion",
+            "prefijo",
+            "tipo",
+            "tipo_display",
+            "fecha_resolucion",
+            "fecha_desde",
+            "fecha_hasta",
+            "rango_desde",
+            "rango_hasta",
+            "consecutivo_actual",
+            "vigente",
+            "numero_formado",
+            "agotada",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id", "uuid", "consecutivo_actual", "numero_formado", "agotada",
+            "tipo_display", "created_at", "updated_at",
+        )
+
+    def get_numero_formado(self, obj):
+        return obj.formar_numero()
+
+    def get_agotada(self, obj):
+        return not obj.esta_en_rango()
+
+
+class ItemVentaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItemVenta
         fields = (
             "id",
             "descripcion",
             "cantidad",
             "precio_unitario",
-            "tasa_iva",
+            "porcentaje_iva",
             "subtotal",
             "producto_id",
             "servicio_id",
@@ -63,50 +57,7 @@ class ItemOrdenVentaSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "subtotal")
 
 
-class OrdenVentaListSerializer(serializers.ModelSerializer):
-    """Serializer optimizado para el listado en Tabulator."""
-
-    cliente_nombre = serializers.CharField(
-        source="cliente.razon_social",
-        read_only=True,
-        default="",
-    )
-    cliente_documento = serializers.CharField(
-        source="cliente.numero_documento",
-        read_only=True,
-        default="",
-    )
-    factura_numero = serializers.SerializerMethodField()
-
-    class Meta:
-        model = OrdenVenta
-        fields = (
-            "id",
-            "uuid",
-            "fecha_emision",
-            "fecha_vencimiento",
-            "estado",
-            "subtotal",
-            "impuestos",
-            "total",
-            "cliente_id",
-            "cliente_nombre",
-            "cliente_documento",
-            "factura_id",
-            "factura_numero",
-            "created_at",
-        )
-        read_only_fields = fields
-
-    def get_factura_numero(self, obj):
-        if obj.factura_id and obj.factura:
-            return obj.factura.numero
-        return None
-
-
-class OrdenVentaDetailSerializer(serializers.ModelSerializer):
-    """Serializer completo para detalle e HTMX offcanvas."""
-
+class VentaListSerializer(serializers.ModelSerializer):
     cliente_nombre = serializers.CharField(
         source="cliente.razon_social",
         read_only=True,
@@ -119,10 +70,10 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
     )
     factura_numero = serializers.SerializerMethodField()
     factura_uuid = serializers.SerializerMethodField()
-    items = ItemOrdenVentaSerializer(many=True, read_only=True)
+    resolucion_prefijo = serializers.SerializerMethodField()
 
     class Meta:
-        model = OrdenVenta
+        model = Venta
         fields = (
             "id",
             "uuid",
@@ -131,70 +82,112 @@ class OrdenVentaDetailSerializer(serializers.ModelSerializer):
             "estado",
             "subtotal",
             "impuestos",
-            "total",
-            "observaciones",
+            "total_neto",
+            "numero_factura",
             "cliente_id",
             "cliente_nombre",
             "cliente_documento",
-            "factura_id",
+            "proyecto_id",
+            "resolucion_id",
+            "resolucion_prefijo",
+            "factura_asociada_id",
             "factura_numero",
             "factura_uuid",
+            "created_at",
+        )
+        read_only_fields = fields
+
+    def get_factura_numero(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.numero
+        return obj.numero_factura
+
+    def get_factura_uuid(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return str(obj.factura_asociada.uuid)
+        return None
+
+    def get_resolucion_prefijo(self, obj):
+        if obj.resolucion_id and obj.resolucion:
+            return obj.resolucion.prefijo or obj.resolucion.numero_resolucion
+        return None
+
+
+class VentaDetailSerializer(serializers.ModelSerializer):
+    cliente_nombre = serializers.CharField(
+        source="cliente.razon_social",
+        read_only=True,
+        default="",
+    )
+    cliente_documento = serializers.CharField(
+        source="cliente.numero_documento",
+        read_only=True,
+        default="",
+    )
+    proyecto_nombre = serializers.CharField(
+        source="proyecto.nombre",
+        read_only=True,
+        default="",
+    )
+    resolucion_numero = serializers.SerializerMethodField()
+    resolucion_prefijo = serializers.SerializerMethodField()
+    factura_numero = serializers.SerializerMethodField()
+    factura_uuid = serializers.SerializerMethodField()
+    factura_estado = serializers.SerializerMethodField()
+    items = ItemVentaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Venta
+        fields = (
+            "id",
+            "uuid",
+            "fecha_emision",
+            "fecha_vencimiento",
+            "estado",
+            "subtotal",
+            "impuestos",
+            "total_neto",
+            "observaciones",
+            "numero_factura",
+            "cliente_id",
+            "cliente_nombre",
+            "cliente_documento",
+            "proyecto_id",
+            "proyecto_nombre",
+            "resolucion_id",
+            "resolucion_numero",
+            "resolucion_prefijo",
+            "factura_asociada_id",
+            "factura_numero",
+            "factura_uuid",
+            "factura_estado",
             "items",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
 
-    def get_factura_numero(self, obj):
-        if obj.factura_id and obj.factura:
-            return obj.factura.numero
+    def get_resolucion_numero(self, obj):
+        if obj.resolucion_id and obj.resolucion:
+            return obj.resolucion.numero_resolucion
         return None
+
+    def get_resolucion_prefijo(self, obj):
+        if obj.resolucion_id and obj.resolucion:
+            return obj.resolucion.prefijo
+        return None
+
+    def get_factura_numero(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.numero
+        return obj.numero_factura
 
     def get_factura_uuid(self, obj):
-        if obj.factura_id and obj.factura:
-            return str(obj.factura.uuid)
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return str(obj.factura_asociada.uuid)
         return None
 
-
-class OrdenVentaCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer para CREATE y PATCH de OrdenVenta con items anidados."""
-
-    from apps.tenant.clientes.models import Cliente
-
-    cliente = UUIDOrPKRelatedField(
-        queryset=Cliente.objects.none(),
-    )
-    items = ItemOrdenVentaSerializer(many=True, required=False)
-
-    class Meta:
-        model = OrdenVenta
-        fields = (
-            "cliente",
-            "fecha_emision",
-            "fecha_vencimiento",
-            "observaciones",
-            "items",
-        )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        from apps.tenant.clientes.models import Cliente
-
-        empresa_id = self.context.get("empresa_id")
-        if empresa_id:
-            self.fields["cliente"].queryset = Cliente.objects.filter(
-                empresa_id=empresa_id,
-                activo=True,
-            )
-        else:
-            self.fields["cliente"].queryset = Cliente.objects.none()
-
-    def validate_items(self, items):
-        if items is not None and len(items) == 0:
-            raise serializers.ValidationError(
-                "La orden debe tener al menos un item."
-            )
-        return items
-
-    def to_representation(self, instance):
-        return OrdenVentaDetailSerializer(instance, context=self.context).data
+    def get_factura_estado(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.estado
+        return None

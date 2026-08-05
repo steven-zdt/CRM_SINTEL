@@ -1,0 +1,214 @@
+{# offcanvas_editar_compras.html - Offcanvas para EDITAR Orden de Compra v3.10.5 #}
+<style>
+  #offcanvas-compra-editar {
+    width: 800px !important;
+  }
+  #offcanvas-compra-editar .offcanvas-body {
+    padding: 1.5rem;
+  }
+  #offcanvas-compra-editar .section-divider {
+    margin-bottom: 1.75rem;
+  }
+  #offcanvas-compra-editar .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.01em;
+  }
+  #offcanvas-compra-editar .form-control,
+  #offcanvas-compra-editar .form-select {
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #offcanvas-compra-editar .form-control:focus,
+  #offcanvas-compra-editar .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,.12);
+  }
+  #offcanvas-compra-editar .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #0d6efd;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  #offcanvas-compra-editar .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+  }
+  #offcanvas-compra-editar .table-items th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    background-color: #f8f9fa;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-compra-editar" aria-labelledby="offcanvas-compra-editar-label">
+    <div class="offcanvas-header border-bottom py-3 px-4">
+        <h5 class="offcanvas-title fw-semibold" id="offcanvas-compra-editar-label">
+            <i class="bi bi-pencil-square text-primary me-2"></i>Editar Orden de Compra: {{ instance.consecutivo }}
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+
+    <div class="offcanvas-body">
+        {# Contenedor de errores/feedback #}
+        <div id="form-compra-editar-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+        <form id="compra-editar-form" data-mode="edit" data-uuid="{{ instance.uuid }}">
+            {% csrf_token %}
+
+            {# ── Sección: Datos Generales ───────────────────────────── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-file-earmark-text me-1"></i>Información General
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="consecutivo" class="form-label">Consecutivo</label>
+                        <input type="text" class="form-control bg-light" id="consecutivo" value="{{ instance.consecutivo }}" readonly disabled>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="fecha" class="form-label">Fecha Emisión *</label>
+                        <input type="date" class="form-control" id="fecha" name="fecha" value="{{ instance.fecha|date:'Y-m-d' }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="fecha_entrega" class="form-label">Fecha Entrega</label>
+                        <input type="date" class="form-control" id="fecha_entrega" name="fecha_entrega" value="{% if instance.fecha_entrega %}{{ instance.fecha_entrega|date:'Y-m-d' }}{% endif %}">
+                    </div>
+                </div>
+            </div>
+
+            {# ── Sección: Relaciones ────────────────────────────────── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-person-badge me-1"></i>Asociaciones
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="proveedor" class="form-label">Proveedor *</label>
+                        <select class="form-select" id="proveedor" name="proveedor" required>
+                            <option value="{{ instance.proveedor.uuid }}" selected>{{ instance.proveedor.razon_social }}</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="proyecto" class="form-label">Proyecto (Opcional)</label>
+                        <select class="form-select" id="proyecto" name="proyecto">
+                            <option value="">Ninguno</option>
+                            {% if instance.proyecto %}
+                                <option value="{{ instance.proyecto.uuid }}" selected>{{ instance.proyecto.nombre }}</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {# ── Sección: Items de la Orden ─────────────────────────── #}
+            <div class="section-divider">
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                    <p class="section-title mb-0 border-0 pb-0">
+                        <i class="bi bi-list-check me-1"></i>Detalle de Items
+                    </p>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-agregar-item">
+                        <i class="bi bi-plus-lg me-1"></i>Agregar Item
+                    </button>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm align-middle table-items" id="tabla-items">
+                        <thead>
+                            <tr>
+                                <th style="width: 40%;">Descripción *</th>
+                                <th style="width: 15%;" class="text-end">Cantidad *</th>
+                                <th style="width: 20%;" class="text-end">Val. Unitario *</th>
+                                <th style="width: 10%;" class="text-end">IVA %</th>
+                                <th style="width: 15%;" class="text-end">Total</th>
+                                <th style="width: 50px;" class="text-center"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="items-tbody">
+                            {% for item in instance.items.all %}
+                            <tr class="item-row" data-uuid="{{ item.uuid }}">
+                                <td>
+                                    <input type="text" class="form-control form-control-sm item-descripcion" value="{{ item.descripcion }}" required>
+                                    <input type="hidden" class="item-inventario-uuid" value="{{ item.item_inventario_uuid|default:'' }}">
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm text-end item-cantidad" value="{{ item.cantidad }}" step="any" min="0.01" required>
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm text-end item-valor-unitario" value="{{ item.valor_unitario }}" step="any" min="0.00" required>
+                                </td>
+                                <td>
+                                    <select class="form-select form-select-sm text-end item-iva">
+                                        <option value="0" {% if item.porcentaje_iva == 0 %}selected{% endif %}>0%</option>
+                                        <option value="5" {% if item.porcentaje_iva == 5 %}selected{% endif %}>5%</option>
+                                        <option value="19" {% if item.porcentaje_iva == 19 %}selected{% endif %}>19%</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm text-end bg-light item-total" value="{{ item.total }}" readonly disabled>
+                                </td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-link link-danger p-0 btn-eliminar-item" title="Eliminar item">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            {# Se manejará por JS si por alguna razón no hay items #}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {# ── Sección: Totales y Observaciones ───────────────────── #}
+            <div class="section-divider">
+                <div class="row g-3">
+                    <div class="col-md-7">
+                        <label for="observaciones" class="form-label">Observaciones</label>
+                        <textarea class="form-control" id="observaciones" name="observaciones" rows="4" placeholder="Notas o términos de entrega...">{{ instance.observaciones|default:'' }}</textarea>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="card bg-light border-0 shadow-sm">
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between mb-2 small text-muted">
+                                    <span>Subtotal:</span>
+                                    <span id="resumen-subtotal">${{ instance.subtotal }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2 small text-muted">
+                                    <span>Impuestos (IVA):</span>
+                                    <span id="resumen-impuestos">${{ instance.impuestos }}</span>
+                                </div>
+                                <hr class="my-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold text-dark">Total Neto:</span>
+                                    <h4 class="mb-0 fw-bold text-primary" id="resumen-total">${{ instance.total }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="offcanvas-footer">
+        <div class="d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cancelar</button>
+            <button type="submit" class="btn btn-primary btn-sm px-4" id="btn-guardar-compra" form="compra-editar-form">
+                <i class="bi bi-save me-1"></i>Guardar Cambios
+            </button>
+        </div>
+    </div>
+</div>

@@ -395,6 +395,14 @@ class ItemPresupuestoProyecto(SintelTenantBaseModel):
         EQUIPOS = 'EQUIPOS', _('Equipos')
         MATERIALES = 'MATERIALES', _('Materiales')
 
+    # WARNING: [ARQ-A1] UUID Lookup Field (AGENTS.md §25)
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
     # --- Relaciones ---
     proyecto = models.ForeignKey(
         Proyecto,
@@ -483,6 +491,14 @@ class TareaDiariaProyecto(SintelTenantBaseModel):
         BAJA = 'BAJA', _('Baja')
         NORMAL = 'NORMAL', _('Normal')
         ALTA = 'ALTA', _('Alta')
+
+    # WARNING: [ARQ-A1] UUID Lookup Field (AGENTS.md §25)
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
 
     # --- Relaciones ---
     proyecto = models.ForeignKey(

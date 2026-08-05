@@ -257,7 +257,7 @@ curl -X GET http://localhost:8000/api/v1/clientes/ \
 # Esperado: 200 OK con lista de clientes
 
 # 5. Validar Workspace UI
-# Abrir http://home.sintel.com/workspace/#clientes
+# Abrir http://home.sintel.net.co/workspace/#clientes
 # Intentar crear/editar cliente como usuario no-staff
 # Verificar en Network tab que se recibe 405
 ```

@@ -18,7 +18,7 @@
     
     // Verificación de hostname: la consola solo debe cargarse en el dominio público
     const hostname = window.location.hostname;
-    const isPublicHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'sintel.com' || hostname === '192.168.2.15';
+    const isPublicHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'sintel.net.co' || hostname === '192.168.2.15';
     
     if (!isPublicHost) {
         // Hard stop: abortar si se carga en un dominio de tenant
@@ -782,7 +782,7 @@
                 const schemaValue = this.value.trim().toLowerCase();
                 if (schemaValue && !dominioFqdnInput.value.trim()) {
                     // Solo mostrar preview, el usuario puede editarlo o dejarlo vacío para autogeneración
-                    const domainBase = window.location.hostname.includes('localhost') ? 'localhost' : 'sintel.com';
+                    const domainBase = window.location.hostname.includes('localhost') ? 'localhost' : 'sintel.net.co';
                     dominioFqdnInput.placeholder = `${schemaValue}.${domainBase}`;
                 }
             });

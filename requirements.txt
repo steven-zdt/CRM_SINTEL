@@ -23,7 +23,7 @@ redis>=5.0,<6.0
 # Utilidades
 python-dotenv>=1.0,<2.0
 requests>=2.31,<3.0  # Para integraciones externas (DIAN, bancos, etc.)
-django-cors-headers>=4.3,<5.0  # CORS para subdominios dinámicos (sintel.com)
+django-cors-headers>=4.3,<5.0  # CORS para subdominios dinámicos (sintel.net.co)
 Pillow==10.3.0  # Para ImageField en modelos Django
 
 # ETL - Parsers para documentos tributarios
@@ -44,9 +44,9 @@ opensearch-py>=2.0,<3.0  # Cliente Python oficial para OpenSearch
 
 # Enterprise Knowledge Graph (tools/ekg/) — EKG-M1: extraccion AST + carga a Neo4j
 neo4j>=5.24,<6.0  # Driver oficial Bolt para el grafo de arquitectura/codigo
-tree-sitter>=0.23,<0.24  # Motor de parsing AST (sin regex) para Python/JS
-tree-sitter-python>=0.23,<0.24  # Gramatica Python para tree-sitter
-tree-sitter-javascript>=0.23,<0.24  # Gramatica JavaScript para tree-sitter
+tree-sitter>=0.25,<0.27  # Motor de parsing AST (sin regex) para Python/JS - requiere QueryCursor (ausente en 0.23.x, EKG-M2)
+tree-sitter-python>=0.25,<0.26  # Gramatica Python para tree-sitter
+tree-sitter-javascript>=0.25,<0.26  # Gramatica JavaScript para tree-sitter
 
 # Testing (opcional, para desarrollo)
 pytest>=7.4,<8.0  # Framework de testing

@@ -3,15 +3,19 @@ Tests de humo para UI de MailInboxConfig en workspace.
 
 [WARNING] v2.37: Alineado con UI estándar tenant apps.
 """
-from django.test import TestCase, Client
-from django.contrib.auth import get_user_model
+
 import pytest
+from django.contrib.auth import get_user_model
+from django.test import Client, TestCase
 
 try:
-    import playwright  # noqa: F401
     import cryptography  # noqa: F401
+    import playwright  # noqa: F401
 except Exception:
-    pytest.skip("Skipping heavy smoke test: missing playwright/cryptography", allow_module_level=True)
+    pytest.skip(
+        "Skipping heavy smoke test: missing playwright/cryptography",
+        allow_module_level=True,
+    )
 
 User = get_user_model()
 
@@ -20,19 +24,19 @@ class WorkspaceMailinboxSmokeTest(TestCase):
     """
     Tests de humo para render del panel mailinbox en workspace.
     """
-    
+
     def setUp(self):
         """Setup: Crear cliente y usuario de prueba."""
         self.client = Client()
         # TODO: Crear usuario y tenant para tests reales
-    
+
     def test_workspace_includes_mailinbox_partial(self):
         """Test: workspace.html incluye partial de mailinbox."""
         # Sin autenticación, debería redirigir o mostrar login
-        response = self.client.get('/workspace/')
+        response = self.client.get("/workspace/")
         # Verificar que el partial está incluido (requiere autenticación)
         self.assertIn(response.status_code, [200, 302, 401, 403])
-    
+
     def test_mailinbox_js_loaded(self):
         """Test: mailinbox.page.js está cargado en workspace."""
         # Este test requiere verificar el HTML renderizado

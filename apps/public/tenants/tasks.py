@@ -169,12 +169,12 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
     Aprovisiona y/o verifica el certificado SSL del dominio del nuevo tenant.
 
     Comportamiento segun arquitectura:
-    - Wildcard cert (*.sintel.com): verifica cobertura, no requiere accion adicional.
+    - Wildcard cert (*.sintel.net.co): verifica cobertura, no requiere accion adicional.
     - Cert individual: ejecuta CERT_PROVISION_SCRIPT si esta configurado en settings.
     - En ambos casos: verifica resolucion DNS y registra el resultado.
 
     Variables de entorno relevantes:
-        TENANT_DOMAIN_BASE   Base del dominio (ej: sintel.com)
+        TENANT_DOMAIN_BASE   Base del dominio (ej: sintel.net.co)
         CERT_PROVISION_SCRIPT Ruta absoluta al script bash de aprovisionamiento (opcional)
     """
     import os
@@ -204,7 +204,7 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
             )
 
         # -- Certificado wildcard: ya cubre todos los subdominios -------------
-        wildcard_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+        wildcard_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         if domain.endswith(f".{wildcard_base}"):
             logger.info(
                 "[provision_tenant_certificates_task] Wildcard *.%s cubre %s. "

@@ -1,5 +1,5 @@
 """
-Script para agregar el dominio sintel.com al tenant público.
+Script para agregar el dominio sintel.net.co al tenant público.
 
 Uso:
     python manage.py shell < scripts/agregar_dominio_publico.py
@@ -15,15 +15,15 @@ django.setup()
 from apps.public.tenants.models import Client, Domain
 
 def agregar_dominio_publico():
-    """Agrega el dominio sintel.com al tenant público."""
+    """Agrega el dominio sintel.net.co al tenant público."""
     try:
         # Obtener el tenant público
         tenant = Client.objects.get(schema_name='public')
         print(f"[OK] Tenant público encontrado: {tenant.nombre}")
         
-        # Crear o actualizar el dominio sintel.com
+        # Crear o actualizar el dominio sintel.net.co
         domain, created = Domain.objects.get_or_create(
-            domain='sintel.com',
+            domain='sintel.net.co',
             defaults={
                 'tenant': tenant,
                 'is_primary': False,
@@ -31,16 +31,16 @@ def agregar_dominio_publico():
         )
         
         if created:
-            print(f"[OK] Dominio 'sintel.com' creado para el tenant público")
+            print(f"[OK] Dominio 'sintel.net.co' creado para el tenant público")
         else:
             # Actualizar si estaba asignado a otro tenant
             if domain.tenant != tenant:
                 domain.tenant = tenant
                 domain.is_primary = False
                 domain.save()
-                print(f"[OK] Dominio 'sintel.com' actualizado para el tenant público")
+                print(f"[OK] Dominio 'sintel.net.co' actualizado para el tenant público")
             else:
-                print(f"INFO:  Dominio 'sintel.com' ya existe para el tenant público")
+                print(f"INFO:  Dominio 'sintel.net.co' ya existe para el tenant público")
         
         # Mostrar todos los dominios del tenant público
         print("\n📋 Dominios del tenant público:")

@@ -1,0 +1,262 @@
+{% load static %}
+{# partials/representantes_directory.html - Directorio de Representantes v3.17.0 #}
+{# Vista independiente: Listado consolidado de representantes de todos los proveedores #}
+
+<div class="representantes-directory">
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <h4 class="mb-0">
+      <i class="bi bi-person-check text-primary me-2"></i>
+      Directorio de Representantes
+    </h4>
+    <div class="d-flex align-items-center gap-2">
+      <div class="input-group" style="width: 230px;">
+        <span class="input-group-text bg-light">
+          <i class="bi bi-search"></i>
+        </span>
+        <input type="text" class="form-control" id="search-representantes-directory"
+               placeholder="Buscar nombre, documento...">
+      </div>
+      <button type="button" class="btn btn-primary btn-sm text-nowrap"
+              onclick="window.Sintel.Proveedores.abrirFormRepresentante(null, null)">
+        <i class="bi bi-plus-circle me-1"></i>Nuevo Representante
+      </button>
+    </div>
+  </div>
+
+  {# Grid de Representantes #}
+  <div id="grid-representantes-directory" style="height: 600px;"></div>
+
+  {# Estado Vacío #}
+  <div id="representantes-directory-empty" class="alert alert-info text-center py-5 d-none">
+    <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+    <p class="mt-3 mb-0 text-muted">No hay representantes registrados aún.</p>
+  </div>
+</div>
+
+<script>
+/**
+ * representantes_directory.js - Inicializador del Directorio de Representantes v3.17.0
+ * Tabulator grid consolidado mostrando todos los representantes de la empresa
+ */
+(function (w, d) {
+  'use strict';
+
+  const MOD = '[representantes:directory]';
+  const GRID_ID = '#grid-representantes-directory';
+  const SEARCH_ID = '#search-representantes-directory';
+  const API_URL = '/api/v1/proveedores/representantes/';
+  let table = null;
+  let initialized = false;
+
+  /**
+   * Obtener todas los representantes de la empresa (sin filtro de proveedor)
+   */
+  async function obtenerRepresentantes() {
+    try {
+      const response = await w.http('GET', API_URL);
+      return response || [];
+    } catch (error) {
+      console.error(`${MOD} Error obteniendo representantes:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Definir columnas para Tabulator
+   */
+  function getColumns() {
+    return [
+      {
+        title: 'Documento',
+        field: 'numero_documento',
+        width: 120,
+        formatter: function(cell) {
+          const row = cell.getRow().getData();
+          return `
+            <strong>${row.numero_documento}</strong>
+            <small class="d-block text-muted">${row.tipo_documento_display}</small>
+          `;
+        }
+      },
+      {
+        title: 'Nombre Completo',
+        field: 'nombre_completo',
+        minWidth: 180,
+        formatter: function(cell) {
+          const row = cell.getRow().getData();
+          const badge = row.es_principal ? '<span class="badge bg-success ms-2">Principal</span>' : '';
+          return `${cell.getValue()}${badge}`;
+        }
+      },
+      {
+        title: 'Cargo',
+        field: 'cargo',
+        width: 140,
+        formatter: w.TabulatorFactory?.formatters?.valueOrFallback || null
+      },
+      {
+        title: 'Email/Teléfono',
+        field: 'email_contacto',
+        minWidth: 180,
+        formatter: function(cell) {
+          const row = cell.getRow().getData();
+          const email = row.email_contacto;
+          const telefono = row.telefono_contacto;
+          if (email) return `<small>${email}</small>`;
+          if (telefono) return `<small>${telefono}</small>`;
+          return '<span class="text-muted">—</span>';
+        }
+      },
+      {
+        title: 'Acciones',
+        field: 'acciones',
+        width: 100,
+        headerSort: false,
+        formatter: function(cell) {
+          const uuid = cell.getRow().getData().uuid;
+          return `
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-primary btn-edit-representante" data-uuid="${uuid}" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-outline-danger btn-delete-representante" data-uuid="${uuid}" title="Eliminar">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          `;
+        }
+      }
+    ];
+  }
+
+  /**
+   * Inicializar tabla Tabulator
+   */
+  async function initTable() {
+    if (!w.TabulatorFactory) {
+      console.error(`${MOD} TabulatorFactory no disponible`);
+      return;
+    }
+
+    const gridEl = d.querySelector(GRID_ID);
+    if (!gridEl) return;
+
+    // Obtener datos
+    const representantes = await obtenerRepresentantes();
+
+    if (!representantes || representantes.length === 0) {
+      d.querySelector('#representantes-directory-empty')?.classList.remove('d-none');
+      return;
+    }
+
+    d.querySelector('#representantes-directory-empty')?.classList.add('d-none');
+
+    // Crear Tabulator
+    table = new w.Tabulator(GRID_ID, {
+      data: representantes,
+      columns: getColumns(),
+      layout: 'fitColumns',
+      responsiveLayout: 'collapse',
+      pagination: 'local',
+      paginationSize: 20,
+      paginationSizeSelector: [10, 20, 50, 100],
+      sortMode: 'local',
+      filterMode: 'local',
+      height: '100%',
+      selectable: false,
+    });
+
+    // Search/Filter
+    const searchInput = d.querySelector(SEARCH_ID);
+    if (searchInput) {
+      searchInput.addEventListener('keyup', (e) => {
+        table.setFilter([
+          { field: 'nombre_completo', type: 'like', value: e.target.value },
+          { field: 'numero_documento', type: 'like', value: e.target.value },
+          { field: 'email_contacto', type: 'like', value: e.target.value }
+        ]);
+      });
+    }
+
+    // Event Listeners: Editar/Eliminar
+    d.addEventListener('click', (e) => {
+      const btnEdit = e.target.closest('.btn-edit-representante');
+      const btnDelete = e.target.closest('.btn-delete-representante');
+
+      if (btnEdit) {
+        const uuid = btnEdit.dataset.uuid;
+        w.Sintel?.Proveedores?.abrirFormRepresentante?.(uuid, null);
+      } else if (btnDelete) {
+        const uuid = btnDelete.dataset.uuid;
+        if (confirm('¿Está seguro de eliminar este representante?')) {
+          w.Sintel?.Representante?.eliminar?.(uuid).then(() => {
+            showNotification('Representante eliminado correctamente', 'success');
+            reloadDirectorio();
+          }).catch(err => {
+            showNotification(`Error: ${err.message || 'Error eliminando representante'}`, 'danger');
+          });
+        }
+      }
+    });
+
+    initialized = true;
+    console.log(`${MOD} Tabla inicializada con ${representantes.length} representantes`);
+  }
+
+  /**
+   * Recarga el directorio desde cero (llamado por representante_editor tras CRUD).
+   */
+  async function reloadDirectorio() {
+    if (table) {
+      table.destroy();
+      table = null;
+    }
+    initialized = false;
+    await initTable();
+  }
+
+  // Exponemos reload al namespace global para que representante_editor.js lo invoque
+  w.Sintel = w.Sintel || {};
+  w.Sintel.DirectorioRepresentantes = { reload: reloadDirectorio };
+
+  /**
+   * Manejador de afterSettle para offcanvas form
+   */
+  d.body.addEventListener('htmx:afterSettle', async (e) => {
+    const target = e.detail.target;
+    if (target && ('#' + target.id) === '#offcanvas-representante') {
+      const offcanvasEl = target.querySelector('.offcanvas');
+      if (!offcanvasEl) return;
+
+      console.log(`${MOD} Offcanvas HTMX settled, activando...`);
+
+      if (w.UIManager?.handleOffcanvas) {
+        w.UIManager.handleOffcanvas(offcanvasEl, 'show');
+      } else {
+        w.bootstrap?.Offcanvas?.getOrCreateInstance?.(offcanvasEl)?.show?.();
+      }
+    }
+  });
+
+  /**
+   * Escuchar cambio de tab
+   */
+  d.addEventListener('DOMContentLoaded', () => {
+    const tabBtn = d.querySelector('#subtab-representantes-btn');
+    if (tabBtn) {
+      tabBtn.addEventListener('shown.bs.tab', () => {
+        if (!initialized) {
+          initTable();
+        }
+      });
+    }
+    // Fallback: inicializar inmediatamente si tab ya es activo
+    setTimeout(() => {
+      if (d.querySelector('#subtab-representantes')?.classList.contains('active') && !initialized) {
+        initTable();
+      }
+    }, 100);
+  });
+
+})(window, document);
+</script>

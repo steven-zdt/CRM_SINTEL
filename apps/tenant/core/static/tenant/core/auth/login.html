@@ -77,12 +77,30 @@
     <script>
         (function() {
             'use strict';
-            
+
             function getCookie(name) {
                 const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
                 return m ? m.pop() : '';
             }
-            
+
+            // [ARQ-A3] Detecta si estamos en el dominio publico (sintel.net.co, localhost, IP)
+            // o en un subdominio de tenant (ADR-002 Regla 3, igual que activate.html).
+            const IS_PUBLIC_DOMAIN = (function () {
+                const host = window.location.hostname;
+                return (
+                    host === 'sintel.net.co' ||
+                    host === 'localhost' ||
+                    /^\d+\.\d+\.\d+\.\d+$/.test(host)
+                );
+            })();
+
+            function getApiUrl(action) {
+                if (IS_PUBLIC_DOMAIN) {
+                    return '/api/public/v1/auth/' + action + '/';
+                }
+                return '/api/v1/core/auth/' + action + '/';
+            }
+
             // Cargar información del tenant
             async function loadTenantInfo() {
                 try {
@@ -108,7 +126,7 @@
             // Login function
             async function login(email, password) {
                 const csrftoken = getCookie('csrftoken') || '';
-                const response = await fetch('/api/v1/core/auth/login/', {
+                const response = await fetch(getApiUrl('login'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

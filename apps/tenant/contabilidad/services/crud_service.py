@@ -44,14 +44,19 @@ class ContabilidadCRUDService:
         )
 
         # 2. Crear movimientos
+        # WARNING: [PERF-M7] bulk_create en vez de .create() por linea -- ver la
+        # misma nota en integracion/contabilizador.py. MovimientoContable no tiene
+        # save() propio, y empresa_id/asiento van seteados explicitamente en cada
+        # instancia antes de bulk_create.
         total_debe = Decimal('0.00')
         total_haber = Decimal('0.00')
-        
+        nuevos_movimientos = []
+
         for idx, mov_data in enumerate(movimientos):
             debe = Decimal(str(mov_data.get('debe', 0)))
             haber = Decimal(str(mov_data.get('haber', 0)))
-            
-            MovimientoContable.objects.create(
+
+            nuevos_movimientos.append(MovimientoContable(
                 empresa_id=empresa_id,
                 asiento=asiento,
                 cuenta_id=mov_data['cuenta_id'],
@@ -69,9 +74,12 @@ class ContabilidadCRUDService:
                 iva_descontable=Decimal(str(mov_data.get('iva_descontable', 0))),
                 retefuente=Decimal(str(mov_data.get('retefuente', 0))),
                 reteica=Decimal(str(mov_data.get('reteica', 0)))
-            )
+            ))
             total_debe += debe
             total_haber += haber
+
+        if nuevos_movimientos:
+            MovimientoContable.objects.bulk_create(nuevos_movimientos)
 
         # 3. Actualizar totales del asiento (campos primarios + legados)
         asiento.debe_total = total_debe
@@ -102,16 +110,18 @@ class ContabilidadCRUDService:
                 setattr(asiento, campo, data[campo])
         
         # 2. Si hay movimientos, reemplazarlos
+        # WARNING: [PERF-M7] bulk_create en vez de .create() por linea.
         if movimientos is not None:
             asiento.movimientos.all().delete()
             total_debe = Decimal('0.00')
             total_haber = Decimal('0.00')
-            
+            nuevos_movimientos = []
+
             for idx, mov_data in enumerate(movimientos):
                 debe = Decimal(str(mov_data.get('debe', 0)))
                 haber = Decimal(str(mov_data.get('haber', 0)))
-                
-                MovimientoContable.objects.create(
+
+                nuevos_movimientos.append(MovimientoContable(
                     empresa_id=asiento.empresa_id,
                     asiento=asiento,
                     cuenta_id=mov_data['cuenta_id'],
@@ -129,10 +139,13 @@ class ContabilidadCRUDService:
                     iva_descontable=Decimal(str(mov_data.get('iva_descontable', 0))),
                     retefuente=Decimal(str(mov_data.get('retefuente', 0))),
                     reteica=Decimal(str(mov_data.get('reteica', 0)))
-                )
+                ))
                 total_debe += debe
                 total_haber += haber
-            
+
+            if nuevos_movimientos:
+                MovimientoContable.objects.bulk_create(nuevos_movimientos)
+
             asiento.debe_total = total_debe
             asiento.haber_total = total_haber
 
@@ -167,13 +180,15 @@ class ContabilidadCRUDService:
             haber_total=Decimal('0.00'),
         )
 
+        # WARNING: [PERF-M7] bulk_create en vez de .create() por linea.
         total_debe = Decimal('0.00')
         total_haber = Decimal('0.00')
+        nuevos_movimientos = []
 
         for idx, mov in enumerate(movimientos):
             debe = Decimal(str(mov.get('debe', 0)))
             haber = Decimal(str(mov.get('haber', 0)))
-            MovimientoContable.objects.create(
+            nuevos_movimientos.append(MovimientoContable(
                 empresa_id=empresa_id,
                 asiento=asiento,
                 cuenta_id=mov['cuenta_id'],
@@ -185,9 +200,12 @@ class ContabilidadCRUDService:
                 tercero_nit=mov.get('tercero_nit', ''),
                 tercero_razon_social=mov.get('tercero_razon_social', ''),
                 centro_costo_id=mov.get('centro_costo_id'),
-            )
+            ))
             total_debe += debe
             total_haber += haber
+
+        if nuevos_movimientos:
+            MovimientoContable.objects.bulk_create(nuevos_movimientos)
 
         asiento.debe_total = total_debe
         asiento.haber_total = total_haber

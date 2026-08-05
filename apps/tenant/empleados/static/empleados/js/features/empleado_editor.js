@@ -15,6 +15,12 @@
     const API_URL = '/api/v1/empleados/';
     const CONTAINER_ID = 'offcanvas-container-empleados';
 
+    // Guard against double submission. Each open() call (HTMX swap) re-adds submit/click
+    // listeners without removing old ones; without this flag, opening the form N times
+    // produces N simultaneous API calls on submit: first creates the employee, subsequent
+    // ones hit the uniqueness check and show the spurious "ya existe" error.
+    let _submitting = false;
+
     /**
      * Abrir offcanvas de empleado (Crear o Editar)
      */
@@ -36,13 +42,8 @@
     }
 
     function _mostrarOffcanvasSeguro(el) {
-        if (!el || !window.bootstrap?.Offcanvas) return;
-        document.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
-        document.body.classList.remove('overflow-hidden', 'modal-open');
-        document.body.style.overflow = '';
-        document.body.style.paddingRight = '';
-        const oc = bootstrap.Offcanvas.getOrCreateInstance(el);
-        oc.show();
+        // FE-A5: delega al helper SSoT (core/js/common/offcanvas.helper.js).
+        return window.Sintel?.Core?.mostrarOffcanvasSeguro(el);
     }
 
     /**
@@ -167,6 +168,9 @@
      * Usa FormData para soportar upload de foto (multipart/form-data).
      */
     async function submitEmpleado(form) {
+        if (_submitting) return;
+        _submitting = true;
+
         const offcanvas = form.closest('.offcanvas');
         const empleadoUuid = offcanvas?.dataset.empleadoUuid;
 
@@ -288,6 +292,7 @@
                 window.UIManager.notifyError('Error inesperado al guardar el empleado');
             }
         } finally {
+            _submitting = false;
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = empleadoUuid ?
@@ -308,7 +313,13 @@
     }
 
     // Inicializar listeners
-    setupOffcanvasLoadListener();
+    // Guard: setupOffcanvasLoadListener() registra en `document.body` (persiste
+    // entre recargas HTMX del modulo "empleados") — sin este guard, cada
+    // recarga del script duplica el flujo de guardado (FE-A1/A2).
+    if (!document.body.dataset.empleadoEditorInitialized) {
+        document.body.dataset.empleadoEditorInitialized = 'true';
+        setupOffcanvasLoadListener();
+    }
 
     // Exportar módulo
     window.Sintel.Empleados.EmpleadoEditor = {

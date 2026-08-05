@@ -74,6 +74,25 @@ def test_business_service_calls_crud_service():
     assert "crear_orden" in calls[0].properties["methods"]
 
 
+def test_mixin_uses_business_service_via_class_attribute_injection():
+    """apps/tenant/compras/services/api_mixins.py wires OrdenCompraServiceMixin
+    to OrdenCompraBusinessService via `business_service_class =
+    OrdenCompraBusinessService` (class-attribute injection), not a method
+    call - a plain call-scan never sees this, which made every CRUD/Business
+    service in the app look like dead code when audited via the graph
+    (found running a real dead-code audit; OrdenCompraBusinessService is
+    demonstrably live). See extract_services()'s SERVICE_KIND_MIXIN branch."""
+    graph = _graph()
+    mixin_id = schema.service_id("compras", "api_mixins", "OrdenCompraServiceMixin")
+    business_id = schema.service_id("compras", "business_service", "OrdenCompraBusinessService")
+    crud_id = schema.service_id("compras", "crud_service", "OrdenCompraCRUDService")
+    selector_id = schema.service_id("compras", "selectors", "OrdenCompraSelector")
+    uses_targets = {e.target_id for e in graph.edges if e.source_id == mixin_id and e.rel_type == schema.REL_USES}
+    assert business_id in uses_targets
+    assert crud_id in uses_targets
+    assert selector_id in uses_targets
+
+
 def test_viewset_uses_its_serializers():
     graph = _graph()
     viewset_id = schema.viewset_id("compras", "OrdenCompraViewSet")

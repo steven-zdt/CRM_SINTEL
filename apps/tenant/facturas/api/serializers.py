@@ -236,17 +236,31 @@ class FacturaListSerializer(serializers.ModelSerializer):
         from apps.tenant.facturas.services.selectors import ProveedorBridge
         return ProveedorBridge.obtener_proveedor_por_uuid(obj.proveedor_uuid, obj.empresa_id)
 
+    def _retencion_de_mapa_o_property(self, obj, tipo: str, property_name: str):
+        """
+        [PERF-N1] Si el ViewSet ya construyo 'retenciones_map' (una query agrupada
+        para toda la pagina, ver FacturaViewSet._build_retenciones_map), lo usa.
+        Si no esta en el contexto (p.ej. serializer instanciado directamente fuera
+        del listado paginado), cae al property per-row original -- sin cambio de
+        comportamiento para esos casos, solo sin la optimizacion.
+        """
+        retenciones_map = self.context.get('retenciones_map')
+        if retenciones_map is not None:
+            from decimal import Decimal
+            return retenciones_map.get(obj.id, {}).get(tipo, Decimal('0.00'))
+        return getattr(obj, property_name)
+
     def get_retefuente(self, obj):
         """Retorna la retención en la fuente calculada vía Pull Model."""
-        return obj.total_retencion_fuente
+        return self._retencion_de_mapa_o_property(obj, 'RETEFUENTE', 'total_retencion_fuente')
 
     def get_reteica(self, obj):
         """Retorna la retención de ICA calculada vía Pull Model."""
-        return obj.total_reteica
+        return self._retencion_de_mapa_o_property(obj, 'RETEICA', 'total_reteica')
 
     def get_reteiva(self, obj):
         """Retorna la retención de IVA calculada vía Pull Model."""
-        return obj.total_reteiva
+        return self._retencion_de_mapa_o_property(obj, 'RETEIVA', 'total_reteiva')
 
 
 class FacturaDetailSerializer(serializers.ModelSerializer):

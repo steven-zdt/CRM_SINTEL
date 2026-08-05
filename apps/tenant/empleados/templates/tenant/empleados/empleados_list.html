@@ -173,30 +173,24 @@
             data-module="empleados">
             <input type="text" id="search-empleado" class="form-control form-control-sm"
               placeholder="Buscar por nombre, cédula, correo, cargo..." style="max-width: 400px;"
-              data-module="empleados" data-search-input>
+              data-module="empleados"
+              hx-get="{% url 'empleados:empleado-tabla' %}"
+              hx-trigger="keyup changed delay:400ms, search"
+              hx-target="#empleados-panel"
+              name="q">
             <button class="btn btn-primary btn-sm ms-2" hx-get="/api/v1/empleados/gestor-offcanvas/?tipo=empleado"
               hx-target="#offcanvas-container-empleados" hx-swap="innerHTML">
               <i class="bi bi-plus-lg me-1"></i>Nuevo Empleado
             </button>
           </div>
 
-          {# Spinner #}
-          <div data-spinner="empleados" class="text-center py-5 flex-grow-1" style="display: none;">
-            <div class="spinner-border" role="status">
-              <span class="visually-hidden">Cargando...</span>
-            </div>
-            <p class="mt-2 text-muted">Inicializando tabla de empleados...</p>
-          </div>
-
-          {# Grid Container #}
-          <div id="grid-empleados" data-grid="empleados" class="w-100 flex-grow-1"
-            style="display: none; max-width: 100%; overflow-x: auto;"></div>
-
-          {# Empty State #}
-          <div data-empty-state="empleados" class="text-center py-5 flex-grow-1" style="display: none;">
-            <p class="text-muted">
-              <i class="bi bi-inbox"></i> No hay empleados registrados
-            </p>
+          {# Tabla server-rendered (django-tables2 + HTMX) #}
+          <div id="empleados-panel" class="w-100 flex-grow-1"
+               hx-get="{% url 'empleados:empleado-tabla' %}"
+               hx-trigger="load, empleado-updated from:body"
+               hx-target="this"
+               hx-swap="innerHTML"
+               hx-boost="true">
           </div>
         </div>
 
@@ -208,33 +202,27 @@
             data-module="contratos">
             <input type="text" id="search-contrato" class="form-control form-control-sm"
               placeholder="Buscar por empleado, tipo, estado, fecha..." style="max-width: 400px;"
-              data-module="contratos" data-search-input>
+              data-module="contratos"
+              hx-get="{% url 'empleados:contrato-tabla' %}"
+              hx-trigger="keyup changed delay:400ms, search"
+              hx-target="#contratos-panel"
+              name="q">
             <button class="btn btn-primary btn-sm ms-2" id="btn-nuevo-contrato">
               <i class="bi bi-plus-lg me-1"></i>Nuevo Contrato
             </button>
           </div>
 
-          {# Spinner #}
-          <div data-spinner="contratos" class="text-center py-5 flex-grow-1" style="display: none;">
-            <div class="spinner-border" role="status">
-              <span class="visually-hidden">Cargando...</span>
-            </div>
-            <p class="mt-2 text-muted">Inicializando tabla de contratos...</p>
-          </div>
-
-          {# Grid Container #}
-          <div id="grid-contratos" data-grid="contratos" class="w-100 flex-grow-1"
-            style="display: none; max-width: 100%; overflow-x: auto;"></div>
-
-          {# Empty State #}
-          <div data-empty-state="contratos" class="text-center py-5 flex-grow-1" style="display: none;">
-            <p class="text-muted">
-              <i class="bi bi-inbox"></i> No hay contratos registrados
-            </p>
+          {# Tabla server-rendered (django-tables2 + HTMX) -- carga solo al abrir este sub-tab #}
+          <div id="contratos-panel" class="w-100 flex-grow-1"
+               hx-get="{% url 'empleados:contrato-tabla' %}"
+               hx-trigger="shown.bs.tab from:#tab-contratos once, contrato-updated from:body"
+               hx-target="this"
+               hx-swap="innerHTML"
+               hx-boost="true">
           </div>
         </div>
 
-        {# TAB 3: NOMINAS — Master-Detail v4.8.0 #}
+        {# TAB 3: NOMINAS — Master-Detail (Fase 5-BIS: django-tables2 + HTMX) #}
         <div class="tab-pane fade" id="tab-pane-nominas" role="tabpanel" aria-labelledby="tab-nominas" tabindex="0">
 
           {# Toolbar #}
@@ -242,16 +230,12 @@
             <h6 class="mb-0 text-muted fw-semibold">
               <i class="bi bi-cash-coin me-1 text-primary"></i>Nóminas (Devengos)
             </h6>
-            <button class="btn btn-primary btn-sm disabled" id="btn-nueva-nomina"
-                    disabled title="Seleccione un empleado primero">
-              <i class="bi bi-plus-circle me-1"></i>Nueva Nómina
-            </button>
           </div>
 
           {# Split-pane Master-Detail #}
           <div class="d-flex" style="gap: 0; min-height: 480px; border: 1px solid var(--bs-border-color); border-radius: 0.5rem; overflow: hidden;">
 
-            {# PANEL IZQUIERDO — Master: lista de empleados #}
+            {# PANEL IZQUIERDO — Master: empleados con nominas #}
             <div style="width: 280px; min-width: 220px; border-right: 1px solid var(--bs-border-color); background: var(--bs-body-bg); display: flex; flex-direction: column;">
               <div class="px-3 pt-3 pb-2 border-bottom" style="background: var(--bs-tertiary-bg);">
                 <p class="mb-1 small fw-semibold text-muted text-uppercase" style="letter-spacing:.05em;">
@@ -259,33 +243,32 @@
                 </p>
                 <input type="text" id="search-nomina-master"
                        class="form-control form-control-sm"
-                       placeholder="Filtrar empleado...">
+                       placeholder="Filtrar empleado..."
+                       hx-get="{% url 'empleados:nomina-master-tabla' %}"
+                       hx-trigger="keyup changed delay:400ms, search"
+                       hx-target="#nomina-master-panel"
+                       name="q">
               </div>
-              <div id="nomina-master-grid" style="flex: 1; overflow-y: auto;"></div>
+              <div id="nomina-master-panel" style="flex: 1; overflow-y: auto;"
+                   hx-get="{% url 'empleados:nomina-master-tabla' %}"
+                   hx-trigger="shown.bs.tab from:#tab-nominas once, nomina-updated from:body"
+                   hx-target="this"
+                   hx-swap="innerHTML">
+              </div>
             </div>
 
-            {# PANEL DERECHO — Detail: histórico del empleado seleccionado #}
-            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-
-              {# Header Detail #}
+            {# PANEL DERECHO — Detail: histórico del empleado seleccionado (header+tabla, cargado por el click en el master) #}
+            <div id="nomina-detail-panel" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
               <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between"
                    style="background: var(--bs-tertiary-bg); min-height: 46px;">
-                <span id="nomina-detail-header" class="small fw-semibold text-muted">
+                <span class="small fw-semibold text-muted">
                   <i class="bi bi-clock-history me-1"></i>Historial de nóminas
                 </span>
               </div>
-
-              {# Placeholder vacío #}
-              <div id="nomina-detail-placeholder"
-                   class="d-flex flex-column align-items-center justify-content-center text-center text-muted py-5"
-                   style="flex: 1;">
-                <i class="bi bi-person-lines-fill fs-1 mb-3 opacity-25"></i>
-                <p class="mb-0 small">Seleccione un empleado<br>para ver su historial de nóminas</p>
+              <div class="flex-grow-1 d-flex flex-column align-items-center justify-content-center text-muted small">
+                <i class="bi bi-arrow-left-circle" style="font-size:1.5rem; opacity:.35;"></i>
+                <p class="mt-2 mb-0">Selecciona un empleado para ver su historial</p>
               </div>
-
-              {# Grid Detail (oculto hasta seleccionar) #}
-              <div id="nomina-detail-grid" style="flex: 1; display: none; overflow: hidden;"></div>
-
             </div>{# /detail panel #}
           </div>{# /split-pane #}
 
@@ -300,37 +283,30 @@
             data-module="resoluciones">
             <input type="text" id="search-resolucion" class="form-control form-control-sm"
               placeholder="Buscar por número de resolución..." style="max-width: 400px;" data-module="resoluciones"
-              data-search-input>
+              hx-get="{% url 'empleados:resolucion-tabla' %}"
+              hx-trigger="keyup changed delay:400ms, search"
+              hx-target="#resoluciones-panel"
+              name="q">
             <button class="btn btn-primary btn-sm ms-2" id="btn-nueva-resolucion">
               <i class="bi bi-plus-lg me-1"></i>Nueva Resolución
             </button>
           </div>
 
-          {# Spinner #}
-          <div data-spinner="resoluciones" class="text-center py-5 flex-grow-1" style="display: none;">
-            <div class="spinner-border" role="status">
-              <span class="visually-hidden">Cargando...</span>
-            </div>
-            <p class="mt-2 text-muted">Inicializando tabla de resoluciones...</p>
-          </div>
-
-          {# Grid Container #}
-          <div id="grid-resoluciones" data-grid="resoluciones" class="w-100 flex-grow-1"
-            style="display: none; max-width: 100%; overflow-x: auto;"></div>
-
-          {# Empty State #}
-          <div data-empty-state="resoluciones" class="text-center py-5 flex-grow-1" style="display: none;">
-            <p class="text-muted">
-              <i class="bi bi-inbox"></i> No hay resoluciones registradas
-            </p>
+          {# Tabla server-rendered (django-tables2 + HTMX) -- carga solo al abrir este sub-tab #}
+          <div id="resoluciones-panel" class="w-100 flex-grow-1"
+               hx-get="{% url 'empleados:resolucion-tabla' %}"
+               hx-trigger="shown.bs.tab from:#tab-resoluciones once, resolucion-updated from:body"
+               hx-target="this"
+               hx-swap="innerHTML"
+               hx-boost="true">
           </div>
         </div>
 
-        {# TAB 5: LIQUIDACIONES — Master-Detail Layout #}
+        {# TAB 5: LIQUIDACIONES — Master-Detail (Fase 5-BIS: django-tables2 + HTMX) #}
         <div class="tab-pane fade" id="tab-pane-liquidaciones" role="tabpanel" aria-labelledby="tab-liquidaciones"
           tabindex="0">
 
-          {# CSS scoped al tab — Master-Detail split + Tabulator styling #}
+          {# CSS scoped al tab — Master-Detail split #}
           <style>
             #tab-pane-liquidaciones .liq-master-detail {
               display: flex;
@@ -353,131 +329,64 @@
               border-bottom: 1px solid #dee2e6;
               padding: 8px 10px;
             }
-            #tab-pane-liquidaciones #liq-master-grid {
+            #tab-pane-liquidaciones #liq-master-panel {
               flex: 1;
               overflow-y: auto;
             }
             #tab-pane-liquidaciones .liq-detail-panel {
               flex: 1;
-              display: none;
+              display: flex;
               flex-direction: column;
               border: 1px solid #dee2e6;
               border-radius: 8px;
               overflow: hidden;
               background: #fff;
+              padding: 8px 12px;
             }
             #tab-pane-liquidaciones .liq-detail-header {
               background: #f0f7ff;
               border-bottom: 1px solid #dee2e6;
               padding: 8px 12px;
-            }
-            #tab-pane-liquidaciones #liq-detail-grid {
-              flex: 1;
-              overflow-y: auto;
-            }
-            #tab-pane-liquidaciones .liq-detail-placeholder {
-              flex: 1;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              border: 1px solid #dee2e6;
-              border-radius: 8px;
-              background: #fafafa;
-              color: #adb5bd;
-            }
-            #tab-pane-liquidaciones .tabulator {
-              font-size: .82rem;
-              border: none !important;
-            }
-            #tab-pane-liquidaciones .tabulator .tabulator-header {
-              background: #f8f9fa;
-              border-bottom: 2px solid #dee2e6;
-            }
-            #tab-pane-liquidaciones .tabulator .tabulator-col {
-              background: #f8f9fa !important;
-              padding: 5px 8px !important;
-            }
-            #tab-pane-liquidaciones .tabulator .tabulator-col-title {
-              font-size: .7rem;
-              font-weight: 700;
-              text-transform: uppercase;
-              letter-spacing: .04em;
-              color: #6c757d;
-            }
-            #tab-pane-liquidaciones .tabulator .tabulator-cell {
-              padding: 5px 8px !important;
-              border-bottom: 1px solid #f0f0f0;
-              vertical-align: middle;
-            }
-            #tab-pane-liquidaciones .tabulator .tabulator-row:hover {
-              background: #e8f4fd !important;
-            }
-            #tab-pane-liquidaciones .tabulator-master .tabulator-row.tabulator-selected,
-            #tab-pane-liquidaciones .tabulator-master .tabulator-row:focus {
-              background: #dceefb !important;
+              margin: -8px -12px 8px -12px;
             }
             #tab-pane-liquidaciones .btn-group-sm .btn {
               font-size: .68rem;
             }
           </style>
 
-          {# Toolbar #}
-          <div class="d-flex justify-content-between align-items-center mb-2 pt-1 gap-2 flex-wrap">
-            <button class="btn btn-primary btn-sm" id="btn-nueva-liquidacion" disabled>
-              <i class="bi bi-calculator me-1"></i>Nueva Liquidación
-            </button>
-          </div>
-
-          {# Filtros rápidos por tipo — afectan al panel Detail #}
-          <div class="d-flex gap-1 mb-2 flex-wrap align-items-center" id="filtros-tipo-liquidacion"
-            style="padding:5px 6px; background:#fafafa; border-radius:6px; border:1px solid #dee2e6;">
-            <span class="text-muted ms-1 me-1"
-              style="font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;">Tipo:</span>
-            <button class="btn btn-xs btn-outline-dark active" data-filtro-liq-tipo=""
-              style="font-size:.68rem;padding:2px 7px;">Todos</button>
-            <button class="btn btn-xs btn-outline-info" data-filtro-liq-tipo="PRIMA_SERVICIOS"
-              style="font-size:.68rem;padding:2px 7px;"><i class="bi bi-award me-1"></i>Prima</button>
-            <button class="btn btn-xs btn-outline-warning" data-filtro-liq-tipo="CESANTIAS"
-              style="font-size:.68rem;padding:2px 7px;"><i class="bi bi-piggy-bank me-1"></i>Cesant.</button>
-            <button class="btn btn-xs btn-outline-success" data-filtro-liq-tipo="VACACIONES"
-              style="font-size:.68rem;padding:2px 7px;"><i class="bi bi-sun me-1"></i>Vacac.</button>
-            <button class="btn btn-xs btn-outline-danger" data-filtro-liq-tipo="LIQUIDACION_DEFINITIVA"
-              style="font-size:.68rem;padding:2px 7px;"><i class="bi bi-file-earmark-break me-1"></i>Liq.</button>
-          </div>
-
           {# Master-Detail Split Layout #}
           <div class="liq-master-detail">
 
-            {# MASTER: lista de empleados #}
+            {# MASTER: todos los empleados, ordenados por total de liquidaciones #}
             <div class="liq-master-panel">
               <div class="liq-master-header d-flex align-items-center gap-2">
                 <i class="bi bi-people-fill text-primary" style="font-size:.9rem;"></i>
                 <span class="fw-semibold" style="font-size:.78rem;">EMPLEADOS</span>
                 <div class="input-group input-group-sm ms-auto" style="max-width:120px;">
                   <input type="text" id="search-liq-empleado" class="form-control py-0"
-                    placeholder="Buscar..." style="font-size:.72rem;">
+                    placeholder="Buscar..." style="font-size:.72rem;"
+                    hx-get="{% url 'empleados:liquidacion-master-tabla' %}"
+                    hx-trigger="keyup changed delay:400ms, search"
+                    hx-target="#liq-master-panel"
+                    name="q">
                 </div>
               </div>
-              <div id="liq-master-grid" class="tabulator-master" style="flex:1;"></div>
+              <div id="liq-master-panel"
+                   hx-get="{% url 'empleados:liquidacion-master-tabla' %}"
+                   hx-trigger="shown.bs.tab from:#tab-liquidaciones once, liquidacion-updated from:body"
+                   hx-target="this"
+                   hx-swap="innerHTML">
+              </div>
             </div>
 
-            {# DETAIL: historial de liquidaciones del empleado seleccionado #}
-            <div id="liq-detail-panel" class="liq-detail-panel">
-              <div class="liq-detail-header d-flex align-items-center gap-2 flex-wrap">
-                <i class="bi bi-file-earmark-text text-primary" style="font-size:.9rem;"></i>
-                <div>
-                  <div id="liq-detail-title" class="fw-semibold" style="font-size:.82rem;line-height:1.2;">Empleado</div>
-                  <div id="liq-detail-subtitle" class="text-muted" style="font-size:.7rem;"></div>
+            {# DETAIL: historial de liquidaciones del empleado seleccionado (header+filtros+tabla) #}
+            <div class="liq-detail-panel">
+              <div id="liq-detail-panel-content" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+                <div class="d-flex flex-column align-items-center justify-content-center flex-grow-1 text-muted">
+                  <i class="bi bi-arrow-left-circle" style="font-size:2rem; opacity:.35;"></i>
+                  <p class="mt-2 small mb-0" style="font-size:.78rem;">Selecciona un empleado<br>para ver sus liquidaciones</p>
                 </div>
               </div>
-              <div id="liq-detail-grid" style="flex:1;"></div>
-            </div>
-
-            {# PLACEHOLDER: cuando no hay empleado seleccionado #}
-            <div id="liq-detail-placeholder" class="liq-detail-placeholder">
-              <i class="bi bi-arrow-left-circle" style="font-size:2rem; opacity:.35;"></i>
-              <p class="mt-2 small mb-0" style="font-size:.78rem;">Selecciona un empleado<br>para ver sus liquidaciones</p>
             </div>
 
           </div>{# /liq-master-detail #}

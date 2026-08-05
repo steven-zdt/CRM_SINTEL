@@ -9,6 +9,7 @@ modificado algo crítico del módulo. Ver documentacion/WORKSPACE_MODULO_EMPRESA
 import pytest
 from django.test import Client
 from django.urls import reverse
+
 from apps.tenant.core.tests.base_test import TenantTestCase
 
 
@@ -21,8 +22,8 @@ class TestEmpresaModulesSmoke(TenantTestCase):
 import pytest
 
 try:
-    import playwright  # noqa: F401
     import cryptography  # noqa: F401
+    import playwright  # noqa: F401
 except Exception:
     pytest.skip("Skipping heavy smoke test: missing playwright/cryptography", allow_module_level=True)
         """Verifica que el tab #empresa carga correctamente."""
@@ -196,6 +197,7 @@ except Exception:
         
         # Contar <th> en la tabla de empresa
         import re
+
         # Buscar el thead de tabla-empresa
         tabla_match = re.search(r'<table[^>]*id="tabla-empresa"[^>]*>.*?<thead>.*?<tr>(.*?)</tr>.*?</thead>', content, re.DOTALL)
         if tabla_match:

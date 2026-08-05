@@ -7,9 +7,10 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from django.apps import apps
 from django.db import transaction, IntegrityError
 from rest_framework.exceptions import ValidationError
-from .crud_service import ProveedorCRUDService
-from .selectors import ProveedorSelector
+from .crud_service import ProveedorCRUDService, RepresentanteCRUDService
+from .selectors import ProveedorSelector, RepresentanteSelector
 from apps.tenant.empresa.models import Empresa
+from ..models import Proveedor, Representante
 
 class ProveedorBusinessService:
     """
@@ -404,72 +405,126 @@ class CuentasPagarBusinessService:
         return cuenta_pagar_obj
 
 # ==============================================================================
-# CuentaPorPagar Business Service
+# Representante Business Service (DSV + Validaciones)
 # ==============================================================================
 
-class CuentaPorPagarBusinessService:
-    """Business service para CuentaPorPagar — registro de deuda y abonos."""
+class RepresentanteBusinessService:
+    """
+    Orchestration layer for Representante.
+    Handles business rules, DSV validation, and complex flows.
+    """
+
+    def __init__(self):
+        self.crud = RepresentanteCRUDService()
 
     @staticmethod
-    @transaction.atomic
-    def registrar_cuenta_por_pagar(proveedor, factura_uuid: str, empresa_id: int,
-                                    fecha_vencimiento, observaciones: str = ''):
-        from apps.tenant.proveedores.models import CuentaPorPagar
-        from apps.tenant.empresa.models import Empresa
-        import uuid as uuid_mod
-
-        empresa = Empresa.objects.only('id').get(pk=empresa_id)
-
-        monto_total = Decimal('0.00')
-        try:
-            from apps.tenant.facturas.services import FacturaInterAppAPI
-            factura = FacturaInterAppAPI.get_by_id(factura_uuid=str(factura_uuid))
-            if factura:
-                monto_total = Decimal(str(getattr(factura, 'total', 0) or 0))
-        except Exception:
-            pass
-
-        cxp, _ = CuentaPorPagar.objects.get_or_create(
-            empresa=empresa,
-            factura_origen_uuid=uuid_mod.UUID(str(factura_uuid)),
-            defaults={
-                'proveedor': proveedor,
-                'monto_total': monto_total,
-                'saldo_pendiente': monto_total,
-                'fecha_vencimiento': fecha_vencimiento,
-                'estado_pago': 'NO_PAGADA',
-                'observaciones': observaciones,
-            },
+    def _existe_documento_representante(
+        empresa_id: int,
+        proveedor_id: int,
+        numero_documento: str,
+        exclude_uuid: str | None = None,
+    ) -> bool:
+        """
+        Verifica si ya existe un Representante con el mismo documento
+        para el mismo proveedor en la misma empresa.
+        """
+        qs = Representante.objects.filter(
+            empresa_id=empresa_id,
+            proveedor_id=proveedor_id,
+            numero_documento=numero_documento,
         )
-        return cxp
+        if exclude_uuid:
+            qs = qs.exclude(uuid=str(exclude_uuid))
+        return qs.only("id").exists()
 
-    @staticmethod
-    @transaction.atomic
-    def registrar_abono(cxp_uuid: str, monto, empresa_id: int):
-        from apps.tenant.proveedores.models import CuentaPorPagar
+    def crear_representante(self, empresa_id: int, proveedor_uuid: str, data: dict):
+        """
+        Orquesta la creación de un representante con validaciones DSV.
 
-        cxp = (
-            CuentaPorPagar.objects
-            .select_for_update()
-            .filter(uuid=cxp_uuid, empresa_id=empresa_id)
+        DSV (Double Semantic Verification):
+        1. Valida que la empresa exista
+        2. Valida que el proveedor exista y pertenece a la empresa
+        3. Valida unicidad de documento por proveedor
+        """
+        # DSV 1: Empresa existe
+        if not Empresa.objects.filter(id=empresa_id).exists():
+            raise ValidationError({"empresa": ["La empresa no existe."]})
+
+        # DSV 2: Proveedor existe y pertenece a la empresa
+        proveedor = (
+            Proveedor.objects
+            .filter(empresa_id=empresa_id, uuid=proveedor_uuid)
+            .only("id")
             .first()
         )
-        if not cxp:
-            raise ValidationError(f'CuentaPorPagar {cxp_uuid} no encontrada.')
+        if not proveedor:
+            raise ValidationError({"proveedor": ["El proveedor no existe en su empresa."]})
 
-        monto = Decimal(str(monto))
-        if monto <= 0:
-            raise ValidationError('El monto del abono debe ser mayor a cero.')
-        if monto > cxp.saldo_pendiente:
-            raise ValidationError(
-                f'El abono ({monto}) supera el saldo pendiente ({cxp.saldo_pendiente}).')
+        # Validación 3: Unicidad de documento por proveedor
+        numero_documento = data.get("numero_documento", "").strip()
+        if numero_documento and self._existe_documento_representante(
+            empresa_id, proveedor.id, numero_documento
+        ):
+            raise ValidationError({
+                "numero_documento": [
+                    "Ya existe un representante con este documento para este proveedor."
+                ]
+            })
 
-        cxp.saldo_pendiente -= monto
-        if cxp.saldo_pendiente <= Decimal('0.00'):
-            cxp.saldo_pendiente = Decimal('0.00')
-            cxp.estado_pago = 'PAGADA'
-        else:
-            cxp.estado_pago = 'PAGO_PARCIAL'
+        # CRUD: Crear con empresa_id y proveedor_id (DSV)
+        return self.crud.create(empresa_id, proveedor.id, data)
 
-        cxp.save(update_fields=['saldo_pendiente', 'estado_pago', 'updated_at'])
-        return cxp
+    def actualizar_representante(
+        self,
+        empresa_id: int,
+        representante_uuid: str,
+        data: dict
+    ):
+        """
+        Orquesta la actualización de un representante con validaciones DSV.
+        """
+        # DSV 1: Representante existe y pertenece a la empresa
+        representante = RepresentanteSelector.get_by_uuid(empresa_id, representante_uuid)
+        if not representante:
+            raise ValidationError({"representante": ["El representante no existe en su empresa."]})
+
+        # Validación 2: Unicidad de documento (excluyendo el registro actual)
+        numero_documento = data.get("numero_documento", representante.numero_documento).strip()
+        if numero_documento and self._existe_documento_representante(
+            empresa_id, representante.proveedor_id, numero_documento, exclude_uuid=representante_uuid
+        ):
+            raise ValidationError({
+                "numero_documento": [
+                    "Ya existe otro representante con este documento para este proveedor."
+                ]
+            })
+
+        # CRUD: Actualizar
+        return self.crud.update(representante, data)
+
+    def eliminar_representante(self, empresa_id: int, representante_uuid: str):
+        """
+        Orquesta la eliminación de un representante con validaciones.
+        """
+        # DSV: Representante existe y pertenece a la empresa
+        representante = RepresentanteSelector.get_by_uuid(empresa_id, representante_uuid)
+        if not representante:
+            raise ValidationError({"representante": ["El representante no existe en su empresa."]})
+
+        # Validación: No eliminar el único representante principal
+        otros_principales = Representante.objects.filter(
+            empresa_id=empresa_id,
+            proveedor_id=representante.proveedor_id,
+            es_principal=True
+        ).exclude(uuid=representante_uuid).exists()
+
+        if representante.es_principal and not otros_principales:
+            raise ValidationError({
+                "error": [
+                    "No se puede eliminar el único representante principal. "
+                    "Asigne primero otro representante como principal."
+                ]
+            })
+
+        # CRUD: Eliminar
+        return self.crud.delete(representante)

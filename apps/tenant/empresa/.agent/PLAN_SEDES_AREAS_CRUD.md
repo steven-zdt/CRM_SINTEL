@@ -170,7 +170,7 @@ Todos pasaron en `schema_context('home')`:
 
 ---
 
-## 6. FRONTEND — Workspace http://home.sintel.com/workspace/#empresa
+## 6. FRONTEND — Workspace http://home.sintel.net.co/workspace/#empresa
 
 ### Tabs del modulo Empresa
 

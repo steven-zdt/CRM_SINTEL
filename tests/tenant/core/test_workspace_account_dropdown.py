@@ -8,9 +8,11 @@ Verifica que:
 - El logout funciona correctamente (POST con CSRF)
 - Hash-routing funciona correctamente
 """
-from tests.tenant.base_test import SintelTenantTestCase
-from rest_framework import status
+
 from django.test import Client
+from rest_framework import status
+
+from tests.tenant.base_test import SintelTenantTestCase
 
 
 class TestWorkspaceAccountDropdown(SintelTenantTestCase):
@@ -22,11 +24,13 @@ class TestWorkspaceAccountDropdown(SintelTenantTestCase):
         """
         Verifica que el dropdown de cuenta está presente en el navbar.
         """
-        response = self.client.get('/workspace/')
-        
+        response = self.client.get("/workspace/")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificar que el dropdown está presente
-        self.assertContains(response, 'id="account-dropdown-container"', status_code=200)
+        self.assertContains(
+            response, 'id="account-dropdown-container"', status_code=200
+        )
         self.assertContains(response, 'id="account-dropdown-toggle"', status_code=200)
         self.assertContains(response, 'id="account-dropdown-menu"', status_code=200)
 
@@ -34,14 +38,14 @@ class TestWorkspaceAccountDropdown(SintelTenantTestCase):
         """
         Verifica que "Perfil" ya no está en el sidebar.
         """
-        response = self.client.get('/workspace/')
-        
+        response = self.client.get("/workspace/")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificar que Perfil NO está en el sidebar (solo debe estar en el dropdown)
-        sidebar_content = response.content.decode('utf-8')
+        sidebar_content = response.content.decode("utf-8")
         # Buscar el sidebar
         sidebar_start = sidebar_content.find('<ul class="nav" id="nav">')
-        sidebar_end = sidebar_content.find('</ul>', sidebar_start)
+        sidebar_end = sidebar_content.find("</ul>", sidebar_start)
         if sidebar_start != -1 and sidebar_end != -1:
             sidebar_section = sidebar_content[sidebar_start:sidebar_end]
             # Verificar que NO contiene "Perfil" como enlace del sidebar
@@ -54,56 +58,56 @@ class TestWorkspaceAccountDropdown(SintelTenantTestCase):
         """
         Verifica que el dropdown contiene el enlace "Perfil".
         """
-        response = self.client.get('/workspace/')
-        
+        response = self.client.get("/workspace/")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificar que el dropdown contiene el enlace a Perfil
         self.assertContains(response, 'id="account-menu-perfil"', status_code=200)
         self.assertContains(response, 'href="#perfil"', status_code=200)
-        self.assertContains(response, 'Perfil', status_code=200)
+        self.assertContains(response, "Perfil", status_code=200)
 
     def test_account_dropdown_contains_logout_button(self):
         """
         Verifica que el dropdown contiene el botón "Cerrar Sesión".
         """
-        response = self.client.get('/workspace/')
-        
+        response = self.client.get("/workspace/")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificar que el dropdown contiene el botón de logout
         self.assertContains(response, 'id="account-menu-logout"', status_code=200)
-        self.assertContains(response, 'Cerrar Sesión', status_code=200)
+        self.assertContains(response, "Cerrar Sesión", status_code=200)
 
     def test_account_dropdown_javascript_present(self):
         """
         Verifica que el JavaScript del dropdown está presente.
         """
-        response = self.client.get('/workspace/')
-        
+        response = self.client.get("/workspace/")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificar que el JavaScript del dropdown está presente
-        self.assertContains(response, 'account-dropdown-toggle', status_code=200)
-        self.assertContains(response, 'account-dropdown-menu', status_code=200)
-        self.assertContains(response, 'account-menu-perfil', status_code=200)
-        self.assertContains(response, 'account-menu-logout', status_code=200)
+        self.assertContains(response, "account-dropdown-toggle", status_code=200)
+        self.assertContains(response, "account-dropdown-menu", status_code=200)
+        self.assertContains(response, "account-menu-perfil", status_code=200)
+        self.assertContains(response, "account-menu-logout", status_code=200)
 
     def test_hash_routing_still_works(self):
         """
         Verifica que el hash-routing sigue funcionando correctamente.
         """
-        response = self.client.get('/workspace/')
-        
+        response = self.client.get("/workspace/")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificar que el JavaScript de hash-routing está presente
-        self.assertContains(response, 'hashchange', status_code=200)
-        self.assertContains(response, 'currentViewFromHash', status_code=200)
-        self.assertContains(response, 'hydrateView', status_code=200)
+        self.assertContains(response, "hashchange", status_code=200)
+        self.assertContains(response, "currentViewFromHash", status_code=200)
+        self.assertContains(response, "hydrateView", status_code=200)
 
     def test_workspace_contains_all_view_sections(self):
         """
         Verifica que todas las secciones de vista están presentes (incluyendo Perfil).
         """
-        response = self.client.get('/workspace/')
-        
+        response = self.client.get("/workspace/")
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Verificar que todas las secciones están presentes
         self.assertContains(response, 'id="view-perfil"', status_code=200)

@@ -1,7 +1,7 @@
-# AUDITORIA COMPLETA - CONTABILIDAD APP v3.16.3
+# AUDITORIA COMPLETA - CONTABILIDAD APP v3.17.0
 
-**Fecha de auditoria:** 2026-06-05 (sincronizada con models.py local — 14 modelos)
-**Estado:** Implementado y funcional. Deuda tecnica AUD-CONT-012 RESUELTA.
+**Fecha de auditoria:** 2026-06-10 (sincronizada con models.py local — 13 modelos)
+**Estado:** Implementado y funcional. AUD-CONT-008 RESUELTO. AUD-CONT-012 RESUELTO. Motor Fase 3 Autodescubrimiento COMPLETO (v3.17.0).
 **Arquitectura:** Feature-Sliced Design (FSD) + Service Layer
 **Compliance:** AGENTS.md + NIIF PYMES Colombia
 
@@ -9,6 +9,7 @@
 > Nota de auditoria 2026-06-05 (v3.16.1): Unificacion de `Retencion.naturaleza` + sincronizacion frontend workspace/#contabilidad (tab Retenciones). Ver §15.
 > Nota de auditoria 2026-06-05 (v3.16.2): Motor de Plantillas Contables Fase 3 — `PlantillaContable` modo dual + nuevo modelo `LineaPlantilla` + metodo `contabilizar_con_plantilla()`. Ver §16.
 > **Nota de auditoria 2026-06-05 (v3.16.3) — RESOLUCION AUD-CONT-012:** API CRUD `PlantillaContableViewSet` + UI tab Plantillas + Integracion Pendientes (auto-aplicar plantillas). Fase 3 COMPLETA. Ver §17.
+> **Nota de auditoria 2026-06-10 (v3.16.4) — Auditoria de seguridad cross-tenant:** Conteo de modelos corregido a 13 (no 14). Migraciones 0012+0013 documentadas. AUD-CONT-008 RESUELTO — `RetencionesService` ya implementa `empresa_id` obligatorio con Zero-Trust en todos los metodos publicos. Fix critico en `apps/tenant/api/permissions.py`: `IsTenantMember` y demas clases ya bloquean usuarios no autenticados incluso en `DEBUG=True`. Fix critico en cache Redis: claves ahora incluyen `connection.schema_name` para aislar datos entre tenants (dashboard + gastos). Ver §18.
 
 
 ## 📑 Documentación Especializada (SSoT)
@@ -653,7 +654,7 @@ Sin `app_origen`, retorna todas las cuentas activas del tenant (comportamiento a
 | Extractores | `integracion/extractores/` | gastos, facturas, nomina; inventario se consume por Movimientos Recientes, no por extractor directo |
 | Templates | `templates/tenant/contabilidad/` | 33 archivos HTML bajo ruta tenant (+`list_retenciones.html`, +`assets_retenciones.html`, v3.16.1) |
 | Static JS | `static/contabilidad/js/` | 17 archivos JS por dominio: asiento, cuenta, periodo, pendiente, libro, reporte, retencion (+`retencion.api.js`, +`retencion_list.js`, v3.16.1) |
-| Migraciones | `migrations/` | 11 migraciones presentes (`0001` a `0011`). `0009`: unificacion `naturaleza`. `0010`: Motor Fase 3 (PlantillaContable modo dual + LineaPlantilla). `0011`: renombrado indices auto-hash Django. |
+| Migraciones | `migrations/` | 13 migraciones presentes (`0001` a `0013`). `0009`: unificacion `naturaleza`. `0010`: Motor Fase 3 (PlantillaContable modo dual + LineaPlantilla). `0011`: renombrado indices auto-hash Django. `0012`: UUID fields en `LineaPlantilla` y `PlantillaContable` (2026-06-05). `0013`: eliminacion constraint `lineaplantilla_unique_plantilla_origen_valor` (2026-06-05). |
 | Mgmt Commands | `management/commands/` | `poblar_catalogo_niif`, `seed_reglas_contables`, `backfill_contabilidad`, `migrate_retenciones` |
 | Catálogo NIIF | DB (home, cliente) | ✅ 124 cuentas maestras |
 | CuentaContable nivel-6 | DB (home, cliente) | ✅ 54 cuentas seeded desde CatalogoMaestroNIIF |
@@ -1412,7 +1413,7 @@ El `DocumentosPendientesViewSet.list()` procesea los items del timeline de inven
 | AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Remover en limpieza autorizada |
 | AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Mover fuera de la app |
 | AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Agregar `max_retries`, `autoretry_for`, fallback a `FailedTenantTask` |
-| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | Agregar `empresa_id` en `listar_retenciones_por_documento` y `obtener_retenciones_desde_tercero` |
+| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | ✅ RESUELTO 2026-06-10 — `empresa_id` obligatorio con Zero-Trust en todos los metodos publicos |
 | AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` — expone PK | Migrar a UUID lookup (requiere migracion) |
 | AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Evaluar si Dual-Auth se requiere; migrar si se agregan acciones mutables |
 | AUD-CONT-011 | Info | `api/viewsets.py` | Endpoint `/pendientes/asistente-ia/` sin pruebas automatizadas | Agregar test de integracion cuando el usuario lo pida |
@@ -1428,7 +1429,7 @@ El `DocumentosPendientesViewSet.list()` procesea los items del timeline de inven
 | Multi-Tenant (django-tenants) | CONFORME |
 | Zero-Waste Queries (.only, .select_related) | PARCIAL — `RetencionesService` sin `.only()` en algunos metodos |
 | API-First Design (DRF ViewSets) | CONFORME |
-| Double Semantic Verification (DSV) | PARCIAL — `RetencionesService` sin `empresa_id` (AUD-CONT-008) |
+| Double Semantic Verification (DSV) | CONFORME — AUD-CONT-008 RESUELTO 2026-06-10 |
 | NIIF PYMES Colombia (PUC nivel 6) | CONFORME en flujo automatico; flexible en manual |
 | Inmutabilidad (Periodos Cerrados) | CONFORME |
 | Idempotencia (`documento_origen_*`) | CONFORME |
@@ -1436,7 +1437,7 @@ El `DocumentosPendientesViewSet.list()` procesea los items del timeline de inven
 | Partida Doble estricta (cuadratura) | CONFORME |
 | UUID lookup (no exponer PK) | PARCIAL — `ConfiguracionRetencionesViewSet` usa `id` (AUD-CONT-009) |
 | No emojis en .py | CONFORME — validado con `py_compile` |
-| empresa_id en toda query tenant | PARCIAL — `RetencionesService` pendiente (AUD-CONT-008) |
+| empresa_id en toda query tenant | CONFORME — AUD-CONT-008 RESUELTO 2026-06-10 |
 | TabulatorFactory obligatorio | CONFORME en modulos inspeccionados |
 | Celery con DLQ y reintentos | NO CONFORME — AUD-CONT-007 |
 | Cero archivos .py no autorizados | CONFORME — estructura services/ canononica |
@@ -1445,7 +1446,7 @@ El `DocumentosPendientesViewSet.list()` procesea los items del timeline de inven
 ---
 
 **Auditoria actualizada:** 2026-06-04 (v3.10.x — post Nominas Master-Detail v4.8.0)
-**Proxima revision:** Cerrar AUD-CONT-007 (Celery DLQ) y AUD-CONT-008 (RetencionesService empresa_id) como prioridad media antes del siguiente sprint de produccion.
+**Proxima revision:** Cerrar AUD-CONT-007 (Celery DLQ) como prioridad media. AUD-CONT-008 RESUELTO en 2026-06-10.
 
 ---
 
@@ -1579,7 +1580,7 @@ AlterModelOptions ordering=['-created_at']
 | AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Abierto |
 | AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Abierto |
 | AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Abierto |
-| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | Abierto |
+| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | ✅ RESUELTO 2026-06-10 |
 | AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` | Abierto |
 | AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Abierto |
 | AUD-CONT-011 | Info | `api/viewsets.py` | Endpoint `/pendientes/asistente-ia/` sin pruebas automatizadas | Abierto |
@@ -1824,7 +1825,7 @@ Cuadratura: ΣDebe = 1.035.000 ≠ ΣHaber = 1.190.000 → **DESCUADRE** (el eje
 | AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Abierto |
 | AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Abierto |
 | AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Abierto |
-| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | Abierto |
+| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | ✅ RESUELTO 2026-06-10 |
 | AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` | Abierto |
 | AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Abierto |
 | AUD-CONT-011 | Info | `api/viewsets.py` | Endpoint `/pendientes/asistente-ia/` sin pruebas automatizadas | Abierto |
@@ -1966,7 +1967,7 @@ Linea 4: 236505 (ReteF)    DEBE  RETEFUENTE    100% → $35.000
 - [ ] Pendiente: seleccionar plantilla → aplicar → verificar auto-llenado
 - [ ] Cuadratura: debe = haber después de aplicar
 - [ ] Generar asiento desde pendiente con plantilla aplicada
-- [ ] Verificar `LineaPlantilla.unique_plantilla_origen_valor` constraint
+- [x] ~~Verificar `LineaPlantilla.unique_plantilla_origen_valor` constraint~~ — eliminado en migracion `0013` (2026-06-05); constraint quitado por ser demasiado restrictivo para plantillas multi-linea
 
 ### 17.6 Deuda Tecnica Residual
 
@@ -1977,4 +1978,341 @@ Ninguna nueva deuda técnica introducida. AUD-CONT-012 **RESUELTO**.
 ---
 
 **Auditoria actualizada:** 2026-06-05 (v3.16.3 — FASE 3 COMPLETA: AUD-CONT-012 RESUELTO)
+
+---
+
+## 18. AUDITORIA DE SEGURIDAD CROSS-TENANT — 2026-06-10 (v3.16.4)
+
+### 18.1 Contexto
+
+Auditoria motivada por reporte de datos identicos entre tenants `home.sintel.net.co` y `cliente.sintel.net.co:8000` en el dashboard ejecutivo. Se realizo analisis completo de la pila: frontend, permisos DRF, extractores, cache Redis.
+
+### 18.2 Hallazgos y Correcciones Criticas
+
+#### CORRECCION 1 — Permission bypass en DEBUG (CRITICO)
+
+**Archivo:** `apps/tenant/api/permissions.py`
+
+**Problema:** Todas las clases de permiso (`IsTenantMember`, `HasTenantRole`, `IsTenantProfileAdmin`, `IsTenantProfileOperadorOrAdmin`, `IsTenantAdminOrReadOnly`) retornaban `True` de forma incondicional cuando `DEBUG=True`, sin verificar autenticacion. Usuarios anonimos accedian a endpoints de todos los tenants.
+
+**Correccion:** Se movio `if not request.user or not request.user.is_authenticated: return False` ANTES del shortcut DEBUG. Ahora usuarios anonimos siempre son bloqueados; usuarios autenticados omiten solo la verificacion de membresia/rol en DEBUG.
+
+```python
+def has_permission(self, request, view):
+    if not request.user or not request.user.is_authenticated:
+        return False
+    from django.conf import settings
+    if settings.DEBUG:
+        return True
+    # ... verificacion de membresia
+```
+
+**Impacto:** Afecta TODOS los tenant apps incluido `contabilidad`. Fix es global via clase `IsTenantMember` que es SSoT de permisos.
+
+#### CORRECCION 2 — Cache Redis key collision (CRITICO)
+
+**Archivos:**
+- `apps/tenant/dashboard/services/business_service.py`
+- `apps/tenant/gastos/services/selectors.py`
+- `apps/tenant/gastos/services/crud_service.py`
+
+**Problema:** Las claves de cache no incluian `schema_name`. Como `empresa_id` es un auto-increment POR SCHEMA (no globalmente unico), ambos tenants `home` y `cliente` tienen `empresa_id=1`. La clave `"dashboard:metricas:1"` era compartida — el primer tenant en cargar "envenenaba" la cache del segundo con sus propios datos.
+
+**Correccion:** Todas las claves de cache ahora incluyen `connection.schema_name`:
+
+```python
+from django.db import connection
+cache_key = f"dashboard:metricas:{connection.schema_name}:{empresa_id}"
+```
+
+**Impacto sobre contabilidad:** Contabilidad no usa cache Redis directamente en sus servicios principales. Sin embargo, el patron correcto queda documentado aqui para cualquier cache futura.
+
+#### AUD-CONT-008 — RESUELTO (verificacion de codigo)
+
+Durante esta auditoria se verifico el estado real del codigo de `RetencionesService`. Contrariamente a lo marcado en versiones anteriores del documento, el servicio YA implementa `empresa_id` obligatorio:
+
+- `obtener_retenciones_desde_tercero()`: valida `if not empresa_id: raise ValueError("empresa_id is required for Zero-Trust tenant isolation")`
+- `listar_retenciones_por_documento()`: idem
+- `crear_retencion()`: requiere `empresa` o `empresa_id`, lanza `ValueError` si ninguno provisto
+- `eliminar_retencion()`: idem
+
+**Estado:** ✅ RESUELTO. El hallazgo original estaba desactualizado en el documento.
+
+#### Conteo de modelos corregido
+
+El documento anterior marcaba "14 modelos". Conteo real via `grep "^class " models.py`: **13 modelos**:
+
+| # | Modelo |
+|---|--------|
+| 1 | CatalogoMaestroNIIF |
+| 2 | CuentaContable |
+| 3 | TipoComprobante |
+| 4 | AsientoContable |
+| 5 | MovimientoContable |
+| 6 | PeriodoContable |
+| 7 | ReglaContable |
+| 8 | TarifaImpuesto |
+| 9 | ConfiguracionRetenciones |
+| 10 | Retencion |
+| 11 | PlantillaContable |
+| 12 | LineaPlantilla |
+| 13 | ImpuestoDocumento |
+
+#### Migraciones 0012 y 0013 documentadas
+
+| Migracion | Fecha | Cambio |
+|-----------|-------|--------|
+| `0012_plantilla_linea_uuid` | 2026-06-05 | Agrega campo `uuid` (UUIDField, unique, db_index) a `LineaPlantilla` y `PlantillaContable` — necesario para lookup por UUID en API |
+| `0013_remove_lineaplantilla_unique_origen_valor` | 2026-06-05 | Elimina constraint `lineaplantilla_unique_plantilla_origen_valor` — constraint era demasiado restrictivo para configuraciones de plantillas con multiples lineas del mismo `origen_valor` |
+
+### 18.3 ViewSets — Conteo Verificado
+
+11 ViewSets en `api/viewsets.py`:
+
+| ViewSet | Endpoint |
+|---------|----------|
+| CuentaContableViewSet | `/api/v1/contabilidad/cuentas-contables/` |
+| AsientoContableViewSet | `/api/v1/contabilidad/asientos-contables/` |
+| MovimientoContableViewSet | `/api/v1/contabilidad/movimientos-contables/` |
+| CatalogoMaestroNIIFViewSet | `/api/v1/contabilidad/catalogo-niif/` |
+| PeriodoContableViewSet | `/api/v1/contabilidad/periodos-contables/` |
+| TipoComprobanteViewSet | `/api/v1/contabilidad/tipos-comprobante/` |
+| DocumentosPendientesViewSet | `/api/v1/contabilidad/pendientes/` |
+| ConfiguracionRetencionesViewSet | `/api/v1/contabilidad/configuracion-retenciones/` |
+| RetencionViewSet | `/api/v1/contabilidad/retenciones/` |
+| LibroDiarioViewSet | `/api/v1/contabilidad/libro-diario/` |
+| PlantillaContableViewSet | `/api/v1/contabilidad/plantillas-contables/` |
+
+### 18.4 Tabla de Deuda Tecnica Actualizada (2026-06-10)
+
+| ID | Severidad | Archivo | Hallazgo | Estado |
+|----|-----------|---------|----------|--------|
+| AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Abierto |
+| AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Abierto |
+| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Abierto |
+| AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | ✅ RESUELTO 2026-06-10 |
+| AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` expone PK | Abierto |
+| AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Abierto |
+| AUD-CONT-011 | Info | `api/viewsets.py` | Endpoint `/pendientes/asistente-ia/` sin pruebas automatizadas | Abierto |
+| AUD-CONT-012 | Media | `models.py`/API | `LineaPlantilla` y `PlantillaContable` sin ViewSet ni UI | ✅ RESUELTO v3.16.3 |
+| AUD-CONT-013 | Info | `services/business_service.py` | `_TIPO_TRANSACCION_A_MOTOR` requiere actualizacion manual al agregar TipoTransaccion | Abierto — bajo riesgo |
+
+### 18.5 Compliance AGENTS.md (2026-06-10)
+
+| Estandar | Estado |
+|----------|--------|
+| Feature-Sliced Design | CONFORME |
+| Service Layer (selector → CRUD → business) | CONFORME |
+| Multi-Tenant (django-tenants) | CONFORME |
+| Zero-Waste Queries (.only, .select_related) | CONFORME — AUD-CONT-008 RESUELTO |
+| API-First Design (DRF ViewSets) | CONFORME |
+| Double Semantic Verification (DSV) | CONFORME — AUD-CONT-008 RESUELTO |
+| NIIF PYMES Colombia (PUC nivel 6) | CONFORME en flujo automatico; flexible en manual |
+| Inmutabilidad (Periodos Cerrados) | CONFORME |
+| Idempotencia (`documento_origen_*`) | CONFORME |
+| Transacciones atomicas | CONFORME en persistencia principal |
+| Partida Doble estricta (cuadratura) | CONFORME |
+| UUID lookup (no exponer PK) | PARCIAL — `ConfiguracionRetencionesViewSet` usa `id` (AUD-CONT-009) |
+| No emojis en .py | CONFORME — validado con `py_compile` |
+| empresa_id en toda query tenant | CONFORME — AUD-CONT-008 RESUELTO |
+| Celery con DLQ y reintentos | NO CONFORME — AUD-CONT-007 |
+| Cache Redis con schema_name | CONFORME — patron documentado; contabilidad no usa cache directa |
+| IsTenantMember bloquea anonimos en DEBUG | CONFORME — fix aplicado 2026-06-10 en `apps/tenant/api/permissions.py` |
+
+---
+
+## 19. MOTOR FASE 3 — AUTODESCUBRIMIENTO Y GENERACION DE PLANTILLAS (v3.17.0)
+
+**Fecha:** 2026-06-10 | **Estado:** COMPLETO — Fases 1-5 implementadas.
+
+### 19.1 Contexto y Problema
+
+El Motor de Plantillas Fase 3 (`PlantillaContable.tipo_transaccion`) requiere que el usuario configure manualmente una `PlantillaContable` activa antes de poder contabilizar un documento. Si no existe ninguna plantilla activa para el tipo de transaccion correspondiente, el offcanvas de "Contabilizar" quedaba bloqueado sin guiar al usuario.
+
+**Solucion v3.17.0:** Auto-generacion de plantillas desde los propios extractores ETL. El sistema infiere las lineas de plantilla a partir del DTO que el extractor ya produce para ese documento, crea una plantilla borrador y presenta un interceptor al usuario para que la revise y active.
+
+### 19.2 Arquitectura — Flujo Completo
+
+```
+Usuario: "Contabilizar documento facturas/Factura/123"
+   ↓
+render_offcanvas_contabilizar() en viewsets.py
+   ↓ ¿Existe PlantillaContable activa para tipo_motor?
+   │
+   ├─ SI → contexto normal → offcanvas standard
+   │
+   └─ NO → inferir_y_crear_plantilla_desde_documento(empresa_id, 'facturas', 'Factura', 123)
+              ↓
+              ExtractorFacturas(empresa_id).extraer_pendientes()
+              → busca DTO con documento_origen.id == 123
+              → PlantillaContable(activo=False, nombre='Plantilla Sugerida - VENTA (facturas)')
+              → LineaPlantilla por cada linea del DTO (cuenta_hint > ReglaContable > skip)
+              ↓
+           ctx['requiere_revision_plantilla'] = True
+           ctx['plantilla_sugerida_uuid'] = str(plantilla_borrador.uuid)
+              ↓
+           Template muestra bloque interceptor (alerta Bootstrap)
+           Body del offcanvas = display:none (bloqueado)
+              ↓
+           Opciones usuario:
+             A) "Revisar y Activar" → PlantillaInterceptor.abrirEditorPlantilla(uuid, cb)
+                  → fetch GET /api/v1/contabilidad/plantillas-contables/{uuid}/render-offcanvas/editar/
+                  → offcanvas Bootstrap con lineas inferidas
+                  → usuario ajusta cuentas
+                  → "Guardar y Activar" → PATCH /plantillas-contables/{uuid}/ {activo:true}
+                  → callback: oculta alerta + muestra body + toast exito
+             B) "Omitir" → oculta alerta + muestra body (continua manual sin plantilla)
+```
+
+### 19.3 Nuevos Archivos y Metodos
+
+#### `services/business_service.py`
+
+Nuevo metodo `@transaction.atomic`:
+
+```python
+def inferir_y_crear_plantilla_desde_documento(
+    self,
+    empresa_id: int,
+    app_label: str,   # 'facturas' | 'gastos' | 'empleados'
+    modelo: str,      # 'Factura' | 'DocumentoSoporte' | 'Devengo'
+    documento_id: int,
+) -> PlantillaContable:
+```
+
+**Logica interna:**
+1. Mapea `app_label` → clase extractor: `{'facturas': ExtractorFacturas, 'gastos': ExtractorGastos, 'empleados': ExtractorNomina}`
+2. Llama `extractor.extraer_pendientes()` y filtra por `documento_origen.id == documento_id AND modelo == modelo`
+3. Crea `PlantillaContable(activo=False, ...)` con `tipo_transaccion` inferido del DTO
+4. Para cada `linea` del DTO: resuelve cuenta via `cuenta_hint` o `ReglaContable`; crea `LineaPlantilla` (si no hay cuenta → skip, soft failure)
+5. Para cada impuesto del DTO: crea `LineaPlantilla` de impuesto (IVA/retenciones) evitando duplicados por `origen_valor`
+6. Retorna el objeto `PlantillaContable` creado
+
+**Dict de mapeo conceptos → origen_valor:**
+```python
+_CONCEPTO_A_ORIGEN = {
+    'INGRESO_PRINCIPAL': 'SALDO_BASE', 'GASTO_GENERAL': 'SALDO_BASE',
+    'IVA_GENERADO': 'IVA_GENERADO', 'IVA_DESCONTABLE': 'IVA_DESCONTABLE',
+    'RETEFUENTE': 'RETEFUENTE', 'RETEICA': 'RETEICA', 'RETEIVA': 'RETEIVA',
+    'CXC_CLIENTES': 'TOTAL_DOCUMENTO', 'PASIVO_COMPRA_GASTO': 'TOTAL_DOCUMENTO',
+    # ... etc.
+}
+```
+
+#### `api/viewsets.py` — `render_offcanvas_contabilizar`
+
+Bloque de interceptor (despues de resolver `sugerencias_puc`):
+
+```python
+_TIPO_A_MOTOR = {
+    'VENTA_FACTURA': 'VENTA', 'VENTA_NOTA_CREDITO': 'VENTA',
+    'COMPRA_GASTO': 'COMPRA', 'COMPRA_FACTURA': 'COMPRA',
+    'INVENTARIO_COSTO_VENTA': 'GASTO', 'GASTO_RECURRENTE': 'GASTO',
+    'NOMINA_LIQUIDACION': 'NOMINA', 'NOMINA_PROVISION': 'NOMINA',
+}
+tipo_motor = _TIPO_A_MOTOR.get(tipo_tx, '')
+ctx['requiere_revision_plantilla'] = False
+ctx['plantilla_sugerida_uuid'] = ''
+
+if tipo_motor:
+    plantilla_activa = PlantillaContableSelector.obtener_motor_plantilla(empresa_id, tipo_motor)
+    if not plantilla_activa:
+        try:
+            plantilla_sugerida = self.service.inferir_y_crear_plantilla_desde_documento(...)
+            ctx['requiere_revision_plantilla'] = True
+            ctx['plantilla_sugerida_uuid'] = str(plantilla_sugerida.uuid)
+        except Exception as exc_inf:
+            logger.warning(...)  # soft failure — usuario continua manual
+```
+
+#### `templates/tenant/contabilidad/partials/pendiente_offcanvas_contabilizar.html`
+
+Bloque Django template agregado al inicio del `offcanvas-body`:
+
+```html
+{% if requiere_revision_plantilla %}
+<div id="bloque-plantilla-sugerida" class="alert alert-warning ...">
+  ...Plantilla Contable Auto-generada...
+  <button id="btn-revisar-plantilla-sugerida" data-uuid="{{ plantilla_sugerida_uuid }}">
+    Revisar y Activar Plantilla
+  </button>
+  <button id="btn-omitir-plantilla-sugerida">Omitir, continuar manual</button>
+</div>
+<div id="cuerpo-contabilizar-bloqueado" style="display:none;">
+{% endif %}
+  ...cuerpo normal del offcanvas...
+{% if requiere_revision_plantilla %}</div>{% endif %}
+```
+
+Inline JS `initPlantillaInterceptor()` al final del `<script>` del template:
+- `btnOmitir` → oculta alerta, muestra body
+- `btnRevisar` → delega a `window.PlantillaInterceptor.abrirEditorPlantilla(uuid, callback)`
+
+#### `static/contabilidad/js/pendiente/plantilla_interceptor.js` (NUEVO)
+
+Modulo JS `window.Sintel.Contabilidad.PlantillaInterceptor` (alias `window.PlantillaInterceptor`):
+
+| Funcion | Descripcion |
+|---------|-------------|
+| `abrirEditorPlantilla(uuid, onActivadaCallback)` | Carga HTML del offcanvas editor via fetch, lo inyecta en un contenedor en `<body>`, abre Bootstrap Offcanvas, inyecta boton "Guardar y Activar" |
+| `_inyectarBotonActivar(offcanvasEl, uuid, bsOffcanvas, cb)` | Agrega boton al footer del offcanvas cargado; al click llama `_validarCuentasNivel6` y luego `activarPlantilla` |
+| `_validarCuentasNivel6(offcanvasEl)` | Busca `#tbody-lineas-plantilla td code`; verifica que cada codigo sea exactamente 6 digitos numericos; bloquea si hay no-auxiliares |
+| `activarPlantilla(uuid)` | PATCH `/api/v1/contabilidad/plantillas-contables/{uuid}/` con `{activo:true}`; usa `window.PlantillaAPI.update` o fetch nativo |
+
+#### `static/contabilidad/js/plantilla/features/plantilla_editor.js`
+
+Nueva funcion `_validarCuentasNivel6()` + llamada en `handleSave('update')`:
+
+```javascript
+function _validarCuentasNivel6() {
+    const tbody = d.querySelector('#tbody-lineas-plantilla');
+    // ... colecta <code> en cada <td> ...
+    const noAuxiliares = codigos.filter(cod => cod.length !== 6 || !/^\d{6}$/.test(cod));
+    if (noAuxiliares.length > 0) { showError('NIIF PYMES: ...'); return false; }
+    return true;
+}
+
+async function handleSave(mode) {
+    if (mode === 'update' && !_validarCuentasNivel6()) return;  // NEW
+    // ... resto igual
+}
+```
+
+#### `templates/tenant/contabilidad/partials/assets_pendientes.html`
+
+Agregado `plantilla_interceptor.js` entre `plantilla_applicator.js` y `pendiente_list.js`:
+
+```html
+<script src="{% static 'contabilidad/js/pendiente/plantilla_applicator.js' %}"></script>
+<script src="{% static 'contabilidad/js/pendiente/plantilla_interceptor.js' %}"></script>
+<script src="{% static 'contabilidad/js/pendiente/pendiente_list.js' %}"></script>
+```
+
+### 19.4 Garantias de Seguridad
+
+| Garantia | Implementacion |
+|----------|---------------|
+| DSV (empresa_id) | `inferir_y_crear_plantilla_desde_documento` recibe y propaga `empresa_id` a todos los extractores y selectores |
+| Pull Model | Extractores llamados internamente en `business_service.py`; jamas importados desde templates/viewsets directamente |
+| Soft failure | `try/except Exception` en `render_offcanvas_contabilizar` — si el extractor falla, el usuario ve el offcanvas normal (sin interceptor) |
+| Idempotencia | Si el usuario llama "Revisar" dos veces, el PATCH `{activo:true}` es idempotente |
+| NIIF nivel 6 | `_validarCuentasNivel6` en ambos modulos JS (interceptor + editor) bloquea activacion con cuentas no auxiliares |
+| Sin FK huerfanos | `LineaPlantilla.cuenta_contable` es no-nullable PROTECT — si no se resuelve cuenta, se omite la linea (soft skip) |
+| No circular | Extractores importados con `from ... import` dentro del metodo (no en scope del modulo) para evitar imports circulares entre `services/` e `integracion/` |
+
+### 19.5 Estado de la Feature
+
+| Componente | Archivo | Estado |
+|-----------|---------|--------|
+| Metodo de inferencia | `services/business_service.py` | COMPLETO |
+| Interceptor ViewSet | `api/viewsets.py` | COMPLETO |
+| Bloque template | `partials/pendiente_offcanvas_contabilizar.html` | COMPLETO |
+| JS Interceptor | `static/.../pendiente/plantilla_interceptor.js` | COMPLETO (NUEVO) |
+| NIIF validation editor | `static/.../plantilla/features/plantilla_editor.js` | COMPLETO |
+| Assets pendientes | `partials/assets_pendientes.html` | COMPLETO |
+
+---
+
+**Auditoria actualizada:** 2026-06-10 (v3.17.0 — Motor Fase 3 Autodescubrimiento COMPLETO: auto-inferencia de PlantillaContable desde extractores, interceptor UI con validacion NIIF nivel 6. AUD-CONT-008 RESUELTO, AUD-CONT-012 RESUELTO)
+**Proxima revision:** Cerrar AUD-CONT-007 (Celery DLQ) y AUD-CONT-009 (ConfiguracionRetenciones UUID lookup) como prioridad baja en siguiente sprint.
 

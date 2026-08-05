@@ -32,7 +32,7 @@ class DomainSerializer(serializers.ModelSerializer):
         - Sin prefijo www.
         - Sin rutas (/admin/login/)
         - Sin puerto (:8000) - PROHIBIDO según doc oficial
-        - FQDN puro en minúsculas (ej: cliente.sintel.com)
+        - FQDN puro en minúsculas (ej: cliente.sintel.net.co)
 
         Objetivo: Garantizar que Domain.domain siempre contenga un FQDN válido
         y limpio utilizable para enrutamiento django-tenants por hostname.
@@ -45,7 +45,7 @@ class DomainSerializer(serializers.ModelSerializer):
         if ":" in value:
             raise serializers.ValidationError(
                 "Los dominios no pueden incluir puerto (ej: :8000). "
-                "Use un FQDN puro sin puerto (ej: cliente.sintel.com)."
+                "Use un FQDN puro sin puerto (ej: cliente.sintel.net.co)."
             )
 
         # Normalizar dominio (elimina protocolo, www, rutas, puerto)
@@ -60,7 +60,7 @@ class DomainSerializer(serializers.ModelSerializer):
         if not validate_fqdn(normalized):
             raise serializers.ValidationError(
                 f"'{normalized}' no es un FQDN válido. "
-                "Debe ser un dominio completo (ej: cliente.sintel.com)"
+                "Debe ser un dominio completo (ej: cliente.sintel.net.co)"
             )
 
         return normalized
@@ -93,7 +93,7 @@ class OnboardTenantWithOwnerSerializer(serializers.Serializer):
     2. Usuario nuevo: owner_email (requerido si no se proporciona admin_user_id)
 
     WARNING: CAMBIO v2.25: dominio_fqdn es OPCIONAL. Si viene vacío o inválido, se autogenera
-    como <schema_name>.<TENANT_DOMAIN_BASE> (ej: cliente.sintel.com)
+    como <schema_name>.<TENANT_DOMAIN_BASE> (ej: cliente.sintel.net.co)
 
     WARNING: CAMBIO v2.29: NO se aceptan campos de password en onboarding.
     El owner se crea con set_unusable_password() y debe activar en /activate?token=...
@@ -173,7 +173,7 @@ class OnboardTenantWithOwnerSerializer(serializers.Serializer):
             # Autogenerar: <schema>.<TENANT_DOMAIN_BASE>
             from django.conf import settings
 
-            base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+            base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
             dominio_fqdn = f"{schema_name}.{base}"
             data["dominio_fqdn"] = normalize_domain(dominio_fqdn)
             # Validar el dominio autogenerado
@@ -252,7 +252,7 @@ class OnboardTenantWithOwnerSerializer(serializers.Serializer):
             # Autogenerar: <schema>.<TENANT_DOMAIN_BASE>
             from django.conf import settings
 
-            base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+            base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
             dominio_fqdn = f"{schema_name}.{base}"
             data["dominio_fqdn"] = normalize_domain(dominio_fqdn)
             # Validar el dominio autogenerado

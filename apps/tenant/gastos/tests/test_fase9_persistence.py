@@ -21,7 +21,7 @@ def test_creacion_gasto_completo_persistencia(client, tenant1):
     """
     with schema_context(tenant1.schema_name):
         emp = Empresa.objects.first()
-        user = User.objects.create_user(username="auditor", email="auditor@sintel.com", password="password")
+        user = User.objects.create_user(username="auditor", email="auditor@sintel.net.co", password="password")
         TenantProfile.objects.create(user=user, empresa=emp, rol="ADMIN")
         
         # Crear membresia en esquema publico (Bridge)
@@ -91,7 +91,7 @@ def test_creacion_gasto_completo_persistencia(client, tenant1):
             "/api/v1/gastos/",
             data=payload,
             content_type="application/json",
-            HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
         )
 
         # 4. Validaciones de Respuesta
@@ -116,21 +116,24 @@ def test_creacion_gasto_completo_persistencia(client, tenant1):
 
 @pytest.mark.django_db
 @override_settings(DEBUG=True)
-def test_error_resolucion_vencida(client, tenant1):
-    """Verifica que el sistema rechace documentos fuera de la vigencia de la resolucion."""
+def test_gasto_con_resolucion_de_fecha_pasada_es_permitido(client, tenant1):
+    """
+    Verifica que la fecha del documento NO esta restringida por el rango de fechas
+    de la resolucion DIAN. La resolucion solo controla el consecutivo/numeracion.
+    Un gasto con fecha de hoy puede usar una resolucion cuyas fechas son del pasado.
+    """
     with schema_context(tenant1.schema_name):
         emp = Empresa.objects.first()
-        user = User.objects.create_user(username="auditor_fail", email="fail@sintel.com", password="password")
+        user = User.objects.create_user(username="auditor_fecha", email="fecha@sintel.net.co", password="password")
         TenantProfile.objects.create(user=user, empresa=emp, rol="ADMIN")
-        
-        # Crear membresia en esquema publico (Bridge)
+
         with schema_context('public'):
             TenantMembership.objects.create(client=tenant1, user=user, rol="ADMIN")
-        
-        # Resolucion vencida (en el pasado)
+
+        # Resolucion con fechas en el pasado (pero valida para el tenant)
         res = ResolucionDIAN.objects.create(
             empresa=emp,
-            numero_resolucion="VENCIDA",
+            numero_resolucion="ANTIGUA-001",
             prefijo="OLD",
             rango_desde=1,
             rango_hasta=100,
@@ -142,20 +145,19 @@ def test_error_resolucion_vencida(client, tenant1):
 
         prov = Proveedor.objects.create(
             empresa=emp,
-            razon_social="Test",
-            numero_documento="999",
+            razon_social="Proveedor Fecha Test",
+            numero_documento="888",
             tipo_documento="NIT"
         )
 
         payload = {
             "documento_soporte": {
                 "resolucion": res.id,
-                "fecha": "2026-05-06", # Fecha actual, resolucion vieja
+                "fecha": "2026-05-06",  # Fecha fuera del rango de la resolucion -> permitido
                 "proveedor": prov.id,
                 "subtotal": 100,
                 "total": 100
-            },
-            "periodo": "2026-05"
+            }
         }
 
         client.force_login(user)
@@ -163,8 +165,10 @@ def test_error_resolucion_vencida(client, tenant1):
             "/api/v1/gastos/",
             data=payload,
             content_type="application/json",
-            HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
         )
-        
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "resolucion_vencida" in response.data["error"]
+
+        # Debe crear el gasto sin importar el rango de fechas de la resolucion
+        assert response.status_code == status.HTTP_201_CREATED, (
+            f"Se esperaba 201 pero se obtuvo {response.status_code}: {response.data}"
+        )

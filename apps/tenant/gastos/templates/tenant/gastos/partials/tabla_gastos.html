@@ -1,0 +1,61 @@
+{% load django_tables2 %}
+{# Fragmento HTMX: KPIs + tabla de Documentos Soporte. Reemplaza #gastos-panel completo. #}
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+          <i class="bi bi-receipt text-primary fs-5"></i>
+        </div>
+        <div>
+          <div class="fs-4 fw-bold lh-1 mb-1">{{ total_documentos }}</div>
+          <div class="small text-muted">Total Documentos</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+          <i class="bi bi-cash-coin text-success fs-5"></i>
+        </div>
+        <div>
+          <div class="fs-6 fw-bold lh-1 mb-1">${{ resumen.total_gastos_mes|default:"0" }}</div>
+          <div class="small text-muted">Gastado este mes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+          <i class="bi bi-check-circle text-info fs-5"></i>
+        </div>
+        <div>
+          <div class="fs-4 fw-bold lh-1 mb-1">{{ total_activos }}</div>
+          <div class="small text-muted">Gastos Activos</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-danger bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+          <i class="bi bi-x-circle text-danger fs-5"></i>
+        </div>
+        <div>
+          <div class="fs-4 fw-bold lh-1 mb-1">{{ total_anulados }}</div>
+          <div class="small text-muted">Anulados</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="w-100" style="max-width:100%; overflow-x:auto;">
+  {% render_table table %}
+</div>

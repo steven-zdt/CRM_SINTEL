@@ -3,7 +3,9 @@ Tests unitarios para modelo MailInboxConfig.
 
 [WARNING] v2.37: Alineado con arquitectura SSoT.
 """
+
 from django.test import TestCase
+
 from apps.tenant.empresa.models import MailInboxConfig
 
 
@@ -11,7 +13,7 @@ class MailInboxConfigModelTest(TestCase):
     """
     Tests del modelo MailInboxConfig.
     """
-    
+
     def test_create_mailinbox_config(self):
         """Test: Crear configuración básica."""
         config = MailInboxConfig.objects.create(
@@ -28,7 +30,7 @@ class MailInboxConfigModelTest(TestCase):
         self.assertEqual(config.nombre, "Test Config")
         self.assertEqual(config.provider, "custom")
         self.assertTrue(config.is_active)
-    
+
     def test_password_not_in_repr(self):
         """Test: Password no debe estar en __str__ ni __repr__."""
         config = MailInboxConfig.objects.create(
@@ -38,15 +40,18 @@ class MailInboxConfigModelTest(TestCase):
         str_repr = str(config)
         self.assertNotIn("secret_password", str_repr)
         self.assertNotIn("password", str_repr.lower())
-    
+
     def test_indexes_exist(self):
         """Test: Verificar que los índices existen."""
         from django.db import connection
-        indexes = connection.introspection.get_indexes(connection.cursor(), MailInboxConfig._meta.db_table)
-        index_fields = [idx['columns'][0] for idx in indexes.values()]
+
+        indexes = connection.introspection.get_indexes(
+            connection.cursor(), MailInboxConfig._meta.db_table
+        )
+        index_fields = [idx["columns"][0] for idx in indexes.values()]
         # Verificar índices esperados
-        self.assertIn('provider', index_fields or [])
-    
+        self.assertIn("provider", index_fields or [])
+
     def test_gmail_preset(self):
         """Test: Configuración Gmail con presets."""
         config = MailInboxConfig.objects.create(

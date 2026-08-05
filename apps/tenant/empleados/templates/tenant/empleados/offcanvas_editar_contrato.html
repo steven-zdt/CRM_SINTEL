@@ -1,6 +1,7 @@
 {# offcanvas_editar_contrato.html - Offcanvas para EDITAR Contrato v2.61 #}
 {# ⚠️ v2.61: Feature-Sliced Architecture - Template dedicado SOLO para edición #}
 {# ⚠️ HTMX + Offcanvas con Zero Trust #}
+{% load l10n %}
 
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-contrato-editar" aria-labelledby="offcanvas-contrato-editar-label" style="width: 90%; max-width: 800px;">
   <div class="offcanvas-header border-bottom bg-light">
@@ -100,14 +101,14 @@
           <div class="col-md-6">
             <label for="contrato-editar-salario_mensual" class="form-label text-danger fw-bold">Salario Mensual (COP) *</label>
             <input type="number" class="form-control" id="contrato-editar-salario_mensual" name="salario_mensual" 
-                   value="{% if contrato %}{{ contrato.salario_mensual }}{% endif %}" 
+                   value="{% if contrato %}{{ contrato.salario_mensual|unlocalize }}{% endif %}" 
                    step="0.01" min="0" required>
             <small class="form-text text-muted">Valor en Pesos Colombianos</small>
           </div>
           <div class="col-md-6">
             <label for="contrato-editar-auxilio_transporte" class="form-label">Auxilio de Transporte (COP)</label>
             <input type="number" class="form-control" id="contrato-editar-auxilio_transporte" name="auxilio_transporte"
-                   value="{% if contrato %}{{ contrato.auxilio_transporte|default:0 }}{% else %}0{% endif %}"
+                   value="{% if contrato %}{{ contrato.auxilio_transporte|default:0|unlocalize }}{% else %}0{% endif %}"
                    step="0.01" min="0">
             <small class="form-text text-muted">Valor en Pesos Colombianos</small>
           </div>
@@ -127,7 +128,7 @@
           <div class="col-md-12">
             <label for="contrato-editar-prestamos_empresa" class="form-label">Préstamos de la Empresa (COP)</label>
             <input type="number" class="form-control" id="contrato-editar-prestamos_empresa" name="prestamos_empresa" 
-                   value="{% if contrato %}{{ contrato.prestamos_empresa|default:0 }}{% else %}0{% endif %}" 
+                   value="{% if contrato %}{{ contrato.prestamos_empresa|default:0|unlocalize }}{% else %}0{% endif %}" 
                    step="0.01" min="0" 
                    placeholder="Préstamos o deudas que la empresa tiene con el empleado (puede ser 0)">
             <small class="form-text text-muted">Valor en Pesos Colombianos</small>

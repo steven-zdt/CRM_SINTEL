@@ -35,7 +35,7 @@ def test_clientes_list_session_ok(client, django_user_model, tenant):
     
     # Si el ViewSet acepta SessionAuthentication, NO debe devolver 401
     # 200 si funciona correctamente, 404 si falta include en TENANT_URLCONF
-    r = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    r = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     
     # Nunca debe ser 401 si la sesión está activa y SessionAuthentication está configurado
     assert r.status_code != 401, (
@@ -61,6 +61,6 @@ def test_ventas_cliente_list_session_ok(client, django_user_model, tenant):
     TenantMembership.objects.create(client=tenant, user=user, is_active=True, rol="ADMIN")
     client.force_login(user)
     
-    r = client.get("/api/v1/ventas-cliente/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    r = client.get("/api/v1/ventas-cliente/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     assert r.status_code != 401, f"VentaClienteViewSet devolvió 401. Status: {r.status_code}"
     assert r.status_code in (200, 404), f"Status inesperado: {r.status_code}"

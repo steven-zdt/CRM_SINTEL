@@ -37,6 +37,11 @@
         const offcanvasEl = d.getElementById('offcanvas-mailinbox');
         if (!offcanvasEl) return;
 
+        // Guard (FE-A1): initForm() se programa via setTimeout desde el
+        // listener htmx:afterSettle cada vez que se abre el offcanvas.
+        if (offcanvasEl.dataset.editorInitialized) return;
+        offcanvasEl.dataset.editorInitialized = 'true';
+
         const form       = d.getElementById('form-mailinbox');
         const btnGuardar = d.getElementById('btn-guardar-mailinbox');
         const btnProbar  = d.getElementById('btn-probar-conexion-mailinbox');

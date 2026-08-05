@@ -58,12 +58,12 @@ def main():
             status = "⭐ PRIMARIO" if is_primary else "  "
             print(f"   {status} {domain}")
         
-        # Verificar que sintel.com existe y es primario
-        sintel = Domain.objects.filter(tenant=public, domain='sintel.com').first()
+        # Verificar que sintel.net.co existe y es primario
+        sintel = Domain.objects.filter(tenant=public, domain='sintel.net.co').first()
         if sintel and sintel.is_primary:
-            print("\n   [OK] sintel.com existe y es primario")
+            print("\n   [OK] sintel.net.co existe y es primario")
         else:
-            print("\n   [ERROR] sintel.com NO existe o NO es primario")
+            print("\n   [ERROR] sintel.net.co NO existe o NO es primario")
             return 1
     
     # 4. Verificar que es idempotente

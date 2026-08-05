@@ -53,7 +53,7 @@ def make_staff_user(
 def make_tenant_with_domain(
     nombre: str = "Test Empresa",
     schema_name: str = "testempresa",
-    domain: str = "testempresa.sintel.com",
+    domain: str = "testempresa.sintel.net.co",
 ) -> tuple:
     """
     Crea un Client (tenant privado) con su Domain primario.

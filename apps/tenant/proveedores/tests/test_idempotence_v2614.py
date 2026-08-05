@@ -34,7 +34,7 @@ def tenant(django_db_setup, django_db_blocker):
             tenant = TenantModel(schema_name=schema_name, nombre='Test Proveedor Idempotence', is_active=True)
             tenant.save()
         Domain.objects.get_or_create(
-            domain=f'{schema_name}.sintel.com',
+            domain=f'{schema_name}.sintel.net.co',
             defaults={'tenant': tenant, 'is_primary': True},
         )
         return TenantModel.objects.only('id', 'schema_name').get(pk=tenant.pk)
@@ -83,8 +83,8 @@ def tenant_client(tenant, admin_user):
     TenantSecurityAndURLConfMiddleware seleccione TENANT_URLCONF.
     """
     client = TenantClient(tenant)
-    client.defaults['SERVER_NAME'] = f'{tenant.schema_name}.sintel.com'
-    client.defaults['HTTP_HOST'] = f'{tenant.schema_name}.sintel.com'
+    client.defaults['SERVER_NAME'] = f'{tenant.schema_name}.sintel.net.co'
+    client.defaults['HTTP_HOST'] = f'{tenant.schema_name}.sintel.net.co'
     client.force_login(admin_user)
     return client
 
@@ -98,8 +98,8 @@ def jwt_tenant_client(tenant, admin_user):
     TenantSecurityAndURLConfMiddleware seleccione TENANT_URLCONF.
     """
     client = TenantClient(tenant)
-    client.defaults['SERVER_NAME'] = f'{tenant.schema_name}.sintel.com'
-    client.defaults['HTTP_HOST'] = f'{tenant.schema_name}.sintel.com'
+    client.defaults['SERVER_NAME'] = f'{tenant.schema_name}.sintel.net.co'
+    client.defaults['HTTP_HOST'] = f'{tenant.schema_name}.sintel.net.co'
     access_token = str(AccessToken.for_user(admin_user))
     client.defaults['HTTP_AUTHORIZATION'] = f'Bearer {access_token}'
     return client

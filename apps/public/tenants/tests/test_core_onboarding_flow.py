@@ -54,7 +54,7 @@ def test_onboarding_ott_cookie_flow(client):
 
     # Consume OTT in tenant host (should set HttpOnly cookies)
     consume_url = "/api/v1/core/auth/consume-ott/"
-    r2 = client.post(consume_url, data=json.dumps({"ott": ott}), content_type="application/json", HTTP_HOST=f"{schema}.sintel.com")
+    r2 = client.post(consume_url, data=json.dumps({"ott": ott}), content_type="application/json", HTTP_HOST=f"{schema}.sintel.net.co")
     assert r2.status_code == 200, f"Consume OTT failed: {r2.status_code} {r2.content}"
 
     # Response should have set cookies for session
@@ -63,5 +63,5 @@ def test_onboarding_ott_cookie_flow(client):
 
     # Subsequent API calls should be authenticated when using the tenant host
     # The test client preserves cookies between requests
-    r3 = client.get("/api/v1/empresas/mi-empresa/", HTTP_HOST=f"{schema}.sintel.com")
+    r3 = client.get("/api/v1/empresas/mi-empresa/", HTTP_HOST=f"{schema}.sintel.net.co")
     assert r3.status_code == 200, f"Authenticated API call failed: {r3.status_code} {r3.content}"

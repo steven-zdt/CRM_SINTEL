@@ -313,7 +313,7 @@ python manage.py collectstatic --noinput
 # 2. Reiniciar runserver
 python manage.py runserver 0.0.0.0:8000
 
-# 3. En el navegador, en cualquier subdominio de tenant (ej. demo.sintel.com:8000):
+# 3. En el navegador, en cualquier subdominio de tenant (ej. demo.sintel.net.co:8000):
 #    Abrir DevTools → Console → typeof window.http
 #    → "function"
 #    → window.http.__version__ === "3.4"
@@ -345,7 +345,7 @@ python manage.py runserver 0.0.0.0:8000
 - [clientes.editor.js](apps/tenant/clientes/static/clientes/js/clientes.editor.js) — form
 
 **Pasos:**
-1. Subdominio: `demo.sintel.com:8000/clientes/`.
+1. Subdominio: `demo.sintel.net.co:8000/clientes/`.
 2. Verificar en consola: `window.clientesAPI` debe existir (`Object.freeze` con `list/get/create/update/delete`).
 3. CRUD:
    - **Crear:** "Nuevo Cliente" → llenar campos requeridos (`tipo_persona`, `tipo_documento`, `numero_documento`, `razon_social`, `regimen_tributario`) → Guardar.
@@ -376,7 +376,7 @@ python manage.py runserver 0.0.0.0:8000
 | Historial-Servicios | `/api/v1/inventario/historial-servicios/` | ✅ | — | — |
 
 **Pasos:**
-1. `demo.sintel.com:8000/inventario/`
+1. `demo.sintel.net.co:8000/inventario/`
 2. Verificar `typeof window.inventarioAPI === 'object'`.
 3. Para cada sub-módulo de la tabla, ejecutar el smoke `[Crear → Editar → Eliminar]`.
 4. **Atención particular** a [inventario_editor.js:200](apps/tenant/inventario/static/inventario/js/features/inventario_editor.js#L200) (`w.http(method, endpoint, data)` con method dinámico) — el contrato lo soporta sin cambios.
@@ -709,7 +709,7 @@ module.exports = defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: process.env.E2E_BASE_URL || 'http://demo.sintel.com:8000',
+    baseURL: process.env.E2E_BASE_URL || 'http://demo.sintel.net.co:8000',
     headless: true,
     ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
@@ -822,7 +822,7 @@ Mismo patrón aplicado a `/contabilidad/cuentas/`.
 const { test, expect } = require('@playwright/test');
 
 test('Edit Tenant funciona desde la consola pública', async ({ page }) => {
-  await page.goto(`${process.env.E2E_PUBLIC_URL || 'http://sintel.com:8000'}/console/tenants/`);
+  await page.goto(`${process.env.E2E_PUBLIC_URL || 'http://sintel.net.co:8000'}/console/tenants/`);
   // login admin público (ajustar según flujo real)
   await page.fill('[name="username"]', process.env.E2E_ADMIN_USER);
   await page.fill('[name="password"]', process.env.E2E_ADMIN_PASS);
@@ -844,10 +844,10 @@ test('Edit Tenant funciona desde la consola pública', async ({ page }) => {
 
 ```bash
 cd tests/e2e
-E2E_BASE_URL=http://demo.sintel.com:8000 \
+E2E_BASE_URL=http://demo.sintel.net.co:8000 \
 E2E_USER=test_user \
 E2E_PASS=test_pass \
-E2E_PUBLIC_URL=http://sintel.com:8000 \
+E2E_PUBLIC_URL=http://sintel.net.co:8000 \
 E2E_ADMIN_USER=admin \
 E2E_ADMIN_PASS=admin_pass \
 npx playwright test

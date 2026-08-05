@@ -87,7 +87,7 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
 
     # 3. Validar Aislamiento en Listado
     client.force_login(user1)
-    resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.com")
+    resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
     results = data.get('results', [])
@@ -97,7 +97,7 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
     assert "Gasto T2" not in ids
     
     # 4. Validar Prevencion de IDOR (Acceso Directo)
-    resp = client.get(f"/api/v1/gastos/{g2.uuid}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.com")
+    resp = client.get(f"/api/v1/gastos/{g2.uuid}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     # 5. Validar Aislamiento en Creacion (Prevencion de IDOR en FKs)
@@ -115,7 +115,80 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
         "/api/v1/gastos/",
         data=payload,
         content_type="application/json",
-        HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
     )
     # Debe fallar porque res2 no pertenece a la empresa de user1
     assert resp.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
+
+
+@pytest.mark.django_db
+def test_multitenant_isolation_gastos_tabla_html(client, tenant1, tenant2):
+    """
+    Aislamiento multi-tenant de las vistas HTML nuevas (django-tables2 + HTMX,
+    PLAN_UNICO_CORRECCIONES.md Fase 5-BIS) que reemplazan la grilla Tabulator.
+    Estas vistas no pasan por DRF (no son ViewSets) — usan SintelDSVMixin
+    directamente, asi que necesitan su propia verificacion, no basta con la
+    cobertura ya existente sobre /api/v1/gastos/.
+    """
+    with schema_context(tenant1.schema_name):
+        emp1 = Empresa.objects.first()
+        user1 = User.objects.create_user(username="user1b", email="u1b@t.com", password="password")
+        TenantProfile.objects.create(user=user1, empresa=emp1, rol="ADMIN")
+        with schema_context('public'):
+            TenantMembership.objects.create(client=tenant1, user=user1, rol="ADMIN")
+
+        res1 = ResolucionDIAN.objects.create(
+            empresa=emp1, numero_resolucion="RES1B", prefijo="G1B",
+            rango_desde=1, rango_hasta=100,
+            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True
+        )
+        prov1 = Proveedor.objects.create(empresa=emp1, razon_social="Proveedor Tenant Uno", numero_documento="111", tipo_documento="NIT")
+        DocumentoSoporte.objects.create(
+            empresa=emp1, resolucion_dian=res1, consecutivo=1,
+            fecha="2026-05-01", proveedor=prov1,
+            subtotal=1000, total=1000,
+            descripcion="Gasto Tabla T1",
+            categoria_contable="ARRENDAMIENTOS"
+        )
+
+    with schema_context(tenant2.schema_name):
+        emp2 = Empresa.objects.first()
+        user2 = User.objects.create_user(username="user2b", email="u2b@t.com", password="password")
+        TenantProfile.objects.create(user=user2, empresa=emp2, rol="ADMIN")
+        with schema_context('public'):
+            TenantMembership.objects.create(client=tenant2, user=user2, rol="ADMIN")
+
+        res2 = ResolucionDIAN.objects.create(
+            empresa=emp2, numero_resolucion="RES2B", prefijo="G2B",
+            rango_desde=1, rango_hasta=100,
+            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True
+        )
+        prov2 = Proveedor.objects.create(empresa=emp2, razon_social="Proveedor Tenant Dos", numero_documento="222", tipo_documento="NIT")
+        DocumentoSoporte.objects.create(
+            empresa=emp2, resolucion_dian=res2, consecutivo=1,
+            fecha="2026-05-01", proveedor=prov2,
+            subtotal=2000, total=2000,
+            descripcion="Gasto Tabla T2",
+            categoria_contable="SERVICIOS_PUBLICOS"
+        )
+
+    # Nivel 1: listado HTML no debe filtrar datos de otro tenant
+    client.force_login(user1)
+    resp = client.get("/ui/gastos/tabla-documentos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
+    assert resp.status_code == status.HTTP_200_OK
+    body = resp.content.decode()
+    assert "Proveedor Tenant Uno" in body
+    assert "Proveedor Tenant Dos" not in body
+
+    # Nivel 1 (Resoluciones): misma verificacion sobre la segunda tabla del piloto
+    resp = client.get("/ui/gastos/tabla-resoluciones/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
+    assert resp.status_code == status.HTTP_200_OK
+    body = resp.content.decode()
+    assert "RES1B" in body
+    assert "RES2B" not in body
+
+    # Sin sesion: debe redirigir a login (LoginRequiredMixin), no filtrar en silencio
+    from django.test import Client
+    anon_client = Client()
+    resp = anon_client.get("/ui/gastos/tabla-documentos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
+    assert resp.status_code in (status.HTTP_302_FOUND, status.HTTP_403_FORBIDDEN)

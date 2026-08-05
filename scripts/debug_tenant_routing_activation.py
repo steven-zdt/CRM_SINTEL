@@ -42,8 +42,8 @@ def debug_step_by_step():
     print("=" * 80)
     
     test_schema = f"test_debug_{os.getpid()}"
-    test_domain = f"{test_schema}.sintel.com"
-    test_email = f"test_{os.getpid()}@sintel.com"
+    test_domain = f"{test_schema}.sintel.net.co"
+    test_email = f"test_{os.getpid()}@sintel.net.co"
     
     print(f"📋 Parámetros de prueba:")
     print(f"   Schema: {test_schema}")
@@ -222,7 +222,7 @@ def debug_step_by_step():
                 print(f"   [ERROR] PROBLEMA: Redirect a ruta pública (/console/)")
                 print(f"   [WARNING]  El tenant está siendo direccionado al URLConf público")
                 return 1
-            elif 'sintel.com' in location and '/console/' in location:
+            elif 'sintel.net.co' in location and '/console/' in location:
                 print(f"   [ERROR] PROBLEMA: Redirect a dominio público con ruta /console/")
                 print(f"   [WARNING]  El tenant está siendo direccionado al URLConf público")
                 return 1

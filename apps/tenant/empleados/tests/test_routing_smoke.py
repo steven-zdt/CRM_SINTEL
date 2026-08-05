@@ -25,7 +25,7 @@ def test_routing_devengos_list_after_include(client, admin_user, tenant):
     
     # Si el include en TENANT_URLCONF está OK, debe ser 200 (aunque no haya datos)
     # Nota: El host del tenant se simula automáticamente por django-tenants en tests
-    resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     
     # 200 si el router está incluido y funciona, 403 si falta permisos, 404 si falta include
     assert resp.status_code in (200, 403), (
@@ -77,7 +77,7 @@ def test_routing_devengos_list_with_data(client, admin_user, tenant):
     
     client.force_login(admin_user)
     
-    resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     
     if resp.status_code == 200:
         data = resp.json()
@@ -100,7 +100,7 @@ def test_routing_resoluciones_dian_render_offcanvas_crear(client, admin_user, te
     client.force_login(admin_user)
     resp = client.get(
         "/api/v1/empleados/resoluciones-dian/render-offcanvas/crear/",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
     )
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
 

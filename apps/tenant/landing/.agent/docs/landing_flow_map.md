@@ -14,7 +14,7 @@ sequenceDiagram
     participant SRV as LandingInfoService
     participant DB as PostgreSQL (Tenant Schema)
 
-    USR->>LND: Acceso a https://schema.sintel.com/
+    USR->>LND: Acceso a https://schema.sintel.net.co/
     LND->>API: GET /api/v1/landing/info/
     API->>SRV: get_branding_data(empresa)
     SRV->>DB: SELECT branding_metadata FROM LandingInfo

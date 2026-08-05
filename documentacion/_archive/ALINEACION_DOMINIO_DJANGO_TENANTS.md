@@ -153,8 +153,8 @@ def crear_tenant_con_owner(
 ```python
 # config/settings.py
 ALLOWED_HOSTS = [
-    f".{TENANT_DOMAIN_BASE}",  # .sintel.com o .localhost
-    TENANT_DOMAIN_BASE,  # sintel.com o localhost
+    f".{TENANT_DOMAIN_BASE}",  # .sintel.net.co o .localhost
+    TENANT_DOMAIN_BASE,  # sintel.net.co o localhost
     "localhost",
     ".localhost",  # ✅ Subdominios locales (dev)
     "127.0.0.1",

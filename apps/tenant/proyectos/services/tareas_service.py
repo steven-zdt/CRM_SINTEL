@@ -25,7 +25,7 @@ from ..models import Proyecto, TareaDiariaProyecto
 # ==============================================================================
 
 TAREA_FIELDS = [
-    'id', 'proyecto_id', 'empresa_id', 'fecha_inicio', 'fecha_fin',
+    'id', 'uuid', 'proyecto_id', 'empresa_id', 'fecha_inicio', 'fecha_fin',
     'titulo', 'descripcion', 'estado', 'prioridad',
     'asignado_a', 'notas_progreso', 'created_at', 'updated_at'
 ]

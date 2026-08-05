@@ -247,6 +247,12 @@
    * Inicialización
    */
   function init() {
+    // Guard: attachEditorListeners() registra listeners delegados en `document`
+    // — sin este guard, cada recarga HTMX del modulo "cuenta" vuelve a ejecutar
+    // este script y duplica los listeners globales (FE-A1/A2).
+    if (d.body.dataset.cuentaEditorInitialized) return;
+    d.body.dataset.cuentaEditorInitialized = 'true';
+
     attachEditorListeners();
   }
 

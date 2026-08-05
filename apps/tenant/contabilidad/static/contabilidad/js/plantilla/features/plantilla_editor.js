@@ -118,10 +118,35 @@
     };
   }
 
+  // Valida que todas las cuentas en la tabla de lineas sean nivel 6 (6 digitos NIIF)
+  function _validarCuentasNivel6() {
+    const tbody = d.querySelector('#tbody-lineas-plantilla');
+    if (!tbody) return true;
+    const codigos = [];
+    tbody.querySelectorAll('td code').forEach(function (el) {
+      const cod = (el.textContent || '').trim();
+      if (cod && cod !== '-') codigos.push(cod);
+    });
+    if (!codigos.length) return true;
+    const noAuxiliares = codigos.filter(function (cod) {
+      return cod.length !== 6 || !/^\d{6}$/.test(cod);
+    });
+    if (noAuxiliares.length > 0) {
+      showError(
+        'NIIF PYMES: Todas las cuentas de la plantilla deben ser auxiliares (Nivel 6 - 6 digitos). '
+        + 'Cuentas no validas: ' + noAuxiliares.join(', ')
+      );
+      return false;
+    }
+    return true;
+  }
+
   async function handleSave(mode) {
     const formId     = mode === 'create' ? '#form-plantilla-crear' : '#form-plantilla-editar';
     const offcanvasId = mode === 'create' ? 'offcanvas-plantilla-crear' : 'offcanvas-plantilla-editar';
     if (!w.PlantillaAPI) { showError('PlantillaAPI no disponible'); return; }
+
+    if (mode === 'update' && !_validarCuentasNivel6()) return;
 
     const data = collectPlantillaData(formId);
     if (!data) return;
@@ -300,6 +325,12 @@
   }
 
   function init() {
+    // Guard: attachEditorListeners() registra listeners delegados en `document`
+    // — sin este guard, cada recarga HTMX del modulo "plantilla" vuelve a
+    // ejecutar este script y duplica los listeners globales (FE-A1/A2).
+    if (d.body.dataset.plantillaEditorInitialized) return;
+    d.body.dataset.plantillaEditorInitialized = 'true';
+
     attachEditorListeners();
   }
 

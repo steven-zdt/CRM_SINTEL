@@ -87,7 +87,12 @@
    * Eventos globales
    */
   function initListEvents() {
-    if (listEventsBound) return;
+    // Guard: `listEventsBound` es una variable de modulo, se resetea cada vez
+    // que este script se re-ejecuta (recarga HTMX del modulo "proveedores"),
+    // asi que por si sola no evita duplicar el listener en `document` entre
+    // recargas — se ancla tambien a `document.body` (FE-A1/A2).
+    if (listEventsBound || d.body.dataset.cuentasPagarEditorInitialized) return;
+    d.body.dataset.cuentasPagarEditorInitialized = 'true';
 
     d.addEventListener('click', function (e) {
       // Evento click para abrir Offcanvas

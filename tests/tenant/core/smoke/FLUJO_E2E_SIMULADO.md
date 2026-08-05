@@ -9,7 +9,7 @@ Este documento simula paso a paso el flujo completo desde la creación del tenan
 ## PASO 1: Alta del Tenant desde la Consola Pública
 
 ### 1.1 Acceso a la Consola
-- **URL**: `http://sintel.com/console/tenants/`
+- **URL**: `http://sintel.net.co/console/tenants/`
 - **Dominio**: Público (ROOT_URLCONF)
 - **Autenticación**: Usuario staff/superuser
 
@@ -33,12 +33,12 @@ Este documento simula paso a paso el flujo completo desde la creación del tenan
   6. Retorna `login_url` al dominio del tenant
 
 ### 1.3 Dominio Resultante
-- **Ejemplo**: `home.sintel.com`
+- **Ejemplo**: `home.sintel.net.co`
 - **Resolución**: Por hostname (no por subcarpeta)
 - **Middleware**: `TenantMainMiddleware` detecta el dominio y cambia al esquema del tenant
 
 ### 1.4 Correo de Invitación
-- **URL de activación**: `https://home.sintel.com/static/tenant/landing/activate.html?token=...`
+- **URL de activación**: `https://home.sintel.net.co/static/tenant/landing/activate.html?token=...`
 - **Shell estático**: Consume API, no HTML dinámico del backend
 
 ---
@@ -46,7 +46,7 @@ Este documento simula paso a paso el flujo completo desde la creación del tenan
 ## PASO 2: Activación del Owner en el Dominio del Tenant
 
 ### 2.1 El Owner Abre el Enlace
-- **URL**: `https://home.sintel.com/static/tenant/landing/activate.html?token=...`
+- **URL**: `https://home.sintel.net.co/static/tenant/landing/activate.html?token=...`
 - **Shell**: Estático en `apps/tenant/landing/static/tenant/landing/activate.html`
 - **URLCONF**: Ahora bajo TENANT_URLCONF (privado)
 
@@ -70,7 +70,7 @@ Este documento simula paso a paso el flujo completo desde la creación del tenan
   ```json
   {
     "detail": "Cuenta activada exitosamente.",
-    "redirect_url": "https://home.sintel.com/workspace/",
+    "redirect_url": "https://home.sintel.net.co/workspace/",
     "user": {...},
     "tenant": {...}
   }
@@ -82,7 +82,7 @@ Este documento simula paso a paso el flujo completo desde la creación del tenan
 ## PASO 3: Iniciar Sesión (UI Única Orquestada por Core)
 
 ### 3.1 Landing del Tenant
-- **URL**: `GET http://home.sintel.com/`
+- **URL**: `GET http://home.sintel.net.co/`
 - **Redirección**: `/static/tenant/landing/index.html` (shell estático)
 - **Botón "Iniciar Sesión"**: Apunta a `/static/tenant/landing/login.html`
 
@@ -100,7 +100,7 @@ Este documento simula paso a paso el flujo completo desde la creación del tenan
   ```json
   {
     "detail": "Login exitoso.",
-    "redirect_url": "https://home.sintel.com/workspace/",
+    "redirect_url": "https://home.sintel.net.co/workspace/",
     "user": {...},
     "tenant": {...}
   }
@@ -149,7 +149,7 @@ Este documento simula paso a paso el flujo completo desde la creación del tenan
 ## PASO 5: Ver los Datos del Cliente en Workspace (Core Orquesta)
 
 ### 5.1 Navegación
-- **URL**: `GET http://home.sintel.com/workspace/`
+- **URL**: `GET http://home.sintel.net.co/workspace/`
 - **Vista**: `apps.tenant.core.views_ui.WorkspaceView`
 - **Template**: `apps/tenant/core/templates/tenant/core/workspace.html`
 - **Autenticación**: Requerida (cookie/sesión en el dominio del tenant)
@@ -176,7 +176,7 @@ El workspace consume exclusivamente Core API:
 ## PASO 6: Pruebas de Humo (Validación Rápida del Circuito)
 
 ### 6.1 Routing por Hostname
-- **Verificación**: Con `HTTP_HOST='home.sintel.com'`, los requests a `/api/v1/*` usan TENANT_URLCONF (privado)
+- **Verificación**: Con `HTTP_HOST='home.sintel.net.co'`, los requests a `/api/v1/*` usan TENANT_URLCONF (privado)
 - **Middleware**: `TenantMainMiddleware` + `TenantURLConfMiddleware` en orden correcto
 - **Resultado esperado**: No hay 404/mezclas con ROOT_URLCONF
 
@@ -203,7 +203,7 @@ El workspace consume exclusivamente Core API:
 
 ## Resultado Esperado
 
-✅ **Tenant creado** desde la consola pública y accesible solo por su dominio (`home.sintel.com`)
+✅ **Tenant creado** desde la consola pública y accesible solo por su dominio (`home.sintel.net.co`)
 
 ✅ **Owner activado** vía shell estático que consume la API (sin HTML renderizado por backend)
 

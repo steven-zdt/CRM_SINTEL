@@ -24,7 +24,7 @@ from django_tenants.utils import schema_exists, get_public_schema_name, schema_c
 from apps.public.tenants.models import Client, Domain, TenantMembership
 
 SCHEMA_NAME = 'ejemplo'  # Cambiar por el schema_name del tenant a verificar
-DOMAIN_NAME = 'ejemplo.sintel.com'  # Cambiar por el dominio del tenant a verificar
+DOMAIN_NAME = 'ejemplo.sintel.net.co'  # Cambiar por el dominio del tenant a verificar
 
 print("\n" + "=" * 60)
 print(f"🔍 VERIFICACIÓN: Eliminación del Tenant '{SCHEMA_NAME}'")

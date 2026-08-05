@@ -47,6 +47,22 @@
       credentials: "same-origin", // SessionAuth
     };
 
+    // [FE-C3] Inyectar JWT si esta disponible. BaseTenantViewSet (Dual-Auth) intenta
+    // JWTAuthentication antes que SessionAuthentication; sin esta cabecera, este
+    // cliente (el que efectivamente se carga al final en assets_core.html y gana
+    // sobre window.http) dependia unicamente de la cookie de sesion, anulando la
+    // mitad del contrato Dual-Auth documentado en AGENTS.md.
+    try {
+      if (window.jwtAuth && typeof window.jwtAuth.getValidAccessToken === 'function') {
+        const token = await window.jwtAuth.getValidAccessToken();
+        if (token) {
+          init.headers["Authorization"] = `Bearer ${token}`;
+        }
+      }
+    } catch (_) {
+      // silencioso: jwtAuth es opcional, SessionAuth sigue funcionando como fallback
+    }
+
     // ⚠️ CSRF: Requerido para métodos que modifican estado
     const needsCsrf = ["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
     if (needsCsrf || body !== undefined) {

@@ -67,12 +67,12 @@
 
 ## 2. Flujo Completo de Request
 
-### 2.1 Request a Tenant Privado (ej: cliente.sintel.com)
+### 2.1 Request a Tenant Privado (ej: cliente.sintel.net.co)
 
 ```
-1. Request: GET https://cliente.sintel.com/workspace/
+1. Request: GET https://cliente.sintel.net.co/workspace/
    │
-   ├─► django-tenants detecta dominio "cliente.sintel.com"
+   ├─► django-tenants detecta dominio "cliente.sintel.net.co"
    │   └─► Establece schema_context = "tenant_cliente"
    │
    ├─► TenantMainMiddleware activa TENANT_URLCONF
@@ -95,7 +95,7 @@
 ### 2.2 Request a API REST (ej: GET /api/v1/gastos/)
 
 ```
-1. Request: GET https://cliente.sintel.com/api/v1/gastos/
+1. Request: GET https://cliente.sintel.net.co/api/v1/gastos/
    │
    ├─► django-tenants detecta dominio
    │   └─► Establece schema_context = "tenant_cliente"

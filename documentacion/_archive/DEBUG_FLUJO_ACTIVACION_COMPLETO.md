@@ -10,14 +10,14 @@ Documentar el flujo completo desde la creación del tenant hasta la activación,
 
 ### PASO 1: Creación del Tenant en Consola Pública
 
-**URL:** `http://sintel.com/console/tenants/`
+**URL:** `http://sintel.net.co/console/tenants/`
 
 **Proceso:**
 1. Usuario staff accede a la consola pública
 2. Completa formulario de creación de tenant:
    - `nombre`: Nombre de la empresa
    - `schema_name`: Código del tenant (ej: "cliente")
-   - `dominio_fqdn`: Opcional (se autogenera como `<schema>.sintel.com`)
+   - `dominio_fqdn`: Opcional (se autogenera como `<schema>.sintel.net.co`)
    - `owner_email`: Email del owner
 3. Sistema ejecuta `crear_tenant_con_owner()`:
    - Crea `User` con `set_unusable_password()`
@@ -44,7 +44,7 @@ with schema_context('public'):
 ### PASO 2: Email de Invitación
 
 **Contenido del Email:**
-- Link de activación: `https://cliente.sintel.com/activate?token=...`
+- Link de activación: `https://cliente.sintel.net.co/activate?token=...`
 - Token firmado con TTL (24 horas)
 - Instrucciones para activar cuenta
 
@@ -62,13 +62,13 @@ print(f"Token válido: {payload is not None}")
 
 ### PASO 3: Acceso al Link de Activación
 
-**URL:** `http://cliente.sintel.com/activate?token=...`
+**URL:** `http://cliente.sintel.net.co/activate?token=...`
 
 **Proceso:**
-1. Navegador hace request con `HTTP_HOST=cliente.sintel.com`
+1. Navegador hace request con `HTTP_HOST=cliente.sintel.net.co`
 2. `ForceNoPortMiddleware` normaliza `HTTP_HOST` (elimina puerto si existe)
 3. `TenantMainMiddleware`:
-   - Busca `Domain.objects.filter(domain='cliente.sintel.com')`
+   - Busca `Domain.objects.filter(domain='cliente.sintel.net.co')`
    - Encuentra tenant: `Client(schema_name='cliente')`
    - Activa schema: `connection.set_schema_to('cliente')`
    - Establece `request.urlconf = settings.TENANT_URLCONF`
@@ -83,7 +83,7 @@ print(f"Token válido: {payload is not None}")
 # Simular request
 from django.test import Client
 
-client = Client(HTTP_HOST='cliente.sintel.com')
+client = Client(HTTP_HOST='cliente.sintel.net.co')
 response = client.get('/activate/?token=...')
 print(f"Status: {response.status_code}")
 print(f"Template: {response.template_name if hasattr(response, 'template_name') else 'N/A'}")
@@ -95,7 +95,7 @@ print(f"Template: {response.template_name if hasattr(response, 'template_name') 
 
 ### PASO 4: Envío del Formulario de Activación
 
-**Request:** `POST http://cliente.sintel.com/activate/?token=...`
+**Request:** `POST http://cliente.sintel.net.co/activate/?token=...`
 
 **Datos:**
 - `password1`: Nueva contraseña
@@ -143,19 +143,19 @@ return redirect(dashboard_url)
 - El middleware `TenantMainMiddleware` resuelve el tenant correctamente
 - El `TENANT_URLCONF` se activa automáticamente
 
-**✅ Punto de Verificación 3:** El redirect debe ser a `http://cliente.sintel.com/dashboard/`, NO a `http://sintel.com/console/`.
+**✅ Punto de Verificación 3:** El redirect debe ser a `http://cliente.sintel.net.co/dashboard/`, NO a `http://sintel.net.co/console/`.
 
 ---
 
 ### PASO 6: Nueva Request al Dashboard
 
-**URL:** `http://cliente.sintel.com/dashboard/`
+**URL:** `http://cliente.sintel.net.co/dashboard/`
 
 **Proceso:**
-1. Navegador hace nueva request con `HTTP_HOST=cliente.sintel.com`
+1. Navegador hace nueva request con `HTTP_HOST=cliente.sintel.net.co`
 2. `ForceNoPortMiddleware` normaliza `HTTP_HOST`
 3. `TenantMainMiddleware`:
-   - Busca `Domain.objects.filter(domain='cliente.sintel.com')`
+   - Busca `Domain.objects.filter(domain='cliente.sintel.net.co')`
    - Encuentra tenant: `Client(schema_name='cliente')`
    - Activa schema: `connection.set_schema_to('cliente')`
    - Establece `request.urlconf = settings.TENANT_URLCONF`

@@ -76,7 +76,7 @@ def simular_creacion_tenant():
         test_user, _ = User.objects.get_or_create(
             username='test_auto_user',
             defaults={
-                'email': 'test_auto@sintel.com',
+                'email': 'test_auto@sintel.net.co',
                 'is_staff': True,
             }
         )

@@ -132,11 +132,14 @@
 
     /**
      * Headers por defecto con JWT (v2.62)
+     * FE-A9: CSRF via window.getCookie (SSoT, core/js/lib/http.js) — no
+     * depende de un input de formulario tradicional que puede no existir
+     * en paginas API-first (antes: 403 silencioso si el input no estaba presente).
      */
     function getHeaders() {
         const headers = {
             'Content-Type': 'application/json',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
+            'X-CSRFToken': window.getCookie?.('csrftoken') || ''
         };
         
         // window.jwtAuth expuesto globalmente en jwt-auth.js

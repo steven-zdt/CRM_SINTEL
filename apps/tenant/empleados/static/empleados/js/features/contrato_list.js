@@ -1,9 +1,10 @@
-// @ts-nocheck
+// @ts-nocheck — Vanilla JS con namespace global window.Sintel (no TypeScript)
 /**
- * Contrato List Module - Tabla independiente de Contratos
- *
+ * Contrato List Module — Fase 5-BIS: tabla server-rendered via
+ * django-tables2 + HTMX (#contratos-panel, cargada por atributos
+ * hx-get/hx-trigger declarados en empleados_list.html -- carga solo al
+ * abrir el sub-tab de Contratos por primera vez).
  * Namespace: window.Sintel.Empleados.ContratoList
- * Version: v3.10.1 - Migrado a TabulatorFactory (mismo patron que EmpleadoList)
  */
 (function (w, d) {
     'use strict';
@@ -12,179 +13,16 @@
     w.Sintel.Empleados = w.Sintel.Empleados || {};
 
     const MOD = '[ContratoList]';
-    let table = null;
+    const PANEL_SELECTOR = '#contratos-panel';
     const API = () => w.Sintel.Empleados.API;
 
-    // ── Formatters ─────────────────────────────────────────────────────────────
+    // init()/redraw() ya no inicializan nada (el panel HTMX se auto-carga);
+    // se conservan porque empleados.module.js las invoca al activar el sub-tab.
+    function init() {}
+    function redraw() {}
 
-    const COP = (val) => {
-        const n = parseFloat(val) || 0;
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency', currency: 'COP', minimumFractionDigits: 0
-        }).format(n);
-    };
-
-    const tipoBadge = (tipo) => {
-        const map = {
-            'INDEFINIDO':  'bg-success',
-            'FIJO':        'bg-primary',
-            'OBRA':        'bg-warning text-dark',
-            'PRESTACION':  'bg-secondary',
-        };
-        return map[tipo] || 'bg-secondary';
-    };
-
-    const estadoBadge = (estado) => {
-        const map = {
-            'ACTIVO':    'bg-success',
-            'INACTIVO':  'bg-danger',
-            'HISTORICO': 'bg-secondary',
-            'CANCELADO': 'bg-dark',
-        };
-        return map[estado] || 'bg-secondary';
-    };
-
-    // ── Acciones de celda ──────────────────────────────────────────────────────
-
-    function handleCellAction(e, cell) {
-        const btn = e.target.closest('[data-action]');
-        if (!btn) return;
-
-        const action  = btn.dataset.action;
-        const uuid    = btn.dataset.uuid;
-
-        switch (action) {
-            case 'ver-detalle':
-                if (w.Sintel.Empleados.ContratoEditor) {
-                    w.Sintel.Empleados.ContratoEditor.openDetail(uuid);
-                }
-                break;
-            case 'editar':
-                if (w.Sintel.Empleados.ContratoEditor) {
-                    w.Sintel.Empleados.ContratoEditor.open(null, uuid);
-                }
-                break;
-            case 'cancelar':
-                cancelarContrato(uuid);
-                break;
-            default:
-                console.warn(`${MOD} Accion desconocida: ${action}`);
-        }
-    }
-
-    // ── Columnas ───────────────────────────────────────────────────────────────
-
-    function getColumnas() {
-        return [
-            {
-                title: 'Empleado',
-                field: 'empleado_nombre',
-                minWidth: 180,
-                headerFilter: 'input',
-                formatter: (cell) => {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">—</span>';
-                    return `<i class="bi bi-person text-primary me-2"></i><span class="fw-semibold">${val}</span>`;
-                },
-            },
-            {
-                title: 'Tipo Contrato',
-                field: 'tipo',
-                width: 140,
-                hozAlign: 'center',
-                headerHozAlign: 'center',
-                formatter: (cell) => {
-                    const val  = cell.getValue() || '';
-                    const disp = cell.getRow().getData().tipo_display || val;
-                    const icon = val === 'INDEFINIDO' ? '<i class="bi bi-infinite"></i>' :
-                                 val === 'FIJO' ? '<i class="bi bi-hourglass"></i>' :
-                                 val === 'OBRA' ? '<i class="bi bi-briefcase"></i>' :
-                                 val === 'PRESTACION' ? '<i class="bi bi-person-check"></i>' : '';
-                    return `<span class="badge ${tipoBadge(val)} px-2">${icon} ${disp}</span>`;
-                },
-            },
-            {
-                title: 'Inicio',
-                field: 'fecha_inicio',
-                width: 110,
-                hozAlign: 'center',
-                formatter: (cell) => {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">—</span>';
-                    return `<i class="bi bi-calendar-event text-success me-1"></i><span class="small">${val}</span>`;
-                },
-            },
-            {
-                title: 'Fin',
-                field: 'fecha_fin',
-                width: 110,
-                hozAlign: 'center',
-                formatter: (cell) => {
-                    const data = cell.getRow().getData();
-                    if (data.tipo === 'INDEFINIDO' || !cell.getValue()) {
-                        return '<span class="badge bg-light text-dark"><i class="bi bi-infinite me-1"></i>Indefinido</span>';
-                    }
-                    return `<i class="bi bi-calendar-x text-danger me-1"></i><span class="small">${cell.getValue()}</span>`;
-                },
-            },
-            {
-                title: 'Salario',
-                field: 'salario_mensual',
-                width: 140,
-                hozAlign: 'right',
-                headerHozAlign: 'right',
-                formatter: (cell) => {
-                    const val = cell.getValue();
-                    if (!val || val === 0) return '<span class="text-muted">—</span>';
-                    return `<span class="text-success fw-semibold"><i class="bi bi-cash-coin me-1"></i>${COP(val)}</span>`;
-                },
-            },
-            {
-                title: 'Estado',
-                field: 'estado',
-                width: 130,
-                hozAlign: 'center',
-                headerHozAlign: 'center',
-                formatter: (cell) => {
-                    const val  = cell.getValue() || '';
-                    const disp = cell.getRow().getData().estado_display || val;
-                    const icon = val === 'ACTIVO' ? '<i class="bi bi-check-circle me-1"></i>' :
-                                 val === 'INACTIVO' ? '<i class="bi bi-pause-circle me-1"></i>' :
-                                 val === 'CANCELADO' ? '<i class="bi bi-x-circle me-1"></i>' : '';
-                    return `<span class="badge ${estadoBadge(val)} px-2">${icon}${disp}</span>`;
-                },
-            },
-            {
-                title: 'Acciones',
-                width: 180,
-                hozAlign: 'center',
-                headerSort: false,
-                formatter: (cell) => {
-                    const data    = cell.getRow().getData();
-                    const uuid    = data.uuid || '';
-                    const esActivo = data.estado === 'ACTIVO';
-
-                    let html = '<div class="btn-group btn-group-sm">';
-                    html += `<button data-action="ver-detalle" data-uuid="${uuid}"
-                                class="btn btn-outline-secondary" title="Ver Detalle">
-                                <i class="bi bi-eye"></i>
-                             </button>`;
-                    if (esActivo) {
-                        html += `<button data-action="editar" data-uuid="${uuid}"
-                                    class="btn btn-outline-primary" title="Editar">
-                                    <i class="bi bi-pencil"></i>
-                                 </button>`;
-                        html += `<button data-action="cancelar" data-uuid="${uuid}"
-                                    class="btn btn-outline-danger" title="Cancelar Contrato">
-                                    <i class="bi bi-x-circle"></i>
-                                 </button>`;
-                    }
-                    html += '</div>';
-                    return html;
-                },
-                cellClick: (e, cell) => handleCellAction(e, cell),
-            },
-        ];
+    function reload() {
+        d.body.dispatchEvent(new CustomEvent('contrato-updated'));
     }
 
     // ── Cancelar Contrato ──────────────────────────────────────────────────────
@@ -215,54 +53,48 @@
         }
     }
 
-    // ── Inicializar tabla ──────────────────────────────────────────────────────
+    // ── Acciones de fila (delegado sobre el panel persistente) ──────────────
 
-    async function init(gridSelector) {
-        const el = d.querySelector(gridSelector);
-        if (!el) {
-            console.warn(`${MOD} Container ${gridSelector} no encontrado`);
-            return;
-        }
+    function attachTableListeners() {
+        const panel = d.querySelector(PANEL_SELECTOR);
+        if (!panel) return;
 
-        if (table) {
-            console.log(`${MOD} Tabla ya inicializada, omitiendo...`);
-            return table;
-        }
+        panel.addEventListener('click', (ev) => {
+            const btnVer = ev.target.closest('.btn-ver-contrato');
+            const btnEditar = ev.target.closest('.btn-editar-contrato');
+            const btnCancelar = ev.target.closest('.btn-cancelar-contrato');
 
-        const api = API();
-        if (!api) { console.error(`${MOD} API no disponible`); return; }
+            if (btnVer) {
+                ev.preventDefault();
+                const uuid = btnVer.dataset.uuid;
+                if (uuid && w.Sintel.Empleados.ContratoEditor) {
+                    w.Sintel.Empleados.ContratoEditor.openDetail(uuid);
+                }
+                return;
+            }
 
-        if (!w.TabulatorFactory) {
-            console.warn(`${MOD} TabulatorFactory no disponible, reintentando en 100ms...`);
-            setTimeout(() => init(gridSelector), 100);
-            return;
-        }
+            if (btnEditar) {
+                ev.preventDefault();
+                const uuid = btnEditar.dataset.uuid;
+                if (uuid && w.Sintel.Empleados.ContratoEditor) {
+                    w.Sintel.Empleados.ContratoEditor.open(null, uuid);
+                }
+                return;
+            }
 
-        table = w.TabulatorFactory.create(gridSelector, api.contratos.list, getColumnas(), {
-            searchInputSelector: '#search-contrato',
-            paginationSize: 15,
-            paginationSizeSelector: [10, 15, 25, 50],
+            if (btnCancelar) {
+                ev.preventDefault();
+                const uuid = btnCancelar.dataset.uuid;
+                if (uuid) cancelarContrato(uuid);
+            }
         });
-
-        console.log(`${MOD} Tabla inicializada: ${api.contratos.list}`);
-        return table;
     }
 
-    // ── Reload ─────────────────────────────────────────────────────────────────
-
-    function reload() {
-        if (table) {
-            table.setData();
-        }
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', attachTableListeners);
+    } else {
+        attachTableListeners();
     }
-
-    function redraw() {
-        if (table) {
-            table.redraw(true);
-        }
-    }
-
-    // ── Export ─────────────────────────────────────────────────────────────────
 
     w.Sintel.Empleados.ContratoList = { init, reload, redraw };
 

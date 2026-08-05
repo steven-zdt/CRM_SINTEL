@@ -21,7 +21,7 @@ def ensure_user_and_membership():
     if created:
         user.set_password('ChangeMe123!')
         user.save()
-    d = Domain.objects.get(domain='home.sintel.com')
+    d = Domain.objects.get(domain='home.sintel.net.co')
     client = d.tenant
     current = connection.schema_name
     connection.set_schema_to_public()
@@ -48,7 +48,7 @@ def do(method, path, headers, body=None):
 def main():
     user, domain = ensure_user_and_membership()
     token = get_token(user)
-    host = 'home.sintel.com'
+    host = 'home.sintel.net.co'
     headers = {'Host': host, 'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
 
     # Empresa list

@@ -3,7 +3,7 @@
 # Uso: ./scripts/test_empresa_endpoints.sh [BASE_URL] [SESSIONID] [CSRFTOKEN]
 #
 # Ejemplo:
-#   ./scripts/test_empresa_endpoints.sh http://home.sintel.com abc123... xyz789...
+#   ./scripts/test_empresa_endpoints.sh http://home.sintel.net.co abc123... xyz789...
 
 BASE_URL="${1:-http://localhost:8000}"
 SESSIONID="${2:-}"

@@ -77,7 +77,7 @@ class ConsoleUserListSerializer(serializers.ModelSerializer):
 
     def get_tenants(self, obj):
         from django.conf import settings
-        domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+        domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         protocol = getattr(settings, "SITE_PROTOCOL", "https")
 
         memberships = getattr(obj, "_tenant_memberships", None)

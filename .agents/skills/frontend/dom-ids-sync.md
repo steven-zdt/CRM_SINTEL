@@ -32,6 +32,43 @@
 
 ---
 
+## 2.1. ⛔ Colisión de IDs ENTRE módulos en el Workspace SPA (bug recurrente)
+
+**Causa raíz crítica:** `workspace.html` es una SPA — **TODOS los tabs se renderizan a la vez en el mismo DOM**, solo se ocultan con `display:none` (NO se eliminan). Por lo tanto un `id="..."` o `data-spinner="..."` repetido en dos módulos coexiste en el DOM simultáneamente.
+
+`document.querySelector('#grid-X')` devuelve el **primer** elemento en orden de DOM. Si Facturas (que va antes) declara un `#grid-X` oculto, Tabulator del módulo nuevo construye su tabla **dentro del tab oculto de Facturas** → el tab real se ve **vacío** aunque la API devuelva 200 con datos.
+
+**Casos reales (2026-06):** `facturas/list_factura.html` declara sub-grids `#grid-compras` (facturas de compra) y `#grid-ventas` (facturas de venta) para sus sub-pestañas. Colisionaban con los módulos **Compras** (órdenes de compra) y **Ventas** que también usaban `#grid-compras` / `#grid-ventas`. Síntoma: la tabla no listaba. Backend, serializer, scripts y orden de carga eran todos correctos — el bug era puramente la colisión de IDs en el DOM.
+
+**Regla obligatoria:** el `id` del grid Tabulator, el `data-spinner`, `data-grid` y `data-empty-state` deben ser **únicos globalmente** entre TODOS los módulos del workspace, no solo dentro del módulo. Usar nombre específico del listado, no genérico:
+
+```html
+<!-- PROHIBIDO — 'compras'/'ventas' colisionan con sub-grids de facturas -->
+<div id="grid-compras" data-grid="compras"></div>
+<div id="grid-ventas"  data-spinner="ventas"></div>
+
+<!-- OBLIGATORIO — nombre único del listado concreto -->
+<div id="grid-ordenes-compra"  data-spinner="ordenes-compra"></div>
+<div id="grid-listado-ventas"  data-spinner="listado-ventas"></div>
+```
+
+**Antes de crear/renombrar un grid o data-spinner, verificar unicidad en TODO el codebase:**
+
+```bash
+grep -rn 'id="grid-<nombre>"' apps/ --include=*.html      # debe haber 0 antes de crearlo
+grep -rn 'data-spinner="<nombre>"' apps/ --include=*.html  # idem
+```
+
+**Verificar en el HTML renderizado** que el ID aparece exactamente 1 vez (no confiar solo en el conteo de archivos):
+
+```python
+# manage.py shell — Client autenticado, HTTP_HOST del tenant
+html = c.get('/workspace/', HTTP_HOST=host).content.decode()
+assert html.count('id="grid-<nombre>"') == 1   # >1 = colisión → tabla vacía
+```
+
+---
+
 ## 3. SSoT de Selectores en JS — Objeto DOM
 
 ```javascript

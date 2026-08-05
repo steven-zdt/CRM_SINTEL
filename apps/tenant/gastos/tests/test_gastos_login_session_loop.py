@@ -34,7 +34,7 @@ def test_no_logout_after_login_with_session_auth_for_gastos(client, django_user_
     
     # Si el ViewSet acepta SessionAuthentication, NO debe devolver 401
     # 200 si funciona correctamente, 404 si falta include en TENANT_URLCONF
-    resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.com")
+    resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     
     # Nunca debe ser 401 si la sesion esta activa y SessionAuthentication esta configurado
     assert resp.status_code != 401, (

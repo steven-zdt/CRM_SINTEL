@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Script para establecer sintel.com como dominio principal y definitivo del tenant público.
+Script para establecer sintel.net.co como dominio principal y definitivo del tenant público.
 
 Uso:
     docker compose exec web python scripts/set_sintel_as_primary_domain.py
@@ -25,9 +25,9 @@ from apps.public.tenants.models import Client, Domain
 
 
 def main():
-    """Establece sintel.com como dominio principal del tenant público."""
+    """Establece sintel.net.co como dominio principal del tenant público."""
     print("=" * 60)
-    print("🔧 ESTABLECIENDO sintel.com COMO DOMINIO PRINCIPAL")
+    print("🔧 ESTABLECIENDO sintel.net.co COMO DOMINIO PRINCIPAL")
     print("=" * 60)
     
     with schema_context('public'):
@@ -42,7 +42,7 @@ def main():
         
         # 2. Desactivar otros dominios primarios
         print("\n🔍 Desactivando otros dominios primarios...")
-        other_primary = Domain.objects.filter(tenant=public, is_primary=True).exclude(domain='sintel.com')
+        other_primary = Domain.objects.filter(tenant=public, is_primary=True).exclude(domain='sintel.net.co')
         if other_primary.exists():
             for domain in other_primary:
                 domain.is_primary = False
@@ -51,11 +51,11 @@ def main():
         else:
             print("  [OK] No hay otros dominios primarios")
         
-        # 3. Crear o actualizar sintel.com como primario
-        print("\n🔍 Configurando sintel.com...")
+        # 3. Crear o actualizar sintel.net.co como primario
+        print("\n🔍 Configurando sintel.net.co...")
         with transaction.atomic():
             domain, created = Domain.objects.get_or_create(
-                domain='sintel.com',
+                domain='sintel.net.co',
                 defaults={
                     'tenant': public,
                     'is_primary': True,
@@ -63,23 +63,23 @@ def main():
             )
             
             if created:
-                print(f"  [OK] Dominio 'sintel.com' creado como primario")
+                print(f"  [OK] Dominio 'sintel.net.co' creado como primario")
             else:
                 # Actualizar si ya existe
                 if domain.tenant != public:
-                    print(f"  [WARNING]  Dominio 'sintel.com' estaba asociado a otro tenant. Actualizando...")
+                    print(f"  [WARNING]  Dominio 'sintel.net.co' estaba asociado a otro tenant. Actualizando...")
                     domain.tenant = public
                 
                 if not domain.is_primary:
-                    print(f"  [WARNING]  Dominio 'sintel.com' no era primario. Actualizando...")
+                    print(f"  [WARNING]  Dominio 'sintel.net.co' no era primario. Actualizando...")
                     domain.is_primary = True
                 
                 domain.save()
-                print(f"  [OK] Dominio 'sintel.com' actualizado como primario")
+                print(f"  [OK] Dominio 'sintel.net.co' actualizado como primario")
         
         # 4. Verificar resultado
         print("\n📋 Verificación final:")
-        sintel = Domain.objects.get(domain='sintel.com', tenant=public)
+        sintel = Domain.objects.get(domain='sintel.net.co', tenant=public)
         print(f"  [OK] Dominio: {sintel.domain}")
         print(f"  [OK] Tenant: {sintel.tenant.nombre}")
         print(f"  [OK] Primary: {sintel.is_primary}")
@@ -95,10 +95,10 @@ def main():
         print("[OK] CONFIGURACIÓN COMPLETADA")
         print("=" * 60)
         print("\n[IDEA] Próximos pasos:")
-        print("   1. Verifica que sintel.com apunte a tu servidor (DNS o /etc/hosts)")
-        print("   2. Accede a http://sintel.com/ para el dominio público")
-        print("   3. Accede a http://sintel.com/console/tenants/ para la consola")
-        print("   4. Los tenants privados usarán subdominios: cliente.sintel.com")
+        print("   1. Verifica que sintel.net.co apunte a tu servidor (DNS o /etc/hosts)")
+        print("   2. Accede a http://sintel.net.co/ para el dominio público")
+        print("   3. Accede a http://sintel.net.co/console/tenants/ para la consola")
+        print("   4. Los tenants privados usarán subdominios: cliente.sintel.net.co")
         
         return 0
 

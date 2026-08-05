@@ -84,7 +84,7 @@ def test_template_rendering():
     context = {
         'user': type('User', (), {'email': 'test@example.com', 'first_name': 'Test'})(),
         'tenant': type('Tenant', (), {'nombre': 'Test Tenant', 'schema_name': 'test'})(),
-        'activation_url': 'http://test.sintel.com/activate?token=test123',
+        'activation_url': 'http://test.sintel.net.co/activate?token=test123',
         'tenant_name': 'Test Tenant',
     }
     
@@ -200,8 +200,8 @@ def test_invitation_email(dest_email: str):
         try:
             domain = Domain.objects.filter(tenant=tenant, is_primary=True).first()
             if not domain:
-                print("  [WARNING]  No hay dominio primario, usando sintel.com")
-                domain_name = 'sintel.com'
+                print("  [WARNING]  No hay dominio primario, usando sintel.net.co")
+                domain_name = 'sintel.net.co'
             else:
                 domain_name = domain.domain
             

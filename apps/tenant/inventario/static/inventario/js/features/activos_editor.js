@@ -218,6 +218,11 @@
             return;
         }
 
+        // Guard (FE-A1): evita registrar el submit 2 veces si init() se llama
+        // mas de una vez para el mismo form.
+        if (form.dataset.editorInitialized) return;
+        form.dataset.editorInitialized = 'true';
+
         // ⚠️ Prevenir submit nativo del formulario
         form.addEventListener('submit', function(e) {
             e.preventDefault();

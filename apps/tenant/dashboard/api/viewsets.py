@@ -11,7 +11,7 @@ from rest_framework.response import Response
 
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.api.permissions import IsTenantMember
+from apps.tenant.api.permissions import IsTenantMember, IsTenantAdmin
 from apps.tenant.dashboard.api.serializers import DashboardMetricasSerializer, KpiSedeSerializer
 from apps.tenant.dashboard.services.business_service import DashboardBusinessService
 
@@ -54,7 +54,7 @@ class DashboardViewSet(SintelDSVMixin, BaseTenantViewSet):
         """GET /api/v1/dashboard/metricas/ — alias de list."""
         return self.list(request)
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], permission_classes=[IsTenantAdmin])
     def invalidar_cache(self, request):
         """POST /api/v1/dashboard/invalidar-cache/ — invalida cache (admin)."""
         try:

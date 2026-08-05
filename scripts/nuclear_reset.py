@@ -254,7 +254,7 @@ def create_superuser():
     # Usar variables de entorno para crear superusuario sin interacción
     env = os.environ.copy()
     env['DJANGO_SUPERUSER_USERNAME'] = 'admin'
-    env['DJANGO_SUPERUSER_EMAIL'] = 'admin@sintel.com'
+    env['DJANGO_SUPERUSER_EMAIL'] = 'admin@sintel.net.co'
     env['DJANGO_SUPERUSER_PASSWORD'] = 'admin'
     
     cmd = ['docker', 'compose', 'exec', '-T', 'web', 'python', 'manage.py', 'createsuperuser', '--noinput']

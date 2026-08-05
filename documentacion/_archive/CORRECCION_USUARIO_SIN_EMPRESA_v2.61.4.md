@@ -66,7 +66,7 @@ PostgreSQL Database
 ### Paso 2: Análisis del Tenant "home"
 ```
 [EMPRESA]    ✅ Registrada: "sintel technlgy sas" (ID: 1)
-[USUARIOS]   ✅ Existen: admin@home.com, admin@sintel.com
+[USUARIOS]   ✅ Existen: admin@home.com, admin@sintel.net.co
 [PERFIL]     ❌ NO EXISTEN TenantProfile para los usuarios
 ```
 
@@ -114,7 +114,7 @@ Cuando user intenta acceder a /api/v1/clientes/:
 [PROCESSING] Tenant: home (schema: home)
   [USUARIOS] Total: 2
     ✓ admin@home.com - Perfil CREADO
-    ✓ admin@sintel.com - Perfil CREADO
+    ✓ admin@sintel.net.co - Perfil CREADO
 
 [SUMMARY]
 ✅ TenantProfiles creados: 2
@@ -132,7 +132,7 @@ Cuando user intenta acceder a /api/v1/clientes/:
   ✅ admin@home.com
      - Cargo: Usuario
      - Departamento: General
-  ✅ admin@sintel.com
+  ✅ admin@sintel.net.co
      - Cargo: Usuario
      - Departamento: General
 
@@ -178,7 +178,7 @@ Status: ✅ FUNCIONA CORRECTAMENTE
 ```
 TenantProfile:
   - user: admin@home.com, cargo: Usuario, departamento: General
-  - user: admin@sintel.com, cargo: Usuario, departamento: General
+  - user: admin@sintel.net.co, cargo: Usuario, departamento: General
   
 Estado: ✅ PERSISTIDOS EN BD
 ```
@@ -247,7 +247,7 @@ AHORA: [✅] Usuario → TenantProfile → Acceso a datos por empresa
 | Aspecto | Antes | Después |
 |---------|-------|---------|
 | TenantProfile admin@home.com | ❌ NO EXISTE | ✅ CREADO |
-| TenantProfile admin@sintel.com | ❌ NO EXISTE | ✅ CREADO |
+| TenantProfile admin@sintel.net.co | ❌ NO EXISTE | ✅ CREADO |
 | /api/v1/clientes/ response | ❌ [] (vacío) | ✅ 3 registros |
 | Acceso a datos | ❌ BLOQUEADO | ✅ FUNCIONANDO |
 

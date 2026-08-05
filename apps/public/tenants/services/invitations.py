@@ -269,12 +269,12 @@ def build_activation_url(domain: str, token: str) -> str:
 
     ACTIVATION_BASE_URL (env): cuando esta configurado, sobreescribe el dominio
     del tenant para la URL de activacion. Util en dev donde el subdominio del
-    tenant no resuelve (ej: sintel.sintel.com) pero el servidor si es accesible
+    tenant no resuelve (ej: sintel.sintel.net.co) pero el servidor si es accesible
     via IP (ej: https://192.168.2.15). El PUBLIC /activate/ maneja la activacion
     correctamente con el token.
 
     Args:
-        domain: FQDN del tenant (ej: acme.sintel.com) - usado si ACTIVATION_BASE_URL no esta configurado
+        domain: FQDN del tenant (ej: acme.sintel.net.co) - usado si ACTIVATION_BASE_URL no esta configurado
         token: Token de invitacion firmado
 
     Returns:

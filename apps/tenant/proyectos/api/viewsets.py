@@ -12,10 +12,10 @@ from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, NotFound, ValidationError
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.renderers import TemplateHTMLRenderer
 from rest_framework.response import Response
 
+from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.empresa.models import Empresa
@@ -60,14 +60,6 @@ except ImportError:
     _CotizacionProyecto = None
 
 logger = logging.getLogger(__name__)
-
-class StandardResultsSetPagination(PageNumberPagination):
-    """
-    Paginacion estandar SaaS para Tabulator.
-    """
-    page_size = 10
-    page_size_query_param = 'page_size'
-    max_page_size = 100
 
 class ProyectoViewSet(
     ProyectoServiceMixin,
@@ -147,7 +139,10 @@ class ProyectoViewSet(
         # WARNING: Logging para debug de validacion
         if not serializer.is_valid():
             logger.error(f"[ProyectoViewSet] Validacion fallida: {serializer.errors}")
-            logger.error(f"[ProyectoViewSet] Datos recibidos: {request.data}")
+            # WARNING: [SEC-M6] Solo se loguean los nombres de campo, no los valores
+            # (pueden incluir datos de cliente/presupuesto/PII).
+            _campos = list(request.data.keys()) if hasattr(request.data, 'keys') else type(request.data).__name__
+            logger.error(f"[ProyectoViewSet] Campos recibidos: {_campos}")
             return Response(
                 {'detail': 'Datos invalidos', 'errors': serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST
@@ -285,7 +280,7 @@ class ProyectoViewSet(
                 raise ImportError
             facturas_raw = list(
                 _FacturaInterAppAPI.list_all()
-                .only('id', 'numero', 'receptor_razon_social', 'total', 'cotizacion_uuid', 'cotizacion_numero')
+                # .only('id', 'numero', 'receptor_razon_social', 'total', 'cotizacion_uuid', 'cotizacion_numero')
                 .order_by('-fecha_emision')[:200]
             )
         except Exception:
@@ -388,14 +383,14 @@ class ItemPresupuestoViewSet(BaseTenantViewSet):
     Endpoints:
     - GET    /api/v1/proyectos/items-presupuesto/?proyecto_uuid=<uuid>
     - POST   /api/v1/proyectos/items-presupuesto/
-    - PATCH  /api/v1/proyectos/items-presupuesto/<id>/
-    - DELETE /api/v1/proyectos/items-presupuesto/<id>/
+    - PATCH  /api/v1/proyectos/items-presupuesto/<uuid>/
+    - DELETE /api/v1/proyectos/items-presupuesto/<uuid>/
     """
     serializer_class = ItemPresupuestoSerializer
     queryset = ItemPresupuestoProyecto.objects.none()
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
+    # WARNING: [ARQ-A1] lookup_field='uuid' se hereda de BaseTenantViewSet — no
+    # redeclarar con 'id' (exponia la PK entera en la URL, AGENTS.md §25.1).
 
     def get_queryset(self):
         """Filtrado por proyecto_uuid + empresa_id (DSV)."""
@@ -465,17 +460,17 @@ class TareaDiariaViewSet(BaseTenantViewSet):
     Endpoints:
     - GET    /api/v1/proyectos/tareas-diarias/?proyecto_uuid=<uuid>
     - POST   /api/v1/proyectos/tareas-diarias/
-    - PATCH  /api/v1/proyectos/tareas-diarias/<id>/
-    - DELETE /api/v1/proyectos/tareas-diarias/<id>/
-    - POST   /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/
+    - PATCH  /api/v1/proyectos/tareas-diarias/<uuid>/
+    - DELETE /api/v1/proyectos/tareas-diarias/<uuid>/
+    - POST   /api/v1/proyectos/tareas-diarias/<uuid>/cambiar-estado/
 
     DSV: Filtrado automatico por empresa_id via BaseTenantViewSet.
     """
     serializer_class = TareaDiariaSerializer
     queryset = TareaDiariaProyecto.objects.none()
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
+    # WARNING: [ARQ-A1] lookup_field='uuid' se hereda de BaseTenantViewSet — no
+    # redeclarar con 'id' (exponia la PK entera en la URL, AGENTS.md §25.1).
 
     def get_queryset(self):
         """Filtrado por proyecto_uuid + empresa_id (DSV)."""
@@ -551,9 +546,9 @@ class TareaDiariaViewSet(BaseTenantViewSet):
         TareasDiariasBusinessService.eliminar_tarea(instance)
 
     @action(detail=True, methods=['post'], url_path='cambiar-estado')
-    def cambiar_estado(self, request, id=None):
+    def cambiar_estado(self, request, uuid=None):
         """
-        POST /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/
+        POST /api/v1/proyectos/tareas-diarias/<uuid>/cambiar-estado/
         Cambia el estado de una tarea (PENDIENTE -> EN_PROCESO -> COMPLETADA, etc).
 
         Body: { "nuevo_estado": "EN_PROCESO" | "COMPLETADA" | "CANCELADA" }

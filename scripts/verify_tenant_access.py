@@ -74,8 +74,8 @@ def check_domain_resolution(hostname):
 
 if __name__ == '__main__':
     # Ejemplo de uso: Verificar un dominio específico
-    # Cambiar 'ejemplo.sintel.com' por el dominio que desees verificar
-    DOMAIN_TO_CHECK = 'ejemplo.sintel.com'  # Cambiar según necesidad
+    # Cambiar 'ejemplo.sintel.net.co' por el dominio que desees verificar
+    DOMAIN_TO_CHECK = 'ejemplo.sintel.net.co'  # Cambiar según necesidad
     
     check_domain_resolution(DOMAIN_TO_CHECK)
     

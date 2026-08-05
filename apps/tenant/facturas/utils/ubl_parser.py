@@ -19,6 +19,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 
+from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from lxml import etree
@@ -112,7 +113,14 @@ def _parse_xml(xml_input: str | bytes) -> etree._Element:
         ns_clean=True,
         remove_blank_text=True,
         recover=True,
-        huge_tree=True  # Soporta XML grandes
+        huge_tree=True,  # Soporta XML grandes
+        # WARNING: [SEC-A3] resolve_entities=False bloquea expansion de entidades
+        # (XXE / "billion laughs"). huge_tree=True desactiva los limites de tamano
+        # de libxml2, pero sin resolucion de entidades no hay vector de expansion
+        # que explotar -- sigue soportando facturas UBL legitimas grandes.
+        resolve_entities=False,
+        load_dtd=False,
+        no_network=True,
     )
     if isinstance(xml_input, bytes):
         # lxml detecta encoding desde declaración XML automáticamente
@@ -446,7 +454,11 @@ def _extraer_invoice_desde_attached_document(root: etree._Element, xml_bytes: by
                     ns_clean=True,
                     remove_blank_text=True,
                     recover=True,
-                    huge_tree=True
+                    huge_tree=True,
+                    # WARNING: [SEC-A3] ver nota en _parse_xml() -- mismo hardening XXE.
+                    resolve_entities=False,
+                    load_dtd=False,
+                    no_network=True,
                 )
                 context = etree.iterparse(BytesIO(xml_bytes), events=('end',), parser=parser)
                 
@@ -572,7 +584,7 @@ def _parsear_prefijo_consecutivo(numero: str) -> tuple[str, int]:
     return ('', 0)
 
 
-def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
+def importar_factura_desde_ubl(xml_text: str, empresa_id=None, persist: bool = True):
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -580,16 +592,21 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
     - Soporta AttachedDocument con Invoice interno en CDATA.
     - Sin prefijos hardcodeados que no existan en el documento.
     - Usa nsmap dinámico; para nodos 'opcionales' de vendors usa local-name().
-    
+
     # WARNING: v2.30: Service Layer Pattern - Solo parsea XML; la creación de Factura
     se delega a services.importar_ubl() que llama a este parser.
-    
+
     Args:
         xml_text: Contenido XML UBL 2.1 (string)
-        
+        persist: Si True (default), persiste Factura + ItemFactura via FacturaCRUDService
+            de forma atomica y retorna la instancia creada. Si False, retorna unicamente
+            el dict de datos parseados sin escribir en base de datos -- uso: previsualizar
+            metadatos de un correo/adjunto antes de que el usuario confirme la importacion
+            (ver PASO 4.1 en services_mail_ingestion.py, que NO debe crear registros reales).
+
     Returns:
-        Instancia de Factura creada
-        
+        Instancia de Factura creada (persist=True) o dict con los datos parseados (persist=False)
+
     Raises:
         ValueError: Si el XML no es válido o no se puede parsear
     """
@@ -996,28 +1013,37 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None):
         if empresa_id is not None:
             factura_data['empresa_id'] = empresa_id
 
-        # Persistir via CRUD Service
-        factura = FacturaCRUDService.crear(factura_data)
+        if not persist:
+            return factura_data
 
-        # Crear items
-        from apps.tenant.facturas.models import ItemFactura
-        for item in items_data:
-            ItemFactura.objects.create(
-                factura=factura,
-                empresa_id=factura.empresa_id,
-                linea_id=item.get('linea_id', ''),
-                codigo=item.get('codigo', ''),
-                descripcion=item.get('descripcion', ''),
-                cantidad=item.get('cantidad', 1),
-                unidad_medida=item.get('unidad_medida', 'UND'),
-                valor_unitario=item.get('valor_unitario', 0),
-                porcentaje_iva=item.get('porcentaje_iva', 0),
-                porcentaje_retefuente=item.get('porcentaje_retefuente', 0),
-                valor_retefuente=item.get('valor_retefuente', 0),
-                porcentaje_reteica=item.get('porcentaje_reteica', 0),
-                valor_reteica=item.get('valor_reteica', 0),
-            )
-        
+        # WARNING: [PERF-C3] Persistir Factura + Items en una unica transaccion.
+        # FacturaCRUDService.crear() ya es @transaction.atomic internamente y hace
+        # commit al retornar; sin este bloque exterior, un fallo al crear un ItemFactura
+        # (item N de N) deja la Factura y los items 1..N-1 ya confirmados en base de
+        # datos (factura huerfana/incompleta).
+        with transaction.atomic():
+            # Persistir via CRUD Service
+            factura = FacturaCRUDService.crear(factura_data)
+
+            # Crear items
+            from apps.tenant.facturas.models import ItemFactura
+            for item in items_data:
+                ItemFactura.objects.create(
+                    factura=factura,
+                    empresa_id=factura.empresa_id,
+                    linea_id=item.get('linea_id', ''),
+                    codigo=item.get('codigo', ''),
+                    descripcion=item.get('descripcion', ''),
+                    cantidad=item.get('cantidad', 1),
+                    unidad_medida=item.get('unidad_medida', 'UND'),
+                    valor_unitario=item.get('valor_unitario', 0),
+                    porcentaje_iva=item.get('porcentaje_iva', 0),
+                    porcentaje_retefuente=item.get('porcentaje_retefuente', 0),
+                    valor_retefuente=item.get('valor_retefuente', 0),
+                    porcentaje_reteica=item.get('porcentaje_reteica', 0),
+                    valor_reteica=item.get('valor_reteica', 0),
+                )
+
         return factura
         
     except etree.XMLSyntaxError as e:

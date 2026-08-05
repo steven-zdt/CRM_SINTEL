@@ -10,7 +10,9 @@ from apps.public.tenants.api.viewsets import VIEWSETS
 def _find_client_viewset_entry():
     for prefix, viewset, basename in VIEWSETS:
         try:
-            model_name = getattr(getattr(viewset, "queryset", None), "model", None).__name__
+            model_name = getattr(
+                getattr(viewset, "queryset", None), "model", None
+            ).__name__
         except Exception:
             model_name = None
         if model_name == "Client":
@@ -30,7 +32,9 @@ def test_onboard_dynamic_if_present(api_client, admin_user):
     # ¿la acción existe?
     onboard_attr = getattr(viewset, "onboard", None)
     if onboard_attr is None:
-        pytest.skip("La acción 'onboard' no está expuesta en esta API. (OK si vive en otra capa)")
+        pytest.skip(
+            "La acción 'onboard' no está expuesta en esta API. (OK si vive en otra capa)"
+        )
 
     api_client.force_authenticate(user=admin_user)
     onboard_url = reverse(f"{basename}-onboard")  # requiere @action(url_name="onboard")
@@ -48,4 +52,3 @@ def test_onboard_dynamic_if_present(api_client, admin_user):
 
     r2 = api_client.post(onboard_url, payload, format="json")
     assert r2.status_code in (status.HTTP_201_CREATED, status.HTTP_200_OK), r2.data
-

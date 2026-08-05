@@ -20,7 +20,9 @@
     
     {% if tipo_formulario == 'ajuste' %}
       <form id="form-ajuste-inventario" method="POST" onsubmit="return false;">
-        <input type="hidden" id="ajuste-producto-id" name="producto" value="{% if producto %}{{ producto.uuid }}{% endif %}">
+        {# [FE-C2] El hidden y el select comparten name="producto" pero son mutuamente
+           excluyentes: el hidden solo debe existir cuando ya hay un producto pre-seleccionado
+           (rama sin producto usa el select); antes vivian ambos siempre en el DOM a la vez. #}
         {% if not producto %}
         <div class="mb-3">
           <label for="ajuste-producto-select" class="form-label text-danger fw-bold">Producto *</label>
@@ -29,6 +31,7 @@
           </select>
         </div>
         {% else %}
+        <input type="hidden" id="ajuste-producto-id" name="producto" value="{{ producto.uuid }}">
         <div class="card mb-3 border-info">
           <div class="card-body">
             <h6 class="card-title text-info"><i class="bi bi-box-seam me-2"></i>Producto Seleccionado</h6>

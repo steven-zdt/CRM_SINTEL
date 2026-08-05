@@ -163,7 +163,7 @@ curl -X GET http://localhost:8000/api/v1/dashboard/summary/ \
 # Esperado: 200 OK con resumen del dashboard
 
 # 3. Validar Dashboard UI
-# Abrir http://home.sintel.com/dashboard/
+# Abrir http://home.sintel.net.co/dashboard/
 # Verificar que el dashboard carga correctamente
 ```
 

@@ -48,7 +48,7 @@ El proceso de creación de un tenant privado en SINTEL sigue un flujo atómico y
    ↓
 6. JavaScript muestra activation_url al usuario (o login_url si no hay invitación)
    ↓
-7. Owner recibe email con link → https://cliente.sintel.com/activate?token=... ⭐ v2.24
+7. Owner recibe email con link → https://cliente.sintel.net.co/activate?token=... ⭐ v2.24
    ↓
 8. Owner accede a /activate?token=... en el subdominio del tenant ⭐ v2.24
    ↓
@@ -417,7 +417,7 @@ Cuando se llama `client.save()` con `auto_create_schema=True`:
 
 ### ⚠️ CAMBIO v2.25: Autogeneración de Dominio FQDN
 - Si `dominio_fqdn` no se proporciona o es inválido, se autogenera como `<schema>.<TENANT_DOMAIN_BASE>`
-- Ejemplo: schema `cliente` → dominio autogenerado `cliente.sintel.com`
+- Ejemplo: schema `cliente` → dominio autogenerado `cliente.sintel.net.co`
 - El dominio siempre debe ser un FQDN válido con TLD (ej: `.com`, `.local`, etc.)
 - Si el dominio proporcionado no tiene TLD o no termina con `.<TENANT_DOMAIN_BASE>`, se autogenera
 
@@ -455,7 +455,7 @@ class Domain(DomainMixin):
 #   - dominio_fqdn no es un FQDN válido
 #   - dominio_fqdn no termina con .<TENANT_DOMAIN_BASE>
 primary_fqdn = _build_primary_domain(client.schema_name, dominio_fqdn)
-# Ejemplo: schema "cliente" → "cliente.sintel.com" (siempre con TLD)
+# Ejemplo: schema "cliente" → "cliente.sintel.net.co" (siempre con TLD)
 
 # 2. Crear Domain (idempotente)
 try:
@@ -508,7 +508,7 @@ def normalize_domain(domain: str) -> str:
 
 - ✅ Domain creado en esquema `public` (tabla `tenants_domain`)
 - ✅ Dominio normalizado (sin puerto, sin www, sin protocolo)
-- ✅ **v2.25**: Dominio siempre es FQDN válido con TLD (ej: `cliente.sintel.com`)
+- ✅ **v2.25**: Dominio siempre es FQDN válido con TLD (ej: `cliente.sintel.net.co`)
 - ✅ **v2.25**: Autogeneración automática si no se proporciona o es inválido
 - ✅ `is_primary=True` (dominio principal del tenant)
 - ✅ Relación ForeignKey con Client (CASCADE)
@@ -1055,7 +1055,7 @@ class ActivationForm(Form):
 **⚠️ v2.24:** El owner debe activar su cuenta primero usando el token de invitación antes de poder hacer login.
 
 **Flujo Normal (Usuario con password usable):**
-El usuario accede a `http://acme.localhost/login/` (o `https://acme.sintel.com/login/` en producción).
+El usuario accede a `http://acme.localhost/login/` (o `https://acme.sintel.net.co/login/` en producción).
 
 ### Resolución del Tenant por Hostname
 

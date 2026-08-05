@@ -45,7 +45,7 @@
 **Escenario A: Crear Empresa (sin empresa existente)**
 ```bash
 # PATCH /api/v1/core/empresa/ con JSON
-curl -X PATCH http://home.sintel.com/api/v1/core/empresa/ \
+curl -X PATCH http://home.sintel.net.co/api/v1/core/empresa/ \
   -H "Content-Type: application/json" \
   -H "Cookie: sessionid=..." \
   -H "X-CSRFToken: ..." \
@@ -69,7 +69,7 @@ curl -X PATCH http://home.sintel.com/api/v1/core/empresa/ \
 **Escenario B: Actualizar Empresa (con empresa existente)**
 ```bash
 # PATCH /api/v1/core/empresa/ con JSON
-curl -X PATCH http://home.sintel.com/api/v1/core/empresa/ \
+curl -X PATCH http://home.sintel.net.co/api/v1/core/empresa/ \
   -H "Content-Type: application/json" \
   -H "Cookie: sessionid=..." \
   -H "X-CSRFToken: ..." \
@@ -168,7 +168,7 @@ POST /api/v1/empresas/
 ### Prueba 3: Workspace UI - Flujo Completo
 
 **3.1 Crear Empresa**
-1. Abrir `http://home.sintel.com/workspace/#empresa`
+1. Abrir `http://home.sintel.net.co/workspace/#empresa`
 2. Hacer clic en "Crear Empresa"
 3. Llenar formulario:
    - NIT: `900123456`
@@ -213,7 +213,7 @@ POST /api/v1/empresas/
 ### Prueba 4: MailInboxConfig - Crear Configuración
 
 **4.1 Crear Nueva Configuración**
-1. Abrir `http://home.sintel.com/workspace/#empresa`
+1. Abrir `http://home.sintel.net.co/workspace/#empresa`
 2. Ir a sección "Configuraciones de Correo"
 3. Hacer clic en "Nueva Configuración"
 4. Llenar formulario:
@@ -266,7 +266,7 @@ POST /api/v1/empresas/
 
 ```bash
 # PATCH /api/v1/core/empresa/ con campo legacy
-curl -X PATCH http://home.sintel.com/api/v1/core/empresa/ \
+curl -X PATCH http://home.sintel.net.co/api/v1/core/empresa/ \
   -H "Content-Type: application/json" \
   -H "Cookie: sessionid=..." \
   -H "X-CSRFToken: ..." \

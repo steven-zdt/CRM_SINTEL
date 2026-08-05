@@ -145,6 +145,13 @@ class WidgetClientesSerializer(serializers.Serializer):
     retenedores = serializers.IntegerField()
 
 
+class WidgetProveedoresSerializer(serializers.Serializer):
+    """Serializer para métricas de Proveedores (WidgetProveedoresDTO)."""
+    total_provedores = serializers.IntegerField()
+    total_gastos = serializers.DecimalField(max_digits=15, decimal_places=2)
+    cartera_pendiente = serializers.DecimalField(max_digits=15, decimal_places=2)
+
+
 class KpiSedeSerializer(serializers.Serializer):
     """Serializer para indicadores transversales por sede."""
     sede_uuid = serializers.CharField(allow_null=True)
@@ -169,5 +176,6 @@ class DashboardMetricasSerializer(serializers.Serializer):
     inventario = WidgetInventarioSerializer()
     empleados = WidgetEmpleadosSerializer()
     gastos = WidgetGastosSerializer(required=False, allow_null=True)
+    proveedores = WidgetProveedoresSerializer(required=False, allow_null=True)
     proyectos = WidgetProyectosSerializer(required=False, allow_null=True)
     clientes = WidgetClientesSerializer(required=False, allow_null=True)

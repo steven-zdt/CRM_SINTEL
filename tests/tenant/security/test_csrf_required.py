@@ -3,6 +3,7 @@ Tests de seguridad: CSRF Protection.
 
 Valida que las peticiones POST requieran token CSRF válido.
 """
+
 import pytest
 from django.test import Client
 from django.test.utils import override_settings
@@ -30,14 +31,12 @@ def test_post_with_csrf_allowed():
         c = Client(HTTP_HOST="miempresa.localhost")
         # Obtener CSRF token primero
         resp = c.get("/")
-        csrftoken = c.cookies.get('csrftoken')
-        
+        csrftoken = c.cookies.get("csrftoken")
+
         if csrftoken:
             # Intentar POST con CSRF token
             resp = c.post(
-                "/api/v1/core/auth/logout/",
-                data={},
-                HTTP_X_CSRFTOKEN=csrftoken.value
+                "/api/v1/core/auth/logout/", data={}, HTTP_X_CSRFTOKEN=csrftoken.value
             )
             # No debe ser 403 si el token es válido (puede ser 200, 204, 401, etc.)
             assert resp.status_code != 403

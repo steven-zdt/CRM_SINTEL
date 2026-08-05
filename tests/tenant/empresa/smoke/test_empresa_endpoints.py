@@ -6,51 +6,76 @@ en el TENANT_URLCONF y responden correctamente desde el dominio del tenant.
 
 Referencia: SINTEL v2.30 - API-First JSON-only, TENANT_URLCONF para privados.
 """
+
 import pytest
 from django.test import Client
-from django_tenants.utils import schema_context
-from apps.public.tenants.models import Client as TenantClient, Domain
-from apps.tenant.empresa.models import MailInboxConfig, Empresa
 from django.utils import timezone
+from django_tenants.utils import schema_context
+
+from apps.public.tenants.models import Client as TenantClient
+from apps.public.tenants.models import Domain
+from apps.tenant.empresa.models import Empresa, MailInboxConfig
 
 
 @pytest.mark.django_db
 def test_mi_empresa_returns_200(client):
     """
     Verifica que GET /api/v1/empresas/mi-empresa/ retorna 200 OK.
-    
+
     [WARNING] MULTI-TENANT: Usa HTTP_HOST para entrar al TENANT_URLCONF correcto.
     """
     # Usar primer tenant activo disponible en el entorno de test
-    from apps.public.tenants.models import Client as TenantClientQ, Domain as DomainQ
     from django_tenants.utils import get_public_schema_name
-    tenant_q = TenantClientQ.objects.exclude(schema_name=get_public_schema_name()).filter(is_active=True).first()
+
+    from apps.public.tenants.models import Client as TenantClientQ
+    from apps.public.tenants.models import Domain as DomainQ
+
+    tenant_q = (
+        TenantClientQ.objects.exclude(schema_name=get_public_schema_name())
+        .filter(is_active=True)
+        .first()
+    )
     if not tenant_q:
         pytest.skip("No hay tenants activos en la BD de test")
     domain_q = DomainQ.objects.filter(tenant=tenant_q, is_primary=True).first()
-    client.defaults["HTTP_HOST"] = domain_q.domain if domain_q else f"{tenant_q.schema_name}.sintel.local"
+    client.defaults["HTTP_HOST"] = (
+        domain_q.domain if domain_q else f"{tenant_q.schema_name}.sintel.local"
+    )
     r = client.get("/api/v1/empresas/mi-empresa/")
     assert r.status_code == 200, r.content
-    assert r.get("Content-Type", "").startswith("application/json"), "Response should be JSON"
+    assert r.get("Content-Type", "").startswith(
+        "application/json"
+    ), "Response should be JSON"
 
 
 @pytest.mark.django_db
 def test_mailbox_configs_list_returns_200(client):
     """
     Verifica que GET /api/v1/empresas/mailbox/configs/ retorna 200 OK.
-    
+
     [WARNING] MULTI-TENANT: Usa HTTP_HOST para entrar al TENANT_URLCONF correcto.
     """
-    from apps.public.tenants.models import Client as TenantClientQ, Domain as DomainQ
     from django_tenants.utils import get_public_schema_name
-    tenant_q = TenantClientQ.objects.exclude(schema_name=get_public_schema_name()).filter(is_active=True).first()
+
+    from apps.public.tenants.models import Client as TenantClientQ
+    from apps.public.tenants.models import Domain as DomainQ
+
+    tenant_q = (
+        TenantClientQ.objects.exclude(schema_name=get_public_schema_name())
+        .filter(is_active=True)
+        .first()
+    )
     if not tenant_q:
         pytest.skip("No hay tenants activos en la BD de test")
     domain_q = DomainQ.objects.filter(tenant=tenant_q, is_primary=True).first()
-    client.defaults["HTTP_HOST"] = domain_q.domain if domain_q else f"{tenant_q.schema_name}.sintel.local"
+    client.defaults["HTTP_HOST"] = (
+        domain_q.domain if domain_q else f"{tenant_q.schema_name}.sintel.local"
+    )
     r = client.get("/api/v1/empresas/mailbox/configs/")
     assert r.status_code == 200, r.content
-    assert r.get("Content-Type", "").startswith("application/json"), "Response should be JSON"
+    assert r.get("Content-Type", "").startswith(
+        "application/json"
+    ), "Response should be JSON"
 
 
 @pytest.mark.django_db
@@ -58,7 +83,7 @@ def test_mailbox_configs_list_and_mi_empresa():
     """
     Verifica que GET /api/v1/empresas/mailbox/configs/ y GET /api/v1/empresas/mi-empresa/
     responden 200 OK desde el dominio del tenant.
-    
+
     [WARNING] MULTI-TENANT: Usa HTTP_HOST para entrar al TENANT_URLCONF correcto.
     Este test comprueba el routing por hostname (clave en django-tenants).
     """
@@ -70,9 +95,9 @@ def test_mailbox_configs_list_and_mi_empresa():
             "name": "Test Empresa Endpoints Smoke Tenant",
             "paid_until": timezone.now().replace(year=2099),
             "on_trial": False,
-        }
+        },
     )
-    
+
     # Dominio generado dinamicamente desde el schema_name del tenant de prueba
     domain_name = f"{schema_name}.sintel.local"
     Domain.objects.get_or_create(
@@ -83,29 +108,31 @@ def test_mailbox_configs_list_and_mi_empresa():
 
     client = Client()
     client.defaults["HTTP_HOST"] = domain_name
-    
+
     # Test 1: GET /api/v1/empresas/mailbox/configs/
     r1 = client.get("/api/v1/empresas/mailbox/configs/")
     assert r1.status_code == 200, (
         f"Expected 200 OK for mailbox/configs/, got {r1.status_code}. "
         f"Response: {r1.content.decode('utf-8')[:500]}"
     )
-    
+
     # Verificar que la respuesta es JSON
-    assert r1.get("Content-Type", "").startswith("application/json"), (
-        f"Expected JSON response, got {r1.get('Content-Type')}"
-    )
-    
+    assert r1.get("Content-Type", "").startswith(
+        "application/json"
+    ), f"Expected JSON response, got {r1.get('Content-Type')}"
+
     # Verificar estructura básica (paginada o lista simple)
     data1 = r1.json()
-    assert isinstance(data1, (list, dict)), "Response should be a JSON array or paginated object"
-    
+    assert isinstance(
+        data1, (list, dict)
+    ), "Response should be a JSON array or paginated object"
+
     # Si es paginada, debe tener 'results' o 'count'
     if isinstance(data1, dict):
-        assert "results" in data1 or "count" in data1, (
-            "Paginated response should have 'results' or 'count'"
-        )
-    
+        assert (
+            "results" in data1 or "count" in data1
+        ), "Paginated response should have 'results' or 'count'"
+
     # Test 2: GET /api/v1/empresas/mi-empresa/
     r2 = client.get("/api/v1/empresas/mi-empresa/")
     # [WARNING] v2.30: El endpoint siempre retorna 200 (con datos o con mensaje informativo)
@@ -113,24 +140,24 @@ def test_mailbox_configs_list_and_mi_empresa():
         f"Expected 200 OK for mi-empresa/, got {r2.status_code}. "
         f"Response: {r2.content.decode('utf-8')[:500]}"
     )
-    
+
     # Verificar que la respuesta es JSON
-    assert r2.get("Content-Type", "").startswith("application/json"), (
-        f"Expected JSON response, got {r2.get('Content-Type')}"
-    )
-    
+    assert r2.get("Content-Type", "").startswith(
+        "application/json"
+    ), f"Expected JSON response, got {r2.get('Content-Type')}"
+
     # Verificar estructura básica (empresa o mensaje informativo)
     data2 = r2.json()
     assert isinstance(data2, dict), "Response should be a JSON object"
-    
+
     if "detail" in data2:
         # Si no existe empresa, debe tener 'detail' con mensaje informativo
         assert "Empresa" in data2["detail"], "Detail should mention 'Empresa'"
     else:
         # Si hay empresa, debe tener campos básicos
-        assert "id" in data2 or "razon_social" in data2, (
-            "Empresa response should have 'id' or 'razon_social'"
-        )
+        assert (
+            "id" in data2 or "razon_social" in data2
+        ), "Empresa response should have 'id' or 'razon_social'"
 
 
 @pytest.mark.django_db
@@ -146,36 +173,34 @@ def test_mailbox_configs_with_pagination():
             "name": "Test Empresa Pagination Smoke Tenant",
             "paid_until": timezone.now().replace(year=2099),
             "on_trial": False,
-        }
+        },
     )
-    
+
     # Crear dominio para el tenant
-    domain_name = "test-pagination.sintel.com"
+    domain_name = "test-pagination.sintel.net.co"
     Domain.objects.get_or_create(
-        domain=domain_name,
-        tenant=tenant,
-        defaults={"is_primary": True}
+        domain=domain_name, tenant=tenant, defaults={"is_primary": True}
     )
-    
+
     # Cliente HTTP con HTTP_HOST del tenant
     client = Client()
     client.defaults["HTTP_HOST"] = domain_name
-    
+
     # Hacer petición al endpoint
     url = "/api/v1/empresas/mailbox/configs/"
     resp = client.get(url)
-    
+
     # Verificar respuesta
     assert resp.status_code == 200, (
         f"Expected 200 OK, got {resp.status_code}. "
         f"Response: {resp.content.decode('utf-8')[:500]}"
     )
-    
+
     # Verificar que la respuesta es JSON
-    assert resp.get("Content-Type", "").startswith("application/json"), (
-        f"Expected JSON response, got {resp.get('Content-Type')}"
-    )
-    
+    assert resp.get("Content-Type", "").startswith(
+        "application/json"
+    ), f"Expected JSON response, got {resp.get('Content-Type')}"
+
     # Verificar estructura (puede ser lista o paginada)
     data = resp.json()
     if isinstance(data, dict):
@@ -204,17 +229,15 @@ def test_mi_empresa_with_data():
             "name": "Test Empresa Mi Empresa Data Tenant",
             "paid_until": timezone.now().replace(year=2099),
             "on_trial": False,
-        }
+        },
     )
-    
+
     # Crear dominio para el tenant
-    domain_name = "test-mi-empresa.sintel.com"
+    domain_name = "test-mi-empresa.sintel.net.co"
     Domain.objects.get_or_create(
-        domain=domain_name,
-        tenant=tenant,
-        defaults={"is_primary": True}
+        domain=domain_name, tenant=tenant, defaults={"is_primary": True}
     )
-    
+
     # Crear empresa de prueba en el esquema del tenant
     with schema_context(schema_name):
         try:
@@ -227,45 +250,47 @@ def test_mi_empresa_with_data():
         except Exception as e:
             # Si falla, puede ser que las migraciones no estén aplicadas
             pytest.skip(f"No se pudo crear empresa de prueba (migraciones?): {e}")
-    
+
     # Cliente HTTP con HTTP_HOST del tenant
     client = Client()
     client.defaults["HTTP_HOST"] = domain_name
-    
+
     # Hacer petición al endpoint
     url = "/api/v1/empresas/mi-empresa/"
     resp = client.get(url)
-    
+
     # Verificar respuesta
     assert resp.status_code == 200, (
         f"Expected 200 OK, got {resp.status_code}. "
         f"Response: {resp.content.decode('utf-8')[:500]}"
     )
-    
+
     # Verificar que la respuesta es JSON
-    assert resp.get("Content-Type", "").startswith("application/json"), (
-        f"Expected JSON response, got {resp.get('Content-Type')}"
-    )
-    
+    assert resp.get("Content-Type", "").startswith(
+        "application/json"
+    ), f"Expected JSON response, got {resp.get('Content-Type')}"
+
     # Verificar que contiene datos de empresa
     data = resp.json()
     assert isinstance(data, dict), "Response should be a JSON object"
     assert "razon_social" in data, "Response should contain 'razon_social'"
-    assert data["razon_social"] == "Test Empresa S.A.S.", "Should return the created empresa"
+    assert (
+        data["razon_social"] == "Test Empresa S.A.S."
+    ), "Should return the created empresa"
 
 
 @pytest.mark.django_db
 def test_empresa_endpoints_404_from_public_domain():
     """
     Verifica que los endpoints de empresa devuelven 404 desde el dominio público.
-    
+
     [WARNING] SEGURIDAD: Los endpoints de empresa solo están disponibles en el ámbito del tenant.
     Este test confirma que los endpoints NO existen en ROOT_URLCONF.
     """
     # Cliente HTTP sin HTTP_HOST (o con dominio público)
     client = Client()
     # No establecer HTTP_HOST o usar un dominio que no sea de tenant
-    
+
     # Test 1: mailbox/configs/
     url1 = "/api/v1/empresas/mailbox/configs/"
     resp1 = client.get(url1)
@@ -273,7 +298,7 @@ def test_empresa_endpoints_404_from_public_domain():
         f"Expected 404 or 403 from public domain for mailbox/configs/, got {resp1.status_code}. "
         f"This confirms that endpoint is only available in TENANT_URLCONF."
     )
-    
+
     # Test 2: mi-empresa/
     url2 = "/api/v1/empresas/mi-empresa/"
     resp2 = client.get(url2)

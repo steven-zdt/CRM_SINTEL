@@ -50,8 +50,8 @@ docker compose exec web python manage.py auditar_dominios_tenants --fix
 ✅ Tenant activo
 ✅ Esquema PostgreSQL 'home' existe
 ✅ Tiene 1 dominio(s)
-✅ Dominio principal: home.sintel.com
-✅ Formato de dominio correcto: home.sintel.com
+✅ Dominio principal: home.sintel.net.co
+✅ Formato de dominio correcto: home.sintel.net.co
 ✅ Acceso web funciona: HTTP 200
 
 ✅ TENANT OK
@@ -191,7 +191,7 @@ python manage.py shell
 >>> from apps.public.tenants.models import Client, Domain
 >>> tenant = Client.objects.get(schema_name='home')
 >>> Domain.objects.create(
-...     domain=f"{tenant.schema_name}.sintel.com",
+...     domain=f"{tenant.schema_name}.sintel.net.co",
 ...     tenant=tenant,
 ...     is_primary=True
 ... )
@@ -221,7 +221,7 @@ docker compose exec web python manage.py auditar_dominios_tenants --fix --schema
 1. Verificar que el dominio está en la tabla `tenants_domain`
 2. Verificar que `django-tenants` puede resolver el dominio:
    ```bash
-   docker compose exec web python manage.py diagnostico_routing --schema home --hostname home.sintel.com:8000
+   docker compose exec web python manage.py diagnostico_routing --schema home --hostname home.sintel.net.co:8000
    ```
 3. Si el problema es el puerto, agregar el dominio con puerto:
    ```bash
@@ -280,7 +280,7 @@ python manage.py shell
    ```
 
 3. **Verificar acceso web manualmente:**
-   - Abrir navegador en `http://{schema_name}.sintel.com:8000/`
+   - Abrir navegador en `http://{schema_name}.sintel.net.co:8000/`
    - Debe mostrar la landing page del tenant (no 404)
 
 4. **Monitorear logs de creación:**

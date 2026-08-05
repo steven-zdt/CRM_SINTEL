@@ -1,10 +1,13 @@
 """
 Unit tests para modelos de Facturas (versión renombrada para evitar colisión).
 """
-import pytest
+
 from decimal import Decimal
+
+import pytest
 from django.db import IntegrityError
 from django.utils import timezone
+
 from apps.tenant.facturas.models import Factura
 
 
@@ -13,6 +16,7 @@ class TestFacturaModels:
     """
     Tests unitarios para el modelo Factura.
     """
+
     def test_factura_auto_total(self):
         f = Factura.objects.create(
             numero="TST001",

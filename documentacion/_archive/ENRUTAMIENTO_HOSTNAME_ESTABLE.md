@@ -3,8 +3,8 @@
 ## ✅ Estado: Configuración Optimizada y Verificada
 
 El sistema garantiza que cada request se enrute correctamente según el hostname:
-- `sintel.com` → `ROOT_URLCONF` (urls_public) - Consola pública
-- `<schema>.sintel.com` → `TENANT_URLCONF` (urls_tenant) - URLs privadas del tenant
+- `sintel.net.co` → `ROOT_URLCONF` (urls_public) - Consola pública
+- `<schema>.sintel.net.co` → `TENANT_URLCONF` (urls_tenant) - URLs privadas del tenant
 
 ## 🔧 Configuración Crítica
 
@@ -27,14 +27,14 @@ MIDDLEWARE = [
 
 ### Flujo de Enrutamiento
 
-1. **Request llega**: `http://home.sintel.com/activate/?token=...`
+1. **Request llega**: `http://home.sintel.net.co/activate/?token=...`
 2. **SecurityMiddleware**: Headers de seguridad
 3. **SessionMiddleware**: Inicializa sesión
 4. **ForceNoPortMiddleware**: Normaliza `HTTP_HOST` (elimina puerto si existe)
-   - `home.sintel.com:8000` → `home.sintel.com`
+   - `home.sintel.net.co:8000` → `home.sintel.net.co`
 5. **TenantMainMiddleware**: ⚠️ **CRÍTICO**
-   - Busca dominio en BD: `Domain.objects.filter(domain='home.sintel.com').first()`
-   - Encuentra: `Domain(domain='home.sintel.com', tenant=Client(schema_name='home'))`
+   - Busca dominio en BD: `Domain.objects.filter(domain='home.sintel.net.co').first()`
+   - Encuentra: `Domain(domain='home.sintel.net.co', tenant=Client(schema_name='home'))`
    - Activa schema: `connection.set_schema_to('home')`
    - Selecciona URLConf: `settings.URLConf = settings.TENANT_URLCONF` (urls_tenant)
 6. **Resolución de URL**: Django resuelve `/activate/` en `TENANT_URLCONF`
@@ -47,7 +47,7 @@ MIDDLEWARE = [
 
 **Archivo**: `config/urls_public.py`
 
-**Se activa cuando**: `HTTP_HOST = 'sintel.com'` (o cualquier dominio del tenant público)
+**Se activa cuando**: `HTTP_HOST = 'sintel.net.co'` (o cualquier dominio del tenant público)
 
 **Rutas disponibles**:
 - `/` → `PublicIndexView`
@@ -61,7 +61,7 @@ MIDDLEWARE = [
 
 **Archivo**: `config/urls_tenant.py`
 
-**Se activa cuando**: `HTTP_HOST = '<schema>.sintel.com'` (cualquier tenant privado)
+**Se activa cuando**: `HTTP_HOST = '<schema>.sintel.net.co'` (cualquier tenant privado)
 
 **Rutas disponibles**:
 - `/` → `TenantLandingView` (landing page)
@@ -84,16 +84,16 @@ docker compose exec web python scripts/test_hostname_routing.py
 
 ```bash
 # Request a dominio público (ROOT_URLCONF)
-curl -H 'Host: sintel.com' http://localhost:8000/console/tenants/
+curl -H 'Host: sintel.net.co' http://localhost:8000/console/tenants/
 
 # Request a tenant privado (TENANT_URLCONF)
-curl -H 'Host: home.sintel.com' http://localhost:8000/activate/?token=test123
+curl -H 'Host: home.sintel.net.co' http://localhost:8000/activate/?token=test123
 ```
 
 ### Verificación de Dominios
 
 ```bash
-# Asegurar que sintel.com existe
+# Asegurar que sintel.net.co existe
 docker compose exec web python manage.py ensure_public_domains
 
 # Verificar dominio primario
@@ -120,29 +120,29 @@ docker compose exec web python scripts/verify_sintel_primary.py
 
 `ForceNoPortMiddleware` normaliza `HTTP_HOST` **antes** de que `TenantMainMiddleware` intente resolver el tenant:
 
-- **Entrada**: `HTTP_HOST = "home.sintel.com:8000"`
-- **Salida**: `HTTP_HOST = "home.sintel.com"`
-- **Búsqueda en BD**: `Domain.objects.filter(domain='home.sintel.com')`
+- **Entrada**: `HTTP_HOST = "home.sintel.net.co:8000"`
+- **Salida**: `HTTP_HOST = "home.sintel.net.co"`
+- **Búsqueda en BD**: `Domain.objects.filter(domain='home.sintel.net.co')`
 
 ### 3. Selección de URLConf
 
 `TenantMainMiddleware` establece `settings.URLConf` según el tenant resuelto:
 
-- **Tenant público** (`sintel.com`): `settings.URLConf = settings.ROOT_URLCONF`
-- **Tenant privado** (`home.sintel.com`): `settings.URLConf = settings.TENANT_URLCONF`
+- **Tenant público** (`sintel.net.co`): `settings.URLConf = settings.ROOT_URLCONF`
+- **Tenant privado** (`home.sintel.net.co`): `settings.URLConf = settings.TENANT_URLCONF`
 
 ### 4. Dominios en Base de Datos
 
 Los dominios en `Domain.domain` **NUNCA** deben tener puerto:
 
-- ✅ **Correcto**: `home.sintel.com`
-- ❌ **Incorrecto**: `home.sintel.com:8000`
+- ✅ **Correcto**: `home.sintel.net.co`
+- ❌ **Incorrecto**: `home.sintel.net.co:8000`
 
 ## 🐛 Troubleshooting
 
 ### 404 en `/activate/` de tenant privado
 
-**Síntoma**: `GET http://home.sintel.com/activate/?token=...` retorna 404
+**Síntoma**: `GET http://home.sintel.net.co/activate/?token=...` retorna 404
 
 **Causas posibles**:
 1. Dominio no existe en BD → Ejecutar `ensure_public_domains` o crear tenant
@@ -152,7 +152,7 @@ Los dominios en `Domain.domain` **NUNCA** deben tener puerto:
 **Solución**:
 ```bash
 # 1. Verificar dominio
-docker compose exec web python manage.py shell -c "from apps.public.tenants.models import Domain; print(Domain.objects.filter(domain='home.sintel.com').exists())"
+docker compose exec web python manage.py shell -c "from apps.public.tenants.models import Domain; print(Domain.objects.filter(domain='home.sintel.net.co').exists())"
 
 # 2. Verificar enrutamiento
 docker compose exec web python scripts/test_hostname_routing.py
@@ -163,11 +163,11 @@ docker compose exec web python -c "from django.conf import settings; print([i fo
 
 ### 404 en `/console/tenants/` de dominio público
 
-**Síntoma**: `GET http://sintel.com/console/tenants/` retorna 404
+**Síntoma**: `GET http://sintel.net.co/console/tenants/` retorna 404
 
 **Causas posibles**:
-1. Dominio `sintel.com` no existe → Ejecutar `ensure_public_domains`
-2. Acceso desde `localhost` en lugar de `sintel.com` → Añadir a hosts file
+1. Dominio `sintel.net.co` no existe → Ejecutar `ensure_public_domains`
+2. Acceso desde `localhost` en lugar de `sintel.net.co` → Añadir a hosts file
 
 **Solución**:
 ```bash
@@ -179,12 +179,12 @@ docker compose exec web python scripts/verify_sintel_primary.py
 
 # 3. Añadir a hosts (Windows)
 # C:\Windows\System32\drivers\etc\hosts
-# 127.0.0.1 sintel.com
+# 127.0.0.1 sintel.net.co
 ```
 
 ### Request se enruta al URLConf incorrecto
 
-**Síntoma**: Request a `home.sintel.com/activate/` se resuelve en `ROOT_URLCONF` (404)
+**Síntoma**: Request a `home.sintel.net.co/activate/` se resuelve en `ROOT_URLCONF` (404)
 
 **Causas posibles**:
 1. Dominio no existe en BD
@@ -196,7 +196,7 @@ docker compose exec web python scripts/verify_sintel_primary.py
 # 1. Verificar dominio en BD
 docker compose exec web python manage.py shell
 >>> from apps.public.tenants.models import Domain
->>> Domain.objects.filter(domain='home.sintel.com').first()
+>>> Domain.objects.filter(domain='home.sintel.net.co').first()
 
 # 2. Verificar orden de middleware
 docker compose exec web python scripts/test_hostname_routing.py

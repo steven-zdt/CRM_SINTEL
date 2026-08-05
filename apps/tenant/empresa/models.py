@@ -461,6 +461,10 @@ class Sede(SintelTenantBaseModel):
     """
     Sedes o sucursales de la empresa.
     """
+    # WARNING: [ARQ-A2] Excepcion documentada e intencional a SintelTenantBaseModel
+    # (que inyecta empresa con on_delete=PROTECT). EmpresaViewSet.destroy() (STAFF/ADMIN
+    # unicamente) permite eliminar la Empresa del tenant; Sede es estructura organizativa
+    # propia de esa empresa y debe desaparecer junto con ella, no bloquear su eliminacion.
     empresa = models.ForeignKey(
         'empresa.Empresa',
         on_delete=models.CASCADE,
@@ -501,6 +505,10 @@ class Area(SintelTenantBaseModel):
     """
     Areas o departamentos operativos dentro de una Sede.
     """
+    # WARNING: [ARQ-A2] Excepcion documentada e intencional a SintelTenantBaseModel
+    # (que inyecta empresa con on_delete=PROTECT). EmpresaViewSet.destroy() (STAFF/ADMIN
+    # unicamente) permite eliminar la Empresa del tenant; Area es estructura organizativa
+    # propia de esa empresa y debe desaparecer junto con ella, no bloquear su eliminacion.
     empresa = models.ForeignKey(
         'empresa.Empresa',
         on_delete=models.CASCADE,

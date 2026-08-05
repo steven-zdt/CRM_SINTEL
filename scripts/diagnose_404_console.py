@@ -33,11 +33,11 @@ def main():
             public = Client.objects.get(schema_name='public')
             print(f"   [OK] Tenant público encontrado: {public.nombre}")
             
-            sintel_domain = Domain.objects.filter(tenant=public, domain='sintel.com').first()
+            sintel_domain = Domain.objects.filter(tenant=public, domain='sintel.net.co').first()
             if sintel_domain:
-                print(f"   [OK] Dominio sintel.com encontrado (primary: {sintel_domain.is_primary})")
+                print(f"   [OK] Dominio sintel.net.co encontrado (primary: {sintel_domain.is_primary})")
             else:
-                print("   [ERROR] Dominio sintel.com NO encontrado")
+                print("   [ERROR] Dominio sintel.net.co NO encontrado")
                 print("   [IDEA] Ejecuta: python scripts/set_sintel_as_primary_domain.py")
                 return 1
         except Client.DoesNotExist:
@@ -56,12 +56,12 @@ def main():
     # 3. Verificar ALLOWED_HOSTS
     print("\n3. Verificando ALLOWED_HOSTS...")
     allowed = settings.ALLOWED_HOSTS
-    has_sintel = 'sintel.com' in allowed or '.sintel.com' in allowed
+    has_sintel = 'sintel.net.co' in allowed or '.sintel.net.co' in allowed
     print(f"   ALLOWED_HOSTS: {allowed}")
     if has_sintel:
-        print("   [OK] sintel.com está en ALLOWED_HOSTS")
+        print("   [OK] sintel.net.co está en ALLOWED_HOSTS")
     else:
-        print("   [ERROR] sintel.com NO está en ALLOWED_HOSTS")
+        print("   [ERROR] sintel.net.co NO está en ALLOWED_HOSTS")
         return 1
     
     # 4. Verificar que la ruta existe
@@ -115,14 +115,14 @@ def main():
     print("=" * 60)
     print("[OK] Todas las verificaciones pasaron")
     print("\n[IDEA] Si aún tienes 404, verifica:")
-    print("   1. Estás accediendo desde http://sintel.com/ (NO desde localhost)")
-    print("   2. Tu archivo hosts tiene: 127.0.0.1 sintel.com")
+    print("   1. Estás accediendo desde http://sintel.net.co/ (NO desde localhost)")
+    print("   2. Tu archivo hosts tiene: 127.0.0.1 sintel.net.co")
     print("   3. El servidor está corriendo y accesible")
     print("   4. Estás autenticado como usuario staff")
     print("\n🔗 URLs de prueba:")
-    print("   - http://sintel.com/console/tenants/")
-    print("   - http://sintel.com/admin/")
-    print("   - http://sintel.com/console/")
+    print("   - http://sintel.net.co/console/tenants/")
+    print("   - http://sintel.net.co/admin/")
+    print("   - http://sintel.net.co/console/")
     
     return 0
 

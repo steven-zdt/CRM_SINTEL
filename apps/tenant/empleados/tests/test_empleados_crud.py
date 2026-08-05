@@ -4,7 +4,8 @@ from django.urls import reverse
 from django.test import override_settings
 from rest_framework import status
 from apps.config.tests.base_tenant import TenantAPITestCase
-from apps.tenant.empleados.models import Empleado, Contrato, Devengo
+import datetime
+from apps.tenant.empleados.models import Empleado, Contrato, Devengo, ResolucionDIAN
 from apps.tenant.empresa.models import Empresa
 
 
@@ -217,6 +218,19 @@ class TestDevengoAPI(TenantAPITestCase):
         res_cont = self.tpost(self.url_contratos, data=contrato_payload)
         self.contrato_id = res_cont.data['id']
         
+        empresa = Empresa.objects.first()
+        ResolucionDIAN.objects.create(
+            empresa=empresa,
+            numero_resolucion='TEST-001',
+            rango_desde=1,
+            rango_hasta=9999,
+            fecha_resolucion=datetime.date(2023, 1, 1),
+            fecha_inicio=datetime.date(2023, 1, 1),
+            fecha_fin=datetime.date(2030, 12, 31),
+            vigente=True,
+            prefijo='NOM',
+        )
+
         self.valid_payload = {
             'empleado': self.empleado_id,
             'contrato': self.contrato_id,

@@ -95,6 +95,18 @@ def _extract_base_names(bases_node: TSNode, src: bytes) -> list[str]:
     return names
 
 
+def _base_class_name(base: str) -> str:
+    """Normalize a base-class reference for sibling-node lookup: a module-
+    qualified base like `inv_services.ProductoServiceMixin`
+    (apps/tenant/inventario/api/viewsets.py) must resolve the same as a bare
+    `ProductoServiceMixin` would - dict lookups on the raw qualified text
+    never matched, making every mixin used this way look unreferenced (a
+    dead-code false positive caught auditing the graph). The raw text is
+    still kept in the node's own `bases` property for provenance; this is
+    only applied at edge-resolution time."""
+    return base.rsplit(".", 1)[-1]
+
+
 def iter_class_level_assignments(body_node: TSNode, src: bytes):
     """Yield (name, right_node) for direct `name = <expr>` statements at the
     top of a class body (i.e. fields), skipping methods and nested classes."""
@@ -320,7 +332,7 @@ def extract_models(
         )
         graph.add_edge(schema.Edge(model_node_id, app_node_id, schema.REL_BELONGS_TO))
         for base in bases:
-            base_id = schema.model_id(app_label, base)
+            base_id = schema.model_id(app_label, _base_class_name(base))
             if base_id in graph.nodes:
                 graph.add_edge(schema.Edge(model_node_id, base_id, schema.REL_INHERITS))
 
@@ -461,11 +473,20 @@ def extract_services(
             class_to_node[class_name] = node_id
             receivers[class_name] = node_id
 
-            if kind == schema.SERVICE_KIND_BUSINESS and body_node is not None:
-                # Graph.add_edge de-dupes on (source, target, rel_type), so
-                # aggregate every distinct method into one CALLS edge per
-                # (business_service, target_service) pair instead of losing
-                # all but the first call site.
+            if kind in (schema.SERVICE_KIND_BUSINESS, schema.SERVICE_KIND_OTHER) and body_node is not None:
+                # Non-canonically-named files (kind=other, e.g.
+                # proyectos/services/presupuesto_service.py,
+                # cotizaciones/services/producto_service.py) hold the exact
+                # same intra-file Business->CRUD delegation pattern as
+                # business_service.py, just without the FSD filename - e.g.
+                # `PresupuestoCRUDService.save_item(item)` called from
+                # `PresupuestoBusinessService` in the same file. Restricting
+                # this scan to kind=business only made every such CRUD class
+                # look unreferenced (4 confirmed cases caught auditing the
+                # graph for dead code). Graph.add_edge de-dupes on (source,
+                # target, rel_type), so aggregate every distinct method into
+                # one CALLS edge per (caller, target_service) pair instead of
+                # losing all but the first call site.
                 calls_by_target: dict[str, set[str]] = {}
                 for receiver, method, _call_line in iter_attribute_calls(body_node, src):
                     target_id = receivers.get(receiver)
@@ -477,6 +498,28 @@ def extract_services(
                             node_id, target_id, schema.REL_CALLS, {"methods": sorted(methods)}
                         )
                     )
+
+            if kind == schema.SERVICE_KIND_MIXIN and body_node is not None:
+                # ServiceMixins wire in their Selector/CRUD/BusinessService not
+                # via method calls but via class-attribute injection, e.g.
+                # `business_service_class = OrdenCompraBusinessService`
+                # (apps/tenant/compras/services/api_mixins.py) - a plain call
+                # scan never sees this. Without this, every CRUD/Business
+                # service in the app looks "never called" from the mixin that
+                # actually wires it into the ViewSet, a false-positive
+                # dead-code signal severe enough that it was caught auditing
+                # apparently-orphaned services that are demonstrably live
+                # (OrdenCompraBusinessService). Not hardcoded to the three
+                # conventional attribute names (selector_class/
+                # crud_service_class/business_service_class) - any class-level
+                # `name = OtherServiceClass` assignment inside a mixin counts.
+                for _attr_name, right_node in iter_class_level_assignments(body_node, src):
+                    if right_node.type != "identifier":
+                        continue
+                    referenced_class = _text(right_node, src)
+                    target_id = receivers.get(referenced_class)
+                    if target_id is not None and target_id != node_id:
+                        graph.add_edge(schema.Edge(node_id, target_id, schema.REL_USES))
 
     return class_to_node
 
@@ -619,11 +662,12 @@ def extract_viewsets(
                 continue
 
             for base in bases:
-                sibling_id = class_to_node.get(base)
+                base_name = _base_class_name(base)
+                sibling_id = class_to_node.get(base_name)
                 if sibling_id is not None and sibling_id != node_id:
                     graph.add_edge(schema.Edge(node_id, sibling_id, schema.REL_INHERITS))
                     continue
-                mixin_id = service_nodes.get(base)
+                mixin_id = service_nodes.get(base_name)
                 if mixin_id is not None:
                     graph.add_edge(schema.Edge(node_id, mixin_id, schema.REL_USES))
 
@@ -640,6 +684,17 @@ def extract_viewsets(
                             )
                         )
                     graph.add_edge(schema.Edge(node_id, target_id, schema.REL_USES))
+
+                # Some ViewSets call a Selector/Service directly
+                # (`CuentaContableSelector.get_qs_list(...)` in
+                # contabilidad/api/viewsets.py) instead of going through a
+                # ServiceMixin's class-attribute injection. Without this,
+                # every Service only ever reachable this way looks
+                # unreferenced - caught auditing the graph for dead code.
+                for receiver, _method, _line_no in iter_attribute_calls(body_node, src):
+                    target_id = service_nodes.get(receiver)
+                    if target_id is not None:
+                        graph.add_edge(schema.Edge(node_id, target_id, schema.REL_USES))
 
     return class_to_node
 

@@ -7,7 +7,6 @@ from django.db.models import Prefetch
 from django.utils.functional import cached_property
 from rest_framework import status, serializers, filters
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound, ValidationError
@@ -34,19 +33,6 @@ from apps.tenant.clientes.services.business_service import ClienteBusinessServic
 from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
-
-
-
-
-
-class StandardResultsSetPagination(PageNumberPagination):
-    """
-    Paginacion estandar para Tabulator.
-    Tabulator espera: {count, next, previous, results: [...]}
-    """
-    page_size = 10  # Default: 10
-    page_size_query_param = 'page_size'
-    max_page_size = 100
 
 
 class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, CarteraServiceMixin, BaseTenantViewSet):

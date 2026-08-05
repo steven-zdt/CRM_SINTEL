@@ -32,7 +32,7 @@ http://localhost:8000/workspace/?uxsmoke=1
 O en producción:
 
 ```
-http://home.sintel.com:8000/workspace/?uxsmoke=1
+http://home.sintel.net.co:8000/workspace/?uxsmoke=1
 ```
 
 ### 3. El panel de test aparecerá

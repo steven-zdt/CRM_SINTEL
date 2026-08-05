@@ -2,6 +2,52 @@
 
 📚 DOCUMENTACIÓN
 ================================================================================
+segura y autónoma es usar Cloudflare Tunnels (gratuito) o un enfoque híbrido con un Proxy Inverso Cloud.
+
+A continuación, te presento las dos vías, destacando la Opción A como la más recomendada para tu escenario.
+
+Opción A: Despliegue mediante Cloudflare Tunnels (Recomendada)
+Esta opción evita que tengas que pedir una IP estática a tu proveedor de internet y no requiere abrir ningún puerto de entrada en tu router local.
+
+DNS Público Delegado: Transfieres la gestión de DNS de tu dominio (sintel.net.co) a Cloudflare.
+
+El Túnel (Daemon): Instalas un pequeño agente (cloudflared) como servicio en tu Windows Server 2019 o como un contenedor Docker adicional.
+
+Conexión de Salida: Este agente crea una conexión cifrada hacia afuera (hacia la red de Cloudflare).
+
+Enrutamiento Wildcard: Configuras en Cloudflare que todo el tráfico *.sintel.net.co viaje por ese túnel hacia el puerto 80/443 de tu contenedor Nginx local.
+
+SSL Automático: Cloudflare emite certificados SSL públicos y válidos (Let's Encrypt o Edge Certificates) automáticamente para todos tus subdominios. Tus clientes verán el candado verde sin advertencias.
+
+Ventajas: Oculta tu verdadera IP local, bloquea tráfico malicioso antes de que llegue a tu servidor y soluciona el problema de los certificados SSL auto-firmados de raíz.
+
+Opción B: NAT Tradicional y Puerto Expuesto (La ruta clásica)
+Si prefieres no depender de túneles de terceros y gestionar todo el borde de red tú mismo:
+
+IP Pública Estática: Necesitas que tu proveedor de internet (ISP) te asigne una IP pública fija.
+
+Port Forwarding (NAT): Configuras el router principal de tu empresa para que redirija todo el tráfico entrante de los puertos TCP 80 (HTTP) y 443 (HTTPS) a la IP interna de tu servidor (192.168.2.15).
+
+DNS Público (Registrar): En el panel donde compraste el dominio (GoDaddy, Namecheap, etc.), creas un registro tipo A comodín (*) y un registro @ que apunten a tu IP pública estática.
+
+Gestión de SSL (Certbot): Ya no puedes usar certificados auto-firmados. Deberás modificar tu contenedor de Nginx para integrar certbot (Let's Encrypt) y generar certificados SSL válidos mediante validación DNS (DNS-01 challenge), ya que generar certificados comodín (*.sintel.net.co) requiere probar la propiedad del dominio.
+
+Ajustes en la Arquitectura de tu Aplicación (Para ambas opciones)
+Independientemente del camino que elijas para la red, tu código y contenedores requerirán unos ajustes mínimos para operar en internet:
+
+Configuración de Nginx: Tu archivo nginx.conf debe configurarse para leer las cabeceras X-Forwarded-For y X-Forwarded-Proto. Esto es crucial porque Django necesita saber que la petición original venía por HTTPS para que funciones como build_absolute_uri() devuelvan https://... correctamente.
+
+Django Settings: * Asegúrate de que SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') esté configurado en settings.py.
+
+Verifica que ALLOWED_HOSTS = ['.sintel.net.co'] se mantenga.
+
+DEBUG = False es absolutamente no negociable en este punto.
+
+Seguridad del Host: Tu Windows Server 2019 debe tener el Firewall configurado estrictamente. Si usas la Opción A, solo necesitas permitir tráfico de salida. Si usas la Opción B, mantén solo el 80 y 443 abiertos desde el exterior.
+
+Implementar esto transformará tu entorno de pruebas local en una plataforma de producción accesible globalmente.
+
+Para definir el paso técnico exacto a seguir, ¿actualmente tu proveedor de internet (ISP) te proporciona una IP pública estática, o la conexión de tu servidor tiene una IP dinámica?
 
 # Refactorización Módulo de Cotizaciones v2.60
 Ver: documentacion/COTIZACIONES_REFACTOR_v2.60.md

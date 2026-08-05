@@ -35,46 +35,48 @@
         {# Toolbar #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="gastos">
           <div class="input-group input-group-sm w-auto">
-            <input type="text" 
-                   id="search-gasto" 
-                   class="form-control" 
+            <input type="text"
+                   id="search-gasto"
+                   name="q"
+                   class="form-control"
                    placeholder="Buscar gasto..."
                    data-module="gastos"
-                   data-search-input>
-            <button class="btn btn-outline-secondary" type="button" 
+                   data-search-input
+                   hx-get="{% url 'gastos:documentos-tabla' %}"
+                   hx-trigger="keyup changed delay:400ms, search"
+                   hx-target="#gastos-panel"
+                   hx-swap="innerHTML">
+            <button class="btn btn-outline-secondary" type="button"
                     data-action="search" data-module="gastos" title="Buscar">
               <i class="bi bi-search"></i>
             </button>
           </div>
-          <button class="btn btn-primary btn-sm" 
-                  hx-get="/api/v1/gastos/render-offcanvas/crear/" 
-                  hx-target="#offcanvas-container-gastos" 
+          <button class="btn btn-primary btn-sm"
+                  hx-get="/api/v1/gastos/render-offcanvas/crear/"
+                  hx-target="#offcanvas-container-gastos"
                   hx-swap="innerHTML"
                   data-module="gastos"
                   data-create-button>
             <i class="bi bi-plus-lg me-2"></i>Nuevo Gasto
           </button>
         </div>
-        
-        {# Resumen de Gastos #}
-        <div id="gastos-summary" class="mb-3"></div>
-        
-        {# Spinner #}
-        <div data-spinner="gastos" class="text-center py-5" style="display: none;">
-          <div class="spinner-border" role="status">
-            <span class="visually-hidden">Cargando...</span>
+
+        {# Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el antiguo
+           #gastos-summary + spinner + #grid-gastos Tabulator (ver PLAN_UNICO_CORRECCIONES.md
+           Fase 5-BIS). Se recarga completo en cada busqueda/orden/paginacion/evento de refresco. #}
+        <div id="gastos-panel"
+             data-grid="gastos"
+             hx-get="{% url 'gastos:documentos-tabla' %}"
+             hx-trigger="load, gasto-created from:body, gasto-updated from:body"
+             hx-target="this"
+             hx-swap="innerHTML"
+             hx-boost="true">
+          <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2 text-muted">Cargando gastos...</p>
           </div>
-          <p class="mt-2 text-muted">Inicializando tabla de gastos...</p>
-        </div>
-        
-        {# Grid Container #}
-        <div id="grid-gastos" data-grid="gastos" class="w-100" style="display: none; max-width: 100%; overflow-x: auto;"></div>
-        
-        {# Empty State #}
-        <div data-empty-state="gastos" class="text-center py-5" style="display: none;">
-          <p class="text-muted">
-            <i class="bi bi-inbox"></i> No hay gastos registrados
-          </p>
         </div>
       </div>
 
@@ -85,43 +87,46 @@
         {# Toolbar #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="resoluciones">
           <div class="input-group input-group-sm w-auto">
-            <input type="text" 
-                   id="search-resolucion" 
-                   class="form-control" 
+            <input type="text"
+                   id="search-resolucion"
+                   name="q"
+                   class="form-control"
                    placeholder="Buscar resolucion..."
                    data-module="resoluciones"
-                   data-search-input>
-            <button class="btn btn-outline-secondary" type="button" 
+                   data-search-input
+                   hx-get="{% url 'gastos:resoluciones-tabla' %}"
+                   hx-trigger="keyup changed delay:400ms, search"
+                   hx-target="#resoluciones-panel"
+                   hx-swap="innerHTML">
+            <button class="btn btn-outline-secondary" type="button"
                     data-action="search" data-module="resoluciones" title="Buscar">
               <i class="bi bi-search"></i>
             </button>
           </div>
-          <button class="btn btn-primary btn-sm" 
-                  hx-get="/api/v1/gastos/render-offcanvas/resolucion/" 
-                  hx-target="#offcanvas-container-gastos" 
+          <button class="btn btn-primary btn-sm"
+                  hx-get="/api/v1/gastos/render-offcanvas/resolucion/"
+                  hx-target="#offcanvas-container-gastos"
                   hx-swap="innerHTML"
                   data-module="resoluciones"
                   data-create-button>
             <i class="bi bi-plus-lg me-1"></i>Nueva Resolucion
           </button>
         </div>
-        
-        {# Spinner #}
-        <div data-spinner="resoluciones" class="text-center py-5" style="display: none;">
-          <div class="spinner-border" role="status">
-            <span class="visually-hidden">Cargando...</span>
+
+        {# Panel HTMX: tabla server-rendered (django-tables2). Ver nota en la pestaña de Gastos. #}
+        <div id="resoluciones-panel"
+             data-grid="resoluciones"
+             hx-get="{% url 'gastos:resoluciones-tabla' %}"
+             hx-trigger="load, resolucion-created from:body"
+             hx-target="this"
+             hx-swap="innerHTML"
+             hx-boost="true">
+          <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="mt-2 text-muted">Cargando resoluciones...</p>
           </div>
-          <p class="mt-2 text-muted">Inicializando tabla de resoluciones...</p>
-        </div>
-        
-        {# Grid Container #}
-        <div id="grid-resoluciones" data-grid="resoluciones" class="w-100" style="display: none; max-width: 100%; overflow-x: auto;"></div>
-        
-        {# Empty State #}
-        <div data-empty-state="resoluciones" class="text-center py-5" style="display: none;">
-          <p class="text-muted">
-            <i class="bi bi-inbox"></i> No hay resoluciones registradas
-          </p>
         </div>
       </div>
     </div>

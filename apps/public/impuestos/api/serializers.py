@@ -68,6 +68,20 @@ class NormaTributariaSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class NormaTributariaListSerializer(serializers.ModelSerializer):
+    """
+    [PERF-A3] Serializer de listado para NormaTributaria: excluye texto_html/
+    texto_plano (TextField con el articulo legal completo -- pueden ser grandes
+    y no se muestran en un listado, solo en el detalle). El filtrado por
+    texto_plano (search_fields) sigue funcionando: SearchFilter genera un
+    WHERE ... ILIKE a nivel SQL, no depende de que el campo se traiga a Python.
+    """
+
+    class Meta:
+        model = NormaTributaria
+        exclude = ("texto_html", "texto_plano")
+
+
 # ============================================================================
 # SERIALIZERS PARA NORMATIVA DIAN - CATÁLOGOS TRIBUTARIOS (v2.30+)
 # ============================================================================

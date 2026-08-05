@@ -44,10 +44,10 @@ Los siguientes scripts fueron actualizados para ser genéricos:
 ### 4. Código Actualizado
 
 - ✅ `apps/services/onboarding/empresa_service.py`
-  - Comentarios actualizados: `home.sintel.com` → `ejemplo.sintel.com`
+  - Comentarios actualizados: `home.sintel.net.co` → `ejemplo.sintel.net.co`
 
 - ✅ `config/settings.py`
-  - Comentarios actualizados: `home.sintel.com` → `cliente.sintel.com` o `ejemplo.sintel.com`
+  - Comentarios actualizados: `home.sintel.net.co` → `cliente.sintel.net.co` o `ejemplo.sintel.net.co`
   - Comentarios actualizados: `home.com` → `ejemplo.com`
 
 ## 📝 Ejemplos Genéricos Usados
@@ -55,7 +55,7 @@ Los siguientes scripts fueron actualizados para ser genéricos:
 En lugar de referencias específicas a "home", ahora se usan:
 
 - **`ejemplo`** - Para schema_name de ejemplo
-- **`ejemplo.sintel.com`** - Para dominios de ejemplo
+- **`ejemplo.sintel.net.co`** - Para dominios de ejemplo
 - **`admin@ejemplo.com`** - Para emails de ejemplo
 - **`cliente`** - Para referencias a tenants privados en general
 - **`test_subdomain`** - Para pruebas automatizadas

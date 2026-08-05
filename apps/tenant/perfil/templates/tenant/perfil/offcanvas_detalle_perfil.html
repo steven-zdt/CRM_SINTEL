@@ -30,13 +30,15 @@
         <dd class="col-sm-8">{{ profile.user.email }}</dd>
         
         <dt class="col-sm-4 text-muted">Cargo</dt>
-        <dd class="col-sm-8">{{ profile.cargo|default:"<span class='text-muted font-italic'>No definido</span>"|safe }}</dd>
-        
+        {# [SEC-A1] Sin |safe: profile.cargo es texto editable por el usuario; el placeholder
+           "No definido" es el unico HTML literal y vive fuera del valor interpolado. #}
+        <dd class="col-sm-8">{% if profile.cargo %}{{ profile.cargo }}{% else %}<span class="text-muted font-italic">No definido</span>{% endif %}</dd>
+
         <dt class="col-sm-4 text-muted">Departamento</dt>
-        <dd class="col-sm-8">{{ profile.departamento|default:"<span class='text-muted font-italic'>No definido</span>"|safe }}</dd>
-        
+        <dd class="col-sm-8">{% if profile.departamento %}{{ profile.departamento }}{% else %}<span class="text-muted font-italic">No definido</span>{% endif %}</dd>
+
         <dt class="col-sm-4 text-muted">Teléfono</dt>
-        <dd class="col-sm-8">{{ profile.telefono_corporativo|default:"<span class='text-muted font-italic'>No definido</span>"|safe }}</dd>
+        <dd class="col-sm-8">{% if profile.telefono_corporativo %}{{ profile.telefono_corporativo }}{% else %}<span class="text-muted font-italic">No definido</span>{% endif %}</dd>
 
         <dt class="col-sm-4 text-muted">Rol</dt>
         <dd class="col-sm-8">

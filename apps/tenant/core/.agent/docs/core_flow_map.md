@@ -26,7 +26,7 @@ sequenceDiagram
     participant V as ViewSet (Core/App)
     participant DB as PostgreSQL (Tenant Schema)
 
-    C->>M1: Request (tenant.sintel.com)
+    C->>M1: Request (tenant.sintel.net.co)
     M1->>M2: Clean Hostname
     M2->>DB: Lookup Domain (public)
     DB-->>M2: schema_name: "tenant_abc"

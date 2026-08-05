@@ -12,8 +12,10 @@ Requisitos:
 - playwright install (si no está instalado)
 - Servidor Django corriendo en http://localhost:8000 (o configurar BASE_URL)
 """
-import pytest
+
 from pathlib import Path
+
+import pytest
 
 
 @pytest.mark.e2e
@@ -23,16 +25,16 @@ def test_workspace_upload_detail_delete(page, live_server):
     """
     # Navegar al workspace
     page.goto(f"{live_server.url}/workspace/#facturas")
-    
+
     # Esperar a que cargue la vista de facturas
     page.wait_for_selector('[data-test="btn-importar"]', timeout=5000)
-    
+
     # Clic en botón Importar
     page.click('[data-test="btn-importar"]')
-    
+
     # Esperar a que aparezca el modal
     page.wait_for_selector('[data-test="import-modal"]', timeout=2000)
-    
+
     # Crear archivo XML de prueba en memoria
     xml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
@@ -52,41 +54,41 @@ def test_workspace_upload_detail_delete(page, live_server):
   </cac:LegalMonetaryTotal>
   <cbc:DocumentCurrencyCode>COP</cbc:DocumentCurrencyCode>
 </Invoice>"""
-    
+
     # Crear archivo temporal
     assets_dir = Path(__file__).resolve().parent / "assets"
     assets_dir.mkdir(exist_ok=True)
     xml_file = assets_dir / "e2e_forensics_test.xml"
     xml_file.write_text(xml_content, encoding="utf-8")
-    
+
     try:
         # Subir archivo
         file_input = page.locator('[data-test="input-xml-file"]')
         file_input.set_input_files(str(xml_file))
-        
+
         # Clic en Confirmar
         page.click('[data-test="btn-confirm-import"]')
-        
+
         # Esperar a que se cierre el modal (éxito) o aparezca error
         page.wait_for_timeout(3000)
-        
+
         # Verificar que no hay error modal visible
         error_modal = page.locator('[data-test="import-error-modal"]')
         if error_modal.is_visible():
             # Si hay error, verificar formato minimal
-            error_body = error_modal.locator('.modal-body')
+            error_body = error_modal.locator(".modal-body")
             assert error_body.is_visible()
         else:
             # Si no hay error, verificar que la tabla se actualizó
             table = page.locator('[data-test="tbl-facturas"]')
             expect(table).to_be_visible()
-            
+
             # Ver detalle (si hay botón "ver")
             view_buttons = page.locator('[data-test="btn-ver"]')
             if view_buttons.count() > 0:
                 view_buttons.first().click()
                 page.wait_for_timeout(1000)
-            
+
             # Eliminar (si hay botón "eliminar")
             delete_buttons = page.locator('[data-test="btn-eliminar"]')
             if delete_buttons.count() > 0:
@@ -108,20 +110,23 @@ def test_workspace_upload_missing_file_shows_error(page, live_server):
     """
     page.goto(f"{live_server.url}/workspace/#facturas")
     page.wait_for_selector('[data-test="btn-importar"]', timeout=5000)
-    
+
     page.click('[data-test="btn-importar"]')
     page.wait_for_selector('[data-test="import-modal"]', timeout=2000)
-    
+
     # Intentar importar sin seleccionar archivo
     page.click('[data-test="btn-confirm-import"]')
-    
+
     # Esperar respuesta
     page.wait_for_timeout(2000)
-    
+
     # Verificar que aparece error modal con formato minimal
     error_modal = page.locator('[data-test="import-error-modal"]')
     assert error_modal.is_visible()
-    
-    error_body = error_modal.locator('.modal-body')
+
+    error_body = error_modal.locator(".modal-body")
     # Verificar formato minimal: solo message y code
-    assert "missing_xml" in error_body.inner_text() or "Falta archivo" in error_body.inner_text()
+    assert (
+        "missing_xml" in error_body.inner_text()
+        or "Falta archivo" in error_body.inner_text()
+    )

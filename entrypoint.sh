@@ -18,7 +18,8 @@ wait_for_db() {
     DB_HOST="${DATABASE_HOST:-db}"
     DB_PORT="${DATABASE_PORT:-5432}"
     DB_USER="${DATABASE_USER:-sintel}"
-    DB_PASSWORD="${DATABASE_PASSWORD:-sintel}"
+    # DEVOPS-M1: sin fallback debil — falla explicito si falta en .env
+    DB_PASSWORD="${DATABASE_PASSWORD:?DATABASE_PASSWORD debe estar definido en .env}"
     DB_NAME="${DATABASE_NAME:-sintel}"
     
     # Intentar con psql primero (más directo, no carga Django)
@@ -40,12 +41,30 @@ wait_for_db() {
 
 # Función para esperar a que Redis esté lista
 wait_for_redis() {
-    echo "⏳ Esperando a que Redis esté lista..."
-    until python -c "import redis; r = redis.Redis(host='redis', port=6379, db=0); r.ping()" 2>/dev/null; do
-        echo "   Redis no disponible, esperando..."
+    echo "Verificando disponibilidad de Redis..."
+
+    # Parsear host:port desde REDIS_URL (formato redis://host:port/db)
+    # o usar variables individuales como fallback
+    local _url="${REDIS_URL:-redis://redis:6379/0}"
+    local _hostport="${_url#redis://}"        # quitar prefijo redis://
+    _hostport="${_hostport%%/*}"              # quitar /db al final
+    REDIS_HOST="${_hostport%%:*}"
+    REDIS_PORT="${_hostport##*:}"
+    REDIS_HOST="${REDIS_HOST:-redis}"
+    REDIS_PORT="${REDIS_PORT:-6379}"
+
+    for i in $(seq 1 30); do
+        # nc -z: solo verificar conectividad, -w 3: timeout 3 segundos
+        if nc -z -w 3 "$REDIS_HOST" "$REDIS_PORT" 2>/dev/null; then
+            echo "Redis disponible en ${REDIS_HOST}:${REDIS_PORT}"
+            return 0
+        fi
+        echo "   Redis no disponible en ${REDIS_HOST}:${REDIS_PORT}, esperando... (intento $i/30)"
         sleep 2
     done
-    echo "✅ Redis lista"
+
+    echo "ERROR: No fue posible conectarse a Redis en ${REDIS_HOST}:${REDIS_PORT} despues de 30 intentos"
+    exit 1
 }
 
 # Esperar servicios dependientes
@@ -79,7 +98,7 @@ if [ "$ARGS_STR" = "python manage.py runserver 0.0.0.0:8000" ] || \
 
     # Garantizar tenant/dominios públicos de forma idempotente en cada arranque.
     # Esto evita pérdida funcional de enrutamiento cuando la BD fue reiniciada.
-    PUBLIC_PRIMARY_DOMAIN="${TENANT_DOMAIN_BASE:-sintel.com}"
+    PUBLIC_PRIMARY_DOMAIN="${TENANT_DOMAIN_BASE:-sintel.net.co}"
     export PUBLIC_TENANT_DOMAINS="${PUBLIC_TENANT_DOMAINS:-${PUBLIC_PRIMARY_DOMAIN},localhost,127.0.0.1}"
 
     echo "🌐 Garantizando tenant público y dominios (${PUBLIC_TENANT_DOMAINS})..."

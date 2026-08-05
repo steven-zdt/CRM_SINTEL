@@ -113,9 +113,7 @@
       if (w.UIManager && w.UIManager.notifySuccess) {
         w.UIManager.notifySuccess('Perfil eliminado exitosamente');
       }
-      if (w.perfilPage && w.perfilPage.table) {
-        w.perfilPage.table.replaceData();
-      }
+      if (w.refreshPerfilTable) w.refreshPerfilTable();
     })
     .catch(function(errObj) {
       console.error('[perfil.modals] deletePerfil Error:', errObj);
@@ -224,9 +222,7 @@
         }
 
         // Refrescar tabla
-        if (w.perfilPage && w.perfilPage.table) {
-          w.perfilPage.table.replaceData();
-        }
+        if (w.refreshPerfilTable) w.refreshPerfilTable();
 
         // Limpiar formulario
         var form = d.getElementById('form-perfil-crear');

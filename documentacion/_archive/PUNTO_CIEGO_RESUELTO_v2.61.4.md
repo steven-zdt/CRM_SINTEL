@@ -121,11 +121,11 @@ docker exec crm_sintel-web-1 python /app/create_tenantprofiles.py
 ```
 [SINTEL Global] schema=public
   ✅ admin@home.com - CREADO
-  ✅ admin@sintel.com - CREADO
+  ✅ admin@sintel.net.co - CREADO
 
 [home] schema=home
   ✅ admin@home.com - ya existe
-  ✅ admin@sintel.com - ya existe
+  ✅ admin@sintel.net.co - ya existe
 ```
 
 ### Paso 4: Final Validation

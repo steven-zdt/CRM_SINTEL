@@ -16,6 +16,9 @@
     },
     bindForm: function (form) {
       var self = this;
+      if (form.dataset.editorInitialized) return;
+      form.dataset.editorInitialized = 'true';
+
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         self.save(form);
@@ -39,7 +42,7 @@
         if (w.UIManager) w.UIManager.notifySuccess('Servicio guardado');
         if (w.Sintel.Cotizaciones.ui) w.Sintel.Cotizaciones.ui.hideOffcanvas();
         if (w.Sintel.Cotizaciones.features.servicioList && w.Sintel.Cotizaciones.features.servicioList.table) {
-            w.Sintel.Cotizaciones.features.servicioList.table.setData();
+            w.Sintel.Cotizaciones.features.servicioList.table.replaceData();
         }
       });
     }

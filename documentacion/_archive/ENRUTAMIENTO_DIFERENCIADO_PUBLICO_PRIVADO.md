@@ -8,7 +8,7 @@
 
 ## 🎯 Objetivo
 
-El sistema detecta automáticamente si la petición entrante corresponde al dominio público (`sintel.com`) o a un tenant privado (`cliente.sintel.com`) y sirve interfaces completamente aisladas.
+El sistema detecta automáticamente si la petición entrante corresponde al dominio público (`sintel.net.co`) o a un tenant privado (`cliente.sintel.net.co`) y sirve interfaces completamente aisladas.
 
 ## 🏗️ Arquitectura
 
@@ -41,8 +41,8 @@ Utilizamos **TenantMainMiddleware** para la detección y **Dual URLConf** para e
 ```python
 # ⚠️ CONFIGURACIÓN CRÍTICA: URLs separadas para público y privado
 # django-tenants usa ROOT_URLCONF para el esquema 'public' y TENANT_URLCONF para tenants
-ROOT_URLCONF = 'config.urls_public'  # URLs para esquema público (sintel.com)
-TENANT_URLCONF = 'config.urls_tenant'  # URLs para tenants privados (cliente.sintel.com)
+ROOT_URLCONF = 'config.urls_public'  # URLs para esquema público (sintel.net.co)
+TENANT_URLCONF = 'config.urls_tenant'  # URLs para tenants privados (cliente.sintel.net.co)
 ```
 
 **Estado:** ✅ Verificado y correcto
@@ -156,15 +156,15 @@ class TenantLandingView(TemplateView):
 **Tests Implementados:**
 
 1. ✅ `test_public_domain_loads_public_urlconf`
-   - Verifica que `sintel.com/` carga `urls_public`
+   - Verifica que `sintel.net.co/` carga `urls_public`
    - Verifica que `PublicIndexView` se ejecuta
 
 2. ✅ `test_private_tenant_anonymous_loads_landing_page`
-   - Verifica que `cliente.sintel.com/` con usuario anónimo devuelve 200 OK
+   - Verifica que `cliente.sintel.net.co/` con usuario anónimo devuelve 200 OK
    - Verifica que se renderiza `tenant/landing/index.html`
 
 3. ✅ `test_private_tenant_authenticated_redirects_to_dashboard`
-   - Verifica que `cliente.sintel.com/` con usuario autenticado devuelve 302
+   - Verifica que `cliente.sintel.net.co/` con usuario autenticado devuelve 302
    - Verifica que redirige a `/dashboard/`
 
 4. ✅ `test_tenant_landing_view_dispatch_logic`
@@ -190,10 +190,10 @@ class TenantLandingView(TemplateView):
 
 ## 🔄 Flujo de Enrutamiento
 
-### Escenario 1: Dominio Público (`sintel.com`)
+### Escenario 1: Dominio Público (`sintel.net.co`)
 
 ```
-1. Request HTTP → sintel.com/
+1. Request HTTP → sintel.net.co/
 2. TenantMainMiddleware detecta dominio público
 3. Establece esquema 'public'
 4. Django carga ROOT_URLCONF = 'config.urls_public'
@@ -203,10 +203,10 @@ class TenantLandingView(TemplateView):
    - Anónimo → /admin/login/
 ```
 
-### Escenario 2: Tenant Privado Anónimo (`cliente.sintel.com`)
+### Escenario 2: Tenant Privado Anónimo (`cliente.sintel.net.co`)
 
 ```
-1. Request HTTP → cliente.sintel.com/
+1. Request HTTP → cliente.sintel.net.co/
 2. TenantMainMiddleware detecta tenant privado
 3. Establece esquema 'cliente'
 4. Django carga TENANT_URLCONF = 'config.urls_tenant'
@@ -216,10 +216,10 @@ class TenantLandingView(TemplateView):
    - NO redirige a login (acceso público permitido)
 ```
 
-### Escenario 3: Tenant Privado Autenticado (`cliente.sintel.com`)
+### Escenario 3: Tenant Privado Autenticado (`cliente.sintel.net.co`)
 
 ```
-1. Request HTTP → cliente.sintel.com/ (usuario autenticado)
+1. Request HTTP → cliente.sintel.net.co/ (usuario autenticado)
 2. TenantMainMiddleware detecta tenant privado
 3. Establece esquema 'cliente'
 4. Django carga TENANT_URLCONF = 'config.urls_tenant'

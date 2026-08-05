@@ -50,7 +50,7 @@ def test_clientes_crud_completo(client, admin_user, tenant):
     
     with schema_context(tenant.schema_name):
         # 1. LIST: Verificar que la lista está vacía inicialmente
-        resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+        resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.content}"
         data = resp.json()
         assert "results" in data or isinstance(data, list), "Response should be paginated or a list"
@@ -61,7 +61,7 @@ def test_clientes_crud_completo(client, admin_user, tenant):
             "/api/v1/clientes/",
             data=cliente_data,
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.content}"
         created = resp.json()
@@ -78,7 +78,7 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         # 3. READ: Obtener detalle del cliente
         resp = client.get(
             f"/api/v1/clientes/{cliente_uuid}/",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.content}"
         detail = resp.json()
@@ -102,7 +102,7 @@ def test_clientes_crud_completo(client, admin_user, tenant):
             f"/api/v1/clientes/{cliente_uuid}/",
             data=update_data,
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.content}"
         updated = resp.json()
@@ -119,7 +119,7 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         assert cliente_db.activo == update_data["activo"]
         
         # 5. LIST después de UPDATE: Verificar que el cliente aparece actualizado
-        resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+        resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
         assert resp.status_code == 200
         data = resp.json()
         items = data.get("results", data)
@@ -130,7 +130,7 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         assert cliente_list["activo"] == update_data["activo"]
         
         # 6. LIST final: verificar que el cliente persiste y está inactivo
-        resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+        resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
         assert resp.status_code == 200
         data = resp.json()
         items = data.get("results", data)
@@ -157,7 +157,7 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
             "/api/v1/clientes/",
             data={},
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 400, "Should return 400 for missing required fields"
         
@@ -174,7 +174,7 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
             "/api/v1/clientes/",
             data=cliente_data,
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 201
         cliente_id = resp.json()["id"]
@@ -184,7 +184,7 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
             "/api/v1/clientes/",
             data=cliente_data,
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 200, "Should return 200 for idempotent duplicate document"
         
@@ -223,7 +223,7 @@ def test_clientes_list_filtros_y_ordenamiento(client, admin_user, tenant):
         # Test: Ordenamiento
         resp = client.get(
             "/api/v1/clientes/?ordering=razon_social",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -234,7 +234,7 @@ def test_clientes_list_filtros_y_ordenamiento(client, admin_user, tenant):
         # Test: Búsqueda
         resp = client.get(
             "/api/v1/clientes/?search=Cliente A",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 200
         data = resp.json()

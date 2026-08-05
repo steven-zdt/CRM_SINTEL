@@ -4,7 +4,7 @@ Script de verificación de configuración de producción.
 
 Verifica que la configuración esté lista para producción:
 - DEBUG=False
-- ALLOWED_HOSTS contiene sintel.com y .sintel.com
+- ALLOWED_HOSTS contiene sintel.net.co y .sintel.net.co
 - CSRF_TRUSTED_ORIGINS contiene orígenes HTTPS
 - TenantMainMiddleware está en el orden correcto
 - URLConf están correctamente separados
@@ -47,7 +47,7 @@ def check_debug():
 def check_allowed_hosts():
     """Verifica que ALLOWED_HOSTS contenga los dominios necesarios."""
     print("\n🔍 Verificando ALLOWED_HOSTS...")
-    required_hosts = ['sintel.com', '.sintel.com']
+    required_hosts = ['sintel.net.co', '.sintel.net.co']
     missing = [h for h in required_hosts if h not in settings.ALLOWED_HOSTS]
     
     if missing:
@@ -64,11 +64,11 @@ def check_csrf_trusted_origins():
     """Verifica que CSRF_TRUSTED_ORIGINS contenga orígenes HTTPS."""
     print("\n🔍 Verificando CSRF_TRUSTED_ORIGINS...")
     
-    # En producción, debe tener al menos https://sintel.com
-    has_https = any('https://sintel.com' in origin for origin in settings.CSRF_TRUSTED_ORIGINS)
+    # En producción, debe tener al menos https://sintel.net.co
+    has_https = any('https://sintel.net.co' in origin for origin in settings.CSRF_TRUSTED_ORIGINS)
     
     if not has_https and not settings.DEBUG:
-        print("  [WARNING]  ADVERTENCIA: No se encontró 'https://sintel.com' en CSRF_TRUSTED_ORIGINS")
+        print("  [WARNING]  ADVERTENCIA: No se encontró 'https://sintel.net.co' en CSRF_TRUSTED_ORIGINS")
         print("  NOTA: El middleware CSRFTrustedOriginMiddleware puede manejar dominios dinámicos")
     
     print(f"  [OK] CSRF_TRUSTED_ORIGINS configurado")
@@ -143,7 +143,7 @@ def check_domains():
     public_domain = Domain.objects.filter(tenant=public_client, is_primary=True).first()
     if not public_domain:
         print("  [WARNING]  ADVERTENCIA: No se encontró dominio primario para el tenant público")
-        print("  NOTA: Puede ser necesario crear Domain(domain='sintel.com', tenant=public_client, is_primary=True)")
+        print("  NOTA: Puede ser necesario crear Domain(domain='sintel.net.co', tenant=public_client, is_primary=True)")
     else:
         print(f"  [OK] Dominio público encontrado: {public_domain.domain}")
     

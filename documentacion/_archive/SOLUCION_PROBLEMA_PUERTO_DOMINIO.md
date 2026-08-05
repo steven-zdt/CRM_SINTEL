@@ -2,11 +2,11 @@
 
 ## ❌ Problema Identificado
 
-Cuando se crea un tenant privado (ej: `omega-corp`), el sistema guarda el dominio como `omega-corp.sintel.com` (sin puerto). Sin embargo, en desarrollo, el navegador accede con puerto: `http://omega-corp.sintel.com:8000/`.
+Cuando se crea un tenant privado (ej: `omega-corp`), el sistema guarda el dominio como `omega-corp.sintel.net.co` (sin puerto). Sin embargo, en desarrollo, el navegador accede con puerto: `http://omega-corp.sintel.net.co:8000/`.
 
 **Consecuencia:**
 - django-tenants busca coincidencia **exacta** del hostname
-- No encuentra `omega-corp.sintel.com:8000` en la base de datos
+- No encuentra `omega-corp.sintel.net.co:8000` en la base de datos
 - Asume que es una petición pública y carga el esquema `public`
 - El usuario ve la consola pública en lugar de la landing page del tenant
 
@@ -18,8 +18,8 @@ Cuando se crea un tenant privado (ej: `omega-corp`), el sistema guarda el domini
 
 La señal ahora crea **automáticamente** dos dominios en modo desarrollo:
 
-1. **Dominio principal** (sin puerto): `omega-corp.sintel.com` → `is_primary=True`
-2. **Dominio con puerto** (solo en DEBUG): `omega-corp.sintel.com:8000` → `is_primary=False`
+1. **Dominio principal** (sin puerto): `omega-corp.sintel.net.co` → `is_primary=True`
+2. **Dominio con puerto** (solo en DEBUG): `omega-corp.sintel.net.co:8000` → `is_primary=False`
 
 **Código:**
 ```python
@@ -65,22 +65,22 @@ docker compose exec web python manage.py fix_all_tenant_domains --force
 ### Fase 1: Creación del Tenant
 
 **Antes:**
-- Se creaba solo: `omega-corp.sintel.com`
+- Se creaba solo: `omega-corp.sintel.net.co`
 
 **Ahora:**
-- Se crea: `omega-corp.sintel.com` (principal)
-- Se crea: `omega-corp.sintel.com:8000` (desarrollo)
+- Se crea: `omega-corp.sintel.net.co` (principal)
+- Se crea: `omega-corp.sintel.net.co:8000` (desarrollo)
 
 ### Fase 2: Intercepción de la Petición
 
 **Antes:**
-- Navegador: `omega-corp.sintel.com:8000`
-- Base de datos: `omega-corp.sintel.com`
+- Navegador: `omega-corp.sintel.net.co:8000`
+- Base de datos: `omega-corp.sintel.net.co`
 - ❌ No coincide → Carga esquema público
 
 **Ahora:**
-- Navegador: `omega-corp.sintel.com:8000`
-- Base de datos: `omega-corp.sintel.com:8000` ✅
+- Navegador: `omega-corp.sintel.net.co:8000`
+- Base de datos: `omega-corp.sintel.net.co:8000` ✅
 - ✅ Coincide → Carga esquema del tenant
 
 ### Fase 3: Enrutamiento
@@ -126,15 +126,15 @@ for domain in domains:
     print(f"{domain.domain} (primary: {domain.is_primary})")
 
 # Debe mostrar:
-# omega-corp.sintel.com (primary: True)
-# omega-corp.sintel.com:8000 (primary: False)
+# omega-corp.sintel.net.co (primary: True)
+# omega-corp.sintel.net.co:8000 (primary: False)
 ```
 
 ### Probar acceso:
 
 ```bash
 # Debe mostrar la landing page del tenant (no la consola pública)
-curl -I http://omega-corp.sintel.com:8000/
+curl -I http://omega-corp.sintel.net.co:8000/
 ```
 
 ## ⚠️ Notas Importantes

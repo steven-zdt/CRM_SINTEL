@@ -15,7 +15,9 @@ def _find_client_viewset_entry():
     # Estrategia A: por modelo
     for prefix, viewset, basename in VIEWSETS:
         try:
-            model_name = getattr(getattr(viewset, "queryset", None), "model", None).__name__
+            model_name = getattr(
+                getattr(viewset, "queryset", None), "model", None
+            ).__name__
         except Exception:
             model_name = None
         if model_name == "Client":
@@ -59,13 +61,15 @@ def test_tenants_crud_dynamic(api_client, admin_user):
     if r.status_code not in (status.HTTP_201_CREATED, status.HTTP_200_OK):
         # Manejar errores 404/405 correctamente (HttpResponseNotFound no tiene .data)
         error_msg = f"Error {r.status_code}"
-        if hasattr(r, 'data'):
+        if hasattr(r, "data"):
             error_msg += f": {r.data}"
-        elif hasattr(r, 'content'):
+        elif hasattr(r, "content"):
             error_msg += f": {r.content.decode('utf-8') if isinstance(r.content, bytes) else r.content}"
         pytest.fail(error_msg)
-    
-    created_id = r.data.get("id") or r.data.get("pk") or r.data.get("data", {}).get("id")
+
+    created_id = (
+        r.data.get("id") or r.data.get("pk") or r.data.get("data", {}).get("id")
+    )
     assert created_id, f"La respuesta no devolvió ID. Respuesta: {r.data}"
 
     # LIST
@@ -73,10 +77,14 @@ def test_tenants_crud_dynamic(api_client, admin_user):
     assert r.status_code == status.HTTP_200_OK
 
     # Soportar paginado DRF (results) o lista directa
-    results = r.data.get("results") if isinstance(r.data, dict) and "results" in r.data else r.data
-    assert any((row.get("id") == created_id) for row in (results or [])), (
-        f"El tenant creado no aparece en la lista. Respuesta: {r.data}"
+    results = (
+        r.data.get("results")
+        if isinstance(r.data, dict) and "results" in r.data
+        else r.data
     )
+    assert any(
+        (row.get("id") == created_id) for row in (results or [])
+    ), f"El tenant creado no aparece en la lista. Respuesta: {r.data}"
 
     # RETRIEVE
     detail_url = reverse(f"{basename}-detail", args=[created_id])
@@ -88,10 +96,9 @@ def test_tenants_crud_dynamic(api_client, admin_user):
     r = api_client.patch(detail_url, {"nombre": "Empresa CRUD Editada"}, format="json")
     if r.status_code not in (status.HTTP_200_OK, status.HTTP_202_ACCEPTED):
         error_msg = f"Error {r.status_code}"
-        if hasattr(r, 'data'):
+        if hasattr(r, "data"):
             error_msg += f": {r.data}"
-        elif hasattr(r, 'content'):
+        elif hasattr(r, "content"):
             error_msg += f": {r.content.decode('utf-8') if isinstance(r.content, bytes) else r.content}"
         pytest.fail(error_msg)
     assert r.data.get("nombre") in ("Empresa CRUD Editada",)
-

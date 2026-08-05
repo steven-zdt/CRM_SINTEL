@@ -15,6 +15,7 @@ from apps.tenant.empresa.models import Empresa
 from apps.tenant.proveedores.services.api_mixins import (
     ProveedorServiceMixin,
     CuentasPagarServiceMixin,
+    RepresentanteServiceMixin,
 )
 from apps.tenant.proveedores.api.serializers import (
     ProveedorDetailSerializer,
@@ -23,8 +24,10 @@ from apps.tenant.proveedores.api.serializers import (
     CuentasPagarListSerializer,
     CuentasPagarDetailSerializer,
     CuentasPagarAbonoSerializer,
+    RepresentanteListSerializer,
+    RepresentanteDetailSerializer,
 )
-from apps.tenant.proveedores.models import Proveedor, CuentasPagar
+from apps.tenant.proveedores.models import Proveedor, CuentasPagar, Representante
 # PROVEEDORES_NIIF_CHOICES eliminado — AGENTS.md: ninguna app de negocio
 # debe tener referencias contables. Contabilidad es la unica propietaria.
 from apps.config.api.pagination import StandardResultsSetPagination
@@ -399,3 +402,150 @@ class CuentasPagarViewSet(CuentasPagarServiceMixin, BaseTenantViewSet):
             k: str(v) if hasattr(v, 'as_tuple') else v
             for k, v in kpis.items()
         })
+
+
+# ==============================================================================
+# REPRESENTANTE VIEWSET — v3.17.0 (nueva entidad)
+# ==============================================================================
+
+class RepresentanteViewSet(RepresentanteServiceMixin, BaseTenantViewSet):
+    """
+    ViewSet para Representantes de Proveedores (v3.17.0).
+    Router plano: GET /api/v1/proveedores/representantes/?proveedor_uuid=<uuid>
+    """
+
+    lookup_field = 'uuid'
+    lookup_url_kwarg = 'uuid'
+    queryset = Representante.objects.none()
+    serializer_class = RepresentanteDetailSerializer
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    renderer_classes = [JSONRenderer, TemplateHTMLRenderer]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return RepresentanteListSerializer
+        return RepresentanteDetailSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        try:
+            empresa = self.get_empresa()
+            if empresa:
+                context['empresa_id'] = empresa.id
+        except Exception:
+            pass
+        return context
+
+    def get_queryset(self):
+        empresa = self.get_empresa()
+        return Representante.objects.filter(empresa=empresa)
+
+    def get_empresa(self):
+        return resolve_tenant_empresa(self.request, self)
+
+    def get_object(self):
+        """DSV: empresa + uuid propio es suficiente (router plano, no anidado)."""
+        empresa = self.get_empresa()
+        representante_uuid = self.kwargs.get('uuid')
+
+        obj = Representante.objects.filter(
+            empresa=empresa,
+            uuid=representante_uuid
+        ).first()
+
+        if not obj:
+            raise NotFound("Representante no encontrado en esta empresa.")
+        return obj
+
+    def list(self, request, *args, **kwargs):
+        """
+        Lista representantes.
+        ?proveedor_uuid=<uuid>  — filtra por proveedor (desde offcanvas detalle)
+        Sin param               — retorna todos los de la empresa (directorio global)
+        """
+        empresa = self.get_empresa()
+        proveedor_uuid = request.query_params.get('proveedor_uuid')
+
+        if proveedor_uuid:
+            representantes_qs = self.representante_selector.get_list_por_proveedor(
+                empresa_id=empresa.id,
+                proveedor_uuid=proveedor_uuid
+            )
+        else:
+            representantes_qs = self.representante_selector.get_list_por_empresa(
+                empresa_id=empresa.id
+            )
+
+        page = self.paginate_queryset(representantes_qs)
+        rows = page if page is not None else list(representantes_qs)
+
+        serializer = RepresentanteListSerializer(rows, many=True, context=self.get_serializer_context())
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    def create(self, request, *args, **kwargs):
+        """Crea un representante. proveedor_uuid viene en el body POST."""
+        empresa = self.get_empresa()
+        proveedor_uuid = request.data.get('proveedor_uuid')
+
+        if not proveedor_uuid:
+            return Response(
+                {"error": "El campo proveedor_uuid es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            representante = self.representante_service.crear_representante(
+                empresa_id=empresa.id,
+                proveedor_uuid=proveedor_uuid,
+                data=serializer.validated_data
+            )
+            output_serializer = RepresentanteDetailSerializer(
+                representante, context=self.get_serializer_context()
+            )
+            return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as exc:
+            logger.exception(f"Error creando representante: {exc}")
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        """Actualiza un representante (DSV via get_object)."""
+        empresa = self.get_empresa()
+        representante_uuid = self.kwargs.get('uuid')
+
+        serializer = self.get_serializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            representante = self.representante_service.actualizar_representante(
+                empresa_id=empresa.id,
+                representante_uuid=representante_uuid,
+                data=serializer.validated_data
+            )
+            output_serializer = RepresentanteDetailSerializer(
+                representante, context=self.get_serializer_context()
+            )
+            return Response(output_serializer.data, status=status.HTTP_200_OK)
+        except Exception as exc:
+            logger.exception(f"Error actualizando representante: {exc}")
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        """Elimina un representante (con guard representante principal)."""
+        empresa = self.get_empresa()
+        representante_uuid = self.kwargs.get('uuid')
+
+        try:
+            self.representante_service.eliminar_representante(
+                empresa_id=empresa.id,
+                representante_uuid=representante_uuid
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as exc:
+            logger.exception(f"Error eliminando representante: {exc}")
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)

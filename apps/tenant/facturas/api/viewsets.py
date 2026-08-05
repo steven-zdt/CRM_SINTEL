@@ -223,7 +223,49 @@ class FacturaViewSet(FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, Factura
             qs = qs.filter(impuestos_desglosados__tipo_impuesto=tipo_impuesto).distinct()
 
         return qs.order_by("-fecha_emision", "-id")
-    
+
+    # WARNING: [PERF-N1] N+1 en el listado: FacturaListSerializer.get_retefuente/
+    # get_reteica/get_reteiva llamaban a obj.total_retencion_fuente/etc (una query
+    # por tipo por fila -- 3 queries x 20 filas = 60 queries extra solo para
+    # retenciones). Se intercepta paginate_queryset() (sin reescribir list(), que
+    # sigue siendo el ModelViewSet por defecto) para construir un solo mapa
+    # {factura_id: {tipo: monto}} con una unica query agrupada y pasarlo al
+    # serializer via contexto. Las demas fuentes de N+1 de este mismo listado
+    # (cliente/proveedor bridge, banco) quedan documentadas en REPORTE_FASE_4.md
+    # como seguimiento pendiente, no resueltas en este cambio.
+    def paginate_queryset(self, queryset):
+        page = super().paginate_queryset(queryset)
+        rows = page if page is not None else queryset
+        self._retenciones_map = self._build_retenciones_map(rows)
+        return page
+
+    def _build_retenciones_map(self, facturas):
+        ids = [f.id for f in facturas]
+        if not ids:
+            return {}
+        try:
+            empresa_id = resolve_empresa_id_from_request(self.request)
+        except Exception:
+            return {}
+        if not empresa_id:
+            return {}
+        from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+        try:
+            return RetencionesService.totales_retenciones_por_documentos(
+                documento_origen_app='facturas',
+                documento_origen_modelo='Factura',
+                documento_origen_ids=ids,
+                empresa_id=empresa_id,
+            )
+        except Exception:
+            return {}
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        if hasattr(self, '_retenciones_map'):
+            ctx['retenciones_map'] = self._retenciones_map
+        return ctx
+
     def get_serializer_class(self):
         """
         Selecciona el serializer según la acción.
@@ -1013,7 +1055,7 @@ class ItemFacturaViewSet(BaseTenantViewSet):
     - PATCH /api/v1/items-factura/{uuid}/ (actualizar ítem — campos item_inventario_* v3.9.2+)
     - DELETE /api/v1/items-factura/{uuid}/ (eliminar un ítem)
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTenantMember, IsAuthenticated]
     serializer_class = ItemFacturaSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['factura_id']
@@ -1069,7 +1111,7 @@ class NotaCreditoViewSet(BaseTenantViewSet):
     [OK] Escalable (millones de notas crédito)
     [OK] Artefactos pesados (XML) solo en endpoint /xml/
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTenantMember, IsAuthenticated]
     http_method_names = ["get", "head", "options", "delete"]  # # WARNING: v2.40: POST eliminado (datatables deprecated)
     
     def get_serializer_class(self):

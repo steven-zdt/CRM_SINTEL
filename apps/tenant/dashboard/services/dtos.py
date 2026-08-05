@@ -8,15 +8,6 @@ from typing import List, Optional
 
 
 @dataclass(frozen=True)
-class MetricaSimpleDTO:
-    """DTO para una métrica simple (valor + etiqueta)."""
-    label: str
-    value: float
-    delta: Optional[float] = None
-    unit: str = ""
-
-
-@dataclass(frozen=True)
 class WidgetFacturasDTO:
     """DTO para métricas de Facturas."""
     total_facturas: int
@@ -52,6 +43,14 @@ class WidgetGastosDTO:
     gastos_pendientes: int
     gastos_vencidos: int
     gasto_promedio: Decimal
+
+
+@dataclass(frozen=True)
+class WidgetProveedoresDTO:
+    """DTO para métricas de Proveedores."""
+    total_provedores: int
+    total_gastos: Decimal
+    cartera_pendiente: Decimal
 
 
 @dataclass(frozen=True)
@@ -96,5 +95,6 @@ class DashboardMetricasDTO:
     inventario: WidgetInventarioDTO
     empleados: WidgetEmpleadosDTO
     gastos: Optional[WidgetGastosDTO] = None
+    proveedores: Optional[WidgetProveedoresDTO] = None
     proyectos: Optional[WidgetProyectosDTO] = None
     clientes: Optional[WidgetClientesDTO] = None

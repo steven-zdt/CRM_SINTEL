@@ -12,7 +12,7 @@ Uso:
 
 NOTA: Al agregar un nuevo tenant, ejecutar este comando y tambien agregar manualmente
 la linea correspondiente en docker-compose.yaml bajo extra_hosts:
-    - "{schema_name}.sintel.com:<server_ip>"
+    - "{schema_name}.sintel.net.co:<server_ip>"
 Y reiniciar los contenedores: docker compose restart web celery
 """
 import logging
@@ -23,7 +23,7 @@ from django.core.management.base import BaseCommand
 logger = logging.getLogger(__name__)
 
 SERVER_IP: str = getattr(settings, "SERVER_IP", "192.168.2.15")
-DNS_ZONE: str = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+DNS_ZONE: str = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
 
 
 def _dns_record_exists(subdomain: str, zone: str) -> bool:
@@ -97,7 +97,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Dry-run   : {dry_run}")
         self.stdout.write("-" * 50)
 
-        # EXCEPCION: schema_name="public" es el dominio raiz de la plataforma (sintel.com).
+        # EXCEPCION: schema_name="public" es el dominio raiz de la plataforma (sintel.net.co).
         # Su registro DNS se gestiona de forma independiente en el servidor DNS de Windows
         # y NO debe ser modificado por este comando — solo aplica a tenants privados.
         qs = Client.objects.exclude(schema_name="public").filter(is_active=True)

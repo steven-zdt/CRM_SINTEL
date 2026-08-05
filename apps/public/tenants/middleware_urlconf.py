@@ -7,7 +7,7 @@ y garantizar el aislamiento correcto entre tenants.
 
 REGLAS ESTRICTAS:
 1. Esquema PÚBLICO: Solo accesible desde dominios explícitamente permitidos.
-2. Esquema PRIVADO: Solo accesible si el dominio termina en '.sintel.com'
+2. Esquema PRIVADO: Solo accesible si el dominio termina en '.sintel.net.co'
    (o subdominios de localhost para desarrollo).
 3. Protección contra Host Header Attacks.
 4. Validación estricta de dominios para prevenir acceso no autorizado.
@@ -44,7 +44,7 @@ class TenantSecurityAndURLConfMiddleware:
     # 1. Configuración del Esquema Público (WHITELIST ESTRICTA)
     ALLOWED_PUBLIC_DOMAINS = frozenset(
         [
-            "sintel.com",  # Dominio de producción
+            "sintel.net.co",  # Dominio de producción
             "localhost",  # Desarrollo local
             "127.0.0.1",  # Desarrollo local (IP)
             "0.0.0.0",  # Desarrollo local (bind all)
@@ -54,7 +54,7 @@ class TenantSecurityAndURLConfMiddleware:
     )
 
     # 2. Configuración del Esquema Privado (Sufijo obligatorio)
-    REQUIRED_TENANT_SUFFIX = ".sintel.com"
+    REQUIRED_TENANT_SUFFIX = ".sintel.net.co"
 
     # 3. Dominios de desarrollo permitidos para tenants privados
     DEV_DOMAIN_INDICATORS = frozenset(["localhost", "127.0.0.1", "0.0.0.0", ".local"])
@@ -154,7 +154,7 @@ class TenantSecurityAndURLConfMiddleware:
             return False
 
         # CAPA 2: Bloquear subdominios intentando acceder al público
-        # Ejemplo: cliente.sintel.com NO puede acceder al esquema público
+        # Ejemplo: cliente.sintel.net.co NO puede acceder al esquema público
         if host.endswith(self.REQUIRED_TENANT_SUFFIX):
             security_logger.warning(
                 f"🚨 BLOQUEO PÚBLICO (Capa 2 - Subdominio): "
@@ -188,7 +188,7 @@ class TenantSecurityAndURLConfMiddleware:
         Valida acceso a tenant privado con validación de sintaxis de dominio.
 
         WARNING: SEGURIDAD:
-        - Valida que el dominio termine en .sintel.com (producción)
+        - Valida que el dominio termine en .sintel.net.co (producción)
         - Permite localhost/127.0.0.1 para desarrollo
         - Bloquea dominios con formato inválido
 
@@ -237,7 +237,6 @@ class TenantSecurityAndURLConfMiddleware:
         """
         # --- A. Obtener Tenant y Host ---
         tenant = getattr(request, "tenant", None)
-
         if not tenant:
             # Sin tenant: Django usará ROOT_URLCONF por defecto
             return self.get_response(request)
@@ -298,7 +297,7 @@ class TenantSecurityAndURLConfMiddleware:
                     )
                     return JsonResponse(
                         {
-                            "detail": "Este endpoint es exclusivo para tenants. Use el dominio del tenant (ej: subdominio.sintel.com) o configure el host apropiado."
+                            "detail": "Este endpoint es exclusivo para tenants. Use el dominio del tenant (ej: subdominio.sintel.net.co) o configure el host apropiado."
                         },
                         status=400,
                     )

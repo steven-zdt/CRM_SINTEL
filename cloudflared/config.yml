@@ -1,0 +1,50 @@
+# cloudflared/config.yml — Reglas de ingress para el tunel Cloudflare Zero Trust
+#
+# Este archivo define QUELLE tráfico entra y ADÓNDE va dentro de Docker.
+# Las reglas aquí tienen PRIORIDAD sobre las configuradas en el dashboard.
+#
+# SETUP REQUERIDO (una sola vez en el dashboard de Cloudflare):
+# 1. Ir a: https://one.dash.cloudflare.com → Networks → Tunnels
+# 2. Click "Create a tunnel" → nombre: sintel-erp-prod → Save
+# 3. Copiar el token que aparece y ponerlo en .env:  TUNNEL_TOKEN=<token>
+# 4. NO configurar Public Hostnames en el dashboard — este archivo lo hace.
+#
+# REGISTROS DNS (añadir en Cloudflare DNS, pestaña DNS de tu zona sintel.net.co):
+#   Tipo   Nombre    Contenido                          Proxy
+#   CNAME  sintel.net.co   <UUID>.cfargotunnel.com       [Proxied ON]
+#   CNAME  *         <UUID>.cfargotunnel.com           [Proxied ON]
+#
+#   El UUID lo encuentras en: Zero Trust > Networks > Tunnels > sintel-erp-prod (columna Tunnel ID)
+#
+# FLUJO DE TRÁFICO:
+#   Usuario → https://empresa.sintel.net.co (Cloudflare Edge, SSL)
+#          → cloudflared (tunel saliente)
+#          → http://nginx:80 (dentro de Docker, HTTP plano)
+#          → http://web:8000 (Gunicorn, WSGI)
+#
+# Cloudflare envia X-Forwarded-Proto: https → Django lo lee via SECURE_PROXY_SSL_HEADER
+
+ingress:
+  # ── Dominio principal (consola pública sintel.net.co) ──────────────────────────
+  - hostname: sintel.net.co
+    service: http://nginx:80
+    originRequest:
+      # Sin verificacion TLS porque nginx recibe HTTP plano desde cloudflared
+      noTLSVerify: false
+      # Timeout de conexion al origen
+      connectTimeout: 10s
+      # Timeout de lectura de respuesta del origen
+      tcpKeepAlive: 30s
+
+  # ── Wildcard de tenants (*.sintel.net.co) ─────────────────────────────────────
+  # Aplica a CUALQUIER subdominio: acme.sintel.net.co, beta.sintel.net.co, etc.
+  # django-tenants resuelve el schema desde el header Host que Cloudflare pasa intacto.
+  - hostname: "*.sintel.net.co"
+    service: http://nginx:80
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 10s
+      tcpKeepAlive: 30s
+
+  # ── Catch-all obligatorio (cloudflared requiere esta regla al final) ─────────
+  - service: http_status:404

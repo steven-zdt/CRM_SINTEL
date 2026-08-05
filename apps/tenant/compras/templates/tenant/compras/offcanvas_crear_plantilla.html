@@ -1,0 +1,96 @@
+{# offcanvas_crear_plantilla.html - Crear Plantilla de Numeracion v1.0 #}
+<style>
+  #offcanvas-plantilla-crear { width: 480px !important; }
+  #offcanvas-plantilla-crear .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+  }
+  #offcanvas-plantilla-crear .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+  }
+  #offcanvas-plantilla-crear .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6c757d;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.9rem;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-plantilla-crear"
+     aria-labelledby="offcanvas-plantilla-crear-label">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-plantilla-crear-label">
+      <i class="bi bi-journals text-secondary me-2"></i>Nueva Plantilla de Numeración
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body px-4 py-3">
+    <div id="form-plantilla-crear-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+    <form id="plantilla-crear-form" data-mode="create">
+      {% csrf_token %}
+
+      <p class="section-title"><i class="bi bi-info-circle me-1"></i>Identificacion</p>
+      <div class="row g-3 mb-4">
+        <div class="col-12">
+          <label for="plt-nombre" class="form-label">Nombre *</label>
+          <input type="text" class="form-control" id="plt-nombre"
+                 placeholder="Ej: Ordenes de Compra 2026" required maxlength="100">
+        </div>
+        <div class="col-6">
+          <label for="plt-prefijo" class="form-label">Prefijo</label>
+          <input type="text" class="form-control" id="plt-prefijo"
+                 placeholder="Ej: OC" maxlength="10">
+          <div class="form-text">Opcional. Ej: OC-001</div>
+        </div>
+        <div class="col-6 d-flex align-items-center pt-4">
+          <div class="form-check form-switch ms-2">
+            <input class="form-check-input" type="checkbox" id="plt-vigente" checked>
+            <label class="form-check-label fw-semibold" for="plt-vigente">Vigente (activa)</label>
+          </div>
+        </div>
+      </div>
+
+      <p class="section-title"><i class="bi bi-hash me-1"></i>Rango de Consecutivos</p>
+      <div class="row g-3 mb-3">
+        <div class="col-6">
+          <label for="plt-rango-desde" class="form-label">Desde *</label>
+          <input type="number" class="form-control" id="plt-rango-desde"
+                 value="1" min="1" required>
+        </div>
+        <div class="col-6">
+          <label for="plt-rango-hasta" class="form-label">Hasta *</label>
+          <input type="number" class="form-control" id="plt-rango-hasta"
+                 value="9999" min="1" required>
+        </div>
+      </div>
+
+      <div id="plt-preview" class="alert alert-light border py-2 px-3 small">
+        <i class="bi bi-eye me-1 text-muted"></i>
+        Primer numero: <strong id="plt-preview-num">OC-1</strong>
+        &nbsp;|&nbsp; Rango: <strong id="plt-preview-rango">1 – 9999</strong>
+      </div>
+    </form>
+  </div>
+
+  <div class="offcanvas-footer">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary btn-sm px-4"
+              data-bs-dismiss="offcanvas">Cancelar</button>
+      <button type="submit" form="plantilla-crear-form"
+              class="btn btn-primary btn-sm px-4" id="btn-guardar-plantilla">
+        <i class="bi bi-save me-1"></i>Crear Plantilla
+      </button>
+    </div>
+  </div>
+</div>

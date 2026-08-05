@@ -20,7 +20,7 @@ from ..models import Proyecto, ItemPresupuestoProyecto
 # ==============================================================================
 
 ITEM_FIELDS = [
-    'id', 'proyecto_id', 'empresa_id', 'categoria',
+    'id', 'uuid', 'proyecto_id', 'empresa_id', 'categoria',
     'descripcion', 'cantidad', 'valor_unitario', 'subtotal'
 ]
 
@@ -103,8 +103,14 @@ class PresupuestoBusinessService:
         ])
 
     @staticmethod
+    @transaction.atomic
     def crear_item(empresa, proyecto, data):
         """
+        [PERF-M1] @transaction.atomic: la escritura del item y el recalculo del
+        proyecto padre ahora son una sola transaccion -- antes, si _recalcular_proyecto
+        fallaba, el item ya habia quedado persistido (via save_item, atomico por
+        separado) pero los totales cacheados del proyecto quedaban desactualizados.
+
         Crea un nuevo ItemPresupuestoProyecto.
 
         Validaciones:
@@ -135,8 +141,11 @@ class PresupuestoBusinessService:
         return item
 
     @staticmethod
+    @transaction.atomic
     def actualizar_item(item, data):
         """
+        [PERF-M1] @transaction.atomic -- ver nota en crear_item().
+
         Actualiza un ItemPresupuestoProyecto existente.
 
         Validaciones:
@@ -163,8 +172,11 @@ class PresupuestoBusinessService:
         return item
 
     @staticmethod
+    @transaction.atomic
     def eliminar_item(item):
         """
+        [PERF-M1] @transaction.atomic -- ver nota en crear_item().
+
         Elimina un ItemPresupuestoProyecto.
 
         Validaciones:

@@ -785,6 +785,249 @@ class ContabilidadBusinessService:
         return cuenta
 
     # ============================================================================
+    # MOTOR DE PLANTILLAS — AUTO-INFERENCIA DESDE EXTRACTORES (Fase 3 v3.17.0)
+    # ============================================================================
+
+    # Mapeo concepto de LineaTransaccion -> origen_valor de LineaPlantilla
+    _CONCEPTO_A_ORIGEN: Dict[str, str] = {
+        'INGRESO_PRINCIPAL':     'SALDO_BASE',
+        'GASTO_GENERAL':         'SALDO_BASE',
+        'DEVOLUCION_VENTA':      'SALDO_BASE',
+        'DEVOLUCION_COMPRA':     'SALDO_BASE',
+        'SALARIO_BASICO':        'SALDO_BASE',
+        'AUXILIO_TRANSPORTE':    'SALDO_BASE',
+        'HORAS_EXTRAS':          'SALDO_BASE',
+        'PROVISION_CESANTIAS':   'SALDO_BASE',
+        'PROVISION_VACACIONES':  'SALDO_BASE',
+        'IVA_GENERADO':          'IVA_GENERADO',
+        'IVA_DESCONTABLE':       'IVA_DESCONTABLE',
+        'RETEFUENTE':            'RETEFUENTE',
+        'RETEICA':               'RETEICA',
+        'RETEIVA':               'RETEIVA',
+        'CXC_CLIENTES':          'TOTAL_DOCUMENTO',
+        'PASIVO_COMPRA_GASTO':   'TOTAL_DOCUMENTO',
+        'NOMINA_POR_PAGAR':      'TOTAL_DOCUMENTO',
+        'PROVEEDOR_POR_PAGAR':   'TOTAL_DOCUMENTO',
+    }
+
+    @transaction.atomic
+    def inferir_y_crear_plantilla_desde_documento(
+        self,
+        empresa_id: int,
+        app_label: str,
+        modelo: str,
+        documento_id: int,
+    ) -> Any:
+        """
+        Infiere y crea una PlantillaContable borrador (activo=False) a partir
+        del extractor correspondiente al app_label indicado.
+
+        Pull Model: instancia el extractor del app_label, extrae el DTO del
+        documento especifico, infiere tipo_motor y lineas desde ReglaContable,
+        y persiste la plantilla. No introduce dependencias circulares — la
+        plantilla pertenece a Contabilidad, los extractores leen de los apps origen.
+
+        Lineas con cuenta_hint o ReglaContable disponible son pre-pobladas.
+        Lineas sin cuenta resolvible son omitidas; el usuario las agrega en el editor.
+
+        Args:
+            empresa_id: ID de la empresa activa.
+            app_label: App de origen ('facturas', 'gastos', 'empleados').
+            modelo: Modelo del documento ('Factura', 'DocumentoSoporte', etc.).
+            documento_id: PK del documento en el app origen.
+
+        Returns:
+            PlantillaContable recien creada (activo=False).
+
+        Raises:
+            ValidationError si el extractor no existe o el DTO no se puede obtener.
+        """
+        from apps.tenant.contabilidad.models import PlantillaContable, LineaPlantilla, ReglaContable
+        from apps.tenant.contabilidad.integracion.extractores import (
+            ExtractorFacturas, ExtractorGastos, ExtractorNomina,
+        )
+        from apps.tenant.empresa.models import Empresa
+
+        _EXTRACTORES = {
+            'facturas':  ExtractorFacturas,
+            'gastos':    ExtractorGastos,
+            'empleados': ExtractorNomina,
+        }
+
+        extractor_cls = _EXTRACTORES.get(app_label)
+        if not extractor_cls:
+            raise ValidationError({
+                'app_label': (
+                    f'No hay extractor configurado para app_label="{app_label}". '
+                    'Tipos soportados: facturas, gastos, empleados.'
+                )
+            })
+
+        # 1. Obtener DTO via extractor (Pull Model — sin importar de apps origen)
+        dto = None
+        try:
+            extractor = extractor_cls(empresa_id)
+            for candidate in extractor.extraer_pendientes():
+                origen = candidate.documento_origen
+                if (
+                    origen.app_label == app_label
+                    and origen.modelo == modelo
+                    and origen.id == documento_id
+                ):
+                    dto = candidate
+                    break
+        except Exception as exc_ext:
+            logger.warning(
+                '[inferir_plantilla] Error en extractor %s para %s/%s/%s: %s',
+                extractor_cls.__name__, app_label, modelo, documento_id, exc_ext,
+            )
+
+        if not dto:
+            raise ValidationError({
+                'documento': (
+                    f'No se pudo obtener el DTO de transaccion para '
+                    f'{app_label}.{modelo} id={documento_id}. '
+                    'El documento puede no estar en estado pendiente o puede no existir.'
+                )
+            })
+
+        # 2. Resolver tipo motor (VENTA / COMPRA / GASTO / NOMINA)
+        tipo_raw = dto.tipo.value if hasattr(dto.tipo, 'value') else str(dto.tipo)
+        tipo_motor = self._resolver_tipo_motor(tipo_raw)
+        if not tipo_motor:
+            raise ValidationError({
+                'tipo_transaccion': (
+                    f'No se puede inferir tipo motor para "{tipo_raw}". '
+                    'Asegure que TipoTransaccion esta mapeado en _TIPO_TRANSACCION_A_MOTOR.'
+                )
+            })
+
+        # 3. Crear cabecera de PlantillaContable como borrador
+        empresa = Empresa.objects.filter(id=empresa_id).only('id').first()
+        if not empresa:
+            raise ValidationError({'empresa': f'Empresa id={empresa_id} no encontrada.'})
+
+        plantilla = PlantillaContable.objects.create(
+            empresa=empresa,
+            empresa_id=empresa_id,
+            nombre=f'Plantilla Sugerida - {tipo_motor} ({app_label})',
+            tipo_transaccion=tipo_motor,
+            activo=False,
+        )
+
+        # 4. Cargar ReglaContable como mapa concepto -> cuenta_codigo
+        reglas_map: Dict[str, str] = dict(
+            ReglaContable.objects.filter(
+                empresa_id=empresa_id,
+                tipo_transaccion=tipo_raw,
+                activo=True,
+            ).values_list('concepto', 'cuenta_codigo')
+        )
+
+        orden = 1
+        lineas_creadas = 0
+        origenes_procesados: set = set()
+
+        # 5. Construir LineaPlantilla por cada LineaTransaccion del DTO
+        for linea in dto.lineas:
+            origen_valor = self._CONCEPTO_A_ORIGEN.get(linea.concepto, 'SALDO_BASE')
+            naturaleza = 'DEBE' if (linea.lado or 'DEBE') == 'DEBE' else 'HABER'
+
+            codigo_candidato = (
+                str(linea.cuenta_hint).strip() if getattr(linea, 'cuenta_hint', None)
+                else reglas_map.get(linea.concepto)
+            )
+            if not codigo_candidato:
+                continue
+
+            try:
+                cuenta = self._obtener_o_crear_cuenta(empresa_id, codigo_candidato)
+            except Exception as exc_c:
+                logger.warning(
+                    '[inferir_plantilla] No se pudo resolver cuenta %s para %s: %s',
+                    codigo_candidato, linea.concepto, exc_c,
+                )
+                continue
+
+            LineaPlantilla.objects.create(
+                empresa=empresa,
+                empresa_id=empresa_id,
+                plantilla=plantilla,
+                cuenta_contable=cuenta,
+                naturaleza=naturaleza,
+                origen_valor=origen_valor,
+                porcentaje_aplicar=Decimal('100.00'),
+                orden=orden,
+                descripcion=f'{linea.concepto} (sugerido)',
+            )
+            origenes_procesados.add(origen_valor)
+            orden += 1
+            lineas_creadas += 1
+
+        # 6. Lineas adicionales desde ImpuestoDTO (evita duplicar origenes ya procesados)
+        _ORIGEN_IMPUESTO = {
+            'IVA_GENERADO':    'IVA_GENERADO',
+            'IVA_DESCONTABLE': 'IVA_DESCONTABLE',
+            'RETEFUENTE':      'RETEFUENTE',
+            'RETEICA':         'RETEICA',
+            'RETEIVA':         'RETEIVA',
+        }
+        for imp in getattr(dto, 'impuestos', []):
+            origen_imp = _ORIGEN_IMPUESTO.get(imp.tipo_impuesto)
+            if not origen_imp or origen_imp in origenes_procesados:
+                continue
+            if Decimal(str(imp.valor)) <= Decimal('0.00'):
+                continue
+
+            codigo_imp = (
+                str(imp.cuenta_codigo).strip() if getattr(imp, 'cuenta_codigo', None)
+                else reglas_map.get(imp.tipo_impuesto)
+            )
+            if not codigo_imp:
+                continue
+
+            try:
+                cuenta_imp = self._obtener_o_crear_cuenta(empresa_id, codigo_imp)
+            except Exception as exc_i:
+                logger.warning(
+                    '[inferir_plantilla] No se pudo resolver cuenta impuesto %s: %s',
+                    imp.tipo_impuesto, exc_i,
+                )
+                continue
+
+            # Naturaleza segun tipo de motor y tipo de impuesto
+            if imp.tipo_impuesto == 'IVA_GENERADO':
+                nat_imp = 'HABER' if tipo_motor == 'VENTA' else 'DEBE'
+            elif imp.tipo_impuesto == 'IVA_DESCONTABLE':
+                nat_imp = 'DEBE'
+            else:
+                # Retenciones: DEBE para ventas (reducen CxC), HABER para compras
+                nat_imp = 'DEBE' if tipo_motor == 'VENTA' else 'HABER'
+
+            LineaPlantilla.objects.create(
+                empresa=empresa,
+                empresa_id=empresa_id,
+                plantilla=plantilla,
+                cuenta_contable=cuenta_imp,
+                naturaleza=nat_imp,
+                origen_valor=origen_imp,
+                porcentaje_aplicar=Decimal('100.00'),
+                orden=orden,
+                descripcion=f'{imp.tipo_impuesto} (sugerido)',
+            )
+            origenes_procesados.add(origen_imp)
+            orden += 1
+            lineas_creadas += 1
+
+        logger.info(
+            '[inferir_plantilla] PlantillaContable uuid=%s creada — empresa=%s '
+            'tipo=%s app=%s modelo=%s id=%s lineas=%s',
+            plantilla.uuid, empresa_id, tipo_motor, app_label, modelo,
+            documento_id, lineas_creadas,
+        )
+        return plantilla
+
+    # ============================================================================
     # ORQUESTACIÓN DE INTEGRACIÓN (ETL PULL MODEL)
     # ============================================================================
 

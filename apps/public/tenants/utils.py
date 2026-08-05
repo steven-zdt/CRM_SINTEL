@@ -31,13 +31,13 @@ def normalize_domain(domain: str) -> str:
 
     Returns:
         str: Dominio normalizado (FQDN puro, minúsculas, sin protocolo, sin puerto, sin rutas)
-        Ejemplo: "cliente.sintel.com" (nunca "cliente.sintel.com:8000")
+        Ejemplo: "cliente.sintel.net.co" (nunca "cliente.sintel.net.co:8000")
 
     Examples:
         >>> normalize_domain("HTTPS://Mi.Empresa.Com/")
         'mi.empresa.com'
-        >>> normalize_domain("http://www.cliente.sintel.com:8000/admin/")
-        'cliente.sintel.com'  # Sin puerto, sin www, sin protocolo, sin rutas
+        >>> normalize_domain("http://www.cliente.sintel.net.co:8000/admin/")
+        'cliente.sintel.net.co'  # Sin puerto, sin www, sin protocolo, sin rutas
         >>> normalize_domain("  ejemplo.com  ")
         'ejemplo.com'
     """
@@ -63,7 +63,7 @@ def normalize_domain(domain: str) -> str:
     # El middleware ForceNoPortMiddleware normaliza HTTP_HOST antes de django-tenants
     if ":" in normalized:
         # Eliminar el puerto (siempre, sin importar DEBUG o Producción)
-        # Ejemplo: cliente.sintel.com:8000 -> cliente.sintel.com
+        # Ejemplo: cliente.sintel.net.co:8000 -> cliente.sintel.net.co
         normalized = normalized.split(":")[0]
 
     # Eliminar espacios finales que puedan quedar
@@ -80,7 +80,7 @@ def validate_fqdn(domain: str) -> bool:
     Valida que el dominio sea un FQDN válido.
 
     Un FQDN válido debe:
-    - Contener al menos un punto (ej: sintel.com)
+    - Contener al menos un punto (ej: sintel.net.co)
     - No contener espacios
     - No contener caracteres especiales excepto guiones y puntos
     - Tener máximo 253 caracteres (RFC 1035)

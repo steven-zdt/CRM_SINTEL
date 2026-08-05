@@ -71,15 +71,20 @@
       if (w.UIManager?.handleOffcanvas) {
         w.UIManager.handleOffcanvas(offcanvasEl, 'show');
       } else {
-        bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+        // FE-A4: nunca getOrCreateInstance — dispose de la instancia previa
+        // antes de crear una nueva (AGENTS.md §26).
+        const prevInst = bootstrap.Offcanvas.getInstance(offcanvasEl);
+        if (prevInst) { try { prevInst.dispose(); } catch (_) {} }
+        new bootstrap.Offcanvas(offcanvasEl).show();
       }
 
       // 2. Detectar modo: detalle (data-proveedor-uuid presente) vs crear/editar
       const isDetalle = !!offcanvasEl.dataset.proveedorUuid;
 
       if (isDetalle) {
-        // Modo detalle: inicializar tab de historial de facturas de compra
+        // Modo detalle: inicializar tabs de historial
         initHistorialCompras(offcanvasEl);
+        initRepresentantes(offcanvasEl);
       } else {
         // Modo crear/editar: configurar formulario
         configurarEventos(offcanvasEl);
@@ -191,6 +196,29 @@
     if (el('ckpi-total'))    el('ckpi-total').textContent    = total;
     if (el('ckpi-monto'))    el('ckpi-monto').textContent    = fmt(monto);
     if (el('ckpi-pendiente')) el('ckpi-pendiente').textContent = fmt(pendiente);
+  }
+
+  // ── Representantes (v3.17.0) ──────────────────────────────────────────────
+
+  /**
+   * Inicializa el tab de Representantes (lazy: carga al mostrar el tab).
+   * Carga la tabla de representantes cuando el usuario abre la pestaña.
+   */
+  function initRepresentantes(offcanvasEl) {
+    const uuid = offcanvasEl.dataset.proveedorUuid;
+    if (!uuid) return;
+
+    const tabBtn = offcanvasEl.querySelector('#tab-representantes-btn');
+    if (!tabBtn || tabBtn.dataset.representantesBound) return;
+    tabBtn.dataset.representantesBound = 'true';
+
+    // Carga lazy al activar el tab
+    tabBtn.addEventListener('shown.bs.tab', () => {
+      // Cargar tabla de representantes
+      if (w.Sintel?.Proveedores?.Representante?.cargarTabla) {
+        w.Sintel.Proveedores.Representante.cargarTabla(uuid);
+      }
+    });
   }
 
   // ── Formulario ───────────────────────────────────────────────────────────

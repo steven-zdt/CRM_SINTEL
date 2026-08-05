@@ -12,6 +12,40 @@
   <div class="offcanvas-body">
     <div id="feedback-contabilizar" class="alert alert-danger d-none mb-3" role="alert"></div>
 
+    {# ── Interceptor: Plantilla Sugerida (Motor Fase 3 v3.17.0) ─────────── #}
+    {% if requiere_revision_plantilla %}
+    <div id="bloque-plantilla-sugerida" class="alert alert-warning border-warning mb-4 p-3" role="alert"
+         style="border-left: 4px solid #ffc107 !important;">
+      <div class="d-flex align-items-start gap-3">
+        <i class="bi bi-lightning-charge-fill text-warning fs-4 flex-shrink-0 mt-1"></i>
+        <div class="flex-grow-1">
+          <h6 class="alert-heading fw-bold mb-1">Plantilla Contable Auto-generada</h6>
+          <p class="mb-2 small">
+            Hemos inferido una plantilla contable basada en los datos del modulo
+            <strong>{{ app_label }}</strong>. Por normativa
+            <strong>NIIF PYMES Colombia</strong>, por favor revisa y confirma las
+            cuentas auxiliares (nivel 6) antes de aplicarla.
+          </p>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button"
+                    id="btn-revisar-plantilla-sugerida"
+                    class="btn btn-warning btn-sm fw-semibold"
+                    data-uuid="{{ plantilla_sugerida_uuid }}">
+              <i class="bi bi-pencil-square me-1"></i>Revisar y Activar Plantilla
+            </button>
+            <button type="button"
+                    id="btn-omitir-plantilla-sugerida"
+                    class="btn btn-outline-secondary btn-sm">
+              Omitir, continuar manual
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {# Cuerpo del offcanvas bloqueado (oculto hasta que se revise la plantilla) #}
+    <div id="cuerpo-contabilizar-bloqueado" style="display:none;">
+    {% endif %}
+
     {# Resumen del documento (readonly) #}
     <div class="card border-0 bg-light mb-4">
       <div class="card-body py-2">
@@ -83,18 +117,35 @@
     </div>
 
     {# Selector de Plantilla Contable (Fase 3) #}
-    <div class="row g-2 mb-3">
-      <div class="col-md-8">
-        <label class="form-label small fw-bold">Plantilla Contable (Fase 3)</label>
-        <select class="form-select form-select-sm" id="selector-plantilla">
-          <option value="" selected>-- Sin plantilla (carga manual) --</option>
-        </select>
-        <small class="text-muted d-block">Selecciona una plantilla para auto-llenar las líneas automáticamente.</small>
+    <div class="card border-info mb-3">
+      <div class="card-header bg-info bg-opacity-10 py-2 d-flex align-items-center gap-2">
+        <i class="bi bi-layout-text-sidebar-reverse text-info"></i>
+        <span class="small fw-bold text-info">Plantilla Contable (Motor Fase 3)</span>
+        <span class="badge bg-secondary ms-auto small" id="plantillas-count-badge" style="display:none!important"></span>
       </div>
-      <div class="col-md-4 d-flex align-items-end">
-        <button type="button" class="btn btn-sm btn-info w-100" id="btn-aplicar-plantilla" disabled>
-          <i class="bi bi-lightning-charge me-1"></i>Aplicar Plantilla
-        </button>
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-8">
+            <label class="form-label small mb-1">Selecciona una plantilla para auto-llenar las lineas</label>
+            <select class="form-select form-select-sm" id="selector-plantilla">
+              <option value="" selected>-- Cargando plantillas... --</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <button type="button" class="btn btn-sm btn-info w-100" id="btn-aplicar-plantilla" disabled>
+              <i class="bi bi-lightning-charge me-1"></i>Aplicar Plantilla
+            </button>
+          </div>
+        </div>
+        {# Preview de lineas — se llena dinamicamente al seleccionar plantilla #}
+        <div id="preview-plantilla" class="mt-2" style="display:none">
+          <div class="d-flex align-items-center gap-1 mb-1">
+            <i class="bi bi-eye text-muted small"></i>
+            <span class="small text-muted fw-semibold">Vista previa de lineas:</span>
+            <span id="preview-plantilla-nombre" class="small text-info ms-1"></span>
+          </div>
+          <div id="preview-plantilla-tabla"></div>
+        </div>
       </div>
     </div>
 
@@ -138,6 +189,7 @@
         </tfoot>
       </table>
     </div>
+    {% if requiere_revision_plantilla %}</div>{# cierra #cuerpo-contabilizar-bloqueado #}{% endif %}
   </div>
 
   <style>
@@ -217,6 +269,13 @@
   </div>
 </div>
 
+{# [SEC-A2] json_script debe renderizarse fuera de cualquier <script> -- anidar un
+   <script type="application/json"> dentro de otro <script> rompe el parseo HTML
+   (el primer </script> que aparece cierra el bloque exterior). sugerencias_puc
+   incluye texto configurable por el tenant (concepto de ReglaContable, nombre de
+   CuentaContable) que con |safe permitia romper el bloque de script padre e
+   inyectar JS arbitrario. #}
+{{ sugerencias_puc|json_script:"sugerencias-puc-data" }}
 <script>
 (function () {
   'use strict';
@@ -224,25 +283,33 @@
   const MODELO = '{{ modelo }}';
   const DOC_ID = {{ documento_id }};
   const DOC_NUM = '{{ numero }}';
-  const DOC_SUBTOTAL = '{{ subtotal|unlocalize }}';
-  const DOC_IMPUESTOS = '{{ impuestos|unlocalize }}';
-  const DOC_TOTAL = '{{ total|unlocalize }}';
+  const DOC_SUBTOTAL   = '{{ subtotal|unlocalize }}';
+  const DOC_IMPUESTOS  = '{{ impuestos|unlocalize }}';
+  const DOC_TOTAL      = '{{ total|unlocalize }}';
+  const DOC_IVA        = '{{ iva_generado|unlocalize|default:"0" }}';
+  const DOC_RETEFUENTE = '{{ retefuente|unlocalize|default:"0" }}';
+  const DOC_RETEICA    = '{{ reteica|unlocalize|default:"0" }}';
+  const DOC_RETEIVA    = '{{ reteiva|unlocalize|default:"0" }}';
   const DOC_TERCERO_NIT = '{{ tercero_nit }}';
   const DOC_TERCERO_NOMBRE = '{{ tercero_nombre|escapejs }}';
+
+  // Objeto montos granular para PlantillaApplicator.calcularMonto()
+  const DOC_MONTOS = {
+    subtotal:        parseFloat(DOC_SUBTOTAL)   || 0,
+    impuestos:       parseFloat(DOC_IMPUESTOS)  || 0,
+    total:           parseFloat(DOC_TOTAL)      || 0,
+    iva_generado:    parseFloat(DOC_IVA)        || 0,
+    iva_descontable: 0,
+    retefuente:      parseFloat(DOC_RETEFUENTE) || 0,
+    reteica:         parseFloat(DOC_RETEICA)    || 0,
+    reteiva:         parseFloat(DOC_RETEIVA)    || 0,
+  };
   const API_CUENTAS = '/api/v1/contabilidad/cuentas-contables/';
   const API_CONTABILIZAR = '/api/v1/contabilidad/pendientes/contabilizar-manual/';
   const API_ASISTENTE_IA = '/api/v1/contabilidad/pendientes/asistente-ia/';
-  const API_PLANTILLAS = '/api/v1/contabilidad/plantillas-contables/';
   const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
-  const SUGERENCIAS = {{ sugerencias_puc|safe|default:'[]' }};
-
-  // Mapeo de app_label a tipo_transaccion para cargar plantillas
-  const APP_TIPO_MAP = {
-    facturas: 'VENTA',
-    gastos: 'COMPRA',
-    empleados: 'NOMINA',
-    inventario: 'GASTO'
-  };
+  // [SEC-A2] Leido desde el <script type="application/json"> renderizado por json_script arriba.
+  const SUGERENCIAS = JSON.parse(document.getElementById('sugerencias-puc-data').textContent) || [];
 
   const offcanvasEl = document.getElementById('offcanvas-pendiente-contabilizar');
   const selectComprobante = document.getElementById('asiento-tipo-comprobante');
@@ -269,87 +336,185 @@
     }
   }
 
-  // ---- CARGA DE PLANTILLAS CONTABLES (Fase 3) ----
-  const selectPlantilla = document.getElementById('selector-plantilla');
+  // ---- CARGA Y APLICACION DE PLANTILLAS (Fase 3 — v3.17.1) ----
+  // Auto-suficiente: no requiere version especifica de PlantillaApplicator.
+  // Usa PA como optimizacion cuando esta disponible con la API completa.
+  const selectPlantilla     = document.getElementById('selector-plantilla');
   const btnAplicarPlantilla = document.getElementById('btn-aplicar-plantilla');
+  const previewPlantilla    = document.getElementById('preview-plantilla');
+  const previewNombre       = document.getElementById('preview-plantilla-nombre');
+  const previewTabla        = document.getElementById('preview-plantilla-tabla');
+  const API_PLANTILLAS_URL  = '/api/v1/contabilidad/plantillas-contables/';
+  const _APP_TIPO_MAP = { facturas:'VENTA', gastos:'COMPRA', empleados:'NOMINA', inventario:'GASTO' };
+  const _ORIGEN_LABELS = {
+    SALDO_BASE:'Subtotal', TOTAL_DOCUMENTO:'Total', IVA_GENERADO:'IVA',
+    IVA_DESCONTABLE:'IVA Desc.', RETEFUENTE:'Retefuente', RETEICA:'Reteica', RETEIVA:'Reteiva',
+  };
 
-  // Cargar plantillas disponibles para el tipo de transaccion
-  async function cargarPlantillas() {
-    const tipoTransaccion = APP_TIPO_MAP[APP_LABEL] || '';
-    if (!tipoTransaccion) {
-      selectPlantilla.innerHTML = '<option value="" selected>-- Sin plantilla disponible --</option>';
+  // Cache local de lineas por uuid
+  const _lineasCache = {};
+
+  // Fetch del detalle de plantilla (con lineas completas) — siempre directo, no depende de PA
+  async function _fetchLineas(uuid) {
+    if (!uuid) return [];
+    if (_lineasCache[uuid]) return _lineasCache[uuid];
+    const jwt = window.jwtAuth?.getAccessToken?.() || '';
+    try {
+      const r = await fetch(API_PLANTILLAS_URL + uuid + '/', {
+        headers: Object.assign({ 'Accept': 'application/json' }, jwt ? { 'Authorization': 'Bearer ' + jwt } : {}),
+        credentials: 'same-origin',
+      });
+      if (!r.ok) return [];
+      const data = await r.json();
+      const lineas = data.lineas || [];
+      _lineasCache[uuid] = lineas;
+      return lineas;
+    } catch (e) {
+      console.error('[contabilizar] _fetchLineas error:', e);
+      return [];
+    }
+  }
+
+  // Calcular monto segun origen_valor usando DOC_MONTOS granular
+  function _calcularMonto(origenValor, pct) {
+    const m = DOC_MONTOS;
+    let base = 0;
+    switch (origenValor) {
+      case 'SALDO_BASE':      base = m.subtotal;        break;
+      case 'TOTAL_DOCUMENTO': base = m.total;           break;
+      case 'IVA_GENERADO':    base = m.iva_generado    || m.impuestos || 0; break;
+      case 'IVA_DESCONTABLE': base = m.iva_descontable || m.impuestos || 0; break;
+      case 'RETEFUENTE':      base = m.retefuente      || m.impuestos || 0; break;
+      case 'RETEICA':         base = m.reteica         || m.impuestos || 0; break;
+      case 'RETEIVA':         base = m.reteiva         || m.impuestos || 0; break;
+      default: base = 0;
+    }
+    return Math.round(base * ((parseFloat(pct) || 100) / 100) * 100) / 100;
+  }
+
+  // Preview HTML (usa PA.previsualizarLineas si esta disponible con esa funcion)
+  function _renderPreview(lineas) {
+    const PA = window.PlantillaApplicator;
+    if (PA && typeof PA.previsualizarLineas === 'function') {
+      return PA.previsualizarLineas(lineas, DOC_MONTOS);
+    }
+    if (!lineas.length) return '<p class="text-muted small mb-0">Sin lineas configuradas.</p>';
+    const filas = lineas.map(function (l) {
+      const monto = _calcularMonto(l.origen_valor, l.porcentaje_aplicar || 100);
+      const cls = l.naturaleza === 'DEBE' ? 'bg-danger' : 'bg-success';
+      return '<tr>' +
+        '<td class="py-1"><span class="badge ' + cls + '">' + (l.naturaleza || '') + '</span></td>' +
+        '<td class="py-1 font-monospace small">' + (l.cuenta_codigo || '-') + '</td>' +
+        '<td class="py-1 small">' + (l.cuenta_nombre || '') + '</td>' +
+        '<td class="py-1 small text-muted">' + (_ORIGEN_LABELS[l.origen_valor] || l.origen_valor) + '</td>' +
+        '<td class="py-1 text-end small">$ ' + monto.toLocaleString('es-CO', {minimumFractionDigits:2}) + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<table class="table table-xs table-bordered mb-0" style="font-size:.78rem">' +
+      '<thead class="table-light"><tr><th>Tipo</th><th>Cuenta</th><th>Nombre</th><th>Origen</th><th class="text-end">Monto</th></tr></thead>' +
+      '<tbody>' + filas + '</tbody></table>';
+  }
+
+  // Cargar lista de plantillas activas (solo nombre/uuid desde el list endpoint)
+  async function cargarPlantillas(autoSelectUuid) {
+    selectPlantilla.innerHTML = '<option value="">-- Cargando... --</option>';
+    btnAplicarPlantilla.disabled = true;
+    const tipoTx = _APP_TIPO_MAP[APP_LABEL] || '';
+    if (!tipoTx) {
+      selectPlantilla.innerHTML = '<option value="">-- Sin tipo de plantilla para este modulo --</option>';
       return;
     }
     const jwt = window.jwtAuth?.getAccessToken?.() || '';
     try {
-      const res = await fetch(`${API_PLANTILLAS}?tipo_transaccion=${tipoTransaccion}&activo=true&page_size=100`, {
-        headers: jwt ? { 'Authorization': `Bearer ${jwt}` } : {},
+      const r = await fetch(API_PLANTILLAS_URL + '?tipo_transaccion=' + tipoTx + '&activo=true&page_size=100', {
+        headers: Object.assign({ 'Accept': 'application/json' }, jwt ? { 'Authorization': 'Bearer ' + jwt } : {}),
         credentials: 'same-origin',
       });
-      const data = await res.json();
+      const data = r.ok ? await r.json() : { results: [] };
       const plantillas = data.results || [];
-      selectPlantilla.innerHTML = '<option value="" selected>-- Sin plantilla --</option>' +
-        plantillas.map(p => `<option value="${p.uuid}" data-lineas='${JSON.stringify(p.lineas || [])}'>${p.nombre || p.tipo_transaccion}</option>`).join('');
-      btnAplicarPlantilla.disabled = !plantillas.length;
+      if (!plantillas.length) {
+        selectPlantilla.innerHTML = '<option value="">-- Sin plantilla activa para ' + tipoTx + ' --</option>';
+        return;
+      }
+      selectPlantilla.innerHTML = '<option value="" selected>-- Seleccionar plantilla --</option>' +
+        plantillas.map(function (p) {
+          const sel = (autoSelectUuid && p.uuid === autoSelectUuid) ? ' selected' : '';
+          return '<option value="' + p.uuid + '"' + sel + '>' +
+            (p.nombre || p.tipo_transaccion) + ' (' + (p.lineas_count || 0) + ' lineas)</option>';
+        }).join('');
+      const badge = document.getElementById('plantillas-count-badge');
+      if (badge) { badge.textContent = plantillas.length + ' plantilla(s)'; badge.style.removeProperty('display'); }
+      if (autoSelectUuid && selectPlantilla.value === autoSelectUuid) {
+        await _actualizarPreviewYBoton(autoSelectUuid);
+      }
     } catch (e) {
-      console.error('[plantillas] error cargando:', e);
+      console.error('[contabilizar] cargarPlantillas error:', e);
+      selectPlantilla.innerHTML = '<option value="">-- Error al cargar plantillas --</option>';
     }
   }
 
-  // Al abrir offcanvas: cargar plantillas
+  // Actualizar preview y estado del boton al seleccionar una plantilla
+  async function _actualizarPreviewYBoton(uuid) {
+    if (!uuid) {
+      btnAplicarPlantilla.disabled = true;
+      if (previewPlantilla) previewPlantilla.style.display = 'none';
+      return;
+    }
+    btnAplicarPlantilla.disabled = true;
+    btnAplicarPlantilla.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando...';
+    const lineas = await _fetchLineas(uuid);
+    if (!lineas.length) {
+      btnAplicarPlantilla.disabled = true;
+      btnAplicarPlantilla.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Sin lineas';
+      if (previewPlantilla) previewPlantilla.style.display = 'none';
+    } else {
+      btnAplicarPlantilla.disabled = false;
+      btnAplicarPlantilla.innerHTML = '<i class="bi bi-lightning-charge me-1"></i>Aplicar Plantilla';
+      if (previewTabla)    previewTabla.innerHTML = _renderPreview(lineas);
+      if (previewNombre) {
+        const opt = selectPlantilla.options[selectPlantilla.selectedIndex];
+        previewNombre.textContent = opt ? opt.textContent : '';
+      }
+      if (previewPlantilla) previewPlantilla.style.display = '';
+    }
+  }
+
+  selectPlantilla.addEventListener('change', function () { _actualizarPreviewYBoton(this.value); });
   if (offcanvasEl) {
-    offcanvasEl.addEventListener('shown.bs.offcanvas', cargarPlantillas, { once: false });
+    offcanvasEl.addEventListener('shown.bs.offcanvas', function () { cargarPlantillas(); }, { once: false });
   }
   cargarPlantillas();
 
-  // Aplicar plantilla seleccionada
-  btnAplicarPlantilla.addEventListener('click', async () => {
+  // Aplicar plantilla: limpia tabla y llena con lineas calculadas
+  btnAplicarPlantilla.addEventListener('click', async function () {
     const uuid = selectPlantilla.value;
-    if (!uuid) return;
-    const opt = selectPlantilla.options[selectPlantilla.selectedIndex];
-    const lineas = opt.dataset.lineas ? JSON.parse(opt.dataset.lineas) : [];
-    if (!lineas.length) { alert('La plantilla no tiene lineas configuradas.'); return; }
-
-    // Limpiar tabla actual
-    lineasBody.innerHTML = '';
-
-    // Procesar cada línea de la plantilla
-    lineas.forEach(linea => {
-      let monto = 0;
-      switch (linea.origen_valor) {
-        case 'SALDO_BASE':
-          monto = parseFloat(DOC_SUBTOTAL) * (linea.porcentaje_aplicar / 100);
-          break;
-        case 'TOTAL_DOCUMENTO':
-          monto = parseFloat(DOC_TOTAL) * (linea.porcentaje_aplicar / 100);
-          break;
-        case 'IVA_GENERADO':
-        case 'IVA_DESCONTABLE':
-        case 'RETEFUENTE':
-        case 'RETEICA':
-        case 'RETEIVA':
-          // Todos los impuestos están en DOC_IMPUESTOS (suma total)
-          // Asume que hay un desglose o extraemos de la suma
-          monto = parseFloat(DOC_IMPUESTOS) * (linea.porcentaje_aplicar / 100);
-          break;
-        default:
-          monto = 0;
-      }
-
-      monto = Math.round(monto * 100) / 100; // Redondear a 2 decimales
-
-      // Agregar fila con monto calculado
-      agregarLinea({
-        codigo: linea.cuenta_codigo || '',
-        nombre: linea.cuenta_nombre || '',
-        debe: linea.naturaleza === 'DEBE' ? monto : 0,
-        haber: linea.naturaleza === 'HABER' ? monto : 0,
-        descripcion: linea.descripcion || `${linea.origen_valor} - ${linea.cuenta_nombre}`,
+    if (!uuid) { if (window.notyf) window.notyf.error('Selecciona una plantilla primero.'); return; }
+    const origHtml = btnAplicarPlantilla.innerHTML;
+    btnAplicarPlantilla.disabled = true;
+    btnAplicarPlantilla.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Aplicando...';
+    try {
+      const lineas = await _fetchLineas(uuid);
+      if (!lineas.length) { if (window.notyf) window.notyf.error('La plantilla no tiene lineas configuradas.'); return; }
+      lineasBody.innerHTML = '';
+      lineas.forEach(function (l) {
+        const monto = _calcularMonto(l.origen_valor, l.porcentaje_aplicar || 100);
+        agregarLinea({
+          codigo:      l.cuenta_codigo || '',
+          nombre:      l.cuenta_nombre || '',
+          debe:        l.naturaleza === 'DEBE'  ? monto : 0,
+          haber:       l.naturaleza === 'HABER' ? monto : 0,
+          descripcion: l.descripcion || (_ORIGEN_LABELS[l.origen_valor] || l.origen_valor),
+        });
       });
-    });
-
-    recalcularTotales();
-    if (window.notyf) window.notyf.success('Plantilla aplicada. Revisa cuadratura antes de generar.');
+      recalcularTotales();
+      if (window.notyf) window.notyf.success('Plantilla aplicada. Revisa cuadratura antes de generar.');
+    } catch (e) {
+      console.error('[contabilizar] aplicar plantilla error:', e);
+      if (window.notyf) window.notyf.error('Error al aplicar la plantilla.');
+    } finally {
+      btnAplicarPlantilla.disabled = false;
+      btnAplicarPlantilla.innerHTML = origHtml;
+    }
   });
   // ---- FIN PLANTILLAS ----
 
@@ -865,5 +1030,49 @@
     feedback.textContent = msg;
     feedback.classList.remove('d-none');
   }
+
+  // ── Interceptor plantilla sugerida (Motor Fase 3 v3.17.0) ──────────────
+  // Dentro del mismo IIFE para tener acceso a cargarPlantillas en el mismo scope.
+  (function initPlantillaInterceptor() {
+    const btnRevisar      = document.getElementById('btn-revisar-plantilla-sugerida');
+    const btnOmitir       = document.getElementById('btn-omitir-plantilla-sugerida');
+    const bloqueAlerta    = document.getElementById('bloque-plantilla-sugerida');
+    const cuerpoBloqueado = document.getElementById('cuerpo-contabilizar-bloqueado');
+
+    if (!btnRevisar) return;
+
+    if (btnOmitir) {
+      btnOmitir.addEventListener('click', function () {
+        if (bloqueAlerta)    bloqueAlerta.style.display = 'none';
+        if (cuerpoBloqueado) cuerpoBloqueado.style.removeProperty('display');
+      });
+    }
+
+    btnRevisar.addEventListener('click', async function () {
+      const uuid = btnRevisar.dataset.uuid;
+      if (!uuid) return;
+      btnRevisar.disabled = true;
+      btnRevisar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando editor...';
+      try {
+        if (window.PlantillaInterceptor && typeof window.PlantillaInterceptor.abrirEditorPlantilla === 'function') {
+          await window.PlantillaInterceptor.abrirEditorPlantilla(uuid, async function (activatedUuid) {
+            if (bloqueAlerta)    bloqueAlerta.style.display = 'none';
+            if (cuerpoBloqueado) cuerpoBloqueado.style.removeProperty('display');
+            if (window.notyf)    window.notyf.success('Plantilla activada. Ahora puede aplicarla y generar el asiento.');
+            await cargarPlantillas(activatedUuid || uuid);
+          });
+        } else {
+          window.open(API_PLANTILLAS_URL + uuid + '/render-offcanvas/editar/', '_blank');
+        }
+      } catch (e) {
+        console.error('[interceptor]', e);
+        if (window.notyf) window.notyf.error('No se pudo abrir el editor de plantilla.');
+      } finally {
+        btnRevisar.disabled = false;
+        btnRevisar.innerHTML = '<i class="bi bi-pencil-square me-1"></i>Revisar y Activar Plantilla';
+      }
+    });
+  })();
+
 })();
 </script>

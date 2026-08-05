@@ -297,7 +297,7 @@ Todas las apps tenant DEBEN importar permisos desde este modulo centralizado.
 
 1. **Módulo Privados (`apps/tenant/nombre_app`):**
    - **Autorización Obligatoria**: Antes de realizar cualquier modificación, refactorización o creación de código en este módulo, se DEBE solicitar autorización y aprobación explícita al USUARIO.
-   - **Lectura Previa SSoT**: Es OBLIGATORIO leer el archivo `AUDITORIA_FLUJO_COMPLETO.md` (o `AUDITORIA_INVENTARIO.md` si existe) antes de proponer cambios. Toda modificación debe estar alineada con la arquitectura allí documentada.
+   - **Lectura Previa SSoT**: Es OBLIGATORIO leer el documento de auditoría `.agent/` de la app (el nombre exacto varía por app — ver la tabla en `documentacion/arquitectura_general.md` §10.2, DOC-M1) antes de proponer cambios. Toda modificación debe estar alineada con la arquitectura allí documentada.
 
 ## [BRIDGE] 17. Aislamiento de Esquema Publico via Core Membership Bridge
 
@@ -628,7 +628,7 @@ Con esta refactorización:
 1. **Extractores** en `apps/tenant/contabilidad/integracion/extractores/` son los ÚNICOS lectores de apps origen
 2. **Apps origen** NO saben que existen — zero coupling
 3. **Nuevo usuario/flujo:** Usuario contabiliza documento manual en offcanvas de Contabilidad (not en app origen)
-4. **Documentación:** Ver `REFACTORIZAR_DESACOPLAMIENTO_CONTABLE_FRAMEWORK.md` (checklist reutilizable para futuras refactorizaciones)
+4. **Documentación:** el checklist de esta refactorización se aplicó ad-hoc en su momento y no quedó formalizado en un documento aparte (referencia previa a `REFACTORIZAR_DESACOPLAMIENTO_CONTABLE_FRAMEWORK.md` retirada en Fase 9 del plan de correcciones — el archivo nunca existió en el repositorio, ver DOC-A4)
 
 #### 18.8.5. Validación
 
@@ -918,7 +918,7 @@ grep -rn "parseInt.*formData\|parseInteger.*formData" apps/tenant/*/static/*/js/
 - **Detener:** `make down` | **Logs:** `make logs` | **Shell:** `make shell`
 - **Directo:** `docker compose up --build`
 - **REGLA CRITICA — Healthcheck PostgreSQL:** El healthcheck del servicio `db` DEBE usar `psql -c 'SELECT 1'`, NUNCA `pg_isready`. `pg_isready` solo verifica TCP y produce falso-positivo durante la inicialización del DB. Ver `skills/workflow/docker-services.md`.
-- **REGLA CRITICA — Superusuario del sistema:** El usuario administrador del dominio público (`sintel.com/admin/`) se crea SIEMPRE y SOLO de forma manual con `python manage.py createsuperuser [--tenant <schema>]`. NUNCA se crea automáticamente al arrancar el servidor. `ensure_admin` SOLO verifica existencia — no crea usuarios. PROHIBIDO usar `ensure_admin` para crear administradores. Para la primera instalación ejecutar `createsuperuser` manualmente.
+- **REGLA CRITICA — Superusuario del sistema:** El usuario administrador del dominio público (`sintel.net.co/admin/`) se crea SIEMPRE y SOLO de forma manual con `python manage.py createsuperuser [--tenant <schema>]`. NUNCA se crea automáticamente al arrancar el servidor. `ensure_admin` SOLO verifica existencia — no crea usuarios. PROHIBIDO usar `ensure_admin` para crear administradores. Para la primera instalación ejecutar `createsuperuser` manualmente.
 
 ### Serializers — Obtener empresa_id (REGLA CRITICA)
 - **PROHIBIDO en serializers:** `self.context.get('request').user.perfil.empresa_id` — lanza `AttributeError: 'User' object has no attribute 'perfil'` cuando el user no tiene `TenantProfile` asociado. Afecta GET list/detail porque el serializer se ejecuta antes de cualquier guard de perfil.
@@ -928,14 +928,14 @@ grep -rn "parseInt.*formData\|parseInteger.*formData" apps/tenant/*/static/*/js/
 ### Onboarding de Tenants Privados (Contraseñas y Activación)
 - **REGLA ABSOLUTA — Contraseñas:** Las contraseñas de owners de tenants privados se crean SIEMPRE y SOLO por el propio usuario a través del email de activación. NUNCA de forma automática.
 - **REGLA ABSOLUTA — Flujo de activación canónico (v3.15.1):** Todo email de activación de tenant privado DEBE enviarse exclusivamente via `EmailService.send_tenant_activation_email(user, tenant)`. Esta función es el SSoT — genera el código Redis (8 chars, TTL 48h) internamente. PROHIBIDO llamar a `generate_invitation_token`, `build_activation_url`, `send_invitation_email` directamente en flujos de onboarding.
-- **Flujo único autorizado:** `crear_tenant_con_owner()` → `set_unusable_password()` → `EmailService.send_tenant_activation_email()` → email con código 8 chars → `{schema}.sintel.com/static/tenant/core/auth/activate.html` → `POST /api/v1/core/auth/activate-with-code/` → `user.set_password()`.
+- **Flujo único autorizado:** `crear_tenant_con_owner()` → `set_unusable_password()` → `EmailService.send_tenant_activation_email()` → email con código 8 chars → `{schema}.sintel.net.co/static/tenant/core/auth/activate.html` → `POST /api/v1/core/auth/activate-with-code/` → `user.set_password()`.
 - **Prohibido en onboarding:** `set_password(...)`, `make_random_password()`, `create_user_service(password=...)`. Solo `set_unusable_password()`.
 - **`ensure_admin`** SOLO verifica si existe un superusuario activo — NO crea usuarios. Si no existe ninguno, muestra alerta y ordena ejecutar `createsuperuser`. Nunca se llama automáticamente al arrancar el servidor.
 
 ### Nomenclatura y Abstracción de Configuraciones (v3.16.0 — INMUTABLE) → Ver §29 para reglas detalladas
-- **REGLA CRITICA — Sin nombres propios de tenants en código:** Cualquier script, management command, configuración de infraestructura o docstring en `apps/public/` DEBE usar placeholders abstractos (`{schema_name}`, `{schema}.sintel.com`, `<schema_name>`) en lugar de nombres propios de tenants específicos (`cliente`, `home`, `putito`, `tupapi`, etc.).
+- **REGLA CRITICA — Sin nombres propios de tenants en código:** Cualquier script, management command, configuración de infraestructura o docstring en `apps/public/` DEBE usar placeholders abstractos (`{schema_name}`, `{schema}.sintel.net.co`, `<schema_name>`) en lugar de nombres propios de tenants específicos (`cliente`, `home`, `putito`, `tupapi`, etc.).
 - **REGLA CRITICA — Datos dinámicos via ORM:** Los scripts de aprovisionamiento (DNS, extra_hosts, health checks) deben obtener la lista de tenants activos consultando `Client.objects.exclude(schema_name="public").filter(is_active=True)`, nunca una lista hardcodeada.
-- **EXCEPCIÓN DOCUMENTADA — Dominio público:** `schema_name="public"` y `sintel.com` son la excepción explícita y documentada. Su DNS se gestiona independientemente y nunca debe ser modificado por comandos de aprovisionamiento de tenants privados. La excepción está marcada con comentario en `ensure_tenant_dns.py`.
+- **EXCEPCIÓN DOCUMENTADA — Dominio público:** `schema_name="public"` y `sintel.net.co` son la excepción explícita y documentada. Su DNS se gestiona independientemente y nunca debe ser modificado por comandos de aprovisionamiento de tenants privados. La excepción está marcada con comentario en `ensure_tenant_dns.py`.
 - **REGLA CRITICA — Filtro console/users/:** El endpoint `UsersDataTableView` SOLO muestra `Q(is_staff=True, is_superuser=True) OR Q(TenantMembership.is_primary_admin=True)`. PROHIBIDO cambiar este filtro sin aprobación manual — exponer empleados de tenants en el panel admin es una brecha de privacidad.
 - **REGLA CRITICA — is_staff para owners:** Los owners de tenants privados tienen `is_staff=False, is_superuser=False`. PROHIBIDO asignar `is_staff=True` a un owner de tenant en ningún flujo de onboarding o management command. Solo los admins del sistema tienen `is_staff=True + is_superuser=True`.
 
@@ -1231,7 +1231,7 @@ def test_multitenant_isolation_{app}(client, tenant1, tenant2):
 
     # --- NIVEL 1: Aislamiento en listado ---
     client.force_login(user1)
-    resp = client.get("/api/v1/{app}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.com")
+    resp = client.get("/api/v1/{app}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_200_OK
     ids_visibles = [item['{campo_identificador}'] for item in resp.json().get('results', [])]
     assert '{valor_obj1}' in ids_visibles      # propio tenant: VISIBLE
@@ -1240,7 +1240,7 @@ def test_multitenant_isolation_{app}(client, tenant1, tenant2):
     # --- NIVEL 2: Prevencion de IDOR (acceso directo por UUID) ---
     resp = client.get(
         f"/api/v1/{app}/{obj2.uuid}/",
-        HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
     )
     assert resp.status_code == status.HTTP_404_NOT_FOUND  # UUID de otro tenant: 404
 
@@ -1253,7 +1253,7 @@ def test_multitenant_isolation_{app}(client, tenant1, tenant2):
         "/api/v1/{app}/",
         data=payload,
         content_type="application/json",
-        HTTP_HOST=f"{tenant1.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
     )
     assert resp.status_code in (
         status.HTTP_400_BAD_REQUEST,
@@ -1282,7 +1282,7 @@ def _make_test_tenant(schema: str, nombre: str, nit: str):
             tenant_obj = Client.objects.create(schema_name=schema, nombre=nombre)
             Domain.objects.create(
                 tenant=tenant_obj,
-                domain=f'{schema}.sintel.com',  # dominio de test
+                domain=f'{schema}.sintel.net.co',  # dominio de test
                 is_primary=True,
             )
     with connection.cursor() as cur:
@@ -1309,7 +1309,7 @@ def tenant2(db):
 | Elemento | Patron | Ejemplo |
 |---|---|---|
 | schema del tenant de test | `tenant1`, `tenant2` | No usar `home`, `cliente`, etc. |
-| dominio del tenant de test | `{schema}.sintel.com` | `tenant1.sintel.com` |
+| dominio del tenant de test | `{schema}.sintel.net.co` | `tenant1.sintel.net.co` |
 | email del usuario de test | `u{n}@t{n}.local` | `u1@t1.local` |
 | username | `user{n}_t{n}` | `user1_t1` |
 
@@ -1635,9 +1635,9 @@ if schema_filter:  # argumento CLI opcional
 ```python
 # PROHIBIDO
 tenant = Client.objects.get(schema_name='home')
-domain = Domain.objects.get(domain='cliente.sintel.com')
-host = "home.sintel.com"
-url = "http://tupapi.sintel.com/api/"
+domain = Domain.objects.get(domain='cliente.sintel.net.co')
+host = "home.sintel.net.co"
+url = "http://tupapi.sintel.net.co/api/"
 ```
 
 **[OBLIGATORIO]** — Resolver dinamicamente desde el ORM o variables de entorno:
@@ -1650,7 +1650,7 @@ host = domain.domain  # resuelto en runtime
 url = f"{protocol}://{domain.domain}/api/"
 ```
 
-**[EXCEPCION DOCUMENTADA]** — `schema_name='public'` y el dominio raiz `sintel.com` son la unica excepcion permitida. Son el dominio de la plataforma, no un tenant privado. Su DNS se gestiona independientemente. Esta excepcion DEBE estar marcada con comentario explicito en el codigo.
+**[EXCEPCION DOCUMENTADA]** — `schema_name='public'` y el dominio raiz `sintel.net.co` son la unica excepcion permitida. Son el dominio de la plataforma, no un tenant privado. Su DNS se gestiona independientemente. Esta excepcion DEBE estar marcada con comentario explicito en el codigo.
 
 ---
 
@@ -1661,7 +1661,7 @@ url = f"{protocol}://{domain.domain}/api/"
 ```python
 # PROHIBIDO
 help = "Ejecuta el proceso. Ej: --schema cliente"
-print("Accede via: http://home.sintel.com/")
+print("Accede via: http://home.sintel.net.co/")
 print("client = Client.objects.get(schema_name='putito')")
 ```
 
@@ -1670,7 +1670,7 @@ print("client = Client.objects.get(schema_name='putito')")
 ```python
 # CORRECTO
 help = "Ejecuta el proceso. Ej: --schema {schema_name}"
-print("Accede via: http://{schema}.sintel.com/")
+print("Accede via: http://{schema}.sintel.net.co/")
 print("client = Client.objects.get(schema_name='<schema_name>')")
 ```
 
@@ -1684,8 +1684,8 @@ print("client = Client.objects.get(schema_name='<schema_name>')")
 # PROHIBIDO
 tenant = Client.objects.filter(schema_name='home').first()
 tenant = Client(schema_name='home', nombre='Home Test Tenant', ...)
-domain = 'home.sintel.com'
-client.defaults["HTTP_HOST"] = "cliente.sintel.com"
+domain = 'home.sintel.net.co'
+client.defaults["HTTP_HOST"] = "cliente.sintel.net.co"
 ```
 
 **[OBLIGATORIO]** — Nombres claramente transaccionales que no colisionen con produccion:
@@ -1702,8 +1702,8 @@ client.defaults["HTTP_HOST"] = domain  # o f"{self.tenant.schema_name}.sintel.lo
 | Elemento | Patron correcto | Patron incorrecto |
 |---|---|---|
 | schema_name | `test_{app}_{descripcion}_01` | `home`, `cliente`, `empresa` |
-| domain | `test-{desc}-01.sintel.local` | `home.sintel.com`, `cliente.sintel.com` |
-| HTTP_HOST | `f"{self.tenant.schema_name}.sintel.local"` | `"home.sintel.com"` |
+| domain | `test-{desc}-01.sintel.local` | `home.sintel.net.co`, `cliente.sintel.net.co` |
+| HTTP_HOST | `f"{self.tenant.schema_name}.sintel.local"` | `"home.sintel.net.co"` |
 | nombre Tenant | `"Test {App} Tenant"` | `"Home Test Tenant"` |
 
 ---
@@ -1761,8 +1761,8 @@ for tenant in tenants:
 |---|---|---|
 | Iterar tenants | `for s in ['home','cliente']` | `Client.objects.exclude(schema_name='public')` |
 | Obtener un tenant | `Client.objects.get(schema_name='home')` | `Client.objects.filter(...).first()` con arg CLI |
-| URL de tenant | `"http://home.sintel.com"` | `f"http://{domain.domain}"` donde `domain` viene del ORM |
-| HTTP_HOST en test | `"home.sintel.com"` | `f"{self.tenant.schema_name}.sintel.local"` |
+| URL de tenant | `"http://home.sintel.net.co"` | `f"http://{domain.domain}"` donde `domain` viene del ORM |
+| HTTP_HOST en test | `"home.sintel.net.co"` | `f"{self.tenant.schema_name}.sintel.local"` |
 | Schema en fixture | `schema_name='cliente'` | `schema_name='test_feature_01'` |
 | Ejemplo en help | `ej: --schema putito` | `ej: --schema {schema_name}` |
 | DNS management command | lista `['home','cliente']` | `Client.objects.exclude(schema_name='public')` |

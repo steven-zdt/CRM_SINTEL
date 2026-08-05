@@ -283,10 +283,10 @@ Patron Two-Phase DDL/DML (v3.11.0):
 
 **`send_tenant_activation_email_sync` — SSoT de URL de activacion (v3.15.0)**
 - NO lee `ACTIVATION_BASE_URL` — construye la URL directamente desde el `schema_name` del tenant
-- **URL generada:** `https://{schema}.sintel.com/static/tenant/core/auth/activate.html?token={signed_token_48h}`
+- **URL generada:** `https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html?token={signed_token_48h}`
 - La pagina `activate.html` del TENANT PRIVADO valida el token via `GET /api/v1/core/auth/activate/?token=...`, solicita contrasena y redirige al workspace
 - **Garantia para todos los tenants:** la URL siempre apunta al subdominio del tenant especifico — nueva o futura — sin configuracion adicional
-- **Prohibido usar**: IP privada, `sintel.com/activate/` (dominio publico), ni `home.sintel.com` para tenants de otros clientes
+- **Prohibido usar**: IP privada, `sintel.net.co/activate/` (dominio publico), ni `home.sintel.net.co` para tenants de otros clientes
 
 ---
 
@@ -349,7 +349,7 @@ console/
 - `domain_url` — construido en backend: `f"{SITE_PROTOCOL}://{schema_name}.{TENANT_DOMAIN_BASE}"` — nunca calculado en JS
 
 **`/console/users/` — columna Tenants asignados (v3.14.0):**
-- Muestra la URL del dominio del tenant como link clickeable: `https://cliente.sintel.com`
+- Muestra la URL del dominio del tenant como link clickeable: `https://cliente.sintel.net.co`
 - Ícono ★ para el administrador primario
 - Badge ambar "Sin tenant" si el usuario no tiene membresías
 - Botón **"Asignar"** abre modal con lista de tenants huerfanos + buscador
@@ -408,7 +408,7 @@ core/
 |---|---|
 | `_send_email(subject, recipient_list, template_name, context)` | Renderiza `{template_name}.{html,txt}` desde `public/core/emails/` y envía |
 | **`send_tenant_activation_email(user, tenant)`** | **v3.15.0 SSoT** — unica funcion autorizada para emails de activacion. Despacha `send_tenant_activation_email_task` que genera token firmado + URL tenant-especifica internamente |
-| **`send_tenant_activation_email_sync(user, tenant)`** | **v3.15.0** — sincrono: genera `generate_invitation_token(ttl=48h)` → URL `https://{schema}.sintel.com/static/tenant/core/auth/activate.html?token=...` → envia email |
+| **`send_tenant_activation_email_sync(user, tenant)`** | **v3.15.0** — sincrono: genera `generate_invitation_token(ttl=48h)` → URL `https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html?token=...` → envia email |
 | `send_invitation_code_email(user, tenant, code)` | Alias legacy → delega a `send_tenant_activation_email` |
 | `send_invitation_email(user, tenant, activation_url)` | *Legacy* — despacha tarea Celery con URL de activacion |
 | `send_password_reset_email(user, tenant, reset_url)` | Usa template `password_reset` |
@@ -650,12 +650,12 @@ Admin crea tenant (cualquier ruta: consola, onboard, manual)
 EmailService.send_tenant_activation_email(user, tenant)   ← SSoT — unica funcion autorizada
   → send_tenant_activation_email_task.delay(user.pk, tenant.pk)
        → generate_invitation_token(user_id, tenant_id, ttl_hours=48)  ← token firmado
-       → activate_url = f"https://{schema}.sintel.com/static/tenant/core/auth/activate.html?token={token}"
+       → activate_url = f"https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html?token={token}"
        → Email: Boton "Activar mi cuenta en {tenant_name}" → activate_url
   ↓
 Owner recibe email → clic en boton "Activar mi cuenta en {tenant}"
   ↓
-https://{schema}.sintel.com/static/tenant/core/auth/activate.html?token=eyJ...
+https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html?token=eyJ...
   ↓
 activate.html:
   → GET /api/v1/core/auth/activate/?token=eyJ... (validar token, mostrar email del owner)
@@ -727,13 +727,13 @@ delete_user_service(user_id, cascade=True)
 | Tipo | is_staff | is_superuser | TenantMembership | Accede a |
 |---|---|---|---|---|
 | **SYSTEM_ADMIN** | True | True | Opcional (puede tener para workspace propio) | `/admin/` + `/console/` + cualquier workspace |
-| **TENANT_OWNER** | False | False | `is_primary_admin=True` | Solo su workspace `{schema}.sintel.com` |
+| **TENANT_OWNER** | False | False | `is_primary_admin=True` | Solo su workspace `{schema}.sintel.net.co` |
 | **TENANT_MEMBER** | False | False | `rol=OPERADOR/VISOR` | Solo su workspace (no en `/console/users/`) |
 
 ### 8.2 Regla del Superusuario (AGENTS.md)
 
 ```
-REGLA CRITICA: El usuario administrador de sintel.com/admin/ se crea SIEMPRE
+REGLA CRITICA: El usuario administrador de sintel.net.co/admin/ se crea SIEMPRE
 y SOLO de forma MANUAL con:
 
     python manage.py createsuperuser [--tenant <schema>]
@@ -766,11 +766,11 @@ Al crear un superusuario con `python manage.py createsuperuser [--tenant <schema
 
 ### 8.1 Arquitectura DNS — Windows Server 2022
 
-El servidor Windows (`192.168.2.15`) hospeda el DNS autoritativo para la zona `sintel.com`.
+El servidor Windows (`192.168.2.15`) hospeda el DNS autoritativo para la zona `sintel.net.co`.
 
 | Registro DNS | Valor | Tipo |
 |---|---|---|
-| `@` (raiz) | `192.168.2.15` | A — dominio publico `sintel.com` |
+| `@` (raiz) | `192.168.2.15` | A — dominio publico `sintel.net.co` |
 | `*` (wildcard) | `192.168.2.15` | A — todos los subdominios tenant |
 | `home` | `192.168.2.15` | A — tenant home (explicito) |
 | `cliente` | `192.168.2.15` | A — tenant cliente (explicito) |
@@ -794,27 +794,27 @@ python manage.py ensure_tenant_dns --dry-run        # Preview sin ejecutar
 
 El comando:
 1. Lee todos los tenants activos desde la BD
-2. Para cada `{schema}.sintel.com` sin A record: ejecuta `Add-DnsServerResourceRecordA` via PowerShell
+2. Para cada `{schema}.sintel.net.co` sin A record: ejecuta `Add-DnsServerResourceRecordA` via PowerShell
 3. Muestra que lineas agregar en `docker-compose.yaml extra_hosts` y reiniciar
 
 **Ejecucion:** Manual — ejecutar desde el HOST Windows al crear un nuevo tenant. Sin tarea programada.
 
 ### 8.3 Docker `extra_hosts` — Resolucion Interna
 
-Los contenedores Docker NO usan el DNS de Windows por defecto (usan `127.0.0.11` que no tiene acceso directo a la zona `sintel.com`). Se usa `extra_hosts` en el anchor `x-app-base` del `docker-compose.yaml`:
+Los contenedores Docker NO usan el DNS de Windows por defecto (usan `127.0.0.11` que no tiene acceso directo a la zona `sintel.net.co`). Se usa `extra_hosts` en el anchor `x-app-base` del `docker-compose.yaml`:
 
 ```yaml
 x-app-base: &app-base
   extra_hosts:
-    - "sintel.com:192.168.2.15"
-    - "home.sintel.com:192.168.2.15"
-    - "{schema}.sintel.com:192.168.2.15"   # agregar por cada nuevo tenant
+    - "sintel.net.co:192.168.2.15"
+    - "home.sintel.net.co:192.168.2.15"
+    - "{schema}.sintel.net.co:192.168.2.15"   # agregar por cada nuevo tenant
 ```
 
 **Al crear un nuevo tenant**, agregar manualmente la linea y reiniciar:
 ```bash
 # En docker-compose.yaml extra_hosts:
-- "nuevocliente.sintel.com:192.168.2.15"
+- "nuevocliente.sintel.net.co:192.168.2.15"
 
 # Luego:
 docker compose restart web celery
@@ -827,10 +827,10 @@ docker compose restart web celery
 | Valor | Resultado | Estado |
 |---|---|---|
 | `https://192.168.2.15` | Gmail bloquea el hipervinculo (IP privada) | **PROHIBIDO** |
-| `https://home.sintel.com` | Apunta a un tenant privado, no al dominio publico | **PROHIBIDO** |
-| `https://sintel.com` | Dominio publico raiz — Gmail muestra el hipervinculo | **CORRECTO** |
+| `https://home.sintel.net.co` | Apunta a un tenant privado, no al dominio publico | **PROHIBIDO** |
+| `https://sintel.net.co` | Dominio publico raiz — Gmail muestra el hipervinculo | **CORRECTO** |
 
-La URL de activacion para todos los tenants es siempre `https://sintel.com/activate/`. El endpoint vive en el schema `public` y valida el codigo independientemente del dominio de origen.
+La URL de activacion para todos los tenants es siempre `https://sintel.net.co/activate/`. El endpoint vive en el schema `public` y valida el codigo independientemente del dominio de origen.
 
 ---
 
@@ -867,16 +867,16 @@ Q(is_staff=True, is_superuser=True) | Q(Exists(_has_primary_admin))
 Funcion canonica unica: `EmailService.send_tenant_activation_email(user, tenant)`
 
 - Genera codigo Redis (8 chars alfanumericos, TTL 48h) internamente.
-- URL siempre apunta al tenant privado: `https://{schema}.sintel.com/static/tenant/core/auth/activate.html`
+- URL siempre apunta al tenant privado: `https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html`
 - Aplica a TODOS los flujos: onboarding, reenvio, activacion manual.
 - PROHIBIDO: usar `generate_invitation_token` + `build_activation_url` directamente en nuevos flujos.
 
 ### 9.4 Abstraccion de Nombres Propios en Infraestructura
 
 - PROHIBIDO: referencias a nombres propios de tenants (`cliente`, `home`, `putito`, etc.) en scripts, management commands, docstrings o configuraciones.
-- CORRECTO: usar `{schema_name}`, `{schema}.sintel.com`, `<schema_name>` como placeholders.
+- CORRECTO: usar `{schema_name}`, `{schema}.sintel.net.co`, `<schema_name>` como placeholders.
 - Datos de tenants: siempre via ORM `Client.objects.exclude(schema_name="public").filter(is_active=True)`.
-- EXCEPCION documentada: `schema_name="public"` / `sintel.com` — dominio raiz de la plataforma, gestionado independientemente.
+- EXCEPCION documentada: `schema_name="public"` / `sintel.net.co` — dominio raiz de la plataforma, gestionado independientemente.
 
 ### 9.5 Cobertura de Tests — Numeros Minimos
 
@@ -905,9 +905,9 @@ Ejecutar antes de cualquier merge: `python -m pytest apps/public/console/tests/ 
 | **v3.12.0** | **2026-06-01** | **SEC: Blindaje management commands — `generar_tenants_prueba` y `analizar_tenants_prueba` lanzan `CommandError` si `DEBUG=False`; imports de `settings`+`CommandError` al nivel modulo** |
 | **v3.12.0** | **2026-06-01** | **SEC: Codigo activacion alfanumerico 8 chars — `secrets.choice(_CODE_ALPHABET)` reemplaza `random.randint`; alfabeto sin ambiguos; entropia 32^8 ≈ 1.1×10¹² (Zero Collision); normaliza a upper() en validacion** |
 | **v3.12.0** | **2026-06-01** | **TEST: Smoke tests `TestPublicIndexView` — 4 tests en `apps/public/core/tests/test_public_index_view.py`; cubre anonimo, staff, miembro activo, sin membresia; DT-PUB-02 RESUELTO** |
-| **v3.13.0** | **2026-06-01** | **EMAIL: `ACTIVATION_BASE_URL=https://sintel.com` — corregido de IP privada y dominio tenant; Gmail bloqueaba hipervinculos a `192.168.x.x`** |
+| **v3.13.0** | **2026-06-01** | **EMAIL: `ACTIVATION_BASE_URL=https://sintel.net.co` — corregido de IP privada y dominio tenant; Gmail bloqueaba hipervinculos a `192.168.x.x`** |
 | **v3.13.0** | **2026-06-01** | **INFRA: DNS Windows Server — registros A individuales para todos los tenants via `ensure_tenant_dns` (ejecucion manual al crear tenant)** |
-| **v3.13.0** | **2026-06-01** | **INFRA: `docker-compose.yaml` — `extra_hosts` en anchor `x-app-base`; `sintel.com` agregado; resolucion interna de subdominios tenant sin DNS externo** |
+| **v3.13.0** | **2026-06-01** | **INFRA: `docker-compose.yaml` — `extra_hosts` en anchor `x-app-base`; `sintel.net.co` agregado; resolucion interna de subdominios tenant sin DNS externo** |
 | **v3.13.0** | **2026-06-01** | **FIX: `ensure_tenant_dns` — eliminada funcion `_update_compose_extra_hosts` que corrompía el YAML; ahora solo gestiona DNS Windows y muestra hints manuales** |
 | **v3.14.0** | **2026-06-01** | **FIX: JWT_SECRET_KEY en `.env` — eliminado `warnings.warn` por generacion automatica; `public_api_urls.py` simplificado de 105 a 35 lineas** |
 | **v3.14.0** | **2026-06-01** | **FEATURE: Password reset via codigo 8 chars — `generate_reset_code` + `validate_reset_code` en Redis (TTL 1h, clave `reset:code:{schema}:{code}`); `confirm_reset_with_code`; template email con codigo** |
@@ -918,12 +918,12 @@ Ejecutar antes de cualquier merge: `python -m pytest apps/public/console/tests/ 
 | **v3.15.0** | **2026-06-01** | **SEC: Override `createsuperuser` — crea superusuario + asocia directamente a tenant privado; `ensure_admin` convertido a solo-verificacion; eliminada creacion automatica en `entrypoint.sh`** |
 | **v3.15.0** | **2026-06-01** | **FIX: `SafeTokenRefreshView` — convierte `User.DoesNotExist` en 401 en lugar de 500 cuando el usuario del token fue eliminado** |
 | **v3.15.0** | **2026-06-01** | **FIX: `admin@home.com` desactivado y `home` tenant eliminado permanentemente (schema PostgreSQL dropeado)** |
-| **v3.15.0** | **2026-06-01** | **SSoT EMAIL: `EmailService.send_tenant_activation_email(user, tenant)` — funcion canonica para todos los flujos de activacion; genera token firmado + URL `https://{schema}.sintel.com/static/tenant/core/auth/activate.html?token=...`** |
+| **v3.15.0** | **2026-06-01** | **SSoT EMAIL: `EmailService.send_tenant_activation_email(user, tenant)` — funcion canonica para todos los flujos de activacion; genera token firmado + URL `https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html?token=...`** |
 | **v3.15.0** | **2026-06-01** | **UNIFICACION: 5 puntos de envio de email actualizados al SSoT — empresa_service, tenants/tasks, resend-invitation, send_activation_email_task, send_invitation_code_email** |
 | **v3.15.1** | **2026-06-01** | **FIX: Codigo canonico 8 chars Redis en `send_tenant_activation_email_sync`; `activate.html` tenant rediseñado con formulario email+codigo+password; endpoint `POST /api/v1/core/auth/activate-with-code/`** |
 | **v3.15.1** | **2026-06-01** | **FIX: `send_invitation_email_sync` legacy agrega alias `activate_url` en contexto para compatibilidad con template actual** |
 | **v3.15.1** | **2026-06-01** | **FIX: `perfil_tenantprofile` FK huerfano en schema `cliente` para user_id=2 eliminado via SQL calificado** |
-| **v3.16.0** | **2026-06-01** | **ABSTRACCION: 6 archivos en apps/public/ — nombres propios de tenants reemplazados por placeholders `{schema_name}`, `{schema}.sintel.com`; default hardcodeado `home.localhost:8000` → `None` dinamico** |
+| **v3.16.0** | **2026-06-01** | **ABSTRACCION: 6 archivos en apps/public/ — nombres propios de tenants reemplazados por placeholders `{schema_name}`, `{schema}.sintel.net.co`; default hardcodeado `home.localhost:8000` → `None` dinamico** |
 | **v3.16.0** | **2026-06-01** | **REGLAS: Sección §9 agregada a AUDITORIA con 5 reglas invariantes (filtro console/users, flags de usuario, SSoT email, abstraccion nombres, cobertura tests mínima)** |
 | **v3.16.0** | **2026-06-01** | **REGLAS: AGENTS.md — bloque "Nomenclatura y Abstraccion de Configuraciones" con 5 reglas CRITICAS que requieren aprobacion manual para ser modificadas** |
 | **v3.16.0** | **2026-06-01** | **TEST: 67/67 passed — corregidos 3 tests: `test_records_total` (filtro visible), `test_search_by_email` (staff user), `test_send_invitation_email_sync` (alias activate_url)** |
@@ -1017,9 +1017,9 @@ apps/tenant/core/apps.py (TenantCoreConfig.ready)
 | Template | `tenants/templates/public/activate_password.html` | v3.12.0: `maxlength=8`, `pattern=[A-Za-z0-9]{8}`, JS uppercase filter |
 | Smoke tests | `core/tests/test_public_index_view.py` | v3.12.0: 4 tests completos — anonimo, staff, miembro activo, sin membresia |
 | Email SMTP | `.env` | v3.13.0: `EMAIL_BACKEND=smtp`, `EMAIL_HOST=smtp.gmail.com`, `EMAIL_HOST_PASSWORD` App Password sin espacios |
-| Activation URL | `.env` | v3.13.0: `ACTIVATION_BASE_URL=https://sintel.com` (dominio publico raiz) |
+| Activation URL | `.env` | v3.13.0: `ACTIVATION_BASE_URL=https://sintel.net.co` (dominio publico raiz) |
 | DNS Windows | PowerShell manual | v3.13.0: A records individuales para cada tenant via `ensure_tenant_dns` (manual); tarea programada eliminada en v3.16.0 |
-| Docker hosts | `docker-compose.yaml` | v3.13.0: `extra_hosts` en `x-app-base`; incluye `sintel.com` y todos los subdominios tenant activos |
+| Docker hosts | `docker-compose.yaml` | v3.13.0: `extra_hosts` en `x-app-base`; incluye `sintel.net.co` y todos los subdominios tenant activos |
 | ensure_tenant_dns | `tenants/management/commands/ensure_tenant_dns.py` | v3.13.0: eliminada `_update_compose_extra_hosts`; solo DNS Windows + hints manuales |
 | JWT config | `.env` + `config/settings.py` | v3.14.0: `JWT_SECRET_KEY` fija en `.env`; eliminado `warnings.warn` |
 | public_api_urls.py | `config/public_api_urls.py` | v3.14.0: simplificado 105→35 lineas; eliminados logger.info, fallback routers, imports dinamicos |
@@ -1038,7 +1038,7 @@ apps/tenant/core/apps.py (TenantCoreConfig.ready)
 | home tenant eliminado | BD + DNS + docker-compose | v3.15.0: `home` tenant dropeado permanentemente; `admin@home.com` desactivado |
 | EmailService SSoT | `core/services/email_service.py` | v3.15.0: `send_tenant_activation_email(user, tenant)` — genera token + URL tenant especifica sin parametros externos |
 | Celery task SSoT | `core/tasks.py` | v3.15.0: `send_tenant_activation_email_task` — generacion interna del token |
-| Email template | `core/templates/owner_invitation.html/.txt` | v3.15.0: boton apunta a `{schema}.sintel.com/static/tenant/core/auth/activate.html?token=...` |
+| Email template | `core/templates/owner_invitation.html/.txt` | v3.15.0: boton apunta a `{schema}.sintel.net.co/static/tenant/core/auth/activate.html?token=...` |
 | empresa_service | `services/onboarding/empresa_service.py` | v3.15.0: usa `EmailService.send_tenant_activation_email` |
 | tenants/tasks | `public/tenants/tasks.py` | v3.15.0: `send_activation_email_task` delega a `EmailService.send_tenant_activation_email_sync` |
 | resend-invitation | `public/tenants/api/viewsets.py` | v3.15.0: usa `EmailService.send_tenant_activation_email` |
@@ -1048,10 +1048,10 @@ apps/tenant/core/apps.py (TenantCoreConfig.ready)
 | FK huerfano | BD PostgreSQL | v3.15.1: `DELETE FROM "cliente"."perfil_tenantprofile" WHERE user_id=2` |
 | ensure_admin help | `accounts/commands/ensure_admin.py` | v3.16.0: ejemplo `--tenant home` → `--tenant <schema_name>` + instruccion ORM dinamica |
 | createsuperuser help | `accounts/commands/createsuperuser.py` | v3.16.0: `(ej: home)` → `(ej: <schema_name>)` con instruccion ORM |
-| diagnostico_404 | `tenants/commands/diagnostico_404.py` | v3.16.0: default `home.localhost:8000` → `None` dinamico; help usa `{schema}.sintel.com` |
+| diagnostico_404 | `tenants/commands/diagnostico_404.py` | v3.16.0: default `home.localhost:8000` → `None` dinamico; help usa `{schema}.sintel.net.co` |
 | ensure_tenant_dns | `tenants/commands/ensure_tenant_dns.py` | v3.16.0: `--schema putito` → `--schema <schema_name>`; comentario excepcion dominio publico |
-| owner_activation_reset | `tenants/commands/owner_activation_reset_and_token.py` | v3.16.0: ejemplos `cliente.sintel.com` → `{schema}.sintel.com` |
-| middleware.py | `core/middleware.py` | v3.16.0: comentarios `cliente.localhost`, `tupapi.com` → `{schema}.localhost`, `{schema}.sintel.com` |
+| owner_activation_reset | `tenants/commands/owner_activation_reset_and_token.py` | v3.16.0: ejemplos `cliente.sintel.net.co` → `{schema}.sintel.net.co` |
+| middleware.py | `core/middleware.py` | v3.16.0: comentarios `cliente.localhost`, `tupapi.com` → `{schema}.localhost`, `{schema}.sintel.net.co` |
 | test_api_views | `console/tests/test_api_views.py` | v3.16.0: `make_normal_user` → `make_staff_user` en list tests; import `make_staff_user`; `test_records_total` cuenta visibles |
 | AGENTS.md | `AGENTS.md` | v3.16.0: bloque "Nomenclatura y Abstraccion" con 5 reglas CRITICAS INMUTABLES |
 | AUDITORIA | `apps/public/.agent/AUDITORIA_FLUJO_CORE_PUBLIC.md` | v3.16.0: §9 Reglas Invariantes (5 reglas con aprobacion manual requerida) |

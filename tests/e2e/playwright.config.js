@@ -7,7 +7,7 @@ module.exports = defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: process.env.E2E_BASE_URL || 'http://demo.sintel.com:8000',
+    baseURL: process.env.E2E_BASE_URL || 'http://demo.sintel.net.co:8000',
     headless: true,
     ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',

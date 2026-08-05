@@ -17,12 +17,8 @@
     const MOD = '[categorias.list]';
 
     function mostrarOffcanvasSeguro(el) {
-        if (!el || !w.bootstrap?.Offcanvas) return;
-        d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
-        d.body.classList.remove('overflow-hidden', 'modal-open');
-        var prev = bootstrap.Offcanvas.getInstance(el);
-        if (prev) prev.dispose();
-        new bootstrap.Offcanvas(el).show();
+        // FE-A5: delega al helper SSoT (core/js/common/offcanvas.helper.js).
+        return w.Sintel?.Core?.mostrarOffcanvasSeguro(el);
     }
     const GRID_ID = '#grid-categorias';
     const SEARCH_ID = '#search-categoria';

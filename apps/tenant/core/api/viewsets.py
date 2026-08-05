@@ -542,14 +542,10 @@ class CoreAuthViewSet(ViewSet):
                     user.email, tenant.schema_name, str(exc),
                 )
             
-            # Construir redirect_url (API-First)
-            # [DEBUG] En desarrollo, incluimos el puerto si es necesario
-            app_port = getattr(settings, "APP_PORT", "8000")
-            if settings.DEBUG and app_port and str(app_port) not in ("80", "443"):
-                host = request.get_host().split(":")[0]
-                redirect_url = f"http://{host}:{app_port}/dashboard/"
-            else:
-                redirect_url = "/dashboard/"
+            # Usar siempre URL relativa: Nginx termina SSL en 443 y hace proxy
+            # al contenedor web. Una URL absoluta con http://host:8000 no es
+            # accesible desde hosts externos (puerto 8000 no expuesto publicamente).
+            redirect_url = "/dashboard/"
             
             logger.info(
                 "CoreAuthViewSet.login: Login exitoso: user=%s, tenant=%s",
@@ -694,7 +690,7 @@ class CoreAuthViewSet(ViewSet):
 
             # Cuenta preexistente: el tenant ya fue vinculado, redirigir a login
             if payload.get("already_activated"):
-                login_url = f"http://{tenant.schema_name}.{getattr(settings, 'TENANT_DOMAIN_BASE', 'sintel.com')}/login/"
+                login_url = f"http://{tenant.schema_name}.{getattr(settings, 'TENANT_DOMAIN_BASE', 'sintel.net.co')}/login/"
                 logger.info(
                     "CoreAuthViewSet.consume_ott: usuario %s ya tenia cuenta activa, "
                     "tenant vinculado, redirigiendo a login",
@@ -859,16 +855,17 @@ class CoreAuthViewSet(ViewSet):
     @action(detail=False, methods=['post'], url_path='activate-with-code', url_name='activate-with-code')
     def activate_with_code(self, request):
         """
-        POST /api/v1/core/auth/activate-with-code/
+        POST /api/v1/core/auth/activate-with-code/   (tenant schema)
+        POST /api/public/v1/auth/activate-with-code/ (public schema, mismo handler)
         Body: { "email": "...", "code": "AKBT3M7Q", "password": "...", "confirm_password": "..." }
 
-        Esquema canonico v3.15.1: activacion via codigo alfanumerico de 8 chars (Redis).
-        El codigo fue enviado por email al owner del tenant. Se valida contra Redis
-        con aislamiento por tenant_id para evitar uso cross-tenant.
+        Esquema canonico v3.15.1+: activacion via codigo alfanumerico de 8 chars (Redis).
+        En schema publico (home.sintel.net.co) resuelve el tenant directamente desde el
+        payload del codigo (Redis), sin requerir que request.tenant coincida.
         """
         from apps.public.tenants.services.invitations import validate_activation_code
-        from django.contrib.auth import get_user_model
         from apps.public.tenants.models import TenantMembership
+        from django.contrib.auth import get_user_model as _get_user_model
 
         email = (request.data.get("email") or "").strip().lower()
         code = (request.data.get("code") or "").strip()
@@ -882,40 +879,50 @@ class CoreAuthViewSet(ViewSet):
         if confirm and password != confirm:
             return Response({"detail": "Las contrasenas no coinciden."}, status=status.HTTP_400_BAD_REQUEST)
 
-        tenant = getattr(request, "tenant", None)
-        if not tenant:
-            return Response({"detail": "No se pudo determinar el tenant."}, status=status.HTTP_400_BAD_REQUEST)
+        request_tenant = getattr(request, "tenant", None)
+        is_public_schema = (
+            request_tenant is None
+            or getattr(request_tenant, "schema_name", None) == "public"
+        )
 
-        # Validar codigo en Redis (uso unico, aislado por tenant_id via payload)
+        # Validar codigo en Redis (uso unico, consume el codigo al validar)
         payload = validate_activation_code(code)
         if not payload:
-            return Response({"detail": "Codigo invalido o expirado. Solicita uno nuevo."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Verificar que el codigo pertenece a este tenant
-        if payload.get("tenant_id") != tenant.id:
             return Response({"detail": "Codigo invalido o expirado. Solicita uno nuevo."}, status=status.HTTP_400_BAD_REQUEST)
 
         current_schema = connection.schema_name
         try:
             connection.set_schema_to_public()
-            User = get_user_model()
+            _User = _get_user_model()
+
+            if is_public_schema:
+                # En schema publico: resolver el tenant desde el payload del codigo
+                from apps.public.tenants.models import Client as _TenantClient
+                try:
+                    tenant = _TenantClient.objects.get(id=payload["tenant_id"])
+                except _TenantClient.DoesNotExist:
+                    return Response({"detail": "Codigo invalido o expirado. Solicita uno nuevo."}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                # En schema de tenant: verificar que el codigo pertenece a este tenant
+                if payload.get("tenant_id") != request_tenant.id:
+                    return Response({"detail": "Codigo invalido o expirado. Solicita uno nuevo."}, status=status.HTTP_400_BAD_REQUEST)
+                tenant = request_tenant
+
             try:
-                user = User.objects.get(pk=payload["user_id"], is_active=True)
-            except User.DoesNotExist:
+                user = _User.objects.get(pk=payload["user_id"], is_active=True)
+            except _User.DoesNotExist:
                 return Response({"detail": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Verificar email del formulario coincide con el usuario del payload
             if user.email.lower() != email:
                 return Response({"detail": "El email no coincide con el codigo de activacion."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Verificar membresia en este tenant
             if not TenantMembership.objects.filter(client=tenant, user=user, is_active=True).exists():
                 return Response({"detail": "El usuario no pertenece a este tenant."}, status=status.HTTP_403_FORBIDDEN)
 
             user.set_password(password)
             user.is_active = True
             user.save(update_fields=["password", "is_active"])
-            logger.info("activate_with_code: contrasena establecida para user=%s tenant=%s", user.email, tenant.schema_name)
+            logger.info("activate_with_code: contrasena establecida user=%s tenant=%s", user.email, tenant.schema_name)
         finally:
             connection.set_schema(current_schema)
 
@@ -924,6 +931,106 @@ class CoreAuthViewSet(ViewSet):
                 "detail": "Cuenta activada correctamente.",
                 "redirect_url": "/static/tenant/core/auth/login.html",
             },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['post'], url_path='resend-activation-code', url_name='resend-activation-code')
+    def resend_activation_code(self, request):
+        """
+        POST /api/v1/core/auth/resend-activation-code/   (tenant schema)
+        POST /api/public/v1/auth/resend-activation-code/ (public schema, mismo handler)
+        Body: { "email": "..." }
+
+        Regenera el codigo de activacion y lo reenvía al email del owner.
+        Solo funciona si el usuario aun no ha activado su cuenta (sin contrasena usable).
+        En schema publico (home.sintel.net.co) resuelve el tenant desde la membresia del usuario.
+        Respuesta siempre vaga para no filtrar si el email existe.
+        """
+        from apps.public.core.services.email_service import EmailService
+        from apps.public.tenants.models import TenantMembership
+        from django.contrib.auth import get_user_model as _get_user_model
+        from django.db import connection as _connection
+
+        email = (request.data.get("email") or "").strip().lower()
+        if not email:
+            return Response(
+                {"detail": "Ingresa tu email para reenviar el codigo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        request_tenant = getattr(request, "tenant", None)
+        is_public_schema = (
+            request_tenant is None
+            or getattr(request_tenant, "schema_name", None) == "public"
+        )
+
+        current_schema = _connection.schema_name
+        try:
+            _connection.set_schema_to_public()
+            _User = _get_user_model()
+            try:
+                user = _User.objects.get(email__iexact=email)
+            except _User.DoesNotExist:
+                return Response(
+                    {"detail": "Si el email esta registrado recibiras el codigo en breve."},
+                    status=status.HTTP_200_OK,
+                )
+
+            if user.has_usable_password():
+                return Response(
+                    {"detail": "Esta cuenta ya fue activada. Inicia sesion directamente."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            if is_public_schema:
+                # En schema publico: resolver tenant desde la membresia del usuario
+                membership = (
+                    TenantMembership.objects
+                    .filter(user=user, is_active=True)
+                    .select_related("client")
+                    .order_by("-id")
+                    .first()
+                )
+                if not membership:
+                    return Response(
+                        {"detail": "Si el email esta registrado recibiras el codigo en breve."},
+                        status=status.HTTP_200_OK,
+                    )
+                tenant = membership.client
+            else:
+                # En schema de tenant: verificar membresia en este tenant especifico
+                if not TenantMembership.objects.filter(
+                    client=request_tenant, user=user, is_active=True
+                ).exists():
+                    return Response(
+                        {"detail": "Si el email esta registrado recibiras el codigo en breve."},
+                        status=status.HTTP_200_OK,
+                    )
+                tenant = request_tenant
+
+            sent = EmailService.send_tenant_activation_email(user, tenant)
+            if sent:
+                logger.info(
+                    "resend_activation_code: codigo reenviado user=%s tenant=%s",
+                    user.email, tenant.schema_name,
+                )
+            else:
+                logger.warning(
+                    "resend_activation_code: email no enviado user=%s tenant=%s",
+                    user.email, tenant.schema_name,
+                )
+
+        except Exception as exc:
+            logger.error("resend_activation_code: error user=%s error=%s", email, str(exc), exc_info=True)
+            return Response(
+                {"detail": "Error al reenviar el codigo. Intenta nuevamente."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        finally:
+            _connection.set_schema(current_schema)
+
+        return Response(
+            {"detail": "Si el email esta registrado recibiras el codigo en breve."},
             status=status.HTTP_200_OK,
         )
 

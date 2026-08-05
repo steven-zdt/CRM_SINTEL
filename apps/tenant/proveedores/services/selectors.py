@@ -1,11 +1,11 @@
 """
 Selectors for Proveedores v3.5 - Zero Waste Queries.
-Incluye CuentaPorPagarSelector (sub-modulo CxP).
+Incluye CuentaPorPagarSelector (sub-modulo CxP) y RepresentanteSelector.
 """
 from decimal import Decimal
-from django.db.models import Q, Count, Sum, Case, When, IntegerField, DecimalField, F
+from django.db.models import Q, Count, Sum, Case, When, IntegerField, DecimalField, F, Prefetch
 from django.db.models.functions import Coalesce
-from ..models import Proveedor, CuentasPagar
+from ..models import Proveedor, CuentasPagar, Representante
 
 LIST_FIELDS = (
     "id",
@@ -33,6 +33,36 @@ LIST_FIELDS = (
     "departamento",
     "activo",
     "created_at",
+)
+
+# Campos para Representante — Zero Waste
+LIST_FIELDS_REPRESENTANTE = (
+    "id",
+    "uuid",
+    "tipo_documento",
+    "numero_documento",
+    "nombre_completo",
+    "email_contacto",
+    "telefono_contacto",
+    "cargo",
+    "es_principal",
+    "created_at",
+)
+
+DETAIL_FIELDS_REPRESENTANTE = (
+    "id",
+    "uuid",
+    "empresa_id",
+    "proveedor_id",
+    "tipo_documento",
+    "numero_documento",
+    "nombre_completo",
+    "email_contacto",
+    "telefono_contacto",
+    "cargo",
+    "es_principal",
+    "created_at",
+    "updated_at",
 )
 
 DETAIL_FIELDS = (
@@ -71,17 +101,89 @@ DETAIL_FIELDS = (
     "updated_at",
 )
 
+class RepresentanteSelector:
+    """Selectores de solo lectura para Representantes (Zero Waste)."""
+
+    @staticmethod
+    def get_list_por_proveedor(empresa_id: int, proveedor_uuid: str):
+        """
+        Retorna listado optimizado de representantes de un proveedor.
+        Filtros DSV: empresa_id + proveedor_uuid.
+        """
+        qs = (
+            Representante.objects
+            .filter(empresa_id=empresa_id, proveedor__uuid=proveedor_uuid)
+            .only(*LIST_FIELDS_REPRESENTANTE)
+            .order_by("-es_principal", "nombre_completo")
+        )
+        return qs
+
+    @staticmethod
+    def get_by_uuid(empresa_id: int, representante_uuid: str):
+        """
+        Retorna detalle completo de un representante por UUID (DSV).
+        """
+        return (
+            Representante.objects
+            .filter(empresa_id=empresa_id, uuid=representante_uuid)
+            .only(*DETAIL_FIELDS_REPRESENTANTE)
+            .first()
+        )
+
+    @staticmethod
+    def get_list_por_empresa(empresa_id: int):
+        """
+        Retorna todos los representantes de la empresa sin filtro de proveedor.
+        Usado por el directorio global (/representantes/ sin ?proveedor_uuid).
+        """
+        return (
+            Representante.objects
+            .filter(empresa_id=empresa_id)
+            .only(*LIST_FIELDS_REPRESENTANTE)
+            .order_by("-es_principal", "nombre_completo")
+        )
+
+    @staticmethod
+    def get_principal_por_proveedor(empresa_id: int, proveedor_uuid: str):
+        """
+        Retorna el representante principal de un proveedor (es_principal=True).
+        Si no existe, retorna None.
+        """
+        return (
+            Representante.objects
+            .filter(
+                empresa_id=empresa_id,
+                proveedor__uuid=proveedor_uuid,
+                es_principal=True
+            )
+            .only(*LIST_FIELDS_REPRESENTANTE)
+            .first()
+        )
+
+
 class ProveedorSelector:
     """Clase selectora para inyección en mixins."""
-    
+
     @staticmethod
     def get_list(empresa_id: int, search: str = None):
-        """Retorna listado optimizado para Tabulator."""
-        qs = Proveedor.objects.filter(empresa_id=empresa_id).only(*LIST_FIELDS).order_by('razon_social')
-        
+        """Retorna listado optimizado para Tabulator con representante principal precargado."""
+        # Prefetch solo el representante principal (es_principal=True)
+        representante_principal = Prefetch(
+            'representantes',
+            Representante.objects.filter(es_principal=True).only(*LIST_FIELDS_REPRESENTANTE)
+        )
+
+        qs = (
+            Proveedor.objects
+            .filter(empresa_id=empresa_id)
+            .prefetch_related(representante_principal)
+            .only(*LIST_FIELDS)
+            .order_by('razon_social')
+        )
+
         if search:
             qs = qs.filter(
-                Q(razon_social__icontains=search) | 
+                Q(razon_social__icontains=search) |
                 Q(numero_documento__icontains=search) |
                 Q(email_contacto__icontains=search) |
                 Q(nombre_comercial__icontains=search)

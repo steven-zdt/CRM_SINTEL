@@ -51,7 +51,7 @@ else:
 
 ### 1. URL Absoluta Preserva el Contexto del Tenant
 
-Al usar una URL absoluta con el dominio del tenant (`http://cliente.sintel.com/dashboard/`):
+Al usar una URL absoluta con el dominio del tenant (`http://cliente.sintel.net.co/dashboard/`):
 
 - ✅ El navegador hace una **nueva request** con el `HTTP_HOST` correcto
 - ✅ El middleware `TenantMainMiddleware` resuelve el tenant correctamente
@@ -61,12 +61,12 @@ Al usar una URL absoluta con el dominio del tenant (`http://cliente.sintel.com/d
 ### 2. Flujo Correcto
 
 ```
-1. Usuario accede a: http://cliente.sintel.com/activate?token=...
+1. Usuario accede a: http://cliente.sintel.net.co/activate?token=...
 2. TenantMainMiddleware resuelve tenant → TENANT_URLCONF activo ✅
 3. ActivateOwnerView procesa formulario
 4. Usuario se loguea: login(request, user)
-5. Redirect a: http://cliente.sintel.com/dashboard/ (URL absoluta) ✅
-6. Nueva request con HTTP_HOST=cliente.sintel.com
+5. Redirect a: http://cliente.sintel.net.co/dashboard/ (URL absoluta) ✅
+6. Nueva request con HTTP_HOST=cliente.sintel.net.co
 7. TenantMainMiddleware resuelve tenant → TENANT_URLCONF activo ✅
 8. Dashboard se carga correctamente en el contexto del tenant ✅
 ```
@@ -88,19 +88,19 @@ Al usar una URL absoluta con el dominio del tenant (`http://cliente.sintel.com/d
 
 1. **Crear tenant nuevo:**
    ```bash
-   # Acceder a http://sintel.com/console/tenants/
+   # Acceder a http://sintel.net.co/console/tenants/
    # Crear tenant con nombre "Test Tenant", schema "test", email "test@example.com"
    ```
 
 2. **Activar tenant:**
    ```bash
-   # Abrir link de activación: http://test.sintel.com/activate?token=...
+   # Abrir link de activación: http://test.sintel.net.co/activate?token=...
    # Completar formulario de activación
    ```
 
 3. **Verificar redirect:**
-   - ✅ Debe redirigir a `http://test.sintel.com/dashboard/`
-   - ✅ NO debe redirigir a `http://sintel.com/console/` o rutas públicas
+   - ✅ Debe redirigir a `http://test.sintel.net.co/dashboard/`
+   - ✅ NO debe redirigir a `http://sintel.net.co/console/` o rutas públicas
    - ✅ El dashboard debe cargar correctamente
 
 ### Test Automatizado
@@ -115,7 +115,7 @@ def test_activation_redirects_to_tenant_dashboard():
     token = generate_invitation_token(user.id, tenant.id)
     
     # 3. POST a /activate/ con token
-    client = Client(HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    client = Client(HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     response = client.post(f'/activate/?token={token}', data={
         'password1': 'Test123!',
         'password2': 'Test123!',
@@ -123,10 +123,10 @@ def test_activation_redirects_to_tenant_dashboard():
     
     # 4. Verificar redirect
     assert response.status_code == 302
-    assert response['Location'] == f"http://{tenant.schema_name}.sintel.com/dashboard/"
+    assert response['Location'] == f"http://{tenant.schema_name}.sintel.net.co/dashboard/"
     
     # 5. Seguir redirect y verificar URLConf
-    dashboard_response = client.get('/dashboard/', HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    dashboard_response = client.get('/dashboard/', HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     assert dashboard_response.status_code == 200
     # Verificar que se usa TENANT_URLCONF (no ROOT_URLCONF)
 ```

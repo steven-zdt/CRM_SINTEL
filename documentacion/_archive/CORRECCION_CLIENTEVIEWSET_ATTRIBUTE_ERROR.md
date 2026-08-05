@@ -94,7 +94,7 @@ class ClienteViewSet(BaseTenantViewSet):
 
 [STEP 3] Verificar TenantProfile
   ✅ admin@home.com tiene TenantProfile
-  ✅ admin@sintel.com tiene TenantProfile
+  ✅ admin@sintel.net.co tiene TenantProfile
 
 [STEP 4] Verificar Clientes en empresa
   ✅ Empresa ID: 1

@@ -897,15 +897,22 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        _cero = Decimal('0.00')
         if app_label == 'facturas':
             es_venta = getattr(doc, 'naturaleza', '') == 'VENTA'
             fecha = doc.fecha_emision
             if hasattr(fecha, 'date'):
                 fecha = fecha.date()
+            _retefuente = Decimal(str(getattr(doc, 'retefuente', _cero) or _cero))
+            _reteica    = Decimal(str(getattr(doc, 'reteica', _cero) or _cero))
+            _impuestos  = Decimal(str(doc.impuestos))
+            _iva        = max(_cero, _impuestos - _retefuente - _reteica)
             ctx = {
                 'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
                 'numero': doc.numero, 'fecha': fecha,
-                'subtotal': doc.subtotal, 'impuestos': doc.impuestos, 'total': doc.total,
+                'subtotal': doc.subtotal, 'impuestos': _impuestos, 'total': doc.total,
+                'iva_generado': _iva, 'retefuente': _retefuente,
+                'reteica': _reteica, 'reteiva': _cero,
                 'tercero_nit': doc.receptor_nit if es_venta else doc.emisor_nit,
                 'tercero_nombre': doc.receptor_razon_social if es_venta else doc.emisor_razon_social,
             }
@@ -914,7 +921,8 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
                 'numero': doc.periodo_mes, 'fecha': doc.fecha_pago,
                 'subtotal': doc.neto_pagar,
-                'impuestos': Decimal('0.00'),
+                'impuestos': _cero, 'iva_generado': _cero,
+                'retefuente': _cero, 'reteica': _cero, 'reteiva': _cero,
                 'total': doc.neto_pagar,
                 'tercero_nit': doc.empleado.numero_documento,
                 'tercero_nombre': f"{doc.empleado.primer_nombre} {doc.empleado.primer_apellido}",
@@ -928,17 +936,22 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
                 'numero': doc.get('referencia') or doc.get('uuid'), 'fecha': fecha,
                 'subtotal': total,
-                'impuestos': Decimal('0.00'),
+                'impuestos': _cero, 'iva_generado': _cero,
+                'retefuente': _cero, 'reteica': _cero, 'reteiva': _cero,
                 'total': total,
                 'tercero_nit': 'N/A',
                 'tercero_nombre': doc.get('item_nombre') or doc.get('modulo_origen') or 'Movimiento de inventario',
             }
         else:
+            _retefuente = Decimal(str(doc.retefuente or _cero))
+            _reteica    = Decimal(str(doc.reteica or _cero))
             ctx = {
                 'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
                 'numero': doc.numero_documento, 'fecha': doc.fecha,
                 'subtotal': doc.subtotal,
-                'impuestos': doc.retefuente + doc.reteica,
+                'impuestos': _retefuente + _reteica,
+                'iva_generado': _cero, 'retefuente': _retefuente,
+                'reteica': _reteica, 'reteiva': _cero,
                 'total': doc.total,
                 'tercero_nit': doc.proveedor.numero_documento,
                 'tercero_nombre': doc.proveedor.razon_social,
@@ -982,6 +995,49 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 'cuenta_nombre': cuenta.nombre if cuenta else 'Cuenta no encontrada'
             })
         ctx['sugerencias_puc'] = sugerencias
+
+        # ── Auto-Inferencia de Plantilla (Motor Fase 3 v3.17.0) ──────────────────
+        # Mapeo tipo_tx (TipoTransaccion.value) -> tipo_motor (VENTA/COMPRA/GASTO/NOMINA)
+        _TIPO_A_MOTOR = {
+            'VENTA_FACTURA': 'VENTA', 'VENTA_NOTA_CREDITO': 'VENTA',
+            'VENTA_NOTA_DEBITO': 'VENTA', 'SALIDA_INVENTARIO_VENTA': 'VENTA',
+            'RECAUDO_CLIENTE': 'VENTA',
+            'COMPRA_GASTO': 'COMPRA', 'COMPRA_NOTA_CREDITO': 'COMPRA',
+            'COMPRA_INVENTARIO': 'COMPRA', 'ACTIVO_FIJO_COMPRA': 'COMPRA',
+            'PAGO_PROVEEDOR': 'COMPRA',
+            'INVENTARIO_COSTO_VENTA': 'GASTO', 'BAJA_INVENTARIO': 'GASTO',
+            'AJUSTE_INVENTARIO': 'GASTO',
+            'NOMINA_LIQUIDACION': 'NOMINA', 'NOMINA_PROVISION': 'NOMINA',
+            'NOMINA_PAGO': 'NOMINA', 'NOMINA_RETIRO': 'NOMINA',
+        }
+        tipo_motor = _TIPO_A_MOTOR.get(tipo_tx, '')
+        ctx['requiere_revision_plantilla'] = False
+        ctx['plantilla_sugerida_uuid'] = ''
+
+        if tipo_motor:
+            plantilla_activa = PlantillaContableSelector.obtener_motor_plantilla(
+                empresa_id, tipo_motor
+            )
+            if not plantilla_activa:
+                try:
+                    plantilla_sugerida = self.service.inferir_y_crear_plantilla_desde_documento(
+                        empresa_id=empresa_id,
+                        app_label=app_label,
+                        modelo=modelo,
+                        documento_id=documento_id,
+                    )
+                    ctx['requiere_revision_plantilla'] = True
+                    ctx['plantilla_sugerida_uuid'] = str(plantilla_sugerida.uuid)
+                    logger.info(
+                        '[render_offcanvas] Plantilla borrador %s generada para %s/%s/%s',
+                        plantilla_sugerida.uuid, app_label, modelo, documento_id,
+                    )
+                except Exception as exc_inf:
+                    # Fallo suave: el usuario puede seguir contabilizando manualmente
+                    logger.warning(
+                        '[render_offcanvas] No se pudo inferir plantilla para %s/%s/%s: %s',
+                        app_label, modelo, documento_id, exc_inf,
+                    )
 
         return Response(
             ctx,
@@ -1074,13 +1130,13 @@ class ConfiguracionRetencionesViewSet(SintelDSVMixin, BaseTenantViewSet):
     search_fields = ['nit_tercero', 'tipo_tercero']
     ordering_fields = ['tipo_tercero', 'nit_tercero', 'tipo_retencion']
     ordering = ['tipo_tercero', 'nit_tercero']
-    lookup_field = 'id'
-    lookup_url_kwarg = 'id'
+    # WARNING: [ARQ-A1] lookup_field='uuid' se hereda de BaseTenantViewSet — no
+    # redeclarar con 'id' (exponia la PK entera en la URL, AGENTS.md §25.1).
 
     def get_queryset(self):
         """Retorna queryset optimizado para ConfiguracionRetenciones."""
         return ConfiguracionRetenciones.objects.select_related('cuenta_retencion').only(
-            'id', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
+            'id', 'uuid', 'tipo_tercero', 'nit_tercero', 'tipo_retencion',
             'porcentaje_por_defecto', 'activa', 'naturaleza', 'created_at',
             'cuenta_retencion__uuid', 'cuenta_retencion__codigo', 'cuenta_retencion__nombre'
         )
@@ -1090,6 +1146,11 @@ class ConfiguracionRetencionesViewSet(SintelDSVMixin, BaseTenantViewSet):
         if self.action == 'retrieve':
             return ConfiguracionRetencionesDetailSerializer
         return ConfiguracionRetencionesListSerializer
+
+    def perform_create(self, serializer):
+        """Asigna automáticamente la empresa del tenant al crear."""
+        empresa_id = self.get_empresa_id()
+        serializer.save(empresa_id=empresa_id)
 
 
 class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
@@ -1121,7 +1182,7 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
             'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id',
             'reversada', 'created_at',
             'configuracion__id', 'configuracion__tipo_tercero',
-            'asiento_contable__uuid', 'asiento_contable__numero_asiento'
+            'asiento_contable__uuid', 'asiento_contable__numero'
         )
 
     def get_serializer_class(self):
@@ -1129,6 +1190,11 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
         if self.action == 'retrieve':
             return RetencionDetailSerializer
         return RetencionListSerializer
+
+    def perform_create(self, serializer):
+        """Asigna automáticamente la empresa del tenant al crear."""
+        empresa_id = self.get_empresa_id()
+        serializer.save(empresa_id=empresa_id)
 
     @action(detail=False, methods=['get'], url_path='obtener-por-tercero')
     def obtener_por_tercero(self, request):
@@ -1164,10 +1230,12 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
             )
 
         try:
+            empresa_id = self.get_empresa_id()
             retenciones = RetencionesService.obtener_retenciones_desde_tercero(
                 nit=nit,
                 tipo_tercero=tipo_tercero,
                 naturaleza=naturaleza,
+                empresa_id=empresa_id,
             )
 
             # Convertir Decimal a string para JSON
@@ -1213,10 +1281,12 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
             )
 
         try:
+            empresa_id = self.get_empresa_id()
             retenciones = RetencionesService.listar_retenciones_por_documento(
                 documento_origen_app=app,
                 documento_origen_modelo=modelo,
                 documento_origen_id=int(doc_id),
+                empresa_id=empresa_id,
             )
 
             serializer = RetencionListSerializer(retenciones, many=True)

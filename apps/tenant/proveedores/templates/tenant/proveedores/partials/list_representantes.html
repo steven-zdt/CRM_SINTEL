@@ -1,0 +1,37 @@
+{# partials/list_representantes.html - Tabla de Representantes v3.17.0 #}
+
+<div id="representantes-container" class="mt-4"
+     data-proveedor-nombre="{{ proveedor.razon_social|escapejs }}"
+     data-proveedor-uuid="{{ proveedor.uuid }}">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h6 class="mb-0">
+      <i class="bi bi-person-check text-primary me-2"></i>Representantes Autorizados
+    </h6>
+    <button type="button" class="btn btn-sm btn-primary"
+            onclick="window.Sintel.Proveedores.abrirFormRepresentante(null, '{{ proveedor.uuid }}', '{{ proveedor.razon_social|escapejs }}')">
+      <i class="bi bi-plus-circle me-1"></i>Agregar Encargado
+    </button>
+  </div>
+
+  <div id="tabla-representantes-container" class="table-responsive">
+    <table id="tabla-representantes" class="table table-sm table-hover">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 20%">Documento</th>
+          <th style="width: 30%">Nombre</th>
+          <th style="width: 20%">Cargo</th>
+          <th style="width: 15%">Contacto</th>
+          <th style="width: 10%">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-representantes">
+        <!-- Cargado por JavaScript -->
+      </tbody>
+    </table>
+  </div>
+
+  <div id="representantes-empty-state" class="alert alert-info text-center py-4 d-none">
+    <i class="bi bi-info-circle me-2"></i>
+    No hay representantes registrados aún.
+  </div>
+</div>

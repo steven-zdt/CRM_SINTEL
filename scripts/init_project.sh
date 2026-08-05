@@ -92,8 +92,8 @@ echo ""
 
 # 3.1: Setup del tenant público
 echo -e "${YELLOW}   3.1. Configurando tenant público...${NC}"
-# Usar sintel.com como dominio base (configurable vía .env)
-python manage.py setup_public_tenant --domain sintel.com
+# Usar sintel.net.co como dominio base (configurable vía .env)
+python manage.py setup_public_tenant --domain sintel.net.co
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}   ✅ Tenant público configurado${NC}"
 else
@@ -113,20 +113,20 @@ echo ""
 # 3.3: Crear superusuario por defecto
 echo -e "${YELLOW}   3.3. Creando superusuario por defecto...${NC}"
 # Verificar si el superusuario ya existe
-if python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); print('EXISTS' if User.objects.filter(email='admin@sintel.com').exists() else 'NOT_EXISTS')" | grep -q "EXISTS"; then
-    echo -e "${BLUE}   ℹ️  Superusuario admin@sintel.com ya existe (omitiendo creación)${NC}"
+if python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); print('EXISTS' if User.objects.filter(email='admin@sintel.net.co').exists() else 'NOT_EXISTS')" | grep -q "EXISTS"; then
+    echo -e "${BLUE}   ℹ️  Superusuario admin@sintel.net.co ya existe (omitiendo creación)${NC}"
 else
     # Crear superusuario sin interacción
     python manage.py shell << EOF
 from django.contrib.auth import get_user_model
 User = get_user_model()
-if not User.objects.filter(email='admin@sintel.com').exists():
+if not User.objects.filter(email='admin@sintel.net.co').exists():
     User.objects.create_superuser(
         username='admin',
-        email='admin@sintel.com',
+        email='admin@sintel.net.co',
         password='admin'
     )
-    print('Superusuario creado: admin / admin@sintel.com / admin')
+    print('Superusuario creado: admin / admin@sintel.net.co / admin')
 else:
     print('Superusuario ya existe')
 EOF
@@ -150,7 +150,7 @@ echo -e "${BLUE}📋 Resumen:${NC}"
 echo "   ✅ Migraciones creadas y aplicadas"
 echo "   ✅ Esquema público configurado"
 echo "   ✅ Tenant público creado"
-echo "   ✅ Superusuario: admin / admin@sintel.com / admin"
+echo "   ✅ Superusuario: admin / admin@sintel.net.co / admin"
 echo ""
 echo -e "${BLUE}🚀 El sistema está listo para usar${NC}"
 echo ""

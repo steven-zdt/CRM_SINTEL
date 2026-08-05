@@ -23,20 +23,24 @@ class SintelDSVMixin:
 
     def get_empresa_id(self) -> int:
         """Obtiene el ID de la empresa desde el perfil del usuario (SSoT)."""
-        # 1. Intentar obtener del perfil (Producción / Auth OK)
+        # 1. Intentar obtener del perfil (Produccion / Auth OK)
         if hasattr(self.request.user, 'tenant_profile') and self.request.user.tenant_profile:
             return self.request.user.tenant_profile.empresa_id
-        
-        # 2. Fallback para desarrollo (v2.62.1)
+
+        # 2. Fallback DEBUG: solo para usuarios autenticados sin perfil en este schema.
+        # NUNCA aplica a usuarios anonimos — la autenticacion es obligatoria siempre.
         from django.conf import settings
-        if settings.DEBUG:
+        if settings.DEBUG and self.request.user and self.request.user.is_authenticated:
             from apps.tenant.empresa.models import Empresa
             empresa = Empresa.objects.first()
             if empresa:
-                logger.warning(f"[DSV:DEBUG] Usando fallback empresa_id={empresa.id} (usuario anónimo o sin perfil)")
+                logger.warning(
+                    "[DSV:DEBUG] Fallback empresa_id=%s para user=%s sin tenant_profile",
+                    empresa.id, self.request.user.id,
+                )
                 return empresa.id
 
-        raise DRFValidationError("No se encontró configuración de empresa para este tenant.")
+        raise DRFValidationError("No se encontro configuracion de empresa para este tenant.")
 
     def handle_service_error(self, exc: Exception) -> Response:
         """Mapeo estandarizado de excepciones de servicios a respuestas DRF."""

@@ -19,11 +19,16 @@ def parse_xml_catalog(xml_bytes: bytes) -> dict:
         - 'items': lista de elementos parseados
         - 'root_tag': tag raíz del XML
     """
+    # WARNING: [SEC-A3] resolve_entities=False/load_dtd=False/no_network=True en
+    # ambos parsers -- bloquea XXE/expansion de entidades sobre XML de origen externo
+    # (documentos DIAN descargados). etree.fromstring() sin parser explicito usaba
+    # los defaults de lxml (resolve_entities=True).
+    _safe_parser = etree.XMLParser(resolve_entities=False, load_dtd=False, no_network=True)
     try:
-        root = etree.fromstring(xml_bytes)
+        root = etree.fromstring(xml_bytes, parser=_safe_parser)
     except etree.XMLSyntaxError:
         # Intentar parsear con recuperación de errores
-        parser = etree.XMLParser(recover=True)
+        parser = etree.XMLParser(recover=True, resolve_entities=False, load_dtd=False, no_network=True)
         root = etree.fromstring(xml_bytes, parser=parser)
 
     root_tag = root.tag

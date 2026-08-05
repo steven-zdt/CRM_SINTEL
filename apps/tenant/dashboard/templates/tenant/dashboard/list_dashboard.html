@@ -66,28 +66,61 @@
 {# ── Error container ───────────────────────────────────────────────── #}
 <div id="dashboard-error"></div>
 
-{# ── Widgets fila 1: Facturas · Inventario · Empleados ─────────────── #}
+{# ── Widgets fila 1: Facturas · Clientes · Empleados · Inventario ─────────────── #}
 <div class="row g-3 mb-3">
-  <div class="col-12 col-sm-6 col-xl-4">
+  <div class="col-12 col-sm-6 col-xl-3">
     <div id="widget-facturas" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
   </div>
-  <div class="col-12 col-sm-6 col-xl-4">
-    <div id="widget-inventario" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div id="widget-clientes" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
   </div>
-  <div class="col-12 col-sm-6 col-xl-4">
+  <div class="col-12 col-sm-6 col-xl-3">
     <div id="widget-empleados" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  </div>
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div id="widget-inventario" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
   </div>
 </div>
 
-{# ── Widgets fila 2: Gastos · Proyectos · Clientes ───────────────── #}
+{# ── Widgets fila 2: Proveedores · Gastos · Proyectos ───────────────── #}
 <div class="row g-3">
+  <div class="col-12 col-md-4">
+    <div id="widget-proveedores" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+  </div>
   <div class="col-12 col-md-4">
     <div id="widget-gastos" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
   </div>
   <div class="col-12 col-md-4">
     <div id="widget-proyectos" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
   </div>
-  <div class="col-12 col-md-4">
-    <div id="widget-clientes" class="dashboard-widget-placeholder" style="min-height:168px;"></div>
+</div>
+
+{# ── KPIs por Sede ───────────────────────────────────────────────── #}
+<div class="row mt-3">
+  <div class="col-12">
+    <div class="card dashboard-widget-card">
+      <div class="card-body p-3">
+        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+          <div class="d-flex align-items-center">
+            <div class="dashboard-kpi-icon bg-info bg-opacity-10 text-info me-3">
+              <i class="bi bi-geo-alt-fill"></i>
+            </div>
+            <div>
+              <h6 class="card-title mb-0 fw-semibold">Rendimiento por Sede</h6>
+              <small class="text-muted">Desglose transversal de ingresos, gastos y proyectos por sede</small>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <input type="date" id="sede-filtro-inicio" class="form-control form-control-sm" style="width: 140px;" placeholder="Fecha inicio">
+            <input type="date" id="sede-filtro-fin" class="form-control form-control-sm" style="width: 140px;" placeholder="Fecha fin">
+            <button class="btn btn-primary btn-sm" id="btn-filtrar-sede" title="Filtrar por rango de fechas">
+              <i class="bi bi-funnel"></i>
+            </button>
+          </div>
+        </div>
+        <div id="table-kpis-sede" class="mt-2" style="min-height: 120px;"></div>
+      </div>
+    </div>
   </div>
 </div>
+

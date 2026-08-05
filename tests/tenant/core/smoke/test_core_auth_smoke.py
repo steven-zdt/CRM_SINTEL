@@ -3,13 +3,14 @@ Smoke tests para Auth centralizada en Core (login, logout, password-reset).
 
 [WARNING] POLÍTICA v2.30: Validar que Core es la única fuente de autenticación.
 """
-from rest_framework import status
-from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django_tenants.utils import schema_context
+from rest_framework import status
+from rest_framework.test import APIClient
+
 from apps.public.tenants.models import TenantMembership
 from tests.tenant.base_test import SintelTenantTestCase
 
@@ -35,8 +36,8 @@ class TestCoreAuthSmoke(SintelTenantTestCase):
             import pytest
 
             try:
-                import playwright  # noqa: F401
                 import cryptography  # noqa: F401
+                import playwright  # noqa: F401
             except Exception:
                 pytest.skip("Skipping heavy smoke test: missing playwright/cryptography", allow_module_level=True)
             },

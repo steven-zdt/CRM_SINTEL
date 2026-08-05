@@ -1,7 +1,7 @@
 {% load static %}
 {# assets_facturas.html - Assets del módulo Facturas v2.95 #}
 {# Arquitectura modular FSD: Feature-Sliced Design #}
-{# Estructura unificada: apps/tenant/facturas/static/js/facturas/ #}
+{# Estructura estandar (FE-A7): apps/tenant/facturas/static/facturas/js/ #}
 {#                                                                  #}
 {# ORDEN CRÍTICO (sin async/defer):                               #}
 {# 1. facturas.api.js      - API Facade, requiere window.http      #}
@@ -9,9 +9,9 @@
 {# 3. features/*.js        - Features modulares (list, editor, etc)#}
 {# 4. facturas_main.js     - Orquestador principal                #}
 
-<script src="{% static 'js/facturas/facturas.api.js' %}"></script>
-<script src="{% static 'js/facturas/facturas.components.js' %}"></script>
-<script src="{% static 'js/facturas/features/facturas_list.js' %}"></script>
-<script src="{% static 'js/facturas/features/facturas_editor.js' %}"></script>
-<script src="{% static 'js/facturas/features/ver_detalle_factura.js' %}"></script>
-<script src="{% static 'js/facturas/facturas_main.js' %}"></script>
+<script src="{% static 'facturas/js/facturas.api.js' %}"></script>
+<script src="{% static 'facturas/js/facturas.components.js' %}"></script>
+<script src="{% static 'facturas/js/features/facturas_list.js' %}"></script>
+<script src="{% static 'facturas/js/features/facturas_editor.js' %}"></script>
+<script src="{% static 'facturas/js/features/ver_detalle_factura.js' %}"></script>
+<script src="{% static 'facturas/js/facturas_main.js' %}"></script>

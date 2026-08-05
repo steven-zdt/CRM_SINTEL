@@ -144,7 +144,7 @@ class TestHTTPStatusCodes:
                 '/api/v1/clientes/',
                 payload,
                 format='json',
-                HTTP_HOST=f"{tenant.schema_name}.sintel.com",
+                HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
             )
             assert response1.status_code == 201, f"Expected 201, got {response1.status_code}: {response1.data}"
             data1 = response1.json()
@@ -186,7 +186,7 @@ class TestHTTPStatusCodes:
                 '/api/v1/clientes/',
                 payload,
                 format='json',
-                HTTP_HOST=f"{tenant.schema_name}.sintel.com",
+                HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
             )
             assert response1.status_code == 201
             
@@ -195,7 +195,7 @@ class TestHTTPStatusCodes:
                 '/api/v1/clientes/',
                 payload,
                 format='json',
-                HTTP_HOST=f"{tenant.schema_name}.sintel.com",
+                HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
             )
             assert response2.status_code == 200, f"Expected 200, got {response2.status_code}: {response2.data}"
             data2 = response2.json()

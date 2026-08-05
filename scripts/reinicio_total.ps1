@@ -135,7 +135,7 @@ Write-Host ""
 
 Write-Host "🔑 Credenciales por defecto:" -ForegroundColor Cyan
 Write-Host "   Usuario: admin" -ForegroundColor White
-Write-Host "   Email: admin@sintel.com" -ForegroundColor White
+Write-Host "   Email: admin@sintel.net.co" -ForegroundColor White
 Write-Host "   Contraseña: admin" -ForegroundColor White
 Write-Host ""
 

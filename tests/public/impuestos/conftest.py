@@ -7,14 +7,16 @@ Proporciona:
 - Cliente OpenSearch fake (si no hay cluster)
 - Fixtures de usuario y cliente API
 """
-import os
+
 import json
+import os
+
 import pytest
-from django.contrib.auth import get_user_model
-from django.urls import reverse
 from django.conf import settings
-from django.test import override_settings
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.test import override_settings
+from django.urls import reverse
 from rest_framework.test import APIClient
 
 User = get_user_model()
@@ -24,7 +26,7 @@ User = get_user_model()
 def django_db_setup(django_db_setup, django_db_blocker):
     """
     Asegura migraciones en esquema public (django-tenants).
-    
+
     En CI/Local: migrate_schemas --shared --fake-initial
     """
     with django_db_blocker.unblock():
@@ -35,7 +37,7 @@ def django_db_setup(django_db_setup, django_db_blocker):
 def celery_eager():
     """
     Configura Celery en modo eager para pruebas deterministas.
-    
+
     Las tareas se ejecutan síncronamente, sin necesidad de worker.
     """
     with override_settings(
@@ -55,9 +57,7 @@ def api_client(db):
 def admin_user(db):
     """Usuario administrador para tests."""
     user = User.objects.create_superuser(
-        email="admin@test.local",
-        username="admin",
-        password="admin123"
+        email="admin@test.local", username="admin", password="admin123"
     )
     return user
 
@@ -71,39 +71,41 @@ def authenticated_client(api_client, admin_user):
 
 # ----- Fake OpenSearch client (si no hay cluster) -----
 
+
 class FakeOSClient:
     """
     Cliente OpenSearch fake para tests sin cluster real.
-    
+
     Mantiene la misma interfaz mínima que opensearch-py:
     - client.search()
     - client.cluster.health()
     - client.indices.exists_alias(), get_alias(), create(), update_aliases()
     """
+
     def __init__(self):
         self._docs = []  # Almacén en memoria
-    
+
     class indices:
         @staticmethod
         def exists_alias(name):
             return True
-        
+
         @staticmethod
         def get_alias(name):
             return {"impuestos-docs-v1": {"aliases": {"impuestos-docs": {}}}}
-        
+
         @staticmethod
         def create(index, body):
             return {"acknowledged": True}
-        
+
         @staticmethod
         def update_aliases(body):
             return {"acknowledged": True}
-        
+
         @staticmethod
         def exists(index):
             return False
-    
+
     class cluster:
         @staticmethod
         def health():
@@ -116,22 +118,22 @@ class FakeOSClient:
                 "initializing_shards": 0,
                 "unassigned_shards": 0,
             }
-    
+
     def search(self, index, body):
         """
         Busca documentos en el índice fake.
-        
+
         Args:
             index: Nombre del índice (ignorado en fake)
             body: Query body con multi_match
-            
+
         Returns:
             dict: Formato OpenSearch hits
         """
         q = body.get("query", {}).get("multi_match", {}).get("query", "")
         size = body.get("size", 10)
         offset = body.get("from", 0)
-        
+
         # Búsqueda simple: filtrar por texto en título o contenido
         hits = []
         for d in self._docs:
@@ -139,7 +141,7 @@ class FakeOSClient:
             texto = source.get("texto", "").lower()
             titulo = source.get("titulo", "").lower()
             query_lower = q.lower()
-            
+
             if query_lower in texto or query_lower in titulo:
                 hit = {
                     "_source": source,
@@ -151,11 +153,11 @@ class FakeOSClient:
                         "texto": [f"<em>{q}</em> encontrado en el texto"]
                     }
                 hits.append(hit)
-        
+
         # Paginación
         total = len(hits)
-        hits_paginated = hits[offset:offset + size]
-        
+        hits_paginated = hits[offset : offset + size]
+
         return {
             "hits": {
                 "total": {"value": total},
@@ -168,7 +170,7 @@ class FakeOSClient:
 def patch_opensearch(monkeypatch):
     """
     Cambia el cliente real por el fake (si no hay OpenSearch).
-    
+
     Usage:
         def test_search(patch_opensearch, api_client):
             # Agregar documentos al fake
@@ -176,14 +178,14 @@ def patch_opensearch(monkeypatch):
             # Test...
     """
     from apps.public.impuestos import search
-    
+
     fake = FakeOSClient()
-    
+
     def _fake_client():
         return fake
-    
+
     monkeypatch.setattr(search.client, "get_search_client", _fake_client)
-    
+
     return fake
 
 
@@ -191,6 +193,7 @@ def patch_opensearch(monkeypatch):
 def user_admin(db):
     """Usuario administrador para tests E2E."""
     from django.contrib.auth import get_user_model
+
     U = get_user_model()
     return U.objects.create_superuser(email="admin@test.local", password="admin123")
 
@@ -199,9 +202,9 @@ def user_admin(db):
 def csrf_client(db):
     """
     Cliente Django con CSRF habilitado (enforce_csrf=True).
-    
+
     Provee (client, csrftoken) tras solicitar una página interna para setear cookie.
-    
+
     Usage:
         def test_something(csrf_client, user_admin):
             client, csrftoken = csrf_client
@@ -209,14 +212,14 @@ def csrf_client(db):
             resp = client.post(url, data={...}, HTTP_X_CSRFTOKEN=csrftoken)
     """
     from django.test import Client
-    
+
     c = Client(enforce_csrf=True)
-    
+
     # Cualquier GET interno que invoque get_token genera la cookie csrftoken;
     # el admin es suficiente y siempre está en el proyecto.
     c.get("/admin/login/")
     csrftoken = c.cookies.get("csrftoken").value if "csrftoken" in c.cookies else ""
-    
+
     return c, csrftoken
 
 
@@ -224,14 +227,14 @@ def csrf_client(db):
 def admin_client(db, admin_user):
     """
     Cliente Django autenticado como admin.
-    
+
     Usage:
         def test_something(admin_client):
             r = admin_client.get("/console/impuestos/")
             assert r.status_code == 200
     """
     from django.test import Client
-    
+
     client = Client()
     client.force_login(admin_user)
     return client

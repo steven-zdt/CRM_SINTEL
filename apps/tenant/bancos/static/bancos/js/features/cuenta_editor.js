@@ -73,8 +73,8 @@
     const form = container.querySelector('#cuenta-form');
     if (!form) return;
 
-    if (form.dataset.configured === 'true') return;
-    form.dataset.configured = 'true';
+    if (form.dataset.editorInitialized === 'true') return;
+    form.dataset.editorInitialized = 'true';
 
     form.addEventListener('submit', async function (e) {
       e.preventDefault();

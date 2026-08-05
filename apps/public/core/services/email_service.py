@@ -54,7 +54,7 @@ class EmailService:
         a cualquier owner de tenant privado (nuevo o reenvio).
 
         Genera internamente el token firmado y construye la URL del tenant privado:
-            https://{schema}.sintel.com/static/tenant/core/auth/activate.html?token=...
+            https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html?token=...
 
         Aplica para TODOS los flujos:
           - Onboarding nuevo tenant (crear_tenant_con_owner)
@@ -75,13 +75,13 @@ class EmailService:
           - El codigo se genera con generate_activation_code() y se persiste en Redis.
           - El email muestra el codigo prominentemente.
           - El link apunta a la pagina de activacion del tenant:
-              https://{schema}.sintel.com/static/tenant/core/auth/activate.html
+              https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html
             El usuario ingresa email + codigo + contrasena en esa pagina.
           - NO se usa URL firmada con token embebido.
         """
         from apps.public.tenants.services.invitations import generate_activation_code
         schema = getattr(tenant, "schema_name", "")
-        domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+        domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         protocol = getattr(settings, "SITE_PROTOCOL", "https")
 
         # Generar codigo Redis (8 chars alfanumericos, TTL 48h, uso unico)
@@ -115,15 +115,15 @@ class EmailService:
         Envia email de invitacion al owner del tenant.
 
         URL de activacion: apunta directamente a la pagina de activacion del TENANT
-        (https://{schema}.sintel.com/static/tenant/core/auth/activate.html?token=...)
+        (https://{schema}.sintel.net.co/static/tenant/core/auth/activate.html?token=...)
         con un token firmado. El tenant tiene un endpoint propio que valida el token
         y establece la contrasena antes de redirigir al workspace.
 
-        El codigo de 8 chars se incluye como metodo alternativo (via sintel.com/activate/).
+        El codigo de 8 chars se incluye como metodo alternativo (via sintel.net.co/activate/).
         """
         tenant_name = getattr(tenant, "nombre", "Tenant")
         schema = getattr(tenant, "schema_name", "")
-        domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+        domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         protocol = getattr(settings, "SITE_PROTOCOL", "https")
 
         # Generar token firmado para el link directo de activacion del tenant
@@ -196,7 +196,7 @@ class EmailService:
         """Sincrono: envia email de reset con codigo alfanumerico de 8 chars."""
         tenant_name = getattr(tenant, "nombre", "Tenant")
         schema = getattr(tenant, "schema_name", "")
-        domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.com")
+        domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         protocol = getattr(settings, "SITE_PROTOCOL", "https")
         reset_url = f"{protocol}://{schema}.{domain_base}/static/tenant/core/auth/reset-confirm.html"
         context = {

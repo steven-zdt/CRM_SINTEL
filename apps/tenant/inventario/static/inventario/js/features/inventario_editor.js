@@ -46,9 +46,9 @@
         });
 
         // ⚠️ v2.61.3: Conversión de tipos
-        if (data.producto) {
-            data.producto = parseInt(data.producto);
-        }
+        // [FE-C1] NO convertir "producto" con parseInt(): es un UUID (backend usa
+        // lookup_field="uuid"), no un entero. parseInt("9abc...", 10) trunca a 9 y
+        // corrompe la referencia -> el backend responde DoesNotExist en cada ajuste.
         if (data.cantidad) {
             data.cantidad = parseFloat(data.cantidad);
         }
@@ -325,6 +325,15 @@
      * Inicializar eventos del editor
      */
     function initEditorEvents() {
+        // Guard (FE-A1/A2): DOMContentLoaded/init() y htmx:afterSwap pueden
+        // ambos disparar initEditorEvents() para el mismo offcanvas — sin
+        // esto, el submit del formulario de ajuste queda duplicado.
+        const offcanvasElGuard = d.querySelector('#offcanvas-inventario');
+        if (offcanvasElGuard) {
+            if (offcanvasElGuard.dataset.editorInitialized) return;
+            offcanvasElGuard.dataset.editorInitialized = 'true';
+        }
+
         // Botón guardar ajuste
         const btnGuardarAjuste = d.querySelector('#btn-guardar-ajuste');
         if (btnGuardarAjuste) {

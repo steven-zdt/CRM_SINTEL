@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============ CONFIG ============
-BASE_URL="${BASE_URL:-https://<tu-dominio-tenant>}"   # p.ej., https://home.sintel.com
+BASE_URL="${BASE_URL:-https://<tu-dominio-tenant>}"   # p.ej., https://home.sintel.net.co
 XML_FILE="${XML_FILE:-./samples/invoice_min.xml}"     # ruta al XML a subir
 COOKIE_JAR="${COOKIE_JAR:-./cookies.txt}"             # asume sesión ya autenticada en este jar
 CURL="curl -sS --fail-with-body"

@@ -115,14 +115,19 @@ def extract_xml_from_attacheddocument(xml_text: str) -> list[str]:
     # Intentar parsear con lxml
     try:
         from lxml import etree
-        
+
+        # WARNING: [SEC-A3] resolve_entities=False/load_dtd=False/no_network=True
+        # bloquean XXE/expansion de entidades -- este XML viene de un correo entrante,
+        # origen no confiable.
+        _safe_parser = etree.XMLParser(resolve_entities=False, load_dtd=False, no_network=True)
+
         # Parsear XML
         try:
-            root = etree.fromstring(xml_text.encode('utf-8'))
+            root = etree.fromstring(xml_text.encode('utf-8'), parser=_safe_parser)
         except etree.XMLSyntaxError:
             # Si falla, intentar con encoding alternativo
             try:
-                root = etree.fromstring(xml_text.encode('latin-1'))
+                root = etree.fromstring(xml_text.encode('latin-1'), parser=_safe_parser)
             except Exception:
                 return []
         

@@ -58,7 +58,7 @@ class TenantsDataTableViewTest(PublicAPITestCase):
         self.client_obj, self.domain = make_tenant_with_domain(
             nombre="Empresa DT Test",
             schema_name="dttest",
-            domain="dttest.sintel.com",
+            domain="dttest.sintel.net.co",
         )
         self.client.defaults["HTTP_HOST"] = "localhost"
 
@@ -138,7 +138,7 @@ class TenantDomainsDataTableViewTest(PublicAPITestCase):
         self.client_obj, self.domain = make_tenant_with_domain(
             nombre="Empresa Domains Test",
             schema_name="domainstest",
-            domain="domainstest.sintel.com",
+            domain="domainstest.sintel.net.co",
         )
         self.client.defaults["HTTP_HOST"] = "localhost"
 
@@ -500,7 +500,7 @@ class ConsoleActionLogFixtureTest(PublicAPITestCase):
         self.client_obj, _ = make_tenant_with_domain(
             nombre="Log Test Empresa",
             schema_name="logtest",
-            domain="logtest.sintel.com",
+            domain="logtest.sintel.net.co",
         )
         self.log = make_console_action_log(
             actor=self.admin_user,

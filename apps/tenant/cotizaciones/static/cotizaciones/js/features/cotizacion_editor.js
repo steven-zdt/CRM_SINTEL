@@ -84,6 +84,13 @@
       var container = d.getElementById('cot-tabla-items');
       if (!container) return;
 
+      // Guard: `this._initialized` no sirve como guard real (este objeto se
+      // redeclara entero cada vez que el script vuelve a cargar, asi que el
+      // flag siempre nace en false) — se ancla al contenedor, que sí persiste
+      // dentro de la misma inserción del fragmento (FE-A1).
+      if (container.dataset.editorInitialized) return;
+      container.dataset.editorInitialized = 'true';
+
       // Delegación de eventos para la tabla
       container.addEventListener('input', function (e) {
         if (e.target.classList.contains('item-calc')) {

@@ -33,11 +33,11 @@ def main():
     print("\n1. Verificando dominio público...")
     try:
         public = TenantClient.objects.get(schema_name='public')
-        domain = Domain.objects.filter(tenant=public, domain='sintel.com').first()
+        domain = Domain.objects.filter(tenant=public, domain='sintel.net.co').first()
         if domain:
-            print(f"  [OK] Dominio sintel.com encontrado (primary: {domain.is_primary})")
+            print(f"  [OK] Dominio sintel.net.co encontrado (primary: {domain.is_primary})")
         else:
-            print("  [ERROR] Dominio sintel.com NO encontrado")
+            print("  [ERROR] Dominio sintel.net.co NO encontrado")
             print("     Ejecuta: python scripts/add_sintel_domain.py")
             return 1
     except Exception as e:
@@ -77,7 +77,7 @@ def main():
     # 5. Probar acceso sin autenticación
     print("\n5. Probando acceso sin autenticación...")
     client = Client()
-    response = client.get('/console/tenants/', HTTP_HOST='sintel.com')
+    response = client.get('/console/tenants/', HTTP_HOST='sintel.net.co')
     print(f"  Status code: {response.status_code}")
     if response.status_code == 302:
         print(f"  [OK] Redirección a: {response.url}")
@@ -87,7 +87,7 @@ def main():
     elif response.status_code == 404:
         print("  [ERROR] 404 Not Found - Problema con routing")
         print("     Verifica:")
-        print("     - Que estés accediendo desde sintel.com (no localhost)")
+        print("     - Que estés accediendo desde sintel.net.co (no localhost)")
         print("     - Que el dominio esté registrado en la BD")
         print("     - Que las URLs estén correctamente configuradas")
     else:
@@ -96,22 +96,22 @@ def main():
     # 6. Verificar ALLOWED_HOSTS
     print("\n6. Verificando ALLOWED_HOSTS...")
     allowed = settings.ALLOWED_HOSTS
-    has_sintel = 'sintel.com' in allowed or '.sintel.com' in allowed
+    has_sintel = 'sintel.net.co' in allowed or '.sintel.net.co' in allowed
     print(f"  ALLOWED_HOSTS: {allowed}")
     if has_sintel:
-        print("  [OK] sintel.com está permitido")
+        print("  [OK] sintel.net.co está permitido")
     else:
-        print("  [ERROR] sintel.com NO está permitido")
+        print("  [ERROR] sintel.net.co NO está permitido")
     
     print("\n" + "=" * 60)
     print("📋 RESUMEN")
     print("=" * 60)
     print("Si obtienes 404:")
-    print("  1. Verifica que accedas desde http://sintel.com (no localhost)")
-    print("  2. Añade sintel.com a /etc/hosts si es local:")
-    print("     127.0.0.1 sintel.com")
-    print("  3. Inicia sesión como staff en http://sintel.com/admin/")
-    print("  4. Luego accede a http://sintel.com/console/tenants/")
+    print("  1. Verifica que accedas desde http://sintel.net.co (no localhost)")
+    print("  2. Añade sintel.net.co a /etc/hosts si es local:")
+    print("     127.0.0.1 sintel.net.co")
+    print("  3. Inicia sesión como staff en http://sintel.net.co/admin/")
+    print("  4. Luego accede a http://sintel.net.co/console/tenants/")
     
     return 0
 

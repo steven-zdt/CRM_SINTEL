@@ -4,13 +4,13 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import SAFE_METHODS
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.base import BaseTenantViewSet
 
@@ -36,16 +36,6 @@ from .serializers import (
     ServicioListSerializer,
     StockResponseSerializer,
 )
-
-class StandardResultsSetPagination(PageNumberPagination):
-    """
-    v2.40: Paginacion estandar para Tabulator.
-    Tabulator espera: {count, next, previous, results: [...]}
-    """
-    page_size = 10  # Default: 10 (estandar SaaS)
-    page_size_query_param = 'page_size'
-    max_page_size = 100
-
 
 class BaseViewSet(BaseTenantViewSet):
     """
@@ -189,7 +179,7 @@ class CategoriaItemViewSet(BaseViewSet, inv_services.CategoriaItemServiceMixin):
         empresa = self.get_empresa()
         id_instancia = request.query_params.get('id')
         context = self.service_categoria_get_offcanvas_context(empresa, id_instancia)
-        return Response(context, template_name='inventario/offcanvas_categoria.html')
+        return Response(context, template_name='tenant/inventario/offcanvas_categoria.html')
 
 
 class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
@@ -389,7 +379,7 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
         id_instancia = request.query_params.get('id')
         tipo_formulario = request.query_params.get('tipo', 'producto')
         context = self.service_producto_get_offcanvas_context(empresa, id_instancia, tipo_formulario)
-        return Response(context, template_name='inventario/offcanvas_producto.html')
+        return Response(context, template_name='tenant/inventario/offcanvas_producto.html')
 
 
 class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
@@ -440,7 +430,7 @@ class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
         empresa = self.get_empresa()
         id_instancia = request.query_params.get('id')
         context = self.service_servicio_get_offcanvas_context(empresa, id_instancia)
-        return Response(context, template_name='inventario/offcanvas_servicio.html')
+        return Response(context, template_name='tenant/inventario/offcanvas_servicio.html')
     
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='historial-offcanvas')
     def historial_offcanvas(self, request):
@@ -449,7 +439,7 @@ class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
         """
         empresa = self.get_empresa()
         context = self.service_servicio_get_historial_context(empresa)
-        return Response(context, template_name='inventario/offcanvas_historial_servicio.html')
+        return Response(context, template_name='tenant/inventario/offcanvas_historial_servicio.html')
 
 
 class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
@@ -504,7 +494,7 @@ class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
         empresa = inv_services.get_empresa_singleton()
         id_instancia = request.query_params.get('id')
         context = self.service_activo_get_offcanvas_context(empresa, id_instancia)
-        return Response(context, template_name='inventario/offcanvas_activo.html')
+        return Response(context, template_name='tenant/inventario/offcanvas_activo.html')
 
 
 class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMixin):
@@ -553,7 +543,7 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
         empresa = inv_services.get_empresa_singleton()
         id_instancia = request.query_params.get('id')
         context = self.service_movimiento_get_offcanvas_context(empresa, id_instancia)
-        return Response(context, template_name='inventario/offcanvas_movimiento.html')
+        return Response(context, template_name='tenant/inventario/offcanvas_movimiento.html')
     
     @action(detail=False, methods=['get'], url_path='timeline')
     def timeline(self, request):

@@ -59,7 +59,9 @@ def test_admin_onboard_idempotent(api_client, admin_user, settings):
     - Repetir el mismo payload no debe crear nuevos Client/Domain.
     """
     api_client.force_authenticate(user=admin_user)
-    url = reverse("admin-tenants-onboard")  # basename="admin-tenants", url_name="onboard"
+    url = reverse(
+        "admin-tenants-onboard"
+    )  # basename="admin-tenants", url_name="onboard"
 
     schema_name = "empresa_test"
     raw_domain = "https://www.test.localhost:8000/admin/"

@@ -40,7 +40,7 @@ def test_empleados_list_smoke(client, admin_user, tenant):
     client.force_login(admin_user)
     
     # La ruta se incluirá más adelante en TENANT_URLCONF (/api/v1/empleados/)
-    resp = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     
     # 200 si el router está incluido, 404 si aún no se incluyó
     assert resp.status_code in (200, 404), f"Expected 200 or 404, got {resp.status_code}"
@@ -77,7 +77,7 @@ def test_empleados_create_smoke(client, admin_user, tenant):
         "/api/v1/empleados/",
         data=payload,
         content_type="application/json",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.com"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
     )
     
     # 201 si el router está incluido y funciona, 404 si aún no se incluyó
@@ -158,7 +158,7 @@ def test_empleados_multitenancy_isolation(client, admin_user, tenant, tenant_fac
     client.force_login(admin_user)
     
     # Verificar que tenant1 solo ve su empleado (si el router está incluido)
-    resp1 = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.com")
+    resp1 = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     if resp1.status_code == 200:
         data1 = resp1.json()
         results1 = data1.get("results", data1) if isinstance(data1, dict) else data1
@@ -168,7 +168,7 @@ def test_empleados_multitenancy_isolation(client, admin_user, tenant, tenant_fac
             assert "2222222222" not in doc_numbers
     
     # Verificar que tenant2 solo ve su empleado
-    resp2 = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant2.schema_name}.sintel.com")
+    resp2 = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant2.schema_name}.sintel.net.co")
     if resp2.status_code == 200:
         data2 = resp2.json()
         results2 = data2.get("results", data2) if isinstance(data2, dict) else data2

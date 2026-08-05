@@ -102,7 +102,9 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
             
-            logger.info(f"[GastoViewSet:create] Payload recibido: {request.data}")
+            # WARNING: [SEC-M6] Solo nombres de campo, no valores (datos de proveedor/monto).
+            _campos = list(request.data.keys()) if hasattr(request.data, 'keys') else type(request.data).__name__
+            logger.info(f"[GastoViewSet:create] Campos recibidos: {_campos}")
             
             success, result, status_code = self.service_crear_gasto(request.data.copy(), empresa)
             if not success:

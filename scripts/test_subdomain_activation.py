@@ -3,7 +3,7 @@ Script de prueba para verificar la activación automática de subdominios.
 
 Este script:
 1. Crea un tenant de prueba con schema 'test_subdomain'
-2. Verifica que el dominio se creó como 'test_subdomain.sintel.com'
+2. Verifica que el dominio se creó como 'test_subdomain.sintel.net.co'
 3. Construye la URL completa con puerto y verifica que sea accesible
 
 Uso:
@@ -51,7 +51,7 @@ def test_subdomain_activation():
     test_user, _ = User.objects.get_or_create(
         username='test_subdomain_user',
         defaults={
-            'email': 'test_subdomain@sintel.com',
+            'email': 'test_subdomain@sintel.net.co',
             'is_staff': True,
         }
     )

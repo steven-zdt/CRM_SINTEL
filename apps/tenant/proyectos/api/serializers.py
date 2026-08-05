@@ -267,10 +267,10 @@ class ItemPresupuestoSerializer(NormalizationMixin, serializers.ModelSerializer)
     class Meta:
         model = ItemPresupuestoProyecto
         fields = [
-            'id', 'proyecto_id', 'empresa_id', 'categoria', 'categoria_display',
+            'id', 'uuid', 'proyecto_id', 'empresa_id', 'categoria', 'categoria_display',
             'descripcion', 'cantidad', 'valor_unitario', 'subtotal'
         ]
-        read_only_fields = ['id', 'empresa_id', 'subtotal']
+        read_only_fields = ['id', 'uuid', 'empresa_id', 'subtotal']
 
     def validate(self, attrs):
         """Zero Trust: Normalizacion de datos."""
@@ -551,11 +551,11 @@ class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):
     class Meta:
         model = TareaDiariaProyecto
         fields = [
-            'id', 'proyecto_id', 'fecha_inicio', 'fecha_fin', 'titulo', 'descripcion',
+            'id', 'uuid', 'proyecto_id', 'fecha_inicio', 'fecha_fin', 'titulo', 'descripcion',
             'estado', 'estado_display', 'prioridad', 'prioridad_display',
             'asignado_a', 'notas_progreso', 'created_at'
         ]
-        read_only_fields = ['id', 'estado_display', 'prioridad_display', 'created_at']
+        read_only_fields = ['id', 'uuid', 'estado_display', 'prioridad_display', 'created_at']
 
     def validate(self, attrs):
         """

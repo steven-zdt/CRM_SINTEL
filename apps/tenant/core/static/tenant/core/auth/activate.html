@@ -23,6 +23,10 @@
         }
         .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px -5px rgba(79,70,229,0.4); }
         .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+        .resend-btn { transition: all 0.2s ease; }
+        .resend-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease forwards; }
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-900 to-indigo-950 min-h-screen flex items-center justify-center px-4 py-8">
@@ -49,6 +53,19 @@
                    class="btn-primary w-full block text-center text-white font-bold py-4 rounded-xl">
                     <i class="fas fa-sign-in-alt mr-2"></i>Iniciar Sesion
                 </a>
+            </div>
+
+            <!-- Resend Success State -->
+            <div id="resend_success_state" class="hidden text-center py-4 fade-in">
+                <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-paper-plane text-2xl"></i>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800 mb-2">Codigo enviado</h2>
+                <p class="text-gray-500 text-sm mb-6">Revisa tu bandeja de entrada (y la carpeta de spam).<br>El codigo expira en 48 horas.</p>
+                <button type="button" id="btn_volver_form"
+                        class="btn-primary w-full text-white font-bold py-3 rounded-xl text-sm">
+                    <i class="fas fa-arrow-left mr-2"></i>Ingresar codigo
+                </button>
             </div>
 
             <!-- Activation Form -->
@@ -111,9 +128,21 @@
                 </div>
 
                 <!-- Error -->
-                <div id="error_box" class="hidden bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
-                    <i class="fas fa-exclamation-circle flex-shrink-0"></i>
-                    <span id="error_text"></span>
+                <div id="error_box" class="hidden bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+                    <div class="flex items-start gap-2">
+                        <i class="fas fa-exclamation-circle flex-shrink-0 mt-0.5"></i>
+                        <div>
+                            <span id="error_text"></span>
+                            <!-- Reenviar codigo (visible solo cuando el codigo es invalido/expirado) -->
+                            <div id="resend_hint" class="hidden mt-2 pt-2 border-t border-red-200">
+                                <span class="text-red-600">¿No tienes el codigo? </span>
+                                <button type="button" id="btn_resend_inline"
+                                        class="resend-btn font-semibold text-indigo-700 hover:text-indigo-900 underline underline-offset-2">
+                                    Reenviar codigo
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Submit -->
@@ -121,6 +150,16 @@
                         class="btn-primary w-full text-white font-bold py-4 rounded-xl text-sm">
                     <i class="fas fa-unlock-alt mr-2"></i>Activar cuenta
                 </button>
+
+                <!-- Reenvio separado (siempre visible, menor prominencia) -->
+                <div class="text-center pt-1">
+                    <span class="text-xs text-gray-400">¿No recibiste el codigo? </span>
+                    <button type="button" id="btn_resend"
+                            class="resend-btn text-xs text-indigo-500 hover:text-indigo-700 font-medium underline underline-offset-2">
+                        Reenviar codigo
+                    </button>
+                    <span id="resend_countdown" class="hidden text-xs text-gray-400 ml-1"></span>
+                </div>
 
             </form>
 
@@ -142,16 +181,43 @@
             return m ? m.pop() : '';
         }
 
-        const form = document.getElementById('activation_form');
-        const codeInput = document.getElementById('input_code');
-        const passInput = document.getElementById('input_password');
-        const confirmInput = document.getElementById('input_confirm');
-        const emailInput = document.getElementById('input_email');
-        const submitBtn = document.getElementById('submit_btn');
-        const errorBox = document.getElementById('error_box');
-        const errorText = document.getElementById('error_text');
-        const successState = document.getElementById('success_state');
-        const successMsg = document.getElementById('success_msg');
+        const form           = document.getElementById('activation_form');
+        const codeInput      = document.getElementById('input_code');
+        const passInput      = document.getElementById('input_password');
+        const confirmInput   = document.getElementById('input_confirm');
+        const emailInput     = document.getElementById('input_email');
+        const submitBtn      = document.getElementById('submit_btn');
+        const errorBox       = document.getElementById('error_box');
+        const errorText      = document.getElementById('error_text');
+        const resendHint     = document.getElementById('resend_hint');
+        const successState   = document.getElementById('success_state');
+        const successMsg     = document.getElementById('success_msg');
+        const resendSuccessState = document.getElementById('resend_success_state');
+        const btnResend      = document.getElementById('btn_resend');
+        const btnResendInline = document.getElementById('btn_resend_inline');
+        const resendCountdown = document.getElementById('resend_countdown');
+        const btnVolverForm  = document.getElementById('btn_volver_form');
+
+        let resendTimer = null;
+        const RESEND_COOLDOWN = 60; // segundos
+
+        // Detecta si estamos en el dominio publico (sintel.net.co, localhost, IP) o en un subdominio de tenant.
+        // Dominio publico -> /api/public/v1/; tenants (home.sintel.net.co, cliente.sintel.net.co, etc.) -> /api/v1/core/.
+        const IS_PUBLIC_DOMAIN = (function () {
+            const host = window.location.hostname;
+            return (
+                host === 'sintel.net.co' ||
+                host === 'localhost' ||
+                /^\d+\.\d+\.\d+\.\d+$/.test(host)
+            );
+        })();
+
+        function getApiUrl(action) {
+            if (IS_PUBLIC_DOMAIN) {
+                return '/api/public/v1/auth/' + action + '/';
+            }
+            return '/api/v1/core/auth/' + action + '/';
+        }
 
         // Normalizar codigo a mayusculas
         codeInput.addEventListener('input', function () {
@@ -167,31 +233,124 @@
             this.querySelector('i').classList.toggle('fa-eye-slash');
         });
 
-        function showError(msg) {
+        function showError(msg, showResendHint) {
             errorText.textContent = msg;
             errorBox.classList.remove('hidden');
+            if (showResendHint) {
+                resendHint.classList.remove('hidden');
+            } else {
+                resendHint.classList.add('hidden');
+            }
         }
-        function hideError() { errorBox.classList.add('hidden'); }
+        function hideError() {
+            errorBox.classList.add('hidden');
+            resendHint.classList.add('hidden');
+        }
 
+        // Cooldown para el boton de reenvio
+        function startResendCooldown() {
+            let secs = RESEND_COOLDOWN;
+            btnResend.disabled = true;
+            btnResendInline.disabled = true;
+            resendCountdown.classList.remove('hidden');
+
+            function tick() {
+                resendCountdown.textContent = '(' + secs + 's)';
+                if (secs <= 0) {
+                    clearInterval(resendTimer);
+                    btnResend.disabled = false;
+                    btnResendInline.disabled = false;
+                    resendCountdown.classList.add('hidden');
+                    resendCountdown.textContent = '';
+                    return;
+                }
+                secs--;
+            }
+            tick();
+            resendTimer = setInterval(tick, 1000);
+        }
+
+        // Logica de reenvio
+        async function handleResend() {
+            const email = emailInput.value.trim();
+            if (!email) {
+                showError('Ingresa tu email primero para poder reenviar el codigo.', false);
+                emailInput.focus();
+                return;
+            }
+
+            btnResend.disabled = true;
+            btnResendInline.disabled = true;
+            btnResend.textContent = 'Enviando...';
+
+            try {
+                const resp = await fetch(getApiUrl('resend-activation-code'), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ email: email }),
+                });
+
+                let data = {};
+                try { data = await resp.json(); } catch (_) {}
+
+                if (resp.status === 409) {
+                    // Ya activada
+                    hideError();
+                    showError(data.detail || 'Esta cuenta ya fue activada. Usa la opcion de login.', false);
+                    return;
+                }
+
+                // 200 o cualquier otra respuesta positiva: mostrar pantalla de exito
+                form.classList.add('hidden');
+                resendSuccessState.classList.remove('hidden');
+                startResendCooldown();
+
+            } catch (err) {
+                showError('Error de red al reenviar. Intenta nuevamente.', true);
+            } finally {
+                btnResend.textContent = 'Reenviar codigo';
+                if (btnResend.disabled && !resendTimer) {
+                    btnResend.disabled = false;
+                    btnResendInline.disabled = false;
+                }
+            }
+        }
+
+        btnResend.addEventListener('click', handleResend);
+        btnResendInline.addEventListener('click', handleResend);
+
+        // Volver al formulario desde pantalla de exito de reenvio
+        btnVolverForm.addEventListener('click', function () {
+            resendSuccessState.classList.add('hidden');
+            form.classList.remove('hidden');
+            codeInput.value = '';
+            codeInput.focus();
+        });
+
+        // Submit activacion
         form.addEventListener('submit', async function (e) {
             e.preventDefault();
             hideError();
 
-            const email = emailInput.value.trim();
-            const code = codeInput.value.trim();
+            const email   = emailInput.value.trim();
+            const code    = codeInput.value.trim();
             const password = passInput.value;
-            const confirm = confirmInput.value;
+            const confirm  = confirmInput.value;
 
-            if (!email) { showError('Ingresa tu email.'); return; }
-            if (code.length !== 8) { showError('El codigo debe tener 8 caracteres.'); return; }
-            if (password.length < 8) { showError('La contrasena debe tener al menos 8 caracteres.'); return; }
-            if (password !== confirm) { showError('Las contrasenas no coinciden.'); return; }
+            if (!email)            { showError('Ingresa tu email.', false); return; }
+            if (code.length !== 8) { showError('El codigo debe tener 8 caracteres.', false); return; }
+            if (password.length < 8) { showError('La contrasena debe tener al menos 8 caracteres.', false); return; }
+            if (password !== confirm) { showError('Las contrasenas no coinciden.', false); return; }
 
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Activando...';
 
             try {
-                const resp = await fetch('/api/v1/core/auth/activate-with-code/', {
+                const resp = await fetch(getApiUrl('activate-with-code'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -212,10 +371,13 @@
                         window.location.href = data.redirect_url || '/static/tenant/core/auth/login.html';
                     }, 2500);
                 } else {
-                    showError(data.detail || 'Codigo invalido o expirado. Solicita uno nuevo.');
+                    const msg = data.detail || 'Codigo invalido o expirado. Solicita uno nuevo.';
+                    const isCodeError = resp.status === 400 &&
+                        (msg.toLowerCase().includes('codigo') || msg.toLowerCase().includes('expirado'));
+                    showError(msg, isCodeError);
                 }
             } catch (err) {
-                showError('Error de red. Intenta nuevamente.');
+                showError('Error de red. Intenta nuevamente.', false);
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fas fa-unlock-alt mr-2"></i>Activar cuenta';

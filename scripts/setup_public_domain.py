@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Script de inicialización para crear el tenant público y asociar el dominio sintel.com.
+Script de inicialización para crear el tenant público y asociar el dominio sintel.net.co.
 
 [WARNING] IMPORTANTE: Este script debe ejecutarse SOLO una vez durante la configuración inicial.
 Ejecuta las migraciones antes de usar este script.
@@ -36,7 +36,7 @@ from apps.public.tenants.models import Client, Domain
 
 def setup_public_tenant():
     """
-    Crea el tenant público y asocia el dominio sintel.com si no existen.
+    Crea el tenant público y asocia el dominio sintel.net.co si no existen.
     
     [WARNING] SEGURIDAD: Verifica que no exista antes de crear para evitar duplicados.
     """
@@ -60,7 +60,7 @@ def setup_public_tenant():
     
     # Dominios permitidos para el esquema público
     allowed_domains = [
-        'sintel.com',
+        'sintel.net.co',
         'localhost',
         '127.0.0.1',
         '0.0.0.0',
@@ -82,7 +82,7 @@ def setup_public_tenant():
             domain = Domain.objects.create(
                 domain=domain_name,
                 tenant=public_tenant,
-                is_primary=(domain_name == 'sintel.com')  # sintel.com es el dominio principal
+                is_primary=(domain_name == 'sintel.net.co')  # sintel.net.co es el dominio principal
             )
             print(f"[OK] Dominio '{domain_name}' creado exitosamente (ID: {domain.id}, Primary: {domain.is_primary})")
     
@@ -90,14 +90,14 @@ def setup_public_tenant():
     primary_domains = Domain.objects.filter(tenant=public_tenant, is_primary=True)
     if not primary_domains.exists():
         print(f"\n[WARNING]  ADVERTENCIA: No hay dominio primario para '{public_schema}'")
-        # Establecer sintel.com como primario si existe
-        sintel_domain = Domain.objects.filter(domain='sintel.com', tenant=public_tenant).first()
+        # Establecer sintel.net.co como primario si existe
+        sintel_domain = Domain.objects.filter(domain='sintel.net.co', tenant=public_tenant).first()
         if sintel_domain:
             sintel_domain.is_primary = True
             sintel_domain.save()
-            print(f"[OK] Dominio 'sintel.com' establecido como primario")
+            print(f"[OK] Dominio 'sintel.net.co' establecido como primario")
         else:
-            # Si no existe sintel.com, establecer el primero disponible como primario
+            # Si no existe sintel.net.co, establecer el primero disponible como primario
             first_domain = Domain.objects.filter(tenant=public_tenant).first()
             if first_domain:
                 first_domain.is_primary = True

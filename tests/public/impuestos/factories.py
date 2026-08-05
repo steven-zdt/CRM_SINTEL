@@ -3,26 +3,29 @@ Factories para modelos de impuestos (factory_boy).
 
 Facilitan la creación de datos de prueba.
 """
+
+from datetime import timedelta
+
 import factory
 from django.utils import timezone
-from datetime import timedelta
+
 from apps.public.impuestos.models import (
-    TipoImpuesto,
-    TarifaIVA,
-    ConceptoRetencion,
-    CodigoTributario,
     ActividadEconomica,
-    NormaTributaria,
+    CodigoTributario,
+    ConceptoRetencion,
     DocumentoFuente,
+    NormaTributaria,
+    TarifaIVA,
+    TipoImpuesto,
 )
 
 
 class TipoImpuestoFactory(factory.django.DjangoModelFactory):
     """Factory para TipoImpuesto."""
-    
+
     class Meta:
         model = TipoImpuesto
-    
+
     codigo = factory.Sequence(lambda n: f"T{n:03d}")
     nombre = factory.Faker("word", locale="es_ES")
     descripcion = factory.Faker("sentence", locale="es_ES", nb_words=6)
@@ -32,10 +35,10 @@ class TipoImpuestoFactory(factory.django.DjangoModelFactory):
 
 class TarifaIVAFactory(factory.django.DjangoModelFactory):
     """Factory para TarifaIVA."""
-    
+
     class Meta:
         model = TarifaIVA
-    
+
     codigo = factory.Sequence(lambda n: f"TAR{n:03d}")
     nombre = factory.Faker("word", locale="es_ES")
     porcentaje = factory.Iterator([0, 19, 5])
@@ -46,10 +49,10 @@ class TarifaIVAFactory(factory.django.DjangoModelFactory):
 
 class ConceptoRetencionFactory(factory.django.DjangoModelFactory):
     """Factory para ConceptoRetencion."""
-    
+
     class Meta:
         model = ConceptoRetencion
-    
+
     codigo = factory.Sequence(lambda n: f"RET{n:03d}")
     nombre = factory.Faker("word", locale="es_ES")
     tipo_retencion = factory.Iterator(["ICA", "IVA", "RENTA"])
@@ -59,10 +62,10 @@ class ConceptoRetencionFactory(factory.django.DjangoModelFactory):
 
 class CodigoTributarioFactory(factory.django.DjangoModelFactory):
     """Factory para CodigoTributario."""
-    
+
     class Meta:
         model = CodigoTributario
-    
+
     codigo = factory.Sequence(lambda n: f"COD{n:03d}")
     nombre = factory.Faker("word", locale="es_ES")
     tipo = factory.Iterator(["RESPONSABILIDAD", "REGIMEN"])
@@ -72,10 +75,10 @@ class CodigoTributarioFactory(factory.django.DjangoModelFactory):
 
 class ActividadEconomicaFactory(factory.django.DjangoModelFactory):
     """Factory para ActividadEconomica."""
-    
+
     class Meta:
         model = ActividadEconomica
-    
+
     codigo = factory.Sequence(lambda n: f"ACT{n:04d}")
     nombre = factory.Faker("company", locale="es_ES")
     descripcion = factory.Faker("sentence", locale="es_ES", nb_words=8)
@@ -84,10 +87,10 @@ class ActividadEconomicaFactory(factory.django.DjangoModelFactory):
 
 class DocumentoFuenteFactory(factory.django.DjangoModelFactory):
     """Factory para DocumentoFuente."""
-    
+
     class Meta:
         model = DocumentoFuente
-    
+
     fuente = factory.Iterator(["DIAN", "DOF", "SUIN"])
     tipo = factory.Iterator(["PDF", "HTML", "CSV"])
     estado = "RECIBIDO"
@@ -97,10 +100,10 @@ class DocumentoFuenteFactory(factory.django.DjangoModelFactory):
 
 class NormaTributariaFactory(factory.django.DjangoModelFactory):
     """Factory para NormaTributaria."""
-    
+
     class Meta:
         model = NormaTributaria
-    
+
     documento_fuente = factory.SubFactory(DocumentoFuenteFactory)
     articulo = factory.Sequence(lambda n: f"Art. {n}")
     impuesto = factory.Iterator(["IVA", "ICA", "RENTA"])

@@ -6,19 +6,22 @@ en el TENANT_URLCONF y responde correctamente desde el dominio del tenant.
 
 Referencia: SINTEL v2.30 - API-First JSON-only, TENANT_URLCONF para privados.
 """
+
 import pytest
 from django.test import Client
-from django_tenants.utils import schema_context
-from apps.public.tenants.models import Client as TenantClient, Domain
-from apps.tenant.facturas.models import Factura
 from django.utils import timezone
+from django_tenants.utils import schema_context
+
+from apps.public.tenants.models import Client as TenantClient
+from apps.public.tenants.models import Domain
+from apps.tenant.facturas.models import Factura
 
 
 @pytest.mark.django_db
 def test_list_facturas_returns_200():
     """
     Verifica que GET /api/v1/facturas/ responde 200 OK desde el dominio del tenant.
-    
+
     [WARNING] MULTI-TENANT: Usa HTTP_HOST para entrar al TENANT_URLCONF correcto.
     Este test comprueba el routing por hostname (clave en django-tenants).
     """
@@ -30,9 +33,9 @@ def test_list_facturas_returns_200():
             "name": "Test Facturas Smoke Tenant",
             "paid_until": timezone.now().replace(year=2099),
             "on_trial": False,
-        }
+        },
     )
-    
+
     # Dominio generado dinamicamente desde el schema_name del tenant de prueba
     domain_name = f"{schema_name}.sintel.local"
     Domain.objects.get_or_create(
@@ -40,7 +43,7 @@ def test_list_facturas_returns_200():
         tenant=tenant,
         defaults={"is_primary": True},
     )
-    
+
     # Crear factura de prueba en el esquema del tenant
     with schema_context(schema_name):
         # Asegurar que la tabla existe (migraciones aplicadas)
@@ -62,40 +65,40 @@ def test_list_facturas_returns_200():
         except Exception as e:
             # Si falla, puede ser que las migraciones no estén aplicadas
             pytest.skip(f"No se pudo crear factura de prueba (migraciones?): {e}")
-    
+
     # Cliente HTTP con HTTP_HOST del tenant
     # [WARNING] CRÍTICO: Esto hace que django-tenants resuelva el TENANT_URLCONF correcto
     client = Client()
     client.defaults["HTTP_HOST"] = domain_name
-    
+
     # Hacer petición al endpoint
     url = "/api/v1/facturas/?ordering=-fecha_emision&page=1&page_size=10"
     resp = client.get(url)
-    
+
     # Verificar respuesta
     assert resp.status_code == 200, (
         f"Expected 200 OK, got {resp.status_code}. "
         f"Response: {resp.content.decode('utf-8')[:500]}"
     )
-    
+
     # Verificar que la respuesta es JSON
-    assert resp.get("Content-Type", "").startswith("application/json"), (
-        f"Expected JSON response, got {resp.get('Content-Type')}"
-    )
-    
+    assert resp.get("Content-Type", "").startswith(
+        "application/json"
+    ), f"Expected JSON response, got {resp.get('Content-Type')}"
+
     # Verificar estructura básica de respuesta paginada
     data = resp.json()
     assert isinstance(data, dict), "Response should be a JSON object"
-    assert "results" in data or "count" in data, (
-        "Response should have pagination structure (results or count)"
-    )
+    assert (
+        "results" in data or "count" in data
+    ), "Response should have pagination structure (results or count)"
 
 
 @pytest.mark.django_db
 def test_list_facturas_empty_returns_200():
     """
     Verifica que GET /api/v1/facturas/ responde 200 OK incluso sin facturas.
-    
+
     [WARNING] MULTI-TENANT: Verifica que el endpoint existe aunque no haya datos.
     """
     # Crear tenant de prueba
@@ -106,53 +109,51 @@ def test_list_facturas_empty_returns_200():
             "name": "Test Facturas Empty Smoke Tenant",
             "paid_until": timezone.now().replace(year=2099),
             "on_trial": False,
-        }
+        },
     )
-    
+
     # Crear dominio para el tenant
-    domain_name = "empty-test.sintel.com"
+    domain_name = "empty-test.sintel.net.co"
     Domain.objects.get_or_create(
-        domain=domain_name,
-        tenant=tenant,
-        defaults={"is_primary": True}
+        domain=domain_name, tenant=tenant, defaults={"is_primary": True}
     )
-    
+
     # Cliente HTTP con HTTP_HOST del tenant
     client = Client()
     client.defaults["HTTP_HOST"] = domain_name
-    
+
     # Hacer petición al endpoint (sin facturas)
     url = "/api/v1/facturas/?ordering=-fecha_emision&page=1&page_size=10"
     resp = client.get(url)
-    
+
     # Verificar respuesta (debe ser 200 incluso sin datos)
     assert resp.status_code == 200, (
         f"Expected 200 OK even with no data, got {resp.status_code}. "
         f"Response: {resp.content.decode('utf-8')[:500]}"
     )
-    
+
     # Verificar que la respuesta es JSON
-    assert resp.get("Content-Type", "").startswith("application/json"), (
-        f"Expected JSON response, got {resp.get('Content-Type')}"
-    )
+    assert resp.get("Content-Type", "").startswith(
+        "application/json"
+    ), f"Expected JSON response, got {resp.get('Content-Type')}"
 
 
 @pytest.mark.django_db
 def test_list_facturas_404_from_public_domain():
     """
     Verifica que GET /api/v1/facturas/ devuelve 404 desde el dominio público.
-    
+
     [WARNING] SEGURIDAD: Las facturas solo están disponibles en el ámbito del tenant.
     Este test confirma que el endpoint NO existe en ROOT_URLCONF.
     """
     # Cliente HTTP sin HTTP_HOST (o con dominio público)
     client = Client()
     # No establecer HTTP_HOST o usar un dominio que no sea de tenant
-    
+
     # Hacer petición al endpoint desde contexto público
     url = "/api/v1/facturas/"
     resp = client.get(url)
-    
+
     # Verificar que devuelve 404 (porque no existe en ROOT_URLCONF)
     # O 403 si hay algún middleware que bloquea
     assert resp.status_code in [404, 403], (

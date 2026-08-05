@@ -122,7 +122,7 @@ class Command(BaseCommand):
 
             # 5. Crear dominio adicional mínimo: solo 127.0.0.1
             # WARNING: ESTÁNDAR: Solo creamos localhost (principal) y 127.0.0.1 (adicional)
-            # No creamos dominios con puerto, sintel.localhost, ni sintel.com
+            # No creamos dominios con puerto, sintel.localhost, ni sintel.net.co
             if domain_name != "127.0.0.1":
                 additional_domain_obj, created = Domain.objects.get_or_create(
                     domain="127.0.0.1",

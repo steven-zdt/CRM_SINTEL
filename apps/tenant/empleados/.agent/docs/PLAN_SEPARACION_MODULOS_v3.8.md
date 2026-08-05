@@ -12,7 +12,7 @@
 
 ### Estado actual (v3.7.4)
 
-La workspace `#empleados` en `home.sintel.com` ya tiene 3 tabs (Empleados / Contratos / Nóminas), **pero**:
+La workspace `#empleados` en `home.sintel.net.co` ya tiene 3 tabs (Empleados / Contratos / Nóminas), **pero**:
 
 | Módulo | Estado Tab | CRUD | Problema |
 |--------|-----------|------|----------|

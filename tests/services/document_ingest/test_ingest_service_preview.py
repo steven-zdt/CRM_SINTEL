@@ -6,16 +6,18 @@ Tests para servicio de ingestión en modo preview (FASE 9).
 - Retorna DTO completo
 - Validaciones se ejecutan
 """
+
 import pytest
+
 from apps.services.document_ingest.ingest_service import ingest_document
 
 
 class TestIngestServicePreview:
     """Tests para ingest_service en modo preview."""
-    
+
     def test_preview_xml_invoice(self):
         """Test: Preview de XML Invoice no persiste."""
-        xml_content = b'''<?xml version="1.0" encoding="UTF-8"?>
+        xml_content = b"""<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
          xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
          xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
@@ -47,30 +49,26 @@ class TestIngestServicePreview:
         <cbc:TaxInclusiveAmount>1190.00</cbc:TaxInclusiveAmount>
         <cbc:PayableAmount>1190.00</cbc:PayableAmount>
     </cac:LegalMonetaryTotal>
-</Invoice>'''
-        
+</Invoice>"""
+
         result, status_code = ingest_document(
-            content=xml_content,
-            filename="test.xml",
-            preview=True
+            content=xml_content, filename="test.xml", preview=True
         )
-        
+
         assert result["persisted"] is False
         assert "dto" in result
         assert "sha256" in result
         assert "metadata" in result
         assert status_code == 200
-    
+
     def test_preview_invalid_document(self):
         """Test: Preview de documento inválido retorna error."""
-        invalid_content = b'invalid content'
-        
+        invalid_content = b"invalid content"
+
         result, status_code = ingest_document(
-            content=invalid_content,
-            filename="test.txt",
-            preview=True
+            content=invalid_content, filename="test.txt", preview=True
         )
-        
+
         assert result["persisted"] is False
         assert status_code in (400, 422)
         assert "error" in result

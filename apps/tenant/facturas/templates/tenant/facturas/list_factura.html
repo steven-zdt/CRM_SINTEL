@@ -1,17 +1,11 @@
 {% load static %}
-{# list_factura.html — v3.17 Compact UI: tabs Ventas / Compras #}
-{# Skill: tabulator.md §6 — lazy init + redraw en tab oculto     #}
+{# list_factura.html — v4.0 Compact UI: tabs Ventas / Compras #}
+{# PLAN_UNICO_CORRECCIONES.md Fase 5-BIS: tabla server-rendered (django-tables2 + HTMX),
+   ya no Tabulator — ver apps/tenant/facturas/tables.py y views.py. #}
 
 <style>
-  /* ── Tabulator filas compactas (scoped a ui-facturas) ────── */
-  .ui-facturas .tabulator { font-size: 0.82rem; border: none !important; }
-  .ui-facturas .tabulator .tabulator-header { background: #f8f9fa; border-bottom: 2px solid #dee2e6; }
-  .ui-facturas .tabulator .tabulator-col { background: #f8f9fa !important; padding: 6px 8px !important; }
-  .ui-facturas .tabulator .tabulator-col-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #6c757d; }
-  .ui-facturas .tabulator .tabulator-row { min-height: 0 !important; }
-  .ui-facturas .tabulator .tabulator-cell { padding: 5px 8px !important; vertical-align: middle; border-bottom: 1px solid #f0f0f0; }
-  .ui-facturas .tabulator .tabulator-row:hover { background: #f0f7ff !important; }
-  .ui-facturas .tabulator .tabulator-row-even { background: #fafafa; }
+  .ui-facturas .table { font-size: 0.82rem; }
+  .ui-facturas thead th { background: #f8f9fa; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #6c757d; }
   /* Acciones siempre visibles pero más pequeñas */
   .ui-facturas .btn-group-sm .btn { padding: 2px 6px; font-size: 0.72rem; }
   /* Badge compacto */
@@ -82,7 +76,7 @@
       <span class="input-group-text bg-white border-end-0">
         <i class="bi bi-search text-muted" style="font-size:0.8rem;"></i>
       </span>
-      <input type="text" id="search-factura"
+      <input type="text" id="search-factura" name="q"
              class="form-control border-start-0 ps-0"
              placeholder="Buscar numero, emisor, receptor...">
     </div>
@@ -116,29 +110,20 @@
     <div class="tab-pane fade show active" id="tab-pane-ventas"
          role="tabpanel" aria-labelledby="tab-ventas-btn">
 
-      {# Filtros rápidos — ventas #}
-      <div class="d-flex gap-1 px-3 pt-2 pb-1 flex-wrap align-items-center border-bottom" id="filtros-pago-ventas"
-           style="background:#fafafa;">
-        <span class="text-muted me-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">Pago:</span>
-        <button class="btn btn-xs btn-outline-dark active" data-filtro-venta-pago=""
-                style="font-size:0.73rem;padding:2px 8px;">Todas</button>
-        <button class="btn btn-xs btn-outline-danger" data-filtro-venta-pago="NO_PAGADA"
-                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-exclamation-circle me-1"></i>Pendientes</button>
-        <button class="btn btn-xs btn-outline-warning" data-filtro-venta-pago="PAGO_PARCIAL"
-                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-clock-history me-1"></i>Parcial</button>
-        <button class="btn btn-xs btn-outline-success" data-filtro-venta-pago="PAGADA"
-                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-check2-all me-1"></i>Pagadas</button>
-      </div>
-
-      {# Grid Ventas #}
-      <div data-spinner="ventas" class="text-center py-4" style="display:none;">
-        <div class="spinner-border spinner-border-sm text-success" role="status"></div>
-        <span class="ms-2 text-muted small">Cargando facturas de venta...</span>
-      </div>
-      <div id="grid-ventas" style="display:none;"></div>
-      <div data-empty-state="ventas" class="text-center py-5" style="display:none;">
-        <i class="bi bi-receipt text-muted" style="font-size:2rem;"></i>
-        <p class="mt-2 text-muted small mb-0">No hay facturas de venta</p>
+      {# Panel HTMX: filtros de pago + tabla server-rendered (django-tables2).
+         Ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS — reemplaza el Tabulator
+         que antes poblaba #grid-ventas via JS. #}
+      <div id="panel-ventas" data-facturas-panel
+           hx-get="{% url 'facturas:tabla' naturaleza='venta' %}"
+           hx-trigger="load, keyup changed delay:400ms from:#search-factura, search from:#search-factura, facturaGuardada from:document"
+           hx-include="#search-factura"
+           hx-target="this"
+           hx-swap="innerHTML"
+           hx-boost="true">
+        <div class="text-center py-4">
+          <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+          <span class="ms-2 text-muted small">Cargando facturas de venta...</span>
+        </div>
       </div>
     </div>
 
@@ -146,29 +131,18 @@
     <div class="tab-pane fade" id="tab-pane-compras"
          role="tabpanel" aria-labelledby="tab-compras-btn">
 
-      {# Filtros rápidos — compras #}
-      <div class="d-flex gap-1 px-3 pt-2 pb-1 flex-wrap align-items-center border-bottom" id="filtros-pago-compras"
-           style="background:#fafafa;">
-        <span class="text-muted me-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">Pago:</span>
-        <button class="btn btn-xs btn-outline-dark active" data-filtro-compra-pago=""
-                style="font-size:0.73rem;padding:2px 8px;">Todas</button>
-        <button class="btn btn-xs btn-outline-danger" data-filtro-compra-pago="NO_PAGADA"
-                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-exclamation-circle me-1"></i>Pendientes</button>
-        <button class="btn btn-xs btn-outline-warning" data-filtro-compra-pago="PAGO_PARCIAL"
-                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-clock-history me-1"></i>Parcial</button>
-        <button class="btn btn-xs btn-outline-success" data-filtro-compra-pago="PAGADA"
-                style="font-size:0.73rem;padding:2px 8px;"><i class="bi bi-check2-all me-1"></i>Pagadas</button>
-      </div>
-
-      {# Grid Compras #}
-      <div data-spinner="compras" class="text-center py-4" style="display:none;">
-        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-        <span class="ms-2 text-muted small">Cargando facturas de compra...</span>
-      </div>
-      <div id="grid-compras" style="display:none;"></div>
-      <div data-empty-state="compras" class="text-center py-5" style="display:none;">
-        <i class="bi bi-cart text-muted" style="font-size:2rem;"></i>
-        <p class="mt-2 text-muted small mb-0">No hay facturas de compra</p>
+      {# Panel HTMX. Ver nota en la pestaña de Ventas. #}
+      <div id="panel-compras" data-facturas-panel
+           hx-get="{% url 'facturas:tabla' naturaleza='compra' %}"
+           hx-trigger="load, keyup changed delay:400ms from:#search-factura, search from:#search-factura, facturaGuardada from:document"
+           hx-include="#search-factura"
+           hx-target="this"
+           hx-swap="innerHTML"
+           hx-boost="true">
+        <div class="text-center py-4">
+          <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+          <span class="ms-2 text-muted small">Cargando facturas de compra...</span>
+        </div>
       </div>
     </div>
 

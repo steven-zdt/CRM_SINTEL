@@ -3,8 +3,8 @@
 Script de prueba para verificar el enrutamiento por hostname (TENANT_URLCONF).
 
 Este script verifica que:
-1. Requests a <schema>.sintel.com se resuelvan en TENANT_URLCONF
-2. Requests a sintel.com se resuelvan en ROOT_URLCONF
+1. Requests a <schema>.sintel.net.co se resuelvan en TENANT_URLCONF
+2. Requests a sintel.net.co se resuelvan en ROOT_URLCONF
 3. La ruta /activate/ esté disponible en tenants privados
 
 Uso:
@@ -67,15 +67,15 @@ def test_routing():
         results.append(False)
     
     # 2. Verificar dominio público
-    print("\n2. Verificando dominio público (sintel.com)...")
+    print("\n2. Verificando dominio público (sintel.net.co)...")
     with schema_context('public'):
         public = Client.objects.get(schema_name='public')
-        sintel_domain = Domain.objects.filter(tenant=public, domain='sintel.com').first()
+        sintel_domain = Domain.objects.filter(tenant=public, domain='sintel.net.co').first()
         
         if sintel_domain and sintel_domain.is_primary:
-            print("   [OK] sintel.com existe y es primario")
+            print("   [OK] sintel.net.co existe y es primario")
         else:
-            print("   [ERROR] sintel.com NO existe o NO es primario")
+            print("   [ERROR] sintel.net.co NO existe o NO es primario")
             print("   [IDEA] Ejecuta: python manage.py ensure_public_domains")
             results.append(False)
     
@@ -105,8 +105,8 @@ def test_routing():
     print("\n4. Probando enrutamiento (simulación)...")
     print("   [WARNING]  Nota: Esta es una simulación. Para pruebas reales, usa curl o el navegador.")
     
-    # Simular request a sintel.com (público)
-    print("\n   a) Request a sintel.com/console/tenants/ (ROOT_URLCONF):")
+    # Simular request a sintel.net.co (público)
+    print("\n   a) Request a sintel.net.co/console/tenants/ (ROOT_URLCONF):")
     try:
         # Nota: No podemos simular completamente el middleware, pero podemos verificar las URLs
         from django.urls import reverse
@@ -165,11 +165,11 @@ def test_routing():
     if all(results) if results else True:
         print("[OK] Todas las verificaciones pasaron")
         print("\n[IDEA] Para pruebas reales de enrutamiento:")
-        print("   1. Accede a http://sintel.com/console/tenants/ (debe usar ROOT_URLCONF)")
+        print("   1. Accede a http://sintel.net.co/console/tenants/ (debe usar ROOT_URLCONF)")
         if test_domain_name:
             print(f"   2. Accede a http://{test_domain_name}/activate/ (debe usar TENANT_URLCONF)")
         print("\n   Prueba con curl:")
-        print("   curl -H 'Host: sintel.com' http://localhost:8000/console/tenants/")
+        print("   curl -H 'Host: sintel.net.co' http://localhost:8000/console/tenants/")
         if test_domain_name:
             print(f"   curl -H 'Host: {test_domain_name}' http://localhost:8000/activate/")
         return 0

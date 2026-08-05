@@ -100,18 +100,18 @@ class ResolucionSelector:
         Obtiene la resolucion vigente para una empresa (Optimizado con Cache).
         """
         from django.core.cache import cache
-        cache_key = f"resolucion_vigente_{empresa_id}"
+        from django.db import connection
+        cache_key = f"resolucion_vigente:{connection.schema_name}:{empresa_id}"
         resolucion = cache.get(cache_key)
-        
+
         if resolucion is None:
             resolucion = ResolucionDIAN.objects.filter(
                 empresa_id=empresa_id,
                 vigente=True
             ).first()
             if resolucion:
-                # Cachear por 1 hora
                 cache.set(cache_key, resolucion, timeout=3600)
-        
+
         return resolucion
 
 

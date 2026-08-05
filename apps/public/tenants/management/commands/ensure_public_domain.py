@@ -3,7 +3,7 @@ Comando de management para garantizar que el tenant público tenga el dominio co
 
 WARNING: POLÍTICA ESTRICTA DE SUBDOMINIOS:
 - El tenant PÚBLICO siempre debe responder en {TENANT_DOMAIN_BASE}
-- Ejemplo: Si TENANT_DOMAIN_BASE='sintel.com', el tenant público debe tener dominio 'sintel.com'
+- Ejemplo: Si TENANT_DOMAIN_BASE='sintel.net.co', el tenant público debe tener dominio 'sintel.net.co'
 - Si el tenant público tiene otro dominio (ej: 'localhost'), se actualiza automáticamente
 
 Este comando:
