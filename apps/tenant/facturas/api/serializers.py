@@ -317,6 +317,15 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'sede': 'La sede seleccionada no pertenece a esta empresa.'}
             )
+        # [OSF Fase F8] anti-IDOR ya verificaba "pertenece a la empresa" -
+        # esto agrega "esta dentro del alcance organizacional del usuario"
+        # (perfil.sedes_asignadas si alcance=SEDE/AREA), usando OrganizationalScope.
+        if sede:
+            from apps.tenant.core.services.organizational_scope import sede_esta_en_alcance
+            if not sede_esta_en_alcance(sede.id, self.context.get('request')):
+                raise serializers.ValidationError(
+                    {'sede': 'No tiene permiso para asignar esta sede (fuera de su alcance organizacional).'}
+                )
         return attrs
 
     class Meta:
@@ -416,7 +425,15 @@ class FacturaWriteSerializer(serializers.ModelSerializer):
     mediante el servicio crear_factura() / actualizar_factura().
     # RETENCIONES Y FORMAS DE PAGO: Opcionales (si vienen del XML, se usan; si no, usuario ingresa manualmente).
     # ESTADO DE PAGO: Campo editable por usuario para rastrear pagos (NO_PAGADA, PAGO_PARCIAL, PAGADA).
+
+    [OSF Fase F11] `sede_nombre` (solo lectura) agregado para que la
+    respuesta de PATCH refleje el resultado de editar `sede` (MANUAL_EDITABLE_FIELDS,
+    business_service.py) - la escritura real bypasea este serializer (usa
+    request.data directo, ver FacturaViewSet.partial_update()), este campo
+    es unicamente para el payload de salida.
     """
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+
     class Meta:
         model = Factura
         fields = (
@@ -425,7 +442,7 @@ class FacturaWriteSerializer(serializers.ModelSerializer):
             "receptor_nit", "receptor_razon_social", "receptor_direccion", "receptor_email", "receptor_telefono",
             "moneda", "subtotal", "impuestos", "total",
             "forma_pago", "medio_pago_codigo", "payment_due_date",
-            "cotizacion_uuid",
+            "cotizacion_uuid", "sede_nombre",
         )
         read_only_fields = ("subtotal", "impuestos", "total")
 

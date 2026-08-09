@@ -381,6 +381,14 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'sede': 'La sede seleccionada no pertenece a esta empresa.'}
             )
+        # [OSF Fase F8] anti-IDOR ya verificaba "pertenece a la empresa" -
+        # esto agrega "esta dentro del alcance organizacional del usuario".
+        if sede:
+            from apps.tenant.core.services.organizational_scope import sede_esta_en_alcance
+            if not sede_esta_en_alcance(sede.id, self.context.get('request')):
+                raise serializers.ValidationError(
+                    {'sede': 'No tiene permiso para asignar esta sede (fuera de su alcance organizacional).'}
+                )
 
         # Get the project's current phase (from instance if updating, from attrs if creating)
         proyecto = self.instance if self.instance else None

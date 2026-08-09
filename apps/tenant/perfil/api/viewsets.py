@@ -31,6 +31,7 @@ from rest_framework.response import Response
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.models import Area, Empresa, Sede
 from apps.tenant.perfil.models import Departamento, RolTenant
 from apps.tenant.perfil.services.business_service import PerfilBusinessService
@@ -47,8 +48,17 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class PerfilViewSet(PerfilServiceMixin, viewsets.GenericViewSet):
-    """Router puro: delega la logica al Service Layer (PerfilServiceMixin)."""
+class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.GenericViewSet):
+    """Router puro: delega la logica al Service Layer (PerfilServiceMixin).
+
+    Fase 9 (OCF): adopta OrganizationalContextMixin de forma aditiva
+    (expone get_organizational_context() para quien lo necesite). No se
+    migro ningun metodo de este ViewSet a context.filter(...): todos
+    resuelven la empresa con Empresa.objects.only('id').first() (via
+    PerfilServiceMixin._resolve_empresa_id() o inline), que no exige
+    TenantProfile, a diferencia de OrganizationalContext.resolve(). Mismo
+    hallazgo que en empresa/api/viewsets.py (Fase 9, app 1/14) - no se
+    repite el razonamiento completo aqui, se referencia."""
     permission_classes = [IsTenantMember]
     serializer_class = TenantProfileSerializer
     pagination_class = StandardResultsSetPagination
@@ -390,9 +400,12 @@ class PerfilViewSet(PerfilServiceMixin, viewsets.GenericViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class DepartamentoViewSet(BaseTenantViewSet):
+class DepartamentoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     ViewSet para Departamento.
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    get_queryset()/perform_* no migrados - misma razon que PerfilViewSet.
     """
     # WARNING: [SEC-A4] IsTenantMember agregado -- IsTenantAdminOrReadOnly solo no
     # valida membresia en SAFE_METHODS (permite lectura a cualquier autenticado de

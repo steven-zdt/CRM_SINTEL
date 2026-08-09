@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.ventas.api.serializers import (
     ResolucionFacturacionSerializer,
     VentaDetailSerializer,
@@ -24,7 +25,13 @@ from apps.tenant.ventas.services.api_mixins import (
 logger = logging.getLogger(__name__)
 
 
-class VentaViewSet(VentaServiceMixin, BaseTenantViewSet):
+class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantViewSet):
+    """Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    get_queryset()/get_object() no migrados - _get_empresa_id_seguro()
+    (BaseServiceMixin) cae al singleton Empresa.objects.only('id').first()
+    sin exigir TenantProfile (VentaServiceMixin no hereda SintelDSVMixin),
+    mismo patron de riesgo ya documentado en empresa (Fase 9 app 1/14)."""
+
     queryset = Venta.objects.none()
     serializer_class = VentaDetailSerializer
     lookup_field = "uuid"
@@ -194,7 +201,7 @@ class VentaViewSet(VentaServiceMixin, BaseTenantViewSet):
         )
 
 
-class ResolucionFacturacionViewSet(ResolucionFacturacionServiceMixin, BaseTenantViewSet):
+class ResolucionFacturacionViewSet(OrganizationalContextMixin, ResolucionFacturacionServiceMixin, BaseTenantViewSet):
     queryset = ResolucionFacturacion.objects.none()
     serializer_class = ResolucionFacturacionSerializer
     lookup_field = "uuid"

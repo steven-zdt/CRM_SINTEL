@@ -51,7 +51,24 @@ class EmpleadoTableView(_EmpleadosTableViewBase):
         if not empresa_id:
             return Empleado.objects.none()
         search = (self.request.GET.get("q") or "").strip() or None
-        return EmpleadoSelector.get_list(empresa_id=empresa_id, search=search)
+
+        # [OSF Fase F13] Antes de esta fase, la grilla HTML no aplicaba
+        # ningun filtro de alcance organizacional, a diferencia del endpoint
+        # DRF equivalente (F7) - mismo patron de bug recurrente (compras F5,
+        # facturas F11, gastos/proyectos F13). NULL-safe.
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            scope = OrganizationalScope.resolve(self.request)
+            sede_ids, area_ids = scope.sede_ids, scope.area_ids
+        except OrganizationalScopeError:
+            sede_ids, area_ids = None, None
+
+        return EmpleadoSelector.get_list(
+            empresa_id=empresa_id, search=search, sede_ids=sede_ids, area_ids=area_ids,
+        )
 
 
 class ContratoTableView(_EmpleadosTableViewBase):

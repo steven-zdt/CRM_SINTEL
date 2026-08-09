@@ -1,9 +1,10 @@
 import re
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import SAFE_METHODS
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
@@ -13,6 +14,7 @@ from rest_framework.response import Response
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
 # SINTEL v3.5: Refactorizacion Service Layer (Tri-Part)
 # PROHIBIDO IMPORTAR MODELOS directamente en ViewSets.
@@ -37,15 +39,21 @@ from .serializers import (
     StockResponseSerializer,
 )
 
-class BaseViewSet(BaseTenantViewSet):
+class BaseViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     v2.60: ViewSet base para inventario usando GenericViewSet con mixins especificos.
-    
+
     SINTEL v2.60: Sincronizacion Arquitectonica
     - GenericViewSet: Base flexible con mixins especificos (List, Retrieve, Create, Update, Destroy)
     - ENFORCED MODE: Validacion de permisos para mutaciones
     - Asignacion de Empresa (SSoT): Automatica en perform_create()
     - Formato DRF {count, results}: Garantizado en list() para Tabulator Factory
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado aqui, en la base, para
+    que las 6 subclases lo hereden. get_queryset()/get_object()/etc. no
+    migrados - resuelven la empresa via inv_services.get_empresa_singleton()
+    (Empresa.objects.only('id').first(), sin exigir TenantProfile), mismo
+    patron de riesgo ya documentado en empresa (Fase 9 app 1/14).
     """
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
@@ -510,14 +518,50 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
     def get_queryset(self):
         empresa = inv_services.get_empresa_singleton()
         search = self.request.query_params.get('search', None)
-        return inv_services.MovimientoInventarioSelector.get_list(empresa_id=empresa.id, search=search).order_by('-created_at')
+
+        # [OSF Fase F7] mismo criterio de degradacion que facturas/
+        # cotizaciones/gastos/compras: sin scope resoluble, no restringir.
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        return inv_services.MovimientoInventarioSelector.get_list(
+            empresa_id=empresa.id, search=search, sede_ids=sede_ids,
+        ).order_by('-created_at')
 
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.MovimientoInventarioSelector.get_detail(
-            empresa_id=empresa.id,
-            movimiento_uuid=self.kwargs[self.lookup_url_kwarg],
+
+        # [OSF Fase F13] mismo criterio de degradacion que get_queryset()
+        # (F7): antes de esta fase, get_object() (retrieve/update/
+        # partial_update/destroy) solo filtraba por empresa_id.
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
         )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        try:
+            return inv_services.MovimientoInventarioSelector.get_detail(
+                empresa_id=empresa.id,
+                movimiento_uuid=self.kwargs[self.lookup_url_kwarg],
+                sede_ids=sede_ids,
+            )
+        except ObjectDoesNotExist as exc:
+            # [OSF Fase F13] bug preexistente: `.get()` sin envolver dejaba
+            # que un DoesNotExist se propagara como 500 en vez de 404 -
+            # invisible antes porque ningun test intentaba acceder a un
+            # movimiento fuera de scope/empresa. Se descubrio al agregar el
+            # filtro de sede_ids arriba (ahora si se ejercita esta rama).
+            raise NotFound("Movimiento no encontrado o no pertenece a este tenant.") from exc
     
     def list(self, request, *args, **kwargs):
         """

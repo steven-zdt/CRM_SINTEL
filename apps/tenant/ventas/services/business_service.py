@@ -221,6 +221,7 @@ class VentaBusinessService:
         items_data: list,
         numero_factura: str = None,
         resolucion=None,
+        sede_id: int | None = None,
     ) -> dict:
         """
         Construye el DTO UBL 2.1 completo que el motor de generacion XML necesita.
@@ -233,6 +234,10 @@ class VentaBusinessService:
           - cac:TaxTotal (impuestos por tasa)
           - cac:LegalMonetaryTotal (totales desglosados)
           - cac:InvoiceLine[] (lineas con identificadores de producto)
+
+        [OSF Fase F10] `sede_id` (opcional) viaja en el DTO como dato plano
+        (`dto["sede_id"]`), igual que `cliente_uuid`/`venta_uuid` - nunca
+        una FK directa Ventas->Facturas.
         """
         from django.utils import timezone as tz
 
@@ -420,6 +425,7 @@ class VentaBusinessService:
             "fecha_vencimiento": str(venta.fecha_vencimiento) if venta.fecha_vencimiento else None,
             "cliente_uuid": str(cliente.uuid),
             "venta_uuid": str(venta.uuid),
+            "sede_id": sede_id,
         }
 
         if numero_factura:
@@ -481,7 +487,7 @@ class VentaBusinessService:
 
     @staticmethod
     @transaction.atomic
-    def procesar_y_facturar_venta(empresa, payload: dict) -> tuple:
+    def procesar_y_facturar_venta(empresa, payload: dict, sede_id: int | None = None) -> tuple:
         """
         Flujo completo: crea Venta + genera Factura DIAN en una sola transaccion atomica.
 
@@ -493,6 +499,15 @@ class VentaBusinessService:
         5. Invocar FacturaBusinessService.crear_factura_desde_venta(empresa, dto).
         6. Vincular factura y cambiar estado a FACTURADA_DIAN.
         7. Retornar (True, venta, 201).
+
+        [OSF Fase F10] `sede_id` (opcional, la sede ACTIVA de quien hace la
+        peticion, via OrganizationalContext) se propaga al DTO canonico
+        (`dto["sede_id"]`) y de ahi a `FacturaBusinessService.
+        crear_factura_desde_venta()` - nunca como FK directa Ventas->Facturas,
+        siempre como dato plano dentro del contrato DTO ya existente (mismo
+        patron que `cliente_uuid`/`venta_uuid`). `Venta` no tiene campo
+        `sede` propio (F6: candidato plausible sin campo aun) - lo que se
+        transporta es el contexto de QUIEN factura, no un campo de la Venta.
         """
         try:
             # -- Validaciones previas --
@@ -553,6 +568,7 @@ class VentaBusinessService:
                 items_data=items_validos,
                 numero_factura=numero_factura,
                 resolucion=resolucion,
+                sede_id=sede_id,
             )
 
             # -- Paso 5a: calcular CUFE y QR --

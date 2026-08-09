@@ -111,10 +111,19 @@ class FacturaSelectors:
     """
 
     @staticmethod
-    def qs_list(empresa_id: int | None = None, search: str | None = None):
+    def qs_list(empresa_id: int | None = None, search: str | None = None, sede_ids=None):
         """
         QuerySet optimizado para listado (v3.5 Zero Waste).
         empresa_id aplicado aqui (SSoT Anti-IDOR).
+
+        [OSF Fase F7] `sede_ids=None` (default) no restringe por sede -
+        comportamiento identico al de antes de esta fase. Cuando se pasa
+        (perfil con alcance SEDE/AREA), usa filter_by_scope_null_safe()
+        (no filter_by_scope()): el 100% de las Facturas reales tiene
+        sede=NULL hoy (verificado empiricamente en F7, el campo era
+        puramente informativo) - un registro sin sede queda visible para
+        todos los alcances, para no ocultar datos existentes al activar el
+        filtrado. `Factura` no tiene campo `area` - nunca se filtra por el.
         """
         qs = Factura.objects.select_related("nota_credito", "sede").only(
             *LIST_FIELDS,
@@ -123,6 +132,8 @@ class FacturaSelectors:
         )
         if empresa_id:
             qs = qs.filter(empresa_id=empresa_id)
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         if search:
             qs = qs.filter(
                 Q(numero__icontains=search) |
@@ -133,10 +144,17 @@ class FacturaSelectors:
         return qs.order_by("-fecha_emision", "-id")
 
     @staticmethod
-    def qs_detail(empresa_id: int | None = None):
+    def qs_detail(empresa_id: int | None = None, sede_ids=None):
         """
         QuerySet optimizado para detalle.
         empresa_id aplicado aqui (SSoT Anti-IDOR).
+
+        [OSF Fase F11] `sede_ids=None` (default) no restringe - mismo
+        criterio NULL-safe de F7 (qs_list). Antes de esta fase, `retrieve`
+        (y el resto de acciones a nivel de objeto en FacturaViewSet) solo
+        filtraban por `empresa_id`, nunca por alcance organizacional - un
+        perfil con alcance=SEDE podia ver/editar/eliminar por UUID directo
+        una Factura de otra sede aunque el listado (F7) ya se la ocultara.
         """
         qs = Factura.objects.select_related("nota_credito", "sede").prefetch_related("impuestos_desglosados").only(
             *DETAIL_FIELDS,
@@ -145,6 +163,8 @@ class FacturaSelectors:
         )
         if empresa_id:
             qs = qs.filter(empresa_id=empresa_id)
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         return qs
 
     @staticmethod
@@ -257,7 +277,9 @@ class CotizacionBridge:
     Integración con apps.tenant.cotizaciones sin acoplamiento circular.
     """
     @staticmethod
-    def obtener_cotizacion_por_uuid(cotizacion_uuid: str, empresa_id: int | None = None) -> dict | None:
+    def obtener_cotizacion_por_uuid(
+        cotizacion_uuid: str, empresa_id: int | None = None, sede_ids=None,
+    ) -> dict | None:
         """
         Resuelve Cotizacion a partir de uuid vinculado en Factura.
         Usa CotizacionSelector.get_detail_by_uuid() del servicio cotizaciones.
@@ -265,9 +287,18 @@ class CotizacionBridge:
         Params:
           cotizacion_uuid: UUID de la cotizacion (viene de Factura.cotizacion_uuid)
           empresa_id: opcional, filtra por empresa si se proporciona
+          sede_ids: [OSF Fase F9] opcional, conjunto de sedes permitidas segun
+            el OrganizationalScope de quien hace la peticion. Si se pasa
+            (perfil con alcance SEDE/AREA), una Cotizacion cuya sede no este
+            en el conjunto se trata como "no encontrada" (mismo criterio
+            NULL-safe de F7: `Cotizacion.sede=None` SI es visible - el 100%
+            de las Cotizaciones reales no tiene sede asignada hoy). `None`
+            (default) no restringe - comportamiento identico al de antes de
+            esta fase.
 
         Returns:
-          dict con datos de Cotizacion o None si no existe
+          dict con datos de Cotizacion o None si no existe (o no esta en el
+          alcance organizacional del solicitante).
         """
         if not cotizacion_uuid:
             return None
@@ -289,6 +320,13 @@ class CotizacionBridge:
             if not cotizacion:
                 return None
 
+            # [OSF Fase F9] la cotizacion existe y pertenece a la empresa,
+            # pero puede estar fuera del alcance organizacional de quien
+            # pregunta - se trata igual que "no existe" (mismo criterio DSV
+            # que las demas verificaciones de este bridge).
+            if sede_ids is not None and cotizacion.sede_id is not None and cotizacion.sede_id not in sede_ids:
+                return None
+
             return {
                 'uuid': str(cotizacion.uuid),
                 'numero_cotizacion': cotizacion.numero_cotizacion,
@@ -305,9 +343,10 @@ class CotizacionBridge:
             return None
 
     @staticmethod
-    def exists_by_uuid(cotizacion_uuid: str, empresa_id: int | None = None) -> bool:
-        """Valida existencia de cotizacion por UUID."""
-        return CotizacionBridge.obtener_cotizacion_por_uuid(cotizacion_uuid, empresa_id) is not None
+    def exists_by_uuid(cotizacion_uuid: str, empresa_id: int | None = None, sede_ids=None) -> bool:
+        """Valida existencia de cotizacion por UUID (y, si se pasa `sede_ids`,
+        que este dentro del alcance organizacional del solicitante - F9)."""
+        return CotizacionBridge.obtener_cotizacion_por_uuid(cotizacion_uuid, empresa_id, sede_ids) is not None
 
 
 class ClienteBridge:

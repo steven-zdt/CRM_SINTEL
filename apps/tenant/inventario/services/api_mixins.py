@@ -282,14 +282,28 @@ class MovimientoServiceMixin:
         KardexService.eliminar_movimiento(movimiento=instance, empresa_id=empresa.id)
 
     def service_movimiento_get_offcanvas_context(self, empresa, id_instancia=None):
-        """Contexto para formulario de registro/edicion de movimiento (Kardex)."""
+        """Contexto para formulario de registro/edicion de movimiento (Kardex).
+
+        [OSF Fase F13] Antes de esta fase resolvia el movimiento solo por
+        empresa_id, bypaseando get_queryset()/get_object() por completo -
+        mismo gap que F11/F13(gastos) encontraron en acciones offcanvas
+        equivalentes."""
         movimiento = None
         if id_instancia:
+            from apps.tenant.core.services.organizational_scope import (
+                OrganizationalScope,
+                OrganizationalScopeError,
+            )
             from apps.tenant.inventario.services.selectors import MovimientoInventarioSelector
+            try:
+                sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+            except OrganizationalScopeError:
+                sede_ids = None
             try:
                 movimiento = MovimientoInventarioSelector.get_detail(
                     empresa_id=empresa.id,
-                    movimiento_uuid=id_instancia
+                    movimiento_uuid=id_instancia,
+                    sede_ids=sede_ids,
                 )
             except MovimientoInventario.DoesNotExist:
                 movimiento = None

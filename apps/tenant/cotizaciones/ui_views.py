@@ -7,6 +7,10 @@ from django.http import Http404
 from django.views.generic import TemplateView
 
 from apps.tenant.api.utils import resolve_tenant_empresa
+from apps.tenant.core.services.organizational_scope import (
+    OrganizationalScope,
+    OrganizationalScopeError,
+)
 from .models import Cotizacion
 from .services import CotizacionSelector
 
@@ -17,6 +21,13 @@ class CotizacionTemplateView(LoginRequiredMixin, TemplateView):
         if not empresa:
             raise PermissionDenied("No se pudo determinar la empresa activa.")
         return empresa
+
+    def _resolve_sede_ids(self):
+        """[OSF Fase F13] mismo criterio de degradacion NULL-safe de F7/F11."""
+        try:
+            return OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            return None
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -36,7 +47,9 @@ class CotizacionEditorTemplateView(CotizacionTemplateView):
         if uuid:
             empresa = self._resolve_empresa()
             try:
-                context['cotizacion'] = CotizacionSelector.get_detail_by_uuid(uuid, empresa.id).get()
+                context['cotizacion'] = CotizacionSelector.get_detail_by_uuid(
+                    uuid, empresa.id, sede_ids=self._resolve_sede_ids(),
+                ).get()
                 context['is_draft'] = False
             except Cotizacion.DoesNotExist:
                 raise Http404("Cotizacion no encontrada")
@@ -107,7 +120,9 @@ class CotizacionDetalleOffcanvasView(CotizacionTemplateView):
         if uuid:
             empresa = self._resolve_empresa()
             try:
-                context['cotizacion'] = CotizacionSelector.get_detail_by_uuid(uuid, empresa.id).get()
+                context['cotizacion'] = CotizacionSelector.get_detail_by_uuid(
+                    uuid, empresa.id, sede_ids=self._resolve_sede_ids(),
+                ).get()
             except Cotizacion.DoesNotExist:
                 raise Http404("Cotizacion no encontrada")
         return context

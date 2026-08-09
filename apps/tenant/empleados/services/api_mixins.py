@@ -34,6 +34,47 @@ class EmpleadoServiceMixin(BaseServiceMixin):
     business_service_class = EmpleadoBusinessService
     summary_selector_class = NominaSummarySelector
 
+    def get_qs_list(self):
+        """[OSF Fase F7] Sobrescribe BaseServiceMixin.get_qs_list() (que no
+        pasa sede_ids/area_ids) para filtrar scope-aware, mismo criterio de
+        degradacion que facturas/cotizaciones/gastos/inventario/proyectos."""
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        empresa_id = self._get_empresa_id_seguro()
+        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        try:
+            scope = OrganizationalScope.resolve(self.request)
+            sede_ids, area_ids = scope.sede_ids, scope.area_ids
+        except OrganizationalScopeError:
+            sede_ids, area_ids = None, None
+        return self.selector_class.get_list(
+            empresa_id, search=search, sede_ids=sede_ids, area_ids=area_ids,
+        )
+
+    def get_qs_detail(self):
+        """[OSF Fase F13] Sobrescribe BaseServiceMixin.get_qs_detail() (que no
+        pasa sede_ids/area_ids) para que retrieve/update/partial_update/
+        destroy respeten el mismo alcance organizacional que get_qs_list()
+        (F7) - mismo gap que F11/F13(gastos/cotizaciones/inventario/proyectos)
+        encontraron y corrigieron."""
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        empresa_id = self._get_empresa_id_seguro()
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field or 'pk'
+        lookup_value = self.kwargs.get(lookup_url_kwarg)
+        try:
+            scope = OrganizationalScope.resolve(self.request)
+            sede_ids, area_ids = scope.sede_ids, scope.area_ids
+        except OrganizationalScopeError:
+            sede_ids, area_ids = None, None
+        return self.selector_class.get_detail(empresa_id, lookup_value, sede_ids=sede_ids, area_ids=area_ids)
+
     def service_crear_empleado(self, serializer):
         """Crea empleado usando business service."""
         empresa = self._get_empresa()

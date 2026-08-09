@@ -28,6 +28,7 @@ from rest_framework.response import Response
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.mixins import SintelDSVMixin, SintelServiceMixin
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
 logger = logging.getLogger(__name__)
 
@@ -126,12 +127,20 @@ class ContabilidadServiceMixin(SintelServiceMixin):
         return model_class.objects.only(*fields)
 
 
-class CuentaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para CuentaContable.
     [ARCHITECTURE v3.5]
     - DSV: Validación inyectiva de empresa_id.
     - SSoT: Selectors para lectura, Business Service para escritura.
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva en
+    los 10 ViewSets de esta app. Caso de PARIDAD (no divergencia): toda la
+    app ya hereda SintelDSVMixin y usa self.get_empresa_id() directamente -
+    la misma SSoT que OrganizationalContext.resolve() duplica (Fase 2).
+    get_queryset() no se migra de todos modos: cada Selector de esta app
+    tiene su propio .only()/select_related que context.filter() generico
+    no replica.
     """
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     pagination_class = StandardResultsSetPagination
@@ -285,7 +294,7 @@ class CuentaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenant
 
 
 
-class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+class AsientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para AsientoContable.
     
@@ -498,7 +507,7 @@ class AsientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             return Response({'error': str(e)}, template_name='tenant/contabilidad/partials/asiento_offcanvas_detalle.html', status=500)
 
 
-class MovimientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+class MovimientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para MovimientoContable.
     [ARCHITECTURE v3.5]
@@ -555,7 +564,7 @@ class MovimientoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTe
             return self.handle_service_error(e)
 
 
-class CatalogoMaestroNIIFViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+class CatalogoMaestroNIIFViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para CatalogoMaestroNIIF (Catálogo oficial NIIF Colombia).
     [ARCHITECTURE v3.5]
@@ -616,7 +625,7 @@ class CatalogoMaestroNIIFViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseT
             return self.handle_service_error(e)
 
 
-class PeriodoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para PeriodoContable.
     [ARCHITECTURE v3.5]
@@ -714,7 +723,7 @@ class PeriodoContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             return Response({"detail": [str(e)]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class TipoComprobanteViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+class TipoComprobanteViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para TipoComprobante.
     Permite configurar plantillas de comprobantes (CC, RC, NC, etc.) con prefijos y consecutivos.
@@ -763,7 +772,7 @@ class TipoComprobanteViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenan
             return self.handle_service_error(e)
 
 
-class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+class DocumentosPendientesViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     Documentos pendientes de contabilizar + endpoint de asignacion manual On-Demand.
 
@@ -943,8 +952,11 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
                 'tercero_nombre': doc.get('item_nombre') or doc.get('modulo_origen') or 'Movimiento de inventario',
             }
         else:
-            _retefuente = Decimal(str(doc.retefuente or _cero))
-            _reteica    = Decimal(str(doc.reteica or _cero))
+            # Pull Model v3.7.1 (ADR-001): retefuente/reteica ya no son campos
+            # directos del documento -- se leen desde Contabilidad.Retencion via
+            # las properties total_retefuente/total_reteica (ver DocumentoSoporte).
+            _retefuente = Decimal(str(doc.total_retefuente or _cero))
+            _reteica    = Decimal(str(doc.total_reteica or _cero))
             ctx = {
                 'app_label': app_label, 'modelo': modelo, 'documento_id': documento_id,
                 'numero': doc.numero_documento, 'fecha': doc.fecha,
@@ -1117,7 +1129,7 @@ class DocumentosPendientesViewSet(SintelDSVMixin, ContabilidadServiceMixin, Base
             return self.handle_service_error(e)
 
 
-class ConfiguracionRetencionesViewSet(SintelDSVMixin, BaseTenantViewSet):
+class ConfiguracionRetencionesViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para ConfiguracionRetenciones (v3.7.1).
     Gestiona configuración de tasas de retención por tercero.
@@ -1153,7 +1165,7 @@ class ConfiguracionRetencionesViewSet(SintelDSVMixin, BaseTenantViewSet):
         serializer.save(empresa_id=empresa_id)
 
 
-class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
+class RetencionViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para Retencion (v3.7.1).
     Gestiona registros de retenciones aplicadas a documentos.
@@ -1299,7 +1311,7 @@ class RetencionViewSet(SintelDSVMixin, BaseTenantViewSet):
             )
 
 
-class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.ViewSet):
+class LibroDiarioViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, viewsets.ViewSet):
     """
     Libro Diario Contable — Vista Unificada Raw + Procesado (Normatividad PYMES Colombia).
 
@@ -1348,7 +1360,7 @@ class LibroDiarioViewSet(SintelDSVMixin, ContabilidadServiceMixin, viewsets.View
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class PlantillaContableViewSet(SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
+class PlantillaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para PlantillaContable + LineaPlantilla (Motor Fase 3 v3.16.2).
 

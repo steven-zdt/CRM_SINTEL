@@ -58,9 +58,16 @@ TAREA_CORTA_FIELDS = [
 ]
 
 
-def qs_list(empresa_id, search=None, fase=None):
+def qs_list(empresa_id, search=None, fase=None, sede_ids=None):
     """
     QuerySet optimizado para listados. Usa .only() para Zero Waste.
+
+    [OSF Fase F7] `sede_ids=None` (default) no restringe por sede -
+    comportamiento identico al de antes de esta fase. El 100% de los
+    Proyecto reales tiene sede=NULL hoy (verificado empiricamente, el campo
+    era puramente informativo, DT-SEDE) - un registro sin sede queda
+    visible para todos los alcances (filtro NULL-safe), para no ocultar
+    datos existentes al activar el filtrado.
     """
     qs = Proyecto.objects.filter(
         empresa_id=empresa_id
@@ -70,6 +77,9 @@ def qs_list(empresa_id, search=None, fase=None):
         *LIST_FIELDS,
         *_SEDE_LIST_TRAVERSALS,
     )
+
+    if sede_ids is not None:
+        qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
 
     if _Empleado is not None:
         responsable_uuid = _Empleado.objects.filter(
@@ -127,14 +137,20 @@ def kpis_list(empresa_id, search=None, fase=None):
     return agg
 
 
-def qs_detail(empresa_id, uuid):
+def qs_detail(empresa_id, uuid, sede_ids=None):
     """
     QuerySet de detalle con relaciones prefetch. Retorna None si no existe
     (el ViewSet lanza NotFound al recibir None).
     Filtra por uuid (no pk) para cumplir M-001 del Roadmap M3.
     v3.5.2: Agregado prefetch_related('items_presupuesto') para Zero Waste.
+
+    [OSF Fase F13] `sede_ids=None` (default) no restringe - mismo criterio
+    NULL-safe de F7 (qs_list). Antes de esta fase, `ProyectoViewSet.get_object()`
+    (retrieve/update/partial_update/destroy y las acciones que reusan
+    get_object() internamente) solo filtraba por empresa_id - mismo gap que
+    F11/F13(gastos/cotizaciones/inventario) encontraron y corrigieron.
     """
-    return Proyecto.objects.filter(
+    qs = Proyecto.objects.filter(
         empresa_id=empresa_id,
         uuid=uuid
     ).select_related(
@@ -147,7 +163,10 @@ def qs_detail(empresa_id, uuid):
         'pedidos',
         'pedidos__items',
         'items_presupuesto'
-    ).first()
+    )
+    if sede_ids is not None:
+        qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+    return qs.first()
 
 
 class TareaCortaSelector:

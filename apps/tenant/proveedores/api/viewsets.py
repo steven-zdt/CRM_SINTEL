@@ -11,6 +11,7 @@ from rest_framework.exceptions import NotFound
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
 from apps.tenant.api.utils import render_template_safe, resolve_tenant_empresa
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.proveedores.services.api_mixins import (
     ProveedorServiceMixin,
@@ -34,9 +35,14 @@ from apps.config.api.pagination import StandardResultsSetPagination
 
 logger = logging.getLogger(__name__)
 
-class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
+class ProveedorViewSet(OrganizationalContextMixin, ProveedorServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Proveedores v3.5 - Refactorizado a Service Layer (DSV Mixins).
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    get_queryset()/get_object()/etc. no migrados - resuelven la empresa via
+    resolve_tenant_empresa(), mismo mecanismo ya documentado en empresa
+    (Fase 9 app 1/14), que no exige TenantProfile.
     """
     lookup_field = 'uuid'
     lookup_url_kwarg = 'uuid'
@@ -223,7 +229,7 @@ class ProveedorViewSet(ProveedorServiceMixin, BaseTenantViewSet):
 # CuentasPagar ViewSet
 # ==============================================================================
 
-class CuentasPagarViewSet(CuentasPagarServiceMixin, BaseTenantViewSet):
+class CuentasPagarViewSet(OrganizationalContextMixin, CuentasPagarServiceMixin, BaseTenantViewSet):
     """
     ViewSet para el sub-modulo de Cuentas por Pagar (Control de Deudas a Proveedores).
 
@@ -261,17 +267,20 @@ class CuentasPagarViewSet(CuentasPagarServiceMixin, BaseTenantViewSet):
           ?proveedor_uuid=<uuid>  — filtrar por proveedor (Factura.proveedor_uuid)
           ?estado_pago=SIN_PAGO|PARCIAL|PAGADA
           ?vencidas=true          — solo facturas vencidas no pagadas
+          ?search=<texto>         — numero de factura, razon social o NIT del proveedor
         """
         empresa = self.get_empresa()
         proveedor_uuid = request.query_params.get("proveedor_uuid") or request.query_params.get("proveedor_id")
         estado_pago    = request.query_params.get("estado_pago")
         vencidas       = request.query_params.get("vencidas", "").lower() == "true"
+        search         = (request.query_params.get("search") or "").strip() or None
 
         qs = self.cuentas_pagar_selector.qs_list_facturas_compra(
             empresa_id=empresa.id,
             proveedor_uuid=proveedor_uuid,
             estado_pago=estado_pago,
             vencidas=vencidas,
+            search=search,
         )
         page = self.paginate_queryset(qs)
         rows = page if page is not None else list(qs)
@@ -408,7 +417,7 @@ class CuentasPagarViewSet(CuentasPagarServiceMixin, BaseTenantViewSet):
 # REPRESENTANTE VIEWSET — v3.17.0 (nueva entidad)
 # ==============================================================================
 
-class RepresentanteViewSet(RepresentanteServiceMixin, BaseTenantViewSet):
+class RepresentanteViewSet(OrganizationalContextMixin, RepresentanteServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Representantes de Proveedores (v3.17.0).
     Router plano: GET /api/v1/proveedores/representantes/?proveedor_uuid=<uuid>

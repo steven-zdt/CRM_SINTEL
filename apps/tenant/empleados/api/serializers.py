@@ -667,6 +667,22 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
             if area.sede_id != sede.id:
                 raise serializers.ValidationError({'area': 'El area seleccionada no pertenece a la sede seleccionada.'})
 
+        # [OSF Fase F8] anti-IDOR ya verificaba "pertenece a la empresa" -
+        # esto agrega "esta dentro del alcance organizacional del usuario".
+        from apps.tenant.core.services.organizational_scope import (
+            area_esta_en_alcance,
+            sede_esta_en_alcance,
+        )
+        request = self.context.get('request')
+        if sede and not sede_esta_en_alcance(sede.id, request):
+            raise serializers.ValidationError(
+                {'sede': 'No tiene permiso para asignar esta sede (fuera de su alcance organizacional).'}
+            )
+        if area and not area_esta_en_alcance(area.id, request):
+            raise serializers.ValidationError(
+                {'area': 'No tiene permiso para asignar esta area (fuera de su alcance organizacional).'}
+            )
+
         return attrs
     
     def validate_email(self, value):

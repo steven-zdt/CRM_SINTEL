@@ -44,7 +44,24 @@ class ProyectoTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
         empresa_id = self._resolver_empresa_id()
         if not empresa_id:
             return Proyecto.objects.none()
-        return selectors.qs_list(empresa_id=empresa_id, search=self._search(), fase=self._fase())
+
+        # [OSF Fase F13] Antes de esta fase, la grilla HTML (lo que el
+        # usuario realmente ve) no aplicaba ningun filtro de alcance
+        # organizacional, a diferencia del endpoint DRF equivalente (F7) -
+        # mismo patron de bug que compras Bug 1 (F5), facturas (F11) y
+        # gastos (F13). NULL-safe: un registro sin sede sigue visible.
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        return selectors.qs_list(
+            empresa_id=empresa_id, search=self._search(), fase=self._fase(), sede_ids=sede_ids,
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

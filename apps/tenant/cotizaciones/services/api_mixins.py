@@ -26,11 +26,38 @@ class CotizacionServiceMixin(BaseServiceMixin):
         search = self.request.query_params.get('search') if hasattr(self, 'request') else None
         estado = self.request.query_params.get('estado') if hasattr(self, 'request') else None
         cliente = self.request.query_params.get('cliente') if hasattr(self, 'request') else None
-        return self.selector_class.get_list(empresa_id, search=search, estado=estado, cliente=cliente)
+
+        # [OSF Fase F7] mismo criterio de degradacion que facturas/compras:
+        # si no se puede resolver un scope, no restringir (comportamiento
+        # identico al de antes de esta fase).
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        return self.selector_class.get_list(
+            empresa_id, search=search, estado=estado, cliente=cliente, sede_ids=sede_ids,
+        )
 
     def get_qs_detail(self):
+        """[OSF Fase F13] Antes de esta fase no pasaba sede_ids - retrieve/
+        update/exportar-pdf/render-offcanvas-*/recalcular en CotizacionViewSet
+        (todos via get_object()) solo filtraban por empresa_id, mismo gap que
+        F11/F13(gastos) encontraron y corrigieron."""
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
         empresa_id = self.get_empresa_id()
-        return self.selector_class.get_detail(None, empresa_id)
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+        return self.selector_class.get_detail(None, empresa_id, sede_ids=sede_ids)
 
     def service_crear_cotizacion(self, serializer):
         empresa = self._get_empresa()

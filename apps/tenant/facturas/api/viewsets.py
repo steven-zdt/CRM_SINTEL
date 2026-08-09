@@ -30,8 +30,11 @@ from rest_framework.exceptions import ValidationError
 
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito
+
+logger = logging.getLogger(__name__)
 
 # Logger normalizado para facturas (upload, import, etc.)
 log_up = logging.getLogger("facturas")
@@ -115,9 +118,22 @@ def resolve_empresa_id_from_request(request: Request) -> int:
     raise ValidationError({"empresa": "No se pudo resolver la empresa activa del tenant."})
 
 
-class FacturaViewSet(FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, FacturaServiceMixin, BaseTenantViewSet):
+class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, FacturaServiceMixin, BaseTenantViewSet):
 
     """
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    get_queryset() no migrado a OrganizationalContext.resolve() -
+    resolve_empresa_id_from_request() intenta perfil primero pero cae al
+    singleton Empresa.objects.only('id').first() sin exigir TenantProfile,
+    mientras OrganizationalContext.resolve() si lo exige - mismo patron de
+    riesgo ya documentado en empresa (Fase 9 app 1/14).
+
+    [OSF Fase F7] La accion "list" SI usa OrganizationalScope (distinto de
+    OrganizationalContext) para filtrar por sede - ver get_queryset(). Usa
+    filter_by_scope_null_safe (via FacturaSelectors.qs_list) porque el 100%
+    de las Facturas reales tiene sede=NULL hoy (verificado empiricamente):
+    un registro sin sede queda visible para todos los alcances.
+
     FACTURAS MODULE — CONTROL CONTABLE
     
     # WARNING: REGLAS DE NEGOCIO v2.95:
@@ -196,16 +212,36 @@ class FacturaViewSet(FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, Factura
         empresa_id = resolve_empresa_id_from_request(self.request)
         search = self.request.query_params.get('search', None)
 
+        # [OSF Fase F11] Resuelto una sola vez para TODAS las acciones a
+        # nivel de objeto, no solo "list" (gap de F7): antes de esta fase,
+        # retrieve/destroy/partial_update/cambiar_estado/vincular_* solo
+        # filtraban por empresa_id, permitiendo que un perfil alcance=SEDE
+        # accediera por UUID directo a una Factura fuera de su alcance
+        # aunque el listado ya se la ocultara. Mismo criterio de degradacion
+        # NULL-safe que F7/F9 (sin scope resoluble, no restringir).
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
         if self.action == "list":
-            qs = self.get_qs_list(search=search).filter(empresa_id=empresa_id)
+            qs = self.get_qs_list(search=search, sede_ids=sede_ids).filter(empresa_id=empresa_id)
         elif self.action == "retrieve":
-            qs = self.get_qs_detail().filter(empresa_id=empresa_id)
+            qs = self.get_qs_detail(sede_ids=sede_ids).filter(empresa_id=empresa_id)
         elif self.action == "destroy":
-            qs = Factura.objects.filter(empresa_id=empresa_id).only('id', 'estado', 'empresa_id')
+            qs = Factura.objects.filter(empresa_id=empresa_id).only('id', 'estado', 'empresa_id', 'sede_id')
+            if sede_ids is not None:
+                qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         elif self.action in ("partial_update", "update", "cambiar_estado", "vincular_cotizacion", "vincular_cliente", "vincular_proveedor"):
             qs = Factura.objects.filter(empresa_id=empresa_id)
+            if sede_ids is not None:
+                qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         else:
-            qs = self.get_qs_list(search=search).filter(empresa_id=empresa_id)
+            qs = self.get_qs_list(search=search, sede_ids=sede_ids).filter(empresa_id=empresa_id)
 
         request = self.request
 
@@ -323,12 +359,24 @@ class FacturaViewSet(FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, Factura
         factura = self.get_object()
         empresa_id = resolve_empresa_id_from_request(request)
 
+        # [OSF Fase F9] mismo criterio de degradacion que F5/F7/F8: sin scope
+        # resoluble, no restringir el vinculo a Cotizacion (CotizacionBridge).
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
         try:
             with transaction.atomic():
                 factura = FacturaBusinessService.actualizar_factura_limitado(
                     factura=factura,
                     data=request.data,
-                    empresa_id=empresa_id
+                    empresa_id=empresa_id,
+                    sede_ids=sede_ids,
                 )
 
             serializer = self.get_serializer(factura)
@@ -1039,7 +1087,7 @@ class FacturaViewSet(FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, Factura
 
         return Response(resultados, status=status.HTTP_200_OK)
 
-class ItemFacturaViewSet(BaseTenantViewSet):
+class ItemFacturaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     Endpoints para ítems de factura.
 
@@ -1086,7 +1134,7 @@ class ItemFacturaViewSet(BaseTenantViewSet):
         return qs.order_by('orden')
 
 
-class NotaCreditoViewSet(BaseTenantViewSet):
+class NotaCreditoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     NOTAS CRÉDITO — Endpoints para gestión de notas crédito.
     

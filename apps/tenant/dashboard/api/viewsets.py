@@ -12,13 +12,14 @@ from rest_framework.response import Response
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdmin
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.dashboard.api.serializers import DashboardMetricasSerializer, KpiSedeSerializer
 from apps.tenant.dashboard.services.business_service import DashboardBusinessService
 
 logger = logging.getLogger(__name__)
 
 
-class DashboardViewSet(SintelDSVMixin, BaseTenantViewSet):
+class DashboardViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para el Dashboard Ejecutivo.
 
@@ -26,6 +27,13 @@ class DashboardViewSet(SintelDSVMixin, BaseTenantViewSet):
     - GET /api/v1/dashboard/ — metricas consolidadas
     - GET /api/v1/dashboard/metricas/ — alias
     - POST /api/v1/dashboard/invalidar-cache/ — invalida cache (admin)
+
+    Fase 9 (OCF, app 14/14 - cierra la fase): OrganizationalContextMixin
+    adoptado de forma aditiva. Caso de PARIDAD: hereda SintelDSVMixin y usa
+    get_empresa_id() directamente - la misma SSoT que
+    OrganizationalContext.resolve() duplica (Fase 2). No hay get_queryset()
+    real que migrar (list()/metricas()/etc. llaman directo a
+    DashboardBusinessService, no a un Selector con .only()).
     """
 
     permission_classes = [IsTenantMember]

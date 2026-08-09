@@ -43,13 +43,23 @@ _SEDE_DETAIL_TRAVERSALS = (
 
 class CotizacionSelector:
     @staticmethod
-    def get_list(empresa_id, search=None, estado=None, cliente=None):
+    def get_list(empresa_id, search=None, estado=None, cliente=None, sede_ids=None):
+        """
+        [OSF Fase F7] `sede_ids=None` (default) no restringe por sede -
+        comportamiento identico al de antes de esta fase. El 100% de las
+        Cotizaciones reales tiene sede=NULL hoy (verificado empiricamente,
+        el campo era puramente informativo, DT-SEDE-04) - un registro sin
+        sede queda visible para todos los alcances (filtro NULL-safe), para
+        no ocultar datos existentes al activar el filtrado.
+        """
         qs = Cotizacion.objects.filter(
             empresa_id=empresa_id
         ).select_related(
             'cliente', 'sede'
         ).only(*LIST_FIELDS, *LIST_FK_FIELDS, *_SEDE_LIST_TRAVERSALS)
 
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         if search:
             qs = qs.filter(
                 Q(numero_cotizacion__icontains=search) |
@@ -63,25 +73,43 @@ class CotizacionSelector:
         return qs.order_by('-created_at')
 
     @staticmethod
-    def get_detail(_cotizacion_id, empresa_id):
-        """Returns base queryset filtered by empresa_id (DRF get_object applies uuid filter)."""
-        return Cotizacion.objects.filter(
+    def get_detail(_cotizacion_id, empresa_id, sede_ids=None):
+        """Returns base queryset filtered by empresa_id (DRF get_object applies uuid filter).
+
+        [OSF Fase F13] `sede_ids=None` (default) no restringe - mismo
+        criterio NULL-safe de F7 (get_list). Antes de esta fase, retrieve/
+        update/exportar-pdf/render-offcanvas-*/recalcular en CotizacionViewSet
+        solo filtraban por empresa_id (via get_qs_detail() sin sede_ids) -
+        mismo gap que F11/F13(gastos) encontraron y corrigieron.
+        """
+        qs = Cotizacion.objects.filter(
             empresa_id=empresa_id
         ).select_related(
             'cliente', 'configuracion', 'sede'
         ).prefetch_related('items').only(
             *DETAIL_FIELDS, *DETAIL_FK_FIELDS, *_SEDE_DETAIL_TRAVERSALS
         )
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        return qs
 
     @staticmethod
-    def get_detail_by_uuid(uuid, empresa_id):
-        return Cotizacion.objects.filter(
+    def get_detail_by_uuid(uuid, empresa_id, sede_ids=None):
+        """[OSF Fase F13] `sede_ids=None` (default) no restringe - mismo
+        criterio NULL-safe. Usado directamente por `ui_views.py` (paginas de
+        editor/detalle fuera del ViewSet DRF) y por `CotizacionBridge`
+        (facturas, F9 - ese consumidor ya hace su propio chequeo NULL-safe
+        post-fetch, no pasa `sede_ids` aqui, comportamiento sin cambios)."""
+        qs = Cotizacion.objects.filter(
             empresa_id=empresa_id, uuid=uuid
         ).select_related(
             'cliente', 'configuracion', 'sede'
         ).prefetch_related('items').only(
             *DETAIL_FIELDS, *DETAIL_FK_FIELDS, *_SEDE_DETAIL_TRAVERSALS
         )
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        return qs
 
     @staticmethod
     def get_clientes_activos(empresa_id):

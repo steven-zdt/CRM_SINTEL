@@ -31,6 +31,42 @@ class GastoServiceMixin(BaseServiceMixin):
     business_service_class = GastoBusinessService
     crud_service_class = DocumentoCRUDService
 
+    def get_qs_list(self):
+        """[OSF Fase F7] Sobrescribe BaseServiceMixin.get_qs_list() (que no
+        pasa sede_ids) para filtrar por sede scope-aware, mismo criterio de
+        degradacion que facturas/cotizaciones/compras."""
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        empresa_id = self._get_empresa_id_seguro()
+        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+        return self.selector_class.get_list(empresa_id, search=search, sede_ids=sede_ids)
+
+    def get_qs_detail(self):
+        """[OSF Fase F13] Sobrescribe BaseServiceMixin.get_qs_detail() (que no
+        pasa sede_ids) para que retrieve/update/partial_update/destroy/anular
+        respeten el mismo alcance organizacional que get_qs_list() (F7) -
+        mismo gap que F11 encontro y corrigio en Facturas."""
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        empresa_id = self._get_empresa_id_seguro()
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field or 'pk'
+        lookup_value = self.kwargs.get(lookup_url_kwarg)
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+        return self.selector_class.get_detail(empresa_id, lookup_value, sede_ids=sede_ids)
+
     def service_crear_gasto(self, data, empresa):
         """Bridge para creacion de gasto desde ViewSet."""
         return self.business_service_class.procesar_gasto(empresa, data)

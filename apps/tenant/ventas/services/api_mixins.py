@@ -22,7 +22,27 @@ class VentaServiceMixin(BaseServiceMixin):
         return self.business_service_class.crear_venta_borrador(empresa=empresa, payload=payload)
 
     def service_procesar_y_facturar(self, empresa, payload: dict):
-        return self.business_service_class.procesar_y_facturar_venta(empresa=empresa, payload=payload)
+        """
+        [OSF Fase F10] Resuelve la sede ACTIVA del usuario (OrganizationalContext,
+        no OrganizationalScope - este es un caso de "defaultear un registro
+        nuevo", el mismo criterio que compras usa para OrdenCompra.sede en
+        F5) y la propaga al DTO Venta->Factura via un id plano, nunca una FK
+        directa Ventas->Facturas (contrato inter-app, ver
+        crear_factura_desde_venta()). `VentaServiceMixin` no hereda
+        SintelDSVMixin (cae al singleton) - OrganizationalContext.resolve()
+        duplica el algoritmo independientemente, por eso funciona igual aqui.
+        """
+        from apps.tenant.core.services.organizational_context import (
+            OrganizationalContext,
+            OrganizationalContextError,
+        )
+        try:
+            sede_id = OrganizationalContext.resolve(self.request).sede_id
+        except OrganizationalContextError:
+            sede_id = None
+        return self.business_service_class.procesar_y_facturar_venta(
+            empresa=empresa, payload=payload, sede_id=sede_id,
+        )
 
     def service_anular_venta(self, venta_uuid: str, empresa_id: int):
         return self.business_service_class.anular_venta(venta_uuid=venta_uuid, empresa_id=empresa_id)

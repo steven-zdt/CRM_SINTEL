@@ -8,6 +8,7 @@ WARNING: SINTEL v3.5: API-First & Zero-Coupling
 """
 import logging
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -18,6 +19,7 @@ from rest_framework.response import Response
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.models import Empresa
 from .serializers import ProyectoDetailSerializer, ProyectoListSerializer, ItemPresupuestoSerializer, TareaDiariaSerializer, TareaCortaSerializer
 from .mixins import ProyectoServiceMixin
@@ -62,6 +64,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class ProyectoViewSet(
+    OrganizationalContextMixin,
     ProyectoServiceMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -73,6 +76,11 @@ class ProyectoViewSet(
     """
     ViewSet para Proyectos v3.5.
     Delegacion absoluta al Service Layer modularizado.
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    get_queryset()/get_empresa() no migrados - usan el singleton
+    Empresa.objects.only('id').first() sin exigir TenantProfile, mismo
+    patron de riesgo ya documentado en empresa (Fase 9 app 1/14).
     """
     queryset = Proyecto.objects.none()
     pagination_class = StandardResultsSetPagination
@@ -95,12 +103,39 @@ class ProyectoViewSet(
         """Usa el selector optimizado con Zero Trust."""
         empresa = self.get_empresa()
         search = self.request.query_params.get('search', None)
-        return self.proyecto_selector(empresa_id=empresa.id, search=search)
+
+        # [OSF Fase F7] mismo criterio de degradacion que facturas/
+        # cotizaciones/gastos/inventario/compras.
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        return self.proyecto_selector(empresa_id=empresa.id, search=search, sede_ids=sede_ids)
     
     def get_object(self):
-        """Usa el selector de detalle optimizado. Filtra por uuid (M-001 Roadmap M3)."""
+        """Usa el selector de detalle optimizado. Filtra por uuid (M-001 Roadmap M3).
+
+        [OSF Fase F13] mismo criterio de degradacion que get_queryset() (F7):
+        antes de esta fase, get_object() (retrieve/update/partial_update/
+        destroy) solo filtraba por empresa_id.
+        """
         empresa = self.get_empresa()
-        obj = self.proyecto_detail_selector(empresa_id=empresa.id, uuid=self.kwargs['uuid'])
+
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        obj = self.proyecto_detail_selector(empresa_id=empresa.id, uuid=self.kwargs['uuid'], sede_ids=sede_ids)
         if not obj:
             raise NotFound("Proyecto no encontrado o no pertenece a este tenant.")
         return obj
@@ -363,7 +398,20 @@ class ProyectoViewSet(
             )
 
         # Buscar proyecto para validar que exista y pertenezca al tenant (DSV)
-        proyecto = get_object_or_404(Proyecto, uuid=proyecto_uuid, empresa_id=empresa.id)
+        # [OSF Fase F13] antes de esta fase solo filtraba por empresa_id - un
+        # perfil alcance=SEDE podia vincular un HistorialServicio a un
+        # Proyecto de otra sede.
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+        proyecto = self.proyecto_detail_selector(empresa_id=empresa.id, uuid=proyecto_uuid, sede_ids=sede_ids)
+        if not proyecto:
+            raise NotFound("Proyecto no encontrado o no pertenece a este tenant.")
 
         # Buscar HistorialServicio en inventario
         historial = get_object_or_404(_HistorialServicio, uuid=historial_uuid, empresa_id=empresa.id)
@@ -376,7 +424,7 @@ class ProyectoViewSet(
         return Response({'status': 'vinculado_exitosamente'})
 
 
-class ItemPresupuestoViewSet(BaseTenantViewSet):
+class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     ViewSet para items de presupuesto planeado (v3.5.2).
 
@@ -393,9 +441,20 @@ class ItemPresupuestoViewSet(BaseTenantViewSet):
     # redeclarar con 'id' (exponia la PK entera en la URL, AGENTS.md §25.1).
 
     def get_queryset(self):
-        """Filtrado por proyecto_uuid + empresa_id (DSV)."""
+        """Filtrado por proyecto_uuid + empresa_id (DSV).
+
+        [OSF Fase F13] Antes de esta fase no filtraba por el alcance
+        organizacional del Proyecto padre - un perfil alcance=SEDE podia
+        listar/editar items de presupuesto de un Proyecto de otra sede via
+        `?proyecto_uuid=`. Se filtra por `proyecto__sede_id` (join), NULL-safe
+        igual que el resto de F7/F13.
+        """
         empresa_id = self._get_empresa_id()
         qs = ItemPresupuestoProyecto.objects.filter(empresa_id=empresa_id)
+
+        sede_ids = self._get_sede_ids()
+        if sede_ids is not None:
+            qs = qs.filter(Q(proyecto__sede_id__isnull=True) | Q(proyecto__sede_id__in=sede_ids))
 
         proyecto_uuid = self.request.query_params.get('proyecto_uuid')
         if proyecto_uuid:
@@ -410,15 +469,28 @@ class ItemPresupuestoViewSet(BaseTenantViewSet):
             raise APIException(detail='No se encontro la empresa configurada en este tenant.')
         return empresa.id
 
-    def _get_proyecto(self, proyecto_uuid):
-        """Obtiene el proyecto correspondiente (DSV)."""
-        empresa_id = self._get_empresa_id()
-        proyecto = get_object_or_404(
-            Proyecto,
-            uuid=proyecto_uuid,
-            empresa_id=empresa_id
+    def _get_sede_ids(self):
+        """[OSF Fase F13] mismo criterio de degradacion NULL-safe de F7/F11."""
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
         )
-        return proyecto
+        try:
+            return OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            return None
+
+    def _get_proyecto(self, proyecto_uuid):
+        """Obtiene el proyecto correspondiente (DSV).
+
+        [OSF Fase F13] antes de esta fase solo filtraba por empresa_id.
+        """
+        empresa_id = self._get_empresa_id()
+        qs = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id)
+        sede_ids = self._get_sede_ids()
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        return get_object_or_404(qs)
 
     def perform_create(self, serializer):
         """
@@ -453,7 +525,7 @@ class ItemPresupuestoViewSet(BaseTenantViewSet):
         PresupuestoBusinessService.eliminar_item(instance)
 
 
-class TareaDiariaViewSet(BaseTenantViewSet):
+class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     ViewSet para tareas diarias (v3.5.3).
 
@@ -473,9 +545,25 @@ class TareaDiariaViewSet(BaseTenantViewSet):
     # redeclarar con 'id' (exponia la PK entera en la URL, AGENTS.md §25.1).
 
     def get_queryset(self):
-        """Filtrado por proyecto_uuid + empresa_id (DSV)."""
+        """Filtrado por proyecto_uuid + empresa_id (DSV).
+
+        [OSF Fase F13] mismo criterio que ItemPresupuestoViewSet - antes de
+        esta fase no filtraba por el alcance organizacional del Proyecto
+        padre. NULL-safe via join `proyecto__sede_id`.
+        """
         empresa_id = self._get_empresa_id()
         qs = TareaDiariaProyecto.objects.filter(empresa_id=empresa_id)
+
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+        if sede_ids is not None:
+            qs = qs.filter(Q(proyecto__sede_id__isnull=True) | Q(proyecto__sede_id__in=sede_ids))
 
         proyecto_uuid = self.request.query_params.get('proyecto_uuid')
         if proyecto_uuid:
@@ -499,14 +587,24 @@ class TareaDiariaViewSet(BaseTenantViewSet):
         return empresa.id
 
     def _get_proyecto(self, proyecto_uuid):
-        """Obtiene el proyecto correspondiente (DSV)."""
-        empresa_id = self._get_empresa_id()
-        proyecto = get_object_or_404(
-            Proyecto,
-            uuid=proyecto_uuid,
-            empresa_id=empresa_id
+        """Obtiene el proyecto correspondiente (DSV).
+
+        [OSF Fase F13] antes de esta fase solo filtraba por empresa_id -
+        mismo gap que ItemPresupuestoViewSet._get_proyecto().
+        """
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
         )
-        return proyecto
+        empresa_id = self._get_empresa_id()
+        qs = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id)
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        return get_object_or_404(qs)
 
     def perform_create(self, serializer):
         """
@@ -573,7 +671,7 @@ class TareaDiariaViewSet(BaseTenantViewSet):
             )
 
 
-class TareaCortaViewSet(TareaCortaServiceMixin, BaseTenantViewSet):
+class TareaCortaViewSet(OrganizationalContextMixin, TareaCortaServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Tareas Cortas v3.10.0.
 

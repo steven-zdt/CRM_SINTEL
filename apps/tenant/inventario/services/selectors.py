@@ -268,9 +268,16 @@ class ActivoFijoSelector:
 
 class MovimientoInventarioSelector:
     @staticmethod
-    def get_list(empresa_id: int, search: str = None):
+    def get_list(empresa_id: int, search: str = None, sede_ids=None):
         """
         QuerySet optimizado para LISTAR Movimientos de Inventario (Kardex).
+
+        [OSF Fase F7] `sede_ids=None` (default) no restringe por sede -
+        comportamiento identico al de antes de esta fase. El 100% de los
+        MovimientoInventario reales tiene sede=NULL hoy (verificado
+        empiricamente, el campo era puramente informativo, DT-SEDE-05) - un
+        registro sin sede queda visible para todos los alcances (filtro
+        NULL-safe), para no ocultar datos existentes al activar el filtrado.
         """
         qs = (
             MovimientoInventario.objects
@@ -278,6 +285,8 @@ class MovimientoInventarioSelector:
             .select_related('producto', 'activo_fijo')
             .only(*MOVIMIENTO_LIST_FIELDS)
         )
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         if search:
             qs = qs.filter(
                 Q(producto__codigo__icontains=search) |
@@ -290,17 +299,26 @@ class MovimientoInventarioSelector:
         return qs
 
     @staticmethod
-    def get_detail(empresa_id: int, movimiento_uuid):
+    def get_detail(empresa_id: int, movimiento_uuid, sede_ids=None):
         """
         QuerySet optimizado para DETALLE de Movimiento.
+
+        [OSF Fase F13] `sede_ids=None` (default) no restringe - mismo
+        criterio NULL-safe de F7 (get_list). Antes de esta fase,
+        `MovimientoInventarioViewSet.get_object()` (retrieve/update/
+        partial_update/destroy) y `service_movimiento_get_offcanvas_context()`
+        solo filtraban por empresa_id - mismo gap que F11/F13(gastos/
+        cotizaciones) encontraron y corrigieron.
         """
-        return (
+        qs = (
             MovimientoInventario.objects
             .filter(empresa_id=empresa_id, uuid=movimiento_uuid)
             .select_related('producto', 'activo_fijo')
             .only(*MOVIMIENTO_DETAIL_FIELDS)
-            .get()
         )
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        return qs.get()
 
     @staticmethod
     def get_kardex_for_producto(empresa_id: int, producto_id: int):

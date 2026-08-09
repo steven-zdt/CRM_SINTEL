@@ -847,6 +847,7 @@ MANUAL_EDITABLE_FIELDS = [
     'orden_compra',
     'cotizacion_uuid',
     'cotizacion_numero',
+    'sede',  # [OSF Fase F11] antes solo informativa/reporting (DT-SEDE-02)
 ]
 
 XML_IMMUTABLE_FIELDS = {

@@ -14,6 +14,7 @@ from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.utils import resolve_tenant_empresa
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
 from ..models import Cotizacion, Producto, Servicio, CotizacionItem
 from ..services import (
@@ -36,7 +37,7 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class ProductoViewSet(SintelDSVMixin, ProductoServiceMixin, BaseTenantViewSet):
+class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServiceMixin, BaseTenantViewSet):
     serializer_class = ProductoSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = Producto.objects.none()
@@ -66,7 +67,7 @@ class ProductoViewSet(SintelDSVMixin, ProductoServiceMixin, BaseTenantViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ServicioViewSet(SintelDSVMixin, ServicioServiceMixin, BaseTenantViewSet):
+class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServiceMixin, BaseTenantViewSet):
     serializer_class = ServicioSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = Servicio.objects.none()
@@ -96,7 +97,15 @@ class ServicioViewSet(SintelDSVMixin, ServicioServiceMixin, BaseTenantViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class CotizacionViewSet(SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSet):
+class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSet):
+    """Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    Hallazgo propio de esta app: get_queryset() usa la SSoT (SintelDSVMixin,
+    igual que OrganizationalContext.resolve()) pero exportar_pdf()/
+    render_offcanvas_crear()/render_offcanvas_editar() usan
+    resolve_tenant_empresa() (el mecanismo mas permisivo, sin exigir
+    TenantProfile) - una inconsistencia interna real de esta ViewSet, no
+    documentada hasta ahora. Ninguna de las dos rutas se migro."""
+
     lookup_field = 'uuid'
     queryset = Cotizacion.objects.none()
     serializer_class = CotizacionSerializer
@@ -177,7 +186,7 @@ class CotizacionViewSet(SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSe
         return Response(self.get_serializer(instance).data)
 
 
-class CotizacionItemViewSet(SintelDSVMixin, CotizacionItemServiceMixin, BaseTenantViewSet):
+class CotizacionItemViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionItemServiceMixin, BaseTenantViewSet):
     serializer_class = CotizacionItemSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = CotizacionItem.objects.none()

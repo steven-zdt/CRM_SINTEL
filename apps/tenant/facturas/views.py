@@ -50,7 +50,23 @@ class FacturaTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
             return Factura.objects.none()
 
         search = (self.request.GET.get("q") or "").strip() or None
-        qs = FacturaSelectors.qs_list(empresa_id=self._empresa_id, search=search).filter(
+
+        # [OSF Fase F11] Antes de esta fase, la grilla HTML (lo que el
+        # usuario realmente ve, migrada a django-tables2 en Fase 5-BIS) no
+        # aplicaba NINGUN filtro de alcance organizacional, a diferencia del
+        # endpoint DRF equivalente (ya corregido en F7) - mismo patron de
+        # bug que compras Bug 1 (F5). NULL-safe (F7): un registro sin sede
+        # sigue visible para todos los alcances.
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        qs = FacturaSelectors.qs_list(empresa_id=self._empresa_id, search=search, sede_ids=sede_ids).filter(
             naturaleza=self.get_naturaleza()
         )
         estado_pago = self.request.GET.get("estado_pago") or ""

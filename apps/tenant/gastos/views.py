@@ -4,7 +4,7 @@ Vistas HTML server-rendered (django-tables2 + HTMX) para los listados de gastos.
 Piloto de reemplazo de Tabulator (PLAN_UNICO_CORRECCIONES.md, Fase 5-BIS).
 No reemplazan la API DRF (apps/tenant/gastos/api/viewsets.py) — esta vive en
 paralelo para clientes API-first / tests de IDOR ya existentes. Estas vistas
-solo alimentan los contenedores #gastos-panel / #resoluciones-panel del
+solo alimentan los contenedores #gastos-panel / #gastos-resoluciones-panel del
 template gastos_list.html via hx-get.
 
 Aislamiento multi-tenant: reutiliza SintelDSVMixin.get_empresa_id() (misma
@@ -43,7 +43,22 @@ class DocumentoSoporteTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableV
             return DocumentoSoporte.objects.none()
 
         search = (self.request.GET.get("q") or "").strip() or None
-        return DocumentoSelector.get_list(empresa_id=self._empresa_id, search=search)
+
+        # [OSF Fase F13] Antes de esta fase, la grilla HTML (lo que el
+        # usuario realmente ve) no aplicaba ningun filtro de alcance
+        # organizacional, a diferencia del endpoint DRF equivalente (F7) -
+        # mismo patron de bug que compras Bug 1 (F5) y facturas Hallazgo 2
+        # (F11). NULL-safe: un registro sin sede sigue visible para todos.
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        return DocumentoSelector.get_list(empresa_id=self._empresa_id, search=search, sede_ids=sede_ids)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

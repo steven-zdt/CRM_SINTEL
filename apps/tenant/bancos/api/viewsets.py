@@ -1,5 +1,4 @@
 import logging
-from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status
@@ -12,6 +11,7 @@ from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
 from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario, TransaccionBancaria
 from apps.tenant.bancos.services.api_mixins import (
@@ -46,9 +46,16 @@ TIPOS_CUENTA_CHOICES = [
     ("CORRIENTE", "Corriente"),
 ]
 
-class CuentaBancariaViewSet(CuentaBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet to manage CuentaBancaria.
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva. Como
+    compras, esta app SI hereda SintelDSVMixin - no hay divergencia de
+    mecanismo con OrganizationalContext.resolve(). get_queryset() no se
+    migra de todos modos: get_qs_list()/get_qs_detail() (BaseServiceMixin)
+    usan el selector con sus propios .only(), y context.filter() generico
+    no los replica.
     """
     queryset = CuentaBancaria.objects.none()
     serializer_class = CuentaBancariaSerializer
@@ -61,11 +68,7 @@ class CuentaBancariaViewSet(CuentaBancariaServiceMixin, SintelDSVMixin, BaseTena
     search_fields = ["nombre", "banco", "numero"]
     ordering_fields = ["nombre", "banco", "created_at"]
     ordering = ["nombre"]
-
-    def get_permissions(self):
-        if settings.DEBUG:
-            return []
-        return [IsTenantMember(), IsTenantAdminOrReadOnly()]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
 
     def get_queryset(self):
         if not hasattr(self, "action") or self.action is None:
@@ -140,7 +143,7 @@ class CuentaBancariaViewSet(CuentaBancariaServiceMixin, SintelDSVMixin, BaseTena
 
 
 
-class ExtractoBancarioViewSet(ExtractoBancarioServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet to manage ExtractoBancario and execute statement processing.
     """
@@ -155,11 +158,7 @@ class ExtractoBancarioViewSet(ExtractoBancarioServiceMixin, SintelDSVMixin, Base
     search_fields = ["cuenta__nombre", "cuenta__numero"]
     ordering_fields = ["mes", "anio", "procesado", "created_at"]
     ordering = ["-anio", "-mes"]
-
-    def get_permissions(self):
-        if settings.DEBUG:
-            return []
-        return [IsTenantMember(), IsTenantAdminOrReadOnly()]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
 
     def get_queryset(self):
         if not hasattr(self, "action") or self.action is None:
@@ -254,7 +253,7 @@ class ExtractoBancarioViewSet(ExtractoBancarioServiceMixin, SintelDSVMixin, Base
         return Response(context, template_name="tenant/bancos/offcanvas_detalle_extracto.html")
 
 
-class TransaccionBancariaViewSet(TransaccionBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para TransaccionBancaria.
     Lectura: GET list/detail con filtros por extracto_uuid, tipo_movimiento, conciliado.
@@ -273,11 +272,7 @@ class TransaccionBancariaViewSet(TransaccionBancariaServiceMixin, SintelDSVMixin
     search_fields = ["descripcion", "sucursal", "dcto"]
     ordering_fields = ["fecha", "valor", "saldo", "conciliado", "created_at"]
     ordering = ["-fecha", "-created_at"]
-
-    def get_permissions(self):
-        if settings.DEBUG:
-            return []
-        return [IsTenantMember()]
+    permission_classes = [IsTenantMember]
 
     def get_queryset(self):
         if not hasattr(self, "action") or self.action is None:

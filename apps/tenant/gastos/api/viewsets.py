@@ -41,12 +41,21 @@ from .serializers import (
 
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
 logger = logging.getLogger(__name__)
 
-class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para gastos (v2.62.0).
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    Caso de PARIDAD (no divergencia), igual que compras/bancos/contabilidad:
+    esta app ya hereda SintelDSVMixin y usa get_empresa_id() directamente -
+    la misma SSoT que OrganizationalContext.resolve() duplica (Fase 2).
+    get_queryset() no se migra: get_qs_list()/get_qs_detail() usan el
+    selector con sus propios .only() que context.filter() generico no
+    replica.
     """
     queryset = DocumentoSoporte.objects.none()
     serializer_class = GastoDetailSerializer
@@ -55,12 +64,7 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     
     pagination_class = StandardResultsSetPagination
     parser_classes = [JSONParser, FormParser, MultiPartParser]
-
-    def get_permissions(self):
-        """En DEBUG, no aplicar permisos (modo desarrollo sin restricciones)."""
-        if settings.DEBUG:
-            return []
-        return [IsTenantMember(), IsTenantAdminOrReadOnly()]
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     renderer_classes = [JSONRenderer]
     
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -200,7 +204,11 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
         if not uuid_val:
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
 
-        instance = get_object_or_404(DocumentoSoporte, uuid=uuid_val, empresa_id=empresa_id)
+        # [OSF Fase F13] Antes solo filtraba por empresa_id (bypaseaba
+        # get_queryset()/get_qs_detail()) - mismo gap que F11 encontro y
+        # corrigio en Facturas: un perfil alcance=SEDE podia editar por UUID
+        # directo un DocumentoSoporte de otra sede.
+        instance = get_object_or_404(self._get_documento_scope_qs(empresa_id), uuid=uuid_val)
 
         # Pull Model (ADR-001 / §28): retenciones viven en tabla Retencion, no en campos deprecated
         retenciones_fracciones = {}
@@ -239,8 +247,24 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
         if not uuid_val:
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
 
-        instance = get_object_or_404(DocumentoSoporte, uuid=uuid_val, empresa_id=empresa_id)
+        # [OSF Fase F13] ver nota de render_offcanvas_editar - mismo gap.
+        instance = get_object_or_404(self._get_documento_scope_qs(empresa_id), uuid=uuid_val)
         return Response({'instance': instance, 'offcanvas_id': 'offcanvas-gasto-detalle'}, template_name='tenant/gastos/offcanvas_detalle_gasto.html')
+
+    def _get_documento_scope_qs(self, empresa_id):
+        """[OSF Fase F13] QuerySet de DocumentoSoporte con OrganizationalScope
+        aplicado (NULL-safe, mismo criterio que get_qs_detail()) - reusado por
+        las acciones render-offcanvas que resuelven su propio objeto sin pasar
+        por get_queryset()/get_object()."""
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+        return DocumentoSelector.get_detail(empresa_id, sede_ids=sede_ids)
 
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/resolucion')
     def render_offcanvas_resolucion(self, request):
@@ -260,7 +284,7 @@ class GastoViewSet(GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
 
 
 
-class ResolucionDIANViewSet(ResolucionServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class ResolucionDIANViewSet(OrganizationalContextMixin, ResolucionServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para Resoluciones DIAN (v2.62.0).
     """

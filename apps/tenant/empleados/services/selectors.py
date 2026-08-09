@@ -129,10 +129,16 @@ class EmpleadoSelector:
     """Read-only selectors para modelo Empleado."""
 
     @staticmethod
-    def get_list(empresa_id: int, search: str = None):
+    def get_list(empresa_id: int, search: str = None, sede_ids=None, area_ids=None):
         """
         QuerySet optimizado para LISTAR Empleados.
         Anota estados secuenciales para logica de botones UI.
+
+        [OSF Fase F7] `sede_ids`/`area_ids=None` (default) no restringe -
+        comportamiento identico al de antes de esta fase. El 100% de los
+        Empleado reales tiene sede=NULL/area=NULL hoy (verificado
+        empiricamente) - un registro sin sede/area queda visible para todos
+        los alcances (filtro NULL-safe), para no ocultar datos existentes.
         """
         has_contract = Contrato.objects.filter(
             empleado_id=OuterRef('pk'),
@@ -172,6 +178,11 @@ class EmpleadoSelector:
             cargo=cargo,
         ).select_related('sede', 'area').only(*EMPLEADO_LIST_FIELDS, *_SEDE_AREA_TRAVERSALS)
 
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        if area_ids is not None:
+            qs = qs.filter(Q(area_id__isnull=True) | Q(area_id__in=area_ids))
+
         if search:
             qs = qs.filter(
                 Q(numero_documento__icontains=search) |
@@ -184,11 +195,24 @@ class EmpleadoSelector:
         return qs.order_by('-fecha_ingreso', 'id')
 
     @staticmethod
-    def get_detail(empresa_id: int, empleado_uuid):
-        """QuerySet optimizado para DETALLE de Empleado."""
-        return Empleado.objects.filter(
+    def get_detail(empresa_id: int, empleado_uuid, sede_ids=None, area_ids=None):
+        """QuerySet optimizado para DETALLE de Empleado.
+
+        [OSF Fase F13] `sede_ids`/`area_ids=None` (default) no restringen -
+        mismo criterio NULL-safe de F7 (get_list). Antes de esta fase,
+        `EmpleadoViewSet.get_object()` (retrieve/update/partial_update/
+        destroy, via get_qs_detail() generico) solo filtraba por empresa_id -
+        mismo gap que F11/F13(gastos/cotizaciones/inventario/proyectos)
+        encontraron y corrigieron.
+        """
+        qs = Empleado.objects.filter(
             empresa_id=empresa_id, uuid=empleado_uuid
-        ).select_related('empresa', 'sede', 'area').only(*EMPLEADO_DETAIL_FIELDS, *_EMPLEADO_DETAIL_TRAVERSALS).get()
+        ).select_related('empresa', 'sede', 'area').only(*EMPLEADO_DETAIL_FIELDS, *_EMPLEADO_DETAIL_TRAVERSALS)
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        if area_ids is not None:
+            qs = qs.filter(Q(area_id__isnull=True) | Q(area_id__in=area_ids))
+        return qs.get()
 
     @staticmethod
     def get_by_id(empresa_id: int, empleado_id: int):

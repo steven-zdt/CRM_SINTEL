@@ -36,6 +36,7 @@ from apps.services.security.crypto import decrypt_password
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantAdmin, IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.utils import resolve_tenant_empresa
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.api.serializers import (
     EmpresaDetailSerializer,
     EmpresaHeaderSerializer,
@@ -65,7 +66,7 @@ log_mailinbox = logging.getLogger("mailinbox.api")
 
 # ========= ViewSets =========
 
-class EmpresaViewSet(viewsets.ModelViewSet):
+class EmpresaViewSet(OrganizationalContextMixin, viewsets.ModelViewSet):
     """
     ViewSet para Empresa (Singleton por tenant).
     
@@ -96,11 +97,19 @@ class EmpresaViewSet(viewsets.ModelViewSet):
     - Endpoint: GET /api/v1/empresas/ con StandardResultsSetPagination
     - Soporte ?search= para búsqueda en tiempo real
     """
+    # [Fase 9, OCF] OrganizationalContextMixin agregado como capacidad opt-in
+    # (expone self.get_organizational_context()) - get_queryset() NO fue
+    # migrado a context.filter(): esta app resuelve `empresa` via
+    # resolve_tenant_empresa() (apps/tenant/api/utils.py), que cae al
+    # singleton Empresa.objects.first() SIN exigir TenantProfile, mientras
+    # OrganizationalContext.resolve() SI lo exige - no son equivalentes para
+    # un usuario sin perfil, y forzar el cambio romperia ese caso real. Ver
+    # documentacion/IMPLEMENTACION_ORGANIZATIONAL_CONTEXT.md Fase 9 (empresa).
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     parser_classes = [JSONParser, FormParser, MultiPartParser]  # FormParser legacy
     renderer_classes = [JSONRenderer]
     pagination_class = StandardResultsSetPagination
-    
+
     def _check_enforced_mode(self, request):
         """
         Verifica si el usuario tiene permisos para mutaciones (ENFORCED MODE).
@@ -561,27 +570,37 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         QuerySet optimizado con .only() para mínima exposición (Tabulator v2.40).
-        
+
         # WARNING: v2.40: Alineado con Service Layer Pattern.
         # WARNING: v2.40: Soporta filtrado por ?search= para Tabulator.
-        # WARNING: AISLAMIENTO: django-tenants maneja automáticamente el aislamiento por esquema.
-        No es necesario filtrar manualmente por tenant, el QuerySet base ya está filtrado.
+
+        # SEC-FIX [2026-08-05]: django-tenants SOLO aisla por esquema (tenant),
+        # NO por empresa. MailInboxConfig hereda `empresa` (FK obligatoria) de
+        # SintelTenantBaseModel -- sin filtrar por empresa_id aqui, cualquier
+        # usuario autenticado del tenant podia listar/ver/editar/eliminar la
+        # configuracion de buzon de correo (host IMAP, puerto, usuario) de
+        # OTRAS empresas dentro del mismo tenant (solo el password quedaba
+        # deferred, sin control de acceso real). Corregido filtrando por
+        # empresa_id en las 3 ramas, igual que el resto de selectors de este
+        # proyecto (AGENTS.md: "empresa_id en cada query").
         """
-        
-        # WARNING: AISLAMIENTO: MailInboxConfig.objects ya filtrado por tenant automaticamente
-        # django-tenants aplica el filtro por esquema en el QuerySet base
-        base_qs = MailInboxConfig.objects.defer('imap_password')
-        
+        empresa = resolve_tenant_empresa(self.request, self)
+        if not empresa:
+            return MailInboxConfig.objects.none()
+
+        # WARNING: AISLAMIENTO: filtro explicito por empresa_id (ver SEC-FIX arriba)
+        base_qs = MailInboxConfig.objects.filter(empresa_id=empresa.id).defer('imap_password')
+
         # Obtener parámetro de búsqueda
         search = self.request.query_params.get('search', None)
-        
+
         if self.action == 'list':
             qs = base_qs.only(
-                'id', 'nombre', 'email_address', 'provider', 'protocol',
+                'id', 'empresa_id', 'nombre', 'email_address', 'provider', 'protocol',
                 'imap_host', 'imap_port', 'imap_ssl', 'is_active',
                 'created_at', 'updated_at'
             )
-            
+
             # Aplicar filtro de búsqueda si se proporciona
             if search:
                 qs = qs.filter(
@@ -590,20 +609,18 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
                     Q(imap_host__icontains=search) |
                     Q(provider__icontains=search)
                 )
-            
+
             return qs
         elif self.action == 'retrieve':
             # # WARNING: ZERO WASTE: Solo cargar campos necesarios para detalle
-            # # WARNING: AISLAMIENTO: django-tenants ya aplica el filtro por esquema automáticamente
             return base_qs.only(
-                'id', 'nombre', 'email_address', 'provider', 'protocol', 'is_active',
+                'id', 'empresa_id', 'nombre', 'email_address', 'provider', 'protocol', 'is_active',
                 'imap_host', 'imap_port', 'imap_username', 'imap_ssl', 'imap_starttls',
                 'imap_mailbox', 'imap_mark_as_seen', 'imap_max_attachment_mb', 'imap_move_processed_to',
                 'created_at', 'updated_at'
             )
         else:
             # # WARNING: Para otras acciones (create, update, delete, render_offcanvas, etc.), retornar QuerySet completo
-            # # WARNING: AISLAMIENTO: django-tenants ya aplica el filtro por esquema automáticamente
             return base_qs
     
     def list(self, request: Request, *args, **kwargs) -> Response:
@@ -1093,7 +1110,7 @@ def actividades_lookup(request):
 ciiu_lookup = actividades_lookup
 
 
-class SedeViewSet(BaseTenantViewSet):
+class SedeViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     ViewSet para Sedes (Sucursales).
     Aislamiento tenant-isolated y lookup por UUID heredado de BaseTenantViewSet.
@@ -1205,7 +1222,7 @@ class SedeViewSet(BaseTenantViewSet):
         return HttpResponse(html, content_type='text/html')
 
 
-class AreaViewSet(BaseTenantViewSet):
+class AreaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     ViewSet para Areas (Departamentos).
     Aislamiento tenant-isolated y lookup por UUID heredado de BaseTenantViewSet.

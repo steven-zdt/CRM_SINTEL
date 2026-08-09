@@ -119,8 +119,17 @@ class DocumentoSelector:
     """Read-only selectors para modelo DocumentoSoporte."""
 
     @staticmethod
-    def get_list(empresa_id: int, resolucion_id: int = None, search: str = None):
-        """QuerySet optimizado para LISTAR Documentos Soporte."""
+    def get_list(empresa_id: int, resolucion_id: int = None, search: str = None, sede_ids=None):
+        """
+        QuerySet optimizado para LISTAR Documentos Soporte.
+
+        [OSF Fase F7] `sede_ids=None` (default) no restringe por sede -
+        comportamiento identico al de antes de esta fase. El 100% de los
+        DocumentoSoporte reales tiene sede=NULL hoy (verificado
+        empiricamente, el campo era puramente informativo, DT-SEDE-01) - un
+        registro sin sede queda visible para todos los alcances (filtro
+        NULL-safe), para no ocultar datos existentes al activar el filtrado.
+        """
         qs = DocumentoSoporte.objects.filter(
             empresa_id=empresa_id
         ).select_related(
@@ -134,6 +143,9 @@ class DocumentoSelector:
             'proveedor__razon_social',
             'proveedor_id'
         )
+
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
 
         if resolucion_id:
             qs = qs.filter(resolucion_dian_id=resolucion_id)
@@ -149,8 +161,15 @@ class DocumentoSelector:
         return qs.order_by('-fecha', '-consecutivo')
 
     @staticmethod
-    def get_detail(empresa_id: int, documento_uuid=None):
-        """QuerySet optimizado para DETALLE de DocumentoSoporte."""
+    def get_detail(empresa_id: int, documento_uuid=None, sede_ids=None):
+        """QuerySet optimizado para DETALLE de DocumentoSoporte.
+
+        [OSF Fase F13] `sede_ids=None` (default) no restringe - mismo
+        criterio NULL-safe de F7 (get_list). Antes de esta fase, retrieve/
+        update/partial_update/destroy/anular en GastoViewSet solo filtraban
+        por empresa_id (via get_qs_detail() generico), sin ningun chequeo de
+        sede - mismo gap que F11 encontro y corrigio en Facturas.
+        """
         qs = DocumentoSoporte.objects.filter(
             empresa_id=empresa_id
         ).select_related(
@@ -158,6 +177,8 @@ class DocumentoSelector:
             'proveedor',
             'usuario_anulacion'
         )
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         if documento_uuid:
             return qs.filter(uuid=documento_uuid)
         return qs

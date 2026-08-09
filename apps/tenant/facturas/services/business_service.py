@@ -101,6 +101,18 @@ class FacturaBusinessService:
         resol = dto.get("resolucion", {})
         num_definitivo = dto.get("numero_externo") or dto.get("num_fac") or numero_provisional
 
+        # [OSF Fase F10] `sede_id` viaja en el DTO como dato plano (nunca
+        # una FK directa Ventas->Facturas, ver VentaBusinessService.
+        # _construir_dto_factura()). DSV anti-IDOR: solo se asigna si la
+        # Sede realmente pertenece a esta empresa - un id ajeno/invalido se
+        # ignora silenciosamente (degrada a sede=None) en vez de romper la
+        # creacion de la Factura por un dato de contexto secundario.
+        sede = None
+        sede_id_dto = dto.get("sede_id")
+        if sede_id_dto:
+            from apps.tenant.empresa.models import Sede
+            sede = Sede.objects.filter(id=sede_id_dto, empresa_id=empresa.id).first()
+
         factura_data = {
             "empresa": empresa,
             "numero": num_definitivo,
@@ -123,6 +135,7 @@ class FacturaBusinessService:
             "total": Decimal(str(totales.get("total", "0"))),
             "moneda": dto.get("moneda", "COP"),
             "cliente_uuid": dto.get("cliente_uuid"),
+            "sede": sede,
             # Campos DIAN generados en Fase 5 (None en vez de "" para campos unique/integer)
             "cufe": dto.get("cufe") or None,
             "qr_url": dto.get("qr_string") or None,
@@ -787,7 +800,9 @@ class FacturaBusinessService:
         return FacturaSelectors.obtener_anexo_xml(factura, tipo)
 
     @staticmethod
-    def actualizar_factura_limitado(factura: Factura, data: dict[str, Any], empresa_id: int) -> Factura:
+    def actualizar_factura_limitado(
+        factura: Factura, data: dict[str, Any], empresa_id: int, sede_ids=None,
+    ) -> Factura:
         """
         Actualizacion parcial segura de factura (Limited Edit).
 
@@ -795,6 +810,21 @@ class FacturaBusinessService:
         - Rechaza con 400 cualquier campo XML inmutable.
         - Sanitiza "" a None para fechas y UUID.
         - Usa MANUAL_EDITABLE_FIELDS (SSoT en models.py).
+
+        [OSF Fase F9] `sede_ids` (opcional, conjunto de sedes del
+        OrganizationalScope de quien hace la peticion) se propaga a
+        CotizacionBridge al vincular `cotizacion_uuid`: un perfil con
+        alcance SEDE/AREA no debe poder vincular una Factura a una
+        Cotizacion de una sede fuera de su alcance, aunque pertenezca a la
+        misma empresa. `None` (default) no restringe - comportamiento
+        identico al de antes de esta fase.
+
+        [OSF Fase F11] `sede_ids` tambien restringe ahora la propia
+        asignacion del campo `sede` de la Factura: solo se puede asignar una
+        sede que pertenezca a la empresa Y este dentro del alcance
+        organizacional de quien edita (mismo `sede_ids`, verificacion
+        estricta - no NULL-safe, porque aqui se valida la sede DESTINO, no
+        si un registro existente sin sede es visible).
         """
         from rest_framework.exceptions import ValidationError
 
@@ -824,17 +854,48 @@ class FacturaBusinessService:
             # DSV para cotizacion + auto-sync snapshot (v3.10.1)
             if field == 'cotizacion_uuid' and val:
                 from apps.tenant.facturas.services.selectors import CotizacionBridge
-                if not CotizacionBridge.exists_by_uuid(val, empresa_id):
+                if not CotizacionBridge.exists_by_uuid(val, empresa_id, sede_ids=sede_ids):
                     raise ValidationError({
-                        "cotizacion_uuid": "La cotización no existe o no pertenece a la empresa."
+                        "cotizacion_uuid": "La cotización no existe, no pertenece a la empresa, "
+                                           "o esta fuera de su alcance organizacional."
                     })
                 # Auto-sync snapshot: obtener numero y guardarlo
-                cot = CotizacionBridge.obtener_cotizacion_por_uuid(val, empresa_id)
+                cot = CotizacionBridge.obtener_cotizacion_por_uuid(val, empresa_id, sede_ids=sede_ids)
                 if cot:
                     update_data['cotizacion_numero'] = cot.get('numero_cotizacion')
             elif field == 'cotizacion_uuid' and not val:
                 # Desvincular: limpiar snapshot también
                 update_data['cotizacion_numero'] = None
+
+            # [OSF Fase F11] `sede` deja de ser meramente informativa: se
+            # vuelve editable via el unico camino de escritura realmente
+            # alcanzable hoy (Limited Edit) - antes de esta fase el DSV de
+            # alcance ya existia en FacturaDetailSerializer.validate() (F8)
+            # pero era codigo muerto (ese serializer nunca se usa para
+            # escritura aqui, ver auditoria de F8). Resuelve UUID o PK
+            # (mismo patron que UUIDOrPKRelatedField), anti-IDOR por
+            # empresa_id y verificacion de alcance organizacional.
+            elif field == 'sede':
+                if val:
+                    from apps.tenant.empresa.models import Sede
+                    data_str = str(val)
+                    sede_obj = (
+                        Sede.objects.filter(id=val, empresa_id=empresa_id).first()
+                        if data_str.isdigit()
+                        else Sede.objects.filter(uuid=val, empresa_id=empresa_id).first()
+                    )
+                    if sede_obj is None:
+                        raise ValidationError({
+                            "sede": "La sede no existe o no pertenece a la empresa."
+                        })
+                    if sede_ids is not None and sede_obj.id not in sede_ids:
+                        raise ValidationError({
+                            "sede": "No tiene permiso para asignar esta sede "
+                                    "(fuera de su alcance organizacional)."
+                        })
+                    val = sede_obj
+                else:
+                    val = None
 
             update_data[field] = val
 

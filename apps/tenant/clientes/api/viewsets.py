@@ -16,6 +16,7 @@ from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
 from apps.tenant.api.utils import render_template_safe, resolve_tenant_empresa
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.clientes.services.api_mixins import ClienteServiceMixin, ContactoClienteServiceMixin, CarteraServiceMixin
 from apps.tenant.clientes.api.serializers import (
     ClienteDetailSerializer,
@@ -35,10 +36,16 @@ from apps.tenant.empresa.models import Empresa
 logger = logging.getLogger(__name__)
 
 
-class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, CarteraServiceMixin, BaseTenantViewSet):
+class ClienteViewSet(OrganizationalContextMixin, ClienteServiceMixin, ContactoClienteServiceMixin, CarteraServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Clientes con soporte Tabulator y HTMX Offcanvas.
-    
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    get_queryset()/get_object()/etc. no migrados - resuelven la empresa via
+    resolve_tenant_empresa() (mismo mecanismo ya documentado en empresa,
+    Fase 9 app 1/14), que no exige TenantProfile a diferencia de
+    OrganizationalContext.resolve().
+
     Endpoints:
     - GET /api/v1/clientes/ - Lista paginada (Tabulator)
     - GET /api/v1/clientes/{uuid}/ - Detalle
@@ -445,9 +452,12 @@ class ClienteViewSet(ClienteServiceMixin, ContactoClienteServiceMixin, CarteraSe
         )
 
 
-class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
+class ContactoClienteViewSet(OrganizationalContextMixin, ContactoClienteServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Contactos de Cliente con Zero Trust estricto.
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    Misma razon que ClienteViewSet para no migrar get_queryset()/get_object().
     """
     lookup_field = 'uuid'
     lookup_url_kwarg = 'uuid'
@@ -684,9 +694,12 @@ class ContactoClienteViewSet(ContactoClienteServiceMixin, BaseTenantViewSet):
 
 
 
-class CarteraViewSet(CarteraServiceMixin, BaseTenantViewSet):
+class CarteraViewSet(OrganizationalContextMixin, CarteraServiceMixin, BaseTenantViewSet):
     """
     ViewSet for accounts receivable (Cartera) management.
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
+    Misma razon que ClienteViewSet para no migrar get_queryset()/get_object().
     """
     lookup_field = 'uuid'
     lookup_url_kwarg = 'uuid'
