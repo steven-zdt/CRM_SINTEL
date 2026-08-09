@@ -1,11 +1,18 @@
 import logging
-from decimal import Decimal, ROUND_HALF_UP
-from django.db import transaction, models
+from decimal import ROUND_HALF_UP, Decimal
+
+from django.db import models, transaction
 
 _TWO = Decimal('0.01')
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.compras.models import OrdenCompra, ItemOrdenCompra, PlantillaOrdenCompra
+from apps.tenant.compras.models import (
+    ItemOrdenCompra,
+    OrdenCompra,
+    PlantillaOrdenCompra,
+    RecepcionCompra,
+    RecepcionCompraItem,
+)
 from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
@@ -276,3 +283,64 @@ class OrdenCompraCRUDService:
         ).aggregate(max_val=models.Max('consecutivo'))['max_val']
 
         return (ultimo + 1) if ultimo else 1
+
+
+class RecepcionCompraCRUDService:
+    """
+    Operaciones CRUD puras y persistencia transaccional para RecepcionCompra (F21).
+    Toda validacion de negocio (estado de la orden, cantidades pendientes,
+    pertenencia de items) vive en RecepcionCompraBusinessService — esta capa
+    solo persiste lo que ya fue validado.
+    """
+
+    @staticmethod
+    @transaction.atomic
+    def crear_recepcion(*, empresa, sede, orden_compra, usuario, fecha, items_data: list, observaciones: str = '') -> RecepcionCompra:
+        recepcion = RecepcionCompra(
+            empresa=empresa,
+            sede=sede,
+            orden_compra=orden_compra,
+            usuario=usuario,
+            fecha=fecha,
+            observaciones=observaciones,
+        )
+        recepcion.full_clean()
+        recepcion.save()
+
+        if not items_data:
+            raise ValidationError("Una recepcion de compra debe contener al menos un item.")
+
+        items_a_crear = []
+        for item_data in items_data:
+            item = RecepcionCompraItem(
+                empresa=empresa,
+                recepcion=recepcion,
+                item_orden_compra=item_data['item_orden_compra'],
+                cantidad_recibida=item_data['cantidad_recibida'],
+                observaciones=item_data.get('observaciones', ''),
+            )
+            item.full_clean()
+            items_a_crear.append(item)
+        RecepcionCompraItem.objects.bulk_create(items_a_crear)
+
+        logger.info(
+            "[RecepcionCompraCRUD] Recepcion id=%s creada para orden_compra_id=%s (%s items)",
+            recepcion.id, orden_compra.id, len(items_a_crear),
+        )
+        return recepcion
+
+    @staticmethod
+    @transaction.atomic
+    def marcar_confirmada(recepcion: RecepcionCompra) -> RecepcionCompra:
+        recepcion.estado = RecepcionCompra.Estado.CONFIRMADA
+        recepcion.save(update_fields=['estado'])
+        logger.info("[RecepcionCompraCRUD] Recepcion id=%s confirmada", recepcion.id)
+        return recepcion
+
+    @staticmethod
+    @transaction.atomic
+    def anular(recepcion: RecepcionCompra) -> RecepcionCompra:
+        recepcion.estado = RecepcionCompra.Estado.ANULADA
+        recepcion.save(update_fields=['estado'])
+        logger.info("[RecepcionCompraCRUD] Recepcion id=%s anulada", recepcion.id)
+        return recepcion

@@ -1,28 +1,39 @@
 import logging
+
+from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
-from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.config.api.pagination import StandardResultsSetPagination
-from apps.tenant.api.permissions import HasOrganizationalScope, IsTenantAdminOrReadOnly, IsTenantMember
-from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
-from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
-from apps.tenant.compras.services import (
-    OrdenCompraServiceMixin,
-    OrdenCompraBusinessService,
-    PlantillaOrdenCompraServiceMixin
+from apps.tenant.api.mixins import SintelDSVMixin
+from apps.tenant.api.permissions import (
+    HasOrganizationalScope,
+    IsTenantAdminOrReadOnly,
+    IsTenantMember,
 )
+from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra, RecepcionCompra
+from apps.tenant.compras.services import (
+    OrdenCompraBusinessService,
+    OrdenCompraServiceMixin,
+    PlantillaOrdenCompraServiceMixin,
+    RecepcionCompraBusinessService,
+    RecepcionCompraServiceMixin,
+)
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
+
 from .serializers import (
-    OrdenCompraListSerializer,
-    OrdenCompraDetailSerializer,
     OrdenCompraCreateUpdateSerializer,
-    PlantillaOrdenCompraSerializer
+    OrdenCompraDetailSerializer,
+    OrdenCompraListSerializer,
+    PlantillaOrdenCompraSerializer,
+    RecepcionCompraCreateSerializer,
+    RecepcionCompraDetailSerializer,
+    RecepcionCompraListSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -201,6 +212,7 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
     def render_offcanvas_crear(self, request):
         """Renderiza offcanvas para crear."""
         import datetime
+
         from apps.tenant.compras.services.selectors import PlantillaOrdenCompraSelector
         empresa = self._get_empresa()
         fecha_default = datetime.date.today().isoformat()
@@ -327,3 +339,109 @@ class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenComp
             {'offcanvas_id': 'offcanvas-plantilla-crear'},
             template_name='tenant/compras/offcanvas_crear_plantilla.html'
         )
+
+
+class RecepcionCompraViewSet(OrganizationalContextMixin, RecepcionCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+    """
+    ViewSet para Recepcion de Compras (F21): OrdenCompra -> RecepcionCompra ->
+    MovimientoInventario. Solo API (sin renderizado de offcanvas HTMX -
+    reduccion de alcance documentada en documentacion/F21_RECEPCION_INVENTARIO.md,
+    consistente con la decision de no construir frontend nuevo en esta fase).
+    """
+    queryset = RecepcionCompra.objects.none()
+    serializer_class = RecepcionCompraDetailSerializer
+    service_class = RecepcionCompraBusinessService
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    pagination_class = StandardResultsSetPagination
+    parser_classes = [JSONParser, FormParser, MultiPartParser]
+    renderer_classes = [JSONRenderer]
+
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["estado"]
+    ordering_fields = ["fecha", "created_at"]
+    ordering = ["-fecha", "-id"]
+
+    def get_permissions(self):
+        # Mismo piloto de alcance organizacional que OrdenCompraViewSet:
+        # RecepcionCompra hereda SedeAwareModel igual que su orden padre.
+        return [IsTenantMember(), IsTenantAdminOrReadOnly(), HasOrganizationalScope()]
+
+    def get_queryset(self):
+        if not hasattr(self, 'action') or self.action is None:
+            return RecepcionCompra.objects.none()
+        if self.action == "list":
+            orden_uuid = self.request.query_params.get('orden_compra')
+            estado = self.request.query_params.get('estado')
+            return self.get_qs_list(orden_compra_uuid=orden_uuid, estado=estado)
+        uuid_val = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+        return self.get_qs_detail(uuid_val)
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return RecepcionCompraListSerializer
+        if self.action == "create":
+            return RecepcionCompraCreateSerializer
+        return RecepcionCompraDetailSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        try:
+            context['empresa_id'] = self.get_empresa_id()
+        except Exception:
+            context['empresa_id'] = None
+        return context
+
+    def create(self, request, *args, **kwargs):
+        """Crea una RecepcionCompra en BORRADOR (sin efecto en stock todavia)."""
+        try:
+            empresa = self._get_empresa()
+            if not empresa:
+                return Response(
+                    {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            serializer = RecepcionCompraCreateSerializer(
+                data=request.data, context={'empresa_id': empresa.id}
+            )
+            serializer.is_valid(raise_exception=True)
+
+            validated_data = serializer.validated_data
+            items_data = validated_data.pop('items')
+
+            success, result, status_code = self.service_crear_recepcion(
+                validated_data, items_data, empresa
+            )
+            if not success:
+                logger.warning(f"[RecepcionCompraViewSet:create] Fallo creacion: {result}")
+                return Response(result, status=status_code)
+
+            out_serializer = RecepcionCompraDetailSerializer(result)
+            return Response(out_serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=["post"], url_path="confirmar")
+    def confirmar(self, request, uuid=None):
+        """Confirma la recepcion: genera MovimientoInventario y actualiza la orden."""
+        try:
+            success, result, status_code = self.service_confirmar_recepcion(uuid)
+            if not success:
+                return Response(result, status=status_code)
+            out_serializer = RecepcionCompraDetailSerializer(result)
+            return Response(out_serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=["post"], url_path="anular")
+    def anular(self, request, uuid=None):
+        """Anula una recepcion en Borrador (sin efecto en stock aun)."""
+        try:
+            success, result, status_code = self.service_anular_recepcion(uuid)
+            if not success:
+                return Response(result, status=status_code)
+            out_serializer = RecepcionCompraDetailSerializer(result)
+            return Response(out_serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)

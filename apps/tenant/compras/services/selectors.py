@@ -1,5 +1,5 @@
 from django.db.models import Q, Max, Sum, Count
-from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
+from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra, RecepcionCompra
 from apps.tenant.core.services.organizational_filters import filter_by_scope
 
 
@@ -160,4 +160,36 @@ class OrdenCompraSelector:
         ).aggregate(max_val=Max('consecutivo'))['max_val']
 
         return (max_consecutivo + 1) if max_consecutivo is not None else 1
+
+
+RECEPCION_LIST_FIELDS = (
+    'id', 'uuid', 'fecha', 'estado', 'observaciones', 'empresa_id', 'sede_id',
+    'area_id', 'orden_compra_id', 'usuario_id', 'created_at', 'updated_at',
+)
+
+RECEPCION_DETAIL_FIELDS = RECEPCION_LIST_FIELDS
+
+
+class RecepcionCompraSelector:
+    """Selectores optimizados de solo lectura para RecepcionCompra (F21)."""
+
+    @staticmethod
+    def get_list(empresa_id: int, orden_compra_uuid: str = None, estado: str = None, sede_ids=None, area_ids=None):
+        qs = filter_by_scope(
+            RecepcionCompra.objects.all(), empresa_id, sede_ids=sede_ids, area_ids=area_ids,
+        ).select_related('orden_compra', 'sede', 'area', 'usuario').only(
+            *RECEPCION_LIST_FIELDS, 'orden_compra__uuid', 'orden_compra__numero_documento',
+            'sede__nombre', 'area__nombre',
+        )
+        if orden_compra_uuid:
+            qs = qs.filter(orden_compra__uuid=orden_compra_uuid)
+        if estado:
+            qs = qs.filter(estado=estado)
+        return qs.order_by('-fecha', '-id')
+
+    @staticmethod
+    def get_detail(empresa_id: int, recepcion_uuid: str):
+        return RecepcionCompra.objects.filter(
+            empresa_id=empresa_id, uuid=recepcion_uuid,
+        ).select_related('orden_compra', 'sede', 'area', 'usuario').prefetch_related('items')
 

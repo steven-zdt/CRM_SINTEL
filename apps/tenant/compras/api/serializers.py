@@ -1,9 +1,16 @@
 from rest_framework import serializers
-from apps.tenant.compras.models import OrdenCompra, ItemOrdenCompra, PlantillaOrdenCompra
+
+from apps.tenant.compras.models import (
+    ItemOrdenCompra,
+    OrdenCompra,
+    PlantillaOrdenCompra,
+    RecepcionCompra,
+    RecepcionCompraItem,
+)
 from apps.tenant.empresa.models import Area
+from apps.tenant.gastos.models import DocumentoSoporte
 from apps.tenant.proveedores.models import Proveedor
 from apps.tenant.proyectos.models import Proyecto
-from apps.tenant.gastos.models import DocumentoSoporte
 
 
 class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
@@ -220,4 +227,58 @@ class OrdenCompraCreateUpdateSerializer(serializers.ModelSerializer):
     def validate_items(self, value):
         if not value:
             raise serializers.ValidationError("Debe proporcionar al menos un item para la orden de compra.")
+        return value
+
+
+class RecepcionCompraItemSerializer(serializers.ModelSerializer):
+    """Linea de recepcion (F21) — referencia al ItemOrdenCompra que se esta recibiendo."""
+    item_orden_compra = UUIDOrPKRelatedField(queryset=ItemOrdenCompra.objects.all())
+
+    class Meta:
+        model = RecepcionCompraItem
+        fields = ('id', 'uuid', 'item_orden_compra', 'cantidad_recibida', 'observaciones')
+        read_only_fields = ('id', 'uuid')
+
+
+class RecepcionCompraListSerializer(serializers.ModelSerializer):
+    """Serializer aplanado para listado de Recepciones de Compra (F21)."""
+    orden_compra_uuid = serializers.CharField(source='orden_compra.uuid', read_only=True)
+    orden_compra_numero = serializers.CharField(source='orden_compra.numero_documento', read_only=True, default='')
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, default='')
+    area_nombre = serializers.CharField(source='area.nombre', read_only=True, default='')
+    usuario_nombre = serializers.SerializerMethodField()
+
+    def get_usuario_nombre(self, obj) -> str:
+        return str(obj.usuario) if obj.usuario_id else ''
+
+    class Meta:
+        model = RecepcionCompra
+        fields = (
+            'id', 'uuid', 'fecha', 'estado', 'observaciones',
+            'orden_compra_uuid', 'orden_compra_numero',
+            'sede_nombre', 'area_nombre', 'usuario_nombre', 'created_at',
+        )
+        read_only_fields = fields
+
+
+class RecepcionCompraDetailSerializer(RecepcionCompraListSerializer):
+    """Serializer detallado que incluye las lineas de recepcion."""
+    items = RecepcionCompraItemSerializer(many=True, read_only=True)
+
+    class Meta(RecepcionCompraListSerializer.Meta):
+        fields = RecepcionCompraListSerializer.Meta.fields + ('items', 'updated_at')
+
+
+class RecepcionCompraCreateSerializer(serializers.ModelSerializer):
+    """Serializer de escritura para crear una Recepcion de Compra en BORRADOR."""
+    orden_compra = UUIDOrPKRelatedField(queryset=OrdenCompra.objects.all())
+    items = RecepcionCompraItemSerializer(many=True, required=True)
+
+    class Meta:
+        model = RecepcionCompra
+        fields = ('orden_compra', 'fecha', 'observaciones', 'items')
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError("Debe indicar al menos un item recibido.")
         return value

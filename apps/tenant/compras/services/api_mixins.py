@@ -1,8 +1,20 @@
 from rest_framework.exceptions import ValidationError
+
 from apps.tenant.api.mixins import BaseServiceMixin
-from apps.tenant.compras.services.selectors import OrdenCompraSelector, PlantillaOrdenCompraSelector
-from apps.tenant.compras.services.crud_service import OrdenCompraCRUDService, PlantillaOrdenCompraCRUDService
-from apps.tenant.compras.services.business_service import OrdenCompraBusinessService
+from apps.tenant.compras.services.business_service import (
+    OrdenCompraBusinessService,
+    RecepcionCompraBusinessService,
+)
+from apps.tenant.compras.services.crud_service import (
+    OrdenCompraCRUDService,
+    PlantillaOrdenCompraCRUDService,
+    RecepcionCompraCRUDService,
+)
+from apps.tenant.compras.services.selectors import (
+    OrdenCompraSelector,
+    PlantillaOrdenCompraSelector,
+    RecepcionCompraSelector,
+)
 
 
 class PlantillaOrdenCompraServiceMixin(BaseServiceMixin):
@@ -132,3 +144,43 @@ class OrdenCompraServiceMixin(BaseServiceMixin):
         """
         empresa_id = self._get_empresa_id_seguro()
         return self.selector_class.get_siguiente_consecutivo(empresa_id)
+
+
+class RecepcionCompraServiceMixin(BaseServiceMixin):
+    """Mixin para inyectar logica de negocios de Recepcion de Compras (F21)."""
+    selector_class = RecepcionCompraSelector
+    crud_service_class = RecepcionCompraCRUDService
+    business_service_class = RecepcionCompraBusinessService
+
+    def get_qs_list(self, orden_compra_uuid: str = None, estado: str = None):
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        empresa_id = self._get_empresa_id_seguro()
+        try:
+            scope = OrganizationalScope.resolve(self.request)
+            sede_ids, area_ids = scope.sede_ids, scope.area_ids
+        except OrganizationalScopeError:
+            sede_ids, area_ids = None, None
+        return self.selector_class.get_list(
+            empresa_id, orden_compra_uuid=orden_compra_uuid, estado=estado,
+            sede_ids=sede_ids, area_ids=area_ids,
+        )
+
+    def get_qs_detail(self, recepcion_uuid: str):
+        empresa_id = self._get_empresa_id_seguro()
+        return self.selector_class.get_detail(empresa_id, recepcion_uuid)
+
+    def service_crear_recepcion(self, data: dict, items_data: list, empresa):
+        sede = self._get_sede()
+        usuario = getattr(self.request.user, 'tenant_profile', None)
+        return self.business_service_class.crear_recepcion(data, items_data, empresa, sede, usuario)
+
+    def service_confirmar_recepcion(self, recepcion_uuid: str):
+        empresa_id = self._get_empresa_id_seguro()
+        return self.business_service_class.confirmar_recepcion(recepcion_uuid, empresa_id)
+
+    def service_anular_recepcion(self, recepcion_uuid: str):
+        empresa_id = self._get_empresa_id_seguro()
+        return self.business_service_class.anular_recepcion(recepcion_uuid, empresa_id)

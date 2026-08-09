@@ -101,6 +101,7 @@ class OrdenCompra(SedeAwareModel):
         ('BORRADOR', _('Borrador')),
         ('PENDIENTE', _('Pendiente por Aprobar')),
         ('APROBADA', _('Aprobada')),
+        ('PARCIAL', _('Recepcion Parcial')),
         ('RECIBIDA', _('Recibida/Completada')),
         ('ANULADA', _('Anulada')),
     ]
@@ -324,10 +325,149 @@ class ItemOrdenCompra(SintelTenantBaseModel):
         verbose_name=_('Total')
     )
 
+    cantidad_recibida = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Cantidad Recibida'),
+        help_text=_(
+            'Acumulado de recepciones CONFIRMADA para este item (F21). '
+            'cantidad_recibida <= cantidad siempre; actualizado transaccionalmente '
+            'por RecepcionCompraBusinessService bajo select_for_update, mismo '
+            'patron que Producto.stock_actual en KardexService.'
+        ),
+    )
+
     class Meta:
         verbose_name = _('Item Orden de Compra')
         verbose_name_plural = _('Items Orden de Compra')
         ordering = ['id']
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(cantidad_recibida__lte=models.F('cantidad')),
+                name='item_orden_compra_recibida_lte_cantidad',
+            ),
+        ]
+
+    @property
+    def cantidad_pendiente(self):
+        return self.cantidad - self.cantidad_recibida
 
     def __str__(self):
         return f"{self.descripcion} x {self.cantidad}"
+
+
+class RecepcionCompra(SedeAwareModel):
+    """
+    Evento de recepcion fisica de mercancia contra una OrdenCompra (F21).
+
+    OrdenCompra != Recepcion: una orden puede recibirse en varios eventos
+    parciales (RecepcionCompra #1, #2, ...) que se acumulan sobre
+    ItemOrdenCompra.cantidad_recibida hasta completar la cantidad ordenada.
+    Solo CONFIRMADA genera MovimientoInventario (via RecepcionCompraBusinessService
+    + KardexService.registrar_movimiento) — BORRADOR es editable/sin efecto en
+    stock, y una vez CONFIRMADA es inmutable (no se reversa automaticamente:
+    ver documentacion/F21_RECEPCION_INVENTARIO.md sobre este limite de alcance).
+    """
+
+    class Estado(models.TextChoices):
+        BORRADOR = 'BORRADOR', _('Borrador')
+        CONFIRMADA = 'CONFIRMADA', _('Confirmada')
+        ANULADA = 'ANULADA', _('Anulada')
+
+    # Tabla nueva sin datos historicos: se endurece sede a NOT NULL desde el
+    # inicio (a diferencia de OrdenCompra, que necesito nullable->backfill->
+    # harden por tener filas preexistentes). Por defecto toma la sede de la
+    # orden de compra (ver RecepcionCompraBusinessService.crear_recepcion).
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.PROTECT,
+        related_name='%(app_label)s_%(class)s_related',
+        verbose_name=_('Sede'),
+        help_text=_('Sede que recibe la mercancia. Por defecto, la sede de la orden de compra.'),
+        null=False,
+        blank=False,
+        db_index=True,
+    )
+
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+
+    orden_compra = models.ForeignKey(
+        OrdenCompra,
+        on_delete=models.PROTECT,
+        related_name='recepciones',
+        verbose_name=_('Orden de Compra'),
+    )
+
+    fecha = models.DateField(verbose_name=_('Fecha de Recepcion'))
+
+    estado = models.CharField(
+        max_length=20,
+        choices=Estado.choices,
+        default=Estado.BORRADOR,
+        db_index=True,
+        verbose_name=_('Estado'),
+    )
+
+    usuario = models.ForeignKey(
+        'perfil.TenantProfile',
+        on_delete=models.PROTECT,
+        related_name='recepciones_compra',
+        verbose_name=_('Usuario que Recibe'),
+    )
+
+    observaciones = models.TextField(blank=True, verbose_name=_('Observaciones'))
+
+    class Meta:
+        verbose_name = _('Recepcion de Compra')
+        verbose_name_plural = _('Recepciones de Compra')
+        ordering = ['-fecha', '-id']
+        indexes = [
+            models.Index(fields=['empresa', 'orden_compra']),
+            models.Index(fields=['empresa', 'estado']),
+            models.Index(fields=['empresa', 'sede']),
+        ]
+
+    def __str__(self):
+        return f"Recepcion #{self.pk} - OC {self.orden_compra_id} ({self.estado})"
+
+
+class RecepcionCompraItem(SintelTenantBaseModel):
+    """Linea de recepcion: cuanto se recibio de un ItemOrdenCompra en este evento."""
+
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+
+    recepcion = models.ForeignKey(
+        RecepcionCompra,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name=_('Recepcion'),
+    )
+
+    item_orden_compra = models.ForeignKey(
+        ItemOrdenCompra,
+        on_delete=models.PROTECT,
+        related_name='recepciones_item',
+        verbose_name=_('Item de Orden de Compra'),
+    )
+
+    cantidad_recibida = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name=_('Cantidad Recibida en este Evento'),
+    )
+
+    observaciones = models.TextField(blank=True, verbose_name=_('Observaciones'))
+
+    class Meta:
+        verbose_name = _('Item de Recepcion de Compra')
+        verbose_name_plural = _('Items de Recepcion de Compra')
+        ordering = ['id']
+        indexes = [
+            models.Index(fields=['empresa', 'item_orden_compra']),
+        ]
+
+    def __str__(self):
+        return f"{self.item_orden_compra_id}: +{self.cantidad_recibida}"
