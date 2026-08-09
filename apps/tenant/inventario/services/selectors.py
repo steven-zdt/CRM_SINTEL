@@ -11,7 +11,10 @@ Reglas:
 - Constantes LIST_FIELDS y DETAIL_FIELDS como tuplas de strings (SSoT).
 """
 
-from django.db.models import Q
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
+from django.db.models import Q, Sum
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.inventario.models import (
@@ -21,9 +24,8 @@ from apps.tenant.inventario.models import (
     MovimientoInventario,
     Producto,
     Servicio,
+    TrasladoInventario,
 )
-
-from django.core.exceptions import ValidationError
 
 # ==============================================================================
 # 1. CONSTANTES DE CAMPOS (SSoT - Single Source of Truth)
@@ -329,6 +331,120 @@ class MovimientoInventarioSelector:
             .select_related('producto')
             .only(*MOVIMIENTO_LIST_FIELDS)
             .order_by('-created_at')
+        )
+
+
+class StockPorSedeSelector:
+    """
+    F21: resuelve "stock por sede" via agregacion de MovimientoInventario.sede,
+    sin persistir un campo nuevo en Producto. Decision registrada en
+    documentacion/F21_ORGANIZATIONAL_DECISIONS.md: Producto sigue siendo
+    Empresa->Producto (stock_actual agregado); la dimension Sede solo vive en
+    el movimiento, resuelta en lectura (mismo criterio que Kardex.calcular_stock,
+    aplicado con un filtro adicional de sede_id).
+    """
+    TIPOS_ENTRADA_SEDE = (
+        MovimientoInventario.TipoMovimiento.ENTRADA_COMPRA,
+        MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
+        MovimientoInventario.TipoMovimiento.ENTRADA_DEVOLUCION,
+        MovimientoInventario.TipoMovimiento.TRASLADO_ENTRADA,
+    )
+    TIPOS_SALIDA_SEDE = (
+        MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+        MovimientoInventario.TipoMovimiento.SALIDA_BAJA,
+        MovimientoInventario.TipoMovimiento.SALIDA_CONSUMO,
+        MovimientoInventario.TipoMovimiento.TRASLADO_SALIDA,
+    )
+
+    @staticmethod
+    def calcular_stock_sede(empresa_id: int, producto_id: int, sede_id: int) -> Decimal:
+        """
+        Stock de un producto en una sede especifica.
+
+        Movimientos historicos con sede=NULL (anteriores a la adopcion de F21,
+        o registrados sin sede porque "aplica a toda la empresa") deliberadamente
+        NO se cuentan aqui — no se les asigna una sede inventada (prohibido
+        explicitamente por el prompt maestro F21 §39/§52). Ver
+        calcular_stock_sin_asignar() para ese resto.
+        """
+        entradas = MovimientoInventario.objects.filter(
+            empresa_id=empresa_id, producto_id=producto_id, sede_id=sede_id,
+            tipo__in=StockPorSedeSelector.TIPOS_ENTRADA_SEDE,
+        ).aggregate(total=Sum('cantidad'))['total'] or Decimal('0')
+        salidas = MovimientoInventario.objects.filter(
+            empresa_id=empresa_id, producto_id=producto_id, sede_id=sede_id,
+            tipo__in=StockPorSedeSelector.TIPOS_SALIDA_SEDE,
+        ).aggregate(total=Sum('cantidad'))['total'] or Decimal('0')
+        return entradas - salidas
+
+    @staticmethod
+    def calcular_stock_sin_asignar(empresa_id: int, producto_id: int) -> Decimal:
+        """Stock proveniente de movimientos sin sede asignada (sede_id NULL)."""
+        entradas = MovimientoInventario.objects.filter(
+            empresa_id=empresa_id, producto_id=producto_id, sede_id__isnull=True,
+            tipo__in=StockPorSedeSelector.TIPOS_ENTRADA_SEDE,
+        ).aggregate(total=Sum('cantidad'))['total'] or Decimal('0')
+        salidas = MovimientoInventario.objects.filter(
+            empresa_id=empresa_id, producto_id=producto_id, sede_id__isnull=True,
+            tipo__in=StockPorSedeSelector.TIPOS_SALIDA_SEDE,
+        ).aggregate(total=Sum('cantidad'))['total'] or Decimal('0')
+        return entradas - salidas
+
+    @staticmethod
+    def calcular_en_transito(empresa_id: int, producto_id: int, sede_origen_id: int = None) -> Decimal:
+        """
+        Cantidad en transito de un producto: suma de TrasladoInventario en
+        estado EN_TRANSITO. Se resuelve contra el estado real del traslado
+        (no re-derivado desde MovimientoInventario) para no crear una segunda
+        fuente de verdad sobre en que estado esta el traslado.
+        """
+        from apps.tenant.inventario.models import TrasladoInventario
+        qs = TrasladoInventario.objects.filter(
+            empresa_id=empresa_id,
+            producto_id=producto_id,
+            estado=TrasladoInventario.Estado.EN_TRANSITO,
+        )
+        if sede_origen_id is not None:
+            qs = qs.filter(sede_origen_id=sede_origen_id)
+        return qs.aggregate(total=Sum('cantidad'))['total'] or Decimal('0')
+
+
+TRASLADO_LIST_FIELDS = (
+    'id', 'uuid', 'cantidad', 'estado', 'motivo', 'empresa_id',
+    'producto_id', 'sede_origen_id', 'sede_destino_id', 'area_origen_id', 'area_destino_id',
+    'usuario_solicita_id', 'usuario_aprueba_id', 'usuario_recibe_id',
+    'fecha_solicitud', 'fecha_aprobacion', 'fecha_envio', 'fecha_recepcion', 'created_at',
+)
+
+
+class TrasladoInventarioSelector:
+    """Selectores de solo lectura para TrasladoInventario (F21)."""
+
+    @staticmethod
+    def get_list(empresa_id: int, estado: str = None, sede_ids=None):
+        qs = (
+            TrasladoInventario.objects
+            .filter(empresa_id=empresa_id)
+            .select_related('producto', 'sede_origen', 'sede_destino', 'area_origen', 'area_destino')
+            .only(
+                *TRASLADO_LIST_FIELDS,
+                'producto__codigo', 'producto__nombre',
+                'sede_origen__nombre', 'sede_destino__nombre',
+                'area_origen__nombre', 'area_destino__nombre',
+            )
+        )
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_origen_id__in=sede_ids) | Q(sede_destino_id__in=sede_ids))
+        if estado:
+            qs = qs.filter(estado=estado)
+        return qs.order_by('-created_at')
+
+    @staticmethod
+    def get_detail(empresa_id: int, traslado_uuid: str):
+        return (
+            TrasladoInventario.objects
+            .filter(empresa_id=empresa_id, uuid=traslado_uuid)
+            .select_related('producto', 'sede_origen', 'sede_destino', 'area_origen', 'area_destino')
         )
 
 

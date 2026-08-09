@@ -10,6 +10,8 @@ from .selectors import (
     ActivoFijoSelector,
     MovimientoInventarioSelector,
     HistorialServicioSelector,
+    StockPorSedeSelector,
+    TrasladoInventarioSelector,
     CATEGORIA_LIST_FIELDS,
     CATEGORIA_DETAIL_FIELDS,
     PRODUCTO_LIST_FIELDS,
@@ -24,6 +26,7 @@ from .selectors import (
 
 from .business_service import (
     KardexService,
+    TrasladoInventarioService,
 )
 
 # [ARQ-C2] Los ServiceMixin viven en api_mixins.py, no en business_service.py.
@@ -34,6 +37,7 @@ from .api_mixins import (
     ActivoFijoServiceMixin,
     MovimientoServiceMixin,
     HistorialServiceMixin,
+    TrasladoInventarioServiceMixin,
 )
 
 from .ingesta_service import (

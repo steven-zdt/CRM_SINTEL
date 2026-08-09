@@ -24,6 +24,7 @@ from apps.tenant.inventario.models import (
     MovimientoInventario,
     Producto,
     Servicio,
+    TrasladoInventario,
 )
 from apps.tenant.inventario.services.selectors import (
     ActivoFijoSelector,
@@ -31,9 +32,12 @@ from apps.tenant.inventario.services.selectors import (
     MovimientoInventarioSelector,
     ProductoSelector,
     ServicioSelector,
+    StockPorSedeSelector,
+    TrasladoInventarioSelector,
 )
 from apps.tenant.inventario.services.business_service import (
     KardexService,
+    TrasladoInventarioService,
     ajustar_stock,
 )
 
@@ -312,6 +316,53 @@ class MovimientoServiceMixin:
             'tipos': MovimientoInventario.TipoMovimiento.choices,
             'empresa': empresa,
         }
+
+
+class TrasladoInventarioServiceMixin:
+    """Mixin para inyectar el flujo de Traslado entre Sedes (F21) en el ViewSet."""
+
+    def get_qs_list(self, empresa, estado=None):
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            sede_ids = OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+        return TrasladoInventarioSelector.get_list(empresa.id, estado=estado, sede_ids=sede_ids)
+
+    def get_qs_detail(self, empresa, traslado_uuid):
+        return TrasladoInventarioSelector.get_detail(empresa.id, traslado_uuid)
+
+    def service_traslado_solicitar(self, empresa, usuario_id, data: dict):
+        return TrasladoInventarioService.solicitar(
+            empresa_id=empresa.id,
+            producto_id=data['producto'].id,
+            cantidad=data['cantidad'],
+            sede_origen_id=data['sede_origen'].id,
+            sede_destino_id=data['sede_destino'].id,
+            usuario_id=usuario_id,
+            area_origen_id=data.get('area_origen').id if data.get('area_origen') else None,
+            area_destino_id=data.get('area_destino').id if data.get('area_destino') else None,
+            motivo=data.get('motivo', ''),
+        )
+
+    def service_traslado_aprobar(self, empresa, traslado_uuid, usuario_id):
+        return TrasladoInventarioService.aprobar(
+            traslado_uuid=traslado_uuid, empresa_id=empresa.id, usuario_id=usuario_id,
+        )
+
+    def service_traslado_enviar(self, empresa, traslado_uuid):
+        return TrasladoInventarioService.enviar(traslado_uuid=traslado_uuid, empresa_id=empresa.id)
+
+    def service_traslado_recibir(self, empresa, traslado_uuid, usuario_id):
+        return TrasladoInventarioService.recibir(
+            traslado_uuid=traslado_uuid, empresa_id=empresa.id, usuario_id=usuario_id,
+        )
+
+    def service_traslado_cancelar(self, empresa, traslado_uuid):
+        return TrasladoInventarioService.cancelar(traslado_uuid=traslado_uuid, empresa_id=empresa.id)
 
 
 class HistorialServiceMixin:

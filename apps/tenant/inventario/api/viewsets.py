@@ -37,6 +37,9 @@ from .serializers import (
     ServicioDetailSerializer,
     ServicioListSerializer,
     StockResponseSerializer,
+    TrasladoInventarioCreateSerializer,
+    TrasladoInventarioDetailSerializer,
+    TrasladoInventarioListSerializer,
 )
 
 class BaseViewSet(OrganizationalContextMixin, BaseTenantViewSet):
@@ -685,3 +688,107 @@ class HistorialServicioViewSet(BaseViewSet, inv_services.HistorialServiceMixin):
         instance.proyecto_nombre = proyecto_nombre or ''
         instance.save(update_fields=['proyecto_uuid', 'proyecto_nombre'])
         return Response({'status': 'ok', 'proyecto_uuid': str(proyecto_uuid_val)})
+
+
+class TrasladoInventarioViewSet(BaseViewSet, inv_services.TrasladoInventarioServiceMixin):
+    """
+    ViewSet para Traslado de Inventario entre Sedes (F21):
+    SOLICITADO -> APROBADO -> EN_TRANSITO -> RECIBIDO (o CANCELADO).
+    Solo API — sin renderizado de offcanvas HTMX (misma reduccion de alcance
+    que RecepcionCompraViewSet, documentada en F21_TRASLADOS_SEDES.md).
+    """
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return TrasladoInventarioListSerializer
+        if self.action == 'create':
+            return TrasladoInventarioCreateSerializer
+        return TrasladoInventarioDetailSerializer
+
+    def _get_usuario_id(self, request):
+        perfil = getattr(request.user, 'tenant_profile', None)
+        return perfil.id if perfil else None
+
+    def get_queryset(self):
+        empresa = inv_services.get_empresa_singleton()
+        if self.action == 'list':
+            estado = self.request.query_params.get('estado')
+            return self.get_qs_list(empresa, estado=estado)
+        uuid_val = self.kwargs.get(self.lookup_url_kwarg)
+        return self.get_qs_detail(empresa, uuid_val)
+
+    def create(self, request, *args, **kwargs):
+        """POST /api/v1/inventario/traslados/ — crea en SOLICITADO."""
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        usuario_id = self._get_usuario_id(request)
+        if not usuario_id:
+            return Response(
+                {"detail": "El usuario autenticado no tiene un perfil de tenant asociado."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        empresa = inv_services.get_empresa_singleton()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            traslado = self.service_traslado_solicitar(empresa, usuario_id, serializer.validated_data)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        out = TrasladoInventarioDetailSerializer(traslado)
+        return Response(out.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='aprobar')
+    def aprobar(self, request, uuid=None):
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        usuario_id = self._get_usuario_id(request)
+        if not usuario_id:
+            return Response({"detail": "El usuario autenticado no tiene un perfil de tenant asociado."}, status=status.HTTP_403_FORBIDDEN)
+        empresa = inv_services.get_empresa_singleton()
+        try:
+            traslado = self.service_traslado_aprobar(empresa, uuid, usuario_id)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(TrasladoInventarioDetailSerializer(traslado).data)
+
+    @action(detail=True, methods=['post'], url_path='enviar')
+    def enviar(self, request, uuid=None):
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        empresa = inv_services.get_empresa_singleton()
+        try:
+            traslado = self.service_traslado_enviar(empresa, uuid)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(TrasladoInventarioDetailSerializer(traslado).data)
+
+    @action(detail=True, methods=['post'], url_path='recibir')
+    def recibir(self, request, uuid=None):
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        usuario_id = self._get_usuario_id(request)
+        if not usuario_id:
+            return Response({"detail": "El usuario autenticado no tiene un perfil de tenant asociado."}, status=status.HTTP_403_FORBIDDEN)
+        empresa = inv_services.get_empresa_singleton()
+        try:
+            traslado = self.service_traslado_recibir(empresa, uuid, usuario_id)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(TrasladoInventarioDetailSerializer(traslado).data)
+
+    @action(detail=True, methods=['post'], url_path='cancelar')
+    def cancelar(self, request, uuid=None):
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        empresa = inv_services.get_empresa_singleton()
+        try:
+            traslado = self.service_traslado_cancelar(empresa, uuid)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(TrasladoInventarioDetailSerializer(traslado).data)

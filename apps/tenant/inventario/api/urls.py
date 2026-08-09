@@ -8,6 +8,7 @@ from .viewsets import (
     MovimientoInventarioViewSet,
     ProductoViewSet,
     ServicioViewSet,
+    TrasladoInventarioViewSet,
 )
 
 # Configuración del Router
@@ -26,6 +27,9 @@ router.register(r'activos', ActivoFijoViewSet, basename='inv-activos')
 # 4. Trazabilidad y Movimientos
 router.register(r'movimientos', MovimientoInventarioViewSet, basename='inv-movimientos')
 router.register(r'historial-servicios', HistorialServicioViewSet, basename='inv-historial-servicios')
+
+# 5. Traslados entre Sedes (F21)
+router.register(r'traslados', TrasladoInventarioViewSet, basename='inv-traslados')
 
 # Registro de URLs
 urlpatterns = [

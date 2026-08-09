@@ -13,7 +13,7 @@ from django.core.exceptions import ValidationError
 from rest_framework import serializers
 
 from apps.tenant.api.utils import NormalizationMixin as BaseMixin
-from apps.tenant.empresa.models import Empresa
+from apps.tenant.empresa.models import Area, Empresa, Sede
 from apps.tenant.inventario.models import (
     ActivoFijo,
     CategoriaItem,
@@ -21,6 +21,7 @@ from apps.tenant.inventario.models import (
     MovimientoInventario,
     Producto,
     Servicio,
+    TrasladoInventario,
 )
 
 # WARNING: v2.60: Importar campos desde services.py (SSoT)
@@ -698,3 +699,62 @@ ServicioSerializer = ServicioDetailSerializer
 ActivoFijoSerializer = ActivoFijoDetailSerializer
 MovimientoInventarioSerializer = MovimientoInventarioDetailSerializer
 HistorialServicioSerializer = HistorialServicioDetailSerializer
+
+
+# ==============================================================================
+# TRASLADO ENTRE SEDES (F21)
+# ==============================================================================
+class TrasladoInventarioListSerializer(serializers.ModelSerializer):
+    """Serializer aplanado para listado de Traslados de Inventario."""
+    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
+    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
+    sede_origen_nombre = serializers.CharField(source='sede_origen.nombre', read_only=True)
+    sede_destino_nombre = serializers.CharField(source='sede_destino.nombre', read_only=True)
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+
+    class Meta:
+        model = TrasladoInventario
+        fields = (
+            'id', 'uuid', 'producto', 'producto_codigo', 'producto_nombre',
+            'cantidad', 'sede_origen', 'sede_origen_nombre', 'sede_destino', 'sede_destino_nombre',
+            'estado', 'estado_display', 'motivo',
+            'fecha_solicitud', 'fecha_aprobacion', 'fecha_envio', 'fecha_recepcion', 'created_at',
+        )
+        read_only_fields = fields
+
+
+class TrasladoInventarioDetailSerializer(TrasladoInventarioListSerializer):
+    area_origen_nombre = serializers.CharField(source='area_origen.nombre', read_only=True, default='')
+    area_destino_nombre = serializers.CharField(source='area_destino.nombre', read_only=True, default='')
+
+    class Meta(TrasladoInventarioListSerializer.Meta):
+        fields = TrasladoInventarioListSerializer.Meta.fields + (
+            'area_origen', 'area_origen_nombre', 'area_destino', 'area_destino_nombre',
+            'usuario_solicita', 'usuario_aprueba', 'usuario_recibe',
+        )
+        read_only_fields = fields
+
+
+class TrasladoInventarioCreateSerializer(serializers.ModelSerializer):
+    """Serializer de escritura: crea un TrasladoInventario en SOLICITADO."""
+    producto = UUIDOrPKRelatedField(queryset=Producto.objects.all())
+    sede_origen = UUIDOrPKRelatedField(queryset=Sede.objects.all())
+    sede_destino = UUIDOrPKRelatedField(queryset=Sede.objects.all())
+    area_origen = UUIDOrPKRelatedField(queryset=Area.objects.all(), required=False, allow_null=True)
+    area_destino = UUIDOrPKRelatedField(queryset=Area.objects.all(), required=False, allow_null=True)
+
+    class Meta:
+        model = TrasladoInventario
+        fields = ('producto', 'cantidad', 'sede_origen', 'sede_destino', 'area_origen', 'area_destino', 'motivo')
+
+    def validate_cantidad(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("La cantidad a trasladar debe ser mayor a cero.")
+        return value
+
+    def validate(self, attrs):
+        if attrs.get('sede_origen') and attrs.get('sede_destino') and attrs['sede_origen'] == attrs['sede_destino']:
+            raise serializers.ValidationError(
+                {"sede_destino": "La sede de destino debe ser distinta de la sede de origen."}
+            )
+        return attrs

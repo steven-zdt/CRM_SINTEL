@@ -244,6 +244,11 @@ class MovimientoInventario(TimeStampedModel):
         SALIDA_VENTA = "SALIDA_VENTA", _("Venta")
         SALIDA_BAJA = "SALIDA_BAJA", _("Baja / Deterioro")
         SALIDA_CONSUMO = "SALIDA_CONSUMO", _("Consumo Interno")
+        # TRASLADOS ENTRE SEDES (F21) — distintos de TRASLADO_MANTENIMIENTO/
+        # RETORNO_MANTENIMIENTO (esos son transiciones de estado de ActivoFijo,
+        # no movimiento de stock de Producto entre sedes).
+        TRASLADO_SALIDA = "TRASLADO_SALIDA", _("Traslado - Salida de Sede")
+        TRASLADO_ENTRADA = "TRASLADO_ENTRADA", _("Traslado - Entrada a Sede")
         # ACTIVOS
         ASIGNACION_RESPONSABLE = "ASIGNACION_RESPONSABLE", _("Asignacion de Responsable")
         TRASLADO_MANTENIMIENTO = "TRASLADO_MANTENIMIENTO", _("Traslado a Mantenimiento")
@@ -307,6 +312,24 @@ class MovimientoInventario(TimeStampedModel):
         db_index=True,
     )
 
+    # Trazabilidad a documento origen (F21) — mismo patron de idempotencia que
+    # AsientoContable (apps/tenant/contabilidad/models.py): soft reference,
+    # sin FK cross-app real. app='compras', modelo='RecepcionCompraItem' para
+    # entradas por compra; app='inventario', modelo='TrasladoInventario' para
+    # traslados entre sedes.
+    documento_origen_app = models.CharField(
+        max_length=30, null=True, blank=True,
+        help_text="App que origino el movimiento: compras, inventario.",
+    )
+    documento_origen_modelo = models.CharField(
+        max_length=50, null=True, blank=True,
+        help_text="Modelo que origino el movimiento: RecepcionCompraItem, TrasladoInventario.",
+    )
+    documento_origen_id = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="PK en la app de origen.",
+    )
+
     class Meta:
         ordering = ["-created_at"]
         verbose_name = "Movimiento Inventario"
@@ -315,6 +338,10 @@ class MovimientoInventario(TimeStampedModel):
             models.Index(fields=["empresa", "created_at"]),
             models.Index(fields=["producto", "created_at"]),
             models.Index(fields=["activo_fijo", "created_at"]),
+            models.Index(fields=["empresa", "sede", "producto"]),
+            models.Index(
+                fields=["documento_origen_app", "documento_origen_modelo", "documento_origen_id"]
+            ),
         ]
         constraints = [
             models.CheckConstraint(
@@ -323,12 +350,129 @@ class MovimientoInventario(TimeStampedModel):
                     models.Q(producto__isnull=True, activo_fijo__isnull=False)
                 ),
                 name="exactly_one_product_or_asset"
-            )
+            ),
+            # Idempotencia: un mismo documento origen no puede generar dos
+            # movimientos del mismo tipo. Incluye 'tipo' (a diferencia del
+            # UniqueConstraint de AsientoContable) porque un TrasladoInventario
+            # es UN documento origen que legitimamente genera DOS movimientos
+            # (TRASLADO_SALIDA + TRASLADO_ENTRADA).
+            models.UniqueConstraint(
+                fields=[
+                    "empresa", "documento_origen_app", "documento_origen_modelo",
+                    "documento_origen_id", "tipo",
+                ],
+                condition=models.Q(documento_origen_id__isnull=False),
+                name="uniq_movimiento_documento_origen_tipo",
+            ),
         ]
 
     def __str__(self):
         item_code = self.producto.codigo if self.producto else (self.activo_fijo.codigo if self.activo_fijo else "N/A")
         return f"{self.tipo} | {item_code}"
+
+
+# ==============================================================================
+# 5-BIS. TRASLADO ENTRE SEDES (F21)
+# ==============================================================================
+class TrasladoInventario(TimeStampedModel):
+    """
+    Traslado de stock de un Producto entre dos Sede de la misma Empresa.
+
+    [ALCANCE F21] Un traslado = un producto, una cantidad. No modela un
+    "carrito" de multiples productos por traslado (TrasladoInventarioItem) —
+    reduccion de alcance documentada en documentacion/F21_TRASLADOS_SEDES.md;
+    el dominio real (ejemplo del prompt maestro) es 1 producto por operacion.
+
+    No modifica MovimientoInventario.sede directamente: el flujo real crea DOS
+    movimientos append-only (TRASLADO_SALIDA al enviar, TRASLADO_ENTRADA al
+    recibir) via KardexService.registrar_movimiento(), igual patron que
+    Recepcion de Compras.
+    """
+
+    class Estado(models.TextChoices):
+        BORRADOR = "BORRADOR", _("Borrador")
+        SOLICITADO = "SOLICITADO", _("Solicitado")
+        APROBADO = "APROBADO", _("Aprobado")
+        EN_TRANSITO = "EN_TRANSITO", _("En Transito")
+        RECIBIDO = "RECIBIDO", _("Recibido")
+        CANCELADO = "CANCELADO", _("Cancelado")
+
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="traslados_inventario",
+        help_text="Empresa propietaria del traslado.",
+    )
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+
+    producto = models.ForeignKey(
+        Producto,
+        on_delete=models.PROTECT,
+        related_name="traslados",
+        help_text="Producto trasladado.",
+    )
+    cantidad = models.DecimalField(max_digits=14, decimal_places=3)
+
+    sede_origen = models.ForeignKey(
+        'empresa.Sede', on_delete=models.PROTECT, related_name='traslados_salida',
+        verbose_name=_('Sede Origen'),
+    )
+    sede_destino = models.ForeignKey(
+        'empresa.Sede', on_delete=models.PROTECT, related_name='traslados_entrada',
+        verbose_name=_('Sede Destino'),
+    )
+    area_origen = models.ForeignKey(
+        'empresa.Area', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='traslados_salida', verbose_name=_('Area Origen'),
+    )
+    area_destino = models.ForeignKey(
+        'empresa.Area', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='traslados_entrada', verbose_name=_('Area Destino'),
+    )
+
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.BORRADOR, db_index=True)
+    motivo = models.TextField(blank=True)
+
+    usuario_solicita = models.ForeignKey(
+        'perfil.TenantProfile', on_delete=models.PROTECT, related_name='traslados_solicitados',
+    )
+    usuario_aprueba = models.ForeignKey(
+        'perfil.TenantProfile', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='traslados_aprobados',
+    )
+    usuario_recibe = models.ForeignKey(
+        'perfil.TenantProfile', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='traslados_recibidos',
+    )
+
+    fecha_solicitud = models.DateTimeField(null=True, blank=True)
+    fecha_aprobacion = models.DateTimeField(null=True, blank=True)
+    fecha_envio = models.DateTimeField(null=True, blank=True)
+    fecha_recepcion = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Traslado de Inventario"
+        verbose_name_plural = "Traslados de Inventario"
+        indexes = [
+            models.Index(fields=["empresa", "estado"]),
+            models.Index(fields=["empresa", "producto"]),
+            models.Index(fields=["sede_origen", "estado"]),
+            models.Index(fields=["sede_destino", "estado"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(sede_origen=models.F('sede_destino')),
+                name="traslado_sede_origen_distinta_destino",
+            ),
+            models.CheckConstraint(
+                check=models.Q(cantidad__gt=0),
+                name="traslado_cantidad_positiva",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Traslado {self.producto.codigo if self.producto_id else '?'} {self.sede_origen_id}->{self.sede_destino_id} ({self.estado})"
 
 
 # ==============================================================================
