@@ -1,8 +1,8 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.16.4
-**Ultima actualizacion:** 2026-08-05 — agregada regla de gobernanza sobre `dependencies` de migraciones y `app_label` en §5.3 (incidente real en `proyectos` migracion 0020, bloqueaba el arranque completo del proyecto; ver `apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` FIX v3.10.5 y `.agents/skills/backend/django-tenant.md`)
-**Actualizacion previa:** 2026-08-03 (DOC-A1 — sincronizado tras cerrar Fases 1-6, 8, 9 de `documentacion/PLAN_UNICO_CORRECCIONES.md`; ver ese documento y sus `REPORTE_FASE_*.md` para el detalle de cada cambio)
+**Version:** 3.18.0
+**Ultima actualizacion:** 2026-08-09 (DOC-M5) — pasada de validacion completa contra codigo real (no solo contra otros documentos). Metodologia: conteo directo de `TENANT_APPS`/`SHARED_APPS` (`config/settings.py`), migraciones (`find .../migrations/[0-9]*.py`), clases de modelo (`grep '^class .*(Model|Base)'` en cada `models.py`), archivos de test, prefijos montados en `config/api_urls.py`, y namespaces `window.Sintel.*` realmente definidos en JS — mas un agente de investigacion dedicado a verificar el estado real de OCF/OSF contra codigo (ver hallazgos abajo). **ADVERTENCIA GENERAL DOC-M5:** casi todos los conteos de este documento (apps de negocio, modelos por app, migraciones por app, archivos de test, endpoints montados, namespaces JS) estaban desactualizados, algunos con numeros internamente contradictorios entre si (ver §2.2, §9, §12). La causa: hay ~209 archivos con cambios sin commitear en el working tree (`git status`, verificado 2026-08-09) que no habian sido reflejados aqui — el ultimo commit real es `371f19d` (2026-08-05); todo el trabajo de Contexto/Alcance Organizacional (ver §7) y varias apps (contabilidad, proveedores, clientes, empleados, facturas) tienen modelos y migraciones nuevas sin commitear. Este documento ahora describe el **working tree actual**, no necesariamente el ultimo commit — se marca explicitamente donde aplica.
+**Actualizacion previa:** 2026-08-07 (DOC-M4) — validado contra codigo real tras cerrar la remediacion completa de la Auditoria Enterprise 2026-08-06 (8 fases, ver `documentacion/REMEDIACION_FASE1_CRITICOS_SEGURIDAD.md` y `documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md`). Cambios de fondo en ese pase: §1.2/§4.6 reescritas — la migracion Tabulator→django-tables2+HTMX esta mucho mas avanzada de lo que el documento reflejaba; §5.3 agrego la prohibicion explicita de bypass por `DEBUG` en autorizacion y la prohibicion de comentarios `{# #}` multilinea; §1.3 documento la politica de cache de Nginx para estaticos.
 **Fuente canonica:** `documentacion/arquitectura_general.md`
 **Reglas de desarrollo:** `AGENTS.md` (raiz del proyecto)
 **Estado actual del proyecto:** `MEMORY.md` (raiz del proyecto)
@@ -34,6 +34,8 @@ SINTEL es un ERP SaaS multi-tenant para gestion contable y facturacion electroni
 | anthropic | 0.40–1.0 | SDK para agentes IA especializados (Asistente Contable) |
 | drf-spectacular | 0.29–0.30 | Generacion de schema OpenAPI |
 | django-filter | 25.1+ | Filtros query para APIs |
+| djangorestframework-mcp | — | **[DOC-M5, nuevo, no documentado antes]** Expone ViewSets decorados con `@mcp_viewset()` como herramientas MCP en `/mcp/` (`config/settings.py:73,105`; montado en `config/urls_public.py:117` y `config/urls_tenant.py:166`). Compatible con `mcp-remote` (STDIO transport). |
+| django-cors-headers | — | **[DOC-M5, nuevo]** CORS para subdominios dinamicos de `sintel.net.co` (`config/settings.py`, `SHARED_APPS`) |
 | psycopg (binary) | 3.1–4.0 | Adaptador PostgreSQL (psycopg3) |
 | pandas | 2.0–3.0 | Procesamiento ETL y datos masivos |
 | lxml | 5.2.1 | Parsing XML/HTML (facturas electronicas DIAN) |
@@ -45,21 +47,26 @@ SINTEL es un ERP SaaS multi-tenant para gestion contable y facturacion electroni
 |---|---|---|
 | HTMX | 1.9.10 | Server-driven UI, carga dinamica de fragmentos HTML |
 | Bootstrap | 5.3.2 | Sistema de diseno UI, Offcanvas para modales laterales |
-| Tabulator | 6.2.5 | Grillas de datos reactivas con paginacion remota |
+| django-tables2 | 2.7.x | **Patron actual para grillas nuevas** — tablas server-rendered + HTMX, reemplaza Tabulator progresivamente (ver §4.6) |
+| Tabulator | 6.2.5 | Grillas de datos reactivas con paginacion remota client-side — **en migracion, no usar en modulos nuevos** (ver §4.6) |
 | Vanilla JS ES6+ | — | Modulos por namespace `window.Sintel.<App>` |
 | Bootstrap Icons + Font Awesome | — | Iconografia |
 
 **No hay build step.** Todas las librerias se cargan via CDN. No existe Webpack, Vite ni compilacion de frontend. Alpine.js esta disponible via CDN pero no es parte del estandar aprobado.
+
+**Migracion de grillas (Tabulator → django-tables2+HTMX), estado real verificado 2026-08-07:** 13 de ~17 apps tenant ya tienen `tables.py` (`bancos`, `clientes`, `compras`, `contabilidad`, `empleados`, `empresa`, `facturas`, `gastos`, `inventario`, `perfil`, `proveedores`, `proyectos`, `ventas`). Solo `cotizaciones` y `dashboard` siguen exclusivamente en Tabulator. Varias apps con `tables.py` conservan Tabulator vivo en vistas puntuales no migradas (`contabilidad`: `pendiente_list.js`/`libro_diario_list.js`/reportes; `inventario`: 6 sitios; `clientes`: `clientes.cartera.js`; `ventas`: `resolucion_list.js`) — coexistencia deliberada, no regresion. Ver nota DOC-M4 en §4.6 para el detalle completo y la discrepancia encontrada con el estado que describia `MEMORY.md` antes de esta validacion.
 
 ### 1.3. Infraestructura
 
 | Componente | Tecnologia |
 |---|---|
 | Contenedores | Docker + Docker Compose |
-| Servidor WSGI | Gunicorn |
-| Proxy inverso | Nginx (produccion) |
+| Servidor WSGI | Gunicorn (produccion) / `runserver` (desarrollo, ver `docker-compose.yaml`) |
+| Proxy inverso | Nginx — sirve `/static/` y `/media/` directamente desde `/app/staticfiles`, `/app/media` (bind mount de solo lectura) y reenvia todo lo demas a `web:8000` |
 | DNS interno | Windows Server 2022 wildcard `*.sintel.net.co → 192.168.2.15` |
 | Autenticacion asimetrica | HS256 JWT via variable de entorno `JWT_SECRET_KEY` |
+
+**Politica de cache de estaticos (Nginx), fijada 2026-08-06:** `/static/` usa `Cache-Control: "no-cache, public, no-transform"` (revalidacion condicional obligatoria via ETag/Last-Modified, sin `expires`) — **no** `expires 30d` como `/media/`. Un `expires 30d` sobre `/static/` estuvo vigente hasta el hallazgo C4/C7 de la Auditoria Enterprise 2026-08-06: cualquier fix de JS/CSS quedaba invisible para navegadores que ya hubieran cargado el archivo anterior, durante 30 dias, sin importar cuantos reinicios del contenedor `web` se hicieran. `nginx.conf` se hornea en la imagen en build-time (no es un volumen montado) — un cambio ahi requiere `docker compose build nginx && docker compose up -d nginx`, no solo un restart.
 
 ### 1.4. Directorio `config/` — Nucleo de Configuracion
 
@@ -95,46 +102,48 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 |---|---|---|---|---|
 | `apps/public/accounts/` | `accounts` | User, DeletionAudit | 2 | Modelo `User` global (AbstractUser), gestion de usuarios |
 | `apps/public/tenants/` | `tenants` | Client, Domain, TenantMembership, FailedTenantTask | 2 | Registro de tenants, dominios, invitaciones OTT |
-| `apps/public/impuestos/` | `impuestos` | TipoImpuesto, TarifaIVA, ConceptoRetencion, CodigoTributario, ActividadEconomica, + 6 mas | 1 | Catalogo DIAN, tarifas, normativas tributarias |
-| `apps/public/console/` | `console` | ConsoleActionLog | 3 | Consola admin: crear tenants, gestionar membresias, JWT bridge |
+| `apps/public/impuestos/` | `impuestos` | TipoImpuesto, TarifaIVA, ConceptoRetencion, CodigoTributario, ActividadEconomica, DocumentoFuente, IngestaLog, NormaTributaria, ContribuyenteTipo, RegimenRenta, ResponsabilidadRUT, PerfilTributario | 1 | Catalogo DIAN, tarifas, normativas tributarias |
+| `apps/public/console/` | `console` | ConsoleActionLog | 4 | Consola admin: crear tenants, gestionar membresias, JWT bridge |
 | `apps/public/core/` | `core` (public) | (sin modelos) | — | Middleware de resolucion de tenant, infraestructura compartida |
 
-**Total public models: 17**
+**Total public models: 19** — **[DOC-M5, corregido]** recuento anterior (17) subestimaba `impuestos` (12 modelos reales, no 11). Total migraciones public: 2+2+1+4 = **9** (antes: 8; `console` paso de 3 a 4 migraciones).
 
-### 2.2. Esquema Tenant (`TENANT_APPS`) — 14 apps de negocio activas
+### 2.2. Esquema Tenant (`TENANT_APPS`) — 17 apps registradas, 15 con modelos de negocio
+
+**[DOC-M5, corregido 2026-08-09]** `TENANT_APPS` (`config/settings.py`) tiene 17 entradas `apps.tenant.*`. Este documento tenia tres numeros distintos y mutuamente contradictorios para "apps de negocio" (14 en este encabezado, 16 filas en la tabla, 13 en la tabla de metricas §12) — ninguno era correcto. El numero real: **15 apps con modelos de negocio concretos** (todas las filas de abajo excepto `core`, que solo aporta las clases base abstractas) + `core` + `landing` (sin `models.py`, ver §2.3) = 17 apps registradas.
 
 | App | App Label | Modelos | Migraciones | Responsabilidad |
 |---|---|---|---|---|
-| `apps/tenant/core/` | `core` | SintelTenantBaseModel (abstract) | 0 | UI Shell, bridge cross-schema, onboarding, auth JWT |
+| `apps/tenant/core/` | `core` | SintelTenantBaseModel, SedeAwareModel (ambas abstractas) | 0 | UI Shell, bridge cross-schema, onboarding, auth JWT |
 | `apps/tenant/empresa/` | `empresa` | Empresa, MailInboxConfig, Sede, Area | 9 | Datos fiscales, logo, sedes y areas del tenant |
-| `apps/tenant/perfil/` | `perfil` | RolTenant, Departamento, TenantProfile | 7 | Roles y perfiles de usuario dentro del tenant |
-| `apps/tenant/facturas/` | `facturas` | Factura, ItemFactura, NotaCredito, MailIngestionConfig, MailIngestionRun, MailInboxState, FacturaAnexos | 26 | Facturacion electronica DIAN (XML, envio, estados) |
-| `apps/tenant/contabilidad/` | `contabilidad` | CuentaContable, AsientoContable, MovimientoContable, PeriodoContable, ReglaContable, Retencion, + 4 mas | 7 | PUC NIIF, asientos, extractores Pull, agente IA |
-| `apps/tenant/gastos/` | `gastos` | ResolucionDIAN, DocumentoSoporte | 20 | Gastos operativos, documentos soporte, retenciones |
-| `apps/tenant/inventario/` | `inventario` | CategoriaItem, Producto, Servicio, ActivoFijo, MovimientoInventario, HistorialServicio (+ TimeStampedModel abstract) | 9 | Productos, servicios, activos fijos, Kardex unificado |
-| `apps/tenant/empleados/` | `empleados` | Empleado, Contrato, Devengo | 10 | Nomina colombiana, devengos, contratos |
-| `apps/tenant/cotizaciones/` | `cotizaciones` | Cotizacion, CotizacionItem (+ Producto y Servicio propios) | 4 | Cotizaciones comerciales, vinculacion con facturas |
-| `apps/tenant/clientes/` | `clientes` | Cliente, ContactoCliente | 7 | CRM basico, terceros clientes, retenciones |
-| `apps/tenant/proveedores/` | `proveedores` | Proveedor | 7 | Terceros proveedores, documentos soporte |
-| `apps/tenant/proyectos/` | `proyectos` | Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, TareaCorta, TareaDiariaProyecto | 18 | Gestion de proyectos, presupuesto, tareas cortas |
-| `apps/tenant/dashboard/` | `dashboard` | SnapshotMetricaDiaria | 1 | Dashboard ejecutivo, metricas consolidadas |
-| `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria | 1 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
-| `apps/tenant/compras/` | `compras` | PlantillaOrdenCompra, OrdenCompra, ItemOrdenCompra | 3 | Ordenes de compra a proveedores (agregada 2026-06-17, ver `.agent/AUDITORIA_FLUJO_COMPRAS.md`) |
+| `apps/tenant/perfil/` | `perfil` | Departamento, TenantProfile (+ RolTenant, AlcanceOrganizacional como `TextChoices`, no modelos) | 8 | Roles y perfiles de usuario dentro del tenant |
+| `apps/tenant/facturas/` | `facturas` | Factura, ItemFactura, NotaCredito, MailIngestionRun, MailInboxState, FacturaAnexos, FacturaImpuesto | 30 | Facturacion electronica DIAN (XML, envio, estados) |
+| `apps/tenant/contabilidad/` | `contabilidad` | CatalogoMaestroNIIF, CuentaContable, TipoComprobante, AsientoContable, MovimientoContable, PeriodoContable, ReglaContable, TarifaImpuesto, ConfiguracionRetenciones, Retencion, PlantillaContable, LineaPlantilla, ImpuestoDocumento | 16 | PUC NIIF, asientos, extractores Pull, agente IA, Motor de Plantillas |
+| `apps/tenant/gastos/` | `gastos` | ResolucionDIAN, DocumentoSoporte | 22 | Gastos operativos, documentos soporte, retenciones |
+| `apps/tenant/inventario/` | `inventario` | CategoriaItem, Producto, Servicio, ActivoFijo, MovimientoInventario, HistorialServicio (+ TimeStampedModel abstract) | 10 | Productos, servicios, activos fijos, Kardex unificado |
+| `apps/tenant/empleados/` | `empleados` | Empleado, Contrato, Devengo, ResolucionDIAN, TransmisionNominaDIAN, LiquidacionPrestacion | 13 | Nomina colombiana, devengos, contratos, liquidaciones |
+| `apps/tenant/cotizaciones/` | `cotizaciones` | Cotizacion, CotizacionItem (+ Producto y Servicio propios) | 5 | Cotizaciones comerciales, vinculacion con facturas |
+| `apps/tenant/clientes/` | `clientes` | Cliente, ContactoCliente, Cartera | 8 | CRM basico, terceros clientes, cartera, retenciones |
+| `apps/tenant/proveedores/` | `proveedores` | Proveedor, CuentasPagar, Representante | 18 | Terceros proveedores, cartera unificada, documentos soporte |
+| `apps/tenant/proyectos/` | `proyectos` | Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, TareaCorta, TareaDiariaProyecto | 20 | Gestion de proyectos, presupuesto, tareas cortas |
+| `apps/tenant/dashboard/` | `dashboard` | SnapshotMetricaDiaria | 3 | Dashboard ejecutivo, metricas consolidadas |
+| `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria | 5 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
+| `apps/tenant/compras/` | `compras` | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra | 7 | Ordenes de compra a proveedores (agregada 2026-06-17, ver `.agent/AUDITORIA_FLUJO_COMPRAS.md`) |
 | `apps/tenant/ventas/` | `ventas` | ResolucionFacturacion, Venta, ItemVenta | 3 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
 
-**Total tenant models: 52 activos (+ 1 abstract) + 6 de `compras`/`ventas` (ver DOC-C1 en `documentacion/REPORTE_FASE_1.md`)**
-**Total migraciones: 125 (tenant) + 8 (public) = 133 total + 6 de `compras`/`ventas`**
+**Nota (`ResolucionDIAN` duplicado):** `gastos` y `empleados` tienen cada una su propia clase `ResolucionDIAN` — son dos modelos distintos, no un bug de referencia cruzada (hallazgo confirmado durante la auditoria EKG 2026-08-07, ver `documentacion/INFORME_FINAL_EKG_GOBERNANZA_2026-08-07.md` §4.1).
 
-> WARNING: [DOC-C1] Este inventario y sus totales estaban desactualizados (faltaban `compras` y `ventas`, ambas ya activas en `TENANT_APPS` desde 2026-06-17). Los totales de arriba solo se corrigieron para sumar las dos apps agregadas; un recuento completo de §2, §9 y §10 (migraciones reales por app, endpoints, cobertura de tests) queda pendiente para la Fase 8 (Documentación) del plan de remediacion — ver `documentacion/PLAN_REMEDIACION.md`.
+**Total tenant models: 67 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M5, corregido, conteo real 2026-08-09 via `grep '^class .*(Model|Base)'` por app]**, reemplaza el "52 + 1 abstract" que este documento reportaba antes (desactualizado por las migraciones nuevas de contabilidad/proveedores/clientes/empleados/facturas listadas arriba, la mayoria sin commitear aun — ver advertencia general al inicio del documento).
+**Total migraciones: 177 (tenant) + 9 (public) = 186 total** — **[DOC-M5, corregido]** conteo directo de archivos `NNNN_*.py` en cada carpeta `migrations/`, reemplaza el "133" que este documento reportaba antes.
 
 ### 2.3. Apps de Infraestructura Tenant (sin modelos de negocio)
 
-| App | Responsabilidad |
-|---|---|
-| `apps/tenant/api/` | `BaseTenantViewSet`, `BaseServiceMixin`, permisos DRF centrales |
-| `apps/tenant/landing/` | Pagina publica estatica del tenant |
-| `apps/tenant/mail/` | Envio de correos transaccionales |
-| `apps/tenant/mailinbox/` | Bandeja de entrada / ingestion de correos |
+**[DOC-M5, corregido 2026-08-09]** Esta tabla listaba `apps/tenant/mail/` y `apps/tenant/mailinbox/`, que **no existen como directorios** en el repositorio actual (verificado, `ls apps/tenant/`) y nunca estuvieron en `TENANT_APPS`. Los modelos de correo viven hoy dentro de `facturas` (`MailIngestionRun`, `MailInboxState`) y `empresa` (`MailInboxConfig`) — ver tabla de §2.2. `apps/tenant/api/` tampoco es una app Django registrada (no tiene `apps.py` ni aparece en `TENANT_APPS`) — es una carpeta de codigo compartido (permisos DRF centrales, `BaseTenantViewSet`), no una "app de infraestructura" en el sentido de django-tenants.
+
+| App | Registrada en `TENANT_APPS` | Responsabilidad |
+|---|---|---|
+| `apps/tenant/landing/` | Si | Pagina publica estatica del tenant — sin `models.py` |
+| `apps/tenant/api/` | No (carpeta de codigo compartido) | `BaseTenantViewSet`, `BaseServiceMixin`, permisos DRF centrales |
 
 ---
 
@@ -161,9 +170,11 @@ Todos los modelos del esquema tenant heredan de `SintelTenantBaseModel`, nunca d
 | `created_at` | `DateTimeField(auto_now_add=True)` | Timestamp de creacion, indexado |
 | `updated_at` | `DateTimeField(auto_now=True)` | Timestamp de ultima modificacion, indexado |
 
-**Indices heredados automaticamente:** `[empresa]` y `[empresa, -created_at]`.
+**Indices declarados en `SintelTenantBaseModel.Meta`:** `[empresa]` y `[empresa, -created_at]`. **Correccion (2026-08-07, verificado durante ADR-003):** Django NO fusiona estos indices con el `Meta.indexes` propio de un modelo concreto cuando este ultimo declara el suyo — verificado empiricamente (`Model._meta.indexes`) en `OrdenCompra` y `PlantillaOrdenCompra`, ninguno de los dos hereda estos dos indices pese a heredar el campo `empresa`. Cualquier modelo que declare su propio `Meta.indexes` debe repetirlos explicitamente ahi si los necesita.
 
 **Proteccion en `save()`:** el modelo base lanza `ValueError` si `empresa_id` es `None`, evitando registros huerfanos por error de programacion.
+
+**Extension opcional — `SedeAwareModel` (ADR-003, `docs/ADR-003-contexto-organizacional-sede-area.md`):** mixin abstracto que hereda de `SintelTenantBaseModel` y agrega `sede`/`area` (Contexto Organizacional Empresa->Sede->Area). Opt-in, no reemplaza `SintelTenantBaseModel` — piloto unico hoy: `apps/tenant/compras/models.py:OrdenCompra`.
 
 ### 3.3. Regla Zero-Trust de Consultas
 
@@ -224,6 +235,31 @@ DRF evalua JWT primero (header `Authorization: Bearer`). Si falla, usa Session (
 | `HasTenantRole` | Generico — el ViewSet declara `required_roles` |
 
 **Auto-creacion de perfil:** al hacer login, si el usuario no tiene `TenantProfile` en el tenant actual, se crea automaticamente con rol `VISOR`.
+
+**Alcance organizacional (ADR-003, 2026-08-07 — fundamentos + piloto `compras`, ver
+`docs/ADR-003-contexto-organizacional-sede-area.md`):** `TenantProfile.alcance`
+(`EMPRESA`/`SEDE`/`AREA`, default `EMPRESA`) es un campo nuevo, **ortogonal** a `rol` — no lo
+reemplaza. Un perfil con `alcance=SEDE`/`AREA` solo puede operar sobre sus `sedes_asignadas`/
+`areas_asignadas`. "ADMIN GLOBAL" no es un valor de `alcance`: es el
+staff/superuser de Django del esquema publico, fuera de `TenantProfile`.
+
+**[DOC-M5, correccion 2026-08-09 — distinguir dos mecanismos que no son lo mismo]** Tras ADR-003
+(piloto `compras`), un proyecto interno mas amplio — Organizational Context/Scope Framework
+(OCF/OSF, sin ADR propio, ver §7) — extendio el *filtrado* por alcance a mas apps, pero **no** de
+la misma forma que el piloto original:
+- La clase de permiso `HasOrganizationalScope` (`apps/tenant/api/permissions.py`) sigue aplicada
+  **solo** a `OrdenCompraViewSet` y a `apps/tenant/core/api/contexto.py` — verificado por grep,
+  sigue sin rollout.
+- `SedeAwareModel` (el mixin de modelo) tambien sigue heredado **solo** por `OrdenCompra`
+  (`apps/tenant/compras/models.py`) — verificado por grep sobre los 17 `models.py` de apps tenant.
+- Lo que si se extendio: **filtrado consciente de alcance a nivel de selector/business-service**
+  (`OrganizationalScope.filter()` / `filter_by_scope()` / `filter_by_scope_null_safe()`, nuevos en
+  `apps/tenant/core/services/organizational_scope.py` y `organizational_filters.py`) — presente hoy
+  en `compras`, `cotizaciones`, `empleados`, `facturas`, `gastos`, `inventario`, `proyectos`, `ventas`
+  (verificado por grep de uso de `OrganizationalScope`/`filter_by_scope` en cada app).
+- Estos modulos `organizational_*.py` de `apps/tenant/core/services/` **no estan commiteados**
+  (`git status` los reporta como archivos nuevos sin trackear, verificado 2026-08-09) — son codigo
+  real y con tests (segun `MEMORY.md`), pero no forman parte todavia del historial de git.
 
 **Frontend JWT:**
 
@@ -317,30 +353,58 @@ La DSV verifica:
 
 **Namespace por app:** `window.Sintel.<App>`
 
+**[DOC-M5]** Verificado 2026-08-09 via `grep -ohE "window\.Sintel\.[A-Za-z]+" apps/tenant/*/static/*/js/**/*.js` — la tabla anterior (10 namespaces) omitia 5 namespaces reales:
+
 | Namespace activo | App |
 |---|---|
+| `window.Sintel.Bancos` | bancos |
+| `window.Sintel.Compras` | compras |
 | `window.Sintel.Contabilidad` | contabilidad |
+| `window.Sintel.Core` | core |
+| `window.Sintel.Cotizaciones` | cotizaciones |
 | `window.Sintel.Dashboard` | dashboard |
 | `window.Sintel.Empleados` | empleados |
 | `window.Sintel.Empresa` | empresa |
 | `window.Sintel.Gastos` | gastos |
-| `window.Sintel.Cotizaciones` | cotizaciones |
 | `window.Sintel.Inventario` | inventario (Productos.Editor, Activos.List, etc.) |
+| `window.Sintel.Perfil` | perfil |
 | `window.Sintel.Proveedores` | proveedores |
 | `window.Sintel.Clientes` | clientes |
 | `window.Sintel.Proyectos` | proyectos |
+| `window.Sintel.Ventas` | ventas |
+
+Ademas existen 3 sub-namespaces no listados aqui por ser especificos de una feature, no de una app completa: `window.Sintel.ProyectosPresupuesto`, `window.Sintel.Representante` (proveedores), `window.Sintel.TareasDiarias` (proyectos).
 
 Archivos por rol:
 
 | Archivo | Responsabilidad |
 |---|---|
 | `<app>.api.js` | SSoT de todas las URLs y consumo de endpoints. Sin logica de UI |
-| `features/<modelo>_list.js` | Inicializacion de Tabulator, columnas compactas apiladas, KPI strips |
+| `features/<modelo>_list.js` | Grilla Tabulator (columnas compactas apiladas, KPI strips) o, en el patron actual, solo delegacion de eventos de fila sobre el panel HTMX server-rendered (ver dos patrones abajo) |
 | `features/<modelo>_editor.js` | Ciclo de vida del Offcanvas (crear/editar/detalle), listeners de formulario con guard `data-editor-initialized` |
 
-**Tabulator (grillas):** Todas las grillas usan `TabulatorFactory.create()` definido en `apps/tenant/core/static/core/js/common/tabulator.factory.js`. Inyecta JWT automaticamente y espera respuesta DRF paginada: `{ count, next, previous, results: [] }`.
+**Dos patrones de grilla coexisten (migracion en curso, ver §1.2):**
 
-**Patron de refresh de tabla:** Siempre usar `table.replaceData()` (no `setData()` sin args). Diferir con `setTimeout(() => tbl.replaceData(), 50)` cuando se llama desde un click handler de Tabulator para evitar `Event Target Lookup Error`.
+**A) django-tables2 + HTMX (patron actual, usar en modulos nuevos).** La grilla es server-rendered: `tables.py` define una `django_tables2.Table`, la vista HTML retorna el fragmento ya paginado/ordenado, y el panel se auto-carga y recarga via atributos HTMX declarativos — sin JS de terceros ni estado de grilla en el cliente.
+
+```html
+<div id="<modelo>-panel"
+     hx-get="{% url '<app>:<modelo>-tabla' %}"
+     hx-trigger="load, <modelo>-updated from:body"
+     hx-target="this"
+     hx-swap="innerHTML"
+     hx-boost="true"></div>
+```
+
+- El JS del modulo (`features/<modelo>_list.js`) NO inicializa la grilla — solo delega eventos de fila (`d.querySelector('#<modelo>-panel').addEventListener('click', ...)`, filtrando por clases `.btn-editar-*`/`.btn-eliminar-*`) y expone `window.<Modelo>List.reload()` que dispara `document.body.dispatchEvent(new CustomEvent('<modelo>-updated'))` — el UNICO mecanismo correcto para forzar una recarga tras crear/editar/eliminar.
+- **Prohibido:** un listener generico (`htmx:afterSettle` u otro) que refresque MULTIPLES paneles a la vez cuando esos mismos paneles viven dentro del contenedor que observa — causa un bucle de retroalimentacion infinito (incidente real: Auditoria Enterprise 2026-08-06, hallazgo C7, ~47 peticiones/segundo sostenidas en las 4 tablas de `empresa`; ver `documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md` Fase 4). Cada tabla se refresca a si misma via su propio evento `<modelo>-updated`, nunca via un orquestador que reaccione a swaps ajenos.
+- **IDs de contenedor/panel deben llevar namespace de app** (`gastos-resoluciones-panel`, no `resoluciones-panel`) cuando el nombre generico del modelo puede repetirse en otro modulo coexistente en el mismo Workspace — el Workspace monta los ~15 modulos simultaneamente en una sola pagina, y `getElementById`/`querySelector` siempre resuelven al primer match del DOM (incidente real: Auditoria Enterprise 2026-08-06, hallazgo C6, colision entre `gastos_list.html` y `empleados_list.html`).
+
+**B) Tabulator (patron legacy, en migracion — no usar en modulos nuevos).** Todas las grillas Tabulator usan `TabulatorFactory.create()` definido en `apps/tenant/core/static/core/js/common/tabulator.factory.js`. Inyecta JWT automaticamente y espera respuesta DRF paginada: `{ count, next, previous, results: [] }`.
+
+**Patron de refresh de tabla Tabulator:** Siempre usar `table.replaceData()` (no `setData()` sin args). Diferir con `setTimeout(() => tbl.replaceData(), 50)` cuando se llama desde un click handler de Tabulator para evitar `Event Target Lookup Error`.
+
+> **[DOC-M4, 2026-08-07]** Validacion directa del codigo (no solo documentacion cruzada) encontro que la migracion esta mas avanzada de lo que `MEMORY.md` describia: 13 de ~17 apps tenant ya tienen `tables.py` — incluyendo `inventario`, `proveedores`, `empresa`, `proyectos`, `clientes`, `perfil`, que `MEMORY.md` listaba como "pendientes" de Fase 5-BIS. Lo que SI sigue pendiente en esas apps es la limpieza de sitios Tabulator puntuales aun vivos dentro de modulos ya migrados (ver §1.2). Antes de asumir que una app necesita migrarse desde cero, verificar si ya tiene `tables.py` — `grep -l "import django_tables2" apps/tenant/*/tables.py`.
 
 **Guard de inicializacion en editors:** Para prevenir doble-inicializacion cuando MutationObserver + htmx:afterSwap disparan simultaneamente:
 ```javascript
@@ -419,6 +483,8 @@ Cada app define un template `assets_<app>.html` que centraliza la inclusion de s
 | `getOrCreateInstance().show()` HTMX | PROHIBIDO — acumula backdrops; usar `mostrarOffcanvasSeguro(el)` |
 | `setData()` sin args en Tabulator | Usar `replaceData()` para forzar nuevo fetch del servidor |
 | `py_compile` hook | PostToolUse hook valida toda edicion `.py`. Corregir antes de continuar |
+| `if settings.DEBUG:` en autorizacion | PROHIBIDO — nunca condicionar una verificacion de permiso/membresia/rol al valor de `DEBUG`. Incidente real: los 5 permisos SSoT de `apps/tenant/api/permissions.py` mas 3 `get_permissions()` de ViewSets tenian `if settings.DEBUG: return True`, desactivando por completo la verificacion de pertenencia al tenant en cualquier instancia con `DEBUG=True` — causa raiz de una fuga completa de datos entre tenants (Auditoria Enterprise 2026-08-06, hallazgo C1, ver `documentacion/REMEDIACION_FASE1_CRITICOS_SEGURIDAD.md`). Verificado limpio (`grep DEBUG apps/tenant/api/permissions.py` sin resultados) el 2026-08-07 |
+| Comentarios `{# #}` multilinea en templates Django | PROHIBIDO — el motor de plantillas de Django no reconoce `{#`/`#}` si abarcan mas de una linea; el bloque completo se renderiza como texto HTML literal visible al usuario. Usar `{% comment %}...{% endcomment %}` para comentarios multilinea, o colapsar a una sola linea. Hallazgo transversal confirmado en 9 archivos / 10 bloques preexistentes (ver M1 en `documentacion/PLAN_PRUEBASUI_PRIVADAS.md`) mas 3 instancias nuevas introducidas y corregidas durante la Auditoria Enterprise 2026-08-06 (Fases 3 y 4 de `documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md`) |
 | Nombre de carpeta en `dependencies` de migraciones | PROHIBIDO — usar el `app_label` real (`grep label apps/tenant/<app>/apps.py`), no el nombre de carpeta. 10 de 17 apps tenant sobre-escriben `label` (ver `.agents/skills/backend/django-tenant.md`). Incidente real: migracion `0020` de `proyectos` referenciaba `('proyectos', ...)` en vez de `('tenant_proyectos', ...)`, bloqueando `migrate_schemas` — y por tanto el arranque de `web` — para todo el proyecto. Ver `apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` (FIX v3.10.5). Mejor practica: dejar que `makemigrations` genere `dependencies` automaticamente |
 
 ### 5.4. Principios de Idempotencia
@@ -536,17 +602,53 @@ python manage.py poblar_catalogo_niif
 
 ## 7. Decisiones Arquitectonicas Relevantes (ADRs)
 
-| ADR | Titulo | Estado | Fecha |
-|---|---|---|---|
-| ADR-001 | Retention Pull Model — Contabilidad owns Retencion | ACCEPTED | 2026-05 |
-| ADR-002 | Desacoplamiento Contable Total — Eliminacion de cuenta_*_uuid en apps fuente | COMPLETED | 2026-05-28 |
-| ADR-003 | TareaCorta.cliente FK PROTECT → SET_NULL para permitir eliminacion de clientes inactivos | APPLIED | 2026-05-29 |
+> **Nota de gobernanza (2026-08-08):** esta tabla tenia una numeracion ADR duplicada — `ADR-002`
+> y `ADR-003` se usaban aqui para dos decisiones tecnicas antiguas (nunca formalizadas en su
+> propio archivo `docs/ADR-NNN-*.md`), mientras que esos mismos numeros ya estaban en uso por
+> archivos reales y activamente referenciados en codigo (`docs/ADR-002-public-schema-api-dual-registration.md`,
+> `docs/ADR-003-contexto-organizacional-sede-area.md`). Verificado por grep: **cero** referencias
+> de codigo usan "ADR-002"/"ADR-003" con el significado antiguo — todas (docenas, en
+> `apps/tenant/api/`, `apps/tenant/compras/`, `apps/tenant/core/services/organizational_*.py`,
+> comentarios de tests) usan el significado nuevo. Resuelto conservando los 4 archivos
+> `docs/ADR-NNN-*.md` existentes sin renombrar (son la convencion activa) y retirando el prefijo
+> "ADR-NNN" de las 2 decisiones antiguas sin archivo propio (quedan documentadas como decisiones
+> tecnicas historicas, no como ADRs numerados) — ver "Organizational Scope Framework, Fase 1" en
+> `documentacion/ORGANIZATIONAL_SCOPE_MASTER_PLAN.md`.
 
-**ADR-002 — Impacto:**
-- Contabilidad es la unica propietaria de mapeos PUC
-- Las apps fuente son Pure Pull (zero coupling)
-- Los extractores resuelven cuentas exclusivamente via `ReglaContable`
-- El checklist de esta refactorización no quedó formalizado en un documento aparte (referencia rota a `REFACTORIZAR_DESACOPLAMIENTO_CONTABLE_FRAMEWORK.md` retirada en Fase 9, DOC-A4 — el archivo nunca existió)
+| ADR | Titulo | Estado | Fecha | Documento |
+|---|---|---|---|---|
+| ADR-001 | Retencion Pull Model (v3.7.1) — Contabilidad owns Retencion | ACCEPTED | 2026-05-13 | `docs/ADR-001-retention-pull-model.md` |
+| ADR-002 | Registro Dual de Endpoints en Schemas Publico y Tenant | ACCEPTED | 2026-06-09 | `docs/ADR-002-public-schema-api-dual-registration.md` |
+| ADR-003 | Contexto Organizacional (Empresa -> Sede -> Area) — Fundamentos + piloto `compras` | ACCEPTED (alcance parcial, ver nota DOC-M5 en §3.6) | 2026-08-07 | `docs/ADR-003-contexto-organizacional-sede-area.md` |
+| ADR-004 | Organizational Context Framework (OCF) — Modelo de Diseño | ACCEPTED (parcialmente implementado, ver Adenda 2026-08-09 en el propio archivo) | 2026-08-07 (adenda 2026-08-09) | `docs/ADR-004-organizational-context-framework-diseno.md` |
+| ADR-005 | Organizational Scope Framework (OSF) — Contrato Independiente y Rollout sin Migracion de Esquema | ACCEPTED (parcialmente implementado) | 2026-08-09 | `docs/ADR-005-organizational-scope-framework.md` |
+
+> **[DOC-M5/OSF-consolidacion, 2026-08-09] Resolucion de la discrepancia ADR-004 y creacion de ADR-005.**
+> Pendiente que la validacion DOC-M5 de este documento habia dejado abierto: el proyecto de
+> consolidacion OCF/OSF (`documentacion/ORGANIZATIONAL_SCOPE_MIGRATION_STATUS.md`, FASE 4)
+> audito codigo real (no solo `MEMORY.md`) y resolvio ambos puntos. `docs/ADR-004-*.md` gano una
+> "Adenda 2026-08-09" que actualiza su Estado a ACCEPTED (parcial) y documenta 2 divergencias
+> reales entre lo diseñado y lo construido (`OrganizationalScope` NO se construye a partir de
+> `OrganizationalContext`, contrario al diagrama original; `OrganizationalSelector` como clase
+> nunca se construyo — su rol lo cumplen funciones puras + metodos de las dataclasses). Se creo
+> `docs/ADR-005-organizational-scope-framework.md` — justificado por 2 decisiones arquitectonicas
+> reales tomadas explicitamente con el usuario durante el proyecto OSF (independencia de
+> `OrganizationalScope` respecto a `OrganizationalContext`, y `filter_by_scope_null_safe()` como
+> patron de rollout SIN migracion de esquema para las 6 apps con `sede` historicamente en NULL),
+> no creado solo por numeracion. Detalle completo de la auditoria que sustenta ambos cambios:
+> `documentacion/OCF_TECHNICAL_AUDIT.md`, `documentacion/OSF_TECHNICAL_AUDIT.md`,
+> `documentacion/ORGANIZATIONAL_CONTRACT.md`. **Sigue sin commitear en git** (ver advertencia
+> general al inicio de este documento) — el trabajo es real pero vive solo en el working tree.
+
+**Decisiones tecnicas historicas (anteriores a la convencion `docs/ADR-NNN-*.md`, sin archivo dedicado propio):**
+- **Desacoplamiento Contable Total** (2026-05-28, COMPLETED) — Eliminacion de `cuenta_*_uuid` en
+  apps fuente. Impacto: Contabilidad es la unica propietaria de mapeos PUC; las apps fuente son
+  Pure Pull (zero coupling); los extractores resuelven cuentas exclusivamente via `ReglaContable`.
+  El checklist de esta refactorizacion no quedo formalizado en un documento aparte (referencia
+  rota a `REFACTORIZAR_DESACOPLAMIENTO_CONTABLE_FRAMEWORK.md` retirada en Fase 9, DOC-A4 — el
+  archivo nunca existio).
+- **TareaCorta.cliente FK PROTECT → SET_NULL** (2026-05-29, APPLIED) — permite eliminacion de
+  clientes inactivos sin bloquear por tareas cortas historicas asociadas.
 
 ---
 
@@ -599,26 +701,29 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 
 ## 9. Endpoints API REST
 
-**SSoT de endpoints:** `config/api_urls.py` — 149 lineas, 14 modulos montados con try/except resiliente por app.
+**SSoT de endpoints:** `config/api_urls.py` — **[DOC-M5, corregido]** 203 lineas, 17 modulos montados con try/except resiliente por app (antes reportado como "149 lineas, 14 modulos" — desactualizado; la tabla de abajo tambien omitia `bancos` por completo, ya corregido).
 
 | Prefijo | App | Modelos Principales |
 |---|---|---|
 | `/api/v1/empresas/` | empresa | Empresa, Sede, Area |
 | `/api/v1/facturas/` | facturas | Factura, ItemFactura, NotaCredito |
-| `/api/v1/contabilidad/` | contabilidad | CuentaContable, AsientoContable, Retencion, ReglaContable |
+| `/api/v1/contabilidad/` | contabilidad | CuentaContable, AsientoContable, Retencion, ReglaContable, PlantillaContable |
 | `/api/v1/inventario/` | inventario | Producto, Servicio, ActivoFijo, MovimientoInventario, HistorialServicio, CategoriaItem |
 | `/api/v1/perfil/` | perfil | TenantProfile |
 | `/api/v1/dashboard/` | dashboard | Metricas consolidadas |
-| `/api/v1/core/` | core | Auth bridge, onboarding, configuraciones globales |
-| `/api/v1/empleados/` | empleados | Empleado, Contrato, Devengo |
+| `/api/v1/core/` | core | Auth bridge, onboarding, configuraciones globales, contexto organizacional (`/core/contexto/`) |
+| `/api/v1/empleados/` | empleados | Empleado, Contrato, Devengo, ResolucionDIAN |
 | `/api/v1/gastos/` | gastos | DocumentoSoporte, ResolucionDIAN |
-| `/api/v1/proveedores/` | proveedores | Proveedor |
-| `/api/v1/clientes/` | clientes | Cliente, ContactoCliente |
+| `/api/v1/bancos/` | bancos | CuentaBancaria, ExtractoBancario, TransaccionBancaria |
+| `/api/v1/proveedores/` | proveedores | Proveedor, CuentasPagar, Representante |
+| `/api/v1/clientes/` | clientes | Cliente, ContactoCliente, Cartera |
 | `/api/v1/cotizaciones/` | cotizaciones | Cotizacion, CotizacionItem |
 | `/api/v1/proyectos/` | proyectos | Proyecto, TareaCorta, AsignacionPersonal |
 | `/api/v1/compras/` | compras | OrdenCompra, ItemOrdenCompra, PlantillaOrdenCompra |
 | `/api/v1/ventas/` | ventas | Venta, ItemVenta, ResolucionFacturacion |
 | `/api/v1/impuestos/` (public) | impuestos | Catalogo DIAN |
+
+**`/mcp/` (nuevo, DOC-M5):** endpoint separado (no en `api_urls.py`, montado directo en `config/urls_public.py`/`config/urls_tenant.py`) que expone ViewSets decorados con `@mcp_viewset()` como herramientas MCP — ver §1.1.
 
 **Formato de respuesta paginada (estandar DRF):**
 ```json
@@ -649,6 +754,9 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | Bridge cross-schema | `apps/tenant/core/services/membership.py` | Unica interfaz autorizada para consultar esquema public |
 | ADR Retenciones | `docs/ADR-001-retention-pull-model.md` | Contabilidad owns Retencion, Pull Model |
 | ADR Dual-Registration API Publica | `docs/ADR-002-public-schema-api-dual-registration.md` | Endpoints accesibles desde `home.sintel.net.co` — registro dual public/tenant |
+| Auditoria Enterprise UI (2026-08-06) | `documentacion/PLAN_PRUEBASUI_PRIVADAS.md` | Informe de auditoria via UI real, 23 hallazgos clasificados; marcadores `[CORREGIDO]` indican los ya remediados |
+| Remediacion Fase 1 (Criticos Seguridad) | `documentacion/REMEDIACION_FASE1_CRITICOS_SEGURIDAD.md` | Detalle 10-secciones de C1/C2/C3 + hallazgo de onboarding |
+| Remediacion Fases 2-8 | `documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md` | Detalle 10-secciones de C4/C5/C6/C7, onboarding, regresion y documentacion |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
@@ -676,28 +784,28 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 
 ### 10.3. Cobertura de Tests
 
-> WARNING: [DOC-A2] Tabla recontada el 2026-08-03 (`apps/tenant/<app>/tests/` + `tests/tenant/<app>/`, ambas ubicaciones donde el proyecto reparte tests por app). No incluye suites cross-cutting no atribuibles a una sola app (`tests/api`, `tests/celery*`, `tests/general`, `tests/multitenant`, `tests/smoke`, etc.) — el total real de archivos de test en todo el repositorio es **336** (vs. 329 reportado por la auditoría de 2026-07-26; la diferencia son tests nuevos agregados durante las Fases 5/5-BIS de este plan). Recuento final por app pendiente de Fase 7 (backfill de `test_multitenant_isolation.py`), que es cuando estos numeros vuelven a moverse de forma significativa.
+> **[DOC-M5, recontado 2026-08-09]** Tabla recontada por conteo directo de `apps/tenant/<app>/tests/test_*.py` + `tests/tenant/<app>/test_*.py`. El conteo anterior (2026-08-03, tabla de abajo la reemplaza) esta muy desactualizado — el trabajo de Contexto/Alcance Organizacional (§7) y otras fases agregaron un numero grande de tests nuevos, la mayoria sin commitear todavia. No incluye suites cross-cutting no atribuibles a una sola app (`tests/api`, `tests/celery*`, `tests/general`, `tests/multitenant`, `tests/smoke`, etc.) — el total real de archivos `test_*.py` en todo el repositorio (excluyendo `venv/`) es **401**.
 
-| App | Archivos de Test (in-app + centralizado) | `test_multitenant_isolation.py`? |
+| App | Archivos de Test (in-app + centralizado) | `test_multitenant_isolation*.py` / `test_cross_tenant*.py`? |
 |---|---:|---|
-| core | 55 | — |
-| facturas | 38 | Parcial (`test_multitenant_isolation_tabla_html.py`, Fase 5-BIS) |
-| empresa | 23 | — |
-| empleados | 8 | — |
-| gastos | 8 | ✅ Completo (3 niveles) |
-| dashboard | 11 | — |
-| contabilidad | 7 | — |
-| clientes | 6 | — |
-| perfil | 4 | — |
-| inventario | 4 | — |
+| core | 63 | — |
+| facturas | 44 | Parcial (`test_multitenant_isolation_tabla_html.py`) |
+| empresa | 29 | — |
+| empleados | 13 | Parcial (`test_multitenant_isolation_tablas_html.py`, nuevo) |
+| gastos | 12 | ✅ Completo (`test_multitenant_isolation.py`) |
+| dashboard | 12 | — |
+| contabilidad | 9 | ✅ Nuevo (`test_multitenant_isolation.py`) |
+| clientes | 8 | — |
+| perfil | 6 | — |
+| inventario | 8 | — |
 | landing | 20 | — |
-| cotizaciones | 3 | — |
-| proveedores | 3 | — |
-| proyectos | 3 | — |
-| bancos | 3 | ✅ Completo (3 niveles) |
-| compras | 2 | Parcial (`test_multitenant_isolation_tabla_html.py`, Fase 5-BIS) |
-| ventas | 1 | ✅ (Fase 1) |
-| **Total atribuido por app** | **199** | **2 completos / 3 parciales de ~17 apps** |
+| cotizaciones | 7 | — |
+| proveedores | 6 | — |
+| proyectos | 8 | — |
+| bancos | 6 | ✅ Completo (`test_multitenant_isolation.py` + `test_cross_tenant_isolation.py`) |
+| compras | 4 | Parcial (`test_multitenant_isolation_tabla_html.py`) |
+| ventas | 2 | ✅ (`test_multitenant_isolation.py`) |
+| **Total atribuido por app** | **257** | **4 completos / 3 parciales de 17 apps** |
 
 ---
 
@@ -748,19 +856,21 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.10.4 — 2026-05-29)
+## 12. Metricas del Proyecto (v3.18.0 — 2026-08-09, DOC-M5)
+
+**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa).
 
 | Metrica | Cantidad |
 |---|---|
 | Apps publicas activas | 5 |
-| Apps tenant de negocio | 13 |
-| Modelos publicos | 17 |
-| Modelos tenant | 52 (+ 1 abstract) |
-| Total migraciones | 133 (125 tenant + 8 public) |
-| Endpoints API (prefijos) | 14 modulos |
-| Archivos de test | 89 |
+| Apps tenant registradas (`TENANT_APPS`) | 17 (15 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) |
+| Modelos publicos | 19 |
+| Modelos tenant | 67 concretos + 3 abstractos |
+| Total migraciones | 186 (177 tenant + 9 public) |
+| Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
+| Archivos de test (atribuidos por app) | 257 (401 en todo el repo, excluyendo `venv/`) |
 | Dependencias Python | 20+ |
-| Namespaces JS activos | 10 (`window.Sintel.*`) |
+| Namespaces JS activos | 15 (`window.Sintel.*`) + 3 sub-namespaces de feature |
 | Campos contables eliminados (v3.10.2) | 15 en 6 apps |
 | Apps con Pure Pull Model contable | 6 (Proveedores, Clientes, Inventario, Facturas, Gastos, Empleados) |
-| Django system check | 0 errores, 0 warnings |
+| Django system check | No re-verificado en esta pasada (validacion fue por lectura de codigo, no ejecucion; ver advertencia general al inicio del documento sobre el working tree sin commitear) |
