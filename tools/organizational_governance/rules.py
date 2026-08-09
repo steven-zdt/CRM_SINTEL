@@ -413,7 +413,11 @@ def _detect_org_010_integration_without_empresa_id(graph: Graph) -> list[Finding
 
 # Modelos autorizados a heredar SedeAwareModel - lista cerrada, ampliar
 # solo tras una decision de negocio real (mismo criterio que ADR-005/F17).
-_SEDE_AWARE_MODEL_ALLOWLIST = frozenset({"compras.OrdenCompra"})
+# compras.RecepcionCompra: F21, decision documentada en
+# documentacion/F21_ORGANIZATIONAL_DECISIONS.md §1 (extension del mismo
+# piloto de compras, tabla nueva sin datos historicos, sede endurecida
+# NOT NULL desde el primer dia).
+_SEDE_AWARE_MODEL_ALLOWLIST = frozenset({"compras.OrdenCompra", "compras.RecepcionCompra"})
 
 
 def _detect_org_017_unauthorized_sede_aware_model(graph: Graph) -> list[Finding]:
