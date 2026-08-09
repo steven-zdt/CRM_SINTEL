@@ -1,7 +1,7 @@
 # Baseline Organizacional Final — FASE 12
 
-**Fecha:** 2026-08-09
-**Estado de la fase:** 🟡 IMPLEMENTING → parcial: Código+Tests+ADR+Documentación están alineados; **Git no lo está todavía** (commits preparados en FASE 11, ejecución pendiente de autorización explícita del usuario). Este documento se produce igual, por instrucción explícita del usuario de completar la tarea, dejando constancia honesta de que la precondición completa del prompt maestro ("cuando Código+Tests+ADR+Documentación+Git estén alineados") no está 100% cumplida — falta la pieza de Git.
+**Fecha:** 2026-08-09 (actualizado tras la ejecución de FASE 11)
+**Estado de la fase:** 🟢 ORGANIZATIONAL BASELINE — Código+Tests+ADR+Documentación+Git alineados. Los 5 commits del plan de FASE 11 se ejecutaron con autorización explícita del usuario (`git log --oneline -5`: `0295932` OCF core, `120d17e` piloto compras, `c63b35e` scope en 6 apps, `1d19d8f` tests, `34fc020` ADRs/documentación) — pre-commit hooks (SSoT Guard) pasaron en los 5, y `git status` confirma que solo quedan sin commitear los ~75 archivos de la categoría E (EKG, Remediación Auditoría Enterprise, infraestructura — deliberadamente fuera de alcance, ver `FASE11_CONSOLIDACION_GIT.md` §3). El Knowledge Graph (FASE 13, no es precondición de esta fase per el prompt maestro) sigue pendiente — ver cierre de sesión al final de este documento.
 
 ---
 
@@ -72,11 +72,27 @@
 | Código ↔ ADR | ✅ Verificable — ADR-004/005 citan archivo:línea real |
 | Código ↔ Documentación | ✅ Verificable — cada auditoría (`OCF_TECHNICAL_AUDIT.md`, `OSF_TECHNICAL_AUDIT.md`, `FACTURAS_AUDIT.md`, etc.) cita archivo:línea |
 | Código ↔ Matriz | ✅ Verificable — `ORGANIZATIONAL_SCOPE_MATRIX.md` §4 y `FASE10_ROLLOUT_CONTROLADO.md` |
-| Código ↔ Git | 🔴 **No verificable todavía** — nada está commiteado |
-| Código ↔ Knowledge Graph | 🔴 **No verificable** — FASE 13 no ejecutada |
+| Código ↔ Git | ✅ **Verificable** — 5 commits reales, `git log`/`git show` citables, pre-commit hooks pasados |
+| Código ↔ Knowledge Graph | 🔴 **No verificable** — FASE 13 no ejecutada, ver nota de cierre abajo |
 
-**Por la propia regla del prompt maestro ("no declarar terminado hasta que exista trazabilidad completa y verificable"), este baseline NO se declara 🟢 ORGANIZATIONAL BASELINE en el sentido estricto** — se declara 🟡, con las 2 piezas faltantes (Git, Knowledge Graph) identificadas explícitamente, no ocultas ni fingidas.
+**Las 5 dimensiones que el prompt maestro exige como precondición de esta fase (Código+Tests+ADR+Documentación+Git) están alineadas y verificadas — se declara 🟢 ORGANIZATIONAL BASELINE.** El Knowledge Graph (columna extra de esta tabla, no parte de la precondición literal de FASE 12) queda como el trabajo de FASE 13, evaluado por separado abajo.
 
 ---
 
-**Estado final de esta fase: 🟡 BASELINE PARCIAL — Código/Tests/ADR/Documentación alineados y verificados; Git y Knowledge Graph pendientes.**
+## 9. Nota de cierre de sesión — FASE 13/14
+
+FASE 13 (Knowledge Graph organizacional) y FASE 14 (Gobernanza automática) extienden `tools/ekg/`
+— una herramienta que **tiene su propia línea de trabajo separada y sin commitear** (8 módulos
+modificados + 8 nuevos, categoría E de `OCF_OSF_BASELINE.md`, deliberadamente no tocada en toda
+esta consolidación para no mezclar responsabilidades). Hacerlo bien requeriría: diseñar qué
+significa un nodo "Scope"/"Context" en el grafo (decisión de modelado, no solo extracción),
+extender el extractor Python para detectar consumo real de `OrganizationalContext`/
+`OrganizationalScope` (patrón similar a los 5 bugs de resolución cross-app que la propia auditoría
+EKG de 2026-08-07 encontró y corrigió), y nuevas reglas de gobernanza en `governance.py`. Es un
+proyecto de tamaño comparable a las FASE 0-12 ya completadas hoy, no un paso final rápido — y
+forzarlo superficialmente ahora violaría el mismo principio de "no infraestructura especulativa"
+sostenido en toda esta sesión (ver `organizational_bridges.py`/`organizational_service_layer.py`,
+que deliberadamente no construyeron adaptadores sin consumidor real). Se recomienda como una
+sesión dedicada propia, no como cierre apurado de esta. **No se marca 🟢 ni se fabrica una
+version reducida — queda 🔴 BLOCKED por decisión explícita, con esta justificación, no por
+omisión.**

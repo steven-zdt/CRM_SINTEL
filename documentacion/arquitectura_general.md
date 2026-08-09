@@ -1,8 +1,9 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.18.0
-**Ultima actualizacion:** 2026-08-09 (DOC-M5) — pasada de validacion completa contra codigo real (no solo contra otros documentos). Metodologia: conteo directo de `TENANT_APPS`/`SHARED_APPS` (`config/settings.py`), migraciones (`find .../migrations/[0-9]*.py`), clases de modelo (`grep '^class .*(Model|Base)'` en cada `models.py`), archivos de test, prefijos montados en `config/api_urls.py`, y namespaces `window.Sintel.*` realmente definidos en JS — mas un agente de investigacion dedicado a verificar el estado real de OCF/OSF contra codigo (ver hallazgos abajo). **ADVERTENCIA GENERAL DOC-M5:** casi todos los conteos de este documento (apps de negocio, modelos por app, migraciones por app, archivos de test, endpoints montados, namespaces JS) estaban desactualizados, algunos con numeros internamente contradictorios entre si (ver §2.2, §9, §12). La causa: hay ~209 archivos con cambios sin commitear en el working tree (`git status`, verificado 2026-08-09) que no habian sido reflejados aqui — el ultimo commit real es `371f19d` (2026-08-05); todo el trabajo de Contexto/Alcance Organizacional (ver §7) y varias apps (contabilidad, proveedores, clientes, empleados, facturas) tienen modelos y migraciones nuevas sin commitear. Este documento ahora describe el **working tree actual**, no necesariamente el ultimo commit — se marca explicitamente donde aplica.
-**Actualizacion previa:** 2026-08-07 (DOC-M4) — validado contra codigo real tras cerrar la remediacion completa de la Auditoria Enterprise 2026-08-06 (8 fases, ver `documentacion/REMEDIACION_FASE1_CRITICOS_SEGURIDAD.md` y `documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md`). Cambios de fondo en ese pase: §1.2/§4.6 reescritas — la migracion Tabulator→django-tables2+HTMX esta mucho mas avanzada de lo que el documento reflejaba; §5.3 agrego la prohibicion explicita de bypass por `DEBUG` en autorizacion y la prohibicion de comentarios `{# #}` multilinea; §1.3 documento la politica de cache de Nginx para estaticos.
+**Version:** 3.20.0
+**Ultima actualizacion:** 2026-08-09 (DOC-M7) — cierre de FASE 13 (Knowledge Graph Organizacional) + FASE 14 (Gobernanza Automatica), alcance real documentado en `documentacion/F13_F14_FINAL_REPORT.md` (no el 100% del espec original — reduccion de alcance explicita, no oculta). Se construyo `tools/organizational_governance/` (paquete nuevo, independiente de `tools/ekg/` por decision documentada — ver `documentacion/F13_0_EKG_AUDIT.md`): un grafo real (165 entidades, 220 relaciones, extraidas por AST de las 17 apps tenant) mas un motor de gobernanza con 8 reglas implementadas y probadas (23/23 tests). Ejecucion real contra el codigo actual: **0 findings, FINAL STATUS: PASS** — consistente con que FASE 7 de la consolidacion OCF/OSF ya habia corregido los 2 bugs reales que 2 de esas 8 reglas (`SEC-002`/`SEC-003`) fueron disenadas para detectar. Comando: `python -m tools.organizational_governance.cli --report`. Detalle completo, incluyendo las ~27 reglas nombradas en el pedido original que NO se implementaron (con la razon de cada una) en `documentacion/F13_F14_EXECUTION_STATUS.md`.
+**Actualizacion previa:** 2026-08-09 (DOC-M6) — sincronizacion tras cerrar el plan de consolidacion OCF/OSF completo (FASE 0-12, ver `documentacion/ORGANIZATIONAL_SCOPE_MIGRATION_STATUS.md`). Trabajo de OCF/OSF commiteado (5 commits, `0295932`..`34fc020`); 2 bugs reales encontrados y corregidos (bypass de `HasOrganizationalScope` en HTMX; `PermissionDenied`->500 en vez de 403); ADR-004 con adenda, ADR-005 nuevo.
+**Actualizacion previa:** 2026-08-09 (DOC-M5) — pasada de validacion completa contra codigo real (conteo directo de apps/migraciones/modelos/tests/endpoints/namespaces JS) que corrigio numeros internamente contradictorios en §2.2/§9/§12 y establecio el estado real de OCF/OSF contra codigo (agente de investigacion dedicado). Detalle completo en el historial de este documento.
 **Fuente canonica:** `documentacion/arquitectura_general.md`
 **Reglas de desarrollo:** `AGENTS.md` (raiz del proyecto)
 **Estado actual del proyecto:** `MEMORY.md` (raiz del proyecto)
@@ -243,23 +244,43 @@ reemplaza. Un perfil con `alcance=SEDE`/`AREA` solo puede operar sobre sus `sede
 `areas_asignadas`. "ADMIN GLOBAL" no es un valor de `alcance`: es el
 staff/superuser de Django del esquema publico, fuera de `TenantProfile`.
 
-**[DOC-M5, correccion 2026-08-09 — distinguir dos mecanismos que no son lo mismo]** Tras ADR-003
-(piloto `compras`), un proyecto interno mas amplio — Organizational Context/Scope Framework
-(OCF/OSF, sin ADR propio, ver §7) — extendio el *filtrado* por alcance a mas apps, pero **no** de
-la misma forma que el piloto original:
+**[DOC-M6, 2026-08-09 — distinguir dos mecanismos que no son lo mismo, ya commiteados]** Tras
+ADR-003 (piloto `compras`), el proyecto interno Organizational Context/Scope Framework (OCF/OSF —
+ADR-004 y **ADR-005**, ver §7) extendio el *filtrado* por alcance a mas apps, pero **no** de la
+misma forma que el piloto original — distincion verificada y consolidada tras el plan de FASE 0-12
+de `documentacion/ORGANIZATIONAL_SCOPE_MIGRATION_STATUS.md`:
 - La clase de permiso `HasOrganizationalScope` (`apps/tenant/api/permissions.py`) sigue aplicada
-  **solo** a `OrdenCompraViewSet` y a `apps/tenant/core/api/contexto.py` — verificado por grep,
-  sigue sin rollout.
+  **solo** a `OrdenCompraViewSet` y a `apps/tenant/core/api/contexto.py` — rollout deliberadamente
+  no extendido a las demas apps hasta resolver una asimetria real encontrada durante la
+  consolidacion: `HasOrganizationalScope` deniega objetos con `sede_id=None`, mientras que el
+  filtrado de listas de las 6 apps de abajo trata esos mismos registros como visibles (100% de los
+  historicos de esas apps tienen `sede=NULL`) — ver `documentacion/OSF_TECHNICAL_AUDIT.md` §4.
 - `SedeAwareModel` (el mixin de modelo) tambien sigue heredado **solo** por `OrdenCompra`
-  (`apps/tenant/compras/models.py`) — verificado por grep sobre los 17 `models.py` de apps tenant.
+  (`apps/tenant/compras/models.py`) — decision confirmada, no pendiente: el rollout a las demas
+  apps usa un patron mas liviano (siguiente punto) en vez de migracion de esquema, ver ADR-005.
 - Lo que si se extendio: **filtrado consciente de alcance a nivel de selector/business-service**
-  (`OrganizationalScope.filter()` / `filter_by_scope()` / `filter_by_scope_null_safe()`, nuevos en
-  `apps/tenant/core/services/organizational_scope.py` y `organizational_filters.py`) — presente hoy
-  en `compras`, `cotizaciones`, `empleados`, `facturas`, `gastos`, `inventario`, `proyectos`, `ventas`
-  (verificado por grep de uso de `OrganizationalScope`/`filter_by_scope` en cada app).
-- Estos modulos `organizational_*.py` de `apps/tenant/core/services/` **no estan commiteados**
-  (`git status` los reporta como archivos nuevos sin trackear, verificado 2026-08-09) — son codigo
-  real y con tests (segun `MEMORY.md`), pero no forman parte todavia del historial de git.
+  (`OrganizationalScope.filter()` / `filter_by_scope()` / `filter_by_scope_null_safe()`, en
+  `apps/tenant/core/services/organizational_scope.py` y `organizational_filters.py`) — presente en
+  `compras`, `cotizaciones`, `empleados`, `facturas`, `gastos`, `inventario`, `proyectos`. `ventas`
+  usa el mecanismo hermano `OrganizationalContext.resolve()` (no `OrganizationalScope`) para
+  defaultear la `sede` de la `Factura` que genera, nunca desde el payload del cliente — ver
+  `documentacion/VENTAS_FACTURAS_AUDIT.md`.
+- **Dos bugs reales de aislamiento encontrados y corregidos durante la consolidacion** (FASE 7):
+  las acciones HTMX `render_offcanvas_detalle`/`render_offcanvas_editar` de `compras`
+  (`apps/tenant/compras/api/viewsets.py`) resolvian el objeto con `get_object_or_404()` en vez de
+  `self.get_object()`, bypaseando `HasOrganizationalScope` por completo — corregido agregando
+  `self.check_object_permissions(request, instance)` explicito. Y `BaseServiceMixin.
+  handle_service_error()` (`apps/tenant/api/mixins.py`, compartido por **todo** el proyecto, no
+  solo `compras`) no tenia un caso para `rest_framework.exceptions.PermissionDenied` y devolvia
+  `500` en vez de `403` cuando `HasOrganizationalScope` denegaba un `update()`/`destroy()` — la
+  escritura ya estaba bloqueada en ambos casos (no era una fuga de seguridad), pero el codigo de
+  estado era incorrecto. Ambos corregidos, verificados con 20/20 tests reales pasando
+  (`documentacion/FASE7_AISLAMIENTO_ORGANIZACIONAL.md`).
+- Estos modulos `organizational_*.py` de `apps/tenant/core/services/`, junto con el resto del
+  trabajo de OCF/OSF (modelos, migraciones, tests, los 2 fixes de arriba), **ya estan commiteados**
+  — 5 commits (`0295932` OCF core, `120d17e` piloto compras, `c63b35e` scope en 6 apps, `1d19d8f`
+  tests, `34fc020` ADRs/documentacion), verificado con `git log`. Detalle completo en
+  `documentacion/FASE11_CONSOLIDACION_GIT.md`.
 
 **Frontend JWT:**
 
@@ -623,22 +644,28 @@ python manage.py poblar_catalogo_niif
 | ADR-004 | Organizational Context Framework (OCF) — Modelo de Diseño | ACCEPTED (parcialmente implementado, ver Adenda 2026-08-09 en el propio archivo) | 2026-08-07 (adenda 2026-08-09) | `docs/ADR-004-organizational-context-framework-diseno.md` |
 | ADR-005 | Organizational Scope Framework (OSF) — Contrato Independiente y Rollout sin Migracion de Esquema | ACCEPTED (parcialmente implementado) | 2026-08-09 | `docs/ADR-005-organizational-scope-framework.md` |
 
-> **[DOC-M5/OSF-consolidacion, 2026-08-09] Resolucion de la discrepancia ADR-004 y creacion de ADR-005.**
-> Pendiente que la validacion DOC-M5 de este documento habia dejado abierto: el proyecto de
-> consolidacion OCF/OSF (`documentacion/ORGANIZATIONAL_SCOPE_MIGRATION_STATUS.md`, FASE 4)
-> audito codigo real (no solo `MEMORY.md`) y resolvio ambos puntos. `docs/ADR-004-*.md` gano una
-> "Adenda 2026-08-09" que actualiza su Estado a ACCEPTED (parcial) y documenta 2 divergencias
-> reales entre lo diseñado y lo construido (`OrganizationalScope` NO se construye a partir de
-> `OrganizationalContext`, contrario al diagrama original; `OrganizationalSelector` como clase
-> nunca se construyo — su rol lo cumplen funciones puras + metodos de las dataclasses). Se creo
-> `docs/ADR-005-organizational-scope-framework.md` — justificado por 2 decisiones arquitectonicas
-> reales tomadas explicitamente con el usuario durante el proyecto OSF (independencia de
-> `OrganizationalScope` respecto a `OrganizationalContext`, y `filter_by_scope_null_safe()` como
-> patron de rollout SIN migracion de esquema para las 6 apps con `sede` historicamente en NULL),
-> no creado solo por numeracion. Detalle completo de la auditoria que sustenta ambos cambios:
-> `documentacion/OCF_TECHNICAL_AUDIT.md`, `documentacion/OSF_TECHNICAL_AUDIT.md`,
-> `documentacion/ORGANIZATIONAL_CONTRACT.md`. **Sigue sin commitear en git** (ver advertencia
-> general al inicio de este documento) — el trabajo es real pero vive solo en el working tree.
+> **[DOC-M6, 2026-08-09] ADR-004/ADR-005 y el plan de consolidacion OCF/OSF — cerrado, verificado
+> y commiteado.** El proyecto de consolidacion OCF/OSF (`documentacion/
+> ORGANIZATIONAL_SCOPE_MIGRATION_STATUS.md`, 12 fases, FASE 0-12) audito codigo real (no solo
+> `MEMORY.md`) linea por linea, con ejecucion real de tests (no solo lectura), y cerro con
+> **🟢 ORGANIZATIONAL BASELINE**: Codigo + Tests + ADR + Documentacion + Git alineados y
+> verificados. `docs/ADR-004-*.md` gano una "Adenda 2026-08-09" que actualiza su Estado a ACCEPTED
+> (parcial) y documenta 2 divergencias reales entre lo diseñado y lo construido (`OrganizationalScope`
+> NO se construye a partir de `OrganizationalContext`, contrario al diagrama original;
+> `OrganizationalSelector` como clase nunca se construyo — su rol lo cumplen funciones puras +
+> metodos de las dataclasses). `docs/ADR-005-organizational-scope-framework.md` (nuevo) formaliza
+> 2 decisiones arquitectonicas reales tomadas explicitamente con el usuario durante el proyecto OSF
+> (independencia de `OrganizationalScope` respecto a `OrganizationalContext`; `filter_by_scope_null_safe()`
+> como patron de rollout SIN migracion de esquema para las 6 apps con `sede` historicamente en NULL).
+> Durante la consolidacion se encontraron y **corrigieron** 2 bugs reales de aislamiento (ver §3.6).
+> **Ya esta commiteado**: 5 commits (`0295932`..`34fc020`, ver `documentacion/FASE11_CONSOLIDACION_GIT.md`)
+> — el ultimo commit del repositorio es `34fc020`, no `371f19d` como indicaba la version anterior de
+> este documento. Detalle completo: `documentacion/OCF_TECHNICAL_AUDIT.md`,
+> `documentacion/OSF_TECHNICAL_AUDIT.md`, `documentacion/ORGANIZATIONAL_CONTRACT.md`,
+> `documentacion/ORGANIZATIONAL_SCOPE_BASELINE_FINAL.md` (cierre). **Pendiente, fuera de esta
+> consolidacion por decision explicita** (no por omision): FASE 13/14 del plan (extension del
+> Knowledge Graph EKG con capas organizacionales + gobernanza automatica) — ver justificacion en
+> `ORGANIZATIONAL_SCOPE_BASELINE_FINAL.md` §9.
 
 **Decisiones tecnicas historicas (anteriores a la convencion `docs/ADR-NNN-*.md`, sin archivo dedicado propio):**
 - **Desacoplamiento Contable Total** (2026-05-28, COMPLETED) — Eliminacion de `cuenta_*_uuid` en
@@ -757,6 +784,8 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | Auditoria Enterprise UI (2026-08-06) | `documentacion/PLAN_PRUEBASUI_PRIVADAS.md` | Informe de auditoria via UI real, 23 hallazgos clasificados; marcadores `[CORREGIDO]` indican los ya remediados |
 | Remediacion Fase 1 (Criticos Seguridad) | `documentacion/REMEDIACION_FASE1_CRITICOS_SEGURIDAD.md` | Detalle 10-secciones de C1/C2/C3 + hallazgo de onboarding |
 | Remediacion Fases 2-8 | `documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md` | Detalle 10-secciones de C4/C5/C6/C7, onboarding, regresion y documentacion |
+| Consolidacion OCF/OSF (2026-08-09) | `documentacion/ORGANIZATIONAL_SCOPE_MIGRATION_STATUS.md` | Indice maestro de las 12 fases (auditoria de codigo real, ADR-004/005, matriz de cobertura de 17 apps, piloto `compras`, `facturas`, `Ventas->Facturas`, rollout controlado, consolidacion git) — enlaza los 12 documentos de detalle. Cierre: `documentacion/ORGANIZATIONAL_SCOPE_BASELINE_FINAL.md` |
+| Knowledge Graph Organizacional + Gobernanza Automatica (2026-08-09) | `documentacion/F13_F14_FINAL_REPORT.md` | `tools/organizational_governance/` (grafo + motor de reglas, independiente de `tools/ekg/`) — estado fase por fase en `documentacion/F13_F14_EXECUTION_STATUS.md`, findings en `documentacion/GOVERNANCE_REMEDIATION_PLAN.md` |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
@@ -784,7 +813,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 
 ### 10.3. Cobertura de Tests
 
-> **[DOC-M5, recontado 2026-08-09]** Tabla recontada por conteo directo de `apps/tenant/<app>/tests/test_*.py` + `tests/tenant/<app>/test_*.py`. El conteo anterior (2026-08-03, tabla de abajo la reemplaza) esta muy desactualizado — el trabajo de Contexto/Alcance Organizacional (§7) y otras fases agregaron un numero grande de tests nuevos, la mayoria sin commitear todavia. No incluye suites cross-cutting no atribuibles a una sola app (`tests/api`, `tests/celery*`, `tests/general`, `tests/multitenant`, `tests/smoke`, etc.) — el total real de archivos `test_*.py` en todo el repositorio (excluyendo `venv/`) es **401**.
+> **[DOC-M5, recontado 2026-08-09; DOC-M6 nota de estado]** Tabla recontada por conteo directo de `apps/tenant/<app>/tests/test_*.py` + `tests/tenant/<app>/test_*.py`. El conteo anterior (2026-08-03, tabla de abajo la reemplaza) esta muy desactualizado — el trabajo de Contexto/Alcance Organizacional (§7) y otras fases agregaron un numero grande de tests nuevos. Los tests de OCF/OSF especificamente (las suites `test_organizational_*.py`/`test_scope_*_fN.py` citadas en la columna de aislamiento) **ya estan commiteados** (commit `1d19d8f`, ver §7) — 53/53 (core) y 20/20 (compras) confirmados pasando por ejecucion real. Los tests nuevos de OTRAS lineas de trabajo (Auditoria Enterprise, EKG) siguen sin commitear. No incluye suites cross-cutting no atribuibles a una sola app (`tests/api`, `tests/celery*`, `tests/general`, `tests/multitenant`, `tests/smoke`, etc.) — el total real de archivos `test_*.py` en todo el repositorio (excluyendo `venv/`) era **401** al momento del conteo DOC-M5 (2026-08-09, antes de esta sincronizacion; no se re-conto tras los commits porque commitear no cambia el numero de archivos en disco).
 
 | App | Archivos de Test (in-app + centralizado) | `test_multitenant_isolation*.py` / `test_cross_tenant*.py`? |
 |---|---:|---|

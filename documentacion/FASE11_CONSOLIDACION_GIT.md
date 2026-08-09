@@ -1,8 +1,27 @@
 # Consolidación Git — FASE 11
 
 **Fecha:** 2026-08-09
-**Estado de la fase:** 🟡 IMPLEMENTING — plan preparado y validado, **ningún commit ejecutado todavía**
-**Regla dura, no negociable:** crear commits requiere pedido explícito del usuario, separado de "termina la tarea" (que autorizó completar la auditoría/consolidación, no necesariamente escribir en el historial de git). Este documento entrega el plan listo para ejecutar — la ejecución (`git add`/`git commit`) queda pendiente de tu confirmación explícita.
+**Estado de la fase:** 🟢 COMPLETED — plan ejecutado con autorización explícita del usuario tras el turno en que se preparó
+**Resultado real de la ejecución (verificado, no asumido):**
+
+```
+34fc020 docs: ADR-003/004/005 + consolidacion completa OCF/OSF (auditoria FASE 0-12)
+1d19d8f test(scope): suite de adopcion OCF por app + aislamiento organizacional Empresa/Sede/Area
+c63b35e feat(scope): filtrado por alcance organizacional en 6 apps (OSF F7/F9/F10/F11) + adopcion aditiva del resto
+120d17e feat(compras): piloto oficial ADR-003/OSF - SedeAwareModel + HasOrganizationalScope
+0295932 feat(core): Organizational Context Framework (OCF) - contexto organizacional Empresa->Sede->Area
+```
+
+Los 5 commits se ejecutaron en el orden del plan (§2), cada uno verificado con `git status` antes
+de `git commit` para confirmar que el archivo staged coincidía exactamente con la lista planeada
+(ni de más ni de menos). El hook `[PRE-COMMIT] SSoT Guard` pasó limpio en los 5. Tras el quinto
+commit, `git status` confirmó que los únicos ~75 archivos restantes sin commitear son exactamente
+los de la categoría E (exclusiones de §3) — ninguno de OCF/OSF quedó fuera.
+
+**Nota honesta sobre `apps/services/onboarding/empresa_service.py`:** se incluyó completo en el
+Commit 2 (el hook de semilla ADR-003 es la parte más grande), sin separar por hunk el fix de la
+Remediación Auditoría Enterprise que también contiene — la advertencia de §4 sigue vigente para
+quien revise ese commit específico.
 
 ---
 
