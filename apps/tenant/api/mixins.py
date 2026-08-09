@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 from django.db import transaction
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied as DRFPermissionDenied
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
 
@@ -42,6 +43,29 @@ class SintelDSVMixin:
 
         raise DRFValidationError("No se encontro configuracion de empresa para este tenant.")
 
+    def get_sede_id(self) -> Optional[int]:
+        """Resuelve la sede activa del request (ver docs/ADR-003-contexto-
+        organizacional-sede-area.md). Espeja get_empresa_id() en vez de un
+        middleware que mute request.* - ver ADR-003 seccion "Decision de
+        diseno" para el porque.
+
+        Orden de resolucion (solo resuelve CUAL sede esta activa; si el
+        usuario puede operar en ella es responsabilidad de
+        HasOrganizationalScope, no de este metodo):
+          1. request.session['sede_activa_id'], si esa sede sigue
+             perteneciendo a la empresa activa (si no, se descarta de la
+             sesion por quedar obsoleta - ej. cambio de empresa).
+          2. La primera (por nombre) de perfil.sedes_asignadas.
+          3. La Sede "Principal" de la empresa (fallback para un perfil sin
+             sedes_asignadas explicitas, ej. alcance EMPRESA).
+        Retorna None solo si la empresa aun no tiene ninguna Sede.
+        """
+        from apps.tenant.core.services.sede_context import resolve_sede_activa_id
+
+        empresa_id = self.get_empresa_id()
+        perfil = getattr(self.request.user, 'tenant_profile', None)
+        return resolve_sede_activa_id(self.request, empresa_id, perfil)
+
     def handle_service_error(self, exc: Exception) -> Response:
         """Mapeo estandarizado de excepciones de servicios a respuestas DRF."""
         from django.core.exceptions import ObjectDoesNotExist
@@ -49,11 +73,23 @@ class SintelDSVMixin:
 
         if isinstance(exc, DRFValidationError):
             return Response(exc.detail, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        
+
         if isinstance(exc, (ObjectDoesNotExist, Http404)):
             return Response(
                 {"error": "not_found", "message": "El recurso solicitado no existe."},
                 status=status.HTTP_404_NOT_FOUND
+            )
+
+        # [FASE 7, consolidacion OCF/OSF] self.get_object() dentro de un
+        # update()/destroy() personalizado (ej. compras) llega aqui cuando
+        # check_object_permissions() deniega (ej. HasOrganizationalScope) --
+        # sin este caso, una denegacion de permiso real caia al generico de
+        # abajo y respondia 500 en vez de 403 (el bloqueo si funcionaba, solo
+        # el codigo de estado era incorrecto). Ver documentacion/FASE7_AISLAMIENTO_ORGANIZACIONAL.md.
+        if isinstance(exc, DRFPermissionDenied):
+            return Response(
+                {"error": "forbidden", "message": exc.detail if hasattr(exc, "detail") else str(exc)},
+                status=status.HTTP_403_FORBIDDEN
             )
 
         logger.error(f"[DSV:Error] {type(exc).__name__}: {str(exc)}", exc_info=True)
@@ -122,6 +158,28 @@ class BaseServiceMixin:
         except Exception:
             # Fallback final: Empresa singleton del tenant actual
             return Empresa.objects.only('id').first()
+
+    def _get_sede_id_seguro(self) -> Optional[int]:
+        """Obtiene sede_id (contexto organizacional activo) con fallback
+        seguro. Requiere que el ViewSet herede SintelDSVMixin (get_sede_id()).
+        Ver docs/ADR-003-contexto-organizacional-sede-area.md."""
+        try:
+            return self.get_sede_id()
+        except Exception:
+            sede = self._get_sede()
+            return sede.id if sede else None
+
+    def _get_sede(self):
+        """Helper para obtener la Sede activa con fallback seguro."""
+        from apps.tenant.empresa.models import Sede
+        try:
+            sede_id = self.get_sede_id()
+            return Sede.objects.filter(id=sede_id).first() if sede_id else None
+        except Exception:
+            empresa = self._get_empresa()
+            if not empresa:
+                return None
+            return Sede.objects.filter(empresa=empresa).order_by('nombre').first()
 
     def get_qs_list(self):
         """

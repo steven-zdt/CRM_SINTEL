@@ -118,4 +118,63 @@ class SintelTenantBaseModel(models.Model):
         super().save(*args, **kwargs)
 
 
-__all__ = ['SintelTenantBaseModel']
+class SedeAwareModel(SintelTenantBaseModel):
+    """
+    Mixin abstracto opt-in que agrega el Contexto Organizacional (Empresa ya
+    viene de SintelTenantBaseModel) -> Sede -> Area a un modelo transaccional.
+    Ver docs/ADR-003-contexto-organizacional-sede-area.md.
+
+    [DECISION DE ALCANCE] No se agrega `sede`/`area` a SintelTenantBaseModel
+    directamente: eso forzaria una migracion (aunque sea de una columna
+    nullable) en las 17 apps tenant de una sola vez. Este mixin es opt-in
+    para que cada app adopte el contexto organizacional en su propio momento
+    (piloto: apps/tenant/compras/models.py's OrdenCompra) sin tocar las
+    demas. Plegar esto en SintelTenantBaseModel es una decision a futuro,
+    solo despues de validar el piloto.
+
+    Campos:
+    - sede: obligatoria para procesos transaccionales (blank=False), pero
+      `null=True` a nivel de BD durante la migracion controlada (Fase 10 del
+      pedido original: agregar nullable -> backfill -> endurecer a
+      null=False una vez el backfill este verificado al 100%).
+    - area: opcional segun el dominio (blank=True) - el pedido original es
+      explicito en que no todas las tablas deben forzar area.
+    """
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.PROTECT,
+        related_name='%(app_label)s_%(class)s_related',
+        verbose_name=_('Sede'),
+        help_text=_('Sede propietaria del registro (Contexto Organizacional). Obligatoria para nuevos registros.'),
+        null=True,
+        blank=False,
+        db_index=True,
+    )
+
+    area = models.ForeignKey(
+        'empresa.Area',
+        on_delete=models.SET_NULL,
+        related_name='%(app_label)s_%(class)s_related',
+        verbose_name=_('Area'),
+        help_text=_('Area ejecutora/solicitante del registro (Contexto Organizacional). Opcional.'),
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    class Meta:
+        abstract = True
+        # [ADR-003] ADVERTENCIA para futuras apps que adopten este mixin:
+        # Django NO fusiona Meta.indexes de esta clase abstracta con el
+        # Meta.indexes propio de la clase concreta cuando esta ultima declara
+        # el suyo (verificado empiricamente con OrdenCompra: este indice no
+        # aparecia en absoluto en _meta.indexes hasta repetirlo a mano en el
+        # Meta de OrdenCompra). Si el modelo concreto define su propio Meta
+        # con `indexes`, debe repetir explicitamente
+        # `models.Index(fields=['empresa', 'sede'])` ahi.
+        indexes = [
+            models.Index(fields=['empresa', 'sede']),
+        ]
+
+
+__all__ = ['SintelTenantBaseModel', 'SedeAwareModel']

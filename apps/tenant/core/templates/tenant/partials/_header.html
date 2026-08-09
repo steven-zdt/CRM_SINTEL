@@ -8,7 +8,33 @@
                 {% tenant_branding_header %}
             </div>
             {% if user.is_authenticated %}
-            <div class="d-flex align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                {% if sede_activa %}
+                <!-- Selector de Sede activa (ADR-003) -->
+                <div class="dropdown" id="sede-dropdown-container">
+                    <button id="sede-dropdown-toggle"
+                            type="button"
+                            class="btn btn-sm btn-outline-light dropdown-toggle d-flex align-items-center gap-1"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                            aria-label="Cambiar de sede">
+                        <i class="fas fa-map-marker-alt small"></i>
+                        <span class="small">{{ sede_activa.nombre }}</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow" role="menu" aria-orientation="vertical">
+                        {% for sede in sedes_disponibles %}
+                        <li>
+                            <a href="#"
+                               class="dropdown-item{% if sede.id == sede_activa.id %} active{% endif %}"
+                               data-sede-uuid="{{ sede.uuid }}"
+                               role="menuitem">
+                                {{ sede.nombre }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
                 <!-- Dropdown de cuenta (Bootstrap 5) -->
                 <div class="dropdown" id="account-dropdown-container">
                     <button id="account-dropdown-toggle" 
@@ -57,3 +83,7 @@
         </div>
     </nav>
 </header>
+{% if sede_activa %}
+<!-- ADR-003: auto-contenido en el partial para funcionar en cualquier pagina que incluya este header, sin depender de que esa pagina tambien incluya assets_core.html -->
+<script src="{% static 'core/js/common/sede_selector.js' %}"></script>
+{% endif %}

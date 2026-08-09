@@ -13,6 +13,22 @@ class RolTenant(models.TextChoices):
     VISOR = 'VISOR', 'Visor'
 
 
+class AlcanceOrganizacional(models.TextChoices):
+    """Alcance organizacional de un colaborador (ver docs/ADR-003-contexto-
+    organizacional-sede-area.md). Ortogonal a RolTenant.rol: 'rol' dice QUE
+    puede hacer (leer/escribir/administrar), 'alcance' dice DONDE puede
+    hacerlo. No reemplaza RolTenant para no romper los chequeos existentes
+    de rol == 'ADMIN' en el resto de la base de codigo.
+
+    'ADMIN GLOBAL' del pedido original no es un valor de este campo: es el
+    staff/superuser de Django ya existente en el esquema publico, fuera de
+    TenantProfile por completo.
+    """
+    EMPRESA = 'EMPRESA', 'Empresa completa'
+    SEDE = 'SEDE', 'Sede(s) asignada(s)'
+    AREA = 'AREA', 'Area(s) asignada(s)'
+
+
 class Departamento(SintelTenantBaseModel):
     """
     Departamento o area organizacional para agrupar perfiles dentro del tenant.
@@ -145,6 +161,15 @@ class TenantProfile(SintelTenantBaseModel):
         db_index=True,
         verbose_name=_('Rol'),
         help_text=_('Rol del colaborador en el tenant: ADMIN (admin), OPERADOR (puede editar), VISOR (solo lectura).')
+    )
+
+    alcance = models.CharField(
+        max_length=10,
+        choices=AlcanceOrganizacional.choices,
+        default=AlcanceOrganizacional.EMPRESA,
+        db_index=True,
+        verbose_name=_('Alcance Organizacional'),
+        help_text=_('Ambito en el que este colaborador puede operar: EMPRESA (todas las sedes/areas), SEDE (solo sedes_asignadas) o AREA (solo areas_asignadas).'),
     )
 
     sedes_asignadas = models.ManyToManyField(

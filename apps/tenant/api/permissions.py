@@ -59,11 +59,6 @@ class IsTenantMember(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # En DEBUG se omite la verificacion de membresia pero NO la autenticacion.
-        from django.conf import settings
-        if settings.DEBUG:
-            return True
-
         tenant = getattr(request, 'tenant', None)
         if not tenant:
             return True
@@ -96,11 +91,6 @@ class HasTenantRole(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # En DEBUG se omite la verificacion de rol pero NO la autenticacion.
-        from django.conf import settings
-        if settings.DEBUG:
-            return True
-
         perfil = _get_perfil(request.user)
         if not perfil:
             return False
@@ -126,11 +116,6 @@ class IsTenantProfileAdmin(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        # En DEBUG se omite la verificacion de rol pero NO la autenticacion.
-        from django.conf import settings
-        if settings.DEBUG:
-            return True
-
         perfil = _get_perfil(request.user)
         if not perfil:
             return False
@@ -149,11 +134,6 @@ class IsTenantProfileOperadorOrAdmin(permissions.BasePermission):
     def has_permission(self, request, view) -> bool:
         if not request.user or not request.user.is_authenticated:
             return False
-
-        # En DEBUG se omite la verificacion de rol pero NO la autenticacion.
-        from django.conf import settings
-        if settings.DEBUG:
-            return True
 
         perfil = _get_perfil(request.user)
         if not perfil:
@@ -177,6 +157,94 @@ class IsTenantAdmin(IsTenantProfileAdmin):
 # Permiso compuesto: Admin-or-ReadOnly
 # ---------------------------------------------------------------------------
 
+class HasOrganizationalScope(permissions.BasePermission):
+    """[ADR-003] Restringe el acceso a un objeto segun
+    TenantProfile.alcance (EMPRESA/SEDE/AREA), ortogonal a HasTenantRole.
+
+    - alcance=EMPRESA (o perfil ausente, ej. fallback DEBUG): sin
+      restriccion adicional - es el comportamiento de hoy.
+    - alcance=SEDE: el objeto debe tener `sede_id` en
+      perfil.sedes_asignadas.
+    - alcance=AREA: el objeto debe tener `area_id` en
+      perfil.areas_asignadas.
+
+    Solo verifica a nivel de objeto (retrieve/update/delete de un recurso
+    puntual, ej. anti-IDOR cross-sede via UUID directo) - el filtrado de
+    listas ya ocurre en el selector (ver OrdenCompraServiceMixin.get_qs_list
+    en apps/tenant/compras/services/api_mixins.py), por lo que
+    has_permission() siempre permite continuar.
+    """
+    message = "No tiene acceso a la sede/area de este recurso (alcance organizacional)."
+
+    def has_permission(self, request, view) -> bool:
+        return True
+
+    def has_object_permission(self, request, view, obj) -> bool:
+        perfil = _get_perfil(request.user)
+        if perfil is None or perfil.alcance == 'EMPRESA':
+            return True
+
+        if perfil.alcance == 'SEDE':
+            sede_id = getattr(obj, 'sede_id', None)
+            return sede_id is not None and perfil.sedes_asignadas.filter(id=sede_id).exists()
+
+        if perfil.alcance == 'AREA':
+            area_id = getattr(obj, 'area_id', None)
+            return area_id is not None and perfil.areas_asignadas.filter(id=area_id).exists()
+
+        return True
+
+
+class OrganizationalPermission(permissions.BasePermission):
+    """[Fase 4, OCF] Permiso generalizado por nivel jerarquico organizacional
+    (ADMIN_GLOBAL > ADMIN_EMPRESA > ADMIN_SEDE > JEFE_AREA > OPERADOR >
+    CONSULTA - ver apps/tenant/core/services/organizational_permissions.py).
+
+    Nueva infraestructura, aditiva: NO reemplaza HasTenantRole/
+    IsTenantProfileAdmin/HasOrganizationalScope, que siguen funcionando
+    exactamente igual. Un ViewSet puede seguir usando esas clases tal cual;
+    esta es una via alternativa para el ViewSet que prefiera declarar un
+    nivel jerarquico en vez de una lista de roles.
+
+    Uso (opt-in):
+        class MiViewSet(OrganizationalContextMixin, BaseTenantViewSet):
+            minimum_organizational_level = 'ADMIN_SEDE'
+            permission_classes = [IsTenantMember, OrganizationalPermission]
+
+    Requiere que el ViewSet herede OrganizationalContextMixin (Fase 3,
+    apps/tenant/core/services/organizational_context.py) para resolver el
+    contexto - si no lo hereda, deniega (fail-closed) en vez de asumir un
+    nivel. Si el ViewSet no declara `minimum_organizational_level`, esta
+    clase no restringe nada (permite continuar) - es responsabilidad del
+    ViewSet optar explicitamente.
+    """
+    message = "Su nivel organizacional no tiene permiso para esta operacion."
+
+    def has_permission(self, request, view) -> bool:
+        minimum = getattr(view, 'minimum_organizational_level', None)
+        if not minimum:
+            return True
+
+        get_context = getattr(view, 'get_organizational_context', None)
+        if get_context is None:
+            return False  # fail-closed: el ViewSet no hereda OrganizationalContextMixin
+
+        from apps.tenant.core.services.organizational_context import OrganizationalContextError
+        from apps.tenant.core.services.organizational_permissions import (
+            level_meets_minimum,
+            resolve_organizational_permission_level,
+        )
+
+        try:
+            context = get_context()
+        except OrganizationalContextError:
+            return False
+
+        is_staff = bool(getattr(request.user, 'is_staff', False))
+        level = resolve_organizational_permission_level(rol=context.rol, alcance=context.alcance, is_staff=is_staff)
+        return level_meets_minimum(level, minimum)
+
+
 class IsTenantAdminOrReadOnly(permissions.BasePermission):
     """
     Lectura permitida a todo usuario autenticado; escritura solo a ADMIN.
@@ -196,11 +264,6 @@ class IsTenantAdminOrReadOnly(permissions.BasePermission):
         if not (user and user.is_authenticated):
             return False
 
-        # En DEBUG se omiten las verificaciones de rol pero NO la autenticacion.
-        from django.conf import settings
-        if settings.DEBUG:
-            return True
-
         if request.method in SAFE_METHODS:
             return True
 
@@ -208,5 +271,4 @@ class IsTenantAdminOrReadOnly(permissions.BasePermission):
         if hasattr(view, '_check_enforced_mode'):
             return True
 
-        # En produccion, verificar si es ADMIN
         return IsTenantAdmin().has_permission(request, view)

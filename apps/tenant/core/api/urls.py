@@ -18,6 +18,7 @@ import logging
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from apps.tenant.core.api.contexto import ContextoOrganizacionalView, ContextoSedeView
 from apps.tenant.core.api.health import HealthView
 
 # Facades v1
@@ -131,6 +132,10 @@ router_v1.register(r"proyectos/gestion", ProyectoCoreViewSet, basename="core-pro
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="tenant-health"),
+
+    # --- Contexto Organizacional (ADR-003 + Fase 3 OCF) ---
+    path("contexto/sede/", ContextoSedeView.as_view(), name="core-contexto-sede"),
+    path("contexto/", ContextoOrganizacionalView.as_view(), name="core-contexto-organizacional"),
 
     # --- Landing Info público ---
     path("landing/info/", TenantInfoView.as_view(), name="core-landing-info"),

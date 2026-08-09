@@ -241,6 +241,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',  # OK: CRÍTICO: Requerido por django-tenants
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.tenant.core.context_processors.contexto_organizacional',  # OK: ADR-003: sede_activa/sedes_disponibles para el header compartido
             ],
         },
     },

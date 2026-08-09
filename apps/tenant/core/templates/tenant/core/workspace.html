@@ -83,8 +83,8 @@
 
       {# Módulo Proyectos #}
       <section id="tab-proyectos" class="workspace-tab" style="display: none;">
+        {# offcanvas-container-proyectos ya lo declara proyectos_list.html -- no duplicar (Fase 3, auditoria 2026-08-06) #}
         {% include 'tenant/proyectos/proyectos_list.html' %}
-        <div id="offcanvas-container-proyectos"></div>
       </section>
 
       <section id="tab-facturas" class="workspace-tab" style="display: none;">
@@ -118,8 +118,8 @@
 
       {# Módulo Gastos v3.5 - Feature-Sliced Architecture #}
       <section id="tab-gastos" class="workspace-tab" style="display: none;">
+        {# offcanvas-container-gastos ya lo declara gastos_list.html -- no duplicar (Fase 3, auditoria 2026-08-06) #}
         {% include 'tenant/gastos/list.html' %}
-        <div id="offcanvas-container-gastos"></div>
       </section>
 
       {# Módulo Bancos v3.5 - Feature-Sliced Architecture #}
@@ -204,9 +204,13 @@
             {% include 'tenant/contabilidad/reporte_page.html' %}
           </div>
         </div>
-        <div id="offcanvas-container-cuentas"></div>
-        <div id="offcanvas-container-asientos"></div>
-        <div id="offcanvas-container-periodo"></div>
+        {% comment %}
+          offcanvas-container-cuentas/asiento/periodo ya los declaran list_cuentas.html,
+          list_asientos.html y list_periodos.html respectivamente -- no duplicar aqui
+          (Fase 3, auditoria 2026-08-06). El "offcanvas-container-asientos" (plural) que
+          existia en este bloque no coincidia con ningun target real (el modulo usa el
+          singular "offcanvas-container-asiento"): quedaba huerfano, se elimina.
+        {% endcomment %}
       </section>
 
       {# Módulo Inventario (Refactorizado v3.5) #}
