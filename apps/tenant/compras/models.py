@@ -4,7 +4,7 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
 
-from apps.tenant.core.models import SintelTenantBaseModel
+from apps.tenant.core.models import SedeAwareModel, SintelTenantBaseModel
 from apps.tenant.empresa.models import Empresa
 
 
@@ -87,10 +87,15 @@ class PlantillaOrdenCompra(SintelTenantBaseModel):
         return f"{self.prefijo or 'SIN-PREFIJO'} {self.rango_desde}-{self.rango_hasta} ({self.nombre})"
 
 
-class OrdenCompra(SintelTenantBaseModel):
+class OrdenCompra(SedeAwareModel):
     """
     Orden de Compra en el esquema Tenant.
     Gestiona la cabecera del documento transaccional de compras.
+
+    Piloto del Contexto Organizacional (docs/ADR-003-contexto-organizacional-
+    sede-area.md): hereda SedeAwareModel en vez de SintelTenantBaseModel, por
+    lo que gana `sede` (Sede emisora de la orden, obligatoria para ordenes
+    nuevas) y `area` (Area solicitante, opcional).
     """
     ESTADO_CHOICES = [
         ('BORRADOR', _('Borrador')),
@@ -99,6 +104,21 @@ class OrdenCompra(SintelTenantBaseModel):
         ('RECIBIDA', _('Recibida/Completada')),
         ('ANULADA', _('Anulada')),
     ]
+
+    # Endurece SedeAwareModel.sede (nullable por defecto, pensada como punto
+    # de partida para la migracion controlada de un futuro adoptante) a
+    # obligatoria: la migracion 0006 (backfill) + 0007 (harden NOT NULL a
+    # nivel de BD) de este app ya garantizan que toda fila tiene sede_id.
+    sede = models.ForeignKey(
+        'empresa.Sede',
+        on_delete=models.PROTECT,
+        related_name='%(app_label)s_%(class)s_related',
+        verbose_name=_('Sede'),
+        help_text=_('Sede propietaria del registro (Contexto Organizacional). Obligatoria para nuevos registros.'),
+        null=False,
+        blank=False,
+        db_index=True,
+    )
 
     uuid = models.UUIDField(
         default=uuid_module.uuid4,
@@ -205,6 +225,13 @@ class OrdenCompra(SintelTenantBaseModel):
         indexes = [
             models.Index(fields=['empresa', 'fecha']),
             models.Index(fields=['empresa', 'estado']),
+            # [ADR-003] Meta.indexes de un Meta propio NO se fusiona con el de
+            # una clase base abstracta (SedeAwareModel/SintelTenantBaseModel) -
+            # verificado empiricamente: OrdenCompra._meta.indexes solo traia
+            # estos dos hasta agregar esta linea. Repetir explicitamente el
+            # indice compuesto empresa+sede aqui (y en cualquier otro modelo
+            # que adopte SedeAwareModel y tambien declare su propio Meta.indexes).
+            models.Index(fields=['empresa', 'sede']),
         ]
         constraints = [
             models.UniqueConstraint(

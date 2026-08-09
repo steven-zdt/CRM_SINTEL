@@ -424,7 +424,13 @@ def crear_tenant_con_owner(
                     logger.info(f"Empresa SINTEL_EMPRESA_ROOT creada para tenant {raw_schema}: {empresa.razon_social}")
                 else:
                     logger.info(f"Empresa existente para tenant {raw_schema}: {empresa.razon_social}")
-                
+
+                # 1.5. Sede "Principal"/Area "General" (idempotente, ver ADR-003)
+                from apps.tenant.empresa.services.business_service import (
+                    asegurar_estructura_organizacional_inicial,
+                )
+                asegurar_estructura_organizacional_inicial(empresa)
+
                 # 2. Crear TenantProfile con empresa explícita
                 # LOOKUP incluye empresa para respetar unique_together=(user, empresa)
                 from apps.tenant.perfil.models import TenantProfile
@@ -633,44 +639,63 @@ def onboard_tenant(
     # 6) Seed opcional dentro del schema del tenant (usando schema_context según doc oficial)
     if admin_user is not None:
         try:
-            # Seed de perfil para admin_user (si existe la tabla)
-            required_tables = ["perfil_tenantprofile"]
+            # Seed de perfil para admin_user (si existen las tablas)
+            # Remediacion onboarding (auditoria 2026-08-06): antes este bloque solo
+            # BUSCABA una Empresa existente (Empresa.objects.only('id').first()), que
+            # en un tenant recien creado siempre es None -- el TenantProfile quedaba
+            # sin su FK obligatoria 'empresa' y la creacion fallaba silenciosamente
+            # (excepcion atrapada mas abajo sin abortar), dejando el tenant sin Empresa
+            # ni TenantProfile pese a que el comando reportaba exito. Se alinea con el
+            # patron ya correcto de crear_tenant_con_owner(): crear la Empresa primero.
+            required_tables = ["perfil_tenantprofile", "empresa_empresa"]
             _ensure_schema_ready(client, required_tables)
-            
-            if _table_exists(client.schema_name, "perfil_tenantprofile"):
+
+            if _table_exists(client.schema_name, "perfil_tenantprofile") and _table_exists(client.schema_name, "empresa_empresa"):
                 with schema_context(client.schema_name):
+                    from apps.tenant.empresa.models import Empresa
                     from apps.tenant.perfil.models import TenantProfile
 
-                    # Obtener empresa singleton para FK obligatoria
-                    profile_empresa = None
-                    try:
-                        from apps.tenant.empresa.models import Empresa
-                        profile_empresa = Empresa.objects.only('id').first()
-                    except Exception:
-                        pass
+                    # Crear la Empresa singleton ANTES del TenantProfile (FK obligatoria)
+                    empresa, empresa_created = Empresa.objects.get_or_create(
+                        singleton_key=1,
+                        defaults={
+                            "razon_social": nombre.strip(),
+                            "nit": "000000000",  # NIT temporal, debe configurarse despues
+                            "direccion": "Dirección por configurar",
+                            "telefono": "000-000-0000",
+                            "email_contacto": admin_user.email,
+                            "owner_email": admin_user.email,
+                        },
+                    )
+                    if empresa_created:
+                        logger.info(f"Empresa creada para tenant {raw_schema}: {empresa.razon_social}")
 
-                    profile_defaults = {
-                        "cargo": "Administrador Principal",
-                        "rol": "ADMIN",  # Auto-Admin: owner siempre es ADMIN
-                        "configuracion": {"theme": "light", "notifications": True},
-                    }
-                    if profile_empresa:
-                        profile_defaults["empresa"] = profile_empresa
+                    # Sede "Principal"/Area "General" (idempotente, ver ADR-003)
+                    from apps.tenant.empresa.services.business_service import (
+                        asegurar_estructura_organizacional_inicial,
+                    )
+                    asegurar_estructura_organizacional_inicial(empresa)
 
+                    # LOOKUP incluye empresa para respetar unique_together=(user, empresa)
                     TenantProfile.objects.get_or_create(
                         user=admin_user,
-                        defaults=profile_defaults,
+                        empresa=empresa,
+                        defaults={
+                            "cargo": "Administrador Principal",
+                            "rol": "ADMIN",  # Auto-Admin: owner siempre es ADMIN
+                            "configuracion": {"theme": "light", "notifications": True},
+                        },
                     )
                 logger.info(f"Perfil creado para admin_user {admin_user.email} en tenant {raw_schema}")
             else:
                 logger.warning(
-                    "Tabla 'perfil_tenantprofile' no existe en schema '%s'. "
-                    "Seed de perfil omitido para admin_user.",
+                    "Tablas 'perfil_tenantprofile'/'empresa_empresa' no existen en schema '%s'. "
+                    "Seed de empresa/perfil omitido para admin_user.",
                     raw_schema
                 )
         except Exception as ex:
             logger.error(
-                "Error creando/actualizando TenantProfile para tenant '%s': %s",
+                "Error creando/actualizando Empresa/TenantProfile para tenant '%s': %s",
                 client.schema_name,
                 ex,
                 exc_info=True,

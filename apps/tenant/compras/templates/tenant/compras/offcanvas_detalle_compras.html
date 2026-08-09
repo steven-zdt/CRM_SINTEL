@@ -113,6 +113,21 @@
                         {% endif %}
                     </div>
                 </div>
+                {# [OSF Fase F5] antes invisible en el detalle: Sede es obligatoria en toda orden #}
+                <div class="col-md-6">
+                    <div class="info-label">Sede</div>
+                    <div class="info-value">{{ instance.sede.nombre }}</div>
+                </div>
+                <div class="col-md-6">
+                    <div class="info-label">Área</div>
+                    <div class="info-value">
+                        {% if instance.area %}
+                            {{ instance.area.nombre }}
+                        {% else %}
+                            <span class="text-muted small">Ninguna</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
 

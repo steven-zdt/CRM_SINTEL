@@ -147,6 +147,16 @@
     if (!which || which === 'proyectos') _proyectosCache = null;
   }
 
+  // Remediacion cache-no-invalidada (auditoria 2026-08-06): un Proveedor creado
+  // o editado en el modulo Proveedores no se reflejaba en el selector de
+  // "Nueva Orden de Compra" hasta recargar toda la pagina, porque nada invalidaba
+  // esta cache de 5 minutos al cambiar el catalogo de proveedores en otro modulo
+  // de la misma sesion del Workspace. proveedores_form.js dispara este evento
+  // sobre document.body tras crear/editar/eliminar un proveedor.
+  d.body.addEventListener('proveedor-updated', function() {
+    invalidateCache('proveedores');
+  });
+
   w.Sintel.Compras.Utils = {
     loadProveedoresSelect: loadProveedoresSelect,
     loadProyectosSelect: loadProyectosSelect,

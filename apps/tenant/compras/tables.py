@@ -29,6 +29,12 @@ class OrdenCompraTable(tables.Table):
     proyecto = tables.Column(
         accessor="proyecto__nombre", verbose_name="Proyecto", orderable=False
     )
+    # [OSF Fase F5] antes invisible: la tabla puede mostrar ordenes de
+    # multiples sedes a la vez (ver OrdenCompraTableView.get_queryset), sin
+    # esta columna no habia forma de distinguir de que sede era cada fila.
+    sede = tables.Column(
+        accessor="sede__nombre", verbose_name="Sede", order_by=("sede__nombre",)
+    )
     total = tables.Column(verbose_name="Total")
     estado = tables.Column(verbose_name="Estado")
     acciones = tables.Column(empty_values=(), orderable=False, verbose_name="")
@@ -38,7 +44,7 @@ class OrdenCompraTable(tables.Table):
         fields = ()
         sequence = (
             "consecutivo", "fecha", "fecha_entrega", "proveedor",
-            "proyecto", "total", "estado", "acciones",
+            "proyecto", "sede", "total", "estado", "acciones",
         )
         attrs = {"class": "table table-hover align-middle mb-0", "id": "tabla-ordenes-compra"}
         empty_text = "No se encontraron órdenes de compra registradas"

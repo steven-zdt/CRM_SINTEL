@@ -47,11 +47,59 @@ class OrdenCompraServiceMixin(BaseServiceMixin):
     crud_service_class = OrdenCompraCRUDService
     business_service_class = OrdenCompraBusinessService
 
+    def get_qs_list(self):
+        """
+        [OSF Fase F5] Filtra por el conjunto COMPLETO de sedes/areas
+        permitidas (OrganizationalScope), no por una sola "sede activa": un
+        perfil con alcance SEDE/AREA asignado a varias sedes/areas debe ver
+        las ordenes de TODAS las suyas, no solo de la activa. Hallazgo real
+        de F4/F5: la version anterior de este metodo (una sola sede activa,
+        via `_get_sede_id_seguro()`) ocultaba ordenes de las demas sedes
+        asignadas, y nunca filtraba por area en absoluto para alcance=AREA.
+        Un perfil con alcance EMPRESA (o sin tenant_profile, ej. fallback
+        DEBUG) sigue viendo todas las sedes/areas de la empresa, igual que
+        antes. Reemplaza BaseServiceMixin.get_qs_list() solo para este
+        ViewSet - no cambia el comportamiento por defecto de las otras 16
+        apps.
+
+        `OrganizationalScope.resolve()` es MAS estricto que
+        `_get_empresa_id_seguro()` (que ya usamos arriba): sin
+        tenant_profile y fuera de DEBUG, `_get_empresa_id_seguro()` cae al
+        singleton de empresa sin condicion, mientras que
+        OrganizationalScope.resolve() exige DEBUG para ese mismo fallback y
+        lanza OrganizationalScopeError si no. Se captura explicitamente para
+        no convertir un request que hoy funciona (sin perfil, produccion,
+        via singleton) en un 500 - se degrada a "sin restriccion", el mismo
+        comportamiento que el `perfil is None` de la version anterior.
+        """
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        empresa_id = self._get_empresa_id_seguro()
+        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+
+        try:
+            scope = OrganizationalScope.resolve(self.request)
+            sede_ids, area_ids = scope.sede_ids, scope.area_ids
+        except OrganizationalScopeError:
+            sede_ids, area_ids = None, None
+
+        return self.selector_class.get_list(
+            empresa_id, search=search, sede_ids=sede_ids, area_ids=area_ids,
+        )
+
     def service_crear_orden_compra(self, data: dict, items_data: list, empresa):
         """
         Orquesta la creacion de la Orden de Compra desde el ViewSet.
+
+        [ADR-003] `sede` se resuelve aqui (via _get_sede(), heredado de
+        BaseServiceMixin) y se pasa explicita al business service - nunca se
+        re-deriva dentro de business_service.py/crud_service.py.
         """
-        return self.business_service_class.crear_orden_compra(data, items_data, empresa)
+        sede = self._get_sede()
+        return self.business_service_class.crear_orden_compra(data, items_data, empresa, sede)
 
     def service_actualizar_orden_compra(self, orden_uuid: str, data: dict, items_data: list = None):
         """

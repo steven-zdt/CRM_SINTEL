@@ -134,13 +134,43 @@ class OrdenCompraBusinessService:
 
     @staticmethod
     @transaction.atomic
-    def crear_orden_compra(data: dict, items_data: list, empresa: Any) -> Tuple[bool, Any, int]:
+    def crear_orden_compra(data: dict, items_data: list, empresa: Any, sede: Any) -> Tuple[bool, Any, int]:
         """
         Orquesta la creacion de una Orden de Compra.
-        Aplica Double Semantic Verification (DSV) en Plantilla, Proveedor, Proyecto y Documento Soporte.
+        Aplica Double Semantic Verification (DSV) en Plantilla, Proveedor, Proyecto, Documento
+        Soporte y Area (opcional). `sede` es un parametro explicito (ver ADR-003) - este metodo
+        nunca la resuelve por su cuenta.
         """
         logger.info(f"[OrdenCompraBusinessService:crear_orden_compra] Iniciando proceso para empresa={empresa.id}")
         try:
+            if sede is None:
+                return False, {"error": "sede_requerida", "message": "No hay ninguna Sede activa para esta empresa. Cree al menos una Sede antes de registrar ordenes de compra."}, 422
+            if getattr(sede, 'empresa_id', None) != empresa.id:
+                # Anti-IDOR: la sede resuelta por el contexto debe pertenecer a la misma empresa.
+                return False, {"error": "sede_invalida", "message": "La sede activa no pertenece a la empresa actual."}, 422
+
+            # DSV: Area (opcional) - si viene, debe pertenecer a la misma
+            # empresa Y a la misma Sede de la orden (F5, OSF: un Area
+            # siempre cuelga de una Sede especifica - permitir un Area de
+            # otra Sede dejaria la orden en un estado organizacionalmente
+            # inconsistente, ej. alcance=AREA filtrando por una combinacion
+            # sede/area que nunca puede coincidir con datos reales).
+            area_raw = data.get('area') or data.get('area_uuid')
+            if area_raw:
+                from apps.tenant.empresa.models import Area
+                area = OrdenCompraBusinessService._obtener_entidad_por_id_o_uuid(
+                    Area, area_raw, empresa.id
+                )
+                if not area:
+                    return False, {"error": "area_invalida", "message": "El area especificada no es valida o no pertenece a la empresa."}, 400
+                if area.sede_id != sede.id:
+                    return False, {"error": "area_invalida", "message": "El area especificada no pertenece a la sede de esta orden."}, 400
+                data.pop('area_uuid', None)
+                data['area'] = area
+            else:
+                data.pop('area_uuid', None)
+                data['area'] = None
+
             # 1. DSV: Plantilla (Obligatorio)
             plantilla_raw = data.get('plantilla') or data.get('plantilla_uuid')
             if not plantilla_raw:
@@ -197,7 +227,7 @@ class OrdenCompraBusinessService:
                 data['documento_soporte'] = None
 
             # 5. Crear a traves de CRUD
-            orden = OrdenCompraCRUDService.crear_orden(data, items_data, empresa)
+            orden = OrdenCompraCRUDService.crear_orden(data, items_data, empresa, sede)
             return True, orden, 201
 
         except ValidationError as e:
@@ -261,6 +291,30 @@ class OrdenCompraBusinessService:
                 else:
                     data.pop('documento_soporte_uuid', None)
                     data['documento_soporte'] = None
+
+            # 4. DSV: Area (Si viene en la peticion) - [OSF Fase F5] Hallazgo
+            # real: antes de esta fase 'area' nunca llegaba aqui (el
+            # serializer no lo declaraba, ver OrdenCompraCreateUpdateSerializer),
+            # asi que este bloque no existia - agregado simetrico a los de
+            # arriba, con la misma regla de consistencia sede/area que
+            # crear_orden_compra (un Area siempre pertenece a una Sede
+            # especifica; la Sede de la orden es inmutable tras crearla).
+            if 'area' in data or 'area_uuid' in data:
+                area_raw = data.get('area') or data.get('area_uuid')
+                if area_raw:
+                    from apps.tenant.empresa.models import Area
+                    area = OrdenCompraBusinessService._obtener_entidad_por_id_o_uuid(
+                        Area, area_raw, empresa_id
+                    )
+                    if not area:
+                        return False, {"error": "area_invalida", "message": "El area especificada no es valida o no pertenece a la empresa."}, 400
+                    if area.sede_id != orden.sede_id:
+                        return False, {"error": "area_invalida", "message": "El area especificada no pertenece a la sede de esta orden."}, 400
+                    data.pop('area_uuid', None)
+                    data['area'] = area
+                else:
+                    data.pop('area_uuid', None)
+                    data['area'] = None
 
             orden = OrdenCompraCRUDService.actualizar_orden(orden, data, items_data)
             return True, orden, 200

@@ -8,9 +8,10 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 
 from apps.config.api.pagination import StandardResultsSetPagination
-from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.api.permissions import HasOrganizationalScope, IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
 from apps.tenant.compras.services import (
     OrdenCompraServiceMixin,
@@ -27,9 +28,21 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class OrdenCompraViewSet(OrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para la gestion de Ordenes de Compra.
+
+    Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva. A
+    diferencia de las apps anteriores de esta fase, aqui SI hereda
+    SintelDSVMixin (piloto ADR-003) - get_empresa_id()/get_sede_id() son la
+    misma SSoT que OrganizationalContext.resolve() duplica (Fase 2), sin la
+    divergencia de las demas apps. Aun asi get_queryset() no se migro a
+    context.filter(): get_qs_list() (Fase F5, OSF) ya aplica un filtro
+    scope-aware mas especifico (alcance SEDE/AREA => conjunto COMPLETO de
+    sedes/areas permitidas, via OrganizationalScope) que el generico de
+    context.filter() (que solo resuelve la sede ACTIVA, una sola), y con
+    .only()/select_related propios del selector - migrar seria un cambio de
+    comportamiento real, no solo de mecanismo.
     """
     queryset = OrdenCompra.objects.none()
     serializer_class = OrdenCompraDetailSerializer
@@ -47,7 +60,11 @@ class OrdenCompraViewSet(OrdenCompraServiceMixin, SintelDSVMixin, BaseTenantView
     ordering = ["-fecha", "-consecutivo"]
 
     def get_permissions(self):
-        return [IsTenantMember(), IsTenantAdminOrReadOnly()]
+        # [ADR-003] HasOrganizationalScope: prueba de concepto de permisos
+        # con alcance organizacional (Fase 6). Solo aplicado aqui (no en
+        # PlantillaOrdenCompraViewSet ni en las otras 16 apps) porque
+        # Plantilla no es SedeAwareModel.
+        return [IsTenantMember(), IsTenantAdminOrReadOnly(), HasOrganizationalScope()]
 
     def get_queryset(self):
         """Usa el selector para obtener QuerySet optimizado."""
@@ -208,6 +225,12 @@ class OrdenCompraViewSet(OrdenCompraServiceMixin, SintelDSVMixin, BaseTenantView
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
 
         instance = get_object_or_404(OrdenCompra, uuid=uuid_val, empresa_id=empresa_id)
+        # [FASE 7, consolidacion OCF/OSF] get_object_or_404() no dispara
+        # check_object_permissions() como self.get_object() -- HasOrganizationalScope
+        # nunca se evaluaba para esta accion. Se invoca explicitamente aqui
+        # (mismo efecto que self.get_object(), sin depender de self.kwargs
+        # porque esta es una accion detail=False con uuid en query_params).
+        self.check_object_permissions(request, instance)
 
         context = {
             'instance': instance,
@@ -225,10 +248,12 @@ class OrdenCompraViewSet(OrdenCompraServiceMixin, SintelDSVMixin, BaseTenantView
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
 
         instance = get_object_or_404(OrdenCompra, uuid=uuid_val, empresa_id=empresa_id)
+        # [FASE 7, consolidacion OCF/OSF] ver nota identica en render_offcanvas_editar().
+        self.check_object_permissions(request, instance)
         return Response({'instance': instance, 'offcanvas_id': 'offcanvas-compra-detalle'}, template_name='tenant/compras/offcanvas_detalle_compras.html')
 
 
-class PlantillaOrdenCompraViewSet(PlantillaOrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para la gestion de Plantillas de Orden de Compra.
     """

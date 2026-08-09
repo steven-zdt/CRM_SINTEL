@@ -80,9 +80,16 @@ class OrdenCompraCRUDService:
 
     @staticmethod
     @transaction.atomic
-    def crear_orden(data: dict, items_data: list, empresa: Empresa) -> OrdenCompra:
+    def crear_orden(data: dict, items_data: list, empresa: Empresa, sede) -> OrdenCompra:
         """
         Crea una nueva Orden de Compra y sus items asociados dentro de una transaccion.
+
+        [ADR-003] `sede` es un parametro explicito, igual que `empresa`: nunca
+        se re-deriva dentro de esta capa. El llamador (business_service) es
+        responsable de resolverla (ver SintelDSVMixin.get_sede_id() /
+        _get_sede() en apps/tenant/api/mixins.py) antes de invocar esto.
+        `area` (opcional) sigue fluyendo dentro de `data` como cualquier otro
+        FK opcional de esta orden (proyecto, documento_soporte).
         """
         data = data.copy()
         consecutivo = data.pop('consecutivo')
@@ -98,6 +105,7 @@ class OrdenCompraCRUDService:
         # Crear instancia de la orden
         orden = OrdenCompra(
             empresa=empresa,
+            sede=sede,
             consecutivo=consecutivo,
             numero_documento=numero_documento,
             plantilla=plantilla,

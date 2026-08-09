@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from apps.tenant.compras.models import OrdenCompra, ItemOrdenCompra, PlantillaOrdenCompra
+from apps.tenant.empresa.models import Area
 from apps.tenant.proveedores.models import Proveedor
 from apps.tenant.proyectos.models import Proyecto
 from apps.tenant.gastos.models import DocumentoSoporte
@@ -88,6 +89,11 @@ class OrdenCompraListSerializer(serializers.ModelSerializer):
     proyecto_nombre = serializers.CharField(source='proyecto.nombre', read_only=True, default='')
     documento_soporte_numero = serializers.SerializerMethodField()
     plantilla_nombre = serializers.CharField(source='plantilla.nombre', read_only=True, default='')
+    # [OSF Fase F5] antes invisible: un listado puede traer ordenes de
+    # multiples sedes/areas a la vez (ver OrdenCompraSelector.get_list),
+    # sin esto no habia forma de distinguir de donde era cada fila.
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, default='')
+    area_nombre = serializers.CharField(source='area.nombre', read_only=True, default='')
 
     def get_documento_soporte_numero(self, obj) -> str:
         if obj.documento_soporte:
@@ -112,6 +118,8 @@ class OrdenCompraListSerializer(serializers.ModelSerializer):
             'proyecto_nombre',
             'documento_soporte_numero',
             'plantilla_nombre',
+            'sede_nombre',
+            'area_nombre',
         )
         read_only_fields = fields
 
@@ -127,6 +135,9 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
     documento_soporte_numero = serializers.SerializerMethodField()
     plantilla_nombre = serializers.CharField(source='plantilla.nombre', read_only=True, default='')
     plantilla_uuid = serializers.CharField(source='plantilla.uuid', read_only=True, default='')
+    # [OSF Fase F5] ver nota en OrdenCompraListSerializer.
+    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, default='')
+    area_nombre = serializers.CharField(source='area.nombre', read_only=True, default='')
 
     def get_documento_soporte_numero(self, obj) -> str:
         if obj.documento_soporte:
@@ -156,6 +167,8 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
             'documento_soporte_numero',
             'plantilla_nombre',
             'plantilla_uuid',
+            'sede_nombre',
+            'area_nombre',
             'items',
             'created_at',
             'updated_at',
@@ -171,6 +184,13 @@ class OrdenCompraCreateUpdateSerializer(serializers.ModelSerializer):
     proveedor = UUIDOrPKRelatedField(queryset=Proveedor.objects.all())
     proyecto = UUIDOrPKRelatedField(queryset=Proyecto.objects.all(), required=False, allow_null=True)
     documento_soporte = UUIDOrPKRelatedField(queryset=DocumentoSoporte.objects.all(), required=False, allow_null=True)
+    # [OSF Fase F5] Hallazgo real: este campo faltaba por completo aqui -
+    # OrdenCompraBusinessService.crear_orden_compra() ya tenia logica DSV
+    # completa para 'area' (opcional), pero como el serializer nunca lo
+    # declaraba, DRF lo descartaba de validated_data antes de llegar al
+    # business service - Area era, en la practica, IMPOSIBLE de asignar via
+    # la API pese a que el modelo/service la soportan.
+    area = UUIDOrPKRelatedField(queryset=Area.objects.all(), required=False, allow_null=True)
     items = ItemOrdenCompraSerializer(many=True, required=True)
 
     class Meta:
@@ -179,6 +199,7 @@ class OrdenCompraCreateUpdateSerializer(serializers.ModelSerializer):
             'plantilla',
             'proveedor',
             'proyecto',
+            'area',
             'documento_soporte',
             'fecha',
             'fecha_entrega',

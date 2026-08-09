@@ -53,6 +53,36 @@ def actualizar_empresa(data: dict) -> Empresa:
     return EmpresaService.update_empresa(data)
 
 
+@transaction.atomic
+def asegurar_estructura_organizacional_inicial(empresa: Empresa) -> Sede:
+    """Garantiza que `empresa` tenga al menos una Sede ("Principal") y que esa
+    Sede tenga al menos un Area ("General"). Idempotente en AMBOS niveles por
+    separado: una empresa con Sede pero sin ninguna Area (posible si la Sede
+    se creo por otra via, ej. CRUD manual, sin pasar por este seed) SI recibe
+    su Area "General" - no basta con "ya tiene una Sede" para saltarse todo,
+    como hacia la version anterior de esta funcion (hallazgo real, Fase F4 del
+    proyecto OSF: `shelltest1` tenia 1 Sede y 0 Area, confirmado por auditoria
+    empirica de los 3 tenants reales antes de corregir esto).
+
+    Punto de entrada unico para el seed de onboarding (apps/services/onboarding/
+    empresa_service.py) y para el backfill de empresas ya existentes
+    (management command backfill_sede_area) - ver docs/ADR-003-contexto-
+    organizacional-sede-area.md. Reutiliza SedeService/AreaService (arriba)
+    en vez de crear Sede/Area directamente, para no duplicar sus validaciones.
+    """
+    sede = Sede.objects.filter(empresa=empresa).order_by('nombre').first()
+    if sede is None:
+        sede = SedeService.crear_sede(empresa.id, {'nombre': 'Principal'})
+
+    if not Area.objects.filter(sede=sede).exists():
+        AreaService.crear_area(
+            empresa.id,
+            {'sede': sede.id, 'nombre': 'General', 'codigo_funcionamiento': 'GEN'},
+        )
+
+    return sede
+
+
 class SedeService:
     """
     Business Service para Sede. Orquesta validaciones y reglas de negocio sobre las primitivas CRUD.

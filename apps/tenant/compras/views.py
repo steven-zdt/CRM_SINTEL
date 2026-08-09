@@ -36,7 +36,27 @@ class OrdenCompraTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
 
         search = (self.request.GET.get("q") or "").strip() or None
         estado = self.request.GET.get("estado") or None
-        return OrdenCompraSelector.get_list(empresa_id=self._empresa_id, search=search, estado=estado)
+
+        # [OSF Fase F5] Hallazgo real: esta vista (la grilla HTML/HTMX que
+        # el usuario realmente ve, a diferencia de OrdenCompraViewSet, que
+        # es la API DRF) nunca aplicaba ningun filtro de sede/area - un
+        # perfil con alcance SEDE/AREA veia TODAS las ordenes de la empresa
+        # en la tabla real, sin restriccion. Corregido usando
+        # OrganizationalScope (conjunto completo de sedes/areas permitidas).
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+        try:
+            scope = OrganizationalScope.resolve(self.request)
+            sede_ids, area_ids = scope.sede_ids, scope.area_ids
+        except OrganizationalScopeError:
+            sede_ids, area_ids = None, None
+
+        return OrdenCompraSelector.get_list(
+            empresa_id=self._empresa_id, search=search, estado=estado,
+            sede_ids=sede_ids, area_ids=area_ids,
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
