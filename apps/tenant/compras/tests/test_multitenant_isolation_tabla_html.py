@@ -8,15 +8,15 @@ superficie nueva de esta fase, no es el backfill completo de TEST-A1
 (pendiente en Fase 7 del plan).
 """
 import pytest
+from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
 from rest_framework import status
 
 from apps.public.tenants.models import TenantMembership
 from apps.tenant.compras.models import OrdenCompra
-from apps.tenant.empresa.models import Empresa
+from apps.tenant.empresa.models import Empresa, Sede
 from apps.tenant.perfil.models import TenantProfile
 from apps.tenant.proveedores.models import Proveedor
-from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
@@ -30,9 +30,10 @@ def test_multitenant_isolation_compras_tabla_html(client, tenant1, tenant2):
         with schema_context('public'):
             TenantMembership.objects.create(client=tenant1, user=user1, rol="ADMIN")
 
+        sede1 = Sede.objects.create(empresa=emp1, nombre="Principal")
         prov1 = Proveedor.objects.create(empresa=emp1, razon_social="Proveedor Compras Tenant Uno", numero_documento="777", tipo_documento="NIT")
         OrdenCompra.objects.create(
-            empresa=emp1, proveedor=prov1, consecutivo=1, fecha="2026-05-01",
+            empresa=emp1, sede=sede1, proveedor=prov1, consecutivo=1, fecha="2026-05-01",
             subtotal=1000, impuestos=190, total=1190,
         )
 
@@ -43,9 +44,10 @@ def test_multitenant_isolation_compras_tabla_html(client, tenant1, tenant2):
         with schema_context('public'):
             TenantMembership.objects.create(client=tenant2, user=user2, rol="ADMIN")
 
+        sede2 = Sede.objects.create(empresa=emp2, nombre="Principal")
         prov2 = Proveedor.objects.create(empresa=emp2, razon_social="Proveedor Compras Tenant Dos", numero_documento="888", tipo_documento="NIT")
         OrdenCompra.objects.create(
-            empresa=emp2, proveedor=prov2, consecutivo=1, fecha="2026-05-01",
+            empresa=emp2, sede=sede2, proveedor=prov2, consecutivo=1, fecha="2026-05-01",
             subtotal=2000, impuestos=380, total=2380,
         )
 

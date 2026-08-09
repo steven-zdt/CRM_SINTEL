@@ -12,7 +12,7 @@ from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
 from apps.tenant.compras.services.business_service import OrdenCompraBusinessService
 from apps.tenant.compras.services.crud_service import PlantillaOrdenCompraCRUDService
 from apps.tenant.compras.services.selectors import PlantillaOrdenCompraSelector
-from apps.tenant.empresa.models import Empresa
+from apps.tenant.empresa.models import Empresa, Sede
 from apps.tenant.proveedores.models import Proveedor
 from tests.tenant.base_test import SintelTenantTestCase
 
@@ -32,6 +32,8 @@ class TestComprasPlantillas(SintelTenantTestCase):
             moneda="COP",
             direccion="Calle 123",
         )
+        # ADR-003: OrdenCompra ahora requiere sede explicita
+        self.sede = Sede.objects.create(empresa=self.empresa, nombre="Principal")
         # Create a mock supplier
         self.proveedor = Proveedor.objects.create(
             empresa=self.empresa,
@@ -99,7 +101,7 @@ class TestComprasPlantillas(SintelTenantTestCase):
 
         # 3. Call Business Service to create the order
         success, orden, status_code = OrdenCompraBusinessService.crear_orden_compra(
-            data=order_data, items_data=order_data["items"], empresa=self.empresa
+            data=order_data, items_data=order_data["items"], empresa=self.empresa, sede=self.sede
         )
         self.assertTrue(success)
 
@@ -141,7 +143,7 @@ class TestComprasPlantillas(SintelTenantTestCase):
 
         # First consumption (consecutivo = 10) succeeds
         success1, orden1, status_code1 = OrdenCompraBusinessService.crear_orden_compra(
-            order_data, order_data["items"], self.empresa
+            order_data, order_data["items"], self.empresa, self.sede
         )
         self.assertTrue(success1)
         plantilla.refresh_from_db()
@@ -149,7 +151,7 @@ class TestComprasPlantillas(SintelTenantTestCase):
 
         # Second consumption fails because consecutivo_actual (11) > rango_hasta (10)
         success2, errors2, status_code2 = OrdenCompraBusinessService.crear_orden_compra(
-            order_data, order_data["items"], self.empresa
+            order_data, order_data["items"], self.empresa, self.sede
         )
         self.assertFalse(success2)
         self.assertEqual(status_code2, 400)
@@ -183,7 +185,7 @@ class TestComprasPlantillas(SintelTenantTestCase):
         }
 
         success, errors, status_code = OrdenCompraBusinessService.crear_orden_compra(
-            order_data, order_data["items"], self.empresa
+            order_data, order_data["items"], self.empresa, self.sede
         )
         self.assertFalse(success)
         self.assertEqual(status_code, 400)
@@ -243,7 +245,7 @@ class TestComprasPlantillas(SintelTenantTestCase):
         }
 
         success, errors, status_code = OrdenCompraBusinessService.crear_orden_compra(
-            order_data, order_data["items"], self.empresa
+            order_data, order_data["items"], self.empresa, self.sede
         )
         self.assertFalse(success)
         self.assertEqual(status_code, 400)
