@@ -202,6 +202,65 @@ def test_sec_003_does_not_fire_when_check_object_permissions_present(tmp_path, m
     assert findings == []
 
 
+# --- ORG-017 (F20: SedeAwareModel sin autorizar) --------------------------
+
+def test_org_017_fires_on_unauthorized_sede_aware_model():
+    graph = Graph()
+    graph.add_node(
+        Node(NODE_MODEL, "gastos.DocumentoSoporte", {"class_name": "DocumentoSoporte", "inherits_sede_aware_model": True})
+    )
+
+    findings = rules._detect_org_017_unauthorized_sede_aware_model(graph)
+
+    assert any(f.rule_id == "ORG-017" and f.component == "gastos.DocumentoSoporte" for f in findings)
+
+
+def test_org_017_does_not_fire_on_allowlisted_compras():
+    graph = Graph()
+    graph.add_node(
+        Node(NODE_MODEL, "compras.OrdenCompra", {"class_name": "OrdenCompra", "inherits_sede_aware_model": True})
+    )
+
+    findings = rules._detect_org_017_unauthorized_sede_aware_model(graph)
+
+    assert findings == []
+
+
+def test_org_017_does_not_fire_on_models_without_sede_aware_model():
+    graph = Graph()
+    graph.add_node(
+        Node(NODE_MODEL, "clientes.Cliente", {"class_name": "Cliente", "inherits_sede_aware_model": False})
+    )
+
+    findings = rules._detect_org_017_unauthorized_sede_aware_model(graph)
+
+    assert findings == []
+
+
+# --- ORG-010 (F20: integracion critica sin empresa_id) --------------------
+
+def test_org_010_fires_when_dependency_classifier_reports_forbidden(tmp_path, monkeypatch):
+    from tools.organizational_governance import dependencies as deps
+
+    monkeypatch.setattr(deps, "TENANT_APPS_DIR", tmp_path)
+    monkeypatch.setattr("tools.organizational_governance.extract.TENANT_APPS_DIR", tmp_path)
+    (tmp_path / "a").mkdir(parents=True)
+    (tmp_path / "a" / "models.py").write_text("", encoding="utf-8")
+    (tmp_path / "b").mkdir(parents=True)
+    (tmp_path / "b" / "models.py").write_text("", encoding="utf-8")
+    services_dir = tmp_path / "b" / "services"
+    services_dir.mkdir(parents=True)
+    (services_dir / "business_service.py").write_text(
+        "def foo():\n    from apps.tenant.a.services.business_service import ABusinessService\n"
+        "    return ABusinessService.crear(data)\n",
+        encoding="utf-8",
+    )
+
+    findings = rules._detect_org_010_integration_without_empresa_id(Graph())
+
+    assert any(f.rule_id == "ORG-010" and f.component == "b->a" for f in findings)
+
+
 # --- Ejecucion real contra el repositorio (regresion, no sintetico) -------
 
 def test_run_all_rules_against_real_repo_is_clean():

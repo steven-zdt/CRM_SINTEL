@@ -257,3 +257,42 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
             f"/api/v1/compras/render-offcanvas/detalle/?uuid={self.orden_bar_com.uuid}"
         )
         self.assertEqual(resp_htmx.status_code, status.HTTP_403_FORBIDDEN, resp_htmx.content)
+
+    # ------------------------------------------------------------------
+    # F19 Test 5 (prompt maestro FASE 15-20): un cliente no puede inyectar
+    # empresa_id/sede_id/area_id en el payload para forzar el contexto
+    # organizacional de una orden nueva.
+    # ------------------------------------------------------------------
+
+    def test_payload_no_puede_inyectar_sede_id_en_creacion(self):
+        """`OrdenCompraCreateUpdateSerializer.Meta.fields` (apps/tenant/compras/api/serializers.py)
+        no declara `sede` como campo escribible -- DRF descarta cualquier
+        `sede`/`sede_id` que el cliente envie en el body antes de que llegue
+        al Business Service. La sede real se resuelve SIEMPRE server-side
+        (self._get_sede(), la sede activa del usuario) -- ver
+        OrdenCompraServiceMixin.service_crear_orden_compra()."""
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="SEDE",
+        )
+        # No hay sede_activa en sesion y el perfil no tiene sedes_asignadas ->
+        # resolve_sede_activa_id() cae a la Sede "Principal" por nombre: Barranquilla F7
+        # (alfabeticamente antes que "Bogota F7").
+        payload = {
+            "plantilla": str(self.plantilla.uuid),
+            "proveedor": str(self.proveedor.uuid),
+            "fecha": "2026-06-15",
+            "sede": str(self.bogota.uuid),  # intento de inyeccion - debe ser ignorado
+            "sede_id": self.bogota.id,       # idem, otra forma comun de intentarlo
+            "items": [
+                {"descripcion": "Item F19", "cantidad": "1", "valor_unitario": "50.00", "porcentaje_iva": "19"},
+            ],
+        }
+
+        resp = self.api_client.post("/api/v1/compras/", data=payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
+        orden_creada = OrdenCompra.objects.get(uuid=resp.json()["uuid"])
+        # La sede NO es la que el payload pedia (Bogota) -- es la resuelta
+        # server-side (la "Principal" alfabetica, Barranquilla F7).
+        self.assertNotEqual(orden_creada.sede_id, self.bogota.id)
+        self.assertEqual(orden_creada.sede_id, self.barranquilla.id)

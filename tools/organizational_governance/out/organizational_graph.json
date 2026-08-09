@@ -172,18 +172,18 @@
     },
     {
       "label": "GitCommit",
-      "id": "5bab0b967029",
-      "props": {
-        "subject": "fix(compras): agregar migracion inicial faltante - crea tablas OrdenCompra e ItemOrdenCompra",
-        "files_count": 2
-      }
-    },
-    {
-      "label": "GitCommit",
       "id": "60d8a333dc23",
       "props": {
         "subject": "feat(refactor): auditoria EKG dead-code, migracion Fase 5-BIS a django-tables2, y rebrand de dominio a sintel.net.co",
         "files_count": 868
+      }
+    },
+    {
+      "label": "GitCommit",
+      "id": "780b6a76ded1",
+      "props": {
+        "subject": "feat(governance): Knowledge Graph organizacional + motor de gobernanza (F13/F14)",
+        "files_count": 25
       }
     },
     {
@@ -204,9 +204,9 @@
     },
     {
       "label": "GitCommit",
-      "id": "d3255c3a8c1e",
+      "id": "e4032329382a",
       "props": {
-        "subject": "feat(workspace): agrega menu Ventas al sidebar",
+        "subject": "docs: completa el hash de commit real en F13_F14_FINAL_REPORT.md",
         "files_count": 1
       }
     },
@@ -3845,7 +3845,7 @@
       },
       "target": {
         "label": "App",
-        "id": "dashboard"
+        "id": "gastos"
       },
       "props": {}
     },
@@ -3857,43 +3857,7 @@
       },
       "target": {
         "label": "App",
-        "id": "proveedores"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "1d19d8f21d63"
-      },
-      "target": {
-        "label": "App",
-        "id": "ventas"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "1d19d8f21d63"
-      },
-      "target": {
-        "label": "App",
-        "id": "bancos"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "1d19d8f21d63"
-      },
-      "target": {
-        "label": "App",
-        "id": "empresa"
+        "id": "proyectos"
       },
       "props": {}
     },
@@ -3917,7 +3881,19 @@
       },
       "target": {
         "label": "App",
-        "id": "contabilidad"
+        "id": "ventas"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "1d19d8f21d63"
+      },
+      "target": {
+        "label": "App",
+        "id": "facturas"
       },
       "props": {}
     },
@@ -3941,7 +3917,7 @@
       },
       "target": {
         "label": "App",
-        "id": "clientes"
+        "id": "proveedores"
       },
       "props": {}
     },
@@ -3953,7 +3929,7 @@
       },
       "target": {
         "label": "App",
-        "id": "gastos"
+        "id": "clientes"
       },
       "props": {}
     },
@@ -3977,19 +3953,7 @@
       },
       "target": {
         "label": "App",
-        "id": "proyectos"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "1d19d8f21d63"
-      },
-      "target": {
-        "label": "App",
-        "id": "facturas"
+        "id": "contabilidad"
       },
       "props": {}
     },
@@ -4009,7 +3973,19 @@
       "rel_type": "MODIFIES",
       "source": {
         "label": "GitCommit",
-        "id": "c63b35e977a5"
+        "id": "1d19d8f21d63"
+      },
+      "target": {
+        "label": "App",
+        "id": "bancos"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "1d19d8f21d63"
       },
       "target": {
         "label": "App",
@@ -4021,11 +3997,11 @@
       "rel_type": "MODIFIES",
       "source": {
         "label": "GitCommit",
-        "id": "c63b35e977a5"
+        "id": "1d19d8f21d63"
       },
       "target": {
         "label": "App",
-        "id": "proveedores"
+        "id": "empresa"
       },
       "props": {}
     },
@@ -4037,19 +4013,7 @@
       },
       "target": {
         "label": "App",
-        "id": "ventas"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "c63b35e977a5"
-      },
-      "target": {
-        "label": "App",
-        "id": "bancos"
+        "id": "gastos"
       },
       "props": {}
     },
@@ -4073,6 +4037,18 @@
       },
       "target": {
         "label": "App",
+        "id": "proyectos"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "c63b35e977a5"
+      },
+      "target": {
+        "label": "App",
         "id": "cotizaciones"
       },
       "props": {}
@@ -4085,67 +4061,7 @@
       },
       "target": {
         "label": "App",
-        "id": "contabilidad"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "c63b35e977a5"
-      },
-      "target": {
-        "label": "App",
-        "id": "inventario"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "c63b35e977a5"
-      },
-      "target": {
-        "label": "App",
-        "id": "clientes"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "c63b35e977a5"
-      },
-      "target": {
-        "label": "App",
-        "id": "gastos"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "c63b35e977a5"
-      },
-      "target": {
-        "label": "App",
-        "id": "empleados"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "c63b35e977a5"
-      },
-      "target": {
-        "label": "App",
-        "id": "proyectos"
+        "id": "ventas"
       },
       "props": {}
     },
@@ -4169,7 +4085,91 @@
       },
       "target": {
         "label": "App",
+        "id": "proveedores"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "c63b35e977a5"
+      },
+      "target": {
+        "label": "App",
+        "id": "clientes"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "c63b35e977a5"
+      },
+      "target": {
+        "label": "App",
+        "id": "empleados"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "c63b35e977a5"
+      },
+      "target": {
+        "label": "App",
+        "id": "contabilidad"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "c63b35e977a5"
+      },
+      "target": {
+        "label": "App",
         "id": "perfil"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "c63b35e977a5"
+      },
+      "target": {
+        "label": "App",
+        "id": "bancos"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "c63b35e977a5"
+      },
+      "target": {
+        "label": "App",
+        "id": "dashboard"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "c63b35e977a5"
+      },
+      "target": {
+        "label": "App",
+        "id": "inventario"
       },
       "props": {}
     },
@@ -4205,7 +4205,7 @@
       },
       "target": {
         "label": "App",
-        "id": "perfil"
+        "id": "core"
       },
       "props": {}
     },
@@ -4217,103 +4217,7 @@
       },
       "target": {
         "label": "App",
-        "id": "core"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "dashboard"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "proveedores"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "ventas"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "landing"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "bancos"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "empresa"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "contabilidad"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "compras"
+        "id": "perfil"
       },
       "props": {}
     },
@@ -4326,42 +4230,6 @@
       "target": {
         "label": "App",
         "id": "core"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "clientes"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "cotizaciones"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "60d8a333dc23"
-      },
-      "target": {
-        "label": "App",
-        "id": "inventario"
       },
       "props": {}
     },
@@ -4385,7 +4253,7 @@
       },
       "target": {
         "label": "App",
-        "id": "empleados"
+        "id": "empresa"
       },
       "props": {}
     },
@@ -4409,7 +4277,91 @@
       },
       "target": {
         "label": "App",
+        "id": "cotizaciones"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
         "id": "facturas"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "ventas"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "compras"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "proveedores"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "clientes"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "empleados"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "contabilidad"
       },
       "props": {}
     },
@@ -4429,7 +4381,43 @@
       "rel_type": "MODIFIES",
       "source": {
         "label": "GitCommit",
-        "id": "8397540e859b"
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "bancos"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "dashboard"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
+      },
+      "target": {
+        "label": "App",
+        "id": "inventario"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "60d8a333dc23"
       },
       "target": {
         "label": "App",
@@ -4445,7 +4433,7 @@
       },
       "target": {
         "label": "App",
-        "id": "bancos"
+        "id": "core"
       },
       "props": {}
     },
@@ -4469,31 +4457,7 @@
       },
       "target": {
         "label": "App",
-        "id": "contabilidad"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "8397540e859b"
-      },
-      "target": {
-        "label": "App",
-        "id": "core"
-      },
-      "props": {}
-    },
-    {
-      "rel_type": "MODIFIES",
-      "source": {
-        "label": "GitCommit",
-        "id": "8397540e859b"
-      },
-      "target": {
-        "label": "App",
-        "id": "inventario"
+        "id": "facturas"
       },
       "props": {}
     },
@@ -4517,7 +4481,19 @@
       },
       "target": {
         "label": "App",
-        "id": "facturas"
+        "id": "contabilidad"
+      },
+      "props": {}
+    },
+    {
+      "rel_type": "MODIFIES",
+      "source": {
+        "label": "GitCommit",
+        "id": "8397540e859b"
+      },
+      "target": {
+        "label": "App",
+        "id": "bancos"
       },
       "props": {}
     },
@@ -4537,11 +4513,11 @@
       "rel_type": "MODIFIES",
       "source": {
         "label": "GitCommit",
-        "id": "5bab0b967029"
+        "id": "8397540e859b"
       },
       "target": {
         "label": "App",
-        "id": "compras"
+        "id": "inventario"
       },
       "props": {}
     },
@@ -4549,11 +4525,11 @@
       "rel_type": "MODIFIES",
       "source": {
         "label": "GitCommit",
-        "id": "d3255c3a8c1e"
+        "id": "8397540e859b"
       },
       "target": {
         "label": "App",
-        "id": "core"
+        "id": "landing"
       },
       "props": {}
     }

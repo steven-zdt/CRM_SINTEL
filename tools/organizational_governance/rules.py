@@ -381,6 +381,72 @@ def _detect_test_001_scope_usage_without_tests(graph: Graph) -> list[Finding]:
     return findings
 
 
+def _detect_org_010_integration_without_empresa_id(graph: Graph) -> list[Finding]:
+    """[F20, ORG-010] Toda integracion critica inter-app debe tener
+    empresa_id. Reutiliza el clasificador ya probado de dependencies.py
+    (FASE 15) en vez de reimplementar la deteccion - FORBIDDEN es
+    exactamente "import de BusinessService/CRUDService de otra app sin
+    empresa_id explicito detectado"."""
+    from tools.organizational_governance.dependencies import FORBIDDEN as DEP_FORBIDDEN
+    from tools.organizational_governance.dependencies import discover_dependency_edges
+
+    findings = []
+    for edge in discover_dependency_edges():
+        if edge.classification != DEP_FORBIDDEN:
+            continue
+        findings.append(
+            Finding(
+                rule_id="ORG-010",
+                severity=HIGH,
+                component=f"{edge.source_app}->{edge.target_app}",
+                file=edge.source_file,
+                line=edge.line,
+                symbol=edge.imported_symbol,
+                evidence=edge.evidence,
+                expected="toda integracion critica inter-app declara empresa_id explicito (Zero-Trust)",
+                actual="import de Service/CRUDService de otra app sin empresa_id detectado",
+                recommendation="Pasar empresa_id explicito a la llamada, o adoptar el patron Bridge si es una lectura.",
+            )
+        )
+    return findings
+
+
+# Modelos autorizados a heredar SedeAwareModel - lista cerrada, ampliar
+# solo tras una decision de negocio real (mismo criterio que ADR-005/F17).
+_SEDE_AWARE_MODEL_ALLOWLIST = frozenset({"compras.OrdenCompra"})
+
+
+def _detect_org_017_unauthorized_sede_aware_model(graph: Graph) -> list[Finding]:
+    """[F20, ORG-017] No introducir SedeAwareModel donde el dominio no lo
+    necesita - guarda de regresion directa contra el riesgo central que
+    esta fase entera advierte ("NO migrar masivamente sede sin demostrar
+    primero la necesidad de dominio"). Si un modelo nuevo hereda
+    SedeAwareModel sin estar en la lista ya decidida, esta regla lo marca
+    para que la decision se haga explicita (agregar a la lista tras
+    justificar el caso de uso), no por accidente de un refactor."""
+    findings = []
+    for model in graph.nodes_by_label("Model"):
+        if not model.props.get("inherits_sede_aware_model"):
+            continue
+        if model.qualified_id in _SEDE_AWARE_MODEL_ALLOWLIST:
+            continue
+        findings.append(
+            Finding(
+                rule_id="ORG-017",
+                severity=MEDIUM,
+                component=model.qualified_id,
+                file=f"apps/tenant/{model.qualified_id.split('.')[0]}/models.py",
+                line=None,
+                symbol=model.props.get("class_name", model.qualified_id),
+                evidence=f"{model.qualified_id} hereda SedeAwareModel, fuera de la lista autorizada {sorted(_SEDE_AWARE_MODEL_ALLOWLIST)}",
+                expected="SedeAwareModel solo se adopta tras una decision de negocio explicita (ADR-005/F17)",
+                actual="adopcion no registrada en la allowlist",
+                recommendation="Si es una decision real, agregar el modelo a _SEDE_AWARE_MODEL_ALLOWLIST con referencia al ADR/decision que lo justifica.",
+            )
+        )
+    return findings
+
+
 ALL_RULES: tuple[Rule, ...] = (
     Rule("ARCH-002", "Modelo tenant sin base reconocida", HIGH, CATEGORY_ARCHITECTURE,
          "Todo modelo tenant debe heredar SintelTenantBaseModel (directo o via SedeAwareModel/TimeStampedModel).",
@@ -406,6 +472,12 @@ ALL_RULES: tuple[Rule, ...] = (
     Rule("TEST-001", "Uso de scope sin test de adopcion", MEDIUM, CATEGORY_TEST_COVERAGE,
          "Toda app que consuma OrganizationalContext/Scope debe tener al menos un test de adopcion.",
          _detect_test_001_scope_usage_without_tests),
+    Rule("ORG-010", "Integracion critica sin empresa_id", HIGH, CATEGORY_INTEGRATIONS,
+         "Toda integracion critica inter-app debe declarar empresa_id explicito (Zero-Trust).",
+         _detect_org_010_integration_without_empresa_id),
+    Rule("ORG-017", "SedeAwareModel sin autorizar", MEDIUM, CATEGORY_ORGANIZATIONAL,
+         "No introducir SedeAwareModel donde el dominio no lo necesita (guarda contra migracion masiva no decidida).",
+         _detect_org_017_unauthorized_sede_aware_model),
 )
 
 
