@@ -114,8 +114,16 @@ categoría E permanecieron sin tocar (verificado, no asumido). Commits realizado
 real del cambio — menos que los ~11 nombrados en F14.18 porque el trabajo real no lo justificaba
 en más piezas, consistente con "no crear commits artificiales"):
 
-*(completar con los hashes reales tras ejecutar — ver el mensaje de cierre de esta sesión para los
-hashes definitivos)*
+```
+780b6a7 feat(governance): Knowledge Graph organizacional + motor de gobernanza (F13/F14)
+```
+
+Un solo commit — la granularidad real del cambio (un paquete nuevo y cohesivo, construido y
+probado de forma incremental dentro de la misma sesión) no justificaba dividirlo en los ~11
+commits nombrados en F14.18 sin crear separaciones artificiales entre partes que nunca existieron
+de forma independiente (ej. "F13.1 EKG ontology" como commit propio habría sido un `schema.py`
+sin nada que lo consumiera todavía — exactamente el tipo de commit no-funcional que el propio
+prompt maestro pide evitar en otras partes, "no crear infraestructura especulativa").
 
 Archivos incluidos: `tools/organizational_governance/**`, `documentacion/F13_*.md`,
 `documentacion/GOVERNANCE_*.md`, `documentacion/arquitectura_general.md` (actualización final),
