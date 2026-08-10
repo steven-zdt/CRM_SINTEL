@@ -22,7 +22,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito, MANUAL_EDITABLE_FIELDS, XML_IMMUTABLE_FIELDS
+from apps.tenant.facturas.models import Factura, ItemFactura, ItemNotaCredito, NotaCredito, MANUAL_EDITABLE_FIELDS, XML_IMMUTABLE_FIELDS
 from apps.tenant.facturas.services.crud_service import FacturaCRUDService
 
 # Importación segura para Document Ingest Pipeline Universal
@@ -688,6 +688,58 @@ class FacturaBusinessService:
                 xml_content=xml_text or "",
             )
             logger.info(f"[facturas:nc] Nota de Crédito {factura.numero} persistida y vinculada a referencia {ref_cufe}")
+
+            # v3.27: Items de la NC (CreditNoteLine, ya parseados por el pipeline
+            # universal en dto["items"] -- mismo shape que los items de Factura)
+            # + disparo real de ENTRADA_DEVOLUCION (Pull hacia Contabilidad se
+            # resuelve solo via ExtractorInventario, F22, sin cambios).
+            for idx, item in enumerate(dto.get("items", []), start=1):
+                cantidad = Decimal(str(item.get("cantidad") or "0"))
+                if cantidad <= 0:
+                    continue
+                valor_unitario = Decimal(str(item.get("valor_unitario") or "0"))
+                porcentaje_iva = Decimal(str(item.get("porcentaje_iva") or "0"))
+                subtotal_item = Decimal(str(item.get("subtotal") or (cantidad * valor_unitario)))
+                total_item = Decimal(str(item.get("total") or subtotal_item))
+                valor_iva = total_item - subtotal_item
+
+                item_inventario_uuid = None
+                item_inventario_tipo = None
+                item_inventario_codigo = None
+                codigo_item = (item.get("codigo") or "").strip()
+                if codigo_item:
+                    from apps.tenant.inventario.models import Producto
+                    producto_resuelto = Producto.objects.filter(
+                        empresa=empresa_instance, codigo=codigo_item, activo=True,
+                    ).only("id", "uuid").first()
+                    if producto_resuelto:
+                        item_inventario_uuid = producto_resuelto.uuid
+                        item_inventario_tipo = ItemNotaCredito.TipoItemInventario.PRODUCTO
+                        item_inventario_codigo = codigo_item
+
+                ItemNotaCredito.objects.create(
+                    empresa=empresa_instance,
+                    nota_credito=nota,
+                    linea_id=item.get("linea_id") or "",
+                    codigo=codigo_item,
+                    descripcion=item.get("descripcion") or "",
+                    item_inventario_uuid=item_inventario_uuid,
+                    item_inventario_tipo=item_inventario_tipo,
+                    item_inventario_codigo=item_inventario_codigo,
+                    cantidad=cantidad,
+                    unidad_medida=item.get("unidad_medida") or "UND",
+                    valor_unitario=valor_unitario,
+                    porcentaje_iva=porcentaje_iva,
+                    valor_iva=valor_iva,
+                    subtotal=subtotal_item,
+                    total=total_item,
+                    orden=idx,
+                )
+
+            FacturaBusinessService._generar_entrada_devolucion(
+                nota=nota, empresa_id=empresa_instance.id, sede_id=factura_original.sede_id,
+            )
+
             return {
                 "id": nota.id,
                 "uuid": str(nota.uuid),
@@ -731,6 +783,56 @@ class FacturaBusinessService:
             "created": True,
             "message": "Factura creada exitosamente.",
         }, 201
+
+    # ------------------------------------------------------------------
+    # v3.27: entrada de inventario real por devolucion (Nota Credito)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _generar_entrada_devolucion(nota: NotaCredito, empresa_id: int, sede_id: int | None) -> None:
+        """
+        Genera MovimientoInventario(ENTRADA_DEVOLUCION) por cada ItemNotaCredito
+        con producto real resuelto (item_inventario_uuid no nulo). Reutiliza
+        KardexService.registrar_movimiento() -- no se crea un servicio de
+        inventario nuevo. Costo desde Producto.costo_promedio (mismo criterio
+        que SALIDA_VENTA, nunca precio_unitario/valor_unitario del documento).
+        Idempotente via el mismo UniqueConstraint que ya usa MovimientoInventario
+        (documento_origen = ItemNotaCredito, mismo criterio de granularidad que
+        ItemVenta/RecepcionCompraItem). Items sin producto resoluble (servicios,
+        o codigo sin match en el catalogo) se omiten sin bloquear la NC -- mismo
+        patron de omision elegante que RecepcionCompraBusinessService.confirmar_recepcion().
+        """
+        from apps.tenant.inventario.models import MovimientoInventario, Producto
+        from apps.tenant.inventario.services.business_service import KardexService
+
+        items_con_producto = (
+            nota.items
+            .filter(item_inventario_uuid__isnull=False)
+            .only("id", "cantidad", "item_inventario_uuid")
+        )
+        for item in items_con_producto:
+            producto = Producto.objects.filter(
+                uuid=item.item_inventario_uuid, empresa_id=empresa_id, activo=True,
+            ).only("id", "costo_promedio").first()
+            if producto is None:
+                logger.info(
+                    "[FacturaBS] ItemNotaCredito id=%s referencia producto uuid=%s ya no "
+                    "resoluble -- se omite ENTRADA_DEVOLUCION.",
+                    item.id, item.item_inventario_uuid,
+                )
+                continue
+            KardexService.registrar_movimiento(
+                empresa_id=empresa_id,
+                producto_id=producto.id,
+                tipo=MovimientoInventario.TipoMovimiento.ENTRADA_DEVOLUCION,
+                cantidad=item.cantidad,
+                costo_unitario=producto.costo_promedio,
+                origen_referencia=f"NC {nota.numero}",
+                sede_id=sede_id,
+                documento_origen_app='facturas',
+                documento_origen_modelo='ItemNotaCredito',
+                documento_origen_id=item.id,
+            )
 
     @staticmethod
     def importar_documento(file_bytes, filename='ubl.xml', preview=False, async_mode=False, **kwargs):

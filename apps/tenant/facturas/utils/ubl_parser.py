@@ -845,15 +845,19 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None, persist: bool = T
         
         # Items: usar findall con namespaces dinámicos
         items_data = []
-        # Usar xpath para InvoiceLine (soporta local-name() y namespaces dinámicos)
-        invoice_lines = _x(invoice_root, ".//*[local-name()='InvoiceLine']")
+        # Usar xpath para InvoiceLine (soporta local-name() y namespaces dinámicos).
+        # CreditNoteLine incluido: mismo esquema UBL, usado por las Notas Credito
+        # (cbc:CreditedQuantity en vez de cbc:InvoicedQuantity, ver abajo).
+        invoice_lines = _x(invoice_root, ".//*[local-name()='InvoiceLine' or local-name()='CreditNoteLine']")
         for item_elem in invoice_lines:
             linea_id = extraer_texto(item_elem, './/cbc:ID', namespaces)
             codigo = extraer_texto(item_elem, './/cac:Item//cbc:SellersItemIdentification//cbc:ID', namespaces)
             descripcion = extraer_texto(item_elem, './/cbc:Description', namespaces)
-            cantidad = extraer_decimal(item_elem, './/cbc:InvoicedQuantity', namespaces)
+            cantidad = extraer_decimal_xpath(
+                item_elem, ".//*[local-name()='InvoicedQuantity' or local-name()='CreditedQuantity']", namespaces
+            )
             # Unidad de medida (usar xpath para mayor robustez)
-            unidad_medida_nodes = _x(item_elem, ".//*[local-name()='InvoicedQuantity']")
+            unidad_medida_nodes = _x(item_elem, ".//*[local-name()='InvoicedQuantity' or local-name()='CreditedQuantity']")
             if unidad_medida_nodes:
                 unidad_medida = unidad_medida_nodes[0].get('unitCode', 'UND')
             else:
