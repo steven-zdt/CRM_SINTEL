@@ -1,7 +1,31 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.26.0
-**Ultima actualizacion:** 2026-08-10 (DOC-M13) — cierre de FASE 25 (Auditoria Enterprise
+**Version:** 3.27.0
+**Ultima actualizacion:** 2026-08-10 (DOC-M14) — Devoluciones reales: NotaCredito ->
+ItemNotaCredito -> ENTRADA_DEVOLUCION. Cierra la brecha DEFERRED declarada desde F23
+(`F23_FACTURAS_BASELINE.md` S3, reafirmada en F24/F25): `NotaCredito` era documento
+de solo cabecera, sin forma de generar `ENTRADA_DEVOLUCION` por producto. Investigacion
+previa a la implementacion encontro que el gap real era menor al documentado: el
+pipeline universal (`apps/services/document_parser/xml_parser/parser.py`) ya extraia
+`CreditNoteLine` hacia `dto["items"]` (mismo shape que los items de Factura);
+`ENTRADA_DEVOLUCION` ya vivia en `KardexService.TIPOS_ENTRADA` y ya estaba mapeado en
+`ExtractorInventario` (F22, sin cambios) con `ReglaContable` seedeada. El unico gap
+real era que `guardar_desde_dto()` no consumia esos items para la rama NC. Ahora crea
+`ItemNotaCredito` por linea (resolviendo `Producto` por codigo, items sin match se
+omiten sin bloquear la NC) y dispara `KardexService.registrar_movimiento(ENTRADA_DEVOLUCION)`
+por cada item resuelto (costo desde `Producto.costo_promedio`, sede heredada de la
+factura original, idempotente via el mismo `UniqueConstraint` de `MovimientoInventario`).
+100% retrocompatible: una NC sin items en el DTO se sigue creando exactamente igual
+que antes. Sin UI de creacion manual (NC sigue siendo import-only, como Factura). Sin
+validacion "cantidad devuelta <= cantidad vendida" (sin FK confiable
+`ItemFactura -> ItemVenta`; la NC en DIAN ya es la autorizacion legal). **5/5 tests
+nuevos, 64/64 en regresion consolidada con el circuito F21-F25** (52 min). **Hallazgo
+de esta fase:** 18 tests preexistentes de `facturas` (`test_materializar_from_dto.py`,
+`test_importar_ubl_service.py`, `test_naturaleza_import_ubl.py`, `test_ingesta_ubl.py`,
+mas `test_5_factura_inexistente_error`) fallan igual con y sin este cambio (confirmado
+revirtiendo temporalmente con `git stash`) — deuda tecnica preexistente, documentada
+aqui pero no corregida (fuera del alcance de esta feature).
+**Actualizacion previa:** 2026-08-10 (DOC-M13) — cierre de FASE 25 (Auditoria Enterprise
 Transversal de Atomicidad, Rollback, Idempotencia y Retry), alcance real en
 `documentacion/F25_FINAL_REPORT.md`. Cierra por completo el hallazgo `F24-003` (DEFERRED):
 de los ~25 sitios detectados por escaneo AST con el mismo patron de atomicidad que F23/F24
@@ -920,7 +944,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | App | Archivos de Test (in-app + centralizado) | `test_multitenant_isolation*.py` / `test_cross_tenant*.py`? |
 |---|---:|---|
 | core | 63 | — |
-| facturas | 44 | Parcial (`test_multitenant_isolation_tabla_html.py`) |
+| facturas | 45 [DOC-M14: +1, `test_devolucion_nota_credito.py`] | Parcial (`test_multitenant_isolation_tabla_html.py`) |
 | empresa | 29 | — |
 | empleados | 13 | Parcial (`test_multitenant_isolation_tablas_html.py`, nuevo) |
 | gastos | 13 [DOC-M13: +1, F25 `test_f25_procesar_gasto_atomicidad.py`] | ✅ Completo (`test_multitenant_isolation.py`) |
@@ -936,7 +960,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | bancos | 6 | ✅ Completo (`test_multitenant_isolation.py` + `test_cross_tenant_isolation.py`) |
 | compras | 6 [DOC-M12: +1, F24 `test_f24_confirmar_recepcion_atomicidad.py`] [DOC-M9: +1, F21 `test_f21_recepcion_compra.py`] | Parcial (`test_multitenant_isolation_tabla_html.py`; +1 test real de 2 schemas `test_orden_de_otro_tenant_no_se_puede_recibir`, F21) |
 | ventas | 4 [DOC-M11: +2, F23 `test_f23_venta_inventario{,_multitenant}.py`] | ✅ (`test_multitenant_isolation.py`); +1 test real de 2 schemas F23 |
-| **Total atribuido por app** | **268** [DOC-M13: 267 + 1, F25] | **4 completos / 3 parciales de 17 apps** |
+| **Total atribuido por app** | **269** [DOC-M14: 268 + 1] | **4 completos / 3 parciales de 17 apps** |
 
 ---
 
@@ -987,19 +1011,19 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.26.0 — 2026-08-10, DOC-M13)
+## 12. Metricas del Proyecto (v3.27.0 — 2026-08-10, DOC-M14)
 
-**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). **[DOC-M13]** F25 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo 1 archivo de test (+1, `gastos`) y 1 correccion de codigo existente (`gastos/services/business_service.py`, ver `F25_FINDINGS.md` F25-001). El resto de filas no se re-verifico en esta pasada.
+**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). **[DOC-M13]** F25 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo 1 archivo de test (+1, `gastos`) y 1 correccion de codigo existente (`gastos/services/business_service.py`, ver `F25_FINDINGS.md` F25-001). **[DOC-M14]** Devoluciones reales agrega 1 modelo tenant nuevo (`ItemNotaCredito`, `facturas`) y 1 migracion (`0031_itemnotacredito.py`); 1 archivo de test (+1, `facturas`). El resto de filas no se re-verifico en esta pasada.
 
 | Metrica | Cantidad |
 |---|---|
 | Apps publicas activas | 5 |
 | Apps tenant registradas (`TENANT_APPS`) | 17 (15 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) |
 | Modelos publicos | 19 |
-| Modelos tenant | 70 concretos + 3 abstractos [DOC-M9: 67+3 F21] |
-| Total migraciones | 188 (179 tenant + 9 public) [DOC-M9: 186+2 F21] |
+| Modelos tenant | 71 concretos + 3 abstractos [DOC-M14: 70+1, `ItemNotaCredito`] |
+| Total migraciones | 189 (180 tenant + 9 public) [DOC-M14: 188+1] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
-| Archivos de test (atribuidos por app) | 268 [DOC-M13: 267+1 F25] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
+| Archivos de test (atribuidos por app) | 269 [DOC-M14: 268+1] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |
 | Namespaces JS activos | 15 (`window.Sintel.*`) + 3 sub-namespaces de feature |
 | Campos contables eliminados (v3.10.2) | 15 en 6 apps |
