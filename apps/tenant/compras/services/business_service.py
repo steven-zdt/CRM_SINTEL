@@ -561,8 +561,10 @@ class RecepcionCompraBusinessService:
 
             return True, recepcion, 200
         except ValidationError as e:
+            transaction.set_rollback(True)
             return False, e.detail if hasattr(e, 'detail') else {"detail": str(e)}, 400
         except Exception as e:
+            transaction.set_rollback(True)
             logger.error(f"Error en confirmar_recepcion: {e}", exc_info=True)
             return False, {"detail": f"Error interno del servidor: {str(e)}"}, 500
 
@@ -591,5 +593,6 @@ class RecepcionCompraBusinessService:
             recepcion = RecepcionCompraCRUDService.anular(recepcion)
             return True, recepcion, 200
         except Exception as e:
+            transaction.set_rollback(True)
             logger.error(f"Error en anular_recepcion: {e}", exc_info=True)
             return False, {"detail": f"Error interno del servidor: {str(e)}"}, 500
