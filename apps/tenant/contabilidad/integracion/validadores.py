@@ -40,7 +40,7 @@ def validar_periodo_abierto(periodo: PeriodoContable) -> None:
     """
     if periodo.estado == 'CERRADO':
         raise PeriodoCerradoError(
-            f"Periodo {periodo.nombre} esta cerrado. No se pueden crear asientos nuevos."
+            f"Periodo {periodo.periodo} esta cerrado. No se pueden crear asientos nuevos."
         )
 
 
