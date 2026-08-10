@@ -1185,7 +1185,7 @@ class NotaCreditoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
                 "created_at"
             )
         # Para retrieve, incluir más campos pero aún sin xml_content
-        return NotaCredito.objects.select_related("factura").filter(empresa_id=empresa_id).only(
+        return NotaCredito.objects.select_related("factura").prefetch_related("items").filter(empresa_id=empresa_id).only(
             "id", "uuid", "empresa_id", "numero", "cude", "fecha_emision", "moneda",
             "subtotal", "impuestos", "total", "motivo",
             "ref_factura_numero", "ref_factura_cufe",

@@ -6,7 +6,7 @@ Serializers para la app facturas.
 """
 from rest_framework import serializers
 
-from apps.tenant.facturas.models import Factura, ItemFactura, MailIngestionRun, NotaCredito, FacturaImpuesto
+from apps.tenant.facturas.models import Factura, ItemFactura, ItemNotaCredito, MailIngestionRun, NotaCredito, FacturaImpuesto
 from apps.tenant.facturas.services import DETAIL_FIELDS
 from apps.tenant.empresa.models import Sede
 
@@ -563,17 +563,36 @@ class NotaCreditoListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ItemNotaCreditoSerializer(serializers.ModelSerializer):
+    """
+    Serializer de solo lectura para ItemNotaCredito (v3.27). Las NC se crean
+    unicamente via importacion XML (mismo criterio que ItemFactura/NotaCredito),
+    por lo que no expone escritura -- ver NotaCreditoViewSet (POST/PUT/PATCH
+    bloqueados).
+    """
+    class Meta:
+        model = ItemNotaCredito
+        fields = (
+            "id", "uuid", "linea_id", "codigo", "descripcion", "cantidad", "unidad_medida",
+            "valor_unitario", "porcentaje_iva", "valor_iva", "subtotal", "total",
+            "es_servicio", "orden", "item_inventario_uuid", "item_inventario_tipo",
+            "item_inventario_codigo",
+        )
+        read_only_fields = fields
+
+
 class NotaCreditoDetailSerializer(serializers.ModelSerializer):
     """
     Serializer de detalle para nota crédito.
-    
+
     # WARNING: OPTIMIZACIÓN: NO incluye xml_content (artefacto pesado).
     [OK] El XML se expone en endpoint dedicado /xml/
     """
     factura_numero = serializers.CharField(source="factura.numero", read_only=True)
     factura_cufe = serializers.CharField(source="factura.cufe", read_only=True)
     factura_id = serializers.IntegerField(source="factura.id", read_only=True)
-    
+    items = ItemNotaCreditoSerializer(many=True, read_only=True)
+
     class Meta:
         model = NotaCredito
         fields = (
@@ -591,6 +610,7 @@ class NotaCreditoDetailSerializer(serializers.ModelSerializer):
             "factura_id",
             "factura_numero",
             "factura_cufe",
+            "items",
             "created_at",
             "updated_at",
         )
