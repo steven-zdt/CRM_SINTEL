@@ -821,6 +821,80 @@ class NotaCredito(SintelTenantBaseModel):
         """Alias de compatibilidad para la factura afectada por la nota credito."""
         return self.factura
 
+
+class ItemNotaCredito(SintelTenantBaseModel):
+    """
+    Linea de Nota Credito (CreditNoteLine UBL). Espejo minimo de ItemFactura --
+    mismo patron de referencia soft hacia Inventario (item_inventario_uuid,
+    sin FK real), sin los campos de retencion por linea (ya deprecados en
+    ItemFactura y no requeridos aqui: las retenciones de NC se manejan a nivel
+    de cabecera, ver NotaCredito.retefuente/reteica/reteiva).
+    """
+    class TipoItemInventario(models.TextChoices):
+        PRODUCTO = 'PRODUCTO', _('Producto de Inventario')
+        SERVICIO = 'SERVICIO', _('Servicio de Inventario')
+
+    uuid = models.UUIDField(
+        default=uuid.uuid4, editable=False, unique=True, db_index=True,
+        verbose_name=_('UUID'),
+        help_text=_('Identificador publico del item de nota credito'),
+    )
+    nota_credito = models.ForeignKey(
+        NotaCredito, on_delete=models.CASCADE, related_name='items',
+        verbose_name=_('Nota Credito'),
+    )
+
+    # UBL: ID de linea y codificacion estandar si existe
+    linea_id = models.CharField(max_length=10, blank=True, null=True, verbose_name=_('ID linea UBL'))
+    codigo = models.CharField(max_length=50, blank=True, null=True, verbose_name=_('Codigo del item'))
+    descripcion = models.CharField(max_length=500, verbose_name=_('Descripcion'))
+
+    # Referencia blanda hacia Inventario (no FK, respeta snapshot documental) --
+    # mismo patron que ItemFactura.item_inventario_uuid. Se resuelve por
+    # coincidencia de codigo contra el catalogo de Producto al momento de
+    # importar la NC (ver FacturaBusinessService.guardar_desde_dto).
+    item_inventario_uuid = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text=_('UUID del Producto o Servicio de Inventario. Referencia soft, sin FK.')
+    )
+    item_inventario_tipo = models.CharField(
+        max_length=10,
+        choices=TipoItemInventario.choices,
+        null=True, blank=True,
+        help_text=_('Tipo de item de inventario referenciado.')
+    )
+    item_inventario_codigo = models.CharField(
+        max_length=50, null=True, blank=True,
+        help_text=_('Snapshot del codigo de inventario al momento de vincular.')
+    )
+
+    cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('1.00'),
+                                   validators=[MinValueValidator(Decimal('0.01'))])
+    unidad_medida = models.CharField(max_length=10, default='UND', verbose_name=_('Unidad de Medida'))
+    valor_unitario = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                         validators=[MinValueValidator(Decimal('0.00'))])
+
+    porcentaje_iva = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'),
+                                         validators=[MinValueValidator(Decimal('0.00'))])
+    valor_iva = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                    validators=[MinValueValidator(Decimal('0.00'))])
+
+    subtotal = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                   validators=[MinValueValidator(Decimal('0.00'))])
+    total = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'),
+                                validators=[MinValueValidator(Decimal('0.00'))])
+
+    es_servicio = models.BooleanField(default=False, verbose_name=_('Es servicio?'))
+    orden = models.IntegerField(default=1, verbose_name=_('Orden'))
+
+    class Meta:
+        verbose_name = _('Item de Nota Credito')
+        verbose_name_plural = _('Items de Nota Credito')
+        ordering = ['nota_credito', 'orden']
+
+    def __str__(self):
+        return f"{self.nota_credito.numero} - {self.descripcion[:50]}"
+
     def save(self, *args, **kwargs):
         """Calcula total automáticamente si no está definido."""
         # # WARNING: v2.40: Auto-asignar empresa desde factura si no está asignada
