@@ -1,7 +1,31 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.24.0
-**Ultima actualizacion:** 2026-08-10 (DOC-M11) — cierre de FASE 23 (Venta -> Inventario -> Kardex
+**Version:** 3.25.0
+**Ultima actualizacion:** 2026-08-10 (DOC-M12) — cierre de FASE 24 (Auditoria E2E Enterprise del
+circuito F21+F22+F23), alcance real en `documentacion/F24_FINAL_REPORT.md`. F24 no agrega
+funcionalidad de negocio nueva: construye 12 tests E2E reales que ninguna fase anterior habia
+ejercitado juntos (Compra hasta Asiento, Venta hasta Asiento, Compra+Venta con reconciliacion de
+stock, multi-item, multi-sede, multi-tenant con DSV real de UUID cruzado, idempotencia contable por
+doble corrida, periodo cerrado, traslado sin asiento externo) y corrige 2 defectos reales
+preexistentes que esos escenarios expusieron: (1) **HIGH** — el mismo patron de atomicidad que F23
+encontro en `ventas` existia tambien en `RecepcionCompraBusinessService.confirmar_recepcion()`
+(compras): al procesar varios `RecepcionCompraItem` en un loop dentro de un unico
+`@transaction.atomic`, si el item N fallaba validacion despues de que el item N-1 ya hubiera
+escrito su `MovimientoInventario` real, Django confirmaba esa escritura igual porque el `except` no
+relanzaba ni forzaba `transaction.set_rollback(True)` — corregido igual que F23 corrigio su propio
+caso. (2) **MEDIUM** — `validar_periodo_abierto()` (`contabilidad/integracion/validadores.py`)
+referenciaba `periodo.nombre`, un campo que no existe en `PeriodoContable` (el real es
+`periodo.periodo`, `YYYY-MM`), enmascarando el mensaje de "periodo cerrado" real detras de un
+`AttributeError` — la proteccion en si nunca fallo (el extractor seguia rechazando la
+contabilizacion), solo el diagnostico; corregido con el nombre de campo correcto. **57/57 tests en
+regresion consolidada final F21+F22+F23+F24** (`documentacion/F24_REGRESSION_REPORT.md`). **0
+migraciones nuevas.** Governance `FINAL STATUS: PASS` sostenido. **Deuda DEFERRED declarada**
+(`documentacion/F24_FINDINGS.md` F24-003): el mismo patron de atomicidad detectado por escaneo AST
+en otros 25 sitios de `compras`/`ventas`/`facturas`, no verificado ni corregido individualmente por
+proporcionalidad de alcance — recomendada una auditoria dedicada fuera de una fase de negocio
+especifica. Devoluciones/despacho parcial/reverso por anulacion siguen DEFERRED sin cambios (F24
+solo confirmo, via auditoria, que ese estado sigue correctamente documentado).
+**Actualizacion previa:** 2026-08-10 (DOC-M11) — cierre de FASE 23 (Venta -> Inventario -> Kardex
 -> Costo de Venta -> Contabilidad), alcance real en `documentacion/F23_FINAL_REPORT.md`. Cierra la
 ultima brecha declarada por F22 (nota DOC-M10 abajo): `SALIDA_VENTA` no tenia datos reales porque
 `ventas`/`facturas` nunca llamaban a `KardexService`. Ahora
@@ -876,7 +900,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | empleados | 13 | Parcial (`test_multitenant_isolation_tablas_html.py`, nuevo) |
 | gastos | 12 | ✅ Completo (`test_multitenant_isolation.py`) |
 | dashboard | 12 | — |
-| contabilidad | 12 [DOC-M10: +3, F22 `test_f22_extractor_inventario_{mapping,integration,multitenant}.py`] | ✅ Nuevo (`test_multitenant_isolation.py`); +1 test real de 2 schemas F22 (`test_extractor_de_un_tenant_no_extrae_movimientos_de_otro_tenant`) |
+| contabilidad | 14 [DOC-M12: +2, F24 `test_f24_e2e_circuito_completo.py`, `test_f24_e2e_multitenant_dsv.py`] [DOC-M10: +3, F22 `test_f22_extractor_inventario_{mapping,integration,multitenant}.py`] | ✅ Nuevo (`test_multitenant_isolation.py`); +2 tests reales de 2 schemas F22/F24 |
 | clientes | 8 | — |
 | perfil | 6 | — |
 | inventario | 9 [DOC-M9: +1, F21 `test_f21_traslado_inventario.py`] | Parcial (1 test real de 2 schemas, `test_no_se_puede_trasladar_a_sede_de_otro_tenant`, F21) |
@@ -885,9 +909,9 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | proveedores | 6 | — |
 | proyectos | 8 | — |
 | bancos | 6 | ✅ Completo (`test_multitenant_isolation.py` + `test_cross_tenant_isolation.py`) |
-| compras | 5 [DOC-M9: +1, F21 `test_f21_recepcion_compra.py`] | Parcial (`test_multitenant_isolation_tabla_html.py`; +1 test real de 2 schemas `test_orden_de_otro_tenant_no_se_puede_recibir`, F21) |
+| compras | 6 [DOC-M12: +1, F24 `test_f24_confirmar_recepcion_atomicidad.py`] [DOC-M9: +1, F21 `test_f21_recepcion_compra.py`] | Parcial (`test_multitenant_isolation_tabla_html.py`; +1 test real de 2 schemas `test_orden_de_otro_tenant_no_se_puede_recibir`, F21) |
 | ventas | 4 [DOC-M11: +2, F23 `test_f23_venta_inventario{,_multitenant}.py`] | ✅ (`test_multitenant_isolation.py`); +1 test real de 2 schemas F23 |
-| **Total atribuido por app** | **264** [DOC-M11: 262 + 2, F23] | **4 completos / 3 parciales de 17 apps** |
+| **Total atribuido por app** | **267** [DOC-M12: 264 + 3, F24] | **4 completos / 3 parciales de 17 apps** |
 
 ---
 
@@ -938,9 +962,9 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.24.0 — 2026-08-10, DOC-M11)
+## 12. Metricas del Proyecto (v3.25.0 — 2026-08-10, DOC-M12)
 
-**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). El resto de filas no se re-verifico en esta pasada.
+**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). El resto de filas no se re-verifico en esta pasada.
 
 | Metrica | Cantidad |
 |---|---|
@@ -950,7 +974,7 @@ python manage.py check
 | Modelos tenant | 70 concretos + 3 abstractos [DOC-M9: 67+3 F21] |
 | Total migraciones | 188 (179 tenant + 9 public) [DOC-M9: 186+2 F21] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
-| Archivos de test (atribuidos por app) | 264 [DOC-M11: 262+2 F23] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
+| Archivos de test (atribuidos por app) | 267 [DOC-M12: 264+3 F24] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |
 | Namespaces JS activos | 15 (`window.Sintel.*`) + 3 sub-namespaces de feature |
 | Campos contables eliminados (v3.10.2) | 15 en 6 apps |
