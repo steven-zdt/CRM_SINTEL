@@ -225,17 +225,20 @@ class GastoBusinessService:
             
         except ValidationError as e:
             # Error de DRF
+            transaction.set_rollback(True)
             logger.warning(f"[GastoBusinessService:procesar_gasto] Error de validacion API: {e.detail}")
             return False, {"error": "validacion_api", "message": e.detail}, 400
-            
+
         except DjangoValidationError as e:
             # Error de Modelo (full_clean)
+            transaction.set_rollback(True)
             error_dict = e.message_dict if hasattr(e, 'message_dict') else {"non_field_errors": str(e)}
             logger.warning(f"[GastoBusinessService:procesar_gasto] Error de validacion Django: {error_dict}")
             logger.warning(f"[GastoBusinessService:procesar_gasto] Documento data al fallar: {ds_data}")
             return False, {"error": "validacion", "message": error_dict}, 400
-            
+
         except Exception as e:
+            transaction.set_rollback(True)
             logger.error(f"[GastoBusinessService:procesar_gasto] Error critico: {str(e)}", exc_info=True)
             return False, {"error": "error_interno", "message": str(e)}, 500
 
