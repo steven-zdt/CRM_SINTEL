@@ -16,8 +16,9 @@ from django.core.management.base import BaseCommand
 from django_tenants.utils import get_tenant_model, schema_context
 
 from apps.tenant.contabilidad.integracion.extractores import (
-    ExtractorGastos,
     ExtractorFacturas,
+    ExtractorGastos,
+    ExtractorInventario,
     ExtractorNomina,
 )
 
@@ -27,6 +28,7 @@ EXTRACTORES_DISPONIBLES = {
     'gastos': ExtractorGastos,
     'facturas': ExtractorFacturas,
     'nomina': ExtractorNomina,
+    'inventario': ExtractorInventario,
 }
 
 
