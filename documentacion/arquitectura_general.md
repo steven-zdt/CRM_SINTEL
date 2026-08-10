@@ -1,7 +1,31 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.23.0
-**Ultima actualizacion:** 2026-08-10 (DOC-M10) — cierre de FASE 22 (Integracion Contable Real de
+**Version:** 3.24.0
+**Ultima actualizacion:** 2026-08-10 (DOC-M11) — cierre de FASE 23 (Venta -> Inventario -> Kardex
+-> Costo de Venta -> Contabilidad), alcance real en `documentacion/F23_FINAL_REPORT.md`. Cierra la
+ultima brecha declarada por F22 (nota DOC-M10 abajo): `SALIDA_VENTA` no tenia datos reales porque
+`ventas`/`facturas` nunca llamaban a `KardexService`. Ahora
+`VentaBusinessService.procesar_y_facturar_venta()` genera `MovimientoInventario(SALIDA_VENTA)`
+real por cada `ItemVenta` con producto (excluye servicios), en el momento en que la Venta pasa a
+`FACTURADA_DIAN`, reutilizando `KardexService.registrar_movimiento()` sin duplicar nada — costo
+tomado de `Producto.costo_promedio` (nunca `precio_unitario`/`precio_venta`), sede propagada desde
+el mismo parametro `sede_id` que ya usa `Factura.sede` (`OrganizationalContext`, sin nuevo campo en
+`Venta`), idempotencia via el mismo `UniqueConstraint` de `MovimientoInventario` que F21 establecio
+(documento origen = `ItemVenta`, no `Venta`, mismo criterio de granularidad de F21).
+`ExtractorInventario` (F22, **sin cambios**) detecta estos movimientos automaticamente — 0
+modificaciones a `apps/tenant/contabilidad/`. **Hallazgo destacado:** se encontro y corrigio un bug
+real preexistente de atomicidad en `procesar_y_facturar_venta()` — el metodo esta decorado
+`@transaction.atomic` pero su propio `try/except` capturaba toda excepcion sin volver a lanzarla,
+por lo que Django nunca revertia escrituras parciales (`Venta`/`Factura`) en caso de error; F23 lo
+expuso en la practica (primer punto de fallo real despues de escrituras) y lo corrigio con
+`transaction.set_rollback(True)`. **9/9 tests nuevos pasan, 45/45 en regresion consolidada
+F21+F22+F23** (`documentacion/F23_TEST_MATRIX.md`). **0 migraciones nuevas.** **Reducciones de
+alcance declaradas** (`documentacion/F23_FINAL_REPORT.md` §5): devoluciones (`ENTRADA_DEVOLUCION`
+desde `NotaCredito`) DEFERRED — `NotaCredito` no tiene lineas de producto/cantidad, crear esa
+granularidad requeriria un modelo nuevo fuera del alcance minimo; reverso de inventario por
+anulacion no aplica (`anular_venta()` rechaza estructuralmente cualquier venta ya facturada, no
+existe el escenario); despacho/entrega parcial no existe en el modelo `Venta`/`ItemVenta`.
+**Actualizacion previa:** 2026-08-10 (DOC-M10) — cierre de FASE 22 (Integracion Contable Real de
 Inventario), alcance real en `documentacion/F22_FINAL_REPORT.md`. Cierra la ultima brecha
 declarada por F21 (nota DOC-M9 abajo, §6.3): `ExtractorInventario.extraer_pendientes()` estaba
 deshabilitado (`return []`) — ahora implementado real: `MovimientoInventario -> ExtractorInventario
@@ -578,7 +602,7 @@ Los campos `cuenta_contable_uuid` / `cuenta_*_uuid` fueron **eliminados de todos
 | `excepciones.py` | Jerarquia `ContabilidadError` y subclases |
 | `extractores/base.py` | `AbstractExtractor` — interfaz comun |
 | `extractores/gastos.py` | `ExtractorGastos` — extrae `DocumentoSoporte` pendientes (sin `cuenta_gasto_uuid`) |
-| `extractores/inventario.py` | `ExtractorInventario` — **[DOC-M10, F22]** implementado real (antes deshabilitado, ver F21 mas abajo). Extrae `MovimientoInventario` con `producto` no nulo cuyo `tipo` este en `ENTRADA_COMPRA`/`SALIDA_VENTA`/`ENTRADA_AJUSTE`/`SALIDA_BAJA`/`SALIDA_CONSUMO`/`ENTRADA_DEVOLUCION` (mapeados a `TipoTransaccion` ya existente en `dtos.py`, sin crear contrato nuevo). `TRASLADO_SALIDA`/`TRASLADO_ENTRADA` y movimientos de `ActivoFijo` quedan deliberadamente excluidos (ver `documentacion/F22_ACCOUNTING_CONTRACT.md`). Registrado en `EXTRACTORES_DISPONIBLES` de `backfill_contabilidad.py`. 20/20 tests reales (`documentacion/F22_TEST_MATRIX.md`) |
+| `extractores/inventario.py` | `ExtractorInventario` — implementado real desde F22 (antes deshabilitado). Extrae `MovimientoInventario` con `producto` no nulo cuyo `tipo` este en `ENTRADA_COMPRA`/`SALIDA_VENTA`/`ENTRADA_AJUSTE`/`SALIDA_BAJA`/`SALIDA_CONSUMO`/`ENTRADA_DEVOLUCION` (mapeados a `TipoTransaccion` ya existente en `dtos.py`, sin crear contrato nuevo). `TRASLADO_SALIDA`/`TRASLADO_ENTRADA` y movimientos de `ActivoFijo` quedan deliberadamente excluidos. Registrado en `EXTRACTORES_DISPONIBLES` de `backfill_contabilidad.py`. **[DOC-M11, F23]** `SALIDA_VENTA` ya tiene datos reales — `VentaBusinessService.procesar_y_facturar_venta()` genera esos movimientos, el extractor los detecta sin ningun cambio propio. 20/20 tests F22 + 9/9 tests F23 reales (`documentacion/F22_TEST_MATRIX.md`, `F23_TEST_MATRIX.md`) |
 | `extractores/facturas.py` | `ExtractorFacturas` — extrae `Factura` ACEPTADA pendientes (sin `cuenta_contable_uuid`) |
 | `extractores/nomina.py` | `ExtractorNomina` — extrae todos los `Devengo` no anulados (sin filtro por cuenta) |
 
@@ -814,6 +838,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | Integracion Inter-App + Empresa/Sede/Area (2026-08-09) | `documentacion/F15_F20_FINAL_REPORT.md` | Grafo de dependencias inter-app (`dependencies.py`), matriz de obligatoriedad organizacional (`ORGANIZATIONAL_FIELD_MATRIX.md`), estado de rollout por app (`F17_SEDE_ROLLOUT_STATUS.md`), procesos de negocio colombianos (`F18_COLOMBIAN_BUSINESS_FLOWS.md`) — cobertura tecnica, no certificacion legal (`COLOMBIA_COMPLIANCE_TRACEABILITY.md`) |
 | Compras -> Recepcion -> Inventario -> Sede -> Kardex -> Traslados -> Contabilidad (F21, 2026-08-09) | `documentacion/F21_FINAL_REPORT.md` | Cierra la brecha `compras->inventario`: `RecepcionCompra`/`RecepcionCompraItem` (`documentacion/F21_RECEPCION_INVENTARIO.md`), `TrasladoInventario` entre sedes (`documentacion/F21_TRASLADOS_SEDES.md`), decisiones de alcance organizacional (`F21_ORGANIZATIONAL_DECISIONS.md`), 16/16 tests reales (`F21_TEST_MATRIX.md`), estado fase por fase (`F21_EXECUTION_STATUS.md`) |
 | Integracion Contable Real de Inventario (F22, 2026-08-10) | `documentacion/F22_FINAL_REPORT.md` | Activa `ExtractorInventario` (Pull real, antes deshabilitado): matriz de movimientos y contrato contable (`documentacion/F22_ACCOUNTING_CONTRACT.md`), flujo operativo (`F22_INVENTORY_ACCOUNTING.md`), auditoria de inventario/extractor (`F22_INVENTARIO_BASELINE.md`, `F22_EXTRACTOR_INVENTARIO_BASELINE.md`), analisis de backfill historico (`F22_HISTORICAL_BACKFILL_ANALYSIS.md`), 20/20 tests reales + 19/19 F21 sin regresion (`F22_TEST_MATRIX.md`), estado fase por fase (`F22_EXECUTION_STATUS.md`) |
+| Venta -> Inventario -> Kardex -> Costo -> Contabilidad (F23, 2026-08-10) | `documentacion/F23_FINAL_REPORT.md` | Cierra la brecha `ventas->inventario`: contrato Venta->Inventario (`documentacion/F23_SALE_INVENTORY_CONTRACT.md`), politica del evento de salida (`F23_INVENTORY_ISSUE_POLICY.md`), auditoria de ventas/facturas (`F23_VENTAS_BASELINE.md`, `F23_FACTURAS_BASELINE.md`), bug de atomicidad real encontrado y corregido en `procesar_y_facturar_venta()`, 9/9 tests reales + 45/45 en regresion consolidada F21+F22+F23 (`F23_TEST_MATRIX.md`), estado fase por fase (`F23_EXECUTION_STATUS.md`) |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
@@ -861,8 +886,8 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | proyectos | 8 | — |
 | bancos | 6 | ✅ Completo (`test_multitenant_isolation.py` + `test_cross_tenant_isolation.py`) |
 | compras | 5 [DOC-M9: +1, F21 `test_f21_recepcion_compra.py`] | Parcial (`test_multitenant_isolation_tabla_html.py`; +1 test real de 2 schemas `test_orden_de_otro_tenant_no_se_puede_recibir`, F21) |
-| ventas | 2 | ✅ (`test_multitenant_isolation.py`) |
-| **Total atribuido por app** | **262** [DOC-M10: 259 + 3, F22] | **4 completos / 3 parciales de 17 apps** |
+| ventas | 4 [DOC-M11: +2, F23 `test_f23_venta_inventario{,_multitenant}.py`] | ✅ (`test_multitenant_isolation.py`); +1 test real de 2 schemas F23 |
+| **Total atribuido por app** | **264** [DOC-M11: 262 + 2, F23] | **4 completos / 3 parciales de 17 apps** |
 
 ---
 
@@ -913,9 +938,9 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.23.0 — 2026-08-10, DOC-M10)
+## 12. Metricas del Proyecto (v3.24.0 — 2026-08-10, DOC-M11)
 
-**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). El resto de filas no se re-verifico en esta pasada.
+**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). El resto de filas no se re-verifico en esta pasada.
 
 | Metrica | Cantidad |
 |---|---|
@@ -925,7 +950,7 @@ python manage.py check
 | Modelos tenant | 70 concretos + 3 abstractos [DOC-M9: 67+3 F21] |
 | Total migraciones | 188 (179 tenant + 9 public) [DOC-M9: 186+2 F21] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
-| Archivos de test (atribuidos por app) | 262 [DOC-M10: 259+3 F22] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
+| Archivos de test (atribuidos por app) | 264 [DOC-M11: 262+2 F23] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |
 | Namespaces JS activos | 15 (`window.Sintel.*`) + 3 sub-namespaces de feature |
 | Campos contables eliminados (v3.10.2) | 15 en 6 apps |
