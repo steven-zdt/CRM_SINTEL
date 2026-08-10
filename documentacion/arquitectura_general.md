@@ -1,7 +1,32 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.25.0
-**Ultima actualizacion:** 2026-08-10 (DOC-M12) — cierre de FASE 24 (Auditoria E2E Enterprise del
+**Version:** 3.26.0
+**Ultima actualizacion:** 2026-08-10 (DOC-M13) — cierre de FASE 25 (Auditoria Enterprise
+Transversal de Atomicidad, Rollback, Idempotencia y Retry), alcance real en
+`documentacion/F25_FINAL_REPORT.md`. Cierra por completo el hallazgo `F24-003` (DEFERRED):
+de los ~25 sitios detectados por escaneo AST con el mismo patron de atomicidad que F23/F24
+corrigieron (`@transaction.atomic` + `except` que retorna sin `raise` ni
+`transaction.set_rollback(True)`), F25 clasifico cada uno individualmente leyendo su codigo
+real. Encontro **1 bug real nuevo** (fuera del alcance original de F24-003, dentro del
+alcance extendido de F25 a `gastos`): `GastoBusinessService.procesar_gasto()` creaba el
+`DocumentoSoporte` y luego un loop de `RetencionesService.crear_retencion()` (escrituras
+crudas sin savepoint propio) — si la retencion N fallaba tras la N-1 ya creada, el documento
+y la primera retencion quedaban comprometidos pese a reportar error; corregido igual que
+F23/F24 con `transaction.set_rollback(True)`, con evidencia ANTES(FAIL)/DESPUES(PASS)
+real. Los **13 candidatos restantes** (compras/ventas/facturas) resultaron
+`SAFE_BY_DESIGN`/`FALSE_POSITIVE` — cada uno tiene una unica escritura real delegada a otro
+metodo `@transaction.atomic` (savepoint independiente, auto-revertido ante cualquier
+excepcion interna sin importar el `except` externo) — y **no se modificaron** (regla
+explicita: no tocar codigo solo para silenciar el AST). El caso mas notable:
+`FacturaBusinessService.guardar_desde_dto()` (5 `except`, el conteo mas alto) resulto ser el
+mas seguro de todos, porque su secuencia real de escrituras no tiene ningun manejo local de
+excepciones que pudiera absorberlas. **59/59 tests en regresion consolidada final
+F21+F22+F23+F24+F25** (`documentacion/F25_REGRESSION_REPORT.md`). **0 migraciones nuevas.**
+Governance `FINAL STATUS: PASS` sostenido. Tambien confirmo (sin cambios necesarios):
+idempotencia de retry HTTP/Celery ya cubierta por el mecanismo existente
+(`UniqueConstraint`+CUFE), y proteccion de stock/asiento concurrente ya cubierta por
+`select_for_update()`/`UniqueConstraint` respectivamente.
+**Actualizacion previa:** 2026-08-10 (DOC-M12) — cierre de FASE 24 (Auditoria E2E Enterprise del
 circuito F21+F22+F23), alcance real en `documentacion/F24_FINAL_REPORT.md`. F24 no agrega
 funcionalidad de negocio nueva: construye 12 tests E2E reales que ninguna fase anterior habia
 ejercitado juntos (Compra hasta Asiento, Venta hasta Asiento, Compra+Venta con reconciliacion de
@@ -898,7 +923,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | facturas | 44 | Parcial (`test_multitenant_isolation_tabla_html.py`) |
 | empresa | 29 | — |
 | empleados | 13 | Parcial (`test_multitenant_isolation_tablas_html.py`, nuevo) |
-| gastos | 12 | ✅ Completo (`test_multitenant_isolation.py`) |
+| gastos | 13 [DOC-M13: +1, F25 `test_f25_procesar_gasto_atomicidad.py`] | ✅ Completo (`test_multitenant_isolation.py`) |
 | dashboard | 12 | — |
 | contabilidad | 14 [DOC-M12: +2, F24 `test_f24_e2e_circuito_completo.py`, `test_f24_e2e_multitenant_dsv.py`] [DOC-M10: +3, F22 `test_f22_extractor_inventario_{mapping,integration,multitenant}.py`] | ✅ Nuevo (`test_multitenant_isolation.py`); +2 tests reales de 2 schemas F22/F24 |
 | clientes | 8 | — |
@@ -911,7 +936,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | bancos | 6 | ✅ Completo (`test_multitenant_isolation.py` + `test_cross_tenant_isolation.py`) |
 | compras | 6 [DOC-M12: +1, F24 `test_f24_confirmar_recepcion_atomicidad.py`] [DOC-M9: +1, F21 `test_f21_recepcion_compra.py`] | Parcial (`test_multitenant_isolation_tabla_html.py`; +1 test real de 2 schemas `test_orden_de_otro_tenant_no_se_puede_recibir`, F21) |
 | ventas | 4 [DOC-M11: +2, F23 `test_f23_venta_inventario{,_multitenant}.py`] | ✅ (`test_multitenant_isolation.py`); +1 test real de 2 schemas F23 |
-| **Total atribuido por app** | **267** [DOC-M12: 264 + 3, F24] | **4 completos / 3 parciales de 17 apps** |
+| **Total atribuido por app** | **268** [DOC-M13: 267 + 1, F25] | **4 completos / 3 parciales de 17 apps** |
 
 ---
 
@@ -962,9 +987,9 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.25.0 — 2026-08-10, DOC-M12)
+## 12. Metricas del Proyecto (v3.26.0 — 2026-08-10, DOC-M13)
 
-**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). El resto de filas no se re-verifico en esta pasada.
+**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). **[DOC-M13]** F25 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo 1 archivo de test (+1, `gastos`) y 1 correccion de codigo existente (`gastos/services/business_service.py`, ver `F25_FINDINGS.md` F25-001). El resto de filas no se re-verifico en esta pasada.
 
 | Metrica | Cantidad |
 |---|---|
@@ -974,7 +999,7 @@ python manage.py check
 | Modelos tenant | 70 concretos + 3 abstractos [DOC-M9: 67+3 F21] |
 | Total migraciones | 188 (179 tenant + 9 public) [DOC-M9: 186+2 F21] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
-| Archivos de test (atribuidos por app) | 267 [DOC-M12: 264+3 F24] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
+| Archivos de test (atribuidos por app) | 268 [DOC-M13: 267+1 F25] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |
 | Namespaces JS activos | 15 (`window.Sintel.*`) + 3 sub-namespaces de feature |
 | Campos contables eliminados (v3.10.2) | 15 en 6 apps |
