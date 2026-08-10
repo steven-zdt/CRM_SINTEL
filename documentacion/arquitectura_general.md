@@ -1,7 +1,8 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.21.0
-**Ultima actualizacion:** 2026-08-09 (DOC-M8) — cierre de FASE 15-20 (Integracion Inter-App + Contexto Empresa/Sede/Area), alcance real en `documentacion/F15_F20_FINAL_REPORT.md`. Se extendio `tools/organizational_governance/` (no se creo un segundo motor) con `dependencies.py`: grafo real de 368 aristas de import inter-app entre las 17 apps, clasificadas (`ALLOWED`/`CONTROLLED`/`PUSH_CONTROLLED`/`PULL`/`FORBIDDEN`/`UNKNOWN`) y verificadas contra codigo fuente real — la primera version del clasificador marco 10 aristas legitimas como `FORBIDDEN`, corregido tras leer cada una (documentado como proceso en `F15_INTEGRATION_BASELINE.md` §3, no solo como resultado). 8 ciclos de dependencia detectados y explicados (ninguno es un `ImportError` real, por el patron de imports locales del proyecto). Motor de gobernanza ahora con **10 reglas** (+`ORG-010`, +`ORG-017`), **33/33 tests**, `FINAL STATUS: PASS`. **0 migraciones de esquema nuevas** — decision explicita registrada (`F17_SEDE_ROLLOUT_STATUS.md`): la necesidad de negocio para las apps pendientes ya se analizo y descarto en FASE 10 anterior, y el propio pedido de esta fase prohibe migracion masiva sin esa necesidad demostrada. 2 brechas funcionales reales documentadas (no fabricadas): `compras` no genera `MovimientoInventario` al recibir una orden; no existe operacion de traslado de inventario entre sedes. **Advertencia explicita:** los documentos `F20_COLOMBIAN_GOVERNANCE.md`/`COLOMBIA_COMPLIANCE_TRACEABILITY.md` son cobertura tecnica verificada por lectura de codigo, NO certificacion de cumplimiento legal colombiano (DIAN/Decreto 2420/Ley 1581) — ninguna cita normativa especifica fue investigada ni verificada contra fuente autoritativa en esta sesion.
+**Version:** 3.22.0
+**Ultima actualizacion:** 2026-08-09 (DOC-M9) — cierre de FASE 21 (Compras -> Recepcion -> Inventario -> Sede -> Kardex -> Traslados -> Contabilidad), alcance real en `documentacion/F21_FINAL_REPORT.md`. Cierra la brecha `compras -> inventario` que F15-F20 (nota DOC-M8 abajo) habia documentado como pendiente: `OrdenCompra -> RecepcionCompra -> RecepcionCompraItem -> MovimientoInventario`, via `KardexService.registrar_movimiento()` extendido (no duplicado) con `sede_id`/idempotencia (`documento_origen_*` + `UniqueConstraint` condicional, mismo patron que `AsientoContable`). Agrega `TrasladoInventario` (nuevo, `inventario`) — flujo SOLICITADO->APROBADO->EN_TRANSITO->RECIBIDO/CANCELADO entre 2 `Sede`, resuelto via `StockPorSedeSelector` (stock por sede calculado en lectura, sin persistir un campo nuevo en `Producto`). `RecepcionCompra` adopta `SedeAwareModel` (extension del piloto de `compras`, ver §3.2/§3.6) — 1 finding real de gobernanza (`ORG-017`) resuelto registrando la decision en la allowlist, no suprimiendo la regla. **16/16 tests reales pasan** (`documentacion/F21_TEST_MATRIX.md`). **Contabilidad NO se toco**: se audito el extractor de inventario (`apps/tenant/contabilidad/integracion/extractores/inventario.py`) y se confirmo que ya estaba deshabilitado antes de F21 (`extraer_pendientes()` retorna `[]` incondicionalmente, sin ningun mecanismo real de contabilizacion) — deuda preexistente, documentada, no una regresion de esta fase (ver §6.3). **Reducciones de alcance declaradas** (`documentacion/F21_ORGANIZATIONAL_DECISIONS.md`): sin frontend/HTMX (2 ViewSets nuevos son API-only), `TrasladoInventario` limitado a 1 producto por operacion (sin `TrasladoInventarioItem` multi-item).
+**Actualizacion previa:** 2026-08-09 (DOC-M8) — cierre de FASE 15-20 (Integracion Inter-App + Contexto Empresa/Sede/Area), alcance real en `documentacion/F15_F20_FINAL_REPORT.md`. Se extendio `tools/organizational_governance/` (no se creo un segundo motor) con `dependencies.py`: grafo real de 368 aristas de import inter-app entre las 17 apps, clasificadas (`ALLOWED`/`CONTROLLED`/`PUSH_CONTROLLED`/`PULL`/`FORBIDDEN`/`UNKNOWN`) y verificadas contra codigo fuente real — la primera version del clasificador marco 10 aristas legitimas como `FORBIDDEN`, corregido tras leer cada una (documentado como proceso en `F15_INTEGRATION_BASELINE.md` §3, no solo como resultado). 8 ciclos de dependencia detectados y explicados (ninguno es un `ImportError` real, por el patron de imports locales del proyecto). Motor de gobernanza ahora con **10 reglas** (+`ORG-010`, +`ORG-017`), **33/33 tests**, `FINAL STATUS: PASS`. **0 migraciones de esquema nuevas** — decision explicita registrada (`F17_SEDE_ROLLOUT_STATUS.md`): la necesidad de negocio para las apps pendientes ya se analizo y descarto en FASE 10 anterior, y el propio pedido de esta fase prohibe migracion masiva sin esa necesidad demostrada. 2 brechas funcionales reales documentadas (no fabricadas): `compras` no genera `MovimientoInventario` al recibir una orden; no existe operacion de traslado de inventario entre sedes. **Advertencia explicita:** los documentos `F20_COLOMBIAN_GOVERNANCE.md`/`COLOMBIA_COMPLIANCE_TRACEABILITY.md` son cobertura tecnica verificada por lectura de codigo, NO certificacion de cumplimiento legal colombiano (DIAN/Decreto 2420/Ley 1581) — ninguna cita normativa especifica fue investigada ni verificada contra fuente autoritativa en esta sesion.
 **Actualizacion previa:** 2026-08-09 (DOC-M7) — cierre de FASE 13 (Knowledge Graph Organizacional) + FASE 14 (Gobernanza Automatica). `tools/organizational_governance/` (paquete nuevo, independiente de `tools/ekg/`): grafo real (165 entidades, 220 relaciones) + motor de gobernanza con 8 reglas (23/23 tests), 0 findings.
 **Actualizacion previa:** 2026-08-09 (DOC-M6) — sincronizacion tras cerrar el plan de consolidacion OCF/OSF completo (FASE 0-12). Trabajo de OCF/OSF commiteado (5 commits, `0295932`..`34fc020`); 2 bugs reales encontrados y corregidos.
 **Actualizacion previa:** 2026-08-09 (DOC-M5) — pasada de validacion completa contra codigo real (conteo directo de apps/migraciones/modelos/tests/endpoints/namespaces JS) que corrigio numeros internamente contradictorios en §2.2/§9/§12 y establecio el estado real de OCF/OSF contra codigo (agente de investigacion dedicado). Detalle completo en el historial de este documento.
@@ -122,7 +123,7 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 | `apps/tenant/facturas/` | `facturas` | Factura, ItemFactura, NotaCredito, MailIngestionRun, MailInboxState, FacturaAnexos, FacturaImpuesto | 30 | Facturacion electronica DIAN (XML, envio, estados) |
 | `apps/tenant/contabilidad/` | `contabilidad` | CatalogoMaestroNIIF, CuentaContable, TipoComprobante, AsientoContable, MovimientoContable, PeriodoContable, ReglaContable, TarifaImpuesto, ConfiguracionRetenciones, Retencion, PlantillaContable, LineaPlantilla, ImpuestoDocumento | 16 | PUC NIIF, asientos, extractores Pull, agente IA, Motor de Plantillas |
 | `apps/tenant/gastos/` | `gastos` | ResolucionDIAN, DocumentoSoporte | 22 | Gastos operativos, documentos soporte, retenciones |
-| `apps/tenant/inventario/` | `inventario` | CategoriaItem, Producto, Servicio, ActivoFijo, MovimientoInventario, HistorialServicio (+ TimeStampedModel abstract) | 10 | Productos, servicios, activos fijos, Kardex unificado |
+| `apps/tenant/inventario/` | `inventario` | CategoriaItem, Producto, Servicio, ActivoFijo, MovimientoInventario, TrasladoInventario (F21), HistorialServicio (+ TimeStampedModel abstract) | 11 | Productos, servicios, activos fijos, Kardex unificado, traslado de stock entre sedes (F21) |
 | `apps/tenant/empleados/` | `empleados` | Empleado, Contrato, Devengo, ResolucionDIAN, TransmisionNominaDIAN, LiquidacionPrestacion | 13 | Nomina colombiana, devengos, contratos, liquidaciones |
 | `apps/tenant/cotizaciones/` | `cotizaciones` | Cotizacion, CotizacionItem (+ Producto y Servicio propios) | 5 | Cotizaciones comerciales, vinculacion con facturas |
 | `apps/tenant/clientes/` | `clientes` | Cliente, ContactoCliente, Cartera | 8 | CRM basico, terceros clientes, cartera, retenciones |
@@ -130,13 +131,13 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 | `apps/tenant/proyectos/` | `proyectos` | Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, TareaCorta, TareaDiariaProyecto | 20 | Gestion de proyectos, presupuesto, tareas cortas |
 | `apps/tenant/dashboard/` | `dashboard` | SnapshotMetricaDiaria | 3 | Dashboard ejecutivo, metricas consolidadas |
 | `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria | 5 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
-| `apps/tenant/compras/` | `compras` | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra | 7 | Ordenes de compra a proveedores (agregada 2026-06-17, ver `.agent/AUDITORIA_FLUJO_COMPRAS.md`) |
+| `apps/tenant/compras/` | `compras` | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra, RecepcionCompra (F21, hereda `SedeAwareModel`), RecepcionCompraItem (F21) | 8 | Ordenes de compra a proveedores + Recepcion de Compras -> Inventario (F21, ver `documentacion/F21_RECEPCION_INVENTARIO.md`) |
 | `apps/tenant/ventas/` | `ventas` | ResolucionFacturacion, Venta, ItemVenta | 3 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
 
 **Nota (`ResolucionDIAN` duplicado):** `gastos` y `empleados` tienen cada una su propia clase `ResolucionDIAN` — son dos modelos distintos, no un bug de referencia cruzada (hallazgo confirmado durante la auditoria EKG 2026-08-07, ver `documentacion/INFORME_FINAL_EKG_GOBERNANZA_2026-08-07.md` §4.1).
 
-**Total tenant models: 67 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M5, corregido, conteo real 2026-08-09 via `grep '^class .*(Model|Base)'` por app]**, reemplaza el "52 + 1 abstract" que este documento reportaba antes (desactualizado por las migraciones nuevas de contabilidad/proveedores/clientes/empleados/facturas listadas arriba, la mayoria sin commitear aun — ver advertencia general al inicio del documento).
-**Total migraciones: 177 (tenant) + 9 (public) = 186 total** — **[DOC-M5, corregido]** conteo directo de archivos `NNNN_*.py` en cada carpeta `migrations/`, reemplaza el "133" que este documento reportaba antes.
+**Total tenant models: 70 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M9, 2026-08-09]** +3 sobre el conteo DOC-M5 (67) por los modelos nuevos de F21: `RecepcionCompra`, `RecepcionCompraItem` (`compras`), `TrasladoInventario` (`inventario`).
+**Total migraciones: 179 (tenant) + 9 (public) = 188 total** — **[DOC-M9, 2026-08-09]** +2 sobre el conteo DOC-M5 (177 tenant) por las migraciones de F21: `tenant_compras.0008_recepcioncompra_recepcioncompraitem_and_more`, `tenant_inventario.0011_trasladoinventario_and_more` — ambas aplicadas en los 3 schemas de tenant reales (`migrate_schemas --tenant`), `makemigrations --check` limpio.
 
 ### 2.3. Apps de Infraestructura Tenant (sin modelos de negocio)
 
@@ -176,7 +177,7 @@ Todos los modelos del esquema tenant heredan de `SintelTenantBaseModel`, nunca d
 
 **Proteccion en `save()`:** el modelo base lanza `ValueError` si `empresa_id` es `None`, evitando registros huerfanos por error de programacion.
 
-**Extension opcional — `SedeAwareModel` (ADR-003, `docs/ADR-003-contexto-organizacional-sede-area.md`):** mixin abstracto que hereda de `SintelTenantBaseModel` y agrega `sede`/`area` (Contexto Organizacional Empresa->Sede->Area). Opt-in, no reemplaza `SintelTenantBaseModel` — piloto unico hoy: `apps/tenant/compras/models.py:OrdenCompra`.
+**Extension opcional — `SedeAwareModel` (ADR-003, `docs/ADR-003-contexto-organizacional-sede-area.md`):** mixin abstracto que hereda de `SintelTenantBaseModel` y agrega `sede`/`area` (Contexto Organizacional Empresa->Sede->Area). Opt-in, no reemplaza `SintelTenantBaseModel` — piloto: `apps/tenant/compras/models.py:OrdenCompra` y, desde F21, `RecepcionCompra` (misma app, extension del piloto ya aprobado, no una app nueva adoptando el mixin — ver `documentacion/F21_ORGANIZATIONAL_DECISIONS.md` §1). La lista de adopcion autorizada es una allowlist cerrada verificada por gobernanza (`tools/organizational_governance/rules.py:_SEDE_AWARE_MODEL_ALLOWLIST`, regla `ORG-017`) — cualquier modelo nuevo que herede `SedeAwareModel` sin estar en esa lista falla el `--report` de gobernanza hasta que la decision se documente y se registre ahi.
 
 ### 3.3. Regla Zero-Trust de Consultas
 
@@ -256,9 +257,12 @@ de `documentacion/ORGANIZATIONAL_SCOPE_MIGRATION_STATUS.md`:
   consolidacion: `HasOrganizationalScope` deniega objetos con `sede_id=None`, mientras que el
   filtrado de listas de las 6 apps de abajo trata esos mismos registros como visibles (100% de los
   historicos de esas apps tienen `sede=NULL`) — ver `documentacion/OSF_TECHNICAL_AUDIT.md` §4.
-- `SedeAwareModel` (el mixin de modelo) tambien sigue heredado **solo** por `OrdenCompra`
-  (`apps/tenant/compras/models.py`) — decision confirmada, no pendiente: el rollout a las demas
-  apps usa un patron mas liviano (siguiente punto) en vez de migracion de esquema, ver ADR-005.
+- `SedeAwareModel` (el mixin de modelo) sigue heredado **solo** dentro de `compras`
+  (`OrdenCompra`, y desde F21 tambien `RecepcionCompra` — ver §2.2) — decision confirmada, no
+  pendiente: el rollout a las demas apps usa un patron mas liviano (siguiente punto) en vez de
+  migracion de esquema, ver ADR-005. La adopcion esta cerrada por una allowlist verificada por
+  gobernanza (`ORG-017`, ver §3.2) — no basta con heredar el mixin en un modelo nuevo, hay que
+  registrar la decision.
 - Lo que si se extendio: **filtrado consciente de alcance a nivel de selector/business-service**
   (`OrganizationalScope.filter()` / `filter_by_scope()` / `filter_by_scope_null_safe()`, en
   `apps/tenant/core/services/organizational_scope.py` y `organizational_filters.py`) — presente en
@@ -554,7 +558,7 @@ Los campos `cuenta_contable_uuid` / `cuenta_*_uuid` fueron **eliminados de todos
 | `excepciones.py` | Jerarquia `ContabilidadError` y subclases |
 | `extractores/base.py` | `AbstractExtractor` — interfaz comun |
 | `extractores/gastos.py` | `ExtractorGastos` — extrae `DocumentoSoporte` pendientes (sin `cuenta_gasto_uuid`) |
-| `extractores/inventario.py` | `ExtractorInventario` — extrae `MovimientoInventario` pendientes |
+| `extractores/inventario.py` | `ExtractorInventario` — **[DOC-M9, F21]** deshabilitado: `extraer_pendientes()` retorna `[]` incondicionalmente. Verificado (auditoria F21, `documentacion/F21_BASELINE.md` §5): 0 codigo real en `apps/tenant/inventario` conecta a `Contabilizador`/`ReglaContable`. Ningun `MovimientoInventario` (compra, venta, ajuste, ni las entradas/traslados nuevos de F21) genera asiento contable hoy — deuda preexistente a F21, no una regresion; decision de no reactivarlo en `documentacion/F21_ORGANIZATIONAL_DECISIONS.md` §5 |
 | `extractores/facturas.py` | `ExtractorFacturas` — extrae `Factura` ACEPTADA pendientes (sin `cuenta_contable_uuid`) |
 | `extractores/nomina.py` | `ExtractorNomina` — extrae todos los `Devengo` no anulados (sin filtro por cuenta) |
 
@@ -736,7 +740,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | `/api/v1/empresas/` | empresa | Empresa, Sede, Area |
 | `/api/v1/facturas/` | facturas | Factura, ItemFactura, NotaCredito |
 | `/api/v1/contabilidad/` | contabilidad | CuentaContable, AsientoContable, Retencion, ReglaContable, PlantillaContable |
-| `/api/v1/inventario/` | inventario | Producto, Servicio, ActivoFijo, MovimientoInventario, HistorialServicio, CategoriaItem |
+| `/api/v1/inventario/` | inventario | Producto, Servicio, ActivoFijo, MovimientoInventario, HistorialServicio, CategoriaItem, TrasladoInventario (F21, `/inventario/traslados/`) |
 | `/api/v1/perfil/` | perfil | TenantProfile |
 | `/api/v1/dashboard/` | dashboard | Metricas consolidadas |
 | `/api/v1/core/` | core | Auth bridge, onboarding, configuraciones globales, contexto organizacional (`/core/contexto/`) |
@@ -747,7 +751,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | `/api/v1/clientes/` | clientes | Cliente, ContactoCliente, Cartera |
 | `/api/v1/cotizaciones/` | cotizaciones | Cotizacion, CotizacionItem |
 | `/api/v1/proyectos/` | proyectos | Proyecto, TareaCorta, AsignacionPersonal |
-| `/api/v1/compras/` | compras | OrdenCompra, ItemOrdenCompra, PlantillaOrdenCompra |
+| `/api/v1/compras/` | compras | OrdenCompra, ItemOrdenCompra, PlantillaOrdenCompra, RecepcionCompra (F21, `/compras/recepciones/`) |
 | `/api/v1/ventas/` | ventas | Venta, ItemVenta, ResolucionFacturacion |
 | `/api/v1/impuestos/` (public) | impuestos | Catalogo DIAN |
 
@@ -788,6 +792,7 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | Consolidacion OCF/OSF (2026-08-09) | `documentacion/ORGANIZATIONAL_SCOPE_MIGRATION_STATUS.md` | Indice maestro de las 12 fases (auditoria de codigo real, ADR-004/005, matriz de cobertura de 17 apps, piloto `compras`, `facturas`, `Ventas->Facturas`, rollout controlado, consolidacion git) — enlaza los 12 documentos de detalle. Cierre: `documentacion/ORGANIZATIONAL_SCOPE_BASELINE_FINAL.md` |
 | Knowledge Graph Organizacional + Gobernanza Automatica (2026-08-09) | `documentacion/F13_F14_FINAL_REPORT.md` | `tools/organizational_governance/` (grafo + motor de reglas, independiente de `tools/ekg/`) — estado fase por fase en `documentacion/F13_F14_EXECUTION_STATUS.md`, findings en `documentacion/GOVERNANCE_REMEDIATION_PLAN.md` |
 | Integracion Inter-App + Empresa/Sede/Area (2026-08-09) | `documentacion/F15_F20_FINAL_REPORT.md` | Grafo de dependencias inter-app (`dependencies.py`), matriz de obligatoriedad organizacional (`ORGANIZATIONAL_FIELD_MATRIX.md`), estado de rollout por app (`F17_SEDE_ROLLOUT_STATUS.md`), procesos de negocio colombianos (`F18_COLOMBIAN_BUSINESS_FLOWS.md`) — cobertura tecnica, no certificacion legal (`COLOMBIA_COMPLIANCE_TRACEABILITY.md`) |
+| Compras -> Recepcion -> Inventario -> Sede -> Kardex -> Traslados -> Contabilidad (F21, 2026-08-09) | `documentacion/F21_FINAL_REPORT.md` | Cierra la brecha `compras->inventario`: `RecepcionCompra`/`RecepcionCompraItem` (`documentacion/F21_RECEPCION_INVENTARIO.md`), `TrasladoInventario` entre sedes (`documentacion/F21_TRASLADOS_SEDES.md`), decisiones de alcance organizacional (`F21_ORGANIZATIONAL_DECISIONS.md`), 16/16 tests reales (`F21_TEST_MATRIX.md`), estado fase por fase (`F21_EXECUTION_STATUS.md`) |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
@@ -828,15 +833,15 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | contabilidad | 9 | ✅ Nuevo (`test_multitenant_isolation.py`) |
 | clientes | 8 | — |
 | perfil | 6 | — |
-| inventario | 8 | — |
+| inventario | 9 [DOC-M9: +1, F21 `test_f21_traslado_inventario.py`] | Parcial (1 test real de 2 schemas, `test_no_se_puede_trasladar_a_sede_de_otro_tenant`, F21) |
 | landing | 20 | — |
 | cotizaciones | 7 | — |
 | proveedores | 6 | — |
 | proyectos | 8 | — |
 | bancos | 6 | ✅ Completo (`test_multitenant_isolation.py` + `test_cross_tenant_isolation.py`) |
-| compras | 4 | Parcial (`test_multitenant_isolation_tabla_html.py`) |
+| compras | 5 [DOC-M9: +1, F21 `test_f21_recepcion_compra.py`] | Parcial (`test_multitenant_isolation_tabla_html.py`; +1 test real de 2 schemas `test_orden_de_otro_tenant_no_se_puede_recibir`, F21) |
 | ventas | 2 | ✅ (`test_multitenant_isolation.py`) |
-| **Total atribuido por app** | **257** | **4 completos / 3 parciales de 17 apps** |
+| **Total atribuido por app** | **259** [DOC-M9: 257 + 2, F21] | **4 completos / 3 parciales de 17 apps** |
 
 ---
 
@@ -887,21 +892,21 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.18.0 — 2026-08-09, DOC-M5)
+## 12. Metricas del Proyecto (v3.22.0 — 2026-08-09, DOC-M9)
 
-**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa).
+**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test); el resto de filas no se re-verificaron en esta pasada (alcance de F21 no toca namespaces JS, dependencias Python, ni el modelo contable).
 
 | Metrica | Cantidad |
 |---|---|
 | Apps publicas activas | 5 |
 | Apps tenant registradas (`TENANT_APPS`) | 17 (15 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) |
 | Modelos publicos | 19 |
-| Modelos tenant | 67 concretos + 3 abstractos |
-| Total migraciones | 186 (177 tenant + 9 public) |
+| Modelos tenant | 70 concretos + 3 abstractos [DOC-M9: 67+3 F21] |
+| Total migraciones | 188 (179 tenant + 9 public) [DOC-M9: 186+2 F21] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
-| Archivos de test (atribuidos por app) | 257 (401 en todo el repo, excluyendo `venv/`) |
+| Archivos de test (atribuidos por app) | 259 [DOC-M9: 257+2 F21] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |
 | Namespaces JS activos | 15 (`window.Sintel.*`) + 3 sub-namespaces de feature |
 | Campos contables eliminados (v3.10.2) | 15 en 6 apps |
-| Apps con Pure Pull Model contable | 6 (Proveedores, Clientes, Inventario, Facturas, Gastos, Empleados) |
-| Django system check | No re-verificado en esta pasada (validacion fue por lectura de codigo, no ejecucion; ver advertencia general al inicio del documento sobre el working tree sin commitear) |
+| Apps con Pure Pull Model contable | 6 (Proveedores, Clientes, Inventario, Facturas, Gastos, Empleados) — **[DOC-M9]** "Pure Pull" describe el desacoplamiento de campos `cuenta_*_uuid` (§6.2), no que el extractor este activo: el de `inventario` esta deshabilitado (ver §6.3) |
+| Django system check | ✅ Limpio, verificado por ejecucion real en el cierre de F21 (`docker compose exec web python manage.py check` → `System check identified no issues`) — reemplaza el "no re-verificado" de DOC-M5 |
