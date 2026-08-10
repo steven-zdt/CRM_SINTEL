@@ -16,6 +16,7 @@ import logging
 from decimal import Decimal
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -607,6 +608,14 @@ class VentaBusinessService:
             # -- Paso 6: vincular y cambiar estado BORRADOR -> FACTURADA_DIAN --
             venta = VentaCRUDService.vincular_factura(venta, factura)
 
+            # -- Paso 7 (F23): salida de inventario real por la venta facturada --
+            # Dentro de la misma transaccion atomica: si un item falla (stock
+            # insuficiente, producto inactivo), toda la operacion se revierte.
+            # Ver documentacion/F23_SALE_INVENTORY_CONTRACT.md.
+            VentaBusinessService._generar_salida_inventario(
+                venta=venta, empresa_id=empresa.id, sede_id=sede_id,
+            )
+
             logger.info(
                 "[VentaBS] Venta id=%s facturada DIAN. Factura id=%s cufe=%s...",
                 venta.id,
@@ -616,10 +625,55 @@ class VentaBusinessService:
             return True, venta, 201
 
         except ValueError as exc:
+            transaction.set_rollback(True)
             return False, {"detail": str(exc)}, 400
+        except DjangoValidationError as exc:
+            transaction.set_rollback(True)
+            detalle = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+            return False, {"detail": detalle}, 422
         except Exception as exc:
+            transaction.set_rollback(True)
             logger.error("[VentaBS] procesar_y_facturar_venta error: %s", exc, exc_info=True)
             return False, {"detail": f"Error al procesar la venta: {exc}"}, 500
+
+    # ------------------------------------------------------------------
+    # F23: salida de inventario real por venta facturada (Pull hacia
+    # Contabilidad se resuelve solo -- ExtractorInventario, sin cambios)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _generar_salida_inventario(venta: Venta, empresa_id: int, sede_id: int | None) -> None:
+        """
+        Genera MovimientoInventario(SALIDA_VENTA) por cada ItemVenta con
+        producto real (excluye servicios e items de texto libre). Reutiliza
+        KardexService.registrar_movimiento() -- no se crea un servicio de
+        inventario nuevo. Idempotente por (empresa, 'ventas', 'ItemVenta',
+        item.id, SALIDA_VENTA) via el mismo UniqueConstraint que F21 ya
+        establecio en MovimientoInventario. Ver
+        documentacion/F23_SALE_INVENTORY_CONTRACT.md.
+        """
+        from apps.tenant.inventario.models import MovimientoInventario
+        from apps.tenant.inventario.services.business_service import KardexService
+
+        items_inventariables = (
+            venta.items
+            .filter(producto__isnull=False)
+            .select_related("producto")
+            .only("id", "producto_id", "cantidad", "producto__costo_promedio")
+        )
+        for item in items_inventariables:
+            KardexService.registrar_movimiento(
+                empresa_id=empresa_id,
+                producto_id=item.producto_id,
+                tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+                cantidad=item.cantidad.quantize(Decimal("0.001")),
+                costo_unitario=item.producto.costo_promedio,
+                origen_referencia=f"Venta {venta.uuid}",
+                sede_id=sede_id,
+                documento_origen_app="ventas",
+                documento_origen_modelo="ItemVenta",
+                documento_origen_id=item.id,
+            )
 
     # ------------------------------------------------------------------
     # Anular
