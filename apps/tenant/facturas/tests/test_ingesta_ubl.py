@@ -67,11 +67,19 @@ class TestFacturaIngestion(TenantTestCase):
       User = get_user_model()
       user = User.objects.create(username="tester", email="tester@example.com")
       # Crear Empresa dummy si no existe
+      # F27-001 (FIXTURE BUG, reproducido en aislamiento total): el nit
+      # "900000001" no coincide con AccountingSupplierParty ("900123456") ni
+      # AccountingCustomerParty ("901999888") de XML_SAMPLE -- guardar_desde_dto()
+      # rechaza el documento con ValidationError de NIT no coincidente antes de
+      # llegar a la logica que este test quiere ejercitar. nit="901999888"
+      # (el receptor / "Mi Empresa S.A.S." en el XML) hace de esta empresa el
+      # tenant receptor real -- consistente con las aserciones de las lineas
+      # 94-95 (factura.receptor_nit == "901999888").
       empresa = Empresa.objects.first()
       if not empresa:
         empresa = Empresa.objects.create(
           razon_social="Empresa Test",
-          nit="900000001",
+          nit="901999888",
           dv="1",
           direccion="Calle 123",
           telefono="1234567",

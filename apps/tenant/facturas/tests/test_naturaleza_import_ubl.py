@@ -2,6 +2,46 @@
 Pruebas de humo para detección automática de naturaleza (VENTA/COMPRA) en importación UBL.
 
 # WARNING: MULTI-TENANT: Usa TenantTestCase de django-tenants para tests tenant-aware.
+
+F27 (CONTRATO CAMBIADO / TEST BUG, documentado, no reescrito en este pase):
+las 5 pruebas de este archivo fallan hoy por 3 causas distintas y
+compuestas, confirmadas por reproduccion directa:
+1. Los fixtures XML_VENTA/XML_COMPRA usan
+   AccountingSupplierParty/CustomerParty > Party > PartyIdentification > ID
+   para el NIT -- el parser real lee PartyTaxScheme > CompanyID (mismo
+   patron corregido en test_importar_ubl_service.py). Con la estructura
+   actual, emisor.nit/receptor.nit llegan vacios y
+   ingest_document() rechaza el documento con missing_required_fields
+   ANTES de llegar al endpoint.
+2. `_post_upload()` llama `reverse("factura-upload-ubl")` de forma directa
+   (fuera del ciclo de request). `django.urls.reverse()` sin urlconf
+   explicito usa `settings.ROOT_URLCONF` (el esquema PUBLIC), que no
+   registra rutas de facturas -- `NoReverseMatch` real, reproducido incluso
+   con `manage.py shell` fuera de pytest. `SintelTenantTestCase`
+   (`tests/tenant/base_test.py:125-136`) resuelve esto con
+   `override_settings(ROOT_URLCONF=settings.TENANT_URLCONF)` +
+   `set_urlconf(...)` en `setUp()`; `TenantTestCase` (django-tenants) NO lo
+   hace -- solo cambia el schema de PostgreSQL, no el URLconf de Django.
+   Ver F27_FINDINGS.md para el resto de archivos con este mismo patron.
+3. `_post_upload()` no pasa `async=false` -- el default real del endpoint
+   es async=true (Celery), asi que aun corrigiendo 1 y 2 el flujo
+   sincronico que estas pruebas esperan (200/201 inmediato) no ocurriria
+   sin ese parametro.
+
+El endpoint que este archivo prueba (`POST /facturas/upload-ubl/`) esta
+ademas marcado `# WARNING: DEPRECATED` en su propio docstring
+(`api/mixins/factura_ubl_mixin.py`), a favor de
+`/api/v1/core/documentos/upload/`. La regla de negocio real (deteccion de
+naturaleza VENTA/COMPRA) ya queda cubierta, tras F27, por
+`test_importar_ubl_service.py` (capa de servicio, mismos 2 escenarios,
+5/5 pasando) mas la cobertura unitaria de `test_naturaleza_rule_ssot.py`/
+`test_naturaleza_unit.py` y la cobertura end-to-end de
+`test_materializar_from_dto.py`/`test_nota_credito_pipeline.py` via el
+pipeline vigente -- no hay perdida de cobertura real dejando este archivo
+sin corregir. No se reescribe en este pase por ser 3 fixes compuestos sobre
+un endpoint deprecado con cobertura ya duplicada en otro lado (mayor riesgo
+que beneficio); candidato real a CONSOLIDAR/ELIMINAR en una pasada
+dedicada.
 """
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
