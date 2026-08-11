@@ -4,6 +4,18 @@
 
 ## Hallazgo metodológico importante: contaminación de schema "test" compartido
 
+**[CORRECCIÓN 2026-08-11]:** el fallo de `test_ingesta_ubl.py::test_procesar_factura_xml_task`
+citado como ejemplo en esta sección **no** era causado por contaminación de schema
+entre archivos — nunca se verificó con una corrida de un solo archivo en aislamiento
+total, y esa verificación posterior lo refutó (el test falla igual ejecutado
+completamente solo). La causa real era un NIT hardcodeado en el fixture del propio
+test (`nit="900000001"`, que no coincide ni con emisor `900123456` ni con receptor
+`901999888` de `XML_SAMPLE`); ya corregido a `nit="901999888"`. Ver la sección
+"[CORRECCIÓN 2026-08-11]" en `F26_REGRESSION_REPORT.md` para el detalle completo.
+El resto de esta sección (comportamiento de `TenantTestCase` reutilizando el schema
+`"test"` entre archivos) puede seguir siendo una característica real de la
+infraestructura de tests — simplemente no era la causa de ese fallo específico.
+
 Durante F26 se ejecutó la suite completa de `apps/tenant/facturas/tests/` (32
 archivos) en una sola invocación de `pytest` y arrojó **94 fallos** — muy por encima
 de los ~18 documentados. Investigación real (no descartado como "ruido"):
@@ -43,7 +55,7 @@ ocultarse.
 | Archivo | Resultado aislado | Nota |
 |---|---|---|
 | `test_materializar_from_dto.py` | **6/6 PASS** | 3 causas raíz corregidas (ver `F26_FINDINGS.md`) + 1 gap real documentado (F26-006) |
-| `test_ingesta_ubl.py` | 1/2 PASS aislado esperado (`test_fast_get_cufe`); `test_procesar_factura_xml_task` corregido a nivel de tipo (ya no `TypeError`) pero sigue expuesto a la contaminación de schema en corridas combinadas -- código de la tarea Celery en sí no tiene consumidores reales (ver F26-Parte1 #17) | Fix de tipo confirmado correcto; no se pudo aislar 100% del problema de infraestructura de schema compartido en el tiempo disponible |
+| `test_ingesta_ubl.py` | Fix de fixture aplicado 2026-08-11 (`test_fast_get_cufe` + `test_procesar_factura_xml_task`); confirmación por corrida aislada pendiente -- código de la tarea Celery en sí no tiene consumidores reales (ver F26-Parte1 #17) | Fix de tipo (`XML_SAMPLE.decode()` → bytes) + fix de fixture (NIT dummy `"900000001"` → `"901999888"`, no coincidía con emisor/receptor del XML); ver corrección en `F26_REGRESSION_REPORT.md` |
 | `test_nota_credito_pipeline.py` | **11/11 PASS** (confirmado en grupo de 3 archivos junto a los 2 anteriores) | Incluye el fix de fixture de `test_5_factura_inexistente_error` |
 | `test_importar_ubl_service.py` | 0/5 -- **CONTRATO CAMBIADO**, documentado, no reescrito (ver `F26_FINDINGS.md`) | |
 | `test_naturaleza_import_ubl.py` | 0/5 -- **CONTRATO CAMBIADO**, documentado, no reescrito (ver `F26_FINDINGS.md`) | |

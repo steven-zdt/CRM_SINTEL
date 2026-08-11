@@ -1,7 +1,45 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.29.0
-**Ultima actualizacion:** 2026-08-11 (DOC-M16) — Fix F26-006: idempotencia real
+**Version:** 3.30.0
+**Ultima actualizacion:** 2026-08-11 (DOC-M17) — FASE 27: gobernanza y
+optimizacion del sistema de testing. Inventario real de **toda** la suite del
+repo (389 archivos, 2008 funciones `def test_`, verificado por comando, no
+estimado): 138 archivos en `SintelTenantTestCase` (sin riesgo), 34 en
+`TenantTestCase` crudo (candidatos de riesgo) -- detalle en
+`documentacion/F27_TEST_INVENTORY.md`. **Hallazgo mas significativo**:
+`django_tenants.test.cases.TenantTestCase` cambia el schema de PostgreSQL
+pero **no** el `ROOT_URLCONF` de Django -- cualquier test que llame
+`reverse("factura-...")` fuera de `self.client` falla con `NoReverseMatch`
+(reproducido incluso via `manage.py shell`, fuera de pytest);
+`SintelTenantTestCase` si lo resuelve
+(`override_settings(ROOT_URLCONF=...)` + `set_urlconf(...)` en `setUp()`).
+Esto explica la mayoria de los 31 fallos de la suite completa de `facturas`
+(baseline real de esta fase: 31 failed/110 passed/4 skipped) -- **corrige el
+diagnostico previo de DOC-M15/F26** que atribuia fallos similares a
+"contaminacion de schema `test`". El test UBL pendiente desde F26
+(`test_procesar_factura_xml_task`) se reprodujo en **aislamiento total**,
+refutando esa misma hipotesis para ese caso puntual: la causa real era un
+NIT de fixture que no coincidia con el XML -- corregido. Se investigo ademas
+por que `test_importar_ubl_service.py` (uno de los "10 tests documentados,
+no reescritos" de F26) seguia fallando tras corregir solo el shape de
+respuesta: el parser real lee el NIT desde `PartyTaxScheme > CompanyID`, no
+`PartyIdentification > ID` (estructura que usaban los fixtures) -- corregido,
+**5/5 tests pasan**. `test_naturaleza_import_ubl.py` comparte ese mismo bug
+mas 2 causas compuestas adicionales (mismo problema de `reverse()`, y falta
+el parametro `async=false` contra un endpoint deprecado) -- documentado con
+evidencia completa, no reescrito (cobertura real ya cubierta por el archivo
+recien corregido). Duplicado byte-identico confirmado
+(`tests/celery/test_tasks_import.py` == `tests/celery_tasks/test_tasks_import.py`)
+-- eliminacion bloqueada por el clasificador de permisos de la sesion, no por
+falta de evidencia. **Test Impact Analysis: no se construyo nada nuevo** --
+`tools/ekg/impact.py` ya existia (Fase 12) y responde exactamente lo que F27
+pedia; su dump de `facturas` estaba desactualizado, regenerado. **0 tests
+nuevos creados** (resultado valido y preferido segun la propia regla de la
+fase). **6 tests reales corregidos.** Governance `FINAL STATUS: PASS`. 0
+migraciones. Alcance reducido declarado explicitamente: esta pasada se
+concentro en `facturas`, no en las ~17 apps del repo -- ver
+`documentacion/F27_EXECUTION_STATUS.md`.
+**Actualizacion previa:** 2026-08-11 (DOC-M16) — Fix F26-006: idempotencia real
 cuando el documento (Factura o NotaCredito) no trae CUFE/CUDE. `guardar_desde_dto()`
 solo hacia el chequeo de idempotencia dentro de `if cufe:` -- si `identificadores`
 venia vacio, `cufe` se resolvia a `""` (no `None`), esa rama se saltaba por completo,
@@ -1072,7 +1110,15 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.29.0 — 2026-08-11, DOC-M16)
+## 12. Metricas del Proyecto (v3.30.0 — 2026-08-11, DOC-M17)
+
+**[DOC-M17]** F27 no toca modelos, migraciones ni codigo de produccion --
+solo archivos de test (2 corregidos, 0 nuevos, 0 eliminados). Ninguna fila
+de esta tabla cambia. Ver `documentacion/F27_TEST_INVENTORY.md` para el
+inventario real de tests de todo el repo (389 archivos, 2008 funciones
+`def test_`), numero mayor y mas preciso que la fila "Archivos de test
+(atribuidos por app)" de abajo, que solo cuenta tests explicitamente
+atribuidos a una app de negocio, no la suite completa incluyendo `tests/`.
 
 **[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). **[DOC-M13]** F25 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo 1 archivo de test (+1, `gastos`) y 1 correccion de codigo existente (`gastos/services/business_service.py`, ver `F25_FINDINGS.md` F25-001). **[DOC-M14]** Devoluciones reales agrega 1 modelo tenant nuevo (`ItemNotaCredito`, `facturas`) y 1 migracion (`0031_itemnotacredito.py`); 1 archivo de test (+1, `facturas`). **[DOC-M15]** F26 no agrega modelos nuevos (elimina 1 campo, `Factura.xml_file_path`, sin afectar el conteo de modelos); 1 migracion nueva (`0032_remove_factura_xml_file_path.py`, remove-only); 0 archivos de test nuevos (corrige 3 archivos existentes: `test_materializar_from_dto.py`, `test_ingesta_ubl.py`, `test_nota_credito_pipeline.py`); 2 correcciones de codigo de produccion (`facturas/models.py`: campo fantasma `orden_compra` removido de `MANUAL_EDITABLE_FIELDS`, campo `xml_file_path` eliminado). **[DOC-M16]** Fix F26-006 no agrega modelos (solo relaja `NotaCredito.cude` a `null=True`); 1 migracion nueva (`0033_alter_notacredito_cude.py`, aditiva); 0 archivos de test nuevos (agrega 1 test a `test_materializar_from_dto.py` y 1 a `test_nota_credito_pipeline.py`, reescribe 1 existente); 1 correccion de codigo de produccion (`facturas/services/business_service.py`: idempotencia por numero + normalizacion `cufe`/`cude` a `None`). El resto de filas no se re-verifico en esta pasada.
 

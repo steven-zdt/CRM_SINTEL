@@ -45,6 +45,36 @@ docker compose exec -T web python -m pytest \
 
 ## El único fallo — analizado y clasificado
 
+**[CORRECCIÓN 2026-08-11]:** El diagnóstico original de esta sección (más abajo,
+conservado por trazabilidad) fue **incorrecto** y nunca se verificó con una corrida
+de un solo archivo en aislamiento total. Verificación posterior lo confirmó falso:
+`test_procesar_factura_xml_task` falla **de forma idéntica ejecutado completamente
+solo** (`pytest apps/tenant/facturas/tests/test_ingesta_ubl.py`, sin ningún otro
+archivo `TenantTestCase` antes en el mismo proceso), por lo que la contaminación de
+schema entre archivos no puede ser la causa.
+
+**Causa real:** el fixture del propio test crea una `Empresa` dummy con
+`nit="900000001"` (línea 74 original), que no coincide ni con el emisor
+(`AccountingSupplierParty` → `900123456`) ni con el receptor
+(`AccountingCustomerParty` → `901999888`) del `XML_SAMPLE`. La validación de
+propiedad de NIT en `guardar_desde_dto()` (`apps/tenant/facturas/services/business_service.py:375`)
+rechaza el documento siempre que ninguna `Empresa` en el schema coincida con emisor
+o receptor — independiente del orden de ejecución. Fix aplicado: cambiar el NIT del
+fixture a `"901999888"` (el receptor), consistente con las propias aserciones del
+test (`factura.receptor_nit == "901999888"`). Confirmación por corrida aislada
+(`docker compose exec -T web python -m pytest apps/tenant/facturas/tests/test_ingesta_ubl.py -q --tb=short`)
+pendiente al momento de esta corrección — había otra corrida de pytest en curso en
+el contenedor `web` (norma AGENTS.md §24.0: nunca en paralelo).
+
+La conclusión original ("no es un defecto de F26" / "deuda de infraestructura de
+testing, fuera del alcance") queda superada: sí era un bug del fixture del test,
+corregible sin tocar código de producción. El hallazgo metodológico sobre
+`TenantTestCase` compartiendo schema `"test"` entre archivos (`F26_TEST_REPORT.md`)
+puede seguir siendo real en otros contextos — simplemente no era la causa de este
+fallo específico.
+
+### Diagnóstico original (superado, conservado por trazabilidad)
+
 `test_ingesta_ubl.py::TestFacturaIngestion::test_procesar_factura_xml_task` falló
 con `ValidationError: 'El NIT de la empresa actual no coincide con el emisor ni con
 el receptor del documento.'` — **el mismo patrón de contaminación de schema
