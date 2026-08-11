@@ -1,7 +1,29 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.28.0
-**Ultima actualizacion:** 2026-08-11 (DOC-M15) — FASE 26: auditoria y simplificacion
+**Version:** 3.29.0
+**Ultima actualizacion:** 2026-08-11 (DOC-M16) — Fix F26-006: idempotencia real
+cuando el documento (Factura o NotaCredito) no trae CUFE/CUDE. `guardar_desde_dto()`
+solo hacia el chequeo de idempotencia dentro de `if cufe:` -- si `identificadores`
+venia vacio, `cufe` se resolvia a `""` (no `None`), esa rama se saltaba por completo,
+y una segunda materializacion con el mismo numero chocaba contra la `UniqueConstraint`
+de BD (`Factura.cufe`/`NotaCredito.cude`, ambos `unique=True`) con un `IntegrityError`
+sin manejar. Fix quirurgico de 2 partes en `business_service.py`: **(1)** fallback de
+idempotencia por `numero`+`empresa` cuando no hay CUFE (mismo criterio "ya existe" que
+la rama por CUFE); **(2)** normalizacion `cufe or None` / `cude or None` al persistir,
+restaurando la semantica real de `unique=True` + `null=True` (Postgres permite
+multiples `NULL`, no multiples `""`). Requirio migracion `0033_alter_notacredito_cude.py`
+(`NotaCredito.cude` no tenia `null=True`, a diferencia de `Factura.cufe`). Tests:
+`test_idempotencia_por_numero` reescrito + 2 tests nuevos
+(`test_dos_facturas_distintas_sin_cufe_no_chocan`,
+`test_12_idempotencia_sin_cude_no_revienta`). Regresion de los 4 archivos de test
+relacionados: **25/26 (96%)** -- el unico fallo (`test_ingesta_ubl.py::test_procesar_factura_xml_task`)
+es un bug de test preexistente **no relacionado** (Empresa dummy con NIT que no
+coincide con ninguna parte del XML de fixture, falla antes de llegar al codigo tocado
+por este fix) -- **corrige el diagnostico previo de DOC-M15**, que atribuia este mismo
+fallo a contaminacion de schema compartido entre archivos `TenantTestCase`; verificado
+ahora que el test falla identico incluso corrido completamente solo. Governance
+`FINAL STATUS: PASS`. Detalle completo: `documentacion/F26-006_FIX_REPORT.md`.
+**Actualizacion previa:** 2026-08-11 (DOC-M15) — FASE 26: auditoria y simplificacion
 de `apps/tenant/facturas` bajo el principio "el XML UBL/DIAN es fuente de datos, no
 el modelo de datos de SINTEL". Investigo individualmente los 18 tests historicos
 fallando (no solo "por que fallan" sino reproduccion real + lectura del codigo de
@@ -1050,9 +1072,9 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.28.0 — 2026-08-11, DOC-M15)
+## 12. Metricas del Proyecto (v3.29.0 — 2026-08-11, DOC-M16)
 
-**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). **[DOC-M13]** F25 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo 1 archivo de test (+1, `gastos`) y 1 correccion de codigo existente (`gastos/services/business_service.py`, ver `F25_FINDINGS.md` F25-001). **[DOC-M14]** Devoluciones reales agrega 1 modelo tenant nuevo (`ItemNotaCredito`, `facturas`) y 1 migracion (`0031_itemnotacredito.py`); 1 archivo de test (+1, `facturas`). **[DOC-M15]** F26 no agrega modelos nuevos (elimina 1 campo, `Factura.xml_file_path`, sin afectar el conteo de modelos); 1 migracion nueva (`0032_remove_factura_xml_file_path.py`, remove-only); 0 archivos de test nuevos (corrige 3 archivos existentes: `test_materializar_from_dto.py`, `test_ingesta_ubl.py`, `test_nota_credito_pipeline.py`); 2 correcciones de codigo de produccion (`facturas/models.py`: campo fantasma `orden_compra` removido de `MANUAL_EDITABLE_FIELDS`, campo `xml_file_path` eliminado). El resto de filas no se re-verifico en esta pasada.
+**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). **[DOC-M13]** F25 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo 1 archivo de test (+1, `gastos`) y 1 correccion de codigo existente (`gastos/services/business_service.py`, ver `F25_FINDINGS.md` F25-001). **[DOC-M14]** Devoluciones reales agrega 1 modelo tenant nuevo (`ItemNotaCredito`, `facturas`) y 1 migracion (`0031_itemnotacredito.py`); 1 archivo de test (+1, `facturas`). **[DOC-M15]** F26 no agrega modelos nuevos (elimina 1 campo, `Factura.xml_file_path`, sin afectar el conteo de modelos); 1 migracion nueva (`0032_remove_factura_xml_file_path.py`, remove-only); 0 archivos de test nuevos (corrige 3 archivos existentes: `test_materializar_from_dto.py`, `test_ingesta_ubl.py`, `test_nota_credito_pipeline.py`); 2 correcciones de codigo de produccion (`facturas/models.py`: campo fantasma `orden_compra` removido de `MANUAL_EDITABLE_FIELDS`, campo `xml_file_path` eliminado). **[DOC-M16]** Fix F26-006 no agrega modelos (solo relaja `NotaCredito.cude` a `null=True`); 1 migracion nueva (`0033_alter_notacredito_cude.py`, aditiva); 0 archivos de test nuevos (agrega 1 test a `test_materializar_from_dto.py` y 1 a `test_nota_credito_pipeline.py`, reescribe 1 existente); 1 correccion de codigo de produccion (`facturas/services/business_service.py`: idempotencia por numero + normalizacion `cufe`/`cude` a `None`). El resto de filas no se re-verifico en esta pasada.
 
 | Metrica | Cantidad |
 |---|---|
@@ -1060,7 +1082,7 @@ python manage.py check
 | Apps tenant registradas (`TENANT_APPS`) | 17 (15 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) |
 | Modelos publicos | 19 |
 | Modelos tenant | 71 concretos + 3 abstractos [DOC-M14: 70+1, `ItemNotaCredito`] |
-| Total migraciones | 190 (181 tenant + 9 public) [DOC-M15: 189+1, `0032_remove_factura_xml_file_path` -- remove-only, campo verificado sin consumidores ni datos historicos] |
+| Total migraciones | 191 (182 tenant + 9 public) [DOC-M16: 190+1, `0033_alter_notacredito_cude` -- aditiva, `null=True` en `NotaCredito.cude`] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
 | Archivos de test (atribuidos por app) | 269 [DOC-M14: 268+1] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |

@@ -50,27 +50,39 @@ Marcados `[DEPRECATED v3.7.1]`, `editable=False`, pero **siguen siendo poblados 
 
 Redundantes en efecto (ambos almacenan la respuesta DIAN), pero `dian_response_xml` se sigue escribiendo en ambos flujos de creación, y `backfill_facturas_anexos.py` ya intenta unificarlos con un fallback explícito (`getattr(factura,'dian_response_xml',None) or getattr(factura,'application_response_xml',None)`), confirmando que es trabajo de migración reconocido pero pendiente, no algo que F26 deba iniciar sin la misma auditoría profunda que F26-003.
 
-### F26-006 — Sin idempotencia real cuando el documento no trae CUFE (REAL BUG, MEDIUM, no corregido)
+### F26-006 — Sin idempotencia real cuando el documento no trae CUFE (REAL BUG, MEDIUM, CORREGIDO post-F26)
 
 Descubierto al corregir `test_idempotencia_por_numero`. `guardar_desde_dto()` solo
-hace el chequeo de idempotencia dentro de `if cufe:` (bloque "Idempotencia por
-CUFE"). Si `identificadores` viene vacío, `cufe` se resuelve a cadena vacía `""`
-(no `None`) — esa rama se salta por completo. Una segunda materialización con el
-mismo `numero` pero sin CUFE intenta crear una segunda `Factura`, y como
-`Factura.cufe` tiene `unique=True`, el segundo `INSERT` con `cufe=""` choca contra
-la constraint de BD (`facturas_factura_cufe_key`) y propaga un `IntegrityError` **sin
-manejar** hasta el llamador — no hay traducción a una respuesta 200/409 idempotente
-como sí ocurre en el camino con CUFE. `@transaction.atomic` en `guardar_desde_dto`
-asegura que no queda un registro corrupto (rollback completo del segundo intento),
-así que no hay pérdida de integridad de datos — el gap es puramente de manejo de
-errores (una excepción de BD sin capturar en vez de una respuesta HTTP limpia).
+hacía el chequeo de idempotencia dentro de `if cufe:` (bloque "Idempotencia por
+CUFE"). Si `identificadores` venía vacío, `cufe` se resolvía a cadena vacía `""`
+(no `None`) — esa rama se saltaba por completo. Una segunda materialización con el
+mismo `numero` pero sin CUFE intentaba crear una segunda `Factura`, y como
+`Factura.cufe` tiene `unique=True`, el segundo `INSERT` con `cufe=""` chocaba contra
+la constraint de BD (`facturas_factura_cufe_key`) y propagaba un `IntegrityError`
+**sin manejar** hasta el llamador. `NotaCredito.cude` tenía el mismo problema
+(`unique=True`, sin `null=True`).
 
-**Alcance real:** solo afecta documentos que llegan sin ningún CUFE/CUDE en
-absoluto — infrecuente para XML DIAN reales (casi siempre lo traen), pero posible
-para datos de prueba, migraciones legacy, o documentos parcialmente procesados.
-**No corregido en F26**: implementar una ruta real de "dedup por número" es lógica
-de negocio nueva (decidir qué hacer: rechazar, actualizar, fusionar), no una
-simplificación — fuera del alcance de este pase. Documentado para una fase futura.
+**Corregido** (sesión posterior a F26, mismo dia): dos cambios quirúrgicos en
+`guardar_desde_dto()` (`business_service.py`):
+
+1. **Fallback de idempotencia por `numero`+`empresa`** cuando `cufe` es falsy —
+   mismo criterio de respuesta "ya existe" (200, `created: False`) que la rama
+   por CUFE, para `Factura` y `NotaCredito` respectivamente.
+2. **Normalización `cufe or None`** al persistir (`Factura.cufe` y
+   `NotaCredito.cude`) en vez de guardar `""` — restaura la semántica real de
+   `unique=True` + `null=True` (Postgres permite múltiples `NULL`, no permite
+   múltiples `""`), para que dos documentos legítimamente **distintos** sin
+   CUFE no choquen entre sí. Requirió migración `0033_alter_notacredito_cude.py`
+   (`NotaCredito.cude` no tenía `null=True`, a diferencia de `Factura.cufe` que
+   ya lo tenía desde antes).
+
+Tests: `test_idempotencia_por_numero` reescrito (200/`created=False` en vez de
+`assertRaises(IntegrityError)`) + `test_dos_facturas_distintas_sin_cufe_no_chocan`
+(nuevo, `test_materializar_from_dto.py`) + `test_12_idempotencia_sin_cude_no_revienta`
+(nuevo, `test_nota_credito_pipeline.py`, ejercitando el shape real del pipeline
+universal — `"type": "creditnote"`, no `"tipo": "NC"` — para no confundirse con el
+chequeo "already_has_nc" preexistente, que ya cubría con gracia el caso de
+reimportar la misma NC para la misma factura independientemente del CUFE).
 
 ### F26-007 a F26-010 — Campos confirmados `KEEP` (con evidencia)
 

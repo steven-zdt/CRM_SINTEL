@@ -62,11 +62,14 @@ incorrectas.
 ## 9-19. Atomicidad, idempotencia, multi-tenant, DIAN, inventario, contabilidad, etc.
 
 Todos reconfirmados intactos por la regresión consolidada (§23). Un hallazgo real
-nuevo, documentado pero **no corregido** por ser fuera del alcance quirúrgico de
-F26 (agregar lógica de negocio nueva, no simplificar): `guardar_desde_dto()` no
-tiene una ruta real de idempotencia cuando el documento no trae CUFE (`cufe=""`
-choca contra la `UniqueConstraint` con un `IntegrityError` sin manejar en vez de una
-respuesta idempotente limpia) — ver `F26_FINDINGS.md` F26-006.
+nuevo, documentado en su momento como **no corregido** por ser fuera del alcance
+quirúrgico de F26: `guardar_desde_dto()` no tenía una ruta real de idempotencia
+cuando el documento no traía CUFE (`cufe=""` chocaba contra la `UniqueConstraint`
+con un `IntegrityError` sin manejar en vez de una respuesta idempotente limpia).
+**Corregido en sesión posterior** (mismo día, ver `F26_FINDINGS.md` F26-006
+actualizado): fallback de idempotencia por `numero`+`empresa` + normalización
+`cufe`/`cude` a `None` (no `""`) al persistir, con migración
+`0033_alter_notacredito_cude.py`.
 
 ## 20. Governance
 
@@ -104,7 +107,7 @@ las 3 empresas del entorno antes de correr la regresión final.
   consumidos como fallback real.
 - `Factura.dian_response_xml` duplicado con `FacturaAnexos.application_response_xml`
   (F26-005) — mismo patrón que `xml_content`.
-- Gap de idempotencia sin CUFE (F26-006) — requiere lógica de negocio nueva.
+- ~~Gap de idempotencia sin CUFE (F26-006)~~ — **CORREGIDO** en sesión posterior (fallback por numero + `cufe`/`cude` normalizados a `None`, migración `0033`).
 - 10 tests de contrato cambiado sin reescribir (`test_importar_ubl_service.py`,
   `test_naturaleza_import_ubl.py`).
 - Celery task `procesar_factura_xml_task` sin llamadores reales en el repo — no
