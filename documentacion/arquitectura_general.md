@@ -1,7 +1,41 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.30.0
-**Ultima actualizacion:** 2026-08-11 (DOC-M17) — FASE 27: gobernanza y
+**Version:** 3.31.0
+**Ultima actualizacion:** 2026-08-11 (DOC-M18) — FASE 28: estabilizacion
+del testing multi-tenant. Auditoria individual (agente dedicado, sin
+asumir migracion automatica) de los 34 archivos con `TenantTestCase` crudo
+documentados por F27: **11 MIGRATE_SAFE, 1 MIGRATE_WITH_FIX, 21
+ALREADY_SAFE, 0 KEEP_INTENTIONAL, 1 UNKNOWN**. Migracion controlada
+aplicada a los 12 que la necesitaban de verdad
+(`TenantTestCase` -> `SintelTenantTestCase`), verificada empiricamente:
+`test_facturas_list_naturaleza_api.py` pasa 100% limpio solo con el swap de
+base class, confirmando que el diagnostico F27-003 (`SintelTenantTestCase`
+fija `ROOT_URLCONF` de tenant, `TenantTestCase` crudo no) era correcto.
+Corregido ademas un `SyntaxError` real encontrado en el archivo `UNKNOWN`
+(`tests/tenant/core/smoke/test_workspace_empresa_modules_smoke.py` -- un
+bloque de guard pegado sin indentar dentro de un metodo). La migracion
+tambien **desenmascaro 2 hallazgos reales preexistentes** que antes
+quedaban ocultos detras del `NoReverseMatch`: (a) varios tests pasan
+`self.f.id` (PK entero) donde el ViewSet espera `self.f.uuid`
+(`lookup_field = "uuid"`) -- bug de test, no de produccion; (b) el nombre
+de URL `workspace` no resuelve via `reverse()` en **ningun** contexto,
+reproducido incluso fuera de pytest con codigo de produccion intacto -- no
+causado por F28 ni relacionado con `TenantTestCase`, la ruta literal
+`/workspace/` si funciona en una peticion real (302). Ninguno de los 2 se
+corrigio en este pase (indicacion explicita del usuario de no seguir
+invirtiendo tiempo en la suite de facturas), documentados con evidencia
+completa para una fase dedicada. Auditoria ligera de `compras` (primera app
+de la expansion progresiva): **GREEN**, 0 archivos con `TenantTestCase`
+crudo. Test Impact Analysis: **0 herramientas nuevas** -- reutilizado
+`tools/ekg/impact.py` (Fase 12), dump de `facturas` regenerado (368 nodos,
+430 edges, identico a F27). **0 tests nuevos creados.** Governance `FINAL
+STATUS: PASS`. 0 migraciones de esquema. Alcance reducido declarado
+explicitamente: no se re-ejecuto la suite completa de `facturas` (ya
+corrida 2 veces sin cambio de fondo) ni la regresion global -- verificacion
+quirurgica de los 13 archivos tocados (44 failed/7 passed/6 skipped,
+desglosado y clasificado, no un numero sin explicar). Detalle completo:
+`documentacion/F28_FINAL_REPORT.md`.
+**Actualizacion previa:** 2026-08-11 (DOC-M17) — FASE 27: gobernanza y
 optimizacion del sistema de testing. Inventario real de **toda** la suite del
 repo (389 archivos, 2008 funciones `def test_`, verificado por comando, no
 estimado): 138 archivos en `SintelTenantTestCase` (sin riesgo), 34 en
@@ -1110,7 +1144,11 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.30.0 — 2026-08-11, DOC-M17)
+## 12. Metricas del Proyecto (v3.31.0 — 2026-08-11, DOC-M18)
+
+**[DOC-M18]** F28 no toca modelos ni migraciones -- solo normaliza base
+classes de test (12 archivos) y corrige 1 `SyntaxError`. Ninguna fila de
+esta tabla cambia.
 
 **[DOC-M17]** F27 no toca modelos, migraciones ni codigo de produccion --
 solo archivos de test (2 corregidos, 0 nuevos, 0 eliminados). Ninguna fila
