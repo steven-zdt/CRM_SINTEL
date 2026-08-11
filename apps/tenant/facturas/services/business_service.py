@@ -490,6 +490,41 @@ class FacturaBusinessService:
                     "created": False,
                     "message": "Factura ya existe.",
                 }, 200
+        else:
+            # F26-006: sin CUFE (documento incompleto o DTO armado a mano)
+            # la rama anterior no aplica, pero Factura.cufe/NotaCredito.cude
+            # siguen siendo unique -- guardar "" ahi choca contra la unique
+            # constraint con un IntegrityError sin manejar en el segundo
+            # intento. Fallback de idempotencia por numero (mismo criterio
+            # de "ya existe" que la rama por CUFE) antes de seguir a crear.
+            if is_credit_note:
+                nota_existente = NotaCredito.objects.filter(
+                    numero=numero, empresa=empresa_instance
+                ).only("id", "uuid", "numero", "cude", "empresa_id").first()
+                if nota_existente:
+                    return {
+                        "id": nota_existente.id,
+                        "uuid": str(nota_existente.uuid),
+                        "numero": nota_existente.numero,
+                        "cude": nota_existente.cude,
+                        "created": False,
+                        "error": "duplicate",
+                        "message": "Nota credito ya existe (idempotencia por numero, sin CUFE).",
+                    }, 200
+            else:
+                factura_existente = Factura.objects.filter(
+                    numero=numero, empresa=empresa_instance
+                ).only('id', 'uuid', 'numero', 'naturaleza', 'cufe', 'empresa_id').first()
+                if factura_existente:
+                    return {
+                        "id": factura_existente.id,
+                        "uuid": str(factura_existente.uuid),
+                        "numero": factura_existente.numero,
+                        "naturaleza": factura_existente.naturaleza,
+                        "cufe": factura_existente.cufe,
+                        "created": False,
+                        "message": "Factura ya existe (idempotencia por numero, sin CUFE).",
+                    }, 200
 
         # Fecha emision
         fecha_emision_raw = dto.get("fecha_emision")
@@ -611,7 +646,9 @@ class FacturaBusinessService:
             "medio_pago_codigo": dto.get("medio_pago_codigo", ""),
             "payment_due_date": parse_date(dto.get("payment_due_date")) if isinstance(dto.get("payment_due_date"), str) else dto.get("payment_due_date"),
             # CUFE / identificadores
-            "cufe": cufe,
+            # F26-006: None (no "") cuando falta -- unique=True + null=True
+            # permite multiples NULL sin chocar; "" repetido si chocaba.
+            "cufe": cufe or None,
             "qr_code": dto.get("qr_code", ""),
             "qr_url": dto.get("qr_url", ""),
             # Autorizacion DIAN
@@ -673,7 +710,7 @@ class FacturaBusinessService:
                 empresa=empresa_instance,
                 factura=factura_original,
                 numero=numero,
-                cude=cufe,
+                cude=cufe or None,  # F26-006: ver nota en "cufe" de Factura mas arriba
                 fecha_emision=fecha_emision,
                 moneda=totales.get("moneda") or dto.get("moneda", "COP"),
                 subtotal=Decimal(str(totales.get("subtotal") or dto.get("subtotal") or 0)),

@@ -716,6 +716,8 @@ class NotaCredito(SintelTenantBaseModel):
     )
     cude = models.CharField(
         max_length=200,   # alineado con Factura.cufe
+        blank=True,
+        null=True,  # F26-006: permite multiples NC sin CUDE sin chocar la unique constraint (mismo patron que Factura.cufe)
         unique=True,
         verbose_name=_('CUDE'),
         help_text=_('Código Único de Documento Electrónico (identificador legal de la nota)')
