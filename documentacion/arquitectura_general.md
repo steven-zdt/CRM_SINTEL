@@ -1,7 +1,46 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.27.0
-**Ultima actualizacion:** 2026-08-10 (DOC-M14) — Devoluciones reales: NotaCredito ->
+**Version:** 3.28.0
+**Ultima actualizacion:** 2026-08-11 (DOC-M15) — FASE 26: auditoria y simplificacion
+de `apps/tenant/facturas` bajo el principio "el XML UBL/DIAN es fuente de datos, no
+el modelo de datos de SINTEL". Investigo individualmente los 18 tests historicos
+fallando (no solo "por que fallan" sino reproduccion real + lectura del codigo de
+produccion que cada uno ejercita): **8/18 corregidos** con evidencia
+ANTES(FAIL)/DESPUES(PASS) real (3 causas distintas en `test_materializar_from_dto.py` --
+parametro `persist_anexos` inexistente, DTO sin envolver en `{"dto": ...}` que
+`materializar_desde_result()` exige, capa de parseo de prefijo/consecutivo mal
+asumida; `.decode()` innecesario en `test_ingesta_ubl.py` violando el contrato
+`bytes` de `ingest_document()`; fixture XML incompleta en
+`test_nota_credito_pipeline.py::test_5_factura_inexistente_error`), **10/18
+documentados como CONTRATO CAMBIADO** (`test_importar_ubl_service.py`,
+`test_naturaleza_import_ubl.py`: esperan un shape de respuesta de preview
+`{"preview": bool, "factura": {...}}` que el pipeline universal actual ya no
+produce -- ahora es `{"persisted": bool, "dto": {...}}`, y el calculo de
+`naturaleza` durante preview fue removido deliberadamente al hacer el pipeline
+agnostico de dominio -- no reescritos por prudencia, con evidencia completa en
+`documentacion/F26_FINDINGS.md`). Auditoria exhaustiva de campos de `facturas`
+(agente dedicado + grep real de consumidores en todo el repo, ver
+`documentacion/F26_FACTURAS_FIELD_INVENTORY.md`) encontro y corrigio 2 defectos
+reales de produccion: **`MANUAL_EDITABLE_FIELDS` incluia `'orden_compra'`, un campo
+fantasma que `Factura` nunca tuvo** (riesgo real de `ValueError`/500 en un PATCH
+nunca disparado en produccion, ahora eliminado de la lista), y **`Factura.xml_file_path`
+eliminado** (0 consumidores confirmados en todo el repo, 0 datos historicos
+verificados en las 3 empresas del entorno antes de aplicar la migracion
+`0032_remove_factura_xml_file_path.py`). Hallazgo real nuevo documentado pero no
+corregido (fuera de alcance -- requiere logica de negocio nueva, no simplificacion):
+`guardar_desde_dto()` no tiene una ruta real de idempotencia cuando el documento no
+trae CUFE (`cufe=""` choca contra la `UniqueConstraint` con un `IntegrityError` sin
+manejar). **82/83 tests (98.8%) en la regresion consolidada final** (F21-F25 +
+DOC-M14 + los 3 archivos de test corregidos en F26, 83 tests reales) -- el unico
+fallo es un artefacto de infraestructura de testing (`TenantTestCase` reutiliza el
+schema `"test"` compartido entre archivos dentro de una misma corrida larga, y
+`Empresa` es un singleton real por schema; confirmado reproduciendo el error
+`ValidationError: {'singleton_key': [...]}` directamente), no una regresion de F26.
+**1 migracion nueva** (remove-only, verificada segura). Governance `FINAL STATUS:
+PASS` sostenido. Conclusion de la auditoria: `apps/tenant/facturas` ya cumplia
+mayormente el principio "XML es fuente, no modelo" antes de F26 -- la
+sobre-persistencia real encontrada fue puntual (1 campo), no sistemica.
+**Actualizacion previa:** 2026-08-10 (DOC-M14) — Devoluciones reales: NotaCredito ->
 ItemNotaCredito -> ENTRADA_DEVOLUCION. Cierra la brecha DEFERRED declarada desde F23
 (`F23_FACTURAS_BASELINE.md` S3, reafirmada en F24/F25): `NotaCredito` era documento
 de solo cabecera, sin forma de generar `ENTRADA_DEVOLUCION` por producto. Investigacion
@@ -1011,9 +1050,9 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.27.0 — 2026-08-10, DOC-M14)
+## 12. Metricas del Proyecto (v3.28.0 — 2026-08-11, DOC-M15)
 
-**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). **[DOC-M13]** F25 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo 1 archivo de test (+1, `gastos`) y 1 correccion de codigo existente (`gastos/services/business_service.py`, ver `F25_FINDINGS.md` F25-001). **[DOC-M14]** Devoluciones reales agrega 1 modelo tenant nuevo (`ItemNotaCredito`, `facturas`) y 1 migracion (`0031_itemnotacredito.py`); 1 archivo de test (+1, `facturas`). El resto de filas no se re-verifico en esta pasada.
+**[DOC-M5]** Esta tabla estaba etiquetada `v3.10.4 — 2026-05-29` y nunca se habia vuelto a tocar en pases de validacion posteriores (DOC-A1 a DOC-M4) — de ahi que tuviera numeros distintos e inconsistentes con el resto del documento (ver §2.2). Recontada 2026-08-09 con la misma metodologia del resto de este pase (conteo directo sobre codigo, no sobre documentacion previa). **[DOC-M9]** Modelos tenant, migraciones y archivos de test actualizados con la contribucion real de F21 (2 modelos en `compras`, 1 en `inventario`; 2 migraciones; 2 archivos de test). **[DOC-M10]** F22 no agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3, `contabilidad`) y la fila de Pure Pull Model (el extractor de inventario paso de deshabilitado a activo). **[DOC-M11]** F23 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+2, `ventas`). **[DOC-M12]** F24 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo archivos de test (+3: `compras` +1, `contabilidad` +2) y 2 correcciones de codigo existente (`compras/services/business_service.py`, `contabilidad/integracion/validadores.py`, ver `F24_FINDINGS.md`). **[DOC-M13]** F25 tampoco agrega modelos ni migraciones (0 cambios de esquema); solo 1 archivo de test (+1, `gastos`) y 1 correccion de codigo existente (`gastos/services/business_service.py`, ver `F25_FINDINGS.md` F25-001). **[DOC-M14]** Devoluciones reales agrega 1 modelo tenant nuevo (`ItemNotaCredito`, `facturas`) y 1 migracion (`0031_itemnotacredito.py`); 1 archivo de test (+1, `facturas`). **[DOC-M15]** F26 no agrega modelos nuevos (elimina 1 campo, `Factura.xml_file_path`, sin afectar el conteo de modelos); 1 migracion nueva (`0032_remove_factura_xml_file_path.py`, remove-only); 0 archivos de test nuevos (corrige 3 archivos existentes: `test_materializar_from_dto.py`, `test_ingesta_ubl.py`, `test_nota_credito_pipeline.py`); 2 correcciones de codigo de produccion (`facturas/models.py`: campo fantasma `orden_compra` removido de `MANUAL_EDITABLE_FIELDS`, campo `xml_file_path` eliminado). El resto de filas no se re-verifico en esta pasada.
 
 | Metrica | Cantidad |
 |---|---|
@@ -1021,7 +1060,7 @@ python manage.py check
 | Apps tenant registradas (`TENANT_APPS`) | 17 (15 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) |
 | Modelos publicos | 19 |
 | Modelos tenant | 71 concretos + 3 abstractos [DOC-M14: 70+1, `ItemNotaCredito`] |
-| Total migraciones | 189 (180 tenant + 9 public) [DOC-M14: 188+1] |
+| Total migraciones | 190 (181 tenant + 9 public) [DOC-M15: 189+1, `0032_remove_factura_xml_file_path` -- remove-only, campo verificado sin consumidores ni datos historicos] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
 | Archivos de test (atribuidos por app) | 269 [DOC-M14: 268+1] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |
