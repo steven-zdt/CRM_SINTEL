@@ -312,3 +312,37 @@ class NotaCreditoPipelineSmokeTests(SintelTenantTestCase):
         factura_item = next((f for f in items if f.get('uuid') == str(self.factura.uuid)), None)
         self.assertIsNotNone(factura_item)
         self.assertTrue(factura_item.get('has_nc'))
+
+    def test_12_idempotencia_sin_cude_no_revienta(self):
+        """
+        Test 12 (F26-006): NC sin CUDE no debe reventar con IntegrityError al
+        reimportarse. Antes del fix, `cude` se guardaba como "" (no None) y
+        chocaba contra la unique constraint en el segundo intento. El fix
+        agrega un fallback de idempotencia por numero cuando no hay CUDE.
+
+        DTO con shape real del pipeline universal ("type": "creditnote",
+        sin "tipo": "NC" a nivel raiz -- ver parser.py:844-845) para
+        ejercitar el mismo camino que la ingesta XML real, no el bloque de
+        "vinculacion" legacy que solo dispara con dto.get("tipo") == "NC".
+        """
+        dto_sin_cude = {
+            "type": "creditnote",
+            "numero": "NC-SIN-CUDE-1",
+            "identificadores": {},
+            "referencia": {"numero": self.factura.numero, "cufe": None},
+            "emisor": {"nit": "800123456", "razon_social": "Proveedor Test"},
+            "receptor": {"nit": self.empresa_test.nit, "razon_social": self.empresa_test.razon_social},
+            "fecha_emision": "2024-01-20T10:00:00Z",
+            "totales": {"subtotal": 50000, "impuestos": 9500, "total": 59500, "moneda": "COP"},
+        }
+
+        out1, code1 = FacturaBusinessService.guardar_desde_dto(dto=dto_sin_cude)
+        self.assertEqual(code1, 201)
+
+        out2, code2 = FacturaBusinessService.guardar_desde_dto(dto=dto_sin_cude)
+        self.assertEqual(code2, 200)
+        self.assertFalse(out2.get("created"))
+
+        self.assertEqual(NotaCredito.objects.filter(numero="NC-SIN-CUDE-1").count(), 1)
+        nota = NotaCredito.objects.get(numero="NC-SIN-CUDE-1")
+        self.assertIsNone(nota.cude)

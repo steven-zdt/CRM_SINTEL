@@ -131,37 +131,50 @@ class MaterializarFromDTOTests(TenantTestCase):
     
     def test_idempotencia_por_numero(self):
         """
-        F26: HALLAZGO REAL (no corregido en este pase, documentado). El
-        nombre original de este test asumia que guardar_desde_dto() dedupe
-        por "numero" cuando no hay CUFE. Auditoria real del codigo
-        (`business_service.py`, seccion "Idempotencia por CUFE") confirma que
-        el UNICO camino de idempotencia es `if cufe: ...` -- si `cufe` es
-        falsy (identificadores vacio => cufe = ""), esa rama se salta por
-        completo y el codigo intenta crear una Factura nueva igual. Como
-        `Factura.cufe` tiene `unique=True` y el valor por defecto resuelto es
-        `""` (no `None`), la SEGUNDA materializacion con el mismo numero y
-        sin CUFE choca contra la unique constraint de BD
-        (`facturas_factura_cufe_key`) y propaga un `IntegrityError` sin
-        manejar -- no existe una ruta de "idempotencia por numero" real hoy.
-        Este es un gap real (documentos sin CUFE duplicados no se manejan
-        con gracia), pero implementarlo es un cambio de logica de negocio
-        nuevo, fuera del alcance quirurgico de F26 (que es auditar/simplificar,
-        no agregar funcionalidad). Se documenta el comportamiento actual en
-        vez de forzar el test a pasar con una asercion falsa.
+        F26-006 (corregido). Antes: sin CUFE, `guardar_desde_dto()` guardaba
+        `cufe=""` (no `None`) y saltaba por completo la rama de idempotencia
+        (`if cufe: ...`), asi que la segunda materializacion con el mismo
+        numero chocaba contra la unique constraint de BD
+        (`facturas_factura_cufe_key`) con un `IntegrityError` sin manejar.
+        Fix: (1) fallback de idempotencia por `numero`+`empresa` cuando no
+        hay CUFE (mismo criterio "ya existe" que la rama por CUFE); (2)
+        `cufe` se normaliza a `None` (no `""`) al persistir, para que
+        documentos legitimamente distintos sin CUFE no choquen entre si.
         """
         dto_sin_cufe = {**DTO_COMPRA, "identificadores": {}}
 
         out1, code1 = materializar_factura_desde_result({"dto": dto_sin_cufe})
         self.assertEqual(code1, 201)
+        self.assertTrue(out1.get("created"))
 
-        from django.db import IntegrityError
-        with self.assertRaises(IntegrityError):
-            materializar_factura_desde_result({"dto": dto_sin_cufe})
+        out2, code2 = materializar_factura_desde_result({"dto": dto_sin_cufe})
+        self.assertEqual(code2, 200)
+        self.assertFalse(out2.get("created"))
+        self.assertEqual(out2.get("numero"), "FE-10020298")
 
-        # A pesar del error, la primera factura sigue existiendo (no se
-        # corrompio) -- el gap es la ausencia de manejo elegante, no perdida
-        # de datos.
+        # Solo una factura -- no duplico ni exploto.
         self.assertEqual(Factura.objects.filter(numero="FE-10020298").count(), 1)
+
+        # La factura persistida tiene cufe=None (no ""), preservando la
+        # semantica de unique=True + null=True para documentos distintos.
+        f = Factura.objects.get(numero="FE-10020298")
+        self.assertIsNone(f.cufe)
+
+    def test_dos_facturas_distintas_sin_cufe_no_chocan(self):
+        """
+        F26-006: dos documentos DIFERENTES (numero distinto) sin CUFE deben
+        poder coexistir -- no es un caso de idempotencia, es la razon real
+        por la que `cufe` debe normalizarse a None y no "".
+        """
+        dto_a = {**DTO_COMPRA, "identificadores": {}, "numero": "FE-A"}
+        dto_b = {**DTO_COMPRA, "identificadores": {}, "numero": "FE-B"}
+
+        out_a, code_a = materializar_factura_desde_result({"dto": dto_a})
+        out_b, code_b = materializar_factura_desde_result({"dto": dto_b})
+
+        self.assertEqual(code_a, 201)
+        self.assertEqual(code_b, 201)
+        self.assertEqual(Factura.objects.filter(cufe__isnull=True).count(), 2)
     
     def test_sin_empresa_retorna_422(self):
         """Test: Retorna 422 si falta SSoT empresa."""
