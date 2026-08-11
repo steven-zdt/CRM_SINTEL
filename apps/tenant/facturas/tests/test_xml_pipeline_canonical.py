@@ -10,10 +10,10 @@ pytestmark = pytest.mark.skip(reason="Legacy xml_ingest module path removed; tes
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
+from tests.tenant.base_test import SintelTenantTestCase
 
 UBL_MIN = b"""<?xml version="1.0"?>
 <Invoice xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" 
@@ -48,7 +48,7 @@ UBL_MIN = b"""<?xml version="1.0"?>
 </Invoice>"""
 
 
-class XMLPipelineCanonicalTests(TenantTestCase):
+class XMLPipelineCanonicalTests(SintelTenantTestCase):
     """Tests para validar pipeline XML canónico."""
     
     def setUp(self):

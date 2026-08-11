@@ -2,13 +2,13 @@
 Tests de humo para validar que la API de listado de facturas incluye naturaleza.
 """
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, NaturalezaFactura
+from tests.tenant.base_test import SintelTenantTestCase
 
 
-class FacturasListNaturalezaAPITests(TenantTestCase):
+class FacturasListNaturalezaAPITests(SintelTenantTestCase):
     """Tests para validar que el listado de facturas incluye naturaleza correctamente."""
     
     def setUp(self):

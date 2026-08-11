@@ -9,10 +9,11 @@ Tests de humo para Fase 4: Modal de detalle de factura con anexos.
 import re
 
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
+
+from tests.tenant.base_test import SintelTenantTestCase
 
 
-class WorkspaceFacturasModalTests(TenantTestCase):
+class WorkspaceFacturasModalTests(SintelTenantTestCase):
     """Tests para validar modal de detalle de factura."""
     
     def setUp(self):

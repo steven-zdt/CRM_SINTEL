@@ -4,10 +4,11 @@ Tests de humo para validar columna Naturaleza y assets en workspace.html.
 import re
 
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
+
+from tests.tenant.base_test import SintelTenantTestCase
 
 
-class WorkspaceFacturasLinksAndColumnTests(TenantTestCase):
+class WorkspaceFacturasLinksAndColumnTests(SintelTenantTestCase):
     """Tests para validar que la tabla de facturas tiene la columna Naturaleza y assets correctos."""
     
     def setUp(self):

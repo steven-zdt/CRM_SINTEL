@@ -7,10 +7,10 @@ Tests para flujo async completo: upload → status → materialize (Fase 2).
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos
+from tests.tenant.base_test import SintelTenantTestCase
 
 # XML mínimo válido para tests
 UBL_MIN = b"""<?xml version="1.0"?>
@@ -51,7 +51,7 @@ UBL_MIN = b"""<?xml version="1.0"?>
 </Invoice>"""
 
 
-class UploadAsyncFlowTests(TenantTestCase):
+class UploadAsyncFlowTests(SintelTenantTestCase):
     """Tests para flujo async completo."""
     
     def setUp(self):

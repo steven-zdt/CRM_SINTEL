@@ -9,13 +9,13 @@ Tests tenant-aware para Fase 4: Detalle de Factura + Anexos bajo demanda.
 """
 from django.urls import reverse
 from django.utils import timezone
-from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos
+from tests.tenant.base_test import SintelTenantTestCase
 
 
-class FacturaDetailAnexosAPITests(TenantTestCase):
+class FacturaDetailAnexosAPITests(SintelTenantTestCase):
     """Tests para detalle de factura y anexos XML."""
     
     def setUp(self):

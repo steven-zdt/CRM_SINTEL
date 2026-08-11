@@ -10,22 +10,21 @@ import pytest
 from django.test import Client
 from django.urls import reverse
 
-from apps.tenant.core.tests.base_test import TenantTestCase
-
-
-class TestEmpresaModulesSmoke(TenantTestCase):
-    """
-    Smoke tests para verificar que ambos módulos se renderizan correctamente.
-    """
-    
-    def test_workspace_empresa_tab_loads(self):
-import pytest
-
 try:
     import cryptography  # noqa: F401
     import playwright  # noqa: F401
 except Exception:
     pytest.skip("Skipping heavy smoke test: missing playwright/cryptography", allow_module_level=True)
+
+from tests.tenant.base_test import SintelTenantTestCase
+
+
+class TestEmpresaModulesSmoke(SintelTenantTestCase):
+    """
+    Smoke tests para verificar que ambos módulos se renderizan correctamente.
+    """
+
+    def test_workspace_empresa_tab_loads(self):
         """Verifica que el tab #empresa carga correctamente."""
         client = Client()
         self.client.force_login(self.user)

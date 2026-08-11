@@ -14,13 +14,14 @@ Tests de smoke para:
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import tenant_context
+
+from tests.tenant.base_test import SintelTenantTestCase
 
 User = get_user_model()
 
 
-class WorkspaceCRUDIntegrationTest(TenantTestCase):
+class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
     """
     Tests de integración CRUD para todos los módulos del workspace.
 
@@ -29,8 +30,11 @@ class WorkspaceCRUDIntegrationTest(TenantTestCase):
 
     def setUp(self):
         """Configuración inicial para los tests."""
+        super().setUp()
+        # Crear usuario de prueba (independiente del self.user que
+        # SintelTenantTestCase ya crea -- este archivo prueba con un
+        # usuario propio sin TenantProfile/membership admin)
         self.client = Client()
-        # Crear usuario de prueba
         self.user = User.objects.create_user(
             username="testuser", email="test@example.com", password="testpass123"
         )
@@ -150,7 +154,7 @@ class WorkspaceCRUDIntegrationTest(TenantTestCase):
         self.assertIn('id="tab-perfil"', content or "")
 
 
-class WorkspaceModalStructureTest(TenantTestCase):
+class WorkspaceModalStructureTest(SintelTenantTestCase):
     """
     Tests para verificar la estructura de modales en cada módulo.
 
@@ -159,6 +163,7 @@ class WorkspaceModalStructureTest(TenantTestCase):
 
     def setUp(self):
         """Configuración inicial para los tests."""
+        super().setUp()
         self.client = Client()
         self.user = User.objects.create_user(
             username="testuser", email="test@example.com", password="testpass123"
@@ -243,7 +248,7 @@ class WorkspaceModalStructureTest(TenantTestCase):
         self.assertIn("modal-eliminar-cuenta", content or "")
 
 
-class WorkspaceDataTableStructureTest(TenantTestCase):
+class WorkspaceDataTableStructureTest(SintelTenantTestCase):
     """
     Tests para verificar la estructura de DataTables en cada módulo.
 
@@ -252,6 +257,7 @@ class WorkspaceDataTableStructureTest(TenantTestCase):
 
     def setUp(self):
         """Configuración inicial para los tests."""
+        super().setUp()
         self.client = Client()
         self.user = User.objects.create_user(
             username="testuser", email="test@example.com", password="testpass123"

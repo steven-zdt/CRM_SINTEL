@@ -2,13 +2,13 @@
 Tests de humo para validar que listado no trae blobs y detalle sí (opcional).
 """
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
+from tests.tenant.base_test import SintelTenantTestCase
 
 
-class PayloadsTests(TenantTestCase):
+class PayloadsTests(SintelTenantTestCase):
     """Tests para validar payloads mínimos en lista y anexos en detalle."""
     
     def setUp(self):

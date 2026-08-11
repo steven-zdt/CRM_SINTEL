@@ -11,10 +11,11 @@ Verifica:
 import re
 
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
+
+from tests.tenant.base_test import SintelTenantTestCase
 
 
-class WorkspaceLinksStrictTests(TenantTestCase):
+class WorkspaceLinksStrictTests(SintelTenantTestCase):
     """Tests estrictos para enlaces y URLs en workspace.html."""
     
     def setUp(self):
@@ -37,7 +38,7 @@ class WorkspaceLinksStrictTests(TenantTestCase):
             return False
 
 
-class WorkspaceFacturasLinksAndColumnTests(TenantTestCase):
+class WorkspaceFacturasLinksAndColumnTests(SintelTenantTestCase):
     """Tests estrictos para enlaces/URLs y columna Naturaleza en workspace.html."""
     
     def setUp(self):

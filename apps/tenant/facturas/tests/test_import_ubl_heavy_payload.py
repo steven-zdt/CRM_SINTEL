@@ -5,10 +5,10 @@ import textwrap
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactura
+from tests.tenant.base_test import SintelTenantTestCase
 
 # XML pesado simulado (con bloques grandes de firma y AttachedDocument)
 HEAVY_XML = textwrap.dedent("""<?xml version="1.0" encoding="UTF-8"?>
@@ -72,7 +72,7 @@ HEAVY_XML = textwrap.dedent("""<?xml version="1.0" encoding="UTF-8"?>
 ).encode("utf-8")
 
 
-class HeavyUBLTests(TenantTestCase):
+class HeavyUBLTests(SintelTenantTestCase):
     """Tests para validar importación de XMLs pesados sin error 500."""
     
     def setUp(self):

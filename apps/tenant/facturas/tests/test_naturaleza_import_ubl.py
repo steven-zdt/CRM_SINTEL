@@ -1,32 +1,25 @@
 """
 Pruebas de humo para detección automática de naturaleza (VENTA/COMPRA) en importación UBL.
 
-# WARNING: MULTI-TENANT: Usa TenantTestCase de django-tenants para tests tenant-aware.
-
-F27 (CONTRATO CAMBIADO / TEST BUG, documentado, no reescrito en este pase):
-las 5 pruebas de este archivo fallan hoy por 3 causas distintas y
-compuestas, confirmadas por reproduccion directa:
+F27 (CONTRATO CAMBIADO / TEST BUG, documentado) encontro 3 causas distintas
+y compuestas para los 5 fallos de este archivo:
 1. Los fixtures XML_VENTA/XML_COMPRA usan
    AccountingSupplierParty/CustomerParty > Party > PartyIdentification > ID
    para el NIT -- el parser real lee PartyTaxScheme > CompanyID (mismo
    patron corregido en test_importar_ubl_service.py). Con la estructura
    actual, emisor.nit/receptor.nit llegan vacios y
    ingest_document() rechaza el documento con missing_required_fields
-   ANTES de llegar al endpoint.
+   ANTES de llegar al endpoint. **Sigue sin corregir.**
 2. `_post_upload()` llama `reverse("factura-upload-ubl")` de forma directa
-   (fuera del ciclo de request). `django.urls.reverse()` sin urlconf
-   explicito usa `settings.ROOT_URLCONF` (el esquema PUBLIC), que no
-   registra rutas de facturas -- `NoReverseMatch` real, reproducido incluso
-   con `manage.py shell` fuera de pytest. `SintelTenantTestCase`
-   (`tests/tenant/base_test.py:125-136`) resuelve esto con
-   `override_settings(ROOT_URLCONF=settings.TENANT_URLCONF)` +
-   `set_urlconf(...)` en `setUp()`; `TenantTestCase` (django-tenants) NO lo
-   hace -- solo cambia el schema de PostgreSQL, no el URLconf de Django.
-   Ver F27_FINDINGS.md para el resto de archivos con este mismo patron.
+   (fuera del ciclo de request) -- con `TenantTestCase` crudo (que no fija
+   `ROOT_URLCONF` al esquema tenant) esto fallaba con `NoReverseMatch`.
+   **F28: CORREGIDO** migrando la clase base a `SintelTenantTestCase`
+   (`tests/tenant/base_test.py:125-136`, ya fija `ROOT_URLCONF`/`set_urlconf`
+   en `setUp()`). Ver `F27_FINDINGS.md` F27-003/F28_TENANT_TEST_AUDIT.md.
 3. `_post_upload()` no pasa `async=false` -- el default real del endpoint
-   es async=true (Celery), asi que aun corrigiendo 1 y 2 el flujo
+   es async=true (Celery), asi que aun con 1 y 2 resueltos el flujo
    sincronico que estas pruebas esperan (200/201 inmediato) no ocurriria
-   sin ese parametro.
+   sin ese parametro. **Sigue sin corregir.**
 
 El endpoint que este archivo prueba (`POST /facturas/upload-ubl/`) esta
 ademas marcado `# WARNING: DEPRECATED` en su propio docstring
@@ -38,17 +31,17 @@ naturaleza VENTA/COMPRA) ya queda cubierta, tras F27, por
 `test_naturaleza_unit.py` y la cobertura end-to-end de
 `test_materializar_from_dto.py`/`test_nota_credito_pipeline.py` via el
 pipeline vigente -- no hay perdida de cobertura real dejando este archivo
-sin corregir. No se reescribe en este pase por ser 3 fixes compuestos sobre
+sin corregir del todo. No se termina de corregir en F28 por seguir siendo
 un endpoint deprecado con cobertura ya duplicada en otro lado (mayor riesgo
 que beneficio); candidato real a CONSOLIDAR/ELIMINAR en una pasada
 dedicada.
 """
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
+from tests.tenant.base_test import SintelTenantTestCase
 
 # XML de ejemplo para VENTA (emisor == empresa del tenant)
 XML_VENTA = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -121,7 +114,7 @@ XML_COMPRA = b"""<?xml version="1.0" encoding="UTF-8"?>
 </Invoice>"""
 
 
-class NaturalezaImportTests(TenantTestCase):
+class NaturalezaImportTests(SintelTenantTestCase):
     """Tests para detección automática de naturaleza en importación UBL."""
     
     def setUp(self):

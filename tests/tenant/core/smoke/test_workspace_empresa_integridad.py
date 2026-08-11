@@ -19,11 +19,11 @@ except Exception:
         "Skipping heavy smoke test: missing playwright/cryptography",
         allow_module_level=True,
     )
-from apps.tenant.core.tests.base_test import TenantTestCase
 from apps.tenant.empresa.models import Empresa
+from tests.tenant.base_test import SintelTenantTestCase
 
 
-class TestEmpresaIntegridad(TenantTestCase):
+class TestEmpresaIntegridad(SintelTenantTestCase):
     """
     Tests de integridad que validan la estructura completa del módulo Empresa.
 
