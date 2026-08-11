@@ -189,7 +189,12 @@ class Factura(SintelTenantBaseModel):
     # XML (# WARNING: DEPRECADO: usar FacturaAnexos.ubl_xml en su lugar)
     # Mantenido por compatibilidad durante migración
     xml_content = models.TextField(blank=True, null=True, verbose_name=_('XML UBL completo (Deprecado)'))
-    xml_file_path = models.CharField(max_length=500, blank=True, null=True, verbose_name=_('Ruta XML'))
+    # F26: xml_file_path removido -- auditoria de codigo real confirmo 0
+    # escritores y 0 lectores en todo el repo (solo aparecia en admin.py sin
+    # uso real), y 0 filas con dato en las 3 empresas del entorno
+    # (SELECT COUNT(*) WHERE xml_file_path IS NOT NULL AND != '' = 0 en
+    # home/qaisotest/shelltest1). Ver F26_FINDINGS.md y migracion
+    # 0032_remove_factura_xml_file_path.py.
 
     # Sede — vinculacion para indicadores y KPIs por sede (DT-SEDE-02)
     sede = models.ForeignKey(
@@ -918,7 +923,11 @@ MANUAL_EDITABLE_FIELDS = [
     'payment_due_date',
     'forma_pago',
     'medio_pago_codigo',
-    'orden_compra',
+    # F26: 'orden_compra' removido -- campo fantasma, Factura nunca lo tuvo
+    # (confirmado por auditoria de codigo real, ver F26_FINDINGS.md). Un PATCH
+    # que lo incluyera habria llegado a factura.save(update_fields=[...,
+    # 'orden_compra']) y Django lo hubiera rechazado con ValueError (campo
+    # inexistente en el modelo) -- riesgo real de 500 nunca ejercitado.
     'cotizacion_uuid',
     'cotizacion_numero',
     'sede',  # [OSF Fase F11] antes solo informativa/reporting (DT-SEDE-02)

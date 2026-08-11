@@ -41,7 +41,7 @@ class FacturaAdmin(admin.ModelAdmin):
             'fields': ('subtotal', 'impuestos', 'total')
         }),
         ('DIAN', {
-            'fields': ('cufe', 'qr_code', 'xml_content', 'xml_file_path')
+            'fields': ('cufe', 'qr_code', 'xml_content')
         }),
         ('Metadatos', {
             'fields': ('created_at', 'updated_at'),
