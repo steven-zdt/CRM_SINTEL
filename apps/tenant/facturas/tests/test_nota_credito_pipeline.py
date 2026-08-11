@@ -182,19 +182,53 @@ class NotaCreditoPipelineSmokeTests(SintelTenantTestCase):
     
     @override_settings(FEATURE_XML_PIPELINE=True)
     def test_5_factura_inexistente_error(self):
-        """Test 5: Error cuando factura referenciada no existe."""
-        xml_text = """<?xml version="1.0" encoding="UTF-8"?>
+        """
+        Test 5: Error cuando factura referenciada no existe.
+
+        F26: fixture corregida con evidencia. El XML original no declaraba
+        AccountingSupplierParty/AccountingCustomerParty -- guardar_desde_dto()
+        valida que el NIT de la empresa actual coincida con emisor o receptor
+        ANTES de resolver la factura_original_para_nc (business_service.py,
+        validacion de pertenencia del NIT), asi que sin esos nodos el XML
+        nunca llegaba a ejercitar el chequeo "missing_invoice" que este test
+        realmente quiere probar -- fallaba antes, con un
+        DjangoValidationError distinto (NIT no coincide). Se agrega
+        AccountingCustomerParty con el NIT de self.empresa_test (mismo patron
+        que _crear_xml_credit_note) para que el XML sea valido hasta ese
+        punto y el test ejercite genuinamente la referencia a una factura
+        inexistente.
+        """
+        xml_text = f"""<?xml version="1.0" encoding="UTF-8"?>
 <CreditNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
             xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
             xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2">
     <cbc:ID>NC999</cbc:ID>
     <cbc:UUID>TEST-CUDE-NOT-FOUND</cbc:UUID>
+    <cbc:IssueDate>2024-01-20</cbc:IssueDate>
     <cac:BillingReference>
         <cac:InvoiceDocumentReference>
             <cbc:ID>FACTURA-INEXISTENTE</cbc:ID>
             <cbc:UUID>CUFE-INEXISTENTE</cbc:UUID>
         </cac:InvoiceDocumentReference>
     </cac:BillingReference>
+    <cac:AccountingSupplierParty>
+        <cac:Party>
+            <cac:PartyTaxScheme>
+                <cbc:RegistrationName>Proveedor Test</cbc:RegistrationName>
+                <cbc:CompanyID schemeAgencyID="195" schemeID="4">800123456</cbc:CompanyID>
+                <cac:TaxScheme><cbc:ID>01</cbc:ID></cac:TaxScheme>
+            </cac:PartyTaxScheme>
+        </cac:Party>
+    </cac:AccountingSupplierParty>
+    <cac:AccountingCustomerParty>
+        <cac:Party>
+            <cac:PartyTaxScheme>
+                <cbc:RegistrationName>{self.empresa_test.razon_social}</cbc:RegistrationName>
+                <cbc:CompanyID schemeAgencyID="195" schemeID="4">{self.empresa_test.nit}</cbc:CompanyID>
+                <cac:TaxScheme><cbc:ID>01</cbc:ID></cac:TaxScheme>
+            </cac:PartyTaxScheme>
+        </cac:Party>
+    </cac:AccountingCustomerParty>
     <cac:LegalMonetaryTotal>
         <cbc:PayableAmount currencyID="COP">10000.00</cbc:PayableAmount>
     </cac:LegalMonetaryTotal>

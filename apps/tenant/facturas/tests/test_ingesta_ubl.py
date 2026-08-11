@@ -82,7 +82,11 @@ class TestFacturaIngestion(TenantTestCase):
       empresa_id = empresa.id
       usuario_id = user.id
       # Ejecutar tarea de forma síncrona para test
-      procesar_factura_xml_task(XML_SAMPLE.decode(), empresa_id, usuario_id)
+      # ingest_document() exige bytes explicitamente (contrato documentado en
+      # apps/services/document_ingest/ingest_service.py: "content: Contenido
+      # del documento en bytes", ademas de hashlib.sha256() que solo acepta
+      # bytes) -- el test pasaba XML_SAMPLE.decode() (str) por error.
+      procesar_factura_xml_task(XML_SAMPLE, empresa_id, usuario_id)
       factura = Factura.objects.filter(cufe="1234567890ABCDEFGHIJKLMN", empresa_id=empresa_id).first()
       assert factura is not None
       assert factura.numero == "F001"
