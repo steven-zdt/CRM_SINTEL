@@ -16,7 +16,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura
+from apps.tenant.facturas.models import Factura, FacturaAnexos
 from tests.tenant.base_test import SintelTenantTestCase
 
 
@@ -91,7 +91,8 @@ class TestFacturaImmutability(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.get(url)
 
         assert resp.status_code == 200
@@ -124,7 +125,8 @@ class TestFacturaImmutability(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.put(
             url, {"numero": "FST-003-MODIFIED", "estado": "ENVIADA"}
         )
@@ -156,7 +158,8 @@ class TestFacturaImmutability(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.patch(url, {"estado": "ENVIADA"})
 
         assert resp.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
@@ -186,7 +189,8 @@ class TestFacturaImmutability(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.delete(url)
 
         assert resp.status_code == status.HTTP_204_NO_CONTENT
@@ -218,7 +222,8 @@ class TestFacturaImmutability(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.delete(url)
 
         assert resp.status_code == status.HTTP_204_NO_CONTENT
@@ -251,7 +256,8 @@ class TestFacturaImmutability(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.delete(url)
 
         assert resp.status_code == status.HTTP_204_NO_CONTENT
@@ -313,14 +319,22 @@ class TestFacturaImmutability(SintelTenantTestCase):
             subtotal=Decimal("800000.00"),
             impuestos=Decimal("152000.00"),
             total=Decimal("952000.00"),
-            xml_content="<Invoice>Test XML</Invoice>",
+        )
+        # F29-001: FacturaAnexos.ubl_xml es la SSoT real desde F26 (no el
+        # campo deprecado Factura.xml_content).
+        FacturaAnexos.objects.create(
+            factura=factura,
+            ubl_xml="<Invoice>Test XML</Invoice>",
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("factura-xml", kwargs={"pk": factura.id})
+        # F29-001: el nombre real es "factura-xml-ubl" (uuid, no pk); la
+        # respuesta exitosa es un HttpResponse XML crudo, no JSON -- mismo
+        # contrato verificado en
+        # test_factura_detail_anexos_api.py::test_get_ubl_xml.
+        url = reverse("factura-xml-ubl", kwargs={"uuid": factura.uuid})
         resp = self.api_client.get(url)
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert "xml" in data
-        assert data["xml"] == "<Invoice>Test XML</Invoice>"
+        assert "application/xml" in resp["Content-Type"]
+        assert "<Invoice>Test XML</Invoice>" in resp.content.decode("utf-8")

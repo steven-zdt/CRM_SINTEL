@@ -15,7 +15,7 @@ from rest_framework import status
 
 from apps.tenant.contabilidad.models import AsientoContable, CuentaContable
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura
+from apps.tenant.facturas.models import Factura, FacturaAnexos
 from tests.tenant.base_test import SintelTenantTestCase
 
 
@@ -98,7 +98,8 @@ class TestNormaExposicionDatos(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.get(url)
 
         assert resp.status_code == 200
@@ -129,7 +130,13 @@ class TestNormaExposicionDatos(SintelTenantTestCase):
             subtotal=300000.00,
             impuestos=57000.00,
             total=357000.00,
-            xml_content="<Invoice>Test XML</Invoice>",
+        )
+        # F29-001: FacturaAnexos.ubl_xml es la SSoT real desde F26 (no el
+        # campo deprecado Factura.xml_content) -- FacturaSelectors.obtener_anexo_xml()
+        # lee de ahi.
+        FacturaAnexos.objects.create(
+            factura=factura,
+            ubl_xml="<Invoice>Test XML</Invoice>",
         )
 
         self.api_client.force_authenticate(user=self.user)
@@ -148,19 +155,24 @@ class TestNormaExposicionDatos(SintelTenantTestCase):
             assert "xml_content" not in f
 
         # Verificar que DETAIL no contiene xml_content
-        url_detail = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url_detail = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp_detail = self.api_client.get(url_detail)
         assert resp_detail.status_code == 200
         data_detail = resp_detail.json()
         assert "xml_content" not in data_detail
 
-        # Verificar que endpoint /xml/ sí contiene xml_content
-        url_xml = reverse("factura-xml", kwargs={"pk": factura.id})
+        # Verificar que endpoint /xml/ sí contiene el XML
+        # F29-001: el nombre real es "factura-xml-ubl", no "factura-xml"
+        # (que nunca existió); la respuesta exitosa es un HttpResponse XML
+        # crudo (Content-Type: application/xml), no JSON -- mismo contrato
+        # ya verificado en
+        # test_factura_detail_anexos_api.py::test_get_ubl_xml.
+        url_xml = reverse("factura-xml-ubl", kwargs={"uuid": factura.uuid})
         resp_xml = self.api_client.get(url_xml)
         assert resp_xml.status_code == 200
-        data_xml = resp_xml.json()
-        assert "xml" in data_xml
-        assert data_xml["xml"] == "<Invoice>Test XML</Invoice>"
+        assert "application/xml" in resp_xml["Content-Type"]
+        assert "<Invoice>Test XML</Invoice>" in resp_xml.content.decode("utf-8")
 
     def test_asientos_contables_list_serializer_minimo(self):
         """
@@ -200,7 +212,8 @@ class TestNormaExposicionDatos(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("asiento-contable-detail", kwargs={"pk": asiento.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("asiento-contable-detail", kwargs={"uuid": asiento.uuid})
         resp = self.api_client.get(url)
 
         assert resp.status_code == 200
@@ -249,7 +262,8 @@ class TestNormaExposicionDatos(SintelTenantTestCase):
         )
 
         self.api_client.force_authenticate(user=self.user)
-        url = reverse("cuenta-contable-detail", kwargs={"pk": cuenta.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("cuenta-contable-detail", kwargs={"uuid": cuenta.uuid})
         resp = self.api_client.get(url)
 
         assert resp.status_code == 200

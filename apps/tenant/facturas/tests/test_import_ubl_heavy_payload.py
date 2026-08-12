@@ -170,7 +170,8 @@ class HeavyUBLTests(SintelTenantTestCase):
             application_response_xml="<ApplicationResponse>Respuesta DIAN</ApplicationResponse>"
         )
         
-        url = reverse("factura-detail", args=[factura.id])
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no PK entero.
+        url = reverse("factura-detail", args=[factura.uuid])
         resp = self.client.get(url)
         
         self.assertEqual(resp.status_code, 200)

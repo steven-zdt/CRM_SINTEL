@@ -63,7 +63,8 @@ class PayloadsTests(SintelTenantTestCase):
     
     def test_detail_con_anexos(self):
         """Valida que el detalle reporta metadatos de anexos sin incluir blobs."""
-        url = reverse("factura-detail", args=[self.f.id])
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no PK entero.
+        url = reverse("factura-detail", args=[self.f.uuid])
         resp = self.client.get(url)
         
         self.assertEqual(resp.status_code, 200)

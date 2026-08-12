@@ -108,9 +108,11 @@ class TestFacturasAPIForensics(SintelTenantTestCase):
 
         assert r.status_code in (status.HTTP_200_OK, status.HTTP_201_CREATED)
         fact_id = r.json()["id"]
+        fact_uuid = r.json()["uuid"]
 
         # 2. Detalle
-        detail_url = reverse("factura-detail", kwargs={"pk": fact_id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        detail_url = reverse("factura-detail", kwargs={"uuid": fact_uuid})
         rd = self.api_client.get(detail_url)
         assert rd.status_code == status.HTTP_200_OK
         assert rd.json()["id"] == fact_id

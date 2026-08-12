@@ -161,7 +161,8 @@ class TestFacturasAPI(SintelTenantTestCase):
             total=Decimal("119000.00"),
         )
 
-        url = reverse("factura-detail", kwargs={"pk": factura.pk})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         data = {"estado": "ENVIADA"}
         response = self.client.patch(url, data, format="json")
 

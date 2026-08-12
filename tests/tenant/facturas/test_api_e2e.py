@@ -142,7 +142,8 @@ class TestFacturasAPIE2E(SintelTenantTestCase):
             total=Decimal("119000.00"),
         )
 
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.get(url)
 
         assert resp.status_code == status.HTTP_200_OK
@@ -174,7 +175,8 @@ class TestFacturasAPIE2E(SintelTenantTestCase):
             total=Decimal("119000.00"),
         )
 
-        url = reverse("factura-detail", kwargs={"pk": factura.id})
+        # F29-001: BaseTenantViewSet.lookup_field = "uuid", no "pk".
+        url = reverse("factura-detail", kwargs={"uuid": factura.uuid})
         resp = self.api_client.delete(url)
 
         assert resp.status_code == status.HTTP_204_NO_CONTENT
