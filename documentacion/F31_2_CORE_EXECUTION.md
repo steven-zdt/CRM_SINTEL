@@ -129,14 +129,29 @@ dominante con camelCase legacy:**
 componente); `tab-activated` (core/workspace.js, navegación de UI, no
 CRUD).
 
-**No se normaliza en F31.2** -- unificar estos 7 sitios requeriría
-también encontrar y actualizar sus listeners correspondientes (fuera del
-alcance de este grep de solo-escritura), y el contrato real ya
-mayoritariamente vigente (`<modelo>-updated`) es una base más sólida para
-documentar como estándar que reescribir todo a un esquema de 3 eventos
-nunca adoptado. Recomendación para una fase futura de eventos: adoptar
-`<modelo>-updated` como el contrato oficial (ya es el de facto), normalizar
-solo los 7 outliers camelCase.
+**Actualización (F31.3):** de los 7 outliers, se investigó cada uno
+individualmente antes de tocar código:
+- **`inventarioActualizado` -- normalizado a `inventario-updated`.**
+  Evento auto-contenido (2 dispatchers + 1 listener, sin acoplamiento a
+  HTMX ni a otras apps) -- renombrado con confianza, verificado que
+  dispatcher y listener quedan sincronizados.
+- **`clienteGuardado`/`contactoGuardado`/`clienteEliminado`/
+  `contactoEliminado` (clientes) -- NO son un outlier real, son
+  indirección deliberada.** Son eventos internos `document`-scoped que
+  `clientes.list.js` traduce a `w.refreshClientesTable()`, que a su vez
+  dispara el evento REAL que HTMX observa (`cliente-updated`,
+  `body`-scoped, vía `hx-trigger="load, cliente-updated from:body"`). Un
+  rename ingenuo habría chocado con ese evento ya existente y roto la capa
+  de indirección. Se dejan sin tocar.
+- **`facturaEliminada` (facturas_main.js) -- código muerto confirmado.**
+  Grep en todo el repo (`.js`, `.html`, `.py`) no encontró ningún listener.
+  Renombrarlo no tiene efecto funcional; se documenta, no se toca.
+
+Adoptar `<modelo>-updated` como contrato oficial (ya es el de facto) sigue
+siendo la recomendación para una fase futura de eventos -- pero cualquier
+normalización adicional requiere la misma investigación caso-por-caso que
+reveló el patrón de `clientes`, no un rename mecánico basado solo en el
+nombre.
 
 ## §4.4 -- Patrón de `contabilidad` (8 `*.api.js`): aceptado, documentado
 
