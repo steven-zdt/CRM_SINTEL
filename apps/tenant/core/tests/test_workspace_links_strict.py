@@ -20,21 +20,20 @@ class WorkspaceLinksStrictTests(SintelTenantTestCase):
     
     def setUp(self):
         super().setUp()
-        # Intentar obtener la URL del workspace (ajustar según tu configuración)
-        # Opciones comunes: "workspace", "tenant-workspace", "dashboard"
+        # F29-002: contrato real confirmado -- 'core_ui:workspace' (ver
+        # apps/tenant/core/urls_ui.py, app_name = 'core_ui'). Los nombres
+        # sin namespace nunca existieron.
         self.workspace_urls = [
-            reverse("workspace") if self._url_exists("workspace") else None,
-            reverse("tenant-workspace") if self._url_exists("tenant-workspace") else None,
-            reverse("dashboard") if self._url_exists("dashboard") else None,
+            reverse("core_ui:workspace") if self._url_exists("core_ui:workspace") else None,
         ]
         self.workspace_url = next((url for url in self.workspace_urls if url), "/workspace/")
-    
+
     def _url_exists(self, name):
         """Helper para verificar si una URL existe."""
         try:
             reverse(name)
             return True
-        except:
+        except Exception:
             return False
 
 
@@ -43,20 +42,20 @@ class WorkspaceFacturasLinksAndColumnTests(SintelTenantTestCase):
     
     def setUp(self):
         super().setUp()
-        # Intentar obtener la URL del workspace
+        # F29-002: contrato real confirmado -- 'core_ui:workspace' (ver
+        # apps/tenant/core/urls_ui.py, app_name = 'core_ui'). Los nombres
+        # sin namespace nunca existieron.
         self.workspace_urls = [
-            reverse("workspace") if self._url_exists("workspace") else None,
-            reverse("tenant-workspace") if self._url_exists("tenant-workspace") else None,
-            reverse("dashboard") if self._url_exists("dashboard") else None,
+            reverse("core_ui:workspace") if self._url_exists("core_ui:workspace") else None,
         ]
         self.workspace_url = next((url for url in self.workspace_urls if url), "/workspace/")
-    
+
     def _url_exists(self, name):
         """Helper para verificar si una URL existe."""
         try:
             reverse(name)
             return True
-        except:
+        except Exception:
             return False
     
     def test_workspace_has_strict_links(self):

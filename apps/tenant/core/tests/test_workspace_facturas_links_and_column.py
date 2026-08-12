@@ -13,11 +13,17 @@ class WorkspaceFacturasLinksAndColumnTests(SintelTenantTestCase):
     
     def setUp(self):
         super().setUp()
-        # Ajustar al name real de la URL del workspace
-        # Si no existe, usar la ruta directa
+        # F29-002: contrato real confirmado -- apps/tenant/core/urls_ui.py
+        # declara app_name = 'core_ui' y registra path('workspace/', ...,
+        # name='workspace'), incluido en config/urls_tenant.py sin
+        # namespace= explicito (Django toma el app_name del modulo
+        # incluido) -- el nombre reversible real es 'core_ui:workspace',
+        # nunca 'tenant-workspace' (nunca existio) ni 'workspace' a secas
+        # (NoReverseMatch: no esta namespaced). Confirmado:
+        # reverse('core_ui:workspace') == '/workspace/'.
         try:
-            self.url = reverse("tenant-workspace")
-        except:
+            self.url = reverse("core_ui:workspace")
+        except Exception:
             self.url = "/workspace/"
     
     def test_columna_naturaleza_y_assets(self):

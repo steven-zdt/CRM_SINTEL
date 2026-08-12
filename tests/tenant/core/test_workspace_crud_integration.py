@@ -9,6 +9,31 @@ Tests de smoke para:
 - Verificación de que las acciones CRUD funcionan
 - Verificación de que los DataTables se inicializan
 - Verificación de que los assets se cargan correctamente
+
+F29-002: los 20 usos de `reverse("workspace")` de este archivo fallaban con
+`NoReverseMatch` en cualquier contexto (incluso fuera de pytest, con
+código de producción intacto) -- el nombre real, confirmado caminando el
+árbol de resolvers, es `core_ui:workspace` (`apps/tenant/core/urls_ui.py`
+declara `app_name = 'core_ui'`; se incluye en `config/urls_tenant.py` sin
+`namespace=` explícito, así que Django toma el `app_name` del módulo
+incluido como namespace). No es un bug de producción -- la ruta literal
+`/workspace/` responde 302 en una petición real. Corregido a
+`reverse("core_ui:workspace")` en las 20 ocurrencias.
+
+F29-003 (hallazgo nuevo, NO corregido en este pase): tras el fix de arriba,
+`test_workspace_page_loads` pasa limpio (200, template correcto), pero el
+resto de los tests de este archivo (que revisan `response.content`) siguen
+fallando con contenido vacío. Causa probable: las 3 clases de este archivo
+sobreescriben `self.user`/`self.client` en su propio `setUp()`
+(`User.objects.create_user(...)` + `force_login`) DESPUÉS de llamar
+`super().setUp()` -- esto reemplaza al usuario admin real que
+`SintelTenantTestCase` ya crea (con `TenantProfile`/`TenantMembership`) por
+un usuario sin perfil de tenant, que probablemente no pasa algún gate de
+membership del middleware/vista y termina recibiendo una respuesta 200 con
+cuerpo vacío en vez del HTML real. No investigado a fondo ni corregido --
+requeriría usar el `self.user` que `SintelTenantTestCase` ya provee (con
+membership) en vez de crear uno nuevo, verificando que no rompa el resto
+del archivo.
 """
 
 from django.contrib.auth import get_user_model
@@ -42,13 +67,13 @@ class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
 
     def test_workspace_page_loads(self):
         """Verifica que la página del workspace carga correctamente."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "tenant/core/workspace.html")
 
     def test_workspace_includes_all_partials(self):
         """Verifica que todos los partials están incluidos en workspace.html."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar partials de módulos principales
@@ -67,7 +92,7 @@ class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
 
     def test_workspace_includes_all_modals(self):
         """Verifica que todos los modales están incluidos en workspace.html."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar modales de módulos principales
@@ -86,7 +111,7 @@ class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
 
     def test_workspace_includes_all_assets(self):
         """Verifica que todos los assets JS están incluidos en workspace.html."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar assets de módulos principales
@@ -103,7 +128,7 @@ class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
 
     def test_workspace_js_modules_exported(self):
         """Verifica que los módulos JS exportan las funciones correctas."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar que los archivos JS principales están incluidos
@@ -123,7 +148,7 @@ class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
 
     def test_workspace_sidebar_links(self):
         """Verifica que todos los enlaces del sidebar están presentes."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar enlaces del sidebar
@@ -139,7 +164,7 @@ class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
 
     def test_workspace_tabs_sections(self):
         """Verifica que todas las secciones de tabs están presentes."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar secciones de tabs
@@ -172,7 +197,7 @@ class WorkspaceModalStructureTest(SintelTenantTestCase):
 
     def test_empresa_modals_structure(self):
         """Verifica que los modales de Empresa tienen la estructura correcta."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar modales de Empresa
@@ -185,7 +210,7 @@ class WorkspaceModalStructureTest(SintelTenantTestCase):
 
     def test_gastos_modals_structure(self):
         """Verifica que los modales de Gastos tienen la estructura correcta."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar modales de Gastos
@@ -196,7 +221,7 @@ class WorkspaceModalStructureTest(SintelTenantTestCase):
 
     def test_facturas_modals_structure(self):
         """Verifica que los modales de Facturas tienen la estructura correcta."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar modal de importar (los demás son dinámicos)
@@ -205,7 +230,7 @@ class WorkspaceModalStructureTest(SintelTenantTestCase):
 
     def test_inventario_catalogo_modals_structure(self):
         """Verifica que los modales de Inventario Catálogo tienen la estructura correcta."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar modales de Catálogo
@@ -216,7 +241,7 @@ class WorkspaceModalStructureTest(SintelTenantTestCase):
 
     def test_inventario_activos_modals_structure(self):
         """Verifica que los modales de Inventario Activos tienen la estructura correcta."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar modales de Activos
@@ -227,7 +252,7 @@ class WorkspaceModalStructureTest(SintelTenantTestCase):
 
     def test_inventario_movimientos_modals_structure(self):
         """Verifica que los modales de Inventario Movimientos tienen la estructura correcta."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar modales de Movimientos (solo Ver y Crear)
@@ -238,7 +263,7 @@ class WorkspaceModalStructureTest(SintelTenantTestCase):
 
     def test_contabilidad_cuentas_modals_structure(self):
         """Verifica que los modales de Contabilidad Cuentas tienen la estructura correcta."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar modales de Cuentas
@@ -266,7 +291,7 @@ class WorkspaceDataTableStructureTest(SintelTenantTestCase):
 
     def test_gastos_table_structure(self):
         """Verifica que la tabla de Gastos tiene las columnas correctas."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         # Verificar que la tabla tiene el ID correcto
@@ -276,28 +301,28 @@ class WorkspaceDataTableStructureTest(SintelTenantTestCase):
 
     def test_proveedores_table_structure(self):
         """Verifica que la tabla de Proveedores tiene las columnas correctas."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         self.assertIn("table-proveedores", content or "")
 
     def test_clientes_table_structure(self):
         """Verifica que la tabla de Clientes tiene las columnas correctas."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         self.assertIn("table-clientes", content or "")
 
     def test_empleados_table_structure(self):
         """Verifica que la tabla de Empleados tiene las columnas correctas."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         self.assertIn("table-empleados", content or "")
 
     def test_inventario_tables_structure(self):
         """Verifica que las tablas de Inventario tienen las columnas correctas."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         self.assertIn("table-inventario-catalogo", content or "")
@@ -306,7 +331,7 @@ class WorkspaceDataTableStructureTest(SintelTenantTestCase):
 
     def test_contabilidad_tables_structure(self):
         """Verifica que las tablas de Contabilidad tienen las columnas correctas."""
-        response = self.client.get(reverse("workspace"))
+        response = self.client.get(reverse("core_ui:workspace"))
         content = response.content.decode("utf-8")
 
         self.assertIn("table-contabilidad-cuentas", content or "")

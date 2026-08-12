@@ -18,21 +18,24 @@ class WorkspaceFacturasModalTests(SintelTenantTestCase):
     
     def setUp(self):
         super().setUp()
-        # Intentar obtener la URL del workspace (ajustar según tu configuración)
-        # Usar el mismo método que test_workspace_links_strict.py
+        # F29-002: contrato real confirmado -- el nombre reversible correcto
+        # es 'core_ui:workspace' (apps/tenant/core/urls_ui.py declara
+        # app_name = 'core_ui'; incluido en config/urls_tenant.py sin
+        # namespace= explicito, Django toma el app_name del modulo). Los
+        # nombres 'workspace'/'tenant-workspace'/'dashboard' sin namespace
+        # nunca existieron -- _url_exists() siempre devolvia False para
+        # los 3 y este setUp siempre caia al fallback hardcodeado.
         self.workspace_urls = [
-            reverse("workspace") if self._url_exists("workspace") else None,
-            reverse("tenant-workspace") if self._url_exists("tenant-workspace") else None,
-            reverse("dashboard") if self._url_exists("dashboard") else None,
+            reverse("core_ui:workspace") if self._url_exists("core_ui:workspace") else None,
         ]
         self.url = next((url for url in self.workspace_urls if url), "/workspace/")
-    
+
     def _url_exists(self, name):
         """Verifica si una URL name existe."""
         try:
             reverse(name)
             return True
-        except:
+        except Exception:
             return False
     
     def test_modal_present_and_assets(self):
