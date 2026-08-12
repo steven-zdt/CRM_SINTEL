@@ -52,7 +52,9 @@ class TestDataTablesDomainValidation:
         # Llamar al endpoint de DataTables
         from django.urls import reverse
 
-        url = reverse("admin-dt-tenants")
+        # F29-002: el DataTables de tenants vive en console_api (namespace
+        # 'console_api'), no "admin-dt-tenants" (nunca existió).
+        url = reverse("console_api:dt_tenants")
         response = api_client.post(
             url, {"draw": 1, "start": 0, "length": 10}, format="json"
         )
@@ -131,7 +133,9 @@ class TestDataTablesDomainValidation:
         # Llamar al endpoint de DataTables
         from django.urls import reverse
 
-        url = reverse("admin-dt-tenants")
+        # F29-002: el DataTables de tenants vive en console_api (namespace
+        # 'console_api'), no "admin-dt-tenants" (nunca existió).
+        url = reverse("console_api:dt_tenants")
         response = api_client.post(
             url, {"draw": 1, "start": 0, "length": 10}, format="json"
         )
@@ -188,7 +192,9 @@ class TestDataTablesDomainValidation:
         # Llamar al endpoint de DataTables
         from django.urls import reverse
 
-        url = reverse("admin-dt-tenants")
+        # F29-002: el DataTables de tenants vive en console_api (namespace
+        # 'console_api'), no "admin-dt-tenants" (nunca existió).
+        url = reverse("console_api:dt_tenants")
         response = api_client.post(
             url, {"draw": 1, "start": 0, "length": 10}, format="json"
         )

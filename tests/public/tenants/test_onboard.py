@@ -26,7 +26,8 @@ class TestOnboard:
         )
         authenticated_client.force_authenticate(user=admin)
 
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         payload = {
             "nombre": "Acme SAS",
             "dominio": "acme.localhost:8000",
@@ -72,7 +73,8 @@ class TestOnboard:
 
     def test_onboard_requiere_autenticacion(self, api_client):
         """Verifica que onboard requiere autenticación."""
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         payload = {"nombre": "Test", "dominio": "test.localhost", "admin_user_id": 1}
 
         response = api_client.post(url, data=payload, format="json")
@@ -82,7 +84,8 @@ class TestOnboard:
         """Verifica que onboard valida datos requeridos."""
         authenticated_client.force_authenticate(user=admin_user)
 
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
 
         # Intentar crear sin nombre
         payload = {"dominio": "test.localhost", "admin_user_id": admin_user.id}

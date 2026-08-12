@@ -60,7 +60,8 @@ class TestDomainNormalizationProtocolAndCase:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe crear exitosamente
@@ -126,7 +127,8 @@ class TestDomainNormalizationWWW:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe crear exitosamente
@@ -186,7 +188,8 @@ class TestDomainNormalizationRegression:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe crear exitosamente
@@ -270,7 +273,8 @@ class TestDomainNormalizationInvalid:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe retornar 400 Bad Request
@@ -318,7 +322,8 @@ class TestDomainNormalizationInvalid:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe retornar 400 Bad Request
@@ -352,7 +357,8 @@ class TestDomainNormalizationInvalid:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe retornar 400 Bad Request
@@ -395,7 +401,8 @@ class TestDomainNormalizationEdgeCases:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe crear exitosamente
@@ -443,7 +450,8 @@ class TestDomainNormalizationEdgeCases:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe crear exitosamente
@@ -491,7 +499,8 @@ class TestDomainNormalizationEdgeCases:
         }
 
         # Enviar POST al endpoint de onboard
-        url = reverse("admin-tenants-onboard")
+        # F29-002: nombre real "tenant-onboard" desde Fase 5-BIS.
+        url = reverse("tenant-onboard")
         response = api_client.post(url, payload, format="json")
 
         # Assert: Debe crear exitosamente

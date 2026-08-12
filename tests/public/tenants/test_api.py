@@ -23,7 +23,8 @@ class TestClientAPI:
         client2 = ClientFactory(nombre="Empresa 2", schema_name="empresa2")
 
         # Hacer request
-        url = reverse("admin-tenants-list")
+        # F29-002: router basename real es "tenant" desde Fase 5-BIS.
+        url = reverse("tenant-list")
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -43,7 +44,8 @@ class TestClientAPI:
         """Test: Verificar que la lista devuelve los campos correctos."""
         ClientFactory(nombre="Test Corp", schema_name="testcorp")
 
-        url = reverse("admin-tenants-list")
+        # F29-002: router basename real es "tenant" desde Fase 5-BIS.
+        url = reverse("tenant-list")
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -68,7 +70,8 @@ class TestClientAPI:
         """Test ANTI-PATRÓN: Asegurar que NO se envía el campo subdomain."""
         ClientFactory(nombre="Test Corp", schema_name="testcorp")
 
-        url = reverse("admin-tenants-list")
+        # F29-002: router basename real es "tenant" desde Fase 5-BIS.
+        url = reverse("tenant-list")
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -88,7 +91,7 @@ class TestClientAPI:
         """Test: Obtener un tenant específico (GET /api/admin/v1/tenants/{id}/)."""
         client = ClientFactory(nombre="Test Corp", schema_name="testcorp")
 
-        url = reverse("admin-tenants-detail", kwargs={"pk": client.id})
+        url = reverse("tenant-detail", kwargs={"pk": client.id})
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -98,7 +101,8 @@ class TestClientAPI:
 
     def test_api_requires_authentication(self, client):
         """Test: La API requiere autenticación."""
-        url = reverse("admin-tenants-list")
+        # F29-002: router basename real es "tenant" desde Fase 5-BIS.
+        url = reverse("tenant-list")
         response = client.get(url)
 
         # Debe retornar 401 o 403 (depende de la configuración)
@@ -118,7 +122,8 @@ class TestClientAPI:
 
         client.force_login(user)
 
-        url = reverse("admin-tenants-list")
+        # F29-002: router basename real es "tenant" desde Fase 5-BIS.
+        url = reverse("tenant-list")
         response = client.get(url)
 
         # Debe retornar 403 (Forbidden)
@@ -139,7 +144,7 @@ class TestDomainAPI:
             tenant=client, domain="test2.localhost", is_primary=False
         )
 
-        url = reverse("admin-tenant-domains-list")
+        url = reverse("domain-list")
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -158,7 +163,7 @@ class TestDomainAPI:
         client = ClientFactory(nombre="Test Corp")
         domain = DomainFactory(tenant=client, domain="test.localhost")
 
-        url = reverse("admin-tenant-domains-detail", kwargs={"pk": domain.id})
+        url = reverse("domain-detail", kwargs={"pk": domain.id})
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -179,7 +184,7 @@ class TestAPISerialization:
 
         client = ClientFactory(nombre="Test Corp", schema_name="testcorp")
 
-        url = reverse("admin-tenants-detail", kwargs={"pk": client.id})
+        url = reverse("tenant-detail", kwargs={"pk": client.id})
         response = admin_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
@@ -192,7 +197,7 @@ class TestAPISerialization:
         # (solo lectura)
         client = ClientFactory()
 
-        url = reverse("admin-tenants-detail", kwargs={"pk": client.id})
+        url = reverse("tenant-detail", kwargs={"pk": client.id})
         response = admin_client.get(url)
 
         # Verificar que 'domains' no está en los campos de escritura

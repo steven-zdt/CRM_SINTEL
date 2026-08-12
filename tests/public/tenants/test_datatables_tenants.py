@@ -27,7 +27,10 @@ class TestDataTablesTenants:
         )
         Domain.objects.create(domain="test.localhost", tenant=client, is_primary=True)
 
-        url = reverse("admin-dt-tenants")
+        # F29-002: el DataTables de tenants vive en console_api (namespace
+        # 'console_api', ver apps/public/console/api/urls.py), no
+        # "admin-dt-tenants" (nunca existió).
+        url = reverse("console_api:dt_tenants")
         # DataTables envía draw/start/length (serverSide)
         params = {"draw": 1, "start": 0, "length": 10}
         response = authenticated_client.get(url, data=params)
@@ -56,7 +59,10 @@ class TestDataTablesTenants:
             schema_name="test_company", nombre="Test Company", auto_create_schema=True
         )
 
-        url = reverse("admin-dt-tenants")
+        # F29-002: el DataTables de tenants vive en console_api (namespace
+        # 'console_api', ver apps/public/console/api/urls.py), no
+        # "admin-dt-tenants" (nunca existió).
+        url = reverse("console_api:dt_tenants")
 
         # Búsqueda por "Acme"
         params = {"draw": 1, "start": 0, "length": 10, "search[value]": "Acme"}
@@ -69,7 +75,10 @@ class TestDataTablesTenants:
 
     def test_datatables_tenants_requiere_autenticacion(self, api_client):
         """Verifica que DataTables requiere autenticación."""
-        url = reverse("admin-dt-tenants")
+        # F29-002: el DataTables de tenants vive en console_api (namespace
+        # 'console_api', ver apps/public/console/api/urls.py), no
+        # "admin-dt-tenants" (nunca existió).
+        url = reverse("console_api:dt_tenants")
         params = {"draw": 1, "start": 0, "length": 10}
         response = api_client.get(url, data=params)
         assert response.status_code == 401 or response.status_code == 403

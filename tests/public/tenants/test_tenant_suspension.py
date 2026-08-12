@@ -293,7 +293,9 @@ class TestToggleStatusAPI:
         api_client.force_authenticate(user=admin_user)
 
         # Llamar al endpoint toggle_status
-        url = reverse("admin-tenants-toggle-status", kwargs={"pk": tenant.id})
+        # F29-002: nombre real "tenant-toggle-active" (url_name="toggle-active"
+        # en el @action, basename="tenant" desde Fase 5-BIS).
+        url = reverse("tenant-toggle-active", kwargs={"pk": tenant.id})
         response = api_client.post(url)
 
         # Debe retornar 200 OK
@@ -337,7 +339,9 @@ class TestToggleStatusAPI:
         api_client.force_authenticate(user=admin_user)
 
         # Llamar al endpoint toggle_status
-        url = reverse("admin-tenants-toggle-status", kwargs={"pk": tenant.id})
+        # F29-002: nombre real "tenant-toggle-active" (url_name="toggle-active"
+        # en el @action, basename="tenant" desde Fase 5-BIS).
+        url = reverse("tenant-toggle-active", kwargs={"pk": tenant.id})
         response = api_client.post(url)
 
         # Debe retornar 200 OK
@@ -384,7 +388,7 @@ class TestToggleStatusAPI:
         api_client.force_authenticate(user=admin_user)
 
         # Intentar desactivar el tenant público
-        url = reverse("admin-tenants-toggle-status", kwargs={"pk": public_tenant.id})
+        url = reverse("tenant-toggle-active", kwargs={"pk": public_tenant.id})
         response = api_client.post(url)
 
         # Debe retornar error (400 Bad Request o ValidationError)
@@ -425,7 +429,9 @@ class TestToggleStatusAPI:
         api_client = APIClient()
         api_client.force_authenticate(user=admin_user)
 
-        url = reverse("admin-tenants-toggle-status", kwargs={"pk": tenant.id})
+        # F29-002: nombre real "tenant-toggle-active" (url_name="toggle-active"
+        # en el @action, basename="tenant" desde Fase 5-BIS).
+        url = reverse("tenant-toggle-active", kwargs={"pk": tenant.id})
 
         # Primer toggle: True -> False
         response1 = api_client.post(url)
@@ -494,7 +500,9 @@ class TestTenantSuspensionIntegration:
         # 3. Suspender via API
         api_client = APIClient()
         api_client.force_authenticate(user=admin_user)
-        url = reverse("admin-tenants-toggle-status", kwargs={"pk": tenant.id})
+        # F29-002: nombre real "tenant-toggle-active" (url_name="toggle-active"
+        # en el @action, basename="tenant" desde Fase 5-BIS).
+        url = reverse("tenant-toggle-active", kwargs={"pk": tenant.id})
         response2 = api_client.post(url)
         assert response2.status_code == status.HTTP_200_OK
         assert response2.data["is_active"] is False

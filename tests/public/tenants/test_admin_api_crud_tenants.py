@@ -17,7 +17,9 @@ def test_admin_create_read_update_tenant(api_client, admin_user):
     """
     api_client.force_authenticate(user=admin_user)
 
-    list_url = reverse("admin-tenants-list")  # router basename="admin-tenants"
+    # F29-002: router basename real es "tenant" desde el refactor Fase
+    # 5-BIS (commit 60d8a33), no "admin-tenants".
+    list_url = reverse("tenant-list")
 
     payload = {
         "schema_name": "crt",
@@ -37,7 +39,7 @@ def test_admin_create_read_update_tenant(api_client, admin_user):
     assert any(it["id"] == tenant_id for it in resp.data["results"])
 
     # DETAIL
-    detail_url = reverse("admin-tenants-detail", args=[tenant_id])
+    detail_url = reverse("tenant-detail", args=[tenant_id])
     resp = api_client.get(detail_url)
     assert resp.status_code == status.HTTP_200_OK
     assert resp.data["id"] == tenant_id
@@ -59,9 +61,7 @@ def test_admin_onboard_idempotent(api_client, admin_user, settings):
     - Repetir el mismo payload no debe crear nuevos Client/Domain.
     """
     api_client.force_authenticate(user=admin_user)
-    url = reverse(
-        "admin-tenants-onboard"
-    )  # basename="admin-tenants", url_name="onboard"
+    url = reverse("tenant-onboard")
 
     schema_name = "empresa_test"
     raw_domain = "https://www.test.localhost:8000/admin/"
@@ -92,7 +92,7 @@ def test_admin_onboard_domain_conflict(api_client, admin_user):
     el servicio debe responder 409/ValidationError.
     """
     api_client.force_authenticate(user=admin_user)
-    url = reverse("admin-tenants-onboard")
+    url = reverse("tenant-onboard")
 
     # Crear tenant A
     c1 = Client.objects.create(schema_name="c1", nombre="C1")
