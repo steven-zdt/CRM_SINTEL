@@ -1,7 +1,40 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.31.0
-**Ultima actualizacion:** 2026-08-11 (DOC-M18) — FASE 28: estabilizacion
+**Version:** 3.32.0
+**Ultima actualizacion:** 2026-08-11 (DOC-M19) — FASE 29: contratos de URL
+y UUID en tests. Cerro los 2 hallazgos que F28 dejo abiertos y, en el
+proceso, audito **todos** los usos de `reverse()`/`redirect()`/`resolve()`
+del repo (~353 call sites, agente dedicado). **84 call sites corregidos en
+19 archivos de test, 0 cambios de codigo de produccion.** Contrato UUID
+(23 sites, 8 archivos): `reverse(..., kwargs={"pk"/args=[obj.id]})` contra
+ViewSets con `BaseTenantViewSet.lookup_field="uuid"` corregido a `.uuid` --
+descubrio ademas que el nombre `factura-xml` nunca existio (reales:
+`factura-xml-ubl`/`factura-xml-app-response`, responden XML crudo, no
+JSON) y que 2 tests usaban el campo deprecado `Factura.xml_content` en vez
+de `FacturaAnexos.ubl_xml` (F26-003). Contrato URL `workspace` (24 sites, 4
+archivos): el nombre real es `core_ui:workspace`
+(`apps/tenant/core/urls_ui.py` declara `app_name = 'core_ui'`, incluido
+sin `namespace=` explicito -- Django toma el `app_name` del modulo como
+namespace) -- confirmado que NO es un bug de produccion (la ruta literal
+`/workspace/` responde 302 en una peticion real), solo un contrato de
+nombre mal invocado en tests; verificado empiricamente
+(`test_workspace_page_loads` pasa 100% limpio tras el fix). Cluster LEGACY
+`admin-tenants-*`/`admin-tenant-domains-*`/`admin-dt-tenants` (37 sites, 7
+archivos): renombrado a los nombres reales post-refactor "Fase 5-BIS"
+(`tenant-*`/`domain-*`/`console_api:dt_tenants`), confirmados con evidencia
+antes de aplicar cada cambio. **3 hallazgos nuevos documentados, no
+corregidos, cada uno con razon explicita**: `test_workspace_crud_integration.py`
+sigue fallando por una causa distinta (usuario propio sin membership,
+reemplaza al que `SintelTenantTestCase` ya provee); `tenant_dashboard:index`
+nunca se registro (decision de producto pendiente, no de testing); colision
+de nombre `user-list`/`user-detail` entre dos ViewSets (el fix toca
+`config/urls_public.py`, produccion real, requiere validacion dedicada).
+Test Impact Analysis: reutilizado `tools/ekg/impact.py` (0 herramientas
+nuevas) -- limitacion real encontrada: `SintelTenantTestCase` no aparece en
+el grafo (el extractor no cubre el arbol `tests/` de infraestructura).
+Governance `FINAL STATUS: PASS`. 0 migraciones. Detalle completo:
+`documentacion/F29_FINAL_REPORT.md`.
+**Actualizacion previa:** 2026-08-11 (DOC-M18) — FASE 28: estabilizacion
 del testing multi-tenant. Auditoria individual (agente dedicado, sin
 asumir migracion automatica) de los 34 archivos con `TenantTestCase` crudo
 documentados por F27: **11 MIGRATE_SAFE, 1 MIGRATE_WITH_FIX, 21
@@ -1144,7 +1177,11 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.31.0 — 2026-08-11, DOC-M18)
+## 12. Metricas del Proyecto (v3.32.0 — 2026-08-11, DOC-M19)
+
+**[DOC-M19]** F29 no toca modelos ni migraciones -- solo corrige nombres de
+URL y valores de lookup en 19 archivos de test. Ninguna fila de esta tabla
+cambia.
 
 **[DOC-M18]** F28 no toca modelos ni migraciones -- solo normaliza base
 classes de test (12 archivos) y corrige 1 `SyntaxError`. Ninguna fila de
