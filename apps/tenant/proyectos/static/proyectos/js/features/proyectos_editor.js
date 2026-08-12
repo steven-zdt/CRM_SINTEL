@@ -1379,11 +1379,8 @@
                     if (w.UIManager?.handleOffcanvas) {
                         w.UIManager.handleOffcanvas(offcanvasEl, 'show');
                     } else if (typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        // Fallback: dispose + create (NUNCA getOrCreateInstance — §26)
-                        const prev = bootstrap.Offcanvas.getInstance(offcanvasEl);
-                        if (prev) prev.dispose();
-                        d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
-                        new bootstrap.Offcanvas(offcanvasEl).show();
+                        // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (NUNCA getOrCreateInstance — §26)
+                        w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
                     }
                 }
             }

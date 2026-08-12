@@ -68,9 +68,8 @@
         w.htmx.ajax('GET', url, { target: container, swap: 'innerHTML' }).then(() => {
             const el = container.querySelector('.offcanvas');
             if (el) {
-                const prev = bootstrap.Offcanvas.getInstance(el);
-                if (prev) { try { prev.dispose(); } catch (_) {} }
-                new bootstrap.Offcanvas(el).show();
+                // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+                w.Sintel?.Core?.mostrarOffcanvasSeguro(el);
             }
         });
     }

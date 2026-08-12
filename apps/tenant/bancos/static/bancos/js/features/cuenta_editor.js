@@ -41,11 +41,8 @@
       if (w.UIManager?.handleOffcanvas) {
         w.UIManager.handleOffcanvas(offcanvasEl, 'show');
       } else {
-        // Fallback seguro: dispose + create (AGENTS.md §26 — nunca getOrCreateInstance)
-        const _p = bootstrap.Offcanvas.getInstance(offcanvasEl);
-        if (_p) _p.dispose();
-        d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
-        new bootstrap.Offcanvas(offcanvasEl).show();
+        // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+        w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
       }
 
       configurarEventos(offcanvasEl);

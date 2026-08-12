@@ -48,10 +48,8 @@
     if (w.UIManager?.handleOffcanvas) {
       w.UIManager.handleOffcanvas(offcanvasEl, 'show');
     } else {
-      d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
-      d.body.classList.remove('overflow-hidden', 'modal-open');
-      d.body.style.overflow = '';
-      new bootstrap.Offcanvas(offcanvasEl).show();
+      // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+      w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
     }
 
     if (offcanvasEl.id === 'offcanvas-extracto-crear') {

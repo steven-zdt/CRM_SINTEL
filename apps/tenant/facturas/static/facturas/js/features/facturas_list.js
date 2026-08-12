@@ -104,11 +104,8 @@
                         if (w.UIManager?.handleOffcanvas) {
                             w.UIManager.handleOffcanvas(offcanvasEl, 'show');
                         } else {
-                            const prev = bootstrap.Offcanvas.getInstance(offcanvasEl);
-                            if (prev) prev.dispose();
-                            d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
-                            d.body.style.overflow = '';
-                            new bootstrap.Offcanvas(offcanvasEl).show();
+                            // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+                            w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
                         }
                     } else {
                         console.warn(`${MOD} No se pudo abrir el Offcanvas: elemento no encontrado o Bootstrap no disponible`);

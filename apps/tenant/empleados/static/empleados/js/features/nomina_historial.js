@@ -55,12 +55,9 @@
             const offcanvasEl = target.querySelector('#offcanvas-historial-nominas');
             if (offcanvasEl && window.bootstrap) {
                 console.log(`${MOD} Activando offcanvas: ${offcanvasEl.id}`);
-                // FE-A4: nunca getOrCreateInstance — dispose de la instancia
-                // previa antes de crear una nueva (AGENTS.md §26).
-                const prevOffcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
-                if (prevOffcanvas) { try { prevOffcanvas.dispose(); } catch (_) {} }
-                new bootstrap.Offcanvas(offcanvasEl).show();
-                
+                // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+                window.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
+
                 // Inicializar tabla después de que el offcanvas esté visible
                 const empleadoId = offcanvasEl.dataset.empleadoId; // Asumimos que viene en el data-attribute
                 setTimeout(() => initTable(empleadoId), 300);

@@ -227,8 +227,8 @@ window.Sintel.Proveedores = window.Sintel.Proveedores || {};
     if (window.UIManager?.handleOffcanvas) {
       window.UIManager.handleOffcanvas(offcanvas, 'show');
     } else {
-      const bsInstance = bootstrap.Offcanvas.getInstance(offcanvas) || new bootstrap.Offcanvas(offcanvas);
-      bsInstance.show();
+      // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+      window.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvas);
     }
   };
 

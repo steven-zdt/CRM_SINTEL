@@ -71,11 +71,8 @@
       if (w.UIManager?.handleOffcanvas) {
         w.UIManager.handleOffcanvas(offcanvasEl, 'show');
       } else {
-        // FE-A4: nunca getOrCreateInstance — dispose de la instancia previa
-        // antes de crear una nueva (AGENTS.md §26).
-        const prevInst = bootstrap.Offcanvas.getInstance(offcanvasEl);
-        if (prevInst) { try { prevInst.dispose(); } catch (_) {} }
-        new bootstrap.Offcanvas(offcanvasEl).show();
+        // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+        w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
       }
 
       // 2. Detectar modo: detalle (data-proveedor-uuid presente) vs crear/editar

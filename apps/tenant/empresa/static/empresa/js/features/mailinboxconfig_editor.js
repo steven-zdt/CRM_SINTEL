@@ -156,11 +156,8 @@
 
             const offcanvasEl = target.querySelector('#offcanvas-mailinbox');
             if (offcanvasEl && w.bootstrap?.Offcanvas) {
-                d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
-                d.body.classList.remove('overflow-hidden', 'modal-open');
-                var prev = bootstrap.Offcanvas.getInstance(offcanvasEl);
-                if (prev) prev.dispose();
-                new bootstrap.Offcanvas(offcanvasEl).show();
+                // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+                w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
                 setTimeout(initForm, 80);
             }
         });
