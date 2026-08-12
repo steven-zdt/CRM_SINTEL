@@ -308,7 +308,7 @@
                 } else {
                     console.warn(`${MOD} No se pudo recargar la tabla: módulos no disponibles`);
                     // Disparar evento personalizado como fallback
-                    d.dispatchEvent(new CustomEvent('inventarioActualizado'));
+                    d.dispatchEvent(new CustomEvent('inventario-updated'));
                 }
             }, 300); // Pequeño delay para asegurar que el backend haya procesado la creación
 

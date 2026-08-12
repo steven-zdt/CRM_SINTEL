@@ -508,7 +508,7 @@
     /**
      * Escuchar evento de actualización para refrescar tabla
      */
-    d.addEventListener('inventarioActualizado', function() {
+    d.addEventListener('inventario-updated', function() {
         recargar();
     });
 

@@ -239,7 +239,7 @@
         }
 
         // ⚠️ Disparar evento personalizado para refrescar tabla
-        d.dispatchEvent(new Event('inventarioActualizado'));
+        d.dispatchEvent(new Event('inventario-updated'));
     }
 
 
