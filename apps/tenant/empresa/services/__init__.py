@@ -10,6 +10,7 @@ from apps.tenant.empresa.models import Empresa
 from . import business_service  # noqa: F401
 from . import crud_service  # noqa: F401
 
+from .crud_service import get_empresa_data
 from .selectors import EmpresaSelector, SedeSelector, AreaSelector
 from .business_service import EmpresaService, SedeService, AreaService
 
@@ -21,6 +22,7 @@ __all__ = [
     'SedeService',
     'AreaService',
     'EmpresaNotConfiguredError',
+    'get_empresa_data',
     'get_empresa_emisor_data',
     'get_mailbox_config',
 ]
