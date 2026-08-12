@@ -49,7 +49,7 @@ def test_admin_users_list_requires_admin(api_client, admin_user, regular_user):
     from django.urls import reverse
 
     # Sin autenticación → 401/403
-    response = api_client.get(reverse("user-list"))
+    response = api_client.get(reverse("admin-user-list"))
     assert response.status_code in (
         status.HTTP_401_UNAUTHORIZED,
         status.HTTP_403_FORBIDDEN,
@@ -57,12 +57,12 @@ def test_admin_users_list_requires_admin(api_client, admin_user, regular_user):
 
     # Usuario regular → 403
     api_client.force_authenticate(user=regular_user)
-    response = api_client.get(reverse("user-list"))
+    response = api_client.get(reverse("admin-user-list"))
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
     # Admin → 200
     api_client.force_authenticate(user=admin_user)
-    response = api_client.get(reverse("user-list"))
+    response = api_client.get(reverse("admin-user-list"))
     assert response.status_code == status.HTTP_200_OK
 
 
@@ -77,7 +77,7 @@ def test_admin_users_list_pagination(api_client, admin_user):
     for i in range(5):
         User.objects.create_user(email=f"user{i}@test.com", password="test123")
 
-    response = api_client.get(reverse("user-list"))
+    response = api_client.get(reverse("admin-user-list"))
     assert response.status_code == status.HTTP_200_OK
 
     data = response.json()
@@ -102,7 +102,7 @@ def test_admin_users_list_with_pagination_params(api_client, admin_user):
 
     api_client.force_authenticate(user=admin_user)
 
-    response = api_client.get(f"{reverse('user-list')}?page=1&page_size=25")
+    response = api_client.get(f"{reverse('admin-user-list')}?page=1&page_size=25")
     assert response.status_code == status.HTTP_200_OK
 
     data = response.json()

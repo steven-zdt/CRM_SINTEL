@@ -52,7 +52,7 @@ def test_create_user_requires_admin(api_client, admin_user, regular_user):
 
     # Sin autenticación → 401
     response = api_client.post(
-        reverse("user-list"),
+        reverse("admin-user-list"),
         {
             "email": "new@test.com",
             "password": "testpass123",
@@ -69,7 +69,7 @@ def test_create_user_requires_admin(api_client, admin_user, regular_user):
     # Usuario regular (no staff) → 403
     api_client.force_authenticate(user=regular_user)
     response = api_client.post(
-        reverse("user-list"),
+        reverse("admin-user-list"),
         {
             "email": "new@test.com",
             "password": "testpass123",
@@ -81,10 +81,11 @@ def test_create_user_requires_admin(api_client, admin_user, regular_user):
     # Admin → 201
     api_client.force_authenticate(user=admin_user)
     response = api_client.post(
-        reverse("user-list"),
+        reverse("admin-user-list"),
         {
             "email": "new@test.com",
             "password": "testpass123",
+            "password2": "testpass123",
             "first_name": "New",
             "last_name": "User",
         },
@@ -105,10 +106,11 @@ def test_create_user_success(api_client, admin_user):
     initial_count = User.objects.count()
 
     response = api_client.post(
-        reverse("user-list"),
+        reverse("admin-user-list"),
         {
             "email": "testuser@example.com",
             "password": "securepass123",
+            "password2": "securepass123",
             "first_name": "Test",
             "last_name": "User",
             "is_staff": False,
@@ -142,16 +144,13 @@ def test_create_user_duplicate_email(api_client, admin_user):
 
     # Intentar crear otro con el mismo email
     response = api_client.post(
-        reverse("user-list"),
-        {"email": "existing@test.com", "password": "pass123"},
+        reverse("admin-user-list"),
+        {"email": "existing@test.com", "password": "pass12345", "password2": "pass12345"},
         format="json",
     )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert (
-        "email" in str(response.data.get("error", "")).lower()
-        or "ya existe" in str(response.data.get("error", "")).lower()
-    )
+    assert "ya existe" in str(response.data.get("email", "")).lower()
 
 
 def test_list_users_requires_admin(api_client, admin_user, regular_user):
@@ -160,7 +159,7 @@ def test_list_users_requires_admin(api_client, admin_user, regular_user):
     from django.urls import reverse
 
     # Sin autenticación → 401/403
-    response = api_client.get(reverse("user-list"))
+    response = api_client.get(reverse("admin-user-list"))
     assert response.status_code in (
         status.HTTP_401_UNAUTHORIZED,
         status.HTTP_403_FORBIDDEN,
@@ -168,12 +167,12 @@ def test_list_users_requires_admin(api_client, admin_user, regular_user):
 
     # Usuario regular → 403
     api_client.force_authenticate(user=regular_user)
-    response = api_client.get(reverse("user-list"))
+    response = api_client.get(reverse("admin-user-list"))
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
     # Admin → 200
     api_client.force_authenticate(user=admin_user)
-    response = api_client.get(reverse("user-list"))
+    response = api_client.get(reverse("admin-user-list"))
     assert response.status_code == status.HTTP_200_OK
     assert "results" in response.data or isinstance(response.data, list)
 
@@ -195,7 +194,7 @@ def test_update_user_success(api_client, admin_user):
 
     # Actualizar
     response = api_client.patch(
-        reverse("user-detail", args=[user.id]),
+        reverse("admin-user-detail", args=[user.id]),
         {"first_name": "New", "last_name": "Name", "is_staff": True},
         format="json",
     )
@@ -220,7 +219,7 @@ def test_update_user_password(api_client, admin_user):
 
     # Actualizar password
     response = api_client.patch(
-        reverse("user-detail", args=[user.id]),
+        reverse("admin-user-detail", args=[user.id]),
         {"password": "newpass123"},
         format="json",
     )
@@ -248,7 +247,7 @@ def test_delete_user_success(api_client, admin_user):
     user_id = user.id
 
     # Eliminar
-    response = api_client.delete(reverse("user-detail", args=[user_id]))
+    response = api_client.delete(reverse("admin-user-detail", args=[user_id]))
 
     assert response.status_code in (status.HTTP_204_NO_CONTENT, status.HTTP_200_OK)
     assert not User.objects.filter(id=user_id).exists()

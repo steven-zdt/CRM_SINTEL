@@ -168,5 +168,5 @@ class UserAdminViewSet(
 
 # Lista de ViewSets para registro automático en el router
 VIEWSETS = [
-    (r"users", UserAdminViewSet, "user"),
+    (r"users", UserAdminViewSet, "admin-user"),
 ]
