@@ -1,7 +1,46 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.32.0
-**Ultima actualizacion:** 2026-08-11 (DOC-M19) — FASE 29: contratos de URL
+**Version:** 3.33.0
+**Ultima actualizacion:** 2026-08-12 (DOC-M20) — FASE 30: auditoria de
+contratos publicos + regresion global controlada. Cerro los 3 hallazgos
+que F29 dejo documentados sin corregir. **Hallazgo A** (workspace CRUD):
+`test_workspace_crud_integration.py` sobreescribia `setUp()` reemplazando
+la infraestructura de `SintelTenantTestCase` (perdia `HTTP_HOST`,
+requerido por el middleware de tenant) -- eliminados los 3 `setUp()`
+redundantes. **Hallazgo B** (`tenant_dashboard:index`): nombre nunca
+registrado; el real es `tenant-dashboard-shell`
+(`config/urls_tenant.py:140`) -- 2 call sites corregidos, sin crear el
+namespace faltante (WRONG_TEST_CONTRACT, no PRODUCT_DECISION). **Hallazgo
+C** (colision `user-list`/`user-detail`): dos routers DRF con el mismo
+basename `"user"` en el mismo urlconf sin namespace; SSoT determinado con
+evidencia (grep repo-wide, unicos 16 consumidores eran los propios tests)
+-- `UserAdminViewSet` renombrado a `"admin-user"` (0 cambios de path
+HTTP), 16 call sites actualizados. Al verificar contra el endpoint admin
+real (antes enmascarado por la colision), confirmo exactamente la
+sospecha de F29: 3 tests fallaban por primera vez por payloads sin
+`password2` (auto-rellenado solo por el endpoint publico, no por el
+admin) -- corregidos. **Bloqueador de infraestructura descubierto y
+resuelto:** primera invocacion de `pytest` sin argumentos (== `make test`)
+en todo el arco F21-F30 abordo con 10 errores de coleccion, 0 tests
+ejecutados -- resueltos (`pytest.ini` `norecursedirs`, colision de modulo
+`tests.py`/`tests/` en 2 apps resuelta con `git mv` tras confirmar 0
+solapamiento de cobertura, y un export faltante en
+`apps/tenant/empresa/services/__init__.py` que ademas **rompia en
+produccion, silenciosamente, el 100% de las invocaciones** de
+`/api/v1/core/mi-empresa/` via un `except Exception` generico -- **1 bug
+de produccion preexistente descubierto y corregido**). Verificado:
+`pytest --collect-only` -> 2053 tests, 0 errores (antes: 10 errores,
+coleccion interrumpida). Regresion dirigida 100% verde en los 6 archivos
+modificados. Regresion monolitica completa bloqueada por un limite de
+recursos del entorno de desarrollo local (Docker Desktop, 5.7GB para todo
+el stack) -- 3 interrupciones independientes a tamanos de lote
+decrecientes, sin patron de fallo de codigo en comun; clasificado
+`ENVIRONMENT`, documentado con causa raiz y accion de seguimiento
+recomendada (no corregible desde dentro de los contenedores). Governance:
+conteos identicos al baseline OCF ya triado (2026-08-08) -- 0 hallazgos
+nuevos. 0 migraciones. Detalle completo: `documentacion/F30_FINAL_REPORT.md`,
+`F30_FINDINGS.md`, `F30_URL_CONTRACT_MATRIX.md`, `F30_REGRESSION_REPORT.md`.
+**Actualizacion previa:** 2026-08-11 (DOC-M19) — FASE 29: contratos de URL
 y UUID en tests. Cerro los 2 hallazgos que F28 dejo abiertos y, en el
 proceso, audito **todos** los usos de `reverse()`/`redirect()`/`resolve()`
 del repo (~353 call sites, agente dedicado). **84 call sites corregidos en
@@ -1177,7 +1216,12 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.32.0 — 2026-08-11, DOC-M19)
+## 12. Metricas del Proyecto (v3.33.0 — 2026-08-12, DOC-M20)
+
+**[DOC-M20]** F30 no toca modelos ni migraciones -- solo 2 archivos de
+codigo de produccion sin cambios de esquema (rename de basename de router,
+export faltante) y archivos de test (5 corregidos, 2 renombrados/movidos
+por colision de modulo, 0 nuevos). Ninguna fila de esta tabla cambia.
 
 **[DOC-M19]** F29 no toca modelos ni migraciones -- solo corrige nombres de
 URL y valores de lookup en 19 archivos de test. Ninguna fila de esta tabla
