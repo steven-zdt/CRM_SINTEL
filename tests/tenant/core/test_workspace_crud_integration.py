@@ -20,30 +20,27 @@ incluido como namespace). No es un bug de producción -- la ruta literal
 `/workspace/` responde 302 en una petición real. Corregido a
 `reverse("core_ui:workspace")` en las 20 ocurrencias.
 
-F29-003 (hallazgo nuevo, NO corregido en este pase): tras el fix de arriba,
-`test_workspace_page_loads` pasa limpio (200, template correcto), pero el
-resto de los tests de este archivo (que revisan `response.content`) siguen
-fallando con contenido vacío. Causa probable: las 3 clases de este archivo
-sobreescriben `self.user`/`self.client` en su propio `setUp()`
-(`User.objects.create_user(...)` + `force_login`) DESPUÉS de llamar
-`super().setUp()` -- esto reemplaza al usuario admin real que
-`SintelTenantTestCase` ya crea (con `TenantProfile`/`TenantMembership`) por
-un usuario sin perfil de tenant, que probablemente no pasa algún gate de
-membership del middleware/vista y termina recibiendo una respuesta 200 con
-cuerpo vacío en vez del HTML real. No investigado a fondo ni corregido --
-requeriría usar el `self.user` que `SintelTenantTestCase` ya provee (con
-membership) en vez de crear uno nuevo, verificando que no rompa el resto
-del archivo.
+F29-003 / F30-A (CORREGIDO): tras el fix de arriba, `test_workspace_page_loads`
+pasaba limpio (200, template correcto), pero el resto de los tests de este
+archivo (que revisan `response.content`) seguían fallando con contenido
+vacío. Causa real confirmada: las 3 clases de este archivo sobreescribían
+`self.user`/`self.client` en su propio `setUp()`
+(`User.objects.create_user(...)` + `Client()` sin `HTTP_HOST` + `force_login`)
+DESPUÉS de llamar `super().setUp()` -- esto reemplazaba tanto al usuario
+admin real que `SintelTenantTestCase` ya crea (con
+`TenantProfile`/`TenantMembership`) como, más críticamente, al `self.client`
+correctamente configurado con `HTTP_HOST=self.domain.domain`
+(`tests/tenant/base_test.py:163`) -- vital para que el middleware de
+routing multi-tenant resuelva el tenant correcto. Un `Client()` sin ese
+`HTTP_HOST` no llega al tenant esperado, explicando el contenido vacío.
+Corregido (regla F30.3, "no duplicar el harness"): se eliminaron los 3
+`setUp()` redundantes -- las 3 clases ahora heredan directamente
+`SintelTenantTestCase.setUp()`, sin código propio.
 """
 
-from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
 from django.urls import reverse
-from django_tenants.utils import tenant_context
 
 from tests.tenant.base_test import SintelTenantTestCase
-
-User = get_user_model()
 
 
 class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
@@ -52,18 +49,6 @@ class WorkspaceCRUDIntegrationTest(SintelTenantTestCase):
 
     [WARNING] v2.37: Verifica que todos los módulos estandarizados funcionen correctamente.
     """
-
-    def setUp(self):
-        """Configuración inicial para los tests."""
-        super().setUp()
-        # Crear usuario de prueba (independiente del self.user que
-        # SintelTenantTestCase ya crea -- este archivo prueba con un
-        # usuario propio sin TenantProfile/membership admin)
-        self.client = Client()
-        self.user = User.objects.create_user(
-            username="testuser", email="test@example.com", password="testpass123"
-        )
-        self.client.force_login(self.user)
 
     def test_workspace_page_loads(self):
         """Verifica que la página del workspace carga correctamente."""
@@ -186,15 +171,6 @@ class WorkspaceModalStructureTest(SintelTenantTestCase):
     [WARNING] v2.37: Verifica que los modales sigan el patrón estándar.
     """
 
-    def setUp(self):
-        """Configuración inicial para los tests."""
-        super().setUp()
-        self.client = Client()
-        self.user = User.objects.create_user(
-            username="testuser", email="test@example.com", password="testpass123"
-        )
-        self.client.force_login(self.user)
-
     def test_empresa_modals_structure(self):
         """Verifica que los modales de Empresa tienen la estructura correcta."""
         response = self.client.get(reverse("core_ui:workspace"))
@@ -279,15 +255,6 @@ class WorkspaceDataTableStructureTest(SintelTenantTestCase):
 
     [WARNING] v2.37: Verifica que las tablas tengan las columnas correctas.
     """
-
-    def setUp(self):
-        """Configuración inicial para los tests."""
-        super().setUp()
-        self.client = Client()
-        self.user = User.objects.create_user(
-            username="testuser", email="test@example.com", password="testpass123"
-        )
-        self.client.force_login(self.user)
 
     def test_gastos_table_structure(self):
         """Verifica que la tabla de Gastos tiene las columnas correctas."""
