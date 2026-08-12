@@ -68,8 +68,9 @@ class TenantLandingRoutingTests(SintelTenantTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response.url,
-            reverse("tenant_dashboard:index"),
-            "Un usuario autenticado debe ser redirigido desde '/' a '/dashboard/'.",
+            "/static/tenant/core/dashboard/index.html",
+            "Un usuario autenticado debe ser redirigido desde '/' al shell "
+            "estático del dashboard (TenantRootView.get, config/urls_tenant.py).",
         )
 
     def test_login_route_loads_login_view(self):

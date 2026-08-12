@@ -204,7 +204,7 @@ class TestSystemHealth(SintelTenantTestCase):
         self.client.defaults["HTTP_HOST"] = domain.domain
 
         # 2. Intentar acceder al Dashboard SIN login -> Esperado: 302 Redirect
-        dashboard_url = reverse("tenant_dashboard:index")
+        dashboard_url = reverse("tenant-dashboard-shell")
         response = self.client.get(dashboard_url, HTTP_HOST=domain.domain)
 
         self.assertEqual(
