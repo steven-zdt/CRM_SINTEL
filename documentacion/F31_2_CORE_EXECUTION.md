@@ -147,6 +147,43 @@ contrato SSoT-por-app, dado que tiene 8 sub-dominios reales distintos. No
 requiere consolidación forzada en un archivo único. Documentado aquí como
 la decisión oficial -- no se crea `contabilidad.api.js` raíz.
 
+## F31.3 -- Auditoría del contrato API Client (solo lectura)
+
+Verificado el principio de F31.1 ("`<app>.api.js` debe contener URLs +
+métodos, NO CSRF/JWT/manejo genérico de errores") contra las 17 apps.
+
+**Cumplen correctamente (delegan a `window.http()`/`w.http()`, sin lógica
+propia de transporte):** inventario, bancos, empresa, facturas, clientes,
+proyectos, proveedores (2 archivos), contabilidad (8 sub-archivos),
+core/landing, perfil, área/mailinboxconfig de empresa. La mayoría del
+proyecto ya sigue el contrato correcto.
+
+**Violan el contrato -- 6 archivos con reimplementación completa de
+`fetch()` + CSRF + JWT propios, en vez de delegar a Core:** `gastos.api.js`,
+`compras.api.js`, `empleados.api.js`, `cotizaciones.api.js`,
+`dashboard.api.js`, `ventas.api.js`. Peor aún: **cada uno tiene su propio
+contrato de error distinto** -- `gastos`/`compras` hacen `throw error`
+(objeto `Error` genérico o la `Response` cruda según el método),
+`cotizaciones` hace `throw {ok:false, status, data}` (una forma custom
+que imita pero no es idéntica a la de `window.http()`), `dashboard` hace
+`throw new Error('Error ' + status + ...)` (mensaje plano, sin `status`/
+`data` estructurados). Ninguno coincide exactamente entre sí ni con el
+contrato `{ok, status, data}` sin `throw` de `window.http()`.
+
+**Verificado el patrón prohibido `window.jwtAuth.token`** (CLAUDE.md exige
+`window.jwtAuth?.getAccessToken?.()`): **0 ocurrencias** en todo el repo.
+Ningún archivo usa el patrón incorrecto.
+
+**Decisión:** no se corrige en este pase. Los consumidores (`*_list.js`/
+`*_editor.js` de esas 6 apps) están escritos contra el contrato
+`try/catch` + `throw` propio de cada api.js -- reemplazar el transporte
+por `window.http()` sin auditar y actualizar cada consumidor rompería el
+manejo de errores en 6 apps simultáneamente, sin forma de verificarlo en
+navegador en este entorno (misma limitación que el cluster de `http.js`
+de §4.1). Se documenta como el mismo tipo de hallazgo -- candidato a la
+misma micro-fase futura dedicada con pruebas de navegador, no una
+corrección aislada de F31.3.
+
 ## Limitación de verificación
 
 **No fue posible verificar visualmente en navegador los 11 cambios de
