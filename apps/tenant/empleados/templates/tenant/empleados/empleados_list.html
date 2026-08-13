@@ -113,8 +113,8 @@
     <div class="card-header bg-light border-bottom">
       <ul class="nav nav-tabs card-header-tabs" id="empleados-tabs" role="tablist">
         <li class="nav-item" role="presentation">
-          <button class="nav-link" id="tab-resoluciones" data-bs-toggle="tab" data-bs-target="#tab-pane-resoluciones"
-            type="button" role="tab" aria-controls="tab-pane-resoluciones" aria-selected="false">
+          <button class="nav-link" id="empleados-tab-resoluciones" data-bs-toggle="tab" data-bs-target="#empleados-tab-pane-resoluciones"
+            type="button" role="tab" aria-controls="empleados-tab-pane-resoluciones" aria-selected="false">
             <i class="bi bi-file-earmark-lock2 me-2"></i>Resoluciones DIAN
             <span data-module="resoluciones" data-loading-icon class="ms-2 d-none">
               <i class="bi bi-hourglass-split"></i>
@@ -275,17 +275,17 @@
         </div>{# /tab-pane-nominas #}
 
         {# TAB 4: RESOLUCIONES DIAN #}
-        <div class="tab-pane fade" id="tab-pane-resoluciones" role="tabpanel" aria-labelledby="tab-resoluciones"
+        <div class="tab-pane fade" id="empleados-tab-pane-resoluciones" role="tabpanel" aria-labelledby="empleados-tab-resoluciones"
           tabindex="0">
 
           {# Toolbar mejorado #}
           <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
             data-module="resoluciones">
-            <input type="text" id="search-resolucion" class="form-control form-control-sm"
+            <input type="text" id="empleados-search-resolucion" class="form-control form-control-sm"
               placeholder="Buscar por número de resolución..." style="max-width: 400px;" data-module="resoluciones"
               hx-get="{% url 'empleados:resolucion-tabla' %}"
               hx-trigger="keyup changed delay:400ms, search"
-              hx-target="#resoluciones-panel"
+              hx-target="#empleados-resoluciones-panel"
               name="q">
             <button class="btn btn-primary btn-sm ms-2" id="btn-nueva-resolucion">
               <i class="bi bi-plus-lg me-1"></i>Nueva Resolución
@@ -293,9 +293,9 @@
           </div>
 
           {# Tabla server-rendered (django-tables2 + HTMX) -- carga solo al abrir este sub-tab #}
-          <div id="resoluciones-panel" class="w-100 flex-grow-1"
+          <div id="empleados-resoluciones-panel" class="w-100 flex-grow-1"
                hx-get="{% url 'empleados:resolucion-tabla' %}"
-               hx-trigger="shown.bs.tab from:#tab-resoluciones once, resolucion-updated from:body"
+               hx-trigger="shown.bs.tab from:#empleados-tab-resoluciones once, resolucion-updated from:body"
                hx-target="this"
                hx-swap="innerHTML"
                hx-boost="true">

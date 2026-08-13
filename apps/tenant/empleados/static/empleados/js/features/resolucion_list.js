@@ -1,7 +1,7 @@
 // @ts-nocheck — Vanilla JS con namespace global window.Sintel (no TypeScript)
 /**
  * Resolucion List Module — Fase 5-BIS: tabla server-rendered via
- * django-tables2 + HTMX (#resoluciones-panel, cargada por atributos
+ * django-tables2 + HTMX (#empleados-resoluciones-panel, cargada por atributos
  * hx-get/hx-trigger declarados en empleados_list.html -- carga solo al
  * abrir el sub-tab de Resoluciones DIAN por primera vez).
  * Namespace: window.Sintel.Empleados.ResolucionList
@@ -13,7 +13,7 @@
     w.Sintel.Empleados = w.Sintel.Empleados || {};
 
     const MOD = '[ResolucionList]';
-    const PANEL_SELECTOR = '#resoluciones-panel';
+    const PANEL_SELECTOR = '#empleados-resoluciones-panel';
     const API_BASE = '/api/v1/empleados/resoluciones-dian/';
 
     // init()/redraw() ya no inicializan nada (el panel HTMX se auto-carga);
