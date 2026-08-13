@@ -124,9 +124,12 @@
     <!-- JWT helper: proporciona window.jwtAuth para inyección Authorization -->
     <script src="{% static 'js/jwt-auth.js' %}"></script>
 
-    <!-- Cliente HTTP unificado v3.4 (función + objeto, devuelve {ok,status,data}) -->
-    <!-- Debe cargarse DESPUÉS de jwt-auth.js y ANTES de cualquier *.api.js -->
-    <script src="{% static 'js/http.js' %}"></script>
+    <!-- F32.7: js/http.js (client B, "v3.4 unificado") removido -- confirmado -->
+    <!-- codigo muerto: siempre sobre-escrito por core/js/lib/http.js, cargado -->
+    <!-- despues via assets_core.html en todas las paginas donde importa -->
+    <!-- (workspace.html); los otros 3 templates que extienden este base.html -->
+    <!-- (tenant/dashboard/index.html, errors/404.html, errors/403.html) no -->
+    <!-- llaman window.http en absoluto. Ver F32_7_TRANSPORT_CONSOLIDATION_AUDIT.md. -->
 
     <!-- Hook de scripts por-página -->
     {% block page_assets_body %}{% endblock page_assets_body %}
