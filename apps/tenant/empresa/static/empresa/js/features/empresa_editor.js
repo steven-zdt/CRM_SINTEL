@@ -6,7 +6,7 @@
  * ⚠️ Aislamiento Gradual v2.60: Sin bloques try/catch, usa UIManager.handleError()
  * 
  * Dependencias globales requeridas:
- * - w.http (definido en lib/http.js) - Capa de Datos
+ * - Sintel.Core.Http (F32.7, core-http.js) - Capa de Datos
  * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
  * - w.SintelFeedback (definido en sintel-feedback.js) - Feedback visual
  */
@@ -89,10 +89,10 @@
         let res;
         if (id) {
             // Actualizar empresa existente (Core API)
-            res = await w.http('PATCH', '/api/v1/core/empresa/', data);
+            res = await w.Sintel.Core.Http.request('PATCH', '/api/v1/core/empresa/', data);
         } else {
             // Crear nueva empresa (Core API - singleton pattern)
-            res = await w.http('PATCH', '/api/v1/core/empresa/', data);
+            res = await w.Sintel.Core.Http.request('PATCH', '/api/v1/core/empresa/', data);
         }
 
         // ⚠️ Error Boundary v2.60: Restaurar estado del botón

@@ -48,7 +48,7 @@
     if (!tipoTx) return [];
     try {
       const url = API_PLANTILLAS + '?tipo_transaccion=' + tipoTx + '&activo=true&page_size=100';
-      const res = await w.http('GET', url);
+      const res = await w.Sintel.Core.Http.request('GET', url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.data.results || [];
     } catch (e) {
@@ -63,7 +63,7 @@
   async function getPlantillaLineas(uuid) {
     if (_detailCache[uuid]) return _detailCache[uuid];
     try {
-      const res = await w.http('GET', API_PLANTILLAS + uuid + '/');
+      const res = await w.Sintel.Core.Http.request('GET', API_PLANTILLAS + uuid + '/');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const lineas = res.data.lineas || [];
       _detailCache[uuid] = lineas;

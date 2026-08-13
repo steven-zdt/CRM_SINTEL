@@ -70,7 +70,7 @@
                 btnDel.disabled = true;
                 btnDel.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    const res = await w.http('DELETE', `/api/v1/proyectos/${uuid}/`);
+                    const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/proyectos/${uuid}/`);
                     if (res.ok) {
                         w.SintelFeedback?.success?.('Proyecto eliminado correctamente');
                         w.refreshProyectosTable?.();

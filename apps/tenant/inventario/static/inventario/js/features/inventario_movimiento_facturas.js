@@ -110,14 +110,14 @@
             console.log(`${MOD} Llamando a API:`, urlCompleta);
 
             try {
-                if (!w.http || typeof w.http !== 'function') {
-                    console.error(`${MOD} HTTP client no disponible. w.http=`, typeof w.http);
+                if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
+                    console.error(`${MOD} HTTP client no disponible. Sintel.Core.Http=`, typeof (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http));
                     this.dropdownElement.innerHTML = '<div class="list-group-item text-danger small">HTTP client no disponible</div>';
                     this.dropdownElement.classList.remove('d-none');
                     return;
                 }
 
-                const res = await w.http('GET', urlCompleta);
+                const res = await w.Sintel.Core.Http.request('GET', urlCompleta);
                 console.log(`${MOD} Respuesta recibida:`, {ok: res.ok, status: res.status, dataType: typeof res.data, dataIsArray: Array.isArray(res.data), dataLength: Array.isArray(res.data) ? res.data.length : 'N/A'});
 
                 if (!res.ok) {

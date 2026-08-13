@@ -2,7 +2,7 @@
  * Feature: Ledger Universal — Movimientos Recientes (Timeline Unificado) v3.9.0
  * Consolida Productos (Kardex), Activos Fijos (Eventos) y Servicios (Historial).
  * Endpoint: GET /api/v1/inventario/movimientos/timeline/
- * Dependencias: TabulatorFactory, w.http, w.SintelFeedback, htmx, bootstrap
+ * Dependencias: TabulatorFactory, Sintel.Core.Http (F32.7), w.SintelFeedback, htmx, bootstrap
  */
 (function(w, d) {
     'use strict';
@@ -199,10 +199,10 @@
     // -----------------------------------------------------------------------
 
     async function abrirDetalle(uuid, modulo) {
-        if (!w.http) return;
+        if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) return;
         try {
             const apiBase = modulo === 'SERVICIO' ? API_HIST : API_MOV;
-            const res = await w.http('GET', apiBase + '/' + uuid + '/');
+            const res = await w.Sintel.Core.Http.request('GET', apiBase + '/' + uuid + '/');
             if (!res.ok) { mostrarError('No se pudo cargar el detalle.'); return; }
             const m = res.data;
 
@@ -271,7 +271,7 @@
 
         try {
             const apiBase = esServicio ? API_HIST : API_MOV;
-            const res = await w.http('DELETE', apiBase + '/' + uuid + '/');
+            const res = await w.Sintel.Core.Http.request('DELETE', apiBase + '/' + uuid + '/');
             if (!res.ok) {
                 mostrarError(res.data?.detail || 'Error al eliminar.');
                 return;
@@ -332,7 +332,7 @@
                 btnCrearProy.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
                     await htmx.ajax('GET', '/api/v1/proyectos/gestor-offcanvas/?historial_uuid=' + uuid, {
-                        target: '#offcanvas-container-proyectos',
+                        target: '#offcanvas-container-inventario-proyecto',
                         swap: 'innerHTML'
                     });
                 } catch (err) {
@@ -355,7 +355,7 @@
                 btnLinkProy.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
                     await htmx.ajax('GET', '/api/v1/proyectos/gestor-offcanvas/?uuid=' + uuid, {
-                        target: '#offcanvas-container-proyectos',
+                        target: '#offcanvas-container-inventario-proyecto',
                         swap: 'innerHTML'
                     });
                 } catch (err) {

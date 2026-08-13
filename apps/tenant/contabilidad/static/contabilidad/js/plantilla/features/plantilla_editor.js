@@ -53,7 +53,7 @@
     const key = q.toLowerCase();
     if (_cuentasCache[key]) return _cuentasCache[key];
     try {
-      const res = await w.http('GET', API_CUENTAS + encodeURIComponent(q) + '&page_size=20');
+      const res = await w.Sintel.Core.Http.request('GET', API_CUENTAS + encodeURIComponent(q) + '&page_size=20');
       if (!res.ok) return [];
       const items = (res.data.results || res.data || []).map(function (c) {
         return { id: c.id, codigo: c.codigo, nombre: c.nombre };

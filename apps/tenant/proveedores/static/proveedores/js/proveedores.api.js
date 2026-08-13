@@ -27,11 +27,11 @@
   }
 
   const proveedoresAPI = {
-    list: (params) => w.http('GET', API_URL, params),
-    get: (id) => w.http('GET', `${API_URL}${id}/`),
-    create: (data) => w.http('POST', API_URL, normalizePayload(data)),
-    update: (id, data) => w.http('PATCH', `${API_URL}${id}/`, normalizePayload(data)),
-    delete: (id) => w.http('DELETE', `${API_URL}${id}/`)
+    list: (params) => w.Sintel.Core.Http.request('GET', API_URL, params),
+    get: (id) => w.Sintel.Core.Http.request('GET', `${API_URL}${id}/`),
+    create: (data) => w.Sintel.Core.Http.request('POST', API_URL, normalizePayload(data)),
+    update: (id, data) => w.Sintel.Core.Http.request('PATCH', `${API_URL}${id}/`, normalizePayload(data)),
+    delete: (id) => w.Sintel.Core.Http.request('DELETE', `${API_URL}${id}/`)
   };
 
   w.AppProveedor = w.AppProveedor || {};

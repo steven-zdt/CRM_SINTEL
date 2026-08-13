@@ -33,9 +33,9 @@
 
         try {
             let productoRes, kardexRes;
-            if (w.http && typeof w.http === 'function') {
-                productoRes = await w.http('GET', `${CORE_API_BASE}/${productoUuid}/`);
-                kardexRes = await w.http('GET', `${CORE_API_BASE}/${productoUuid}/kardex/`);
+            if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                productoRes = await w.Sintel.Core.Http.request('GET', `${CORE_API_BASE}/${productoUuid}/`);
+                kardexRes = await w.Sintel.Core.Http.request('GET', `${CORE_API_BASE}/${productoUuid}/kardex/`);
             } else {
                 console.error(`${MOD} API no disponible`);
                 return;
@@ -168,8 +168,8 @@
                 if (!uuid) return;
 
                 let productoRes;
-                if (w.http && typeof w.http === 'function') {
-                    productoRes = await w.http('GET', `${CORE_API_BASE}/${uuid}/`);
+                if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                    productoRes = await w.Sintel.Core.Http.request('GET', `${CORE_API_BASE}/${uuid}/`);
                 } else {
                     console.error(`${MOD} API no disponible`);
                     return;
@@ -203,7 +203,7 @@
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    const deleteRes = await w.http('DELETE', `${CORE_API_BASE}/${uuid}/`);
+                    const deleteRes = await w.Sintel.Core.Http.request('DELETE', `${CORE_API_BASE}/${uuid}/`);
                     if (!deleteRes.ok) {
                         if (w.UIManager?.handleError) w.UIManager.handleError(deleteRes, MOD);
                         return;

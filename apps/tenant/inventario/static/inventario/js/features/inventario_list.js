@@ -347,8 +347,8 @@
 
                 // ⚠️ v2.61.3: Validación: Obtener datos del producto para validar estado
                 let productoRes;
-                if (w.http && typeof w.http === 'function') {
-                    productoRes = await w.http('GET', `${CORE_API_BASE}/${id}/`);
+                if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                    productoRes = await w.Sintel.Core.Http.request('GET', `${CORE_API_BASE}/${id}/`);
                 } else if (w.inventarioAPI && w.inventarioAPI.productos && typeof w.inventarioAPI.productos.get === 'function') {
                     productoRes = await w.inventarioAPI.productos.get(id);
                 } else {
@@ -400,8 +400,8 @@
                 try {
                     // ⚠️ v2.61.3: Usar Core API Facade
                     let deleteRes;
-                    if (w.http && typeof w.http === 'function') {
-                        deleteRes = await w.http('DELETE', `${CORE_API_BASE}/${id}/`);
+                    if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                        deleteRes = await w.Sintel.Core.Http.request('DELETE', `${CORE_API_BASE}/${id}/`);
                     } else if (w.inventarioAPI && w.inventarioAPI.productos && typeof w.inventarioAPI.productos.delete === 'function') {
                         deleteRes = await w.inventarioAPI.productos.delete(id);
                     } else {

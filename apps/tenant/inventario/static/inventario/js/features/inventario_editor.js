@@ -6,7 +6,7 @@
  * ⚠️ Aislamiento Gradual v2.60: Sin bloques try/catch, usa UIManager.handleError()
  * 
  * Dependencias globales requeridas:
- * - w.http (definido en lib/http.js) - Capa de Datos
+ * - Sintel.Core.Http (F32.7, core-http.js) - Capa de Datos
  * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
  * - w.SintelFeedback (definido en sintel-feedback.js) - Feedback visual
  * - w.inventarioAPI (definido en inventario.api.js) - API wrapper (opcional)
@@ -106,7 +106,7 @@
                 // Si no tenemos el producto en el DOM, obtenerlo de la API
                 // ⚠️ v2.61.3: Usar Core API Facade para obtener producto
                 // ⚠️ v2.61.3: Usar campo mapeado 'producto' en lugar de 'producto_id'
-                const res = await w.http('GET', `/api/v1/inventario/productos/${data.producto}/`);
+                const res = await w.Sintel.Core.Http.request('GET', `/api/v1/inventario/productos/${data.producto}/`);
                 if (res.ok && res.data) {
                     stockActual = parseFloat(res.data.stock_actual || 0);
                 } else {
@@ -197,7 +197,7 @@
         let method = 'POST';
 
         // ⚠️ v2.60: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-        const res = await w.http(method, endpoint, data);
+        const res = await w.Sintel.Core.Http.request(method, endpoint, data);
 
         // ⚠️ Error Boundary v2.60: Restaurar estado del botón
         if (btnGuardar) {

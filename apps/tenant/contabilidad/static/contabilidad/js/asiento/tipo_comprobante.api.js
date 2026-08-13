@@ -20,7 +20,7 @@
       const url = new URL(API_BASE, w.location.origin);
       if (params.activa !== undefined) url.searchParams.append('activa', params.activa);
       
-      const response = await w.http('GET', url.pathname + url.search);
+      const response = await w.Sintel.Core.Http.request('GET', url.pathname + url.search);
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
@@ -32,7 +32,7 @@
      */
     retrieve: async function(id) {
       if (!id) throw new Error('ID requerido');
-      const response = await w.http('GET', `${API_BASE}${id}/`);
+      const response = await w.Sintel.Core.Http.request('GET', `${API_BASE}${id}/`);
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }

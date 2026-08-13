@@ -58,7 +58,7 @@
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    const res = await w.http('DELETE', `/api/v1/empresas/sedes/${uuid}/`);
+                    const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/empresas/sedes/${uuid}/`);
                     if (res.ok) {
                         w.SintelFeedback?.success?.('Sede eliminada correctamente');
                         d.dispatchEvent(new Event('sedeGuardada'));

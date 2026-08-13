@@ -143,7 +143,7 @@
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
                 try {
-                    const res = await w.http('DELETE', `/api/v1/facturas/${id}/`);
+                    const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/facturas/${id}/`);
 
                     if (res.ok) {
                         const offcanvasVerFactura = d.getElementById('offcanvas-ver-factura');
@@ -205,8 +205,8 @@
             let summaryRes;
             if (w.facturasAPI && typeof w.facturasAPI.getSummary === 'function') {
                 summaryRes = await w.facturasAPI.getSummary();
-            } else if (w.http && typeof w.http === 'function') {
-                summaryRes = await w.http('GET', '/api/v1/facturas/summary/');
+            } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                summaryRes = await w.Sintel.Core.Http.request('GET', '/api/v1/facturas/summary/');
             } else {
                 console.warn(`${MOD} No hay API disponible para cargar summary`);
                 return;

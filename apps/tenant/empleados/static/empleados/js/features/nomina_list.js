@@ -67,7 +67,7 @@
         if (!uuid) return;
         if (!confirm('¿Confirma anular esta nómina? La operación no puede revertirse.')) return;
         try {
-            const resp = await w.http('POST', `/api/v1/empleados/devengos/${uuid}/anular/`);
+            const resp = await w.Sintel.Core.Http.request('POST', `/api/v1/empleados/devengos/${uuid}/anular/`);
             if (resp.ok) {
                 w.UIManager?.notifySuccess('Nómina anulada correctamente');
                 reload();

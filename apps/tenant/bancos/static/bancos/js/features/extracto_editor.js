@@ -368,7 +368,7 @@
         btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
 
         try {
-          const res = await w.http('PATCH', `${API_TX_BASE}${uuid}/conciliar/`, payload);
+          const res = await w.Sintel.Core.Http.request('PATCH', `${API_TX_BASE}${uuid}/conciliar/`, payload);
           if (res?.ok) {
             _mostrarFeedback(feedback, 'success', '<i class="bi bi-check-circle me-1"></i>Vínculo guardado correctamente.');
             _actualizarFilaBadge(container, uuid, payload, true);
@@ -394,7 +394,7 @@
         btnQuitar.disabled = true;
         try {
           const payload = { factura_uuid: null, proveedor_uuid: null, cliente_uuid: null, conciliado: false };
-          const res = await w.http('PATCH', `${API_TX_BASE}${uuid}/conciliar/`, payload);
+          const res = await w.Sintel.Core.Http.request('PATCH', `${API_TX_BASE}${uuid}/conciliar/`, payload);
           if (res?.ok) {
             _limpiarChip(container, 'factura');
             _limpiarChip(container, 'proveedor');
@@ -423,7 +423,7 @@
         try {
           // endpoint puede ser función (q)=>url o string prefijo
           const url = typeof endpoint === 'function' ? endpoint(q) : endpoint + encodeURIComponent(q);
-          const res = await w.http('GET', url);
+          const res = await w.Sintel.Core.Http.request('GET', url);
           const items = res?.ok && res?.data?.results ? res.data.results : [];
           dd.innerHTML = '';
           if (!items.length) {

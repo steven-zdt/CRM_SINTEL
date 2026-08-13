@@ -219,7 +219,7 @@
             return;
         }
         if (!confirm('¿Eliminar este cliente de forma permanente?')) return;
-        const res = await w.http('DELETE', `/api/v1/clientes/${uuid}/`);
+        const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/clientes/${uuid}/`);
         if (res.ok || res.status === 204) {
             showSuccess('Cliente eliminado');
             d.dispatchEvent(new CustomEvent('clienteEliminado'));
@@ -242,7 +242,7 @@
 
     async function deleteContacto(uuid) {
         if (!confirm('¿Eliminar este contacto?')) return;
-        const res = await w.http('DELETE', `/api/v1/clientes/contactos/${uuid}/`);
+        const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/clientes/contactos/${uuid}/`);
         if (res.ok || res.status === 204) {
             showSuccess('Contacto eliminado');
             d.dispatchEvent(new CustomEvent('contactoEliminado'));

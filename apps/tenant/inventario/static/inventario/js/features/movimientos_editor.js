@@ -215,11 +215,11 @@
         if (!endpoint) return;
 
         try {
-            if (!w.http || typeof w.http !== 'function') {
+            if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
                 mostrarError('HTTP client no disponible');
                 return;
             }
-            const res = await w.http('GET', endpoint);
+            const res = await w.Sintel.Core.Http.request('GET', endpoint);
             if (!res.ok || !res.data) {
                 mostrarError('Error al cargar ' + categoria);
                 itemSelect.innerHTML = '<option value="">Error al cargar items</option>';
@@ -356,14 +356,14 @@
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando...'; }
 
         try {
-            if (!w.http || typeof w.http !== 'function') {
+            if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
                 mostrarError('HTTP client no disponible');
                 return;
             }
             let res;
             if (modoEdicion) {
                 const patchUrl = '/api/v1/inventario/movimientos/' + movimientoUuid + '/';
-                res = await w.http('PATCH', patchUrl, {
+                res = await w.Sintel.Core.Http.request('PATCH', patchUrl, {
                     tipo: payload.tipo,
                     cantidad: payload.cantidad,
                     costo_unitario: payload.costo_unitario,
@@ -373,7 +373,7 @@
                     factura_numero: payload.factura_numero
                 });
             } else {
-                res = await w.http('POST', endpoint, payload);
+                res = await w.Sintel.Core.Http.request('POST', endpoint, payload);
             }
 
             if (btn) { btn.disabled = false; btn.innerHTML = btnOriginal; }

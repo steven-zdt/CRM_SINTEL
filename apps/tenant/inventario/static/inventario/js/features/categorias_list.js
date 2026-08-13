@@ -58,7 +58,7 @@
                 const originalHTML = btnDelete.innerHTML;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    const res = await w.http('DELETE', `${CORE_API_BASE}/${uuid}/`);
+                    const res = await w.Sintel.Core.Http.request('DELETE', `${CORE_API_BASE}/${uuid}/`);
                     if (!res.ok) {
                         const msg = res.data?.detail || res.data?.message || 'Error al eliminar la categoría';
                         if (w.SintelFeedback?.error) w.SintelFeedback.error(typeof msg === 'string' ? msg : JSON.stringify(msg));

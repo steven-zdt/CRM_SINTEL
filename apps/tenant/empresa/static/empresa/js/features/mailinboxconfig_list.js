@@ -62,7 +62,7 @@
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    const res = await w.http('DELETE', `/api/v1/empresas/mail-inbox-config/${id}/`);
+                    const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/empresas/mail-inbox-config/${id}/`);
                     if (res.ok) {
                         w.SintelFeedback?.success?.('Configuracion eliminada');
                         d.dispatchEvent(new Event('mailinboxConfigGuardado'));

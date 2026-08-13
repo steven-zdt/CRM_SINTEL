@@ -15,7 +15,7 @@
  * 
  * Dependencias globales requeridas:
  * - window.facturasAPI (definido en facturas.api.js) - Capa de Datos
- * - window.http (definido en lib/http.js) - Helper HTTP
+ * - Sintel.Core.Http (F32.7, core-http.js) - Helper HTTP
  * - window.SintelFeedback (definido en sintel-feedback.js) - Feedback visual
  * - window.UIManager (definido en ui-manager.js) - Error Boundary
  * - htmx (global) - HTMX library
@@ -201,8 +201,8 @@
         let res;
         if (w.facturasAPI && typeof w.facturasAPI.deleteFactura === 'function') {
             res = await w.facturasAPI.deleteFactura(facturaId);
-        } else if (w.http && typeof w.http === 'function') {
-            res = await w.http('DELETE', `/api/v1/facturas/${facturaId}/`);
+        } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+            res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/facturas/${facturaId}/`);
         } else {
             console.error(`${MOD} No hay API disponible para eliminar factura`);
             if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
@@ -317,9 +317,9 @@
             // 1. Obtener configuraciones activas de buzones desde el endpoint correcto
             // ⚠️ v2.60: Usar endpoint directo de MailInboxConfig (más confiable que depender de mailinboxAPI)
             let configsRes;
-            if (w.http && typeof w.http === 'function') {
+            if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
                 // ⚠️ Endpoint correcto: /api/v1/empresas/mail-inbox-config/
-                configsRes = await w.http('GET', '/api/v1/empresas/mail-inbox-config/?is_active=true&page_size=100');
+                configsRes = await w.Sintel.Core.Http.request('GET', '/api/v1/empresas/mail-inbox-config/?is_active=true&page_size=100');
             } else if (w.mailinboxAPI && typeof w.mailinboxAPI.list === 'function') {
                 // ⚠️ Fallback: Usar mailinboxAPI si está disponible
                 configsRes = await w.mailinboxAPI.list({ is_active: true, page_size: 100 });
@@ -373,8 +373,8 @@
             let previewRes;
             if (w.facturasAPI && typeof w.facturasAPI.previewMailbox === 'function') {
                 previewRes = await w.facturasAPI.previewMailbox(configId, limitMessages);
-            } else if (w.http && typeof w.http === 'function') {
-                previewRes = await w.http('POST', '/api/v1/facturas/ingesta-correo/preview/', {
+            } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                previewRes = await w.Sintel.Core.Http.request('POST', '/api/v1/facturas/ingesta-correo/preview/', {
                     config_id: configId,
                     limit_messages: limitMessages,
                 });
@@ -691,8 +691,8 @@
                             invoice.file_bytes_b64,
                             'xml'
                         );
-                    } else if (w.http && typeof w.http === 'function') {
-                        persistRes = await w.http('POST', '/api/v1/facturas/create-from-dto/', {
+                    } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                        persistRes = await w.Sintel.Core.Http.request('POST', '/api/v1/facturas/create-from-dto/', {
                             dto: invoice.dto,
                             persist_anexos: true,
                             file_content_bytes: invoice.file_bytes_b64,
@@ -737,8 +737,8 @@
                             // Solo si hay lastUidProcessed y configId disponibles
                             if (modalData.lastUidProcessed !== null && modalData.configId !== null) {
                                 try {
-                                    if (w.http && typeof w.http === 'function') {
-                                        await w.http('POST', '/api/v1/facturas/update-inbox-state/', {
+                                    if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                                        await w.Sintel.Core.Http.request('POST', '/api/v1/facturas/update-inbox-state/', {
                                             config_id: modalData.configId,
                                             last_uid: modalData.lastUidProcessed,
                                             messages_processed: modalData.totalProcessed,
@@ -859,8 +859,8 @@
                                     invoice.file_bytes_b64,
                                     'xml'
                                 );
-                            } else if (w.http && typeof w.http === 'function') {
-                                persistRes = await w.http('POST', '/api/v1/facturas/create-from-dto/', {
+                            } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                                persistRes = await w.Sintel.Core.Http.request('POST', '/api/v1/facturas/create-from-dto/', {
                                     dto: invoice.dto,
                                     persist_anexos: true,
                                     file_content_bytes: invoice.file_bytes_b64,
@@ -926,8 +926,8 @@
                     if (processed > 0 && modalData.lastUidProcessed !== null && modalData.configId !== null) {
                         try {
                             // Llamar al endpoint para actualizar last_seen_uid
-                            if (w.http && typeof w.http === 'function') {
-                                await w.http('POST', '/api/v1/facturas/update-inbox-state/', {
+                            if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                                await w.Sintel.Core.Http.request('POST', '/api/v1/facturas/update-inbox-state/', {
                                     config_id: modalData.configId,
                                     last_uid: modalData.lastUidProcessed,
                                     messages_processed: processed,
@@ -1394,8 +1394,8 @@
                         const fileContentBytesB64 = metadata?.file_content_bytes || null;
                         const fileType = metadata?.file_type || 'pdf';
                         persistRes = await w.facturasAPI.createFacturaFromDTO(dtoCompleto, true, fileContentBytesB64, fileType);
-                    } else if (w.http && typeof w.http === 'function') {
-                        persistRes = await w.http('POST', '/api/v1/facturas/create-from-dto/', {
+                    } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                        persistRes = await w.Sintel.Core.Http.request('POST', '/api/v1/facturas/create-from-dto/', {
                             dto: dtoCompleto,
                             persist_anexos: true,
                             file_content_bytes: metadata?.file_content_bytes || null,
@@ -1666,8 +1666,8 @@
                     const fileContentBytesB64 = data.metadata?.file_content_bytes || null;
                     const fileType = data.metadata?.file_type || 'xml';
                     persistRes = await w.facturasAPI.createFacturaFromDTO(dto, true, fileContentBytesB64, fileType);
-                } else if (w.http && typeof w.http === 'function') {
-                    persistRes = await w.http('POST', '/api/v1/facturas/create-from-dto/', {
+                } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                    persistRes = await w.Sintel.Core.Http.request('POST', '/api/v1/facturas/create-from-dto/', {
                         dto: dto,
                         persist_anexos: true,
                         file_content_bytes: data.metadata?.file_content_bytes || null,

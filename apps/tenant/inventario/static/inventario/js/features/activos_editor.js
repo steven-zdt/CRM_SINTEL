@@ -6,7 +6,7 @@
  * ⚠️ Aislamiento Gradual v2.60: Sin bloques try/catch, usa UIManager.handleError()
  * 
  * Dependencias globales requeridas:
- * - w.http (definido en lib/http.js) - Capa de Datos
+ * - Sintel.Core.Http (F32.7, core-http.js) - Capa de Datos
  * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
  * - w.SintelFeedback (definido en sintel-feedback.js) - Feedback visual
  * - w.inventarioAPI (definido en inventario.api.js) - API wrapper (opcional)
@@ -154,8 +154,8 @@
         let res;
 
         // ⚠️ v2.61.3: Aislamiento Gradual - Capa de Datos retorna {ok, status, data}
-        if (!w.http || typeof w.http !== 'function') {
-            console.error(`${MOD} w.http no está disponible`);
+        if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
+            console.error(`${MOD} Sintel.Core.Http no está disponible`);
             if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
                 w.UIManager.notifyError({ status: 500, data: { detail: 'API no disponible' } }, MOD);
             }
@@ -166,11 +166,11 @@
             if (activoId) {
                 // ⚠️ UPDATE: Actualizar activo existente
                 console.log(`${MOD} Actualizando activo ID: ${activoId}`);
-                res = await w.http('PATCH', `${CORE_API_BASE}/${activoId}/`, payload);
+                res = await w.Sintel.Core.Http.request('PATCH', `${CORE_API_BASE}/${activoId}/`, payload);
             } else {
                 // ⚠️ CREATE: Crear nuevo activo
                 console.log(`${MOD} Creando nuevo activo`);
-                res = await w.http('POST', `${CORE_API_BASE}/`, payload);
+                res = await w.Sintel.Core.Http.request('POST', `${CORE_API_BASE}/`, payload);
             }
 
             // ⚠️ v2.61.3: Aislamiento Gradual - Solo verificar ok

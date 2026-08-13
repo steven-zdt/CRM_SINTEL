@@ -266,7 +266,7 @@
         const selectCliente = form.querySelector('#cartera-cliente-id[multiple!=""]');
         if (selectCliente && selectCliente.tagName === 'SELECT') {
             try {
-                const res = await w.http('GET', '/api/v1/clientes/?page_size=200');
+                const res = await w.Sintel.Core.Http.request('GET', '/api/v1/clientes/?page_size=200');
                 if (res.ok && res.data?.results) {
                     res.data.results.forEach(c => {
                         const opt = d.createElement('option');
@@ -295,7 +295,7 @@
             const fb = el.querySelector('#cartera-crear-feedback');
 
             try {
-                const res = await w.http('POST', '/api/v1/clientes/cartera/', payload);
+                const res = await w.Sintel.Core.Http.request('POST', '/api/v1/clientes/cartera/', payload);
                 if (res.ok) {
                     showSuccess(res.status === 201 ? 'Obligación registrada exitosamente.' : 'Obligación ya existente actualizada.');
                     if (w.UIManager?.handleOffcanvas) w.UIManager.handleOffcanvas(el, 'hide');

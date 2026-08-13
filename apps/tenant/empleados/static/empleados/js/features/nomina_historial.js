@@ -190,7 +190,7 @@
         if (!confirm('¿Está seguro de que desea anular esta nómina?')) return;
 
         try {
-            const resp = await w.http('POST', `${API_BASE}devengos/${id}/anular/`);
+            const resp = await w.Sintel.Core.Http.request('POST', `${API_BASE}devengos/${id}/anular/`);
             if (resp.ok) {
                 window.UIManager?.notifySuccess('Nómina anulada correctamente');
                 w.Sintel.Empleados.NominaHistorial._table?.replaceData();

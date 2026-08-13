@@ -112,7 +112,7 @@
 
         buscarEnInventario(query, itemId, dropdown) {
             const params = new URLSearchParams({ q: query });
-            w.http('GET', `${API_CATALOGO}?${params.toString()}`)
+            w.Sintel.Core.Http.request('GET', `${API_CATALOGO}?${params.toString()}`)
                 .then(data => {
                     this.renderResultados(data, itemId, dropdown);
                 })

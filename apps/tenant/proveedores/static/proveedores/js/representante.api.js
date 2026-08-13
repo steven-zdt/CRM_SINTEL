@@ -30,7 +30,7 @@ window.Sintel.Representante = window.Sintel.Representante || {};
     const params = new URLSearchParams();
     if (proveedorUuid) params.set('proveedor_uuid', proveedorUuid);
     Object.entries(options).forEach(([k, v]) => params.set(k, v));
-    const res = await w.http('GET', `${BASE_URL}/?${params.toString()}`);
+    const res = await w.Sintel.Core.Http.request('GET', `${BASE_URL}/?${params.toString()}`);
     if (!res.ok) _fail(res, 'Error listando representantes');
     return res.data;
   };
@@ -40,7 +40,7 @@ window.Sintel.Representante = window.Sintel.Representante || {};
    * Retorna: { uuid, nombre_completo, tipo_documento, ... }
    */
   api.obtener = async (uuid) => {
-    const res = await w.http('GET', `${BASE_URL}/${uuid}/`);
+    const res = await w.Sintel.Core.Http.request('GET', `${BASE_URL}/${uuid}/`);
     if (!res.ok) _fail(res, 'Error obteniendo representante');
     return res.data;
   };
@@ -52,7 +52,7 @@ window.Sintel.Representante = window.Sintel.Representante || {};
    */
   api.crear = async (data, proveedorUuid) => {
     const payload = { ...data, proveedor_uuid: proveedorUuid };
-    const res = await w.http('POST', `${BASE_URL}/`, payload);
+    const res = await w.Sintel.Core.Http.request('POST', `${BASE_URL}/`, payload);
     if (!res.ok) _fail(res, 'Error creando representante');
     return res.data;
   };
@@ -63,7 +63,7 @@ window.Sintel.Representante = window.Sintel.Representante || {};
    * Retorna: objeto Representante actualizado.
    */
   api.actualizar = async (uuid, data) => {
-    const res = await w.http('PATCH', `${BASE_URL}/${uuid}/`, data);
+    const res = await w.Sintel.Core.Http.request('PATCH', `${BASE_URL}/${uuid}/`, data);
     if (!res.ok) _fail(res, 'Error actualizando representante');
     return res.data;
   };
@@ -74,7 +74,7 @@ window.Sintel.Representante = window.Sintel.Representante || {};
    * Retorna: true si exitoso.
    */
   api.eliminar = async (uuid) => {
-    const res = await w.http('DELETE', `${BASE_URL}/${uuid}/`);
+    const res = await w.Sintel.Core.Http.request('DELETE', `${BASE_URL}/${uuid}/`);
     if (!res.ok) _fail(res, 'Error eliminando representante');
     return true;
   };

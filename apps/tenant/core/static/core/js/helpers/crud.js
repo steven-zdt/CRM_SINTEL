@@ -40,10 +40,10 @@
       }
     }
 
-    // Fallback: usar http.js si está disponible
-    if (w.http && typeof w.http === 'function') {
+    // Fallback: usar Sintel.Core.Http si está disponible (F32.7, antes http.js)
+    if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
       const method = (options.method || 'GET').toUpperCase();
-      return await w.http(method, url, options.body);
+      return await w.Sintel.Core.Http.request(method, url, options.body);
     }
 
     // Fallback: fetch básico con CSRF

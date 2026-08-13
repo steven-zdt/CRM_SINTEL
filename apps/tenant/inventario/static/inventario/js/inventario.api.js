@@ -75,33 +75,33 @@
         const base = await getApiBase();
         // Si el base es el fallback, usar Core API Facade
         if (base === API_BASE_FALLBACK) {
-          return w.http('GET', buildUrlWithParams('/api/v1/inventario/productos/', params));
+          return w.Sintel.Core.Http.request('GET', buildUrlWithParams('/api/v1/inventario/productos/', params));
         }
-        return w.http('GET', buildUrlWithParams(`${base}/productos/`, params));
+        return w.Sintel.Core.Http.request('GET', buildUrlWithParams(`${base}/productos/`, params));
       },
       get: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/productos/${id}/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/productos/${id}/`);
       },
       save: async (payload) => {
         const base = await getApiBase();
-        return w.http('POST', `${base}/productos/`, payload);
+        return w.Sintel.Core.Http.request('POST', `${base}/productos/`, payload);
       },
       update: async (id, payload) => {
         const base = await getApiBase();
-        return w.http('PATCH', `${base}/productos/${id}/`, payload);
+        return w.Sintel.Core.Http.request('PATCH', `${base}/productos/${id}/`, payload);
       },
       delete: async (id) => {
         const base = await getApiBase();
-        return w.http('DELETE', `${base}/productos/${id}/`);
+        return w.Sintel.Core.Http.request('DELETE', `${base}/productos/${id}/`);
       },
       stock: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/productos/${id}/stock/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/productos/${id}/stock/`);
       },
       kardex: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/productos/${id}/kardex/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/productos/${id}/kardex/`);
       },
     },
 
@@ -109,23 +109,23 @@
     servicios: {
       list: async (params = {}) => {
         const base = await getApiBase();
-        return w.http('GET', buildUrlWithParams(`${base}/servicios/`, params));
+        return w.Sintel.Core.Http.request('GET', buildUrlWithParams(`${base}/servicios/`, params));
       },
       get: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/servicios/${id}/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/servicios/${id}/`);
       },
       save: async (payload) => {
         const base = await getApiBase();
-        return w.http('POST', `${base}/servicios/`, payload);
+        return w.Sintel.Core.Http.request('POST', `${base}/servicios/`, payload);
       },
       update: async (id, payload) => {
         const base = await getApiBase();
-        return w.http('PATCH', `${base}/servicios/${id}/`, payload);
+        return w.Sintel.Core.Http.request('PATCH', `${base}/servicios/${id}/`, payload);
       },
       delete: async (id) => {
         const base = await getApiBase();
-        return w.http('DELETE', `${base}/servicios/${id}/`);
+        return w.Sintel.Core.Http.request('DELETE', `${base}/servicios/${id}/`);
       },
     },
 
@@ -133,23 +133,23 @@
     activos: {
       list: async (params = {}) => {
         const base = await getApiBase();
-        return w.http('GET', buildUrlWithParams(`${base}/activos/`, params));
+        return w.Sintel.Core.Http.request('GET', buildUrlWithParams(`${base}/activos/`, params));
       },
       get: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/activos/${id}/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/activos/${id}/`);
       },
       save: async (payload) => {
         const base = await getApiBase();
-        return w.http('POST', `${base}/activos/`, payload);
+        return w.Sintel.Core.Http.request('POST', `${base}/activos/`, payload);
       },
       update: async (id, payload) => {
         const base = await getApiBase();
-        return w.http('PATCH', `${base}/activos/${id}/`, payload);
+        return w.Sintel.Core.Http.request('PATCH', `${base}/activos/${id}/`, payload);
       },
       delete: async (id) => {
         const base = await getApiBase();
-        return w.http('DELETE', `${base}/activos/${id}/`);
+        return w.Sintel.Core.Http.request('DELETE', `${base}/activos/${id}/`);
       },
       // ⚠️ v2.40: Endpoint optimizado para Client-Side DataTables (array JSON simple)
       list_all: async () => {
@@ -167,27 +167,27 @@
     movimientos: {
       list: async (params = {}) => {
         const base = await getApiBase();
-        return w.http('GET', buildUrlWithParams(`${base}/movimientos/`, params));
+        return w.Sintel.Core.Http.request('GET', buildUrlWithParams(`${base}/movimientos/`, params));
       },
       get: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/movimientos/${id}/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/movimientos/${id}/`);
       },
       save: async (payload) => {
         const base = await getApiBase();
-        return w.http('POST', `${base}/movimientos/`, payload);
+        return w.Sintel.Core.Http.request('POST', `${base}/movimientos/`, payload);
       },
       update: async (id, payload) => {
         const base = await getApiBase();
-        return w.http('PATCH', `${base}/movimientos/${id}/`, payload);
+        return w.Sintel.Core.Http.request('PATCH', `${base}/movimientos/${id}/`, payload);
       },
       delete: async (id) => {
         const base = await getApiBase();
-        return w.http('DELETE', `${base}/movimientos/${id}/`);
+        return w.Sintel.Core.Http.request('DELETE', `${base}/movimientos/${id}/`);
       },
       timeline: async (params = {}) => {
         const base = await getApiBase();
-        return w.http('GET', buildUrlWithParams(`${base}/movimientos/timeline/`, params));
+        return w.Sintel.Core.Http.request('GET', buildUrlWithParams(`${base}/movimientos/timeline/`, params));
       },
     },
 
@@ -195,15 +195,15 @@
     historialServicios: {
       list: async (params = {}) => {
         const base = await getApiBase();
-        return w.http('GET', buildUrlWithParams(`${base}/historial-servicios/`, params));
+        return w.Sintel.Core.Http.request('GET', buildUrlWithParams(`${base}/historial-servicios/`, params));
       },
       get: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/historial-servicios/${id}/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/historial-servicios/${id}/`);
       },
       save: async (payload) => {
         const base = await getApiBase();
-        return w.http('POST', `${base}/historial-servicios/`, payload);
+        return w.Sintel.Core.Http.request('POST', `${base}/historial-servicios/`, payload);
       },
       // No hay update/delete por integridad de historial
     },
@@ -212,27 +212,27 @@
     categorias: {
       list: async (params = {}) => {
         const base = await getApiBase();
-        return w.http('GET', buildUrlWithParams(`${base}/categorias/`, params));
+        return w.Sintel.Core.Http.request('GET', buildUrlWithParams(`${base}/categorias/`, params));
       },
       get: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/categorias/${id}/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/categorias/${id}/`);
       },
       save: async (payload) => {
         const base = await getApiBase();
-        return w.http('POST', `${base}/categorias/`, payload);
+        return w.Sintel.Core.Http.request('POST', `${base}/categorias/`, payload);
       },
       update: async (id, payload) => {
         const base = await getApiBase();
-        return w.http('PATCH', `${base}/categorias/${id}/`, payload);
+        return w.Sintel.Core.Http.request('PATCH', `${base}/categorias/${id}/`, payload);
       },
       delete: async (id) => {
         const base = await getApiBase();
-        return w.http('DELETE', `${base}/categorias/${id}/`);
+        return w.Sintel.Core.Http.request('DELETE', `${base}/categorias/${id}/`);
       },
       resumen: async (id) => {
         const base = await getApiBase();
-        return w.http('GET', `${base}/categorias/${id}/resumen/`);
+        return w.Sintel.Core.Http.request('GET', `${base}/categorias/${id}/resumen/`);
       },
     },
   };

@@ -27,7 +27,7 @@
 
     async function _eliminar(uuid) {
         try {
-            const res = await w.http('DELETE', `${API_BASE}${uuid}/`);
+            const res = await w.Sintel.Core.Http.request('DELETE', `${API_BASE}${uuid}/`);
             if (res.ok) {
                 w.UIManager?.notifySuccess('Resolución eliminada correctamente');
                 reload();

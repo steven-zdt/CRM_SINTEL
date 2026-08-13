@@ -76,7 +76,7 @@
                         ? `/api/v1/empresas/mail-inbox-config/${configId}/`
                         : '/api/v1/empresas/mail-inbox-config/';
 
-                    const resp = await w.http(method, url, payload);
+                    const resp = await w.Sintel.Core.Http.request(method, url, payload);
 
                     if (!resp.ok) {
                         w.UIManager?.notifyError?.(resp, MOD) ??
@@ -120,7 +120,7 @@
                         use_starttls: fd.get('imap_starttls') === 'on',
                     };
 
-                    const resp = await w.http('POST', '/api/v1/empresas/mail-inbox-config/test-connection/', testPayload);
+                    const resp = await w.Sintel.Core.Http.request('POST', '/api/v1/empresas/mail-inbox-config/test-connection/', testPayload);
 
                     if (resultEl) {
                         resultEl.classList.remove('d-none');

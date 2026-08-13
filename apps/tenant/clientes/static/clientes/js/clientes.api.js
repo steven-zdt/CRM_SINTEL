@@ -14,8 +14,8 @@
 
   w.AppCliente = w.AppCliente || {};
   
-  if (typeof w.http !== 'function') {
-    console.error('[clientes.api] http() no está disponible.');
+  if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
+    console.error('[clientes.api] Sintel.Core.Http no está disponible.');
     return;
   }
   
@@ -29,22 +29,22 @@
       list: (params = {}) => {
         const query = new URLSearchParams(params).toString();
         const url = query ? `${CLIENTES_BASE}/?${query}` : `${CLIENTES_BASE}/`;
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       },
-      get: (id) => w.http('GET', `${CLIENTES_BASE}/${id}/`),
-      create: (payload) => w.http('POST', `${CLIENTES_BASE}/`, payload),
-      update: (id, payload) => w.http('PATCH', `${CLIENTES_BASE}/${id}/`, payload),
-      delete: (id) => w.http('DELETE', `${CLIENTES_BASE}/${id}/`),
+      get: (id) => w.Sintel.Core.Http.request('GET', `${CLIENTES_BASE}/${id}/`),
+      create: (payload) => w.Sintel.Core.Http.request('POST', `${CLIENTES_BASE}/`, payload),
+      update: (id, payload) => w.Sintel.Core.Http.request('PATCH', `${CLIENTES_BASE}/${id}/`, payload),
+      delete: (id) => w.Sintel.Core.Http.request('DELETE', `${CLIENTES_BASE}/${id}/`),
       
       // [v3.5.0] Buscador de cuentas PUC por texto (autocompletar)
       searchCuentas: (search = '') => {
         const url = `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(search)}&app_origen=clientes&solo_auxiliares=true`;
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       },
       // [v3.6.1] Resolver nombre de cuenta por UUID — §18: consumo HTTP, no import Python
       getCuentaByUuid: (uuid = '') => {
         const url = `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}&app_origen=clientes`;
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       }
     });
   }
@@ -55,15 +55,15 @@
       list: (params = {}) => {
         const query = new URLSearchParams(params).toString();
         const url = query ? `${CONTACTOS_BASE}/?${query}` : `${CONTACTOS_BASE}/`;
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       },
       // Listado por cliente
-      listByCliente: (clienteId) => w.http('GET', `${CONTACTOS_BASE}/?cliente=${clienteId}`),
+      listByCliente: (clienteId) => w.Sintel.Core.Http.request('GET', `${CONTACTOS_BASE}/?cliente=${clienteId}`),
       
-      get: (id) => w.http('GET', `${CONTACTOS_BASE}/${id}/`),
-      create: (payload) => w.http('POST', `${CONTACTOS_BASE}/`, payload),
-      update: (id, payload) => w.http('PATCH', `${CONTACTOS_BASE}/${id}/`, payload),
-      delete: (id) => w.http('DELETE', `${CONTACTOS_BASE}/${id}/`)
+      get: (id) => w.Sintel.Core.Http.request('GET', `${CONTACTOS_BASE}/${id}/`),
+      create: (payload) => w.Sintel.Core.Http.request('POST', `${CONTACTOS_BASE}/`, payload),
+      update: (id, payload) => w.Sintel.Core.Http.request('PATCH', `${CONTACTOS_BASE}/${id}/`, payload),
+      delete: (id) => w.Sintel.Core.Http.request('DELETE', `${CONTACTOS_BASE}/${id}/`)
     });
   }
 
@@ -72,11 +72,11 @@
       list: (params = {}) => {
         const query = new URLSearchParams(params).toString();
         const url = query ? `${CARTERA_BASE}/?${query}` : `${CARTERA_BASE}/`;
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       },
-      get: (id) => w.http('GET', `${CARTERA_BASE}/${id}/`),
-      kpis: () => w.http('GET', `${CARTERA_BASE}/kpis/`),
-      registrarAbono: (id, payload) => w.http('POST', `${CARTERA_BASE}/${id}/registrar-abono/`, payload)
+      get: (id) => w.Sintel.Core.Http.request('GET', `${CARTERA_BASE}/${id}/`),
+      kpis: () => w.Sintel.Core.Http.request('GET', `${CARTERA_BASE}/kpis/`),
+      registrarAbono: (id, payload) => w.Sintel.Core.Http.request('POST', `${CARTERA_BASE}/${id}/registrar-abono/`, payload)
     });
   }
 

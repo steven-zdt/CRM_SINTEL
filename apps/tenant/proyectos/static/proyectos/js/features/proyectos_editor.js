@@ -6,7 +6,7 @@
  * ⚠️ Aislamiento Gradual: Sin bloques try/catch, usa UIManager.handleError()
  * 
  * Dependencias globales requeridas:
- * - w.http (definido en lib/http.js) - Capa de Datos
+ * - Sintel.Core.Http (F32.7, core-http.js) - Capa de Datos
  * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
  * - w.SintelFeedback (definido en sintel-feedback.js) - Feedback visual
  */
@@ -120,9 +120,9 @@
 
         let res;
         if (uuid) {
-            res = await w.http('PATCH', `/api/v1/proyectos/${uuid}/`, data);
+            res = await w.Sintel.Core.Http.request('PATCH', `/api/v1/proyectos/${uuid}/`, data);
         } else {
-            res = await w.http('POST', '/api/v1/proyectos/', data);
+            res = await w.Sintel.Core.Http.request('POST', '/api/v1/proyectos/', data);
         }
 
         // Error Boundary: Restaurar estado del botón
@@ -152,7 +152,7 @@
         // Vinculación automática si es creación y viene de historial de servicio (v3.9.7)
         if (isCreation && currentProyecto?.uuid && historialUuid) {
             console.log(`${MOD} Vinculando nuevo proyecto ${currentProyecto.uuid} con historial ${historialUuid}`);
-            const vincularRes = await w.http('POST', '/api/v1/proyectos/vincular-proyecto/', {
+            const vincularRes = await w.Sintel.Core.Http.request('POST', '/api/v1/proyectos/vincular-proyecto/', {
                 proyecto_uuid: currentProyecto.uuid,
                 historial_uuid: historialUuid
             });
@@ -844,7 +844,7 @@
             debounceTimer = setTimeout(async () => {
                 try {
                     const url = w.proyectosAPI.searchMovimientos(query);
-                    const res = await w.http('GET', url);
+                    const res = await w.Sintel.Core.Http.request('GET', url);
                     const items = (res.data && res.data.results) ? res.data.results : [];
                     renderMovimientoSuggestions(items, suggestions, searchInput, uuidInput);
                 } catch (err) {

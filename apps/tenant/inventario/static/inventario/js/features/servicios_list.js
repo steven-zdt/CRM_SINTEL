@@ -64,7 +64,7 @@
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    const deleteRes = await w.http('DELETE', `${CORE_API_BASE}/${uuid}/`);
+                    const deleteRes = await w.Sintel.Core.Http.request('DELETE', `${CORE_API_BASE}/${uuid}/`);
                     if (!deleteRes.ok) {
                         if (w.UIManager?.handleError) {
                             w.UIManager.handleError(deleteRes, MOD, {

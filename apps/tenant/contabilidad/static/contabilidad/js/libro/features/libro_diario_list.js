@@ -169,7 +169,7 @@
 
     try {
       const url = `${PERIODOS_API_URL}?ordering=-periodo&page_size=50`;
-      const response = await w.http('GET', url);
+      const response = await w.Sintel.Core.Http.request('GET', url);
       if (!response.ok) return;
 
       const data = response.data;

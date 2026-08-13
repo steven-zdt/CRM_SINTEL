@@ -6,7 +6,7 @@
  * ⚠️ Aislamiento Gradual v2.60: Sin bloques try/catch, usa UIManager.handleError()
  * 
  * Dependencias globales requeridas:
- * - w.http (definido en lib/http.js) - Capa de Datos
+ * - Sintel.Core.Http (F32.7, core-http.js) - Capa de Datos
  * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
  * - w.SintelFeedback (definido en sintel-feedback.js) - Feedback visual
  */
@@ -240,7 +240,7 @@
             };
 
             // PATCH a /api/v1/items-factura/{itemId}/
-            const res = await w.http('PATCH', `/api/v1/items-factura/${itemId}/`, data);
+            const res = await w.Sintel.Core.Http.request('PATCH', `/api/v1/items-factura/${itemId}/`, data);
             if (!res.ok) {
                 console.warn(`${MOD} Error al guardar vinculación del ítem ${itemId}:`, res.data);
             }
@@ -296,10 +296,10 @@
         let res;
         if (id) {
             // Actualizar factura existente (solo si es borrador)
-            res = await w.http('PATCH', `/api/v1/facturas/${id}/`, data);
+            res = await w.Sintel.Core.Http.request('PATCH', `/api/v1/facturas/${id}/`, data);
         } else {
             // Crear nueva factura
-            res = await w.http('POST', '/api/v1/facturas/', data);
+            res = await w.Sintel.Core.Http.request('POST', '/api/v1/facturas/', data);
         }
 
         // ⚠️ Error Boundary v2.60: Restaurar estado del botón
@@ -496,7 +496,7 @@
         const currentLabel = select.dataset.currentLabel || '';
 
         try {
-            const res = await w.http('GET', '/api/v1/cotizaciones/?page_size=100');
+            const res = await w.Sintel.Core.Http.request('GET', '/api/v1/cotizaciones/?page_size=100');
             if (!res || !res.ok) return;
 
             const rows = Array.isArray(res.data) ? res.data : (res.data.results || []);
@@ -543,7 +543,7 @@
             const q = searchInput.value.trim();
             if (q.length < 2) { suggestions.classList.add('d-none'); return; }
             debounceTimer = setTimeout(async () => {
-                const res = await w.http('GET', `/api/v1/clientes/?search=${encodeURIComponent(q)}&page_size=10`);
+                const res = await w.Sintel.Core.Http.request('GET', `/api/v1/clientes/?search=${encodeURIComponent(q)}&page_size=10`);
                 if (!res || !res.ok) return;
                 const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
                 renderEntidadSuggestions(items, suggestions, searchInput, uuidInput, 'cliente',
@@ -593,7 +593,7 @@
             const q = searchInput.value.trim();
             if (q.length < 2) { suggestions.classList.add('d-none'); return; }
             debounceTimer = setTimeout(async () => {
-                const res = await w.http('GET', `/api/v1/proveedores/?search=${encodeURIComponent(q)}&page_size=10`);
+                const res = await w.Sintel.Core.Http.request('GET', `/api/v1/proveedores/?search=${encodeURIComponent(q)}&page_size=10`);
                 if (!res || !res.ok) return;
                 const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
                 renderEntidadSuggestions(items, suggestions, searchInput, uuidInput, 'proveedor',
@@ -659,7 +659,7 @@
         if (!container) return;
 
         try {
-            const res = await w.http('GET', endpoint);
+            const res = await w.Sintel.Core.Http.request('GET', endpoint);
             if (!res || !res.ok || !res.data) return;
             const data = res.data;
             const nombre = data.razon_social || data.nombre || '';
@@ -862,7 +862,7 @@
             errorDiv.classList.add('d-none');
 
             const endpoint = isCliente ? '/api/v1/clientes/' : '/api/v1/proveedores/';
-            const res = await w.http('POST', endpoint, payload);
+            const res = await w.Sintel.Core.Http.request('POST', endpoint, payload);
 
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Crear';

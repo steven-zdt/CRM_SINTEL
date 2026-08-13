@@ -103,8 +103,8 @@
         if (!select || select.dataset.loaded === 'true') return;
 
         try {
-            const response = w.http
-                ? await w.http('GET', '/api/v1/cotizaciones/?page_size=50')
+            const response = (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http)
+                ? await w.Sintel.Core.Http.request('GET', '/api/v1/cotizaciones/?page_size=50')
                 : await fetch('/api/v1/cotizaciones/?page_size=50', { headers: { 'Accept': 'application/json' } })
                     .then(async res => ({ ok: res.ok, data: await res.json() }));
 
@@ -132,7 +132,7 @@
         try {
             const response = w.facturasAPI && typeof w.facturasAPI.vincularCotizacion === 'function'
                 ? await w.facturasAPI.vincularCotizacion(facturaUuid, cotizacionUuid)
-                : await w.http('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cotizacion/`, {
+                : await w.Sintel.Core.Http.request('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cotizacion/`, {
                     cotizacion_uuid: cotizacionUuid || null
                 });
 
@@ -169,8 +169,8 @@
             const url = `${FACTURAS_API_BASE}/${facturaId}/`;
             let response;
             
-            if (w.http && typeof w.http === 'function') {
-                response = await w.http('GET', url);
+            if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                response = await w.Sintel.Core.Http.request('GET', url);
             } else if (w.facturasAPI && typeof w.facturasAPI.getFactura === 'function') {
                 response = await w.facturasAPI.getFactura(facturaId);
             } else {
@@ -291,8 +291,8 @@
                         const itemsUrl = `${FACTURAS_API_BASE.replace('/facturas', '/items-factura')}/?factura=${facturaId}`;
                         let itemsResponse;
                         
-                        if (w.http && typeof w.http === 'function') {
-                            itemsResponse = await w.http('GET', itemsUrl);
+                        if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                            itemsResponse = await w.Sintel.Core.Http.request('GET', itemsUrl);
                         } else {
                             const fetchRes = await fetch(itemsUrl, {
                                 headers: {

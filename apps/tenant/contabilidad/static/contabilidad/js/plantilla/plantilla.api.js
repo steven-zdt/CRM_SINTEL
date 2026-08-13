@@ -1,7 +1,7 @@
 /**
  * plantilla.api.js - API para PlantillaContable + LineaPlantilla v3.16.2
  * Feature-Sliced Design: encapsula todas las peticiones HTTP al endpoint DRF.
- * Dependencias: w.http (http.js)
+ * Dependencias: Sintel.Core.Http (F32.7, core-http.js)
  */
 (function (w) {
   'use strict';
@@ -20,42 +20,42 @@
       if (params.activo !== undefined && params.activo !== '') {
         url.searchParams.append('activo', params.activo);
       }
-      const res = await w.http('GET', url.pathname + url.search);
+      const res = await w.Sintel.Core.Http.request('GET', url.pathname + url.search);
       if (!res.ok) throw new Error('Error ' + res.status);
       return res.data;
     },
 
     retrieve: async function (uuid) {
-      const res = await w.http('GET', BASE + uuid + '/');
+      const res = await w.Sintel.Core.Http.request('GET', BASE + uuid + '/');
       if (!res.ok) throw new Error('Error ' + res.status);
       return res.data;
     },
 
     create: async function (data) {
-      const res = await w.http('POST', BASE, data);
+      const res = await w.Sintel.Core.Http.request('POST', BASE, data);
       if (!res.ok) throw res;
       return res.data;
     },
 
     update: async function (uuid, data) {
-      const res = await w.http('PATCH', BASE + uuid + '/', data);
+      const res = await w.Sintel.Core.Http.request('PATCH', BASE + uuid + '/', data);
       if (!res.ok) throw res;
       return res.data;
     },
 
     destroy: async function (uuid) {
-      const res = await w.http('DELETE', BASE + uuid + '/');
+      const res = await w.Sintel.Core.Http.request('DELETE', BASE + uuid + '/');
       if (!res.ok) throw new Error('Error ' + res.status);
     },
 
     agregarLinea: async function (uuid, data) {
-      const res = await w.http('POST', BASE + uuid + '/lineas/', data);
+      const res = await w.Sintel.Core.Http.request('POST', BASE + uuid + '/lineas/', data);
       if (!res.ok) throw res;
       return res.data;
     },
 
     eliminarLinea: async function (uuid, lineaId) {
-      const res = await w.http('DELETE', BASE + uuid + '/lineas/' + lineaId + '/');
+      const res = await w.Sintel.Core.Http.request('DELETE', BASE + uuid + '/lineas/' + lineaId + '/');
       if (!res.ok) throw new Error('Error ' + res.status);
     },
   };

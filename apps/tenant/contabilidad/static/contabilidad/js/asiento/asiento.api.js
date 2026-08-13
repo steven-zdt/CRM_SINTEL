@@ -5,7 +5,7 @@
  * ⚠️ API-First: Consume DRF REST API exclusivamente
  * 
  * Dependencias globales requeridas:
- * - w.http (definido en http.js)
+ * - Sintel.Core.Http (F32.7, core-http.js)
  */
 (function (w, d) {
   'use strict';
@@ -30,7 +30,7 @@
       if (params.estado) url.searchParams.append('estado', params.estado);
       if (params.fecha) url.searchParams.append('fecha', params.fecha);
 
-      const response = await w.http('GET', url.pathname + url.search);
+      const response = await w.Sintel.Core.Http.request('GET', url.pathname + url.search);
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
@@ -45,7 +45,7 @@
     retrieve: async function(id) {
       if (!id) throw new Error('ID de asiento requerido');
       
-      const response = await w.http('GET', `${API_BASE}${id}/`);
+      const response = await w.Sintel.Core.Http.request('GET', `${API_BASE}${id}/`);
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
@@ -59,7 +59,7 @@
      * @throws {Object} Error con estructura { ok: false, status: number, data: object }
      */
     create: async function(data) {
-      const response = await w.http('POST', API_BASE, data);
+      const response = await w.Sintel.Core.Http.request('POST', API_BASE, data);
       if (!response.ok) {
         // ⚠️ v2.60: Lanzar response completo para que error_injector.js pueda procesarlo
         const error = new Error(response.data?.message || response.data?.detail || 'Error al crear asiento');
@@ -81,7 +81,7 @@
     update: async function(id, data) {
       if (!id) throw new Error('ID de asiento requerido');
       
-      const response = await w.http('PATCH', `${API_BASE}${id}/`, data);
+      const response = await w.Sintel.Core.Http.request('PATCH', `${API_BASE}${id}/`, data);
       if (!response.ok) {
         // ⚠️ v2.60: Lanzar response completo para que error_injector.js pueda procesarlo
         const error = new Error(response.data?.message || response.data?.detail || 'Error al actualizar asiento');
@@ -100,7 +100,7 @@
      */
     delete: async function(id) {
       if (!id) throw new Error('ID de asiento requerido');
-      const response = await w.http('DELETE', `${API_BASE}${id}/`);
+      const response = await w.Sintel.Core.Http.request('DELETE', `${API_BASE}${id}/`);
       if (!response.ok) {
         const msg = response.data?.message || response.data?.detail || response.data?.error || `HTTP ${response.status}`;
         throw new Error(msg);
@@ -117,7 +117,7 @@
     aprobar: async function(id) {
       if (!id) throw new Error('ID de asiento requerido');
       
-      const response = await w.http('POST', `${API_BASE}${id}/aprobar/`);
+      const response = await w.Sintel.Core.Http.request('POST', `${API_BASE}${id}/aprobar/`);
       if (!response.ok) {
         // ⚠️ v2.60: Lanzar response completo para que error_injector.js pueda procesarlo
         const error = new Error(response.data?.message || response.data?.detail || 'Error al aprobar asiento');
@@ -138,7 +138,7 @@
       const url = new URL(`${API_BASE}documentos-sin-asiento/`, w.location.origin);
       if (tipo) url.searchParams.append('tipo', tipo);
 
-      const response = await w.http('GET', url.pathname + url.search);
+      const response = await w.Sintel.Core.Http.request('GET', url.pathname + url.search);
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
@@ -153,7 +153,7 @@
      * @throws {Object} Error con estructura { ok: false, status: number, data: object }
      */
     crearDesdeDocumentos: async function(facturasIds = [], gastosIds = []) {
-      const response = await w.http('POST', `${API_BASE}crear-desde-documentos/`, {
+      const response = await w.Sintel.Core.Http.request('POST', `${API_BASE}crear-desde-documentos/`, {
         facturas: facturasIds,
         gastos: gastosIds
       });
