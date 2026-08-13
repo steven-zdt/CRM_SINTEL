@@ -1,69 +1,44 @@
 /**
  * Gastos API - SSoT de URLs y endpoints
- * 
+ *
  * Namespace: window.Sintel.Gastos.API
- * Version: v2.62.0
+ *
+ * F32.6: migrado a Sintel.Core.Http -- ya no reimplementa fetch+CSRF+JWT
+ * (violaba el contrato "solo URLs+metodos", F31.3/F32.1). El contrato
+ * PUBLICO de cada metodo no cambia -- solo el transporte interno,
+ * consolidado en _fetch(). Efecto colateral correcto: JWT ahora usa
+ * getValidAccessToken() (con refresh) via Core.Http -- antes usaba
+ * getAccessToken() a secas (gastos era uno de los 5 de 6 que no
+ * refrescaban, F32.1 S5).
  */
 (function() {
     'use strict';
 
-    // Namespace
     window.Sintel = window.Sintel || {};
     window.Sintel.Gastos = window.Sintel.Gastos || {};
 
     const API_ROOT = '/api/v1/gastos/';
     const RESOLUCION_ROOT = '/api/v1/gastos/resoluciones/';
 
-    /**
-     * API Endpoints para Gastos (Gateway Directo)
-     */
+    async function _fetch(method, url, data) {
+        const res = await window.Sintel.Core.Http.request(method, url, data);
+        if (!res.ok) {
+            const error = new Error(`[Gastos.API] ${method} ${url} -> ${res.status}`);
+            error.status = res.status;
+            error.data = res.data || { detail: `HTTP ${res.status}` };
+            throw error;
+        }
+        if (res.status === 204) return { success: true };
+        return res.data;
+    }
+
     const API = {
         gastos: {
             list: API_ROOT,
             detail: (id) => `${API_ROOT}${id}/`,
             anular: (id) => `${API_ROOT}${id}/anular/`,
-            create: async function(data) {
-                const response = await fetch(API_ROOT, {
-                    method: 'POST',
-                    headers: window.Sintel.Gastos.getHeaders(),
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) {
-                    let errorData = {};
-                    try {
-                        errorData = await response.json();
-                    } catch(e) {
-                        errorData = { detail: `HTTP ${response.status}` };
-                    }
-                    const error = new Error('Gasto creation failed');
-                    error.status = response.status;
-                    error.data = errorData;
-                    console.error('[API] Gasto create error:', errorData);
-                    throw error;
-                }
-                return await response.json();
-            },
-            update: async function(uuid, data) {
-                const response = await fetch(`${API_ROOT}${uuid}/`, {
-                    method: 'PATCH',
-                    headers: window.Sintel.Gastos.getHeaders(),
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) {
-                    let errorData = {};
-                    try {
-                        errorData = await response.json();
-                    } catch(e) {
-                        errorData = { detail: `HTTP ${response.status}` };
-                    }
-                    const error = new Error('Gasto update failed');
-                    error.status = response.status;
-                    error.data = errorData;
-                    console.error('[API] Gasto update error:', errorData);
-                    throw error;
-                }
-                return await response.json();
-            },
+            create: (data) => _fetch('POST', API_ROOT, data),
+            update: (uuid, data) => _fetch('PATCH', `${API_ROOT}${uuid}/`, data),
         },
         resoluciones: {
             list: RESOLUCION_ROOT,
@@ -76,11 +51,12 @@
             searchCuentas: (q) => `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(q)}&app_origen=gastos&activa=true&tipo=GASTO`,
             getCuentaByUuid: (uuid) => `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}&app_origen=gastos`,
             obtenerRetenciones: async function(nit) {
-                const response = await fetch(`/api/v1/contabilidad/retenciones/obtener-por-tercero/?nit=${encodeURIComponent(nit)}&tipo_tercero=PROVEEDOR&naturaleza=COMPRA`, {
-                    headers: window.Sintel.Gastos.getHeaders()
-                });
-                if (!response.ok) return null;
-                return await response.json();
+                // Comportamiento original preservado: retorna null en fallo,
+                // no lanza (a diferencia del resto de metodos de este API).
+                const res = await window.Sintel.Core.Http.get(
+                    `/api/v1/contabilidad/retenciones/obtener-por-tercero/?nit=${encodeURIComponent(nit)}&tipo_tercero=PROVEEDOR&naturaleza=COMPRA`
+                );
+                return res.ok ? res.data : null;
             }
         },
         proveedores: {
@@ -89,8 +65,7 @@
         inventario: {
             searchMovimientos: (q) => `/api/v1/inventario/movimientos/?search=${encodeURIComponent(q)}&page_size=10`,
         },
-        
-        
+
         // Renderizado (HTMX / Views)
         endpoints: {
             renderCrear: () => `${API_ROOT}render-offcanvas/crear/`,
@@ -102,51 +77,23 @@
         /**
          * Acciones asincronas
          */
-        anular: async function(uuid, motivo = "Anulacion administrativa") {
-            const url = this.gastos.anular(uuid);
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: window.Sintel.Gastos.getHeaders(),
-                body: JSON.stringify({ motivo: motivo })
-            });
-            if (!response.ok) {
-                try { response.data = await response.json(); } catch(e) {}
-                throw response;
-            }
-            return await response.json();
+        anular: function(uuid, motivo = "Anulacion administrativa") {
+            return _fetch('POST', this.gastos.anular(uuid), { motivo: motivo });
         },
 
-        eliminar: async function(uuid) {
-            const url = this.gastos.detail(uuid);
-            const response = await fetch(url, {
-                method: 'DELETE',
-                headers: window.Sintel.Gastos.getHeaders()
-            });
-            if (!response.ok) {
-                try { response.data = await response.json(); } catch(e) {}
-                throw response;
-            }
-            return response.status === 204 ? {success: true} : await response.json();
+        eliminar: function(uuid) {
+            return _fetch('DELETE', this.gastos.detail(uuid));
         }
     };
 
-    /**
-     * Headers por defecto con JWT (v2.62)
-     * FE-A9: CSRF via window.getCookie (SSoT, core/js/lib/http.js) — no
-     * depende de un input de formulario tradicional que puede no existir
-     * en paginas API-first (antes: 403 silencioso si el input no estaba presente).
-     */
+    // getHeaders() se conserva por compatibilidad hacia atras (F32.6,
+    // mismo criterio que ventas.api.js/compras.api.js).
     function getHeaders() {
-        const headers = {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': window.getCookie?.('csrftoken') || ''
-        };
-        
-        // window.jwtAuth expuesto globalmente en jwt-auth.js
+        const headers = { 'Content-Type': 'application/json' };
+        const csrf = window.Sintel?.Core?.Http?.csrf ? window.Sintel.Core.Http.csrf() : null;
+        if (csrf) headers['X-CSRFToken'] = csrf;
         const token = window.jwtAuth?.getAccessToken?.();
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
+        if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
     }
 
