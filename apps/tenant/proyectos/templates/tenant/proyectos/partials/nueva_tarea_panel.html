@@ -23,25 +23,6 @@
     </div>
   </div>
 
-  <div class="d-flex gap-0 border-bottom" id="nueva-tarea-kpis" style="font-size:0.75rem;">
-    <div class="flex-fill text-center py-2 border-end">
-      <div id="nt-kpi-total" class="fw-bold text-dark">-</div>
-      <div class="text-muted">Total</div>
-    </div>
-    <div class="flex-fill text-center py-2 border-end">
-      <div id="nt-kpi-proceso" class="fw-bold text-primary">-</div>
-      <div class="text-muted">En Proceso</div>
-    </div>
-    <div class="flex-fill text-center py-2 border-end">
-      <div id="nt-kpi-completada" class="fw-bold text-success">-</div>
-      <div class="text-muted">Completadas</div>
-    </div>
-    <div class="flex-fill text-center py-2">
-      <div id="nt-kpi-pendiente" class="fw-bold text-secondary">-</div>
-      <div class="text-muted">Pendientes</div>
-    </div>
-  </div>
-
   <div class="card-body border-bottom py-2">
     <div class="d-flex gap-2 flex-wrap" id="filtros-estado-nueva-tarea">
       <button class="btn btn-sm btn-outline-dark active" data-estado="">
@@ -54,8 +35,12 @@
     </div>
   </div>
 
+  {# Panel HTMX: KPIs + tabla server-rendered (django-tables2). Cargado/refrescado
+     via JS (nueva_tarea_list.js) porque necesita parametros dinamicos (empleado
+     de contexto, estado, busqueda) que un hx-trigger="load" estatico no puede
+     expresar. #}
   <div class="card-body p-0">
-    <div id="grid-nueva-tarea" style="min-height:360px;"></div>
+    <div id="tareas-cortas-panel" style="min-height:360px;"></div>
   </div>
 
   <div id="form-nueva-tarea" class="card-footer bg-light border-top p-3" style="display:none;">

@@ -175,7 +175,8 @@ class TareaCortaSelector:
     """
 
     @staticmethod
-    def qs_por_empleado(empresa_id, empleado_uuid=None, fecha_inicio=None, fecha_fin=None):
+    def qs_por_empleado(empresa_id, empleado_uuid=None, fecha_inicio=None, fecha_fin=None,
+                         estado=None, search=None):
         """
         QuerySet de tareas cortas filtradas por empleado y empresa.
         Filtros de fecha: busca tareas cuyo periodo intersecta con [fecha_inicio, fecha_fin].
@@ -200,6 +201,18 @@ class TareaCortaSelector:
             qs = qs.filter(fecha_fin__gte=fecha_inicio)
         if fecha_fin:
             qs = qs.filter(fecha_inicio__lte=fecha_fin)
+
+        if estado:
+            qs = qs.filter(estado=estado)
+
+        if search:
+            qs = qs.filter(
+                Q(titulo__icontains=search) |
+                Q(descripcion__icontains=search) |
+                Q(cliente__razon_social__icontains=search) |
+                Q(empleado__primer_nombre__icontains=search) |
+                Q(empleado__primer_apellido__icontains=search)
+            )
 
         return qs.order_by('fecha_inicio', 'created_at')
 

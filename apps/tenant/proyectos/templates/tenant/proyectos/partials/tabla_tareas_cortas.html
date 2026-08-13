@@ -1,0 +1,25 @@
+{% load django_tables2 %}
+{# Fragmento HTMX: KPIs + tabla de Tareas Cortas. Reemplaza #tareas-cortas-panel completo. #}
+
+<div class="d-flex gap-0 border-bottom" id="nueva-tarea-kpis" style="font-size:0.75rem;">
+  <div class="flex-fill text-center py-2 border-end">
+    <div class="fw-bold text-dark">{{ kpi_total }}</div>
+    <div class="text-muted">Total</div>
+  </div>
+  <div class="flex-fill text-center py-2 border-end">
+    <div class="fw-bold text-primary">{{ kpi_proceso }}</div>
+    <div class="text-muted">En Proceso</div>
+  </div>
+  <div class="flex-fill text-center py-2 border-end">
+    <div class="fw-bold text-success">{{ kpi_completada }}</div>
+    <div class="text-muted">Completadas</div>
+  </div>
+  <div class="flex-fill text-center py-2">
+    <div class="fw-bold text-secondary">{{ kpi_pendiente }}</div>
+    <div class="text-muted">Pendientes</div>
+  </div>
+</div>
+
+<div class="w-100" style="max-width:100%; overflow-x:auto;">
+  {% render_table table %}
+</div>
