@@ -109,24 +109,34 @@ facturas (6), empleados (4), contabilidad (9, incluyendo `cuenta.api.js`,
 de F32.1 no habia detectado en absoluto), clientes (3), proveedores (2),
 core/helpers (2, incluyendo el ya confirmado muerto `landing.api.js`).
 
-## Conclusion
+## Conclusion (actualizada -- F32.7 COMPLETO)
 
-Client A (`core/js/lib/http.js`) sigue siendo la dependencia HTTP *de facto*
-de practicamente todo el frontend tenant -- no un residuo aislado. **No se
-elimina en esta pasada de F32.7** ni es realista tratarlo como "eliminar 2-3
-duplicados mas": son ~46 archivos adicionales, del mismo tamano o mayor que
-el trabajo ya hecho en F32.6+F32.7 combinados (18 archivos). El unico
-"duplicado" removido con evidencia suficiente hasta ahora es client B.
+El usuario decidio migrar los 46 archivos restantes en la misma sesion.
+Completado: los 46 archivos (inventario 15, contabilidad 8, facturas 5,
+empresa 5, empleados 4, clientes 3, proveedores 2, proyectos 2, bancos 1,
+core/helpers 1) migrados con el mismo patron mecanico (`window.http(...)`/
+`w.http(...)` -> `Sintel.Core.Http.request(...)`, guards de disponibilidad
+actualizados), verificados con `manage.py check` + regresion E2E completa
+en cada tanda (0 regresiones en ningun punto).
 
-El patron de migracion en si no cambia (probado 18 veces sin una sola
-regresion real: leer el archivo completo, confirmar consumidores reales
-antes de tocar firmas, `window.http(...)`/`w.http(...)` ->
-`Sintel.Core.Http.request(...)`, `window.getCookie` -> `Sintel.Core.Http.
-csrf()`, `manage.py check` + E2E dedicado antes de commitear) -- lo que
-cambia es la escala. Se detiene aqui para que el usuario decida como
-continuar: ¿migrar los 46 restantes en esta misma sesion (varias horas mas
-de trabajo mecanico pero de bajo riesgo), acotar a un subconjunto (p.ej.
-solo los `*.api.js`, dejando `*_editor.js`/`*_list.js` para despues), o
-cerrar F32 con el alcance actual (12+6 archivos migrados, client B
-eliminado, client A documentado y con auditoria completa para retomar
-cuando se decida)?
+Con los 52 consumidores reales (F32.6: 6 + F32.7: 46) migrados, **client A
+(`core/js/lib/http.js`) tambien se elimino** -- confirmado sin consumidores
+vivos por grep exhaustivo, `<script>` removido de `assets_core.html`
+(unico punto de carga real). `Sintel.Core.Http` es ahora el unico cliente
+HTTP del frontend tenant. Regresion final: 22/22 specs E2E en verde contra
+`qaisotest.sintel.net.co`.
+
+Excepciones documentadas, no tocadas (correctamente fuera de alcance):
+- `empresa/static/empresa/js/empresa.api.js`, `core/static/core/js/landing/
+  landing.api.js` -- codigo muerto confirmado (ningun `<script>` real los
+  carga).
+- Shell estatico de `/dashboard/` (`tenant/core/static/tenant/core/
+  dashboard/index.html`) -- mantiene su propio `<script>` hardcodeado hacia
+  el ahora-eliminado `lib/http.js` (404 silencioso), pero esa pagina ya
+  estaba rota por separado (llama `window.initDashboardPage()`, funcion
+  inexistente) y nunca invocaba `window.http`. Bug pre-existente, flagged
+  aparte (`task_8c73f54c`), no de esta migracion.
+
+F32.7 cierra aqui. Siguiente: F32.8 (matriz de regresion completa: 401/403/
+CSRF/refresh JWT/upload/HTMX/offcanvas) segun el plan original del
+usuario.
