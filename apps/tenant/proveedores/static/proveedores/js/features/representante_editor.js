@@ -70,7 +70,7 @@ window.Sintel.Proveedores = window.Sintel.Proveedores || {};
       if (q.length < 2) { dd.style.display = 'none'; return; }
       _timer = setTimeout(async function () {
         try {
-          const res = await window.http(
+          const res = await window.Sintel.Core.Http.request(
             'GET',
             '/api/v1/proveedores/?search=' + encodeURIComponent(q) + '&page_size=15&activo=true'
           );

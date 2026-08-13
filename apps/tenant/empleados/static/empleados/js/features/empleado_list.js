@@ -43,7 +43,7 @@
         const url = window.Sintel.Empleados.API.empleados.summary;
 
         try {
-            const res = await window.http('GET', url);
+            const res = await window.Sintel.Core.Http.request('GET', url);
             if (res.ok) {
                 const data = res.data;
 
@@ -130,7 +130,7 @@
         const url = window.Sintel.Empleados.API.empleados.detail(empleadoIdEliminar);
 
         try {
-            const res = await window.http('DELETE', url);
+            const res = await window.Sintel.Core.Http.request('DELETE', url);
             if (res.ok) {
                 const modalEl = document.getElementById('confirmarEliminarModal');
                 if (modalEl) {

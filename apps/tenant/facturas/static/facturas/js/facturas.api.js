@@ -24,11 +24,13 @@
 (function() {
   'use strict';
 
-  // Asegurar que http() esté disponible
-  if (typeof window.http !== 'function') {
-    console.error('[facturas.api] http() no está disponible. Cargar lib/http.js primero.');
+  // F32.7: Asegurar que Sintel.Core.Http este disponible (antes: window.http,
+  // ver F32_7_TRANSPORT_CONSOLIDATION_AUDIT.md).
+  if (!window.Sintel || !window.Sintel.Core || !window.Sintel.Core.Http) {
+    console.error('[facturas.api] Sintel.Core.Http no esta disponible. Cargar core-http.js primero.');
     return;
   }
+  const Http = window.Sintel.Core.Http;
 
   const API_BASE = '/api/v1';
   const CORE_API_BASE = '/api/v1/core';
@@ -61,7 +63,7 @@
       ? `${FACTURAS_API_BASE}/?${queryParams.toString()}`
       : `${FACTURAS_API_BASE}/`;
     
-    return await window.http('GET', url);
+    return await Http.request('GET', url);
   }
 
   /**
@@ -72,7 +74,7 @@
    */
   async function getFactura(id) {
     // ⚠️ v2.61.1: Usar Core API facade
-    return await window.http('GET', `${FACTURAS_API_BASE}/${id}/`);
+    return await Http.request('GET', `${FACTURAS_API_BASE}/${id}/`);
   }
 
   /**
@@ -110,7 +112,7 @@
     // ⚠️ v2.61.2: Usar Core API facade - endpoint upload-ubl de facturas
     // Soporta batch processing: files[] para múltiples archivos
     const url = `${FACTURAS_API_BASE}/upload-ubl/?preview=${preview ? 'true' : 'false'}&async=false`;
-    return await window.http('POST', url, formData);
+    return await Http.request('POST', url, formData);
   }
 
   /**
@@ -128,7 +130,7 @@
       throw new Error('taskId es requerido');
     }
     // ⚠️ v2.61.2: Usar Core API facade - endpoint ingest status
-    return await window.http('GET', `${FACTURAS_API_BASE}/ingest/${taskId}/status/`);
+    return await Http.request('GET', `${FACTURAS_API_BASE}/ingest/${taskId}/status/`);
   }
 
   /**
@@ -144,7 +146,7 @@
       method: 'GET',
       headers: {
         'Accept': 'application/xml, application/json, text/xml',
-        'X-CSRFToken': window.getCookie ? window.getCookie('csrftoken') || '' : '',
+        'X-CSRFToken': Http.csrf() || '',
       },
       credentials: 'same-origin',
     });
@@ -175,7 +177,7 @@
    */
   async function getSummary() {
     // ⚠️ v2.61.1: Usar Core API facade
-    return await window.http('GET', `${FACTURAS_API_BASE}/summary/`);
+    return await Http.request('GET', `${FACTURAS_API_BASE}/summary/`);
   }
 
   /**
@@ -186,7 +188,7 @@
    */
   async function deleteFactura(id) {
     // ⚠️ v2.61.1: Usar Core API facade
-    return await window.http('DELETE', `${FACTURAS_API_BASE}/${id}/`);
+    return await Http.request('DELETE', `${FACTURAS_API_BASE}/${id}/`);
   }
 
   /**
@@ -199,7 +201,7 @@
     if (!facturaUuid) {
       throw new Error('facturaUuid es requerido');
     }
-    return await window.http('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cotizacion/`, {
+    return await Http.request('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cotizacion/`, {
       cotizacion_uuid: cotizacionUuid || null,
     });
   }
@@ -214,7 +216,7 @@
     if (!facturaUuid) {
       throw new Error('facturaUuid es requerido');
     }
-    return await window.http('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cliente/`, {
+    return await Http.request('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cliente/`, {
       cliente_uuid: clienteUuid || null,
     });
   }
@@ -229,7 +231,7 @@
     if (!facturaUuid) {
       throw new Error('facturaUuid es requerido');
     }
-    return await window.http('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-proveedor/`, {
+    return await Http.request('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-proveedor/`, {
       proveedor_uuid: proveedorUuid || null,
     });
   }
@@ -268,7 +270,7 @@
     }
     
     // ⚠️ v2.61.1: Usar Core API facade
-    return await window.http('POST', `${FACTURAS_API_BASE}/create-from-dto/`, payload);
+    return await Http.request('POST', `${FACTURAS_API_BASE}/create-from-dto/`, payload);
   }
 
   /**
@@ -279,7 +281,7 @@
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function previewMailbox(configId, limitMessages = 50) {
-    return await window.http('POST', `${API_BASE}/facturas/ingesta-correo/preview/`, {
+    return await Http.request('POST', `${API_BASE}/facturas/ingesta-correo/preview/`, {
       config_id: configId,
       limit_messages: limitMessages,
     });
@@ -292,7 +294,7 @@
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function syncMailbox(configId, limitMessages = 50) {
-    return await window.http('POST', `${CORE_API_BASE}/maildigester/run/`, {
+    return await Http.request('POST', `${CORE_API_BASE}/maildigester/run/`, {
       config_id: configId,
       limit_messages: limitMessages,
     });
@@ -303,7 +305,7 @@
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function listMailConfigs() {
-    return await window.http('GET', `${CORE_API_BASE}/maildigester/configs/`);
+    return await Http.request('GET', `${CORE_API_BASE}/maildigester/configs/`);
   }
 
   /**
@@ -311,7 +313,7 @@
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function listMailRuns() {
-    return await window.http('GET', `${CORE_API_BASE}/maildigester/runs/`);
+    return await Http.request('GET', `${CORE_API_BASE}/maildigester/runs/`);
   }
 
   // Exportar para uso global
@@ -336,12 +338,12 @@
       // [v3.7.0] Buscador de cuentas PUC vinculadas a facturas
       searchCuentas: (search = '') => {
         const url = `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(search)}&app_origen=facturas&solo_auxiliares=true`;
-        return window.http('GET', url);
+        return Http.request('GET', url);
       },
       // [v3.7.0] Resolver nombre de cuenta por UUID — §18: consumo HTTP, no import Python
       getCuentaByUuid: (uuid = '') => {
         const url = `/api/v1/contabilidad/cuentas-contables/?uuid=${encodeURIComponent(uuid)}&app_origen=facturas`;
-        return window.http('GET', url);
+        return Http.request('GET', url);
       }
     };
   }

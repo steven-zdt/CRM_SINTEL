@@ -266,7 +266,7 @@
         this.disabled = true;
         this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
         try {
-            const res = await window.http('PATCH',
+            const res = await window.Sintel.Core.Http.request('PATCH',
                 `/api/v1/empleados/liquidaciones-prestaciones/${uuid}/`,
                 { estado: 'PAGADO' });
             if (res.ok) {
