@@ -26,13 +26,15 @@
         }
     };
 
-    const defaultHeaders = {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
-    };
-
+    // getHeaders() se conserva por compatibilidad hacia atras (exportada
+    // publicamente como window.Sintel.Dashboard.getHeaders), aunque ya no
+    // la usa ningun metodo de este archivo (Core.Http arma sus propios
+    // headers CSRF/JWT internamente).
     function getHeaders() {
-        const headers = { ...defaultHeaders };
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
+        };
         const token = window.jwtAuth?.getAccessToken?.();
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
@@ -40,19 +42,25 @@
         return headers;
     }
 
+    // F32.6: delega en Sintel.Core.Http en vez de reimplementar
+    // fetch+CSRF+JWT (violaba el contrato SSoT, F31.3/F32.1). Contrato
+    // publico preservado: cada metodo sigue devolviendo una Promise que
+    // resuelve con los datos o lanza un Error con mensaje
+    // "Error <status>: <statusText>" (forma original de este archivo).
+    async function _fetch(method, url) {
+        const res = await window.Sintel.Core.Http.request(method, url);
+        if (!res.ok) {
+            throw new Error(`Error ${res.status}: ${res.data?.detail || res.data?.error || ''}`);
+        }
+        return res.data;
+    }
+
     /**
      * Obtiene métricas consolidadas del dashboard.
      * GET /api/v1/dashboard/
      */
     async function obtenerMetricas() {
-        const response = await fetch(API.dashboard.metricas, {
-            method: 'GET',
-            headers: getHeaders()
-        });
-        if (!response.ok) {
-            throw new Error(`Error ${response.status}: ${response.statusText}`);
-        }
-        return await response.json();
+        return _fetch('GET', API.dashboard.metricas);
     }
 
     /**
@@ -60,14 +68,7 @@
      * POST /api/v1/dashboard/invalidar-cache/
      */
     async function invalidarCache() {
-        const response = await fetch(API.dashboard.invalidarCache, {
-            method: 'POST',
-            headers: getHeaders()
-        });
-        if (!response.ok) {
-            throw new Error(`Error ${response.status}: ${response.statusText}`);
-        }
-        return await response.json();
+        return _fetch('POST', API.dashboard.invalidarCache);
     }
 
     /**
@@ -82,14 +83,7 @@
         if (params.length > 0) {
             url += '?' + params.join('&');
         }
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: getHeaders()
-        });
-        if (!response.ok) {
-            throw new Error(`Error ${response.status}: ${response.statusText}`);
-        }
-        return await response.json();
+        return _fetch('GET', url);
     }
 
     window.Sintel.Dashboard.API = API;
