@@ -1,7 +1,39 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.33.0
-**Ultima actualizacion:** 2026-08-12 (DOC-M20) — FASE 30: auditoria de
+**Version:** 3.34.0
+**Ultima actualizacion:** 2026-08-13 (DOC-M21) — FASE 31: gobernanza y
+modernizacion del frontend (alcance parcial, explicitamente documentado).
+Audito el frontend completo de las 17 apps tenant (F31.0) -- **correccion
+clave al plan original**: el patron dominante ya es HTMX +
+django-tables2 (14/17 y 12/17 apps), no Tabulator; `inventario`, no
+`cotizaciones`, es la app realmente 100% Tabulator. Diseno el contrato
+Core Frontend (F31.1) y lo ejecuto parcialmente (F31.2): eliminado
+`error-service.js` (codigo muerto), corregidas 11 de 13 violaciones del
+patron Offcanvas obligatorio en 6 apps (3 de ellas con un bug latente
+real de backdrops acumulados). Audito el contrato de API Client y el
+patron JWT (F31.3): 0 usos del patron prohibido `window.jwtAuth.token`;
+6 archivos `*.api.js` violan el contrato "solo URLs+metodos" con
+reimplementaciones propias de fetch+CSRF+JWT, cada una con su propio
+contrato de error. Completo un piloto real de migracion de grillas
+(F31.6, `inventario`, 4 sub-modulos) -- el backend ya existia comiteado y
+desconectado desde una sesion anterior (`60d8a33`); F31.6 lo conecto y en
+el proceso encontro y corrigio **2 bugs de produccion reales**: un
+WRONG_LOOKUP (botones enviaban PK entero a endpoints que exigen uuid) y
+un `FieldError` que habria producido un 500 garantizado en la pestana de
+Productos. **Diferido explicitamente, con evidencia, no como trabajo
+pendiente silencioso**: un cluster real de duplicacion en el transporte
+HTTP/CSRF/JWT (`http.js` x2 copias identicas + una tercera version
+divergente que gana en produccion por orden de carga, mas los 6 `api.js`
+ya mencionados) -- el riesgo de romper auth/CSRF/uploads en todo el
+frontend tenant sin poder verificar en navegador (limitacion transversal
+de este entorno: sin credenciales de tenant, sin `pytest-playwright`) es
+demasiado alto para una correccion apresurada; requiere una micro-fase
+futura con pruebas de navegador como prerrequisito. Governance identico
+al baseline de F30 (0 hallazgos nuevos). 0 migraciones. Detalle completo:
+`documentacion/F31_FINAL_REPORT.md`, `F31_FRONTEND_INVENTORY.md`,
+`F31_FRONTEND_CONTRACT.md`, `F31_2_CORE_EXECUTION.md`,
+`F31_6_INVENTARIO_GRID_MIGRATION.md`.
+**Actualizacion previa:** 2026-08-12 (DOC-M20) — FASE 30: auditoria de
 contratos publicos + regresion global controlada. Cerro los 3 hallazgos
 que F29 dejo documentados sin corregir. **Hallazgo A** (workspace CRUD):
 `test_workspace_crud_integration.py` sobreescribia `setUp()` reemplazando
@@ -1216,7 +1248,13 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.33.0 — 2026-08-12, DOC-M20)
+## 12. Metricas del Proyecto (v3.34.0 — 2026-08-13, DOC-M21)
+
+**[DOC-M21]** F31 no toca modelos ni migraciones -- solo archivos de
+frontend (JS/HTML) y 2 archivos de codigo de produccion Python sin
+cambios de esquema (`apps/tenant/inventario/urls.py`,
+`apps/tenant/inventario/views.py` -- fix de un FieldError preexistente,
+sin tocar modelos). Ninguna fila de esta tabla cambia.
 
 **[DOC-M20]** F30 no toca modelos ni migraciones -- solo 2 archivos de
 codigo de produccion sin cambios de esquema (rename de basename de router,
