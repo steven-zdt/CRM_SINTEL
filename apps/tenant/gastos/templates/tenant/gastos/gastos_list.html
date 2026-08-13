@@ -14,8 +14,8 @@
         </button>
       </li>
       <li class="nav-item" role="presentation">
-        <button class="nav-link" id="tab-resoluciones" data-bs-toggle="tab" data-bs-target="#tab-pane-resoluciones" 
-                type="button" role="tab" aria-controls="tab-pane-resoluciones" aria-selected="false">
+        <button class="nav-link" id="gastos-tab-resoluciones" data-bs-toggle="tab" data-bs-target="#gastos-tab-pane-resoluciones"
+                type="button" role="tab" aria-controls="gastos-tab-pane-resoluciones" aria-selected="false">
           <i class="bi bi-file-text me-2"></i>Resoluciones DIAN
           <span data-module="resoluciones" data-loading-icon class="ms-2 d-none">
             <i class="bi bi-hourglass-split"></i>
@@ -81,14 +81,14 @@
       </div>
 
       {# TAB 2: RESOLUCIONES DIAN #}
-      <div class="tab-pane fade" id="tab-pane-resoluciones" role="tabpanel" 
-           aria-labelledby="tab-resoluciones" tabindex="0">
+      <div class="tab-pane fade" id="gastos-tab-pane-resoluciones" role="tabpanel"
+           aria-labelledby="gastos-tab-resoluciones" tabindex="0">
         
         {# Toolbar #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="resoluciones">
           <div class="input-group input-group-sm w-auto">
             <input type="text"
-                   id="search-resolucion"
+                   id="gastos-search-resolucion"
                    name="q"
                    class="form-control"
                    placeholder="Buscar resolucion..."
@@ -96,7 +96,7 @@
                    data-search-input
                    hx-get="{% url 'gastos:resoluciones-tabla' %}"
                    hx-trigger="keyup changed delay:400ms, search"
-                   hx-target="#resoluciones-panel"
+                   hx-target="#gastos-resoluciones-panel"
                    hx-swap="innerHTML">
             <button class="btn btn-outline-secondary" type="button"
                     data-action="search" data-module="resoluciones" title="Buscar">
@@ -114,7 +114,7 @@
         </div>
 
         {# Panel HTMX: tabla server-rendered (django-tables2). Ver nota en la pestaña de Gastos. #}
-        <div id="resoluciones-panel"
+        <div id="gastos-resoluciones-panel"
              data-grid="resoluciones"
              hx-get="{% url 'gastos:resoluciones-tabla' %}"
              hx-trigger="load, resolucion-created from:body"

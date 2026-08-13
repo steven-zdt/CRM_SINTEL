@@ -1,6 +1,6 @@
 /**
  * Feature: Listado de Gastos y Resoluciones v4.0.0
- * - Tablas server-rendered via django-tables2 + HTMX (#gastos-panel / #resoluciones-panel,
+ * - Tablas server-rendered via django-tables2 + HTMX (#gastos-panel / #gastos-resoluciones-panel,
  *   cargadas por atributos hx-get/hx-trigger declarados en gastos_list.html).
  * - Este archivo solo maneja: acciones de fila (ver/editar/anular/eliminar/desactivar),
  *   apertura de offcanvas, y disparo de los eventos que hacen que HTMX vuelva a pedir
@@ -209,7 +209,7 @@
         }
 
         // Resoluciones Panel Events
-        const panelResoluciones = d.querySelector('#resoluciones-panel');
+        const panelResoluciones = d.querySelector('#gastos-resoluciones-panel');
         if (panelResoluciones) {
             panelResoluciones.addEventListener('click', async (e) => {
                 const btnEdit = e.target.closest('.btn-edit-resolucion');
@@ -247,7 +247,7 @@
     // ─── Setup e Inicializacion Segura ────────────────────────────────────────
     // Este script se re-ejecuta completo cada vez que HTMX vuelve a insertar el
     // modulo "gastos" (nuevo <script> = nuevo closure = nuevos #gastos-panel/
-    // #resoluciones-panel), asi que no hace falta un guard "ya inicializado":
+    // #gastos-resoluciones-panel), asi que no hace falta un guard "ya inicializado":
     // no hay riesgo de doble-listener porque los contenedores tambien son nuevos.
 
     function setup() {
