@@ -1,7 +1,30 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.34.0
-**Ultima actualizacion:** 2026-08-13 (DOC-M21) — FASE 31: gobernanza y
+**Version:** 3.35.0
+**Ultima actualizacion:** 2026-08-13 (DOC-M22) — FASE 31 (continuacion):
+cierre de Grupo 2 (grillas residuales de Tabulator) mas un hallazgo
+adicional. Antes de tocar Grupo 2, se encontro WIP huerfano sin commitear
+en `empresa`/`proveedores`/`gastos`/`empleados` (mismo estilo y disciplina
+que el resto de F31, de una sesion anterior) -- verificado exhaustivamente
+(capa API sin cambios, `manage.py check`/`makemigrations` limpios, suite
+completa de las 4 apps: 115/133 pasan, los 18 fallos confirmados
+pre-existentes e independientes por reproduccion en aislamiento total) y
+commiteado en 4 partes: 3 grillas nuevas en `empresa` (Area/Empresa/
+MailInboxConfig, con un bug real de bucle de refresco infinito ~47 req/s
+corregido), grilla Cuentas por Pagar en `proveedores` (nunca se
+renderizaba en produccion), y namespacing de IDs duplicados en
+`gastos`/`empleados`. Los 18 fallos pre-existentes se flagearon aparte
+(`task_c3296519`), no se corrigieron en esta fase. Cierre real de Grupo 2:
+`proveedores/proveedores_main.js` ya estaba resuelto; `empleados/
+nomina_historial.js` es excepcion deliberada (drill-down anidado, misma
+regla que el Kardex de F31.6); `ventas/resolucion_list.js` eliminado como
+codigo muerto confirmado (0 referencias externas, la UI real ya vive en
+un offcanvas server-rendered separado); `proyectos/nueva_tarea_list.js`
+migrado (unico caso con parametros dinamicos, resuelto via `htmx.ajax()`
+explicito en vez de `hx-trigger` estatico). Governance identico al
+baseline de F30/F31 (0 hallazgos nuevos). 0 migraciones. Detalle completo:
+`documentacion/F31_GRUPO2_GRID_MIGRATION.md`.
+**Actualizacion previa:** 2026-08-13 (DOC-M21) — FASE 31: gobernanza y
 modernizacion del frontend (alcance parcial, explicitamente documentado).
 Audito el frontend completo de las 17 apps tenant (F31.0) -- **correccion
 clave al plan original**: el patron dominante ya es HTMX +
@@ -1248,7 +1271,13 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.34.0 — 2026-08-13, DOC-M21)
+## 12. Metricas del Proyecto (v3.35.0 — 2026-08-13, DOC-M22)
+
+**[DOC-M22]** F31 (continuacion, Grupo 2) no toca modelos ni migraciones
+-- solo archivos de frontend (JS/HTML) y capa de lectura (selectors.py:
+parametros `search`/`estado` nuevos en selectores existentes de
+`empresa`/`proveedores`/`proyectos`, sin cambios de esquema). Ninguna fila
+de esta tabla cambia.
 
 **[DOC-M21]** F31 no toca modelos ni migraciones -- solo archivos de
 frontend (JS/HTML) y 2 archivos de codigo de produccion Python sin
