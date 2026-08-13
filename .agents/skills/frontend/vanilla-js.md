@@ -48,51 +48,79 @@ document.addEventListener('DOMContentLoaded', function() {
 
 ---
 
-## 2. window.http() — Cliente HTTP Unificado
+## 2. Sintel.Core.Http — Cliente HTTP Unificado (F32, reemplaza window.http)
 
-`window.http()` es el cliente HTTP central de SINTEL. Inyecta JWT, CSRF y Content-Type automáticamente.
+**F32 (2026-08-13):** `window.http`/`window.getCookie` (`core/js/lib/http.js`) y su
+duplicado (`core/js/http.js`) fueron eliminados tras migrar sus 52
+consumidores reales. `window.Sintel.Core.Http` (`core/js/lib/core-http.js`,
+cargado globalmente via `assets_core.html`) es ahora el UNICO cliente HTTP
+del frontend tenant. Inyecta JWT (con refresh automático vía
+`jwtAuth.getValidAccessToken()`), CSRF (cookie `csrftoken`) y
+`Content-Type` automáticamente. **Nunca lanza** en 4xx/5xx — siempre
+retorna `{ok, status, data}` con `data` ya parseado (no un `Response` crudo,
+no requiere `.json()`).
 
 ```javascript
 // Uso general
-const res = await window.http(method, url, data);
+const res = await window.Sintel.Core.Http.request(method, url, data);
+
+// Atajos equivalentes
+window.Sintel.Core.Http.get(url, opts);
+window.Sintel.Core.Http.post(url, body, opts);
+window.Sintel.Core.Http.put(url, body, opts);
+window.Sintel.Core.Http.patch(url, body, opts);
+window.Sintel.Core.Http.delete(url, opts);
 
 // POST — crear
-const res = await window.http('POST', '/api/v1/<app>/', {
+const res = await window.Sintel.Core.Http.post('/api/v1/<app>/', {
     nombre: 'Mi registro',
     sede: uuidSede,     // UUID string — NUNCA entero
 });
 
 // PATCH — editar
-const res = await window.http('PATCH', `/api/v1/<app>/${uuid}/`, {
+const res = await window.Sintel.Core.Http.patch(`/api/v1/<app>/${uuid}/`, {
     nombre: 'Nuevo nombre',
 });
 
 // DELETE
-const res = await window.http('DELETE', `/api/v1/<app>/${uuid}/`);
+const res = await window.Sintel.Core.Http.delete(`/api/v1/<app>/${uuid}/`);
 
 // GET (también disponible aunque Tabulator y HTMX lo manejan)
-const res = await window.http('GET', `/api/v1/<app>/${uuid}/`);
+const res = await window.Sintel.Core.Http.get(`/api/v1/<app>/${uuid}/`);
 
-// Respuesta exitosa
+// Respuesta — data ya viene parseada, sin .json()
 if (res.ok) {
-    const data = await res.json();
+    const data = res.data;
     // ...
 }
+
+// Upload de FormData — método explícito, NUNCA pasar FormData a
+// request()/post() esperando que se detecte solo (bug histórico real:
+// una version anterior hacia JSON.stringify(FormData) -> "{}", corrompiendo
+// el archivo en silencio). request() SI maneja FormData de forma segura si
+// se le pasa directo (no la serializa), pero upload() es la forma explícita
+// y preferida para uploads.
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+const res = await window.Sintel.Core.Http.upload('POST', '/api/v1/<app>/upload/', formData);
 ```
+
+Contrato completo: `documentacion/F32_3_CORE_HTTP_CONTRACT.md`.
 
 ---
 
-## 3. getHeaders() — Headers Manuales (solo si window.http no aplica)
+## 3. getHeaders() — Headers Manuales (solo si Sintel.Core.Http no aplica)
 
 ```javascript
 function getHeaders() {
     const headers = { 'Content-Type': 'application/json' };
 
-    // JWT desde el bridge de sesión
+    // JWT desde el bridge de sesión (usar getValidAccessToken si es async-safe;
+    // getAccessToken es sincrono pero NO refresca un token expirado)
     const token = window.jwtAuth?.getAccessToken?.();
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    // CSRF para Django
+    // CSRF para Django — o usar window.Sintel.Core.Http.csrf()
     const csrf = document.cookie.split('; ')
         .find(r => r.startsWith('csrftoken='))?.split('=')[1];
     if (csrf) headers['X-CSRFToken'] = csrf;
@@ -100,7 +128,7 @@ function getHeaders() {
     return headers;
 }
 
-// Uso directo con fetch (solo si window.http no está disponible)
+// Uso directo con fetch (solo si Sintel.Core.Http no está disponible)
 const res = await fetch(url, {
     method: 'POST',
     headers: getHeaders(),
@@ -191,16 +219,16 @@ async function guardar(data, uuid) {
     try {
         const method = uuid ? 'PATCH' : 'POST';
         const url    = uuid ? `/api/v1/<app>/${uuid}/` : `/api/v1/<app>/`;
-        const res    = await window.http(method, url, data);
+        const res    = await window.Sintel.Core.Http.request(method, url, data);
 
         if (res.ok) {
             document.body.dispatchEvent(new CustomEvent('<modelo>Guardado'));
             return true;
         }
 
-        // DRF validation errors (400)
+        // DRF validation errors (400) — res.data ya viene parseado
         if (res.status === 400) {
-            const errors = await res.json();
+            const errors = res.data;
             window.UIManager?.handleError(
                 { data: errors },
                 { contexto: '[<App>:Guardar]' }
@@ -229,7 +257,7 @@ async function guardar(data, uuid) {
 | Regla | Detalle |
 |---|---|
 | `window.Sintel.<App>` | Todo código en namespace — prohibido global sin encapsular |
-| `window.http()` | Para todas las peticiones con auth — nunca fetch desnudo en producción |
+| `window.Sintel.Core.Http` | Para todas las peticiones con auth — nunca fetch desnudo en producción (F32) |
 | UUID sin `parseInt` | `fd.get('campo_uuid') || null` — nunca conversión numérica (AGENTS.md §27) |
 | `source="relacion.campo"` | En serializers Django: punto, no `__` (AGENTS.md §30) |
 | CustomEvents | Comunicación entre módulos — nunca llamar métodos del módulo vecino |

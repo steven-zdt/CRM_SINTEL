@@ -1,7 +1,46 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.35.0
-**Ultima actualizacion:** 2026-08-13 (DOC-M22) — FASE 31 (continuacion):
+**Version:** 3.36.0
+**Ultima actualizacion:** 2026-08-13 (DOC-M23) — FASE 32: consolidacion del
+transporte HTTP/CSRF/JWT del frontend tenant, cerrando el cluster de deuda
+que F31 dejo explicitamente diferido (§5.2 mas abajo tiene el detalle
+tecnico completo). F32.1-F32.5: auditoria exhaustiva (encontro 5
+implementaciones HTTP reales, no las 3 asumidas originalmente, mas un bug
+real de corrupcion silenciosa de `FormData` en la version "v3.4") y diseno
+del contrato `Sintel.Core.Http` (F32.3), agregado de forma aditiva sin
+tocar consumidores todavia (F32.4). F32.5 construyo infraestructura E2E
+real desde cero en este entorno (sin acceso previo a browser automation
+funcional ni credenciales) reutilizando un suite `@playwright/test`
+existente pero nunca corrido, en vez de instalar herramientas redundantes
+-- encontro y corrigio **6 bugs de produccion reales** en el proceso
+(colision de IDs bancos/contabilidad, evento sin listener, WRONG_LOOKUP,
+login flow real, etc). F32.6 migro los 6 `*.api.js` que reimplementaban
+fetch+CSRF+JWT por su cuenta. F32.7 -- la fase con mayor desvio de alcance
+real de la sesion -- descubrio en 3 pasadas de auditoria sucesivas
+(cada grep "exhaustivo" previo resultaba insuficiente) que el patron
+`window.http`/`w.http` (alias de `window` a `w` en la firma del IIFE,
+extremadamente comun en este codebase) era la dependencia HTTP *de facto*
+de casi todo el frontend tenant, no un residuo aislado: 46 archivos
+adicionales en 10 apps. Migrados todos con el mismo patron mecanico
+verificado por navegador real en cada lote; ambos duplicados de transporte
+(`core/static/js/http.js` y `core/static/core/js/lib/http.js`) eliminados
+tras confirmar cero consumidores vivos. F32.8 verifico con navegador real
+los comportamientos cross-cutting (401 critico/no-critico, CSRF, JWT,
+upload FormData) que ningun spec anterior probaba deliberadamente --
+encontro y corrigio una carrera real en el propio arnes de pruebas
+(bootstrap de sesion asincrono que enmascaraba la simulacion de sesion
+expirada) y documento un hallazgo de UX menor (perdida del query param
+`reason=401` en un redirect intermedio), sin corregirlo por estar fuera de
+alcance de transporte. **Resultado: `Sintel.Core.Http` es el unico cliente
+HTTP del frontend tenant.** Governance no re-verificado en esta pasada
+(fase 100% frontend, sin cambios de modelos/servicios backend salvo el
+hallazgo colateral de `ConfiguracionCotizacionViewSet` sin
+`SintelDSVMixin`, flagged y corregido en sesion paralela, no por F32). 0
+migraciones de base de datos. Detalle completo:
+`documentacion/F32_1_2_TRANSPORT_AUDIT.md`, `F32_3_CORE_HTTP_CONTRACT.md`,
+`F32_5_BROWSER_VALIDATION_STATUS.md`, `F32_6_TRANSPORT_MIGRATION_STATUS.md`,
+`F32_7_TRANSPORT_CONSOLIDATION_AUDIT.md`, `F32_8_REGRESSION_MATRIX.md`.
+**Actualizacion previa:** 2026-08-13 (DOC-M22) — FASE 31 (continuacion):
 cierre de Grupo 2 (grillas residuales de Tabulator) mas un hallazgo
 adicional. Antes de tocar Grupo 2, se encontro WIP huerfano sin commitear
 en `empresa`/`proveedores`/`gastos`/`empleados` (mismo estilo y disciplina
@@ -823,7 +862,7 @@ form.dataset.editorInitialized = 'true';
 |---|---|
 | `UIManager` | `ui-manager.js` — notificaciones, manejo de errores 400, offcanvas |
 | `TabulatorFactory` | `tabulator.factory.js` — creacion de grillas con JWT auto-inyectado |
-| `http` | `http.js` — wrapper Fetch API que retorna `{ok, status, data}` |
+| `Sintel.Core.Http` | `core/js/lib/core-http.js` — cliente HTTP unico (F32), retorna `{ok, status, data}`, nunca lanza en 4xx/5xx, JWT con refresh, CSRF, `upload()` explicito para FormData |
 
 ### 4.7. Procesamiento Asincrono
 
@@ -867,7 +906,7 @@ Cada app define un template `assets_<app>.html` que centraliza la inclusion de s
 
 **Helper global `offcanvas.helper.js` (FE-A5, PLAN_UNICO_CORRECCIONES.md Fase 5):** `apps/tenant/core/static/core/js/common/offcanvas.helper.js` expone `window.Sintel.Core.mostrarOffcanvasSeguro(elOrId)` — SSoT que reemplaza las 16 reimplementaciones locales encontradas en la auditoria 2026-07-26. Se carga globalmente desde `assets_core.html`, antes de cualquier modulo. Todo codigo nuevo que abra un Bootstrap Offcanvas debe usar este helper en vez de reimplementar el patron dispose+create.
 
-**Estado dual de `http.js` (FE-M4, deuda documentada, no resuelta):** existen 2 versiones de `http.js` cargadas ambas en el shell del workspace: `core/static/js/http.js` (SSoT moderno, inyecta JWT) y `core/static/core/js/lib/http.js` (version "legacy" que gana por orden de carga en `assets_core.html`/`workspace.html`). La version legacy **no se elimino** (ver `REPORTE_FASE_1.md`, hallazgo FE-C3) porque es la unica que maneja correctamente `FormData` (subida de archivos) y expone `window.getCookie`, del que dependen ~20 features. El fix aplicado en Fase 1 inyecto el JWT tambien en la version legacy, cerrando el bug de seguridad sin tocar el resto de su comportamiento. Consolidar ambas en un solo archivo sigue pendiente (Fase 6/7 del plan de correcciones).
+**Estado dual de `http.js` (FE-M4) — RESUELTO en F32 (2026-08-13).** El cluster de deuda de transporte HTTP/CSRF/JWT que F31 dejo explicitamente diferido (2 copias identicas de `http.js` + una tercera version divergente ganando en produccion por orden de carga, mas 6 `*.api.js` con su propia reimplementacion de fetch+CSRF+JWT) se cerro por completo en F32 ("Frontend Transport Consolidation & Browser Validation", F32.1-F32.8). Resultado: `window.Sintel.Core.Http` (`core/js/lib/core-http.js`) es ahora el **unico** cliente HTTP del frontend tenant. Los 3 archivos `http.js`/duplicados se eliminaron (`core/static/js/http.js` y `core/static/core/js/lib/http.js`, confirmado sin consumidores vivos via grep exhaustivo antes de cada borrado); los 52 consumidores reales (6 `*.api.js` que reimplementaban fetch por su cuenta + 46 archivos adicionales que delegaban en el `http.js` viejo) se migraron uno por uno, cada migracion verificada con navegador real (Playwright contra `qaisotest.sintel.net.co`) antes de commitear. El riesgo que F31 señalo como bloqueante (romper auth/CSRF/uploads sin poder verificar en navegador) se resolvio construyendo infraestructura E2E real en la misma fase (F32.5) en vez de aplazarlo mas. Contrato completo: `documentacion/F32_3_CORE_HTTP_CONTRACT.md`. Auditoria y migracion detalladas: `F32_1_2_TRANSPORT_AUDIT.md`, `F32_6_TRANSPORT_MIGRATION_STATUS.md`, `F32_7_TRANSPORT_CONSOLIDATION_AUDIT.md`, `F32_8_REGRESSION_MATRIX.md`.
 
 ### 5.3. Prohibiciones de Gobernanza
 
@@ -1271,7 +1310,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.35.0 — 2026-08-13, DOC-M22)
+## 12. Metricas del Proyecto (v3.36.0 — 2026-08-13, DOC-M23)
+
+**[DOC-M23]** F32 (Frontend Transport Consolidation) no toca modelos ni
+migraciones -- solo archivos de frontend (JS/HTML: 2 archivos eliminados,
+`core/static/js/http.js` y `core/static/core/js/lib/http.js`; ~55 archivos
+modificados para delegar en `Sintel.Core.Http`) mas 8 archivos de tests E2E
+nuevos (`tests/e2e/specs/50-*.js` a `60-*.js`). Ninguna fila de esta tabla
+cambia.
 
 **[DOC-M22]** F31 (continuacion, Grupo 2) no toca modelos ni migraciones
 -- solo archivos de frontend (JS/HTML) y capa de lectura (selectors.py:

@@ -1061,7 +1061,8 @@ grep -rn "parseInt.*formData\|parseInteger.*formData" apps/tenant/*/static/*/js/
 | Fuente | Razon |
 |---|---|
 | CDN: Bootstrap 5, HTMX, Tabulator, Font Awesome | Infraestructura UI compartida — permitida globalmente |
-| `apps/tenant/core/static/core/js/common/` | Helpers globales de infraestructura: `ui-manager.js`, `tabulator.factory.js`, `notyf.init.js`, `http.js` |
+| `apps/tenant/core/static/core/js/common/` | Helpers globales de infraestructura: `ui-manager.js`, `tabulator.factory.js`, `notyf.init.js` |
+| `apps/tenant/core/static/core/js/lib/core-http.js` | Cliente HTTP unico del frontend tenant — `window.Sintel.Core.Http` (F32, reemplaza `http.js`, eliminado) |
 | `apps/public/console/static/js/jwt-auth.js` | Helper global de autenticacion JWT — `window.jwtAuth` |
 | Eventos del shell `core` (`sintel:*`) | Canal de comunicacion inter-app autorizado via Custom Events estandarizados |
 
@@ -1091,6 +1092,39 @@ document.addEventListener('sintel:cliente:created', (e) => {
 ## [TESTING] 24. Patrones Obligatorios para Tests Multi-Tenant
 
 **Post-mortem: Bug 2026-05-15** — Tests de permisos CRUD fallaban con `AssertionError: 405 != 201/200` para el usuario `admin_user` incluso en DEBUG. Causa: usuarios creados en esquema incorrecto, rol `STAFF` inexistente, sin `TenantProfile` en el tenant.
+
+### 24.0. Testing Progresivo por Alcance (norma permanente, 2026-08-08)
+
+**REGLA OBLIGATORIA** para toda app actual y futura, sin excepción: la verificación después de un
+cambio escala en el siguiente orden, deteniéndose en el nivel más bajo que ya dé confianza
+suficiente — **nunca saltar directo a la suite completa por defecto**.
+
+```
+Cambio pequeño → test específico → componente → app → integración → suite global
+```
+
+- **Cambio pequeño → test específico:** una función/método nuevo o modificado se verifica primero
+  con el/los test(s) que lo ejercitan directamente (`pytest path/al/archivo.py::TestClase::test_metodo`).
+- **Componente:** si el cambio toca un selector/service/mixin compartido dentro de una app, correr
+  el archivo de test de ese componente completo.
+- **App:** si el cambio afecta el `get_queryset()`/ViewSet/flujo de una app, correr
+  `apps/tenant/<app>/tests/` (esa app sola).
+- **Integración:** solo si el cambio cruza apps (Bridges, Pull Model, Selectors compartidos en
+  `apps/tenant/core/`) correr las apps involucradas juntas.
+- **Suite global (`make test`):** reservada para **cierres de fase, cambios transversales
+  (tocan `apps/tenant/api/`, `apps/tenant/core/`, o un mixin base heredado por 3+ apps) o antes de
+  un release/PR** — no después de cada cambio individual.
+
+**Por qué:** la suite completa tarda varios minutos y erosiona el ciclo de feedback; ejecutarla
+tras cada cambio pequeño no detecta nada que el nivel inferior no detecte ya, y en este entorno
+compartido cada corrida adicional de pytest es una oportunidad más de colisión en la base de datos
+de test (`test_sintel`) por conexiones concurrentes o mal cerradas — un riesgo real ya documentado
+repetidas veces en este proyecto (ver Fase 0 del proyecto OCF, y las fases F5/F7 del proyecto OSF).
+
+**Regla asociada, ya vigente, no cambia:** nunca correr dos invocaciones de `pytest` en paralelo
+contra el mismo entorno (verificar con `docker top <container> | grep pytest` antes de lanzar una
+nueva). Esta regla de alcance progresivo reduce cuántas invocaciones se necesitan, pero la
+protección contra concurrencia sigue aplicando a cada una de ellas.
 
 ### 24.1. Regla de Tres Esquemas
 
@@ -2072,7 +2106,7 @@ Antes de escribir, modificar o revisar cualquier codigo frontend, el agente DEBE
   htmx.md              — Patrones HTMX, hx-on::, eventos, OOB, polling
   ui-management.md     — Offcanvas/Modal lifecycle, UIManager, backdrops
   crud-fsd.md          — Arquitectura CRUD completa (HTMX + Tabulator + Vanilla JS)
-  vanilla-js.md        — Namespace, window.http(), UUID sin parseInt, CustomEvents
+  vanilla-js.md        — Namespace, Sintel.Core.Http (F32), UUID sin parseInt, CustomEvents
   tabulator.md         — TabulatorFactory, formatters, cellClick, replaceData
   dom-ids-sync.md      — Sincronizacion IDs HTML ↔ JS, data-attributes
   creacion_item_full.md — Patron completo Add Association end-to-end
