@@ -140,11 +140,19 @@
         <div class="card-body">
           <div id="feedback-empresa-list" class="alert d-none" role="alert" aria-live="polite"></div>
           <div class="mb-3">
-            <input type="text" id="search-empresa" class="form-control" placeholder="Buscar por NIT, razón social, dirección, teléfono o email...">
+            <input type="text" id="search-empresa" class="form-control" placeholder="Buscar por NIT, razón social, dirección, teléfono o email..."
+                   hx-get="{% url 'empresa_ui:empresa-tabla' %}"
+                   hx-trigger="keyup changed delay:400ms, search"
+                   hx-target="#empresa-panel"
+                   name="q">
           </div>
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-              <div id="grid-empresa" class="flex-grow-1" style="min-height: 200px;"></div>
+              <div id="empresa-panel"
+                   hx-get="{% url 'empresa_ui:empresa-tabla' %}"
+                   hx-trigger="load, empresa-updated from:body"
+                   hx-target="this"
+                   style="min-height: 200px; min-width: 0;"></div>
             </div>
           </div>
         </div>
@@ -206,11 +214,19 @@
         </div>
         <div class="card-body">
           <div class="mb-3">
-            <input type="text" id="search-area" class="form-control" placeholder="Buscar por nombre, código, sede o responsable...">
+            <input type="text" id="search-area" class="form-control" placeholder="Buscar por nombre, código o sede..."
+                   hx-get="{% url 'empresa_ui:area-tabla' %}"
+                   hx-trigger="keyup changed delay:400ms, search"
+                   hx-target="#areas-panel"
+                   name="q">
           </div>
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-              <div id="grid-area" style="min-height: 300px;"></div>
+              <div id="areas-panel"
+                   hx-get="{% url 'empresa_ui:area-tabla' %}"
+                   hx-trigger="load, area-updated from:body"
+                   hx-target="this"
+                   style="min-height: 300px;"></div>
             </div>
           </div>
         </div>

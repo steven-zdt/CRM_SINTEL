@@ -2,7 +2,7 @@
 Selectores para Empresa v3.5 - Zero Waste Queries.
 """
 from django.db.models import Q
-from apps.tenant.empresa.models import Empresa, Sede, Area
+from apps.tenant.empresa.models import Empresa, Sede, Area, MailInboxConfig
 
 # Campos canónicos alineados con los serializers y UI
 LIST_FIELDS = (
@@ -66,6 +66,18 @@ AREA_DETAIL_FIELDS = AREA_LIST_FIELDS
 
 # Traversals ORM SOLO para .only() — nunca en Meta.fields de serializer (AGENTS.md §30)
 _SEDE_AREA_TRAVERSALS = ("sede__id", "sede__uuid", "sede__nombre")
+
+MAILINBOXCONFIG_LIST_FIELDS = (
+    "id",
+    "nombre",
+    "email_address",
+    "provider",
+    "imap_host",
+    "imap_port",
+    "imap_ssl",
+    "is_active",
+    "updated_at",
+)
 
 
 class EmpresaSelector:
@@ -138,4 +150,21 @@ class AreaSelector:
         return Area.objects.filter(empresa_id=empresa_id, uuid=uuid).select_related('sede').only(
             *AREA_DETAIL_FIELDS, *_SEDE_AREA_TRAVERSALS
         ).first()
+
+
+class MailInboxConfigSelector:
+    """Selector para el modelo MailInboxConfig (anti-IDOR: siempre filtrado por empresa_id)."""
+
+    @staticmethod
+    def get_list(empresa_id, search=None):
+        """Retorna listado optimizado de configuraciones de buzon para una empresa."""
+        qs = MailInboxConfig.objects.filter(empresa_id=empresa_id).only(*MAILINBOXCONFIG_LIST_FIELDS)
+        if search:
+            qs = qs.filter(
+                Q(nombre__icontains=search) |
+                Q(email_address__icontains=search) |
+                Q(imap_host__icontains=search) |
+                Q(provider__icontains=search)
+            )
+        return qs
 

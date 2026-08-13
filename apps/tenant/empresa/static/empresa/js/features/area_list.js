@@ -1,17 +1,14 @@
 /**
- * Feature: Listado y Tabulator - Area v2.61
- * FSD: Logica de inicializacion y gestion de Tabulator para Area
+ * Feature: Listado de Area
+ * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#areas-panel,
+ * cargada por atributos hx-get/hx-trigger declarados en empresa_list.html).
+ * Columnas viven en tables.py/views.py (server-side).
  * Namespace: window.AreaListModule
  */
 (function(w, d) {
     'use strict';
 
     const MOD = '[area.list]';
-    let table = null;
-
-    if (!w.SintelEmpresaTables) {
-        w.SintelEmpresaTables = {};
-    }
 
     // Helper anti-backdrop-acumulado (patron inventario v3.9.0)
     function mostrarOffcanvasSeguro(el) {
@@ -19,100 +16,16 @@
         return w.Sintel && w.Sintel.Core && w.Sintel.Core.mostrarOffcanvasSeguro(el);
     }
 
-    function getColumns() {
-        return [
-            {
-                title: "Área / Departamento",
-                field: "nombre",
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">—</span>';
-                    return `<i class="bi bi-diagram-3 text-success me-2"></i><span class="fw-semibold">${val}</span>`;
-                },
-                minWidth: 200
-            },
-            {
-                title: "Código",
-                field: "codigo_funcionamiento",
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">—</span>';
-                    return `<code class="bg-light px-2 py-1 rounded small">${val}</code>`;
-                },
-                width: 140,
-                hozAlign: "center"
-            },
-            {
-                title: "Sede",
-                field: "sede_nombre",
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">—</span>';
-                    return `<i class="bi bi-geo-alt text-primary me-1"></i><span class="small">${val}</span>`;
-                },
-                minWidth: 180
-            },
-            {
-                title: "Responsable",
-                field: "responsable_nombre",
-                formatter: function(cell) {
-                    const val = cell.getValue();
-                    if (!val) return '<span class="text-muted">Sin asignar</span>';
-                    return `<i class="bi bi-person-fill text-info me-1"></i><span>${val}</span>`;
-                },
-                minWidth: 160
-            },
-            {
-                title: "Acciones",
-                formatter: function(cell) {
-                    const rowData = cell.getRow().getData();
-                    const id   = rowData.id;
-                    const uuid = rowData.uuid;
-                    return `
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary btn-edit-area" data-uuid="${uuid}" title="Editar Área">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-delete-area" data-uuid="${uuid}" title="Eliminar Área">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    `;
-                },
-                headerSort: false,
-                hozAlign: "center",
-                width: 120
-            }
-        ];
-    }
-
-    function initTabulator() {
-        if (!w.TabulatorFactory) {
-            console.error(`${MOD} TabulatorFactory no disponible`);
-            return;
-        }
-        const gridElement = d.querySelector('#grid-area');
-        if (!gridElement) {
-            console.warn(`${MOD} #grid-area no encontrado`);
-            return;
-        }
-        if (w.SintelEmpresaTables['area']) {
-            try { w.SintelEmpresaTables['area'].destroy(); } catch (_) {}
-        }
-        table = w.TabulatorFactory.create('#grid-area', '/api/v1/empresas/areas/', getColumns(), {
-            searchInputSelector: '#search-area'
-        });
-        if (table) w.SintelEmpresaTables['area'] = table;
-        return table;
-    }
+    // Funcion global de refresco: dispara el evento que el panel HTMX escucha
+    // via hx-trigger="load, area-updated from:body" (ver empresa_list.html).
+    w.refreshAreaTable = function () {
+        d.body.dispatchEvent(new CustomEvent('area-updated'));
+    };
 
     function initListEvents() {
-        const gridElement = d.querySelector('#grid-area');
-        if (!gridElement) return;
-
-        gridElement.addEventListener('click', async (e) => {
-            const btnEdit   = e.target.closest('.btn-edit-area');
-            const btnDelete = e.target.closest('.btn-delete-area');
+        d.body.addEventListener('click', async (e) => {
+            const btnEdit   = e.target.closest('#areas-panel .btn-edit-area');
+            const btnDelete = e.target.closest('#areas-panel .btn-delete-area');
 
             if (btnEdit) {
                 e.preventDefault();
@@ -164,28 +77,13 @@
 
     function initEventListeners() {
         d.addEventListener('areaGuardada', () => {
-            table?.replaceData?.();
+            w.refreshAreaTable();
         });
     }
 
     function init() {
-        initTabulator();
         initListEvents();
         initEventListeners();
-    }
-
-    if (typeof htmx !== 'undefined') {
-        d.addEventListener('htmx:beforeSwap', (event) => {
-            if (event.detail.target.id === 'ui-empresa-list' ||
-                event.detail.target.closest?.('#ui-empresa-list')) {
-                if (w.SintelEmpresaTables['area']) {
-                    try {
-                        w.SintelEmpresaTables['area'].destroy();
-                        delete w.SintelEmpresaTables['area'];
-                    } catch (_) {}
-                }
-            }
-        });
     }
 
     if (d.readyState === 'loading') {
@@ -196,8 +94,7 @@
 
     w.AreaListModule = {
         init,
-        refresh: () => table?.replaceData?.(),
-        getTable: () => table,
+        refresh: () => w.refreshAreaTable(),
         mostrarOffcanvasSeguro
     };
 

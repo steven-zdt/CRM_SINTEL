@@ -1,14 +1,15 @@
 {% load static %}
-{# assets_empresa.html - Assets del módulo Empresa v2.60 #}
-{# ⚠️ v2.60: Migrado a Feature-Sliced Architecture (HTMX + Offcanvas) #}
+{# assets_empresa.html - Assets del módulo Empresa #}
+{# Fase 5-BIS: las 4 grillas (Empresa, Sede, Area, MailInboxConfig) usan #}
+{# django-tables2 + HTMX -- sin Tabulator. #}
 {# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
-{# 1. assets_core.html (incluye DOMUtils, TabulatorFactory, http(), etc.) - ya cargado en workspace.html #}
+{# 1. assets_core.html (incluye DOMUtils, http(), etc.) - ya cargado en workspace.html #}
 {# 2. empresa.api.js (define window.empresaAPI) - Capa de Datos (opcional, legacy) #}
-{# 3. features/empresa_list.js - Feature: Listado y Tabulator #}
+{# 3. features/empresa_list.js - Feature: Listado (delegacion de eventos) #}
 {# 4. features/empresa_editor.js - Feature: Editor y Offcanvas #}
 
-{# BLOQUE 1: Feature-Sliced Architecture v2.60 #}
-{# Feature 1: Listado y Tabulator #}
+{# BLOQUE 1: Feature-Sliced Architecture #}
+{# Feature 1: Listado #}
 <script src="{% static 'empresa/js/features/empresa_list.js' %}"></script>
 
 {# Feature 2: Editor y Offcanvas #}
@@ -26,30 +27,16 @@
 <script src="{% static 'empresa/js/features/mailinboxconfig_list.js' %}"></script>
 <script src="{% static 'empresa/js/features/mailinboxconfig_editor.js' %}"></script>
 
-{# HTMX afterSettle - Refrescar tablas cuando el DOM este estable (no afterSwap) #}
-<script>
-    if (typeof htmx !== 'undefined') {
-        document.addEventListener('htmx:afterSettle', function(event) {
-            // Si se recargó el contenedor de empresa, refrescar Tabulator
-            if (event.detail.target.id === 'ui-empresa-list' || 
-                event.detail.target.closest('#ui-empresa-list')) {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        if (window.EmpresaListModule && typeof window.EmpresaListModule.refresh === 'function') {
-                            window.EmpresaListModule.refresh();
-                        }
-                        if (window.SedeListModule && typeof window.SedeListModule.refresh === 'function') {
-                            window.SedeListModule.refresh();
-                        }
-                        if (window.AreaListModule && typeof window.AreaListModule.refresh === 'function') {
-                            window.AreaListModule.refresh();
-                        }
-                        if (window.MailInboxConfigListModule && typeof window.MailInboxConfigListModule.refresh === 'function') {
-                            window.MailInboxConfigListModule.refresh();
-                        }
-                    });
-                });
-            }
-        });
-    }
-</script>
+{% comment %}
+  Remediacion polling descontrolado (auditoria 2026-08-06, hallazgo C7): el listener
+  "htmx:afterSettle" que existia aqui refrescaba las 4 tablas (Empresa/Sede/Area/
+  MailInboxConfig) cada vez que CUALQUIERA de ellas se asentaba dentro de
+  #ui-empresa-list -- pero esas mismas 4 tablas viven DENTRO de #ui-empresa-list,
+  asi que cada refresco disparaba su propio settle, que volvia a disparar los 4
+  refrescos, en un bucle sin fin (~47 peticiones/segundo sostenidas). Cada modulo
+  (empresa_list.js, sede_list.js, area_list.js, mailinboxconfig_list.js) ya dispara
+  su propio evento "*-updated" sobre body tras una accion real de guardado
+  (empresaGuardada/sedeGuardada/areaGuardada/mailinboxConfigGuardado), que es lo unico que
+  sus respectivos hx-trigger="load, *-updated from:body" necesitan -- este listener
+  generico era enteramente redundante ademas de ser la causa del bucle.
+{% endcomment %}

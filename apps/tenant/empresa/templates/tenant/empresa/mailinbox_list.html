@@ -1,7 +1,5 @@
 {% load static %}
-{# mailinbox_list.html - Módulo MailInboxConfig v2.40 - Tabulator Factory #}
-{# ⚠️ v2.40: Migrado a Tabulator Factory (eliminado DataTables) #}
-{# ⚠️ LAZY INIT: Tabulator se inicializa solo cuando el tab #tab-empresa está visible (DOMUtils.onVisibleOnce) #}
+{# mailinbox_list.html - Módulo MailInboxConfig - Fase 5-BIS: django-tables2 + HTMX #}
 <div id="mailinbox-module-container" class="ui-module ui-mailinbox mt-4">
   <!-- Card Container -->
   <div class="card">
@@ -28,15 +26,21 @@
       <!-- Feedback -->
       <div id="feedback-mailinbox-list" class="alert d-none" role="alert" aria-live="polite"></div>
       
-      {# ⚠️ v2.40: Input de búsqueda para Tabulator #}
       <div class="mb-3">
-        <input type="text" id="search-mailinbox" class="form-control" placeholder="Buscar por nombre, email, host o proveedor...">
+        <input type="text" id="search-mailinbox" class="form-control" placeholder="Buscar por nombre, email, host o proveedor..."
+               hx-get="{% url 'empresa_ui:mailinboxconfig-tabla' %}"
+               hx-trigger="keyup changed delay:400ms, search"
+               hx-target="#mailinboxconfig-panel"
+               name="q">
       </div>
 
-      {# ⚠️ v2.40: Contenedor para Tabulator (no tabla HTML) #}
       <div class="card shadow-sm border-0">
         <div class="card-body p-0">
-          <div id="grid-mailinbox" class="flex-grow-1" style="min-height: 300px;"></div>
+          <div id="mailinboxconfig-panel"
+               hx-get="{% url 'empresa_ui:mailinboxconfig-tabla' %}"
+               hx-trigger="load, mailinboxconfig-updated from:body"
+               hx-target="this"
+               style="min-height: 300px; min-width: 0;"></div>
         </div>
       </div>
     </div>

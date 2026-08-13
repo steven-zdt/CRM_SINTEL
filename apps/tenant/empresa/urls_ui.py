@@ -10,7 +10,9 @@ Todas las rutas retornan 404.
 from django.http import HttpResponseNotFound
 from django.urls import path
 
-from apps.tenant.empresa.views import SedeTableView
+from apps.tenant.empresa.views import (
+    AreaTableView, EmpresaTableView, MailInboxConfigTableView, SedeTableView,
+)
 
 app_name = 'empresa_ui'
 
@@ -26,4 +28,13 @@ urlpatterns = [
     # arriba: el grid de Sede vive en el tab activo de workspace.html
     # (tenant/empresa/empresa_list.html), no en el shell estatico legacy.
     path('sedes/tabla/', SedeTableView.as_view(), name='sede-tabla'),
+    # Idem para Area — reemplaza la grilla en area_list.js
+    path('areas/tabla/', AreaTableView.as_view(), name='area-tabla'),
+    # Idem para Empresa (singleton) — reemplaza la grilla en empresa_list.js
+    path('empresa/tabla/', EmpresaTableView.as_view(), name='empresa-tabla'),
+    # Idem para MailInboxConfig — reemplaza la grilla en mailinboxconfig_list.js
+    # (ver plan_refactorizacion.md: la grilla Tabulator nunca funciono, IDs
+    # #grid-mailinboxconfig/#search-mailinboxconfig no coincidian con el
+    # template, que usaba #grid-mailinbox/#search-mailinbox)
+    path('mailinboxconfig/tabla/', MailInboxConfigTableView.as_view(), name='mailinboxconfig-tabla'),
 ]
