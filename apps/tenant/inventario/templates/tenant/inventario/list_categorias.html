@@ -9,22 +9,37 @@
         </div>
         <div class="btn-group shadow-sm">
             <button type="button" class="btn btn-primary" id="btn-nuevo-categoria"
-                    hx-get="/api/v1/inventario/categorias/gestor-offcanvas/" 
-                    hx-target="#offcanvas-container-categorias" 
+                    hx-get="/api/v1/inventario/categorias/gestor-offcanvas/"
+                    hx-target="#offcanvas-container-categorias"
                     hx-swap="innerHTML"
                     hx-on::after-request="if(event.detail.successful){ window.Sintel?.Core?.mostrarOffcanvasSeguro('offcanvas-categorias'); }">
                 <i class="bi bi-plus-lg me-1"></i> Nueva Categoría
             </button>
-            <button type="button" class="btn btn-outline-secondary" 
-                    onclick="if(window.Sintel?.Inventario?.Categorias?.List?.recargar){ window.Sintel.Inventario.Categorias.List.recargar(); } else if(window.SintelInventarioTables?.categorias){ window.SintelInventarioTables.categorias.replaceData(); }">
+            <button type="button" class="btn btn-outline-secondary"
+                    onclick="window.Sintel?.Inventario?.Categorias?.List?.recargar()">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
         </div>
     </div>
-    
+
     <div class="mb-3">
-        <input type="text" id="search-categoria" class="form-control" placeholder="Buscar por nombre o descripción...">
+        <input type="text"
+               id="search-categoria"
+               class="form-control"
+               placeholder="Buscar por nombre o descripción..."
+               hx-get="{% url 'inventario:categoria-tabla' %}"
+               hx-trigger="keyup changed delay:400ms, search"
+               hx-target="#categorias-panel"
+               name="q">
     </div>
-    
-    <div id="grid-categorias" class="flex-grow-1"></div>
+
+    {# Tabla server-rendered (django-tables2 + HTMX) #}
+    <div id="categorias-panel"
+         class="flex-grow-1"
+         hx-get="{% url 'inventario:categoria-tabla' %}"
+         hx-trigger="load, categoria-updated from:body"
+         hx-target="this"
+         hx-swap="innerHTML"
+         hx-boost="true">
+    </div>
 </div>

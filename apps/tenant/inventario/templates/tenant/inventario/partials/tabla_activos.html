@@ -1,0 +1,38 @@
+{% load django_tables2 %}
+{# Fragmento HTMX: KPIs + tabla de Activos Fijos. Reemplaza #activos-panel completo. #}
+<div id="activos-kpis" class="d-flex gap-2 mb-2 flex-wrap">
+  <div class="kpi-card">
+    <div class="kpi-label">Total</div>
+    <div class="kpi-val">{{ kpi_total }}</div>
+  </div>
+  {% for item in kpi_por_estado %}
+  {% if item.estado == "ACTIVO" %}
+  <div class="kpi-card border-success">
+    <div class="kpi-label" style="color:var(--bs-success)">En Uso</div>
+    <div class="kpi-val text-success">{{ item.cnt }}</div>
+  </div>
+  {% elif item.estado == "MANTENIMIENTO" %}
+  <div class="kpi-card border-warning">
+    <div class="kpi-label" style="color:var(--bs-warning)">Mantenimiento</div>
+    <div class="kpi-val text-warning">{{ item.cnt }}</div>
+  </div>
+  {% elif item.estado == "BAJA" %}
+  <div class="kpi-card border-danger">
+    <div class="kpi-label" style="color:var(--bs-danger)">De Baja</div>
+    <div class="kpi-val text-danger">{{ item.cnt }}</div>
+  </div>
+  {% elif item.estado == "VENDIDO" %}
+  <div class="kpi-card border-secondary">
+    <div class="kpi-label" style="color:var(--bs-secondary)">Vendido</div>
+    <div class="kpi-val text-secondary">{{ item.cnt }}</div>
+  </div>
+  {% endif %}
+  {% endfor %}
+  <div class="kpi-card">
+    <div class="kpi-label">Valor Libros</div>
+    <div class="kpi-val">${{ kpi_valor_total|floatformat:0 }}</div>
+  </div>
+</div>
+<div class="w-100" style="max-width:100%; overflow-x:auto;">
+  {% render_table table %}
+</div>

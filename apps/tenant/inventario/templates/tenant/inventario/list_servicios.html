@@ -22,18 +22,34 @@
                     hx-on::after-request="if(event.detail.successful){ sintelAbrirOffcanvas('offcanvas-historial-servicio'); }">
                 <i class="bi bi-clock-history me-1"></i> Registrar Historial
             </button>
-            <button type="button" class="btn btn-outline-secondary" 
-                    onclick="if(window.Sintel?.Inventario?.Servicios?.List?.recargar){ window.Sintel.Inventario.Servicios.List.recargar(); } else if(window.SintelInventarioTables?.servicios){ window.SintelInventarioTables.servicios.replaceData(); }">
+            <button type="button" class="btn btn-outline-secondary"
+                    onclick="window.Sintel?.Inventario?.Servicios?.List?.recargar()">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
         </div>
     </div>
-    
+
     <div class="mb-3">
-        <input type="text" id="search-servicio" class="form-control" placeholder="Buscar por código, nombre o categoría...">
+        <input type="text"
+               id="search-servicio"
+               class="form-control"
+               placeholder="Buscar por código, nombre o categoría..."
+               hx-get="{% url 'inventario:servicio-tabla' %}"
+               hx-trigger="keyup changed delay:400ms, search"
+               hx-target="#servicios-panel"
+               name="q">
     </div>
-    
-    <div id="grid-servicios" class="flex-grow-1" style="min-width:0;overflow:hidden;"></div>
+
+    {# Tabla server-rendered (django-tables2 + HTMX) #}
+    <div id="servicios-panel"
+         class="flex-grow-1"
+         style="min-width:0;overflow:hidden;"
+         hx-get="{% url 'inventario:servicio-tabla' %}"
+         hx-trigger="load, servicio-updated from:body"
+         hx-target="this"
+         hx-swap="innerHTML"
+         hx-boost="true">
+    </div>
 </div>
 
 {# Contenedores definidos en list_inventario.html — NO duplicar aqui #}

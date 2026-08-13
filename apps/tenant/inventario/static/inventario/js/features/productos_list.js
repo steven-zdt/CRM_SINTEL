@@ -1,321 +1,63 @@
 /**
- * Feature: Listado y Tabulator - Productos v2.61.3
- * ⚠️ Feature-Sliced Architecture: Lógica de inicialización y gestión de Tabulator
- * ⚠️ Vanilla JS: Sin dependencias de jQuery
- * ⚠️ API-First: Consume Core API facade (CORE_API_BASE)
- * ⚠️ Modular: Usa TabulatorFactory (The Engine)
- * ⚠️ Anti-Zombies: Previene instancias fantasma de Tabulator por recargas HTMX
- * 
- * Dependencias globales requeridas:
- * - TabulatorFactory (definido en tabulator.factory.js)
- * - w.UIManager (definido en ui-manager.js) - Capa de Presentación (Error Boundary)
- * - w.ProductosEditor (definido en productos_editor.js) - Feature: Crear/Editar
- * 
- * CRUD:
- * - READ: Lista productos con Tabulator
- * - DELETE: Eliminación con validación de estado activo
- * - READ (detail): Ver Kardex de producto
+ * productos_list.js - Controlador de Lista de Productos
+ * Namespace: window.Sintel.Inventario.Productos.List
+ * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#productos-panel,
+ * cargada por atributos hx-get/hx-trigger declarados en list_productos.html).
+ * Columnas/orden/paginacion/KPIs viven en tables.py/views.py (server-side).
+ * Las acciones de fila (editar/kardex/eliminar) se delegan sobre document.body
+ * para sobrevivir a los re-renders HTMX del panel.
  */
-(function(w, d) {
+(function (w, d) {
     'use strict';
 
     const MOD = '[productos.list]';
+    const CORE_API_BASE = '/api/v1/inventario/productos';
+    let _delegated = false;
+    let _eliminandoProducto = false;
 
-    // Abre un offcanvas de forma segura, limpiando backdrops huerfanos primero.
-    function mostrarOffcanvasSeguro(el) {
-        // FE-A5: delega al helper SSoT (core/js/common/offcanvas.helper.js).
-        return w.Sintel?.Core?.mostrarOffcanvasSeguro(el);
-    }
-    const GRID_ID = '#grid-productos';
-    const SEARCH_ID = '#search-producto';
-    const API_URL = '/api/v1/inventario/productos/'; // ⚠️ v2.61.3: Core API Facade para CRUD
-    const CORE_API_BASE = '/api/v1/inventario/productos'; // Core API Facade
-    let table = null;
-    let _eliminandoProducto = false; // Flag para prevenir rowClick durante eliminación
-
-    // ⚠️ Anti-Zombies v3.5: Singleton global para instancias de Tabulator
-    w.Sintel = w.Sintel || {};
-    w.Sintel.Inventario = w.Sintel.Inventario || {};
-    w.Sintel.Inventario.Tables = w.Sintel.Inventario.Tables || {};
-
-    if (w.Sintel.Inventario.Tables.productos) {
-        if (w.Sintel.Inventario.Tables.productos && typeof w.Sintel.Inventario.Tables.productos.destroy === 'function') {
-            try {
-                w.Sintel.Inventario.Tables.productos.destroy();
-            } catch (error) {
-                console.warn(`${MOD} Error al destruir instancia zombie:`, error);
-            }
-        }
+    function refresh() {
+        d.body.dispatchEvent(new CustomEvent('producto-updated'));
     }
 
-    /**
-     * Formatear moneda usando Intl.NumberFormat
-     * @param {number|string} value - Valor a formatear
-     * @returns {string} Valor formateado
-     */
-    function formatearMoneda(value) {
-        if (value === null || value === undefined || value === '') return '$ 0,00';
-        const num = parseFloat(value);
-        if (isNaN(num)) return '$ 0,00';
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2
-        }).format(num);
-    }
-
-    /**
-     * Formatear badge de stock con alerta
-     * @param {number} stockActual - Stock actual
-     * @param {number} stockMinimo - Stock mínimo
-     * @returns {string} HTML del badge
-     */
-    function formatearStock(stockActual, stockMinimo) {
-        const val = parseFloat(stockActual) || 0;
-        const min = parseFloat(stockMinimo) || 0;
-        const color = val <= min ? 'bg-danger' : 'bg-success';
-        return `<span class="badge ${color}">${val.toFixed(2)}</span>`;
-    }
-
-    /**
-     * Definir columnas — presentación compacta apilada (v3.10.4)
-     * 9 columnas → 5 columnas: Producto | Stock | Precio/Costo | Estado | Acciones
-     */
-    function getColumns() {
-        return [
-            {
-                title: "Producto",
-                field: "nombre",
-                formatter: function(cell) {
-                    const d = cell.getRow().getData();
-                    const cat = d.categoria_nombre
-                        ? `<span class="badge bg-light text-secondary border" style="font-size:.65rem;font-weight:500">${d.categoria_nombre}</span>`
-                        : '';
-                    const cod = d.codigo
-                        ? `<span class="font-monospace text-muted me-1" style="font-size:.72rem">${d.codigo}</span>`
-                        : '';
-                    return `<div class="py-1 lh-sm">
-                        <div class="fw-semibold">${d.nombre || '—'}</div>
-                        <div class="d-flex align-items-center gap-1 mt-1">${cod}${cat}</div>
-                    </div>`;
-                },
-                minWidth: 220,
-                headerFilter: "input"
-            },
-            {
-                title: "Stock",
-                field: "stock_actual",
-                formatter: function(cell) {
-                    const d = cell.getRow().getData();
-                    const actual = parseFloat(d.stock_actual) || 0;
-                    const minimo = parseFloat(d.stock_minimo) || 0;
-                    const alerta = actual <= minimo;
-                    const cls = alerta ? 'bg-danger' : 'bg-success';
-                    const icon = alerta ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.7rem"></i>' : '';
-                    const unidad = d.unidad ? `<span class="text-muted">${d.unidad}</span>` : '';
-                    return `<div class="text-center lh-sm">
-                        <span class="badge ${cls}">${icon}${actual % 1 === 0 ? actual : actual.toFixed(2)} ${unidad}</span>
-                        <div class="text-muted mt-1" style="font-size:.68rem">mín ${minimo % 1 === 0 ? minimo : minimo.toFixed(2)}</div>
-                    </div>`;
-                },
-                width: 110,
-                hozAlign: "center",
-                vertAlign: "middle",
-                sorter: "number"
-            },
-            {
-                title: "Precio / Costo",
-                field: "precio_venta",
-                formatter: function(cell) {
-                    const d = cell.getRow().getData();
-                    const precio = formatearMoneda(d.precio_venta);
-                    const costo = parseFloat(d.costo_promedio) > 0
-                        ? `<div class="text-muted mt-1" style="font-size:.72rem">Costo: ${formatearMoneda(d.costo_promedio)}</div>`
-                        : '';
-                    return `<div class="text-end lh-sm"><div class="fw-semibold">${precio}</div>${costo}</div>`;
-                },
-                width: 150,
-                hozAlign: "right",
-                vertAlign: "middle",
-                sorter: "number"
-            },
-            {
-                title: "Estado",
-                field: "activo",
-                formatter: function(cell) {
-                    return cell.getValue()
-                        ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>'
-                        : '<span class="badge bg-secondary-subtle text-secondary border">Inactivo</span>';
-                },
-                width: 90,
-                hozAlign: "center",
-                vertAlign: "middle"
-            },
-            {
-                title: "",
-                field: "acciones",
-                formatter: function(cell) {
-                    const id = cell.getRow().getData().id;
-                    return `<div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-outline-primary btn-edit-producto" data-id="${id}" title="Editar">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                        <button type="button" class="btn btn-outline-info btn-ver-kardex" data-id="${id}" title="Kardex">
-                            <i class="bi bi-list-ul"></i>
-                        </button>
-                        <button type="button" class="btn btn-outline-danger btn-delete-producto" data-id="${id}" title="Eliminar">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    </div>`;
-                },
-                width: 120,
-                headerSort: false,
-                resizable: false,
-                hozAlign: "center",
-                vertAlign: "middle",
-                frozen: true
-            }
-        ];
-    }
-
-    /**
-     * KPI strip: muestra totales sobre los datos de la página actual
-     */
-    function _actualizarKPIs(data) {
-        const kpisEl = d.querySelector('#prod-kpis');
-        if (!kpisEl) return;
-        const total = data.length;
-        const activos = data.filter(r => r.activo).length;
-        const alertas = data.filter(r => (parseFloat(r.stock_actual) || 0) <= (parseFloat(r.stock_minimo) || 0)).length;
-        const valorTotal = data.reduce((s, r) => s + ((parseFloat(r.stock_actual) || 0) * (parseFloat(r.costo_promedio) || 0)), 0);
-        const fmt = v => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
-        kpisEl.innerHTML = `
-            <div class="kpi-card">
-                <div class="kpi-label">SKUs</div>
-                <div class="kpi-val">${total}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-label">Activos</div>
-                <div class="kpi-val text-success">${activos}</div>
-            </div>
-            ${alertas > 0 ? `<div class="kpi-card border-danger">
-                <div class="kpi-label text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Stock Bajo</div>
-                <div class="kpi-val text-danger">${alertas}</div>
-            </div>` : ''}
-            <div class="kpi-card">
-                <div class="kpi-label">Valor Inventario</div>
-                <div class="kpi-val">${fmt(valorTotal)}</div>
-            </div>
-        `;
-    }
-
-    /**
-     * Inicializar tabla de productos
-     * @returns {Object|null} Instancia de Tabulator o null
-     */
-    function initTable() {
-        const gridEl = d.querySelector(GRID_ID);
-        if (!gridEl) {
-            console.warn(`${MOD} Contenedor ${GRID_ID} no encontrado`);
-            return null;
-        }
-
-        // ⚠️ Verificar que TabulatorFactory esté disponible
-        if (!w.TabulatorFactory || typeof w.TabulatorFactory.create !== 'function') {
-            console.error(`${MOD} TabulatorFactory no está disponible`);
-            return null;
-        }
-
-        // Configuración de la tabla — layout compacto v3.10.4
-        const tableConfig = {
-            searchInputSelector: SEARCH_ID,
-            pagination: true,
-            paginationMode: "remote",
-            paginationSize: 15,
-            paginationSizeSelector: [15, 30, 50, 100],
-            layout: "fitDataFill",
-            responsiveLayout: "collapse",
-            placeholder: "No hay productos registrados",
-            locale: "es",
-            rowHeight: 56
-        };
-
-        // Crear tabla usando TabulatorFactory
-        table = w.TabulatorFactory.create(
-            GRID_ID,
-            API_URL,
-            getColumns(),
-            tableConfig
-        );
-
-        // Guardar instancia en singleton global
-        w.Sintel.Inventario.Tables.productos = table;
-
-        // KPI strip — se actualiza con cada carga de datos
-        if (table) {
-            table.on('dataLoaded', function(data) {
-                _actualizarKPIs(data);
-            });
-        }
-
-        // Event Delegation para acciones del Grid
-        initListEvents();
-
-        return table;
-    }
+    function init() {}
 
     /**
      * Ver Kardex de producto
-     * ⚠️ CRUD: READ (detail) - Historial de movimientos
-     * @param {string|number} productoId - ID del producto
+     * @param {string} productoUuid - UUID del producto
      */
-    async function verKardex(productoId) {
-        if (!productoId) {
-            console.warn(`${MOD} ID de producto no proporcionado`);
+    async function verKardex(productoUuid) {
+        if (!productoUuid) {
+            console.warn(`${MOD} UUID de producto no proporcionado`);
             return;
         }
 
         try {
-            // ⚠️ API-First: Obtener información del producto y kardex
             let productoRes, kardexRes;
-
             if (w.http && typeof w.http === 'function') {
-                productoRes = await w.http('GET', `${CORE_API_BASE}/${productoId}/`);
-                kardexRes = await w.http('GET', `${CORE_API_BASE}/${productoId}/kardex/`);
-            } else if (w.Sintel?.Inventario?.API?.productos) {
-                productoRes = await w.Sintel.Inventario.API.productos.get(productoId);
-                kardexRes = await w.Sintel.Inventario.API.productos.kardex(productoId);
+                productoRes = await w.http('GET', `${CORE_API_BASE}/${productoUuid}/`);
+                kardexRes = await w.http('GET', `${CORE_API_BASE}/${productoUuid}/kardex/`);
             } else {
                 console.error(`${MOD} API no disponible`);
                 return;
             }
 
-            // ⚠️ Aislamiento Gradual - Solo verificar ok
             if (!productoRes.ok || !productoRes.data) {
-                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-                    w.UIManager.handleError(productoRes, MOD);
-                }
+                if (w.UIManager?.handleError) w.UIManager.handleError(productoRes, MOD);
                 return;
             }
-
             if (!kardexRes.ok) {
-                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-                    w.UIManager.handleError(kardexRes, MOD);
-                }
+                if (w.UIManager?.handleError) w.UIManager.handleError(kardexRes, MOD);
                 return;
             }
 
             const producto = productoRes.data;
             const movimientos = Array.isArray(kardexRes.data) ? kardexRes.data : (kardexRes.data.results || []);
 
-            // Mostrar información del producto
             const infoEl = d.querySelector('#kardex-producto-info');
             if (infoEl) {
                 const stockActual = parseFloat(producto.stock_actual || 0);
                 const stockMinimo = parseFloat(producto.stock_minimo || 0);
                 const stockColor = stockActual <= stockMinimo ? 'bg-danger' : 'bg-success';
-                
                 infoEl.innerHTML = `
                     <div class="row">
                         <div class="col-md-6">
@@ -330,7 +72,6 @@
                 `;
             }
 
-            // Llenar tabla de movimientos
             const tbody = d.querySelector('#table-kardex tbody');
             if (tbody) {
                 if (movimientos.length === 0) {
@@ -343,7 +84,6 @@
                         const referencia = mov.origen_referencia || mov.cliente_referencia || '-';
                         const observaciones = mov.observaciones || '-';
                         const tipoColor = (tipo.includes('ENTRADA') || tipo.includes('entrada')) ? 'success' : 'danger';
-                        
                         return `
                             <tr>
                                 <td>${fecha}</td>
@@ -357,76 +97,43 @@
                 }
             }
 
-            // Abrir modal de kardex
             const modalEl = d.querySelector('#modal-kardex');
             if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-                modal.show();
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
             } else {
                 console.warn(`${MOD} Modal #modal-kardex no encontrado o Bootstrap no disponible`);
             }
-
         } catch (error) {
             console.error(`${MOD} Error al obtener kardex:`, error);
-            if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                w.SintelFeedback.error('Error al cargar el kardex del producto');
-            }
+            if (w.SintelFeedback?.error) w.SintelFeedback.error('Error al cargar el kardex del producto');
         }
     }
 
-    /**
-     * Event Delegation para acciones del Grid
-     */
-    function initListEvents() {
-        const gridElement = d.querySelector(GRID_ID);
-        if (!gridElement) {
-            console.warn(`${MOD} Elemento ${GRID_ID} no encontrado para eventos`);
-            return;
-        }
+    function initDelegation() {
+        if (_delegated) return;
+        _delegated = true;
 
-        // ⚠️ Event Delegation: Escuchar clics en el contenedor del grid
-        gridElement.addEventListener('click', async (e) => {
+        d.body.addEventListener('click', async (e) => {
             // Botón Editar
             const btnEdit = e.target.closest('.btn-edit-producto');
             if (btnEdit) {
                 e.preventDefault();
-                e.stopPropagation();
-                
-                const id = btnEdit.getAttribute('data-id');
-                if (!id) {
-                    console.warn(`${MOD} Botón sin data-id`);
-                    return;
-                }
+                const uuid = btnEdit.dataset.uuid;
+                if (!uuid) return;
 
-                // ⚠️ Loading state
                 const originalHTML = btnEdit.innerHTML;
                 btnEdit.disabled = true;
                 btnEdit.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
                 try {
-                    // ⚠️ v2.61.3: Usar Core API Facade para HTMX
-                    const offcanvasContainer = d.getElementById('offcanvas-container-inventario');
-                    if (!offcanvasContainer) {
-                        console.warn(`${MOD} Contenedor #offcanvas-container-inventario no encontrado`);
-                        return;
-                    }
-
-                    await htmx.ajax('GET', `${CORE_API_BASE}/gestor-offcanvas/?id=${id}`, {
+                    await htmx.ajax('GET', `${CORE_API_BASE}/gestor-offcanvas/?id=${uuid}`, {
                         target: '#offcanvas-container-inventario',
                         swap: 'innerHTML'
                     });
-
-                    await new Promise(resolve => setTimeout(resolve, 100));
-
                     const offcanvasEl = d.getElementById('offcanvas-inventario');
-                    if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        mostrarOffcanvasSeguro(offcanvasEl);
-                    }
+                    if (offcanvasEl) w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
                 } catch (error) {
                     console.error(`${MOD} Error al cargar Offcanvas:`, error);
-                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                        w.SintelFeedback.error('Error al cargar el formulario de producto');
-                    }
+                    if (w.SintelFeedback?.error) w.SintelFeedback.error('Error al cargar el formulario de producto');
                 } finally {
                     btnEdit.disabled = false;
                     btnEdit.innerHTML = originalHTML;
@@ -438,22 +145,14 @@
             const btnKardex = e.target.closest('.btn-ver-kardex');
             if (btnKardex) {
                 e.preventDefault();
-                e.stopPropagation();
-                
-                const id = btnKardex.getAttribute('data-id');
-                if (!id) {
-                    console.warn(`${MOD} Botón kardex sin data-id`);
-                    return;
-                }
+                const uuid = btnKardex.dataset.uuid;
+                if (!uuid) return;
 
                 const originalHTML = btnKardex.innerHTML;
                 btnKardex.disabled = true;
                 btnKardex.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
                 try {
-                    await verKardex(id);
-                } catch (error) {
-                    console.error(`${MOD} Error al ver kardex:`, error);
+                    await verKardex(uuid);
                 } finally {
                     btnKardex.disabled = false;
                     btnKardex.innerHTML = originalHTML;
@@ -465,43 +164,27 @@
             const btnDelete = e.target.closest('.btn-delete-producto');
             if (btnDelete) {
                 e.preventDefault();
-                e.stopPropagation();
-                
-                const id = btnDelete.getAttribute('data-id');
-                if (!id) {
-                    console.warn(`${MOD} Botón eliminar sin data-id`);
-                    return;
-                }
+                const uuid = btnDelete.dataset.uuid;
+                if (!uuid) return;
 
-                // ⚠️ Validación: Obtener datos del producto para validar estado
                 let productoRes;
                 if (w.http && typeof w.http === 'function') {
-                    productoRes = await w.http('GET', `${CORE_API_BASE}/${id}/`);
-                } else if (w.Sintel?.Inventario?.API?.productos && typeof w.Sintel.Inventario.API.productos.get === 'function') {
-                    productoRes = await w.Sintel.Inventario.API.productos.get(id);
+                    productoRes = await w.http('GET', `${CORE_API_BASE}/${uuid}/`);
                 } else {
                     console.error(`${MOD} API no disponible`);
                     return;
                 }
-
                 if (!productoRes.ok || !productoRes.data) {
-                    if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-                        w.UIManager.handleError(productoRes, MOD);
-                    }
+                    if (w.UIManager?.handleError) w.UIManager.handleError(productoRes, MOD);
                     return;
                 }
 
                 const producto = productoRes.data;
-
-                // Validar que el producto no esté activo
                 if (producto.activo) {
-                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                        w.SintelFeedback.error('El producto está activo. Desactívelo primero.');
-                    }
+                    if (w.SintelFeedback?.error) w.SintelFeedback.error('El producto está activo. Desactívelo primero.');
                     return;
                 }
 
-                // Construir mensaje de confirmación
                 let mensajeConfirmacion = '¿Está seguro de eliminar este producto?';
                 const stock = parseFloat(producto.stock_actual || 0);
                 if (stock > 0) {
@@ -513,62 +196,31 @@
                 mensajeConfirmacion += '\n- Todo el historial de movimientos (Kardex)';
                 mensajeConfirmacion += '\n\nEsta acción es irreversible.';
 
-                if (!confirm(mensajeConfirmacion)) {
-                    return;
-                }
+                if (!confirm(mensajeConfirmacion)) return;
 
-                // ⚠️ v2.61.3: Activar flag para prevenir rowClick durante eliminación
                 _eliminandoProducto = true;
-
-                // ⚠️ Loading state
                 const originalHTML = btnDelete.innerHTML;
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
                 try {
-                    // ⚠️ v2.61.3: Usar Core API Facade
-                    let deleteRes;
-                    if (w.http && typeof w.http === 'function') {
-                        deleteRes = await w.http('DELETE', `${CORE_API_BASE}/${id}/`);
-                    } else if (w.Sintel?.Inventario?.API?.productos && typeof w.Sintel.Inventario.API.productos.delete === 'function') {
-                        deleteRes = await w.Sintel.Inventario.API.productos.delete(id);
-                    } else {
-                        console.error(`${MOD} API de eliminación no disponible`);
-                        return;
-                    }
-
-                    // ⚠️ v2.61.3: Aislamiento Gradual - Solo verificar ok
+                    const deleteRes = await w.http('DELETE', `${CORE_API_BASE}/${uuid}/`);
                     if (!deleteRes.ok) {
-                        if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-                            w.UIManager.handleError(deleteRes, MOD);
-                        }
+                        if (w.UIManager?.handleError) w.UIManager.handleError(deleteRes, MOD);
                         return;
                     }
 
-                    // ⚠️ v2.61.3: Cerrar cualquier offcanvas abierto
                     const offcanvasProducto = d.getElementById('offcanvas-inventario');
                     if (offcanvasProducto && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
                         const instance = bootstrap.Offcanvas.getInstance(offcanvasProducto);
-                        if (instance) {
-                            instance.hide();
-                        }
+                        if (instance) instance.hide();
                     }
 
-                    if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {
-                        w.SintelFeedback.success('Producto eliminado correctamente. Stock y kardex eliminados.');
-                    }
-
-                    // Recargar tabla
-                    if (table) {
-                        table.replaceData();
-                    }
+                    if (w.SintelFeedback?.success) w.SintelFeedback.success('Producto eliminado correctamente. Stock y kardex eliminados.');
+                    refresh();
                 } catch (error) {
                     console.error(`${MOD} Error al eliminar producto:`, error);
-                    if (w.SintelFeedback && typeof w.SintelFeedback.error === 'function') {
-                        w.SintelFeedback.error('Error al eliminar el producto');
-                    }
+                    if (w.SintelFeedback?.error) w.SintelFeedback.error('Error al eliminar el producto');
                 } finally {
-                    // Restaurar estado del botón y flag
                     btnDelete.disabled = false;
                     btnDelete.innerHTML = originalHTML;
                     _eliminandoProducto = false;
@@ -576,107 +228,19 @@
                 return;
             }
         });
-
-        // ⚠️ Event Delegation: Clic en fila para editar (solo si no se está eliminando)
-        if (table) {
-            table.on('rowClick', async function(e, row) {
-                // ⚠️ v2.61.3: Prevenir rowClick si se está eliminando un producto
-                if (_eliminandoProducto) {
-                    console.log(`${MOD} rowClick ignorado: eliminación en proceso`);
-                    return;
-                }
-
-                // Evitar abrir si se hizo click en un botón
-                const target = e.target || e.originalEvent?.target;
-                if (target && target.closest && target.closest('button')) {
-                    return;
-                }
-
-                const rowData = row.getData();
-                const id = rowData.id;
-                if (!id) return;
-
-                try {
-                    // ⚠️ v2.61.3: Usar Core API Facade para HTMX
-                    await htmx.ajax('GET', `${CORE_API_BASE}/gestor-offcanvas/?id=${id}`, {
-                        target: '#offcanvas-container-inventario',
-                        swap: 'innerHTML'
-                    });
-
-                    await new Promise(resolve => setTimeout(resolve, 100));
-
-                    const offcanvasEl = d.getElementById('offcanvas-inventario');
-                    if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
-                        mostrarOffcanvasSeguro(offcanvasEl);
-                    }
-                } catch (error) {
-                    console.error(`${MOD} Error al cargar Offcanvas desde rowClick:`, error);
-                }
-            });
-        }
     }
 
-    /**
-     * Recargar tabla
-     */
-    function recargar() {
-        if (table) {
-            table.replaceData();
-        }
-    }
+    initDelegation();
 
-    /**
-     * Inicializar módulo de listado de productos
-     * ⚠️ Lazy Loading: Solo se inicializa cuando el tab está visible
-     */
-    function init() {
-        console.log(`${MOD} Inicializando módulo de listado...`);
-        
-        const gridEl = d.querySelector(GRID_ID);
-        if (!gridEl) {
-            console.warn(`${MOD} Contenedor ${GRID_ID} no encontrado. El módulo se inicializará cuando el tab esté visible.`);
-            return;
-        }
-
-        initTable();
-    }
-
-    // ⚠️ Exposición global del módulo v3.5
+    w.Sintel = w.Sintel || {};
+    w.Sintel.Inventario = w.Sintel.Inventario || {};
     w.Sintel.Inventario.Productos = w.Sintel.Inventario.Productos || {};
     w.Sintel.Inventario.Productos.List = {
         init: init,
-        recargar: recargar,
-        verKardex: verKardex,
-        getTable: () => table
+        recargar: refresh
     };
 
-    // Deprecated fallbacks
+    // Deprecated fallback (compatibilidad con llamadas legacy)
     w.ProductosList = w.Sintel.Inventario.Productos.List;
-
-    // ⚠️ Auto-inicialización si el DOM está listo
-    if (d.readyState === 'loading') {
-        d.addEventListener('DOMContentLoaded', init);
-    } else {
-        // Si el tab de productos está visible, inicializar inmediatamente
-        const tabProductos = d.querySelector('#tab-inventario');
-        if (tabProductos && tabProductos.classList.contains('active')) {
-            init();
-        } else {
-            // Lazy loading: inicializar cuando el tab se muestre
-            if (w.DOMUtils && typeof w.DOMUtils.onVisibleOnce === 'function') {
-                w.DOMUtils.onVisibleOnce('#pane-existencias', init);
-            } else {
-                // Fallback: escuchar evento de tab
-                const tabButton = d.querySelector('#tab-existencias');
-                if (tabButton) {
-                    tabButton.addEventListener('shown.bs.tab', function() {
-                        if (!table) {
-                            init();
-                        }
-                    });
-                }
-            }
-        }
-    }
 
 })(window, document);

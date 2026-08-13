@@ -1,7 +1,5 @@
 {# list_activos.html - Módulo Activos Fijos v3.10.4 - Presentación Compacta #}
 <style>
-  #grid-activos .tabulator-row { min-height: 56px; }
-  #grid-activos .tabulator-cell { padding: 6px 8px; vertical-align: middle; }
   #activos-kpis .kpi-card { background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:8px 14px; }
   #activos-kpis .kpi-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#6c757d; }
   #activos-kpis .kpi-val { font-size:1.1rem; font-weight:700; line-height:1.2; }
@@ -14,11 +12,15 @@
   <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
     <div class="d-flex align-items-center gap-2 flex-grow-1">
       <input type="text" id="search-activo" class="form-control form-control-sm"
-             placeholder="Buscar código, nombre, categoría, ubicación, responsable..." style="max-width:360px">
+             placeholder="Buscar código, nombre, categoría, ubicación, responsable..." style="max-width:360px"
+             hx-get="{% url 'inventario:activo-tabla' %}"
+             hx-trigger="keyup changed delay:400ms, search"
+             hx-target="#activos-panel"
+             name="q">
     </div>
     <div class="d-flex gap-1">
       <button type="button" class="btn btn-sm btn-outline-secondary"
-              onclick="if(window.ActivosList?.recargar){ window.ActivosList.recargar(); } else if(window.SintelInventarioTables?.activos){ window.SintelInventarioTables.activos.replaceData(); }"
+              onclick="window.ActivosList?.recargar()"
               title="Recargar">
         <i class="bi bi-arrow-clockwise"></i>
       </button>
@@ -32,8 +34,13 @@
     </div>
   </div>
 
-  {# KPIs strip — llenado por JS en dataLoaded #}
-  <div id="activos-kpis" class="d-flex gap-2 mb-2 flex-wrap"></div>
-
-  <div id="grid-activos" class="flex-grow-1 w-100"></div>
+  {# Tabla server-rendered (django-tables2 + HTMX) — KPIs incluidos en el partial #}
+  <div id="activos-panel"
+       class="flex-grow-1 w-100"
+       hx-get="{% url 'inventario:activo-tabla' %}"
+       hx-trigger="load, activo-updated from:body"
+       hx-target="this"
+       hx-swap="innerHTML"
+       hx-boost="true">
+  </div>
 </div>
