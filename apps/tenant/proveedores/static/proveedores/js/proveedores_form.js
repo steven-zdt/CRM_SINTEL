@@ -365,6 +365,10 @@
         bootstrap.Offcanvas.getInstance(offcanvasEl)?.hide();
     }
     w.Sintel.Proveedores.Main?.refresh();
+
+    // Notificar a otros modulos (p.ej. Compras.Utils cachea proveedores por 5min)
+    // que el catalogo de proveedores cambio, para que invaliden su cache local.
+    d.body.dispatchEvent(new Event('proveedor-updated'));
   }
 
   /**
@@ -381,6 +385,7 @@
 
     w.SintelFeedback?.success('Proveedor eliminado');
     w.Sintel.Proveedores.Main?.refresh();
+    d.body.dispatchEvent(new Event('proveedor-updated'));
   }
 
   // Registro en Namespace Global v2.61.4

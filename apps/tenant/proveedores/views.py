@@ -13,9 +13,10 @@ from django_tables2 import SingleTableView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.api.mixins import SintelDSVMixin
+from apps.tenant.facturas.models import Factura
 from apps.tenant.proveedores.models import Proveedor
-from apps.tenant.proveedores.services.selectors import ProveedorSelector
-from apps.tenant.proveedores.tables import ProveedorTable
+from apps.tenant.proveedores.services.selectors import CuentasPagarSelector, ProveedorSelector
+from apps.tenant.proveedores.tables import CuentasPagarTable, ProveedorTable
 
 logger = logging.getLogger(__name__)
 
@@ -58,3 +59,29 @@ class ProveedorTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
         table.cuentas_pagar_map = cuentas_pagar_map
 
         return context
+
+
+class CuentasPagarTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
+    table_class = CuentasPagarTable
+    template_name = "tenant/proveedores/partials/tabla_cuentas_pagar.html"
+    table_pagination = {"per_page": 20}
+
+    def _resolver_empresa_id(self):
+        try:
+            return self.get_empresa_id()
+        except DRFValidationError:
+            logger.warning(
+                "[CuentasPagarTableView] Sin empresa resuelta para user=%s",
+                self.request.user.pk,
+            )
+            return None
+
+    def get_queryset(self):
+        empresa_id = self._resolver_empresa_id()
+        if not empresa_id:
+            return Factura.objects.none()
+        search = (self.request.GET.get("q") or "").strip() or None
+        estado_pago = (self.request.GET.get("estado_pago") or "").strip() or None
+        return CuentasPagarSelector.qs_list_facturas_compra(
+            empresa_id=empresa_id, estado_pago=estado_pago, search=search,
+        )

@@ -105,7 +105,12 @@
 
             <div class="d-flex align-items-center gap-2 flex-wrap">
               {# Selector de Estado de Pago #}
-              <select id="filtro-estado-cuentas-pagar" class="form-select form-select-sm w-auto">
+              <select id="filtro-estado-cuentas-pagar" class="form-select form-select-sm w-auto"
+                      hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}"
+                      hx-trigger="change"
+                      hx-target="#cuentas-pagar-panel"
+                      hx-include="#search-cuentas-pagar"
+                      name="estado_pago">
                 <option value="">Todos los Estados</option>
                 <option value="SIN_PAGO">Sin Pago</option>
                 <option value="PARCIAL">Pago Parcial</option>
@@ -118,8 +123,15 @@
                        id="search-cuentas-pagar"
                        class="form-control"
                        placeholder="Buscar factura..."
-                       data-module="cuentas-pagar">
-                <button class="btn btn-outline-secondary" type="button" id="btn-search-cuentas-pagar" title="Buscar">
+                       hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}"
+                       hx-trigger="keyup changed delay:400ms, search"
+                       hx-target="#cuentas-pagar-panel"
+                       hx-include="#filtro-estado-cuentas-pagar"
+                       name="q">
+                <button class="btn btn-outline-secondary" type="button" title="Buscar"
+                        hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}"
+                        hx-target="#cuentas-pagar-panel"
+                        hx-include="#search-cuentas-pagar, #filtro-estado-cuentas-pagar">
                   <i class="bi bi-search"></i>
                 </button>
               </div>
@@ -128,21 +140,11 @@
         </div>
 
         <div class="card-body p-0">
-          {# Spinner Cuentas por Pagar — arranca oculto, JS lo muestra al init #}
-          <div data-spinner="cuentas-pagar" class="text-center py-5" style="display: none;">
-            <div class="spinner-border text-primary" role="status">
-              <span class="visually-hidden">Cargando...</span>
-            </div>
-            <p class="mt-2 text-muted">Cargando cuentas por pagar de proveedores...</p>
-          </div>
-
-          {# Grid Tabulator Cuentas por Pagar #}
-          <div id="grid-cuentas-pagar" data-grid="cuentas-pagar" style="display: none;"></div>
-
-          {# Empty State Cuentas por Pagar #}
-          <div data-empty-state="cuentas-pagar" class="text-center py-5" style="display: none;">
-            <p class="text-muted"><i class="bi bi-wallet2-fill me-2"></i> No se encontraron registros de cuentas por pagar</p>
-          </div>
+          {# Panel Tabla server-rendered (django-tables2 + HTMX) — Fase 5-BIS #}
+          <div id="cuentas-pagar-panel"
+               hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}"
+               hx-trigger="load, cuentas-pagar-updated from:body"
+               hx-target="this"></div>
         </div>
       </div>
     </div>

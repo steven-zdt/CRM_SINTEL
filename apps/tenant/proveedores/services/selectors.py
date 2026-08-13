@@ -345,7 +345,7 @@ class CuentasPagarSelector:
     )
 
     @staticmethod
-    def qs_list_facturas_compra(empresa_id: int, proveedor_uuid=None, estado_pago=None, vencidas: bool = False):
+    def qs_list_facturas_compra(empresa_id: int, proveedor_uuid=None, estado_pago=None, vencidas: bool = False, search=None):
         """
         FASE 3 — Listado de facturas de compra pendientes/pagadas (fuente de verdad).
 
@@ -368,6 +368,13 @@ class CuentasPagarSelector:
 
         if proveedor_uuid:
             qs = qs.filter(proveedor_uuid=proveedor_uuid)
+
+        if search:
+            qs = qs.filter(
+                Q(numero__icontains=search) |
+                Q(emisor_razon_social__icontains=search) |
+                Q(emisor_nit__icontains=search)
+            )
 
         if estado_pago:
             # Traducir estado CxP → estado Factura
