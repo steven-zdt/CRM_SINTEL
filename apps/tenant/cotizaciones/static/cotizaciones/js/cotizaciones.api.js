@@ -1,8 +1,18 @@
 /**
- * cotizaciones.api.js - SSoT de URLs y consumo de endpoints v2.62.0
+ * cotizaciones.api.js - SSoT de URLs y consumo de endpoints
  * Namespace: window.Sintel.Cotizaciones.api
  *
  * Gateway Directo: /api/v1/cotizaciones/
+ *
+ * F32.6: migrado a Sintel.Core.Http -- ya no reimplementa fetch+CSRF+JWT
+ * (violaba el contrato "solo URLs+metodos", F31.3/F32.1). Contrato
+ * publico preservado: cada metodo de Configuracion sigue devolviendo una
+ * Promise que resuelve con los datos o rechaza con {ok:false,status,data}
+ * (objeto plano, no Error -- forma original de este archivo, distinta de
+ * ventas/compras/gastos/empleados; se preserva tal cual porque no se
+ * encontro ningun consumidor de request() fuera de este archivo -- grep
+ * completo, 0 resultados -- pero el shape del rechazo si podria estar
+ * siendo inspeccionado por los 3 metodos que si son publicos).
  */
 (function (w) {
   'use strict';
@@ -12,50 +22,33 @@
 
   var BASE = '/api/v1/cotizaciones';
 
-  /**
-   * Construye headers con JWT Bearer + CSRF.
-   */
+  // getHeaders() se conserva por compatibilidad hacia atras (exportada
+  // publicamente como w.Sintel.Cotizaciones.api.getHeaders).
   function getHeaders() {
-    var headers = {
-      'Content-Type': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest'
-    };
+    var headers = {};
+    var csrf = w.Sintel && w.Sintel.Core && w.Sintel.Core.Http && w.Sintel.Core.Http.csrf
+      ? w.Sintel.Core.Http.csrf()
+      : null;
+    if (csrf) headers['X-CSRFToken'] = csrf;
     var token = w.jwtAuth && typeof w.jwtAuth.getAccessToken === 'function'
       ? w.jwtAuth.getAccessToken()
       : null;
-    if (token) {
-      headers['Authorization'] = 'Bearer ' + token;
-    }
-    // CSRF cookie
-    var csrfToken = (function () {
-      var match = document.cookie.match(/csrftoken=([^;]+)/);
-      return match ? match[1] : null;
-    })();
-    if (csrfToken) {
-      headers['X-CSRFToken'] = csrfToken;
-    }
+    if (token) headers['Authorization'] = 'Bearer ' + token;
     return headers;
   }
 
   /**
-   * Helper para peticiones asíncronas con manejo de errores estandarizado
+   * request(method, url, data) -- recibe datos crudos (no pre-serializados;
+   * antes los 3 llamadores hacian JSON.stringify() ellos mismos y esta
+   * funcion recibia options.body ya como string -- ahora Core.Http lo
+   * serializa una sola vez, aqui).
    */
-  async function request(url, options = {}) {
-    options.headers = Object.assign(getHeaders(), options.headers || {});
-    
-    try {
-      const response = await fetch(url, options);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw { ok: false, status: response.status, data: data };
-      }
-      
-      return data;
-    } catch (error) {
-      if (error.status) throw error;
-      throw { ok: false, status: 500, data: { detail: error.message || 'Error de conexión' } };
+  async function request(method, url, data) {
+    const res = await w.Sintel.Core.Http.request(method, url, data);
+    if (!res.ok) {
+      throw { ok: false, status: res.status, data: res.data };
     }
+    return res.data;
   }
 
   w.Sintel.Cotizaciones.api = {
@@ -68,38 +61,30 @@
     recalcularUrl:  function (uuid) { return BASE + '/' + uuid + '/recalcular/'; },
     exportarPdfUrl: function (uuid) { return BASE + '/' + uuid + '/exportar-pdf/'; },
     estadisticasUrl: BASE + '/estadisticas/',
-    
+
     // URLs Configuracion
     configuracionUrl: BASE + '/configuracion/',
     configuracionDetailUrl: function (uuid) { return BASE + '/configuracion/' + uuid + '/'; },
-    
+
     // Métodos Configuracion
     createConfiguracion: function (data) {
-      return request(this.configuracionUrl, {
-        method: 'POST',
-        body: JSON.stringify(data)
-      });
+      return request('POST', this.configuracionUrl, data);
     },
     updateConfiguracion: function (uuid, data) {
-      return request(this.configuracionDetailUrl(uuid), {
-        method: 'PATCH',
-        body: JSON.stringify(data)
-      });
+      return request('PATCH', this.configuracionDetailUrl(uuid), data);
     },
     deleteConfiguracion: function (uuid) {
-      return request(this.configuracionDetailUrl(uuid), {
-        method: 'DELETE'
-      });
+      return request('DELETE', this.configuracionDetailUrl(uuid));
     },
-    
+
     // URLs Productos
     productosUrl:     BASE + '/productos/',
     productoDetailUrl: function (uuid) { return BASE + '/productos/' + uuid + '/'; },
-    
+
     // URLs Servicios
     serviciosUrl:     BASE + '/servicios/',
     servicioDetailUrl: function (uuid) { return BASE + '/servicios/' + uuid + '/'; },
-    
+
     // URLs Items
     itemsUrl:         BASE + '/items/',
     itemDetailUrl:    function (uuid) { return BASE + '/items/' + uuid + '/'; },
