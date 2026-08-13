@@ -22,22 +22,14 @@ test('F32.6: cotizaciones.api.js migrado a Core.Http funciona (URLs + metodos)',
     };
     try {
       const res = await window.Sintel.Core.Http.get(api.listUrl);
-      // NOTA: /configuracion/ tiene un bug pre-existente no relacionado con
-      // F32 (ConfiguracionCotizacionViewSet no hereda SintelDSVMixin -> 500
-      // AttributeError en get_empresa_id, ver
-      // apps/tenant/cotizaciones/configuracion/viewsets.py:26). Fuera de
-      // alcance de F32 (transporte, no logica de negocio) -- flagged
-      // aparte. Aqui solo verificamos que Core.Http.request() en si mismo
-      // funciona (no lanza, parsea la respuesta) contra ese 500, no que el
-      // endpoint responda ok.
       const config = await window.Sintel.Core.Http.get(api.configuracionUrl);
       return {
         ...shape,
         ok: res.ok,
         status: res.status,
         hasData: !!res.data,
+        configOk: config.ok,
         configStatus: config.status,
-        configHasData: !!config.data,
       };
     } catch (err) {
       return { ...shape, error: err.message || JSON.stringify(err) };
@@ -51,8 +43,6 @@ test('F32.6: cotizaciones.api.js migrado a Core.Http funciona (URLs + metodos)',
   expect(result.ok).toBe(true);
   expect(result.status).toBe(200);
   expect(result.hasData).toBe(true);
-  // /configuracion/ esta rota (bug pre-existente, no de transporte): solo
-  // confirmamos que Core.Http complete la peticion y parsee el body.
-  expect(result.configStatus).toBe(500);
-  expect(result.configHasData).toBe(true);
+  expect(result.configOk).toBe(true);
+  expect(result.configStatus).toBe(200);
 });
