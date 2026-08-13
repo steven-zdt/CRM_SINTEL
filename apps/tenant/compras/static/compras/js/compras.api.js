@@ -1,89 +1,47 @@
 /**
  * Compras API - SSoT de URLs y endpoints
- * 
+ *
  * Namespace: window.Sintel.Compras.API
+ *
+ * F32.6: migrado a Sintel.Core.Http -- ya no reimplementa fetch+CSRF+JWT
+ * (violaba el contrato "solo URLs+metodos", F31.3/F32.1). El contrato
+ * PUBLICO de cada metodo (lanza Error con .status/.data en fallo) no
+ * cambia -- solo el transporte interno, unificado en _fetch().
  */
 (function() {
     'use strict';
 
-    // Namespace
     window.Sintel = window.Sintel || {};
     window.Sintel.Compras = window.Sintel.Compras || {};
 
     const API_ROOT = '/api/v1/compras/';
     const PLANTILLAS_ROOT = `${API_ROOT}plantillas/`;
 
-    /**
-     * API Endpoints para Compras (Gateway Directo)
-     */
+    async function _fetch(method, url, data) {
+        const res = await window.Sintel.Core.Http.request(method, url, data);
+        if (!res.ok) {
+            const error = new Error(`[Compras.API] ${method} ${url} -> ${res.status}`);
+            error.status = res.status;
+            error.data = res.data || { detail: `HTTP ${res.status}` };
+            throw error;
+        }
+        if (res.status === 204) return { success: true };
+        return res.data;
+    }
+
     const API = {
         compras: {
             list: API_ROOT,
             detail: (id) => `${API_ROOT}${id}/`,
             cambiarEstado: (id) => `${API_ROOT}${id}/cambiar-estado/`,
-            create: async function(data) {
-                const response = await fetch(API_ROOT, {
-                    method: 'POST',
-                    headers: await window.Sintel.Compras.getHeaders(),
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) {
-                    let errorData = {};
-                    try {
-                        errorData = await response.json();
-                    } catch(e) {
-                        errorData = { detail: `HTTP ${response.status}` };
-                    }
-                    const error = new Error('Orden de compra creation failed');
-                    error.status = response.status;
-                    error.data = errorData;
-                    console.error('[API] OrdenCompra create error:', errorData);
-                    throw error;
-                }
-                return await response.json();
-            },
-            update: async function(uuid, data) {
-                const response = await fetch(`${API_ROOT}${uuid}/`, {
-                    method: 'PATCH',
-                    headers: await window.Sintel.Compras.getHeaders(),
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) {
-                    let errorData = {};
-                    try {
-                        errorData = await response.json();
-                    } catch(e) {
-                        errorData = { detail: `HTTP ${response.status}` };
-                    }
-                    const error = new Error('Orden de compra update failed');
-                    error.status = response.status;
-                    error.data = errorData;
-                    console.error('[API] OrdenCompra update error:', errorData);
-                    throw error;
-                }
-                return await response.json();
-            },
+            create: (data) => _fetch('POST', API_ROOT, data),
+            update: (uuid, data) => _fetch('PATCH', `${API_ROOT}${uuid}/`, data),
         },
         plantillas: {
             list: PLANTILLAS_ROOT,
             detail: (uuid) => `${PLANTILLAS_ROOT}${uuid}/`,
             renderCrear: () => `${PLANTILLAS_ROOT}render-offcanvas/crear/`,
-            create: async function(data) {
-                const response = await fetch(PLANTILLAS_ROOT, {
-                    method: 'POST',
-                    headers: await window.Sintel.Compras.getHeaders(),
-                    body: JSON.stringify(data)
-                });
-                if (!response.ok) {
-                    let errorData = {};
-                    try { errorData = await response.json(); } catch(e) { errorData = { detail: `HTTP ${response.status}` }; }
-                    const error = new Error('Plantilla creation failed');
-                    error.status = response.status;
-                    error.data = errorData;
-                    throw error;
-                }
-                return await response.json();
-            },
+            create: (data) => _fetch('POST', PLANTILLAS_ROOT, data),
         },
         proveedores: {
             list: '/api/v1/proveedores/'
@@ -102,57 +60,27 @@
         /**
          * Acciones asincronas
          */
-        cambiarEstado: async function(uuid, estado) {
-            const url = this.compras.cambiarEstado(uuid);
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: await window.Sintel.Compras.getHeaders(),
-                body: JSON.stringify({ estado: estado })
-            });
-            if (!response.ok) {
-                try { response.data = await response.json(); } catch(e) {}
-                throw response;
-            }
-            return await response.json();
+        cambiarEstado: function(uuid, estado) {
+            return _fetch('POST', this.compras.cambiarEstado(uuid), { estado: estado });
         },
 
-        eliminar: async function(uuid) {
-            const url = this.compras.detail(uuid);
-            const response = await fetch(url, {
-                method: 'DELETE',
-                headers: await window.Sintel.Compras.getHeaders()
-            });
-            if (!response.ok) {
-                try { response.data = await response.json(); } catch(e) {}
-                throw response;
-            }
-            return response.status === 204 ? {success: true} : await response.json();
+        eliminar: function(uuid) {
+            return _fetch('DELETE', this.compras.detail(uuid));
         }
     };
 
-    /**
-     * Headers por defecto con JWT
-     * FE-A9: CSRF via window.getCookie (SSoT, core/js/lib/http.js) — no
-     * depende de un input de formulario tradicional que puede no existir
-     * en paginas API-first.
-     */
+    // getHeaders() se conserva por compatibilidad hacia atras -- no se
+    // encontro ningun consumidor externo de window.Sintel.Compras.getHeaders,
+    // pero se deja el shape identico por si acaso (F32.6, mismo criterio
+    // que ventas.api.js).
     async function getHeaders() {
-        const headers = {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': window.getCookie?.('csrftoken') || ''
-        };
-        
+        const headers = { 'Content-Type': 'application/json' };
+        const csrf = window.Sintel?.Core?.Http?.csrf ? window.Sintel.Core.Http.csrf() : null;
+        if (csrf) headers['X-CSRFToken'] = csrf;
         try {
             if (window.jwtAuth && typeof window.jwtAuth.getValidAccessToken === 'function') {
                 const token = await window.jwtAuth.getValidAccessToken();
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-            } else {
-                const token = window.jwtAuth?.getAccessToken?.();
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
+                if (token) headers['Authorization'] = `Bearer ${token}`;
             }
         } catch (err) {
             console.warn('[Compras.API] Error al obtener JWT token:', err);
