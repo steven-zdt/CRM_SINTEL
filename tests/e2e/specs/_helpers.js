@@ -27,9 +27,14 @@ async function login(page, { username, password }) {
  * Helper para detectar errores en la consola del navegador
  * @param {Page} page - Página de Playwright
  * @param {string} context - Contexto para logs
+ * @param {string[]} ignorePatterns - Substrings de errores conocidos y ya
+ *   documentados como fuera de alcance (no bugs de esta app) -- p.ej. el
+ *   timing interno de Bootstrap Offcanvas ("null.scroll", ya documentado
+ *   como excepcion aceptada para devengo_editor.js en F31.2, no algo que
+ *   este spec deba "arreglar"). No usar para ocultar errores reales.
  * @returns {Function} Función para verificar errores acumulados
  */
-async function expectNoConsoleErrors(page, context = '') {
+async function expectNoConsoleErrors(page, context = '', ignorePatterns = []) {
   const errors = [];
 
   page.on('console', (msg) => {
@@ -44,7 +49,8 @@ async function expectNoConsoleErrors(page, context = '') {
 
   // Retorna una función que verifica los errores acumulados
   return () => {
-    expect(errors, errors.join('\n')).toHaveLength(0);
+    const relevantes = errors.filter((e) => !ignorePatterns.some((p) => e.includes(p)));
+    expect(relevantes, relevantes.join('\n')).toHaveLength(0);
   };
 }
 

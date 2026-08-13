@@ -1,6 +1,6 @@
 /**
  * cuenta_list.js - Feature List para CuentaContable
- * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#cuentas-panel,
+ * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#contabilidad-cuentas-panel,
  * cargada por atributos hx-get/hx-trigger declarados en list_cuentas.html).
  * Este archivo solo maneja: acciones de fila (ver/editar/eliminar), apertura
  * de offcanvas, y el disparo del evento que hace que HTMX vuelva a pedir la
@@ -10,7 +10,7 @@
 (function (w, d) {
   'use strict';
 
-  const PANEL_SELECTOR = '#cuentas-panel';
+  const PANEL_SELECTOR = '#contabilidad-cuentas-panel';
   const API_URL = '/api/v1/contabilidad/cuentas-contables/';
 
   function showOffcanvas(id) {

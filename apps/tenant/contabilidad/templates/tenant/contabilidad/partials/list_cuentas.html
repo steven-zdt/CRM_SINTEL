@@ -5,16 +5,16 @@
 <div id="ui-contabilidad-cuentas-list" class="ui-module ui-contabilidad">
   <!-- Toolbar -->
   <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-contabilidad-cuentas">
-    <input id="search-cuenta" class="form-control form-control-sm"
+    <input id="contabilidad-search-cuenta" class="form-control form-control-sm"
            type="search" placeholder="Buscar por código o nombre..."
            hx-get="{% url 'contabilidad:cuenta-tabla' %}"
            hx-trigger="keyup changed delay:400ms, search"
-           hx-target="#cuentas-panel"
+           hx-target="#contabilidad-cuentas-panel"
            name="q" />
 
     <button id="btn-refrescar-cuentas" class="btn btn-sm btn-outline-secondary"
             hx-get="{% url 'contabilidad:cuenta-tabla' %}"
-            hx-target="#cuentas-panel">
+            hx-target="#contabilidad-cuentas-panel">
       <i class="bi bi-arrow-clockwise"></i> Refrescar
     </button>
 
@@ -40,7 +40,7 @@
   </div>
 
   <!-- Tabla server-rendered (django-tables2 + HTMX) -->
-  <div id="cuentas-panel"
+  <div id="contabilidad-cuentas-panel"
        hx-get="{% url 'contabilidad:cuenta-tabla' %}"
        hx-trigger="load, cuenta-updated from:body"
        hx-target="this"

@@ -111,6 +111,14 @@
   const offcanvasEl = document.getElementById(offcanvasId);
   const isEdit = '{% if cuenta %}true{% else %}false{% endif %}' === 'true';
   const cuentaId = '{% if cuenta %}{{ cuenta.id }}{% endif %}';
+  // F32.5: cuentaId (PK entero) solo sirve para el filtro "excluir esta
+  // cuenta del select de cuenta padre" (cargarCuentasPadre(), compara
+  // contra c.id de la lista) -- NUNCA para URLs de la API, que exigen uuid
+  // (BaseTenantViewSet.lookup_field='uuid'). cuentaUuid es lo que se usa
+  // para el PATCH real (bug real encontrado y corregido: guardarCuenta()
+  // enviaba PATCH .../{cuentaId}/ con el PK entero, la API respondia
+  // "not_found" porque busca por uuid, no por id).
+  const cuentaUuid = '{% if cuenta %}{{ cuenta.uuid }}{% endif %}';
   
   if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
     // UIManager gestiona dispose + backdrops + show (AGENTS.md §26)
@@ -187,7 +195,7 @@
         return;
       }
       
-      const url = isEdit ? `/api/v1/contabilidad/cuentas-contables/${cuentaId}/` : '/api/v1/contabilidad/cuentas-contables/';
+      const url = isEdit ? `/api/v1/contabilidad/cuentas-contables/${cuentaUuid}/` : '/api/v1/contabilidad/cuentas-contables/';
       const method = isEdit ? 'PATCH' : 'POST';
       const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
       
@@ -213,7 +221,13 @@
       .then(data => {
         if (window.notyf) window.notyf.success(`Cuenta ${isEdit ? 'actualizada' : 'creada'} con éxito.`);
         offcanvasInstance.hide();
-        document.body.dispatchEvent(new Event('contabilidad:refresh'));
+        // F32.5: 'contabilidad:refresh' no tenia ningun listener en todo el
+        // arbol (grep completo, 0 ocurrencias fuera de este dispatch) -- la
+        // tabla nunca se actualizaba tras crear/editar una cuenta, solo con
+        // "Refrescar" manual. #contabilidad-cuentas-panel escucha
+        // 'cuenta-updated from:body' (list_cuentas.html) -- ese es el evento
+        // real, ya usado en el resto de la app (regla F31.9).
+        document.body.dispatchEvent(new Event('cuenta-updated'));
         if (window.Sintel?.Contabilidad?.Table) window.Sintel.Contabilidad.Table.refresh();
       })
       .catch(err => {
