@@ -6,10 +6,11 @@
 <!-- ⚠️ v2.40: SweetAlert2 para sistema de feedback centralizado -->
 <!-- ⚠️ v2.60: Fallback a cdnjs si jsdelivr falla -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.10.5/sweetalert2.all.min.js';"></script>
-<script src="{% static 'core/js/lib/http.js' %}"></script>
-<!-- F32.6: Sintel.Core.Http -- aditivo, NO reemplaza window.http todavia. -->
-<!-- Ver documentacion/F32_3_CORE_HTTP_CONTRACT.md. Requiere jwtAuth, ya -->
-<!-- cargado antes en tenant/base.html. -->
+<!-- F32.7: core/js/lib/http.js (client A, window.http/window.getCookie) -->
+<!-- removido -- todos los consumidores reales (52 archivos entre F32.6+ -->
+<!-- F32.7) migraron a Sintel.Core.Http. Ver -->
+<!-- documentacion/F32_7_TRANSPORT_CONSOLIDATION_AUDIT.md. Requiere jwtAuth, -->
+<!-- ya cargado antes en tenant/base.html. -->
 <script src="{% static 'core/js/lib/core-http.js' %}"></script>
 <script src="{% static 'core/js/lib/api-helpers.js' %}"></script>
 <script src="{% static 'core/js/lib/ajax-setup-csrf.js' %}"></script>

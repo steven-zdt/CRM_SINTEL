@@ -54,30 +54,4 @@ async function expectNoConsoleErrors(page, context = '', ignorePatterns = []) {
   };
 }
 
-/**
- * Helper para verificar que window.http esté disponible y correctamente configurado
- * @param {Page} page - Página de Playwright
- */
-async function expectHttpAvailable(page) {
-  // Fase F32.1: la suposicion original de este helper ("v3.4 esta activo,
-  // __version__ === '3.4'") es FALSA en produccion -- el orden de carga real
-  // (tenant/base.html:129 carga http.js v3.4 primero, workspace.html via
-  // assets_core.html carga core/js/lib/http.js despues y lo sobreescribe,
-  // ver documentacion/F32_1_2_TRANSPORT_AUDIT.md S2) hace que la version SIN
-  // __version__ (lib/http.js) sea la que realmente gana. Este check ahora
-  // verifica la baseline real (funcion global window.http disponible como
-  // funcion invocable), no la version especifica -- asercion sobre
-  // __version__ se reintroduce en F32.7 una vez Core.Http sea el unico
-  // ganador confirmado.
-  const info = await page.evaluate(() => ({
-    type: typeof window.http,
-    version: window.http && window.http.__version__,
-  }));
-
-  expect(info.type).toBe('function');
-  // Documentar cual version esta activa ahora mismo (visible en el reporte
-  // del test, no en aserciones -- es informativo para el audit, no un fallo).
-  console.log(`[F32.1 baseline] window.http.__version__ = ${info.version === undefined ? '(sin version -- lib/http.js activo)' : info.version}`);
-}
-
-module.exports = { login, expectNoConsoleErrors, expectHttpAvailable };
+module.exports = { login, expectNoConsoleErrors };
