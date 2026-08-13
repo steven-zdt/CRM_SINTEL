@@ -75,8 +75,13 @@ class ProductoTableView(_InventarioTableViewBase):
             context["kpi_skus"] = qs.count()
             context["kpi_activos"] = qs.filter(activo=True).count()
             context["kpi_alertas"] = qs.filter(stock_actual__lte=F("stock_minimo")).count()
+            # stock_actual/costo_promedio ya estan en PRODUCTO_LIST_FIELDS (selectors.py) --
+            # NO volver a llamar .only() aqui: un segundo .only() sobre un queryset que ya
+            # trae campos de relacion via .only() (categoria__nombre) rompe con
+            # "Field Producto.categoria cannot be both deferred and traversed using
+            # select_related at the same time" (FieldError real, encontrado en F31.6).
             context["kpi_valor_total"] = sum(
-                (p.stock_actual or 0) * (p.costo_promedio or 0) for p in qs.only("stock_actual", "costo_promedio")
+                (p.stock_actual or 0) * (p.costo_promedio or 0) for p in qs
             )
         return context
 
