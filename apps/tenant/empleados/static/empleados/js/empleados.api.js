@@ -80,52 +80,26 @@
         }
     };
 
-    /**
-     * Lee el CSRF token en tiempo de request (no al cargar el modulo).
-     * Intenta el campo hidden del formulario primero, luego la cookie.
-     */
-    function getCsrfToken() {
-        const domToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
-        if (domToken) return domToken;
-        return document.cookie
-            .split('; ')
-            .find(r => r.startsWith('csrftoken='))
-            ?.split('=')[1] || '';
-    }
-
-    /**
-     * Headers dinamicos por request — CSRF se lee en el momento, no al cargar.
-     */
+    // F32.6: migrado a Sintel.Core.Http -- ya no reimplementa fetch+CSRF+JWT
+    // (violaba el contrato "solo URLs+metodos", F31.3/F32.1). getHeaders()
+    // se conserva por compatibilidad hacia atras (exportada publicamente,
+    // sin consumidores externos encontrados). request() mantiene su firma
+    // y forma de retorno {ok,status,data} identicas -- el unico consumidor
+    // real (contrato_list.js:38) llama request(url, {method:'POST'}) sin
+    // body, verificado antes de migrar.
     function getHeaders() {
-        const headers = {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken(),
-        };
+        const headers = { 'Content-Type': 'application/json' };
+        const csrf = window.Sintel?.Core?.Http?.csrf ? window.Sintel.Core.Http.csrf() : null;
+        if (csrf) headers['X-CSRFToken'] = csrf;
         const token = window.jwtAuth?.getAccessToken?.();
         if (token) headers['Authorization'] = `Bearer ${token}`;
         return headers;
     }
 
-    /**
-     * Wrapper para fetch con soporte JWT
-     */
     async function request(url, options = {}) {
-        const headers = getHeaders();
-        const config = {
-            ...options,
-            headers: {
-                ...headers,
-                ...options.headers
-            }
-        };
-
-        const response = await fetch(url, config);
-        if (!response.ok) {
-            const data = await response.json().catch(() => ({}));
-            return { ok: false, status: response.status, data };
-        }
-        const data = await response.json();
-        return { ok: true, status: response.status, data };
+        return window.Sintel.Core.Http.request(
+            options.method || 'GET', url, options.body, { headers: options.headers }
+        );
     }
 
     // Exportar API
