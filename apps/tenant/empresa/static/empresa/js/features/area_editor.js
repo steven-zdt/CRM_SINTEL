@@ -57,11 +57,11 @@
             };
 
             try {
-                if (!w.http) {
-                    throw new Error('El helper window.http no está cargado.');
+                if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
+                    throw new Error('El helper Sintel.Core.Http no está cargado.');
                 }
 
-                const res = await w.http(method, url, payload);
+                const res = await w.Sintel.Core.Http.request(method, url, payload);
 
                 if (res.ok) {
                     if (w.SintelFeedback && typeof w.SintelFeedback.success === 'function') {

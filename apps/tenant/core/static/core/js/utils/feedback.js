@@ -12,7 +12,9 @@
  * 
  * Dependencias:
  * - SweetAlert2 (Swal) - CDN o local
- * - window.http (definido en lib/http.js) - para detectar errores 401
+ * - Ninguna real: solo inspecciona la forma {ok,status,data} generica de
+ *   window.http/Sintel.Core.Http (F32.7) via duck-typing (error.status),
+ *   sin llamar a ninguno de los dos directamente.
  */
 
 (function(w, d) {

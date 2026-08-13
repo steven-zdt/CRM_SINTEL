@@ -6,7 +6,7 @@
  * ⚠️ Aislamiento Gradual: Event-based, sin try/catch genéricos
  * 
  * Dependencias globales requeridas:
- * - window.http (definido en lib/api.js) - HTTP wrapper
+ * - Sintel.Core.Http (F32.7, core-http.js) - HTTP wrapper
  * - window.SintelFeedback (definido en feedback.js) - Notificaciones
  */
 (function(w, d) {
@@ -119,7 +119,7 @@
             
             const method = contactoId ? 'PATCH' : 'POST';
             
-            const response = await w.http(method, url, payload);
+            const response = await w.Sintel.Core.Http.request(method, url, payload);
 
             if (response.ok) {
                 if (w.UIManager?.success) {

@@ -1,7 +1,7 @@
 /**
  * retencion.api.js - SSoT de endpoints para Retencion v3.16.1
  *
- * Dependencias: window.http (http.js)
+ * Dependencias: Sintel.Core.Http (F32.7, core-http.js)
  */
 (function (w) {
   'use strict';
@@ -30,7 +30,7 @@
         if (params.documento_origen_app) url.searchParams.append('documento_origen_app', params.documento_origen_app);
         if (params.search)              url.searchParams.append('search',              params.search);
       }
-      const response = await w.http('GET', url.pathname + url.search);
+      const response = await w.Sintel.Core.Http.request('GET', url.pathname + url.search);
       if (!response.ok) {
         const msg = response.data?.detail || `HTTP ${response.status}`;
         const err = new Error(msg);

@@ -8,7 +8,7 @@
  *      para desbloquear el offcanvas de contabilizacion.
  *   3. Expone window.Sintel.Contabilidad.PlantillaInterceptor como API publica.
  *
- * Dependencias: window.http, window.bootstrap, window.PlantillaAPI (plantilla.api.js),
+ * Dependencias: Sintel.Core.Http (F32.7), window.bootstrap, window.PlantillaAPI (plantilla.api.js),
  *               window.UIManager, window.SintelFeedback (opcional)
  *
  * Namespace: window.Sintel.Contabilidad (AGENTS.md §23)
@@ -49,8 +49,8 @@
   async function cargarEditorHTML(uuid) {
     const url = API_PLANTILLAS + uuid + '/render-offcanvas/editar/';
     try {
-      const res = await w.http('GET', url, null, { responseType: 'html' });
-      // w.http devuelve { ok, status, data }. Si data es HTML string lo usamos directamente.
+      const res = await w.Sintel.Core.Http.request('GET', url, null, { responseType: 'html' });
+      // Sintel.Core.Http.request devuelve { ok, status, data }. Si data es HTML string lo usamos directamente.
       // Algunas versiones de http.js del proyecto retornan la respuesta cruda en .data.
       if (typeof res === 'string') return res;
       if (res && typeof res.data === 'string') return res.data;

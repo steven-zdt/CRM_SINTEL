@@ -76,8 +76,8 @@
         }
 
         try {
-            // window.http inyecta JWT + CSRF (skill: vanilla-js.md §2)
-            const res = await w.http('GET', `${API_INFO}?empleado=${empleadoId}`);
+            // Sintel.Core.Http inyecta JWT + CSRF (F32.7, antes window.http)
+            const res = await w.Sintel.Core.Http.request('GET', `${API_INFO}?empleado=${empleadoId}`);
             if (!res.ok) throw new Error(res.data?.error || 'Empleado sin contrato activo');
 
             const data = res.data;
@@ -134,7 +134,7 @@
             // Preferir UUID (AGENTS.md §14), fallback a ID entero
             const param = contratoUuid ? `contrato_uuid=${contratoUuid}` : `contrato_id=${contratoId}`;
             const url = `${API_BASE}simular/?${param}&fecha_corte=${fechaCorte}&tipo_liquidacion=${tipoLiq}&dias_salario_pendiente=${diasSalario}&indemnizacion=${indemnizacion}`;
-            const res = await w.http('GET', url);
+            const res = await w.Sintel.Core.Http.request('GET', url);
 
             if (!res.ok) throw new Error(res.data?.error || 'Error al calcular simulación');
 
@@ -197,7 +197,7 @@
         }
     }
 
-    // ── Guardar via window.http (skill: vanilla-js.md §2) ───────────────────
+    // ── Guardar via Sintel.Core.Http (F32.7, antes window.http) ─────────────
     async function _guardar(offcanvasEl) {
         const form = offcanvasEl.querySelector(`#${FORM_ID}`);
         const btn  = offcanvasEl.querySelector(`#${BTN_ID}`);
@@ -227,7 +227,7 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
 
         try {
-            const res = await w.http('POST', API_BASE, payload);
+            const res = await w.Sintel.Core.Http.request('POST', API_BASE, payload);
             if (res.ok) {
                 w.UIManager?.notifySuccess('Liquidación registrada correctamente');
                 _cerrar();

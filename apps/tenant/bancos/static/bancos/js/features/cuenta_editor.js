@@ -78,17 +78,20 @@
       await guardar(form);
     });
 
-    const btnGuardar = container.querySelector('#btn-guardar-cuenta');
-    if (btnGuardar) {
-      btnGuardar.addEventListener('click', () => form.requestSubmit());
-    }
+    // NOTA (remediacion doble-submit, auditoria 2026-08-06): #btn-guardar-cuenta
+    // ya es <button type="submit" form="cuenta-form"> (ver offcanvas_crear_cuenta.html
+    // / offcanvas_editar_cuenta.html) -- el navegador ya dispara el evento "submit"
+    // del formulario nativamente al hacer click. Llamar ademas form.requestSubmit()
+    // en un listener de "click" separado disparaba un SEGUNDO evento "submit",
+    // ejecutando guardar(form) dos veces por cada click humano y creando cuentas
+    // bancarias duplicadas (sin validacion de unicidad de respaldo en backend).
   }
 
   async function guardar(form) {
     if (!form.checkValidity()) return form.reportValidity();
 
-    if (typeof w.http !== 'function') {
-      console.error(`${MOD} window.http no disponible`);
+    if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
+      console.error(`${MOD} Sintel.Core.Http no disponible`);
       w.UIManager?.notifyError?.({ data: { detail: 'Error interno: cliente HTTP no disponible.' } });
       return;
     }
@@ -98,7 +101,7 @@
     const method  = uuid ? 'PUT' : 'POST';
     const url     = uuid ? `${API_URL}${uuid}/` : API_URL;
 
-    const res = await w.http(method, url, payload);
+    const res = await w.Sintel.Core.Http.request(method, url, payload);
 
     if (!res.ok) {
       return w.UIManager?.handleError(res, MOD, {

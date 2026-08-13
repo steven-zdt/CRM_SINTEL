@@ -11,9 +11,9 @@
   const API_BASE = '/api/v1/proyectos';
   const MOD = 'proyectos.api';
 
-  if (typeof w.http !== 'function') {
-    console.error(`[${MOD}] ❌ window.http no está disponible. Cargar lib/http.js primero.`);
-    w.proyectosAPI = { error: 'window.http no está disponible' };
+  if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
+    console.error(`[${MOD}] ❌ Sintel.Core.Http no está disponible. Cargar core-http.js primero.`);
+    w.proyectosAPI = { error: 'Sintel.Core.Http no está disponible' };
     return;
   }
 
@@ -34,27 +34,27 @@
     list: async (params = {}) => {
       console.log(`[${MOD}] list()`, params);
       const url = buildUrlWithParams(`${API_BASE}/`, params);
-      return w.http('GET', url);
+      return w.Sintel.Core.Http.request('GET', url);
     },
 
     /** GET /api/v1/proyectos/{uuid}/ */
     get: async (uuid) => {
       console.log(`[${MOD}] get(${uuid})`);
       if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
-      return w.http('GET', `${API_BASE}/${uuid}/`);
+      return w.Sintel.Core.Http.request('GET', `${API_BASE}/${uuid}/`);
     },
 
     /** POST /api/v1/proyectos/ */
     create: async (data) => {
       console.log(`[${MOD}] create()`, data);
-      return w.http('POST', `${API_BASE}/`, data);
+      return w.Sintel.Core.Http.request('POST', `${API_BASE}/`, data);
     },
 
     /** PUT /api/v1/proyectos/{uuid}/ */
     update: async (uuid, data) => {
       console.log(`[${MOD}] update(${uuid})`, data);
       if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
-      return w.http('PUT', `${API_BASE}/${uuid}/`, data);
+      return w.Sintel.Core.Http.request('PUT', `${API_BASE}/${uuid}/`, data);
     },
 
     /** POST /api/v1/proyectos/{uuid}/avanzar-fase/ */
@@ -66,7 +66,7 @@
       if (responsableId) payload.responsable_id = responsableId;
       if (responsableNombre) payload.responsable_nombre = responsableNombre;
 
-      return w.http('POST', `${API_BASE}/${uuid}/avanzar-fase/`, payload);
+      return w.Sintel.Core.Http.request('POST', `${API_BASE}/${uuid}/avanzar-fase/`, payload);
     },
 
     /** PATCH /api/v1/proyectos/{uuid}/
@@ -76,14 +76,14 @@
       console.log(`[${MOD}] syncCostos(${uuid})`);
       if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
 
-      const result = await w.http('GET', `${API_BASE}/${uuid}/`);
+      const result = await w.Sintel.Core.Http.request('GET', `${API_BASE}/${uuid}/`);
       if (!result.ok) {
         console.error(`[${MOD}] syncCostos() fallo al obtener el proyecto:`, result);
         return result;
       }
 
       const proyecto = result.data;
-      return w.http('PATCH', `${API_BASE}/${uuid}/`, {
+      return w.Sintel.Core.Http.request('PATCH', `${API_BASE}/${uuid}/`, {
         porcentaje_avance: proyecto.porcentaje_avance || 0
       });
     },
@@ -92,7 +92,7 @@
     delete: async (uuid) => {
       console.log(`[${MOD}] delete(${uuid})`);
       if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
-      return w.http('DELETE', `${API_BASE}/${uuid}/`);
+      return w.Sintel.Core.Http.request('DELETE', `${API_BASE}/${uuid}/`);
     },
 
     /** GET /api/v1/inventario/movimientos/?search=<q>
@@ -105,7 +105,7 @@
      */
     fetchCentrosCostos: async () => {
       console.log(`[${MOD}] fetchCentrosCostos()`);
-      return w.http('GET', '/api/v1/facturas/lista-centro-costos/');
+      return w.Sintel.Core.Http.request('GET', '/api/v1/facturas/lista-centro-costos/');
     },
 
     /** Presupuesto Planeado (v3.5.2) */
@@ -115,20 +115,20 @@
         console.log(`[${MOD}] presupuesto.list(${proyectoUuid})`);
         if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
         const url = buildUrlWithParams(`${API_BASE}/items-presupuesto/`, { proyecto_uuid: proyectoUuid });
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       },
 
       /** POST /api/v1/proyectos/items-presupuesto/ */
       create: async (data) => {
         console.log(`[${MOD}] presupuesto.create()`, data);
-        return w.http('POST', `${API_BASE}/items-presupuesto/`, data);
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/items-presupuesto/`, data);
       },
 
       /** DELETE /api/v1/proyectos/items-presupuesto/<id>/ */
       delete: async (itemId) => {
         console.log(`[${MOD}] presupuesto.delete(${itemId})`);
         if (!itemId) return { ok: false, status: 400, data: { detail: 'Item ID requerido' } };
-        return w.http('DELETE', `${API_BASE}/items-presupuesto/${itemId}/`);
+        return w.Sintel.Core.Http.request('DELETE', `${API_BASE}/items-presupuesto/${itemId}/`);
       }
     },
 
@@ -140,27 +140,27 @@
         if (fechaInicio) params.fecha_inicio = fechaInicio;
         if (fechaFin) params.fecha_fin = fechaFin;
         const url = buildUrlWithParams(`${API_BASE}/tareas-diarias/`, params);
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       },
 
       /** POST /api/v1/proyectos/tareas-diarias/ */
       create: async (data) => {
         console.log(`[${MOD}] tareasDiarias.create()`, data);
-        return w.http('POST', `${API_BASE}/tareas-diarias/`, data);
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/tareas-diarias/`, data);
       },
 
       /** POST /api/v1/proyectos/tareas-diarias/<id>/cambiar-estado/ */
       cambiarEstado: async (tareaId, nuevoEstado) => {
         console.log(`[${MOD}] tareasDiarias.cambiarEstado(${tareaId}, ${nuevoEstado})`);
         if (!tareaId || !nuevoEstado) return { ok: false, status: 400, data: { detail: 'Tarea ID y nuevo estado requeridos' } };
-        return w.http('POST', `${API_BASE}/tareas-diarias/${tareaId}/cambiar-estado/`, { nuevo_estado: nuevoEstado });
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/tareas-diarias/${tareaId}/cambiar-estado/`, { nuevo_estado: nuevoEstado });
       },
 
       /** DELETE /api/v1/proyectos/tareas-diarias/<id>/ */
       delete: async (tareaId) => {
         console.log(`[${MOD}] tareasDiarias.delete(${tareaId})`);
         if (!tareaId) return { ok: false, status: 400, data: { detail: 'Tarea ID requerido' } };
-        return w.http('DELETE', `${API_BASE}/tareas-diarias/${tareaId}/`);
+        return w.Sintel.Core.Http.request('DELETE', `${API_BASE}/tareas-diarias/${tareaId}/`);
       }
     },
 
@@ -172,34 +172,34 @@
         if (empleadoUuid) qp.empleado_uuid = empleadoUuid;
         Object.assign(qp, params);
         const url = buildUrlWithParams(`${API_BASE}/tareas-cortas/`, qp);
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       },
 
       /** POST /api/v1/proyectos/tareas-cortas/ */
       create: async (data) => {
         console.log(`[${MOD}] tareasCortas.create()`, data);
-        return w.http('POST', `${API_BASE}/tareas-cortas/`, data);
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/tareas-cortas/`, data);
       },
 
       /** PATCH /api/v1/proyectos/tareas-cortas/<uuid>/ */
       update: async (uuid, data) => {
         console.log(`[${MOD}] tareasCortas.update(${uuid})`, data);
         if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
-        return w.http('PATCH', `${API_BASE}/tareas-cortas/${uuid}/`, data);
+        return w.Sintel.Core.Http.request('PATCH', `${API_BASE}/tareas-cortas/${uuid}/`, data);
       },
 
       /** POST /api/v1/proyectos/tareas-cortas/<uuid>/cambiar-estado/ */
       cambiarEstado: async (uuid, nuevoEstado) => {
         console.log(`[${MOD}] tareasCortas.cambiarEstado(${uuid}, ${nuevoEstado})`);
         if (!uuid || !nuevoEstado) return { ok: false, status: 400, data: { detail: 'UUID y estado requeridos' } };
-        return w.http('POST', `${API_BASE}/tareas-cortas/${uuid}/cambiar-estado/`, { nuevo_estado: nuevoEstado });
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/tareas-cortas/${uuid}/cambiar-estado/`, { nuevo_estado: nuevoEstado });
       },
 
       /** DELETE /api/v1/proyectos/tareas-cortas/<uuid>/ */
       delete: async (uuid) => {
         console.log(`[${MOD}] tareasCortas.delete(${uuid})`);
         if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
-        return w.http('DELETE', `${API_BASE}/tareas-cortas/${uuid}/`);
+        return w.Sintel.Core.Http.request('DELETE', `${API_BASE}/tareas-cortas/${uuid}/`);
       }
     },
 
@@ -210,7 +210,7 @@
           page_size: 500,
           ordering: 'razon_social'
         });
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       },
 
       empleados: async (search = '') => {
@@ -219,7 +219,7 @@
           page_size: 500,
           ordering: 'primer_apellido'
         });
-        return w.http('GET', url);
+        return w.Sintel.Core.Http.request('GET', url);
       }
     },
 

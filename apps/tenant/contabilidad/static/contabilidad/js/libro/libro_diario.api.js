@@ -2,7 +2,7 @@
  * libro_diario.api.js — API client para el Libro Diario Contable v3.7.7
  *
  * v3.7.7: Soporta periodo_uuid (primario) o fecha_inicio/fecha_fin (fallback).
- * Dependencias: window.http (http.js)
+ * Dependencias: Sintel.Core.Http (F32.7, core-http.js)
  */
 (function (w) {
   'use strict';
@@ -31,7 +31,7 @@
         if (params.search)        url.searchParams.append('search',        params.search);
       }
 
-      const response = await w.http('GET', url.pathname + url.search);
+      const response = await w.Sintel.Core.Http.request('GET', url.pathname + url.search);
       if (!response.ok) {
         const msg = response.data?.detail || response.data?.error || `HTTP ${response.status}`;
         const err = new Error(msg);

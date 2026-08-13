@@ -60,7 +60,7 @@
         if (fb) fb.classList.add('d-none');
     }
 
-    // ── Guardar via window.http (skill: vanilla-js.md §2) ───────────────────
+    // ── Guardar via Sintel.Core.Http (F32.7, antes window.http) ─────────────
     async function _guardar(offcanvasEl) {
         const form = offcanvasEl.querySelector(`#${FORM_ID}`);
         const btn  = offcanvasEl.querySelector(`#${BTN_ID}`);
@@ -83,7 +83,7 @@
         _ocultarFeedback();
 
         try {
-            const res = await w.http('POST', API_BASE, payload);
+            const res = await w.Sintel.Core.Http.request('POST', API_BASE, payload);
             if (res.ok) {
                 w.UIManager?.notifySuccess('Resolución DIAN creada correctamente');
                 _cerrar();

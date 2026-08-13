@@ -14,14 +14,15 @@
   const API_BASE = '/api/v1/bancos';
   const MOD = 'bancos.api';
 
-  // Lazy: verificar window.http en cada llamada, no al cargar el modulo.
-  // El modulo puede cargar antes que http.js en algunos contextos HTMX.
+  // F32.7: Lazy, verificar Sintel.Core.Http en cada llamada (antes: window.http),
+  // no al cargar el modulo -- el modulo puede cargar antes que core-http.js en
+  // algunos contextos HTMX.
   function callHttp(method, url, data) {
-    if (typeof w.http !== 'function') {
-      console.error(`[${MOD}] window.http no disponible al llamar ${method} ${url}`);
-      return Promise.resolve({ ok: false, status: 503, data: { detail: 'window.http no disponible' } });
+    if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.Http) {
+      console.error(`[${MOD}] Sintel.Core.Http no disponible al llamar ${method} ${url}`);
+      return Promise.resolve({ ok: false, status: 503, data: { detail: 'Sintel.Core.Http no disponible' } });
     }
-    return w.http(method, url, data);
+    return w.Sintel.Core.Http.request(method, url, data);
   }
 
   function buildUrlWithParams(baseUrl, params = {}) {
