@@ -16,8 +16,11 @@ async function login(page, { username, password }) {
   await page.fill('#login_email', username);
   await page.fill('#login_password', password);
   await page.click('#login_submit_btn');
-  // redirect_url en login exitoso es "/dashboard/" (apps/tenant/core/api/viewsets.py:548)
-  await page.waitForURL(/\/(dashboard|workspace|console|clientes)\/?/, { timeout: 10000 });
+  // redirect_url en login exitoso es "/dashboard/" (apps/tenant/core/api/viewsets.py:548),
+  // que a su vez redirige server-side a /static/tenant/core/dashboard/index.html --
+  // doble salto, 10s eran insuficientes en la practica (timeout real observado
+  // con la pagina ya completamente cargada en la captura de pantalla).
+  await page.waitForURL(/\/(dashboard|workspace|console|clientes)\/?/, { timeout: 20000 });
 }
 
 /**
