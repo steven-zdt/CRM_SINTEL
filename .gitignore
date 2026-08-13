@@ -18,6 +18,10 @@ htmlcov/
 tools/ekg/out/
 .cache/
 
+# E2E (Playwright) -- instalado via contenedor efimero, no en el repo (F32.5)
+tests/e2e/node_modules/
+tests/e2e/test-results/
+
 # Artefactos generados localmente
 staticfiles/
 media/

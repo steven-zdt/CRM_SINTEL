@@ -9,8 +9,9 @@ test('Clientes: crear → editar → eliminar', async ({ page }) => {
   // Login
   await login(page, { username, password });
 
-  // Navegar a clientes
-  await page.goto('/clientes/');
+  // Navegar a clientes -- F32.5: ruta real es /ui/clientes/ (patron Fase
+  // 5-BIS "ui/<app>/", /clientes/ ya no existe -- confirmado con 404 real).
+  await page.goto('/ui/clientes/');
   await page.waitForLoadState('networkidle');
 
   // Verificar que la tabla existe
