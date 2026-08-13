@@ -11,14 +11,16 @@
     const API_ROOT = '/api/v1/ventas/';
     const RESOLUCIONES_ROOT = '/api/v1/ventas/resoluciones/';
 
-    // FE-A9: CSRF via window.getCookie (SSoT, core/js/lib/http.js) — no
-    // depende de un input de formulario tradicional que puede no existir
-    // en paginas API-first (antes: 403 silencioso si el input no estaba presente).
+    // F32.6: migrado a Sintel.Core.Http -- ya no reimplementa fetch+CSRF+JWT
+    // (violaba el contrato "solo URLs+metodos", F31.3/F32.1). getHeaders()
+    // se conserva solo por compatibilidad hacia atras (w.Sintel.Ventas.getHeaders
+    // se exportaba publicamente; no se encontro ningun consumidor externo,
+    // pero se deja el shape identico por si acaso). El contrato PUBLICO de
+    // _fetch() (lanza Error con .status/.data en fallo) no cambia -- solo
+    // el transporte interno.
     function getHeaders() {
-        var headers = {
-            'Content-Type': 'application/json',
-        };
-        var csrf = w.getCookie ? w.getCookie('csrftoken') : null;
+        var headers = { 'Content-Type': 'application/json' };
+        var csrf = w.Sintel?.Core?.Http?.csrf ? w.Sintel.Core.Http.csrf() : null;
         if (csrf) headers['X-CSRFToken'] = csrf;
         var token = w.jwtAuth && typeof w.jwtAuth.getAccessToken === 'function'
             ? w.jwtAuth.getAccessToken()
@@ -28,21 +30,15 @@
     }
 
     async function _fetch(method, url, data) {
-        var opts = { method: method, headers: getHeaders() };
-        if (data !== undefined && data !== null) {
-            opts.body = JSON.stringify(data);
-        }
-        var res = await fetch(url, opts);
+        var res = await w.Sintel.Core.Http.request(method, url, data === null ? undefined : data);
         if (!res.ok) {
-            var err;
-            try { err = await res.json(); } catch (_) { err = { detail: 'HTTP ' + res.status }; }
             var ex = new Error('[Ventas.API] ' + method + ' ' + url + ' -> ' + res.status);
             ex.status = res.status;
-            ex.data = err;
+            ex.data = res.data || { detail: 'HTTP ' + res.status };
             throw ex;
         }
         if (res.status === 204) return { success: true };
-        return await res.json();
+        return res.data;
     }
 
     var API = {
