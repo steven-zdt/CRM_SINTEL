@@ -158,7 +158,6 @@
         </div>
       </div>
       {% include 'tenant/empresa/mailinbox_list.html' %}
-      {% include 'tenant/empresa/mailinbox_modals.html' %}
     </div>
 
     <!-- Tab 2: Sedes -->
@@ -241,27 +240,14 @@
 <div id="offcanvas-container-sede"></div>
 <div id="offcanvas-container-area"></div>
 
-{# sintelAbrirOffcanvas — helper global anti-backdrop-acumulado (patron inventario v3.9.0) #}
-{# Limpia backdrops huerfanos antes de mostrar cualquier offcanvas HTMX del modulo empresa #}
+{# F33.4/F33.10: sintelAbrirOffcanvasEmpresa era una copia local (F33_SHARED_UI_INVENTORY.md §12d, #}
+{# "patron inventario v3.9.0") del mismo snippet de fallback pegado a mano en 6+ sitios. Con los 2 #}
+{# helpers "safe offcanvas" ya consolidados en uno solo (F33.4), esta funcion queda como un alias #}
+{# delgado que solo traduce el nombre historico -- sin logica de fallback propia. #}
 <script>
-(function() {
-    window.sintelAbrirOffcanvasEmpresa = function(id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        // Delegar a UIManager (gestiona dispose + backdrops + show — AGENTS.md §26)
-        if (window.UIManager && typeof window.UIManager.handleOffcanvas === 'function') {
-            window.UIManager.handleOffcanvas(el, 'show');
-        } else {
-            // Fallback: dispose + cleanup + crear nueva instancia
-            document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
-            document.body.classList.remove('overflow-hidden', 'modal-open');
-            document.body.style.overflow = '';
-            var prev = bootstrap.Offcanvas.getInstance(el);
-            if (prev) prev.dispose();
-            new bootstrap.Offcanvas(el).show();
-        }
-    };
-})();
+window.sintelAbrirOffcanvasEmpresa = function(id) {
+    window.Sintel?.Core?.mostrarOffcanvasSeguro(id);
+};
 </script>
 
 {# Redraw Tabulator al activar sub-tab — evita columnas mal renderizadas en contenedor oculto #}
