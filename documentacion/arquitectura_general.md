@@ -1,7 +1,41 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.37.0
-**Ultima actualizacion:** 2026-08-13 (DOC-M24) — FASE 32.9: revalidacion de
+**Version:** 3.38.0
+**Ultima actualizacion:** 2026-08-13 (DOC-M25) — FASE 33 (Shared UI / Design
+System), EN PROGRESO -- no cerrada, documentado con evidencia por que.
+F33.0-F33.1: inventario real de UI compartida en las 17 apps tenant (agente
+de exploracion dedicado) mas clasificacion (SHARED_EXISTING/DUPLICATE/
+APP_SPECIFIC/CANDIDATE_SHARED/OBSOLETE). Hallazgo principal: Offcanvas
+tenia 2 helpers "safe" independientes con adopcion comparable (~25 vs ~22
+archivos) -- la consolidacion de F31.2 habia quedado incompleta.
+F33.2-F33.9: contrato de UI core diseñado deliberadamente minimo -- de 10
+piezas conceptuales, 6 ya existian (Table=django-tables2, Notificaciones/
+Confirm=UIManager, Offcanvas=mostrarOffcanvasSeguro) y no se creo
+`window.Sintel.Core.UI` como namespace nuevo (seria indireccion sin valor);
+las 4 restantes (Card KPI, EmptyState, Loading, Filtros) se implementaron
+como primitivas Django server-side minimas, no componentes JS. F33.4:
+consolidacion tecnica real de Offcanvas ejecutada -- `mostrarOffcanvasSeguro`
+extendido con `{action:'show'|'hide'}` (retrocompatible), `UIManager.
+handleOffcanvas` reducido a alias delgado que delega ahi. F33.10-11: piloto
+ejecutado sobre `empresa` (elegido por evidencia, no preferencia) --
+2 templates de modal confirmados muertos eliminados (una investigacion mas
+profunda que la del inventario original reclasifico
+`mailinbox_modals.html` de "vivo sin migrar" a "muerto": el flujo real ya
+usa un offcanvas server-rendered completamente distinto), snippet de
+fallback local reducido a un alias de una linea. Validado: `manage.py
+check` PASS, governance FINAL STATUS PASS, **29/29 specs E2E PASS**
+(incluye 2 nuevos: consolidacion de offcanvas + flujo real del piloto).
+F33.12: impact analysis (`tools.ekg.impact`) corrido, con un hallazgo de
+completitud del grafo documentado (no detecta cobertura de test real que
+si existe). **F33.13 en adelante (expansion controlada a las otras ~13
+apps con el mismo patron, accesibilidad, responsive, performance) NO se
+ejecuto** -- decision de alcance explicita, no bloqueo: es del mismo orden
+de magnitud que la expansion de 46 archivos de F32.7, no razonable de
+comprimir en la cola de esta sesion sin repetir el mismo rigor de
+verificacion individual por archivo. Detalle completo:
+`documentacion/F33_SHARED_UI_INVENTORY.md`, `F33_CORE_UI_CONTRACT.md`,
+`F33_STATUS_REPORT.md`.
+**Actualizacion previa:** 2026-08-13 (DOC-M24) — FASE 32.9: revalidacion de
 gobernanza y release gate de F32, con un metodo de busqueda deliberadamente
 distinto al que F32.6/F32.7 usaron (`fetch()` nativo + `getHeaders()`
 manual, no solo `window.http`/`w.http`) para comprobar contractualmente el
@@ -1333,7 +1367,15 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.37.0 — 2026-08-13, DOC-M24)
+## 12. Metricas del Proyecto (v3.38.0 — 2026-08-13, DOC-M25)
+
+**[DOC-M25]** F33 (Shared UI, en progreso) no toca modelos ni migraciones
+-- solo frontend (JS: helper de offcanvas extendido, alias en UIManager;
+2 templates HTML eliminados por codigo muerto confirmado, 1 modificado;
+Python: 1 templatetags module nuevo con 2 tags, 1 helper de wording, 3
+partials HTML nuevos) mas 2 archivos de test E2E nuevos
+(`tests/e2e/specs/62-f334-*.spec.js`, `63-f3310-*.spec.js`). Ninguna fila
+de esta tabla cambia.
 
 **[DOC-M24]** F32.9 (Governance Revalidation) no toca modelos ni
 migraciones -- solo 2 archivos de frontend (JS: `reporte.api.js`,
