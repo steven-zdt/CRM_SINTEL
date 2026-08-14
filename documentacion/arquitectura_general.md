@@ -1,10 +1,52 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.42.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M29) — FASE 33 (Shared UI / Design
+**Version:** 3.43.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M30) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre F33.14-A: inventario evidence-based de Card KPI en las 17 apps
-tenant + adopcion controlada (2 archivos migrados), posterior a DOC-M28.
+que. Cubre F33.14-B: inventario evidence-based de Empty State en las 17
+apps tenant + adopcion controlada (1 archivo migrado, 1 codigo muerto
+eliminado), posterior a DOC-M29.
+
+**F33.14-B** (Empty State, mismo rigor que F33.14-A): auditoria de **8
+candidatos** en las 17 apps tenant. Clasificacion: `SHARED_CANDIDATE`=1,
+`DUPLICATE`=4 (2 sub-variantes reales), `KEEP`=2 (patron tabla `{% empty
+%}`, estructuralmente incompatible), `OBSOLETE`=1. Detalle completo:
+`documentacion/F33_14B_EMPTY_STATE_INVENTORY.md`.
+
+**Migrado:** `clientes/clientes_list.html` (2/2 sitios,
+`data-empty-state="contactos"`/`"cartera"`) -- markup byte-identico al
+target, toggle JS por selector de atributo sin cambios. Verificado con
+`Template().render()` antes de aplicar.
+
+**Hallazgo colateral (codigo muerto, no una migracion):**
+`clientes/contactos_list.html` resulto tener **0 referencias en todo el
+repo** (ni `{% include %}`, ni vista Python) -- eliminado con evidencia,
+no migrado.
+
+**No migrado, con evidencia real (mismo patron que F33.14-A):** una
+sub-variante "compacta" (`id` en vez de `data-attr`, tamano reducido)
+aparece identica en `clientes/offcanvas_detalle_cliente.html` y
+`proveedores/offcanvas_form.html`. Ademas, **`proveedores` tiene 2
+archivos para el mismo concepto ("representantes") con 2 estilos de
+empty-state `alert-info` que ni siquiera coinciden entre si**
+(`representantes_directory.html` usa `bi-inbox`+parrafo separado,
+`list_representantes.html` usa `bi-info-circle`+texto inline) -- una
+inconsistencia real dentro de la propia app, documentada, no resuelta en
+esta pasada. `bancos/offcanvas_detalle_extracto.html` y
+`facturas/offcanvas_editar_factura.html` usan la clausula `{% empty %}`
+de Django dentro de una fila de tabla (`<tr><td colspan="N">`) --
+estructuralmente incompatible con el primitivo basado en `<div>`, no es
+la misma duplicacion.
+
+`manage.py check` PASS, governance FINAL STATUS PASS, E2E **29/29 PASS**
+(contenedor `web` reiniciado preventivamente, limpio en el primer
+intento).
+
+**Actualizacion previa:** 2026-08-14 (DOC-M29) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre F33.14-A: inventario evidence-based de Card
+KPI en las 17 apps tenant + adopcion controlada (2 archivos migrados),
+posterior a DOC-M28.
 
 **F33.14-A** (Card KPI, inventario ANTES de tocar codigo -- regla
 explicita de la mision): auditoria en 3 pasadas de precision creciente
@@ -1564,7 +1606,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.42.0 — 2026-08-14, DOC-M29)
+## 12. Metricas del Proyecto (v3.43.0 — 2026-08-14, DOC-M30)
+
+**[DOC-M30]** F33.14-B no toca modelos ni migraciones -- solo frontend
+(HTML: 1 archivo migrado a `sintel_empty_state`, sin cambios de codigo
+Python -- el templatetag ya existia desde F33.6; 1 archivo eliminado
+como codigo muerto confirmado) mas 1 documento de inventario nuevo
+(`F33_14B_EMPTY_STATE_INVENTORY.md`) y 0 archivos de test E2E nuevos.
+Ninguna fila de esta tabla cambia.
 
 **[DOC-M29]** F33.14-A no toca modelos ni migraciones -- solo frontend
 (HTML: 2 archivos migrados a `sintel_kpi_card`, sin cambios de codigo
