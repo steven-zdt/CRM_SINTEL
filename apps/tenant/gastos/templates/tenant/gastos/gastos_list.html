@@ -1,5 +1,6 @@
 {# gastos_list.html - Gastos Module v3.5 (Feature-Sliced) #}
 {# Zero JS in HTML - All logic in gasto_list.js #}
+{# F33.14-C: loading states migrados a loading_state.html (F33.6) -- markup identico. #}
 
 <div class="card shadow-sm" data-module="gastos">
   <div class="card-header bg-white">
@@ -71,12 +72,7 @@
              hx-target="this"
              hx-swap="innerHTML"
              hx-boost="true">
-          <div class="text-center py-5">
-            <div class="spinner-border" role="status">
-              <span class="visually-hidden">Cargando...</span>
-            </div>
-            <p class="mt-2 text-muted">Cargando gastos...</p>
-          </div>
+          {% include 'tenant/core/partials/ui/loading_state.html' with entity="gastos" %}
         </div>
       </div>
 
@@ -121,12 +117,7 @@
              hx-target="this"
              hx-swap="innerHTML"
              hx-boost="true">
-          <div class="text-center py-5">
-            <div class="spinner-border" role="status">
-              <span class="visually-hidden">Cargando...</span>
-            </div>
-            <p class="mt-2 text-muted">Cargando resoluciones...</p>
-          </div>
+          {% include 'tenant/core/partials/ui/loading_state.html' with entity="resoluciones" %}
         </div>
       </div>
     </div>

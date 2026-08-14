@@ -1,5 +1,6 @@
 {# compras_list.html - Compras Module v3.10.5 #}
 {# Zero JS in HTML - All logic in compras_list.js #}
+{# F33.14-C: loading state migrado a loading_state.html (F33.6) -- markup identico. #}
 
 <div class="card shadow-sm" data-module="compras">
   <div class="card-header bg-white py-3">
@@ -63,12 +64,7 @@
          hx-target="this"
          hx-swap="innerHTML"
          hx-boost="true">
-      <div class="text-center py-5">
-        <div class="spinner-border" role="status">
-          <span class="visually-hidden">Cargando...</span>
-        </div>
-        <p class="mt-2 text-muted">Cargando órdenes de compra...</p>
-      </div>
+      {% include 'tenant/core/partials/ui/loading_state.html' with entity="órdenes de compra" %}
     </div>
   </div>
 </div>
