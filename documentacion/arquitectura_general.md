@@ -1,7 +1,68 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.38.0
-**Ultima actualizacion:** 2026-08-13 (DOC-M25) — FASE 33 (Shared UI / Design
+**Version:** 3.39.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M26) — FASE 33 (Shared UI / Design
+System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
+que. Cubre F33.13 (expansion controlada, batches 1/2/4/5-parte1) y F33-R
+(revalidacion y reconciliacion formal), ambas posteriores a DOC-M25.
+
+**F33-R (revalidacion):** auditoria evidence-based (codigo/git/tests
+reales, no solo documentacion) del estado real de F33.13+ contra lo
+declarado en DOC-M25. Resultado: **F33-R = PASS** (auditoria completada
+sin bloqueos), **F33 = IN_PROGRESS sin cambio** (Resultado B,
+implementacion parcial confirmada por evidencia -- ni COMPLETED por
+evidencia insuficiente en 8/29 items del release gate, ni FAIL porque
+nada esta roto). Unico hallazgo real: discrepancia documental de conteo
+(el batch 1 de F33.13 declaraba "13 archivos", `git show --stat`
+confirma 11) -- corregida. `pytest --collect-only` ejecutado por primera
+vez tras F33.13 (2064 tests, 0 errores de coleccion). Detalle completo:
+`documentacion/F33R_EXECUTION_STATUS.md`, `F33R_FINAL_REPORT.md`,
+`F33_RECONCILIATION_MATRIX.md`.
+
+**F33.13 (expansion controlada, 4 batches ejecutados sobre el piloto
+`empresa` de DOC-M25):**
+- **Batch 1** (Offcanvas #12c/#12d restante): 11 archivos en 6 apps
+  (perfil, compras, gastos, facturas, contabilidad x6, inventario)
+  consolidados sobre `Sintel.Core.mostrarOffcanvasSeguro`, mismo patron
+  del piloto. `empleados/devengo_editor.js` investigado y **revertido**
+  tras detectar que su `setTimeout(0)` es un workaround deliberado (ya
+  documentado en F31.2) a un bug real de timing de Bootstrap, no
+  duplicacion evitable -- correccion de un error propio detectado a
+  mitad de batch, no solo del codigo preexistente.
+- **Batch 2** (codigo muerto con evidencia): 6 archivos eliminados -- 2
+  modals de confirmar-eliminar sin consumidores JS (compras, gastos) + 4
+  de 5 prototipos Tailwind huerfanos (`core/static/tenant/core/
+  {contabilidad,empresa,perfil,facturas}/index.html`; el 5o,
+  `dashboard/index.html`, se dejo intacto por estar alcanzado por
+  trafico real via el redirect post-login).
+- **Batch 4** (`ModalService`, diferido en el batch 2 por su carga
+  global): eliminado tras confirmar 0 consumidores reales (grep +
+  `tools/ekg/impact.py`), su `<script>` tag y documentacion obsoleta.
+- **Batch 5, parte 1** (confirm() nativo -> `UIManager.confirm()`,
+  subconjunto de menor riesgo): migrados los 2 unicos sitios donde toda
+  la superficie de `confirm()` nativo de la app vive en un solo
+  archivo/funcion (`ventas/resolucion_editor.js`, `perfil/
+  perfil.modals.js`). `bancos.main.js` evaluado y diferido -- su
+  `confirm()` es el fallback de un modal Bootstrap hand-rolled vivo
+  (hallazgo #5c del inventario, mayor alcance que un simple swap).
+
+Todos los batches verificados individualmente: `manage.py check` PASS,
+governance FINAL STATUS PASS, E2E 29/29 (una corrida intermedia con 10
+fallos durante el batch 2 se investigo -- `AnonRateThrottle` agotado tras
+2 suites E2E seguidas en la misma sesion, confirmado por logs 429 del
+contenedor `web`, no una regresion -- reinicio del contenedor limpio el
+cache en memoria y la re-corrida confirmo 29/29).
+
+**Pendiente, documentado con evidencia, no omision silenciosa:** batch
+5b (~28 sitios de `confirm()` restantes en ~10 apps, incl. el patron
+modal de bancos/empleados), batches 6-9 (adopcion de Card KPI/Empty
+state/Badges/Filtros -- primitivas ya existen desde DOC-M25 pero
+adopcion real = 0, requieren spot-check visual en navegador por app),
+F33.15-19 (testing formal, accesibilidad, responsive, performance,
+regresion final). Detalle completo:
+`documentacion/F33_APP_EXPANSION_MATRIX.md`, `F33_STATUS_REPORT.md`.
+
+**Actualizacion previa:** 2026-08-13 (DOC-M25) — FASE 33 (Shared UI / Design
 System), EN PROGRESO -- no cerrada, documentado con evidencia por que.
 F33.0-F33.1: inventario real de UI compartida en las 17 apps tenant (agente
 de exploracion dedicado) mas clasificacion (SHARED_EXISTING/DUPLICATE/
@@ -1367,7 +1428,18 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.38.0 — 2026-08-13, DOC-M25)
+## 12. Metricas del Proyecto (v3.39.0 — 2026-08-14, DOC-M26)
+
+**[DOC-M26]** F33.13 (batches 1/2/4/5-parte1) y F33-R (revalidacion) no
+tocan modelos ni migraciones -- solo frontend (JS: 11 archivos
+consolidados sobre `mostrarOffcanvasSeguro`, 2 archivos migrados de
+`confirm()` nativo a `UIManager.confirm()`, `ModalService` eliminado;
+HTML: 2 templates modificados, 4 shells Tailwind huerfanos + 1 modal
+service eliminados) mas 3 documentos de reconciliacion nuevos
+(`F33R_EXECUTION_STATUS.md`, `F33R_FINAL_REPORT.md`,
+`F33_RECONCILIATION_MATRIX.md`) y 0 archivos de test E2E nuevos (se
+reutilizo la suite existente, sin crear tests por cuota). Ninguna fila
+de esta tabla cambia.
 
 **[DOC-M25]** F33 (Shared UI, en progreso) no toca modelos ni migraciones
 -- solo frontend (JS: helper de offcanvas extendido, alias en UIManager;
