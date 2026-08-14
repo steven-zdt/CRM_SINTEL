@@ -186,15 +186,32 @@ fallback `confirm()` nativo) queda fuera de este cierre -- nunca aparecio
 en ningun grep de `confirm()` porque su modal se abre directamente sin
 condicional. Documentado como trabajo futuro aparte.
 
-**Batches 6-9 (Cards KPI, Empty states, Badges de estado, Filtros) —
-pendientes**, documentados con evidencia en la matriz junto con su
-motivo de diferimiento (requieren spot-check visual en navegador por
-app, no solo grep mecanico). No son omision silenciosa -- son decisiones
-de alcance explicitas para no violar la regla "nunca refactor masivo +
-migracion masiva en la misma operacion".
+**F33.14-A (Card KPI, inventario + adopcion controlada):** auditoria de
+16 candidatos en las 17 apps tenant (detalle completo:
+`documentacion/F33_14A_CARD_KPI_INVENTORY.md`). Corrige el inventario
+original de F33.0 -- de los "7 sitios duplicados" declarados, solo 2 se
+migraron sin cambiar comportamiento ni diseno (`clientes` 6/6 cards,
+`proyectos` 4/6 cards; las otras 2 cards de proyectos tienen un color no
+estandar y un font-size custom, personalizacion real no descuido).
+`cotizaciones` es byte-identico al target pero sus valores se actualizan
+por JS via `id=` (bloqueado hasta decidir si se extiende el primitivo).
+`ventas`/`gastos`/`facturas` tienen estilos propios reales (tamano,
+acento de color, tipografia) que el inventario original no distinguio.
+Se encontraron ademas 2 implementaciones de KPI card completamente
+independientes no detectadas en F33.0 (`compras`, `inventario` x2
+archivos). `manage.py check` PASS, governance PASS, E2E 29/29.
 
-## F33.14-19 — Governance rules, Accesibilidad, Responsive, Performance,
-Tests, Regresion final: **NOT_STARTED**
+**Batches 6b-9 (resto de Card KPI, Empty states, Badges de estado,
+Filtros) — pendientes**, documentados con evidencia en la matriz junto
+con su motivo de diferimiento (requieren spot-check visual en navegador
+por app, o decisiones de diseno sobre el primitivo, no solo grep
+mecanico). No son omision silenciosa -- son decisiones de alcance
+explicitas para no violar la regla "nunca refactor masivo + migracion
+masiva en la misma operacion".
+
+## F33.14-B a F33.19 — Empty states/Badges/Filtros, Governance rules,
+Accesibilidad, Responsive, Performance, Tests, Regresion final:
+**NOT_STARTED**
 
 Accesibilidad, Responsive y Performance (F33.15-17) requieren su propia
 auditoria real (lectura de markup para aria/contraste/teclado, pruebas de

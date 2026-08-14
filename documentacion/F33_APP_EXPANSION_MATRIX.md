@@ -374,12 +374,32 @@ archivos están vivos, no es código muerto. Flageado como tarea aparte
 (no se investiga ni se toca en este batch, fuera de alcance de
 "confirm() nativo").
 
+## F33.14-A — Card KPI: inventario y adopción controlada (EJECUTADO)
+
+Auditoría de 16 candidatos en las 17 apps tenant + migración de los
+únicos 2 archivos verificados como byte-idénticos al target sin
+acoplamiento funcional. Detalle completo, tabla de clasificación por
+candidato, y corrección de precisión sobre el inventario original de
+F33.0: `documentacion/F33_14A_CARD_KPI_INVENTORY.md`.
+
+**Resumen:** de los "7 sitios duplicados" que F33.0 declaraba, solo
+`clientes` (6/6 cards) y `proyectos` (4/6 cards) resultaron migrables
+sin cambiar comportamiento ni diseño. `cotizaciones` es byte-idéntico
+pero sus valores se actualizan por JS via `id=` (bloqueado hasta decidir
+si se extiende el primitivo). `ventas`/`gastos`/`facturas` tienen
+personalizaciones visuales reales (tamaño, acento de color, tipografía)
+que el inventario original no distinguió. `compras` e `inventario` (x2
+archivos) tienen implementaciones de KPI card completamente
+independientes, no detectadas en F33.0.
+
+`manage.py check` PASS, governance PASS, E2E 29/29.
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
 |---|---|---|---|
 | 5d | `empleados_list.html`/`empleado_list.js` (patrón modal hermano, sin `confirm()` nativo) | empleados | Modal hand-rolled vivo sin fallback nativo -- mismo target (`UIManager.confirm()`) pero requiere retirar el modal HTML completo, no un swap de línea. Sin urgencia (no aparece en ningún grep de `confirm()` nativo restante) |
-| 6 | Card KPI → `sintel_kpi_card` | clientes, gastos, proyectos, cotizaciones, facturas, ventas (7 sitios) | Primitiva ya existe (F33.6-9) pero adopción = 0 verificado. Cambio visual, requiere spot-check en navegador por app, no solo grep |
+| 6b | `cotizaciones` (Card KPI, bloqueado por acoplamiento JS) + `ventas`/`gastos`/`facturas`/`compras`/`inventario` (Card KPI, estilos propios reales) | cotizaciones, ventas, gastos, facturas, compras, inventario | Ver `F33_14A_CARD_KPI_INVENTORY.md` §Pendiente -- cada uno requiere su propia decisión de diseño (extender el primitivo, crear una variante, o confirmar que es intencional), no un swap mecánico |
 | 7 | Empty state hand-rolled → `empty_state.html` | clientes, bancos, facturas, proveedores (6 sitios) | Igual — primitiva existe, adopción pendiente |
 | 8 | Badges de estado (17 métodos, 7 apps) | inventario, clientes, contabilidad, gastos, ventas, empresa | Mayor divergencia visual real, requiere decisión de wording unificado antes de tocar código (no solo consolidación mecánica) |
 | 9 | Filtro/búsqueda wrapper → `filter_bar.html` | bancos, compras, gastos, proveedores, clientes, facturas, ventas, cotizaciones | Cambio visual en 8 apps, requiere spot-check navegador |
