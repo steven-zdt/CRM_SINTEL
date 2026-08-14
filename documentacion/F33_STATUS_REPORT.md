@@ -2,6 +2,12 @@
 
 **Estado global: IN_PROGRESS** (no COMPLETED -- ver razonamiento al final)
 
+**Actualizacion:** F33.13 (expansion controlada) avanzo de NOT_STARTED a
+IN_PROGRESS con 2 batches reales ejecutados y verificados (commits
+`a39fa8f`, `22373dd` -- 19 archivos tocados/eliminados en 7 apps + core,
+ver seccion F33.13 abajo y `F33_APP_EXPANSION_MATRIX.md` para el detalle
+completo).
+
 ## F33.0 — Inventario Shared UI: PASS
 
 Escaneo real de las 17 apps tenant via agente de exploracion dedicado.
@@ -86,26 +92,40 @@ cross-archivo (`mostrarOffcanvasSeguro()` invocado desde ~25 archivos de
 features no aparece como arista). Gap de completitud del grafo, documentado
 para una fase futura de EKG, no una falta real de cobertura.
 
-## F33.13-19 — Expansion controlada, Governance rules, Accesibilidad,
-Responsive, Performance, Tests, Regresion final: **NOT_STARTED**
+## F33.13 — Expansion controlada: **IN_PROGRESS** (2 batches ejecutados con evidencia)
 
-**Por que no se ejecutaron en esta pasada, con evidencia, no como omision
-silenciosa:**
+Detalle completo: `documentacion/F33_APP_EXPANSION_MATRIX.md`.
 
-La expansion controlada (F33.13) implica repetir el patron de adopcion del
-piloto (retirar el fallback duplicado + adoptar el helper consolidado +
-limpiar codigo muerto donde exista) en las otras ~13 apps que el inventario
-identifico con el mismo patron (`compras`, `gastos`, `contabilidad` x4,
-`inventario`, `perfil`, mas los ~22 consumidores de
-`UIManager.handleOffcanvas` que aun no se migraron al llamado directo del
-helper consolidado). Esto es del mismo orden de magnitud que la expansion
-de F32.7 (46 archivos, multiples sesiones de trabajo con verificacion
-individual por archivo) -- no es razonable comprimirlo en la cola de una
-sesion ya extensa sin repetir el mismo rigor de verificacion por archivo
-que F32.7 uso (grep de consumidores, migrar, `manage.py check`, spec E2E
-dedicado, commit). Intentarlo ahora violaria la regla explicita de la
-mision: "Nunca realizar refactor masivo + migracion masiva + cambio visual
-masivo en la misma operacion."
+**Batch 1 (Offcanvas #12c/#12d, commit `a39fa8f`):** 13 archivos en 6 apps
+(perfil, compras, gastos, facturas, contabilidad x7, inventario)
+consolidados sobre `Sintel.Core.mostrarOffcanvasSeguro`, mismo patron ya
+probado en el piloto empresa. Verificado con grep repo-wide (0
+instanciaciones crudas de `bootstrap.Offcanvas` restantes salvo el propio
+helper y 2 excepciones deliberadamente preservadas -- `devengo_editor.js`
+por un workaround real de timing de Bootstrap ya documentado en F31.2, y
+`facturas_main.js:66` por su contrato de 3 funciones separadas, tambien
+documentado en F31.2). `manage.py check` PASS, governance PASS, E2E 29/29.
+
+**Batch 2 (OBSOLETE con evidencia, commit `22373dd`):** 6 archivos
+eliminados -- 2 modals de confirmar-eliminar sin consumidores JS
+(compras, gastos) + 4 de los 5 prototipos Tailwind huerfanos (el 5o,
+`dashboard/index.html`, se dejo intacto por estar alcanzado por trafico
+real via el redirect post-login y por estar ya modificado por otra sesion
+concurrente). `manage.py check` PASS, governance PASS, E2E 29/29 (una
+corrida intermedia con 10 fallos se investigo y se confirmo ambiental --
+`AnonRateThrottle` agotado tras 2 suites seguidas, no una regresion; ver
+matriz para el detalle completo con evidencia de logs).
+
+**Batches 3-9 (Confirm nativo->UIManager, Cards KPI, Empty states,
+Badges de estado, Filtros) — pendientes**, documentados con evidencia en
+la matriz junto con su motivo de diferimiento (escala comparable a F32.7,
+o requieren spot-check visual en navegador por app, no solo grep
+mecanico). No son omision silenciosa -- son decisiones de alcance
+explicitas para no violar la regla "nunca refactor masivo + migracion
+masiva en la misma operacion".
+
+## F33.14-19 — Governance rules, Accesibilidad, Responsive, Performance,
+Tests, Regresion final: **NOT_STARTED**
 
 Accesibilidad, Responsive y Performance (F33.15-17) requieren su propia
 auditoria real (lectura de markup para aria/contraste/teclado, pruebas de
@@ -116,8 +136,9 @@ casilla"; genuinamente no se ejecutaron.
 **Esto NO es un bloqueo (`BLOCKED_SAFE`)** -- no hay ningun impedimento
 tecnico, de permisos, ni de credenciales. Es una decision de alcance:
 la evidencia y la infraestructura para continuar existen completas
-(inventario, contrato, helper consolidado y verificado, piloto validado),
-lo que falta es tiempo de ejecucion adicional del mismo patron ya probado.
+(inventario, contrato, helper consolidado y verificado, piloto validado,
+2 batches de expansion ya ejecutados), lo que falta es tiempo de ejecucion
+adicional del mismo patron ya probado.
 
 ## Conclusion
 
@@ -126,10 +147,13 @@ lo que falta es tiempo de ejecucion adicional del mismo patron ya probado.
 piloto --, "responsive validado", "accessibility validado") genuinamente
 no se cumplen todavia. Lo que SI esta completo y verificado con evidencia
 real (no solo documentado): inventario, clasificacion, contrato, la
-consolidacion tecnica de Offcanvas (el hallazgo de mayor severidad), 4
-primitivas UI nuevas, y un piloto real ejecutado + validado con navegador
-+ governance + regresion completa.
+consolidacion tecnica de Offcanvas (el hallazgo de mayor severidad) ahora
+extendida a las 6 apps con violaciones reales (no solo el piloto), 4
+primitivas UI nuevas, 6 archivos de codigo muerto eliminados con
+evidencia, y el piloto original real ejecutado + validado con navegador +
+governance + regresion completa.
 
-**Siguiente paso recomendado (no ejecutado en esta sesion):** F33.13,
-expansion controlada, aplicando el mismo patron del piloto app por app,
-con el mismo rigor de verificacion individual que F32.7 establecio.
+**Siguiente paso recomendado (no ejecutado todavia):** batches 3-9 de
+F33.13 (documentados en `F33_APP_EXPANSION_MATRIX.md` con su motivo de
+diferimiento cada uno), seguidos de F33.15-17 (accesibilidad, responsive,
+performance -- auditorias reales, no listas de verificacion superficiales).
