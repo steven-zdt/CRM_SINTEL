@@ -69,9 +69,12 @@ test('Inventario: crear → editar → eliminar producto', async ({ page }) => {
   await expect(page.locator(`#productos-panel:has-text("${editedName}")`)).toBeVisible({ timeout: 10000 });
 
   // **ELIMINAR producto** -- boton real: .btn-delete-producto data-uuid
-  page.once('dialog', (dialog) => dialog.accept());
+  // F33.13-B: productos_list.js migro de confirm() nativo a UIManager.confirm()
+  // (SweetAlert2) -- ya no dispara el evento 'dialog' de Playwright, hay que
+  // clickear el boton real del modal renderizado.
   const deleteBtn = page.locator(`#productos-panel tr:has-text("${editedName}") .btn-delete-producto`).first();
   await deleteBtn.click();
+  await page.locator('.swal2-confirm').click();
 
   await expect(page.locator(`#productos-panel:has-text("${editedName}")`)).toBeHidden({ timeout: 10000 });
 
