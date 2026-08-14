@@ -1,11 +1,61 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.43.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M30) — FASE 33 (Shared UI / Design
+**Version:** 3.44.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M31) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre F33.14-B: inventario evidence-based de Empty State en las 17
-apps tenant + adopcion controlada (1 archivo migrado, 1 codigo muerto
-eliminado), posterior a DOC-M29.
+que. Cubre F33.14-C: inventario evidence-based de Loading States en las
+apps tenant + adopcion controlada (2 archivos migrados, 3 sitios),
+posterior a DOC-M30.
+
+**F33.14-C** (Loading states, mismo rigor que F33.14-A/B): auditoria de
+**17 candidatos** (`spinner-border`) en las apps tenant. Clasificacion:
+`SHARED_CANDIDATE`=2 (3 sitios), `DUPLICATE`=5 (2 sub-familias reales, 7
+sitios), `KEEP` (spinner inline de boton/celda, no panel)=8 (15 sitios),
+`KEEP` (overlay global)=2 (2 sitios). Detalle completo:
+`documentacion/F33_14C_LOADING_STATE_INVENTORY.md`.
+
+**Migrado:** `gastos/gastos_list.html` (2/2 sitios: paneles "gastos" y
+"resoluciones") y `compras/compras_list.html` (1/1 sitio: panel "ordenes
+de compra") -- los 3 eran el contenido inicial byte-identico de un panel
+`hx-trigger="load"`, mismo caso de uso del partial `loading_state.html`
+(creado en F33.6). Verificado con `Template().render()` antes de aplicar.
+
+**No migrado, con evidencia real:** una familia "compacta py-4" con 2
+sub-variantes internas inconsistentes entre si (`spinner-border-sm` +
+`<span>` vs `spinner-border` normal + `<p>`) repetida en
+`clientes/offcanvas_detalle_cliente.html` y `facturas/list_factura.html`
+(x2) + `facturas/offcanvas_pendientes_factura.html` -- mismo patron de
+inconsistencia interna que F33.14-B encontro en `proveedores`. Un
+spinner JS-toggled por `data-spinner` con color propio en
+`clientes/clientes_list.html` (mecanismo distinto al del target, mismo
+tipo de hallazgo que el `data-empty-state` de F33.14-B). Un near-miss de
+un solo sitio en `contabilidad/reporte_page.html` (le falta
+`role="status"` + `span.visually-hidden`; migrarlo seria a la vez un
+cambio visual -- quitar `text-primary opacity-50` -- y una mejora de
+accesibilidad no solicitada). 8 archivos con spinners inline de
+boton/celda de tabla (estado de envio de formulario via `innerHTML` de
+JS, no el contenido inicial de un panel) en `contabilidad` y `empleados`.
+2 overlays globales (`core/workspace.html`, indicador HTMX de toda la
+app; `cotizaciones/editor_cotizacion.html`, overlay de pantalla completa
+del editor) -- patron estructuralmente distinto, sin `entity` ni
+contenedor de panel.
+
+`manage.py check` PASS, governance FINAL STATUS PASS. E2E: la primera
+corrida (post-reinicio preventivo del contenedor `web`) arrojo 18 fallos
+`net::ERR_CONNECTION_REFUSED` -- el puerto 8000 aun no aceptaba
+conexiones de red pese a que `manage.py check` via `docker compose exec`
+ya habia pasado (ese comando corre dentro del contenedor, no prueba que
+el servidor este escuchando en el puerto mapeado). Confirmado como
+carrera de arranque del contenedor, no una regresion del cambio: los 11
+tests que si alcanzaron a correr en esa misma corrida pasaron. Verificado
+el puerto activo (`curl` 200 en `/static/tenant/core/auth/login.html`)
+antes de re-correr: **29/29 PASS** (4.4m).
+
+**Actualizacion previa:** 2026-08-14 (DOC-M30) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre F33.14-B: inventario evidence-based de Empty
+State en las 17 apps tenant + adopcion controlada (1 archivo migrado, 1
+codigo muerto eliminado), posterior a DOC-M29.
 
 **F33.14-B** (Empty State, mismo rigor que F33.14-A): auditoria de **8
 candidatos** en las 17 apps tenant. Clasificacion: `SHARED_CANDIDATE`=1,
@@ -1606,7 +1656,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.43.0 — 2026-08-14, DOC-M30)
+## 12. Metricas del Proyecto (v3.44.0 — 2026-08-14, DOC-M31)
+
+**[DOC-M31]** F33.14-C no toca modelos ni migraciones -- solo frontend
+(HTML: 2 archivos migrados a `loading_state.html`, sin cambios de codigo
+Python -- el partial ya existia desde F33.6) mas 1 documento de
+inventario nuevo (`F33_14C_LOADING_STATE_INVENTORY.md`) y 0 archivos de
+test E2E nuevos (se reutilizo la suite existente, 29/29 PASS). Ninguna
+fila de esta tabla cambia.
 
 **[DOC-M30]** F33.14-B no toca modelos ni migraciones -- solo frontend
 (HTML: 1 archivo migrado a `sintel_empty_state`, sin cambios de codigo
