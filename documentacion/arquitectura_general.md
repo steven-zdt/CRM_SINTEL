@@ -1,7 +1,30 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.36.0
-**Ultima actualizacion:** 2026-08-13 (DOC-M23) — FASE 32: consolidacion del
+**Version:** 3.37.0
+**Ultima actualizacion:** 2026-08-13 (DOC-M24) — FASE 32.9: revalidacion de
+gobernanza y release gate de F32, con un metodo de busqueda deliberadamente
+distinto al que F32.6/F32.7 usaron (`fetch()` nativo + `getHeaders()`
+manual, no solo `window.http`/`w.http`) para comprobar contractualmente el
+cierre, no volver a migrarlo. Encontro 2 hallazgos reales: una regresion
+directa de F32.7 (`empleados/features/devengo_editor.js` referenciaba el
+global `w.getCookie` que F32.7 elimino -- no rompia en produccion por un
+fallback preexistente, pero era una referencia muerta; corregida a
+`Sintel.Core.Http.csrf()`) y una violacion de contrato `*.api.js` nunca
+detectada (`contabilidad/reporte/reporte.api.js` reimplementaba fetch+JWT
+manual sin refresh, el mismo bug documentado en F32.1 para los 6 archivos
+originales, en un 7o archivo que esa auditoria nunca alcanzo; migrado a
+`Sintel.Core.Http`). Ambos corregidos y verificados (spec E2E nueva,
+regresion completa 27/27, governance re-confirmado). Encontro tambien 10
+archivos con el mismo patron de duplicacion (`getHeaders()`/`getCookie()`
+propios + `fetch()` directo) que **no** se corrigieron -- documentados
+como deuda preexistente DEFERRED, no un remanente a medio migrar (nunca
+estuvieron en el alcance original de F32, corregirlos ahora habria sido
+abrir una nueva ronda de migracion masiva). Release gate: **COMPLETED**
+(`manage.py check`, `makemigrations --check`, `git diff --check`,
+governance, contrato API/JWT/CSRF/FormData y validacion de navegador, todo
+PASS). Detalle completo: `documentacion/F32_9_EXECUTION_STATUS.md`,
+`F32_9_FINAL_REPORT.md`.
+**Actualizacion previa:** 2026-08-13 (DOC-M23) — FASE 32: consolidacion del
 transporte HTTP/CSRF/JWT del frontend tenant, cerrando el cluster de deuda
 que F31 dejo explicitamente diferido (§5.2 mas abajo tiene el detalle
 tecnico completo). F32.1-F32.5: auditoria exhaustiva (encontro 5
@@ -1310,7 +1333,13 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.36.0 — 2026-08-13, DOC-M23)
+## 12. Metricas del Proyecto (v3.37.0 — 2026-08-13, DOC-M24)
+
+**[DOC-M24]** F32.9 (Governance Revalidation) no toca modelos ni
+migraciones -- solo 2 archivos de frontend (JS: `reporte.api.js`,
+`devengo_editor.js`) mas 1 archivo de test E2E nuevo
+(`tests/e2e/specs/61-f329-reporte-api-migration.spec.js`). Ninguna fila de
+esta tabla cambia.
 
 **[DOC-M23]** F32 (Frontend Transport Consolidation) no toca modelos ni
 migraciones -- solo archivos de frontend (JS/HTML: 2 archivos eliminados,
