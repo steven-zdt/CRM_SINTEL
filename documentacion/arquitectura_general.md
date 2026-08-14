@@ -1,11 +1,59 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.45.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M32) — FASE 33 (Shared UI / Design
+**Version:** 3.46.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M33) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre F33.14-D: inventario evidence-based de Filter/Search Bar en las
-apps tenant + adopcion controlada (2 archivos migrados, 3 sitios),
-posterior a DOC-M31.
+que. Cubre F33.14-E: auditoria evidence-based de Badges de Estado (cierre
+del Batch 8, 0 migraciones -- no existe primitivo previo y el unico
+candidato real tiene 3 variantes de color inconsistentes), posterior a
+DOC-M32. **Cierra formalmente los "Batches 6-9" (Shared UI adoption)** del
+roadmap: F33.14-A a F33.14-E completos, 8 archivos/12 sitios migrados en
+total, siguiente paso F33.15 (Testing).
+
+**F33.14-E** (Badges de estado, cierre de Batch 8): auditoria de **179
+metodos `render_*`** en los 13 `tables.py` de las apps tenant
+(django-tables2, Fase 5-BIS). A diferencia de F33.14-A/B/C/D, no existe
+ningun primitivo de badge compartido hoy (`sintel_ui.py` solo lo
+menciona en un comentario docstring, sin `inclusion_tag` real) -- la
+pregunta no es "adoptar un target ya construido", es "¿hay evidencia
+suficiente para crear uno nuevo?".
+
+**Hallazgo real, no migrado:** el patron booleano `render_activo`/
+`render_activa` ("Activo"/"Inactivo") se repite en **7-8 sitios de 5
+apps** (`clientes`, `contabilidad` x2, `empresa`, `inventario` x3,
+`proveedores`) pero con **3 combinaciones de color inconsistentes para
+"Inactivo"**: `bg-danger` (2 sitios), `bg-secondary` (5 sitios),
+`bg-secondary-subtle`+borde (1 sitio) -- incluso **dentro de la misma
+app** (`contabilidad` tiene `render_activa` con `bg-secondary` en un
+metodo y `render_activo` con `bg-danger` en otro; `inventario` tiene 3
+sitios con 2 estilos distintos entre si). Unificar mecanicamente
+elegiria un color sin base de diseno -- requiere decision explicita
+antes de crear cualquier helper compartido.
+
+**Resto de badges (~50 sitios), confirmado NO duplicacion:** mapeos de
+estado genuinamente especificos de cada dominio (`_BADGE_DIAN` en
+facturas, `_BADGE_ESTADO` en ventas/compras/proyectos,
+`_BADGE_TIPO_CUENTA`/`_BADGE_ESTADO_PERIODO`/`_BADGE_ESTADO_ASIENTO`/
+`_BADGE_TIPO_RETENCION`/`_BADGE_TIPO_PLANTILLA` en contabilidad,
+`_BADGE_ESTADO_EMPLEADO`/`_BADGE_TIPO_CONTRATO`/`_BADGE_ESTADO_CONTRATO`
+en empleados, etc.) -- cada enum es distinto, cada combinacion de
+icono+color es distinta, la estructura HTML difiere (algunos con `<i
+class="bi ...">`, algunos con `badge-sm`, otros con `px-2 py-1`).
+Confirma con lectura real de codigo la conclusion original documentada
+en el batch 8 de `F33_APP_EXPANSION_MATRIX.md`.
+
+**0 archivos de codigo modificados en esta sub-fase** -- crear un
+primitivo de badge nuevo sin decision de diseno previa violaria la
+prohibicion explicita de la mision F33 ("no crear mas infraestructura...
+no UniversalComponent"). Detalle completo:
+`documentacion/F33_14E_BADGES_ESTADO_INVENTORY.md`. Sin cambios de
+codigo, no aplica ciclo `manage.py check`/governance/E2E.
+
+**Actualizacion previa:** 2026-08-14 (DOC-M32) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre F33.14-D: inventario evidence-based de
+Filter/Search Bar en las apps tenant + adopcion controlada (2 archivos
+migrados, 3 sitios), posterior a DOC-M31.
 
 **F33.14-D** (Filter/search bar, mismo rigor que F33.14-A/B/C): auditoria
 de **21 candidatos** (`keyup changed delay:400ms`) en las apps tenant.
@@ -1709,7 +1757,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.45.0 — 2026-08-14, DOC-M32)
+## 12. Metricas del Proyecto (v3.46.0 — 2026-08-14, DOC-M33)
+
+**[DOC-M33]** F33.14-E no toca modelos, migraciones NI codigo de
+aplicacion -- auditoria pura (13 `tables.py` leidos, 0 modificados) mas
+1 documento de inventario nuevo
+(`F33_14E_BADGES_ESTADO_INVENTORY.md`). 0 archivos de test E2E nuevos
+(no aplico corrida, sin cambios de codigo). Ninguna fila de esta tabla
+cambia.
 
 **[DOC-M32]** F33.14-D no toca modelos ni migraciones -- solo frontend
 (HTML: 2 archivos migrados a `filter_bar.html`, sin cambios de codigo
