@@ -201,7 +201,20 @@ Se encontraron ademas 2 implementaciones de KPI card completamente
 independientes no detectadas en F33.0 (`compras`, `inventario` x2
 archivos). `manage.py check` PASS, governance PASS, E2E 29/29.
 
-**Batches 6b-9 (resto de Card KPI, Empty states, Badges de estado,
+**F33.14-B (Empty State, inventario + adopcion controlada):** auditoria
+de 8 candidatos en las 17 apps tenant (detalle:
+`documentacion/F33_14B_EMPTY_STATE_INVENTORY.md`). Solo
+`clientes/clientes_list.html` (2/2 sitios) era byte-identico al target
+sin acoplamiento funcional -- migrado. Los otros 7 se dividen en una
+sub-variante "compacta" (`id` en vez de `data-attr`, repetida en
+`clientes` y `proveedores`), 2 variantes `alert-info` en `proveedores`
+que ni siquiera coinciden entre si para el mismo concepto, y un patron
+de fila de tabla `{% empty %}` estructuralmente incompatible (`bancos`,
+`facturas`). Hallazgo colateral: `contactos_list.html` resulto ser
+codigo muerto real (0 referencias repo-wide) -- eliminado, no migrado.
+`manage.py check` PASS, governance PASS, E2E 29/29.
+
+**Batches 6b-7b-9 (resto de Card KPI, Empty state, Badges de estado,
 Filtros) — pendientes**, documentados con evidencia en la matriz junto
 con su motivo de diferimiento (requieren spot-check visual en navegador
 por app, o decisiones de diseno sobre el primitivo, no solo grep
@@ -209,9 +222,8 @@ mecanico). No son omision silenciosa -- son decisiones de alcance
 explicitas para no violar la regla "nunca refactor masivo + migracion
 masiva en la misma operacion".
 
-## F33.14-B a F33.19 — Empty states/Badges/Filtros, Governance rules,
-Accesibilidad, Responsive, Performance, Tests, Regresion final:
-**NOT_STARTED**
+## F33.14-C a F33.19 — Badges/Filtros, Governance rules, Accesibilidad,
+Responsive, Performance, Tests, Regresion final: **NOT_STARTED**
 
 Accesibilidad, Responsive y Performance (F33.15-17) requieren su propia
 auditoria real (lectura de markup para aria/contraste/teclado, pruebas de
