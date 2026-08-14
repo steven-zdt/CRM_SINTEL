@@ -1,6 +1,7 @@
 {# compras_list.html - Compras Module v3.10.5 #}
 {# Zero JS in HTML - All logic in compras_list.js #}
 {# F33.14-C: loading state migrado a loading_state.html (F33.6) -- markup identico. #}
+{# F33.14-D: search bar migrada a filter_bar.html (F33.8) -- markup identico. #}
 
 <div class="card shadow-sm" data-module="compras">
   <div class="card-header bg-white py-3">
@@ -17,23 +18,8 @@
   <div class="card-body">
     {# Toolbar #}
     <div class="d-flex justify-content-between align-items-center mb-3" data-module="compras">
-      <div class="input-group input-group-sm w-auto">
-        <input type="text"
-               id="search-compra"
-               name="q"
-               class="form-control"
-               placeholder="Buscar orden..."
-               data-module="compras"
-               data-search-input
-               hx-get="{% url 'compras:tabla' %}"
-               hx-trigger="keyup changed delay:400ms, search"
-               hx-target="#compras-panel"
-               hx-swap="innerHTML">
-        <button class="btn btn-outline-secondary" type="button"
-                data-action="search" data-module="compras" title="Buscar">
-          <i class="bi bi-search"></i>
-        </button>
-      </div>
+      {% url 'compras:tabla' as compras_search_url %}
+      {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-compra" placeholder="Buscar orden..." module="compras" search_url=compras_search_url target="#compras-panel" %}
       <div class="d-flex gap-2">
         <button class="btn btn-outline-secondary btn-sm"
                 hx-get="/api/v1/compras/plantillas/render-offcanvas/crear/"
