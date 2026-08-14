@@ -117,7 +117,15 @@ corrida intermedia con 10 fallos se investigo y se confirmo ambiental --
 `AnonRateThrottle` agotado tras 2 suites seguidas, no una regresion; ver
 matriz para el detalle completo con evidencia de logs).
 
-**Batches 3-9 (Confirm nativo->UIManager, Cards KPI, Empty states,
+**Batch 4 (ModalService, commits `6feccaa`+`68bfacd`):** eliminado
+`core/js/helpers/modal-service.js` (0 consumidores confirmados por grep
++ Impact Analysis), su `<script>` tag en `assets_core.html`, y la
+entrada obsoleta en `helpers/README.md`. Diferido en el batch 2 por su
+carga global (mayor blast radius); ejecutado ahora con su propio ciclo
+de verificacion completo. `manage.py check` PASS, governance PASS, E2E
+29/29 (corrida completa, contenedor Playwright fresco).
+
+**Batches 5-9 (Confirm nativo->UIManager, Cards KPI, Empty states,
 Badges de estado, Filtros) — pendientes**, documentados con evidencia en
 la matriz junto con su motivo de diferimiento (escala comparable a F32.7,
 o requieren spot-check visual en navegador por app, no solo grep
