@@ -1,7 +1,55 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.39.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M26) — FASE 33 (Shared UI / Design
+**Version:** 3.40.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M27) — FASE 33 (Shared UI / Design
+System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
+que. Cubre F33.13 batch 5 parte 2 (27 sitios adicionales de `confirm()`
+nativo migrados) mas un hallazgo real de E2E encontrado y corregido en el
+proceso, posterior a DOC-M26.
+
+**F33.13 batch 5, parte 2** (confirm() nativo -> `UIManager.confirm()`,
+resto de sitios aislados): migrados **27 sitios en 25 archivos, 8 apps**
+(clientes, empleados, empresa, contabilidad, proyectos, proveedores,
+inventario, facturas). Cada sitio auditado individualmente contra uso de
+`bootstrap.Modal` antes de tocarlo (regla explicita: `confirm()` aislado
+se reemplaza mecanicamente, `confirm()` integrado en modal vivo requiere
+auditoria propia) -- ningun archivo de este batch resulto tener el
+patron modal-integrado. `bancos.main.js:138` queda como **unico sitio de
+`confirm()` nativo restante en todo `apps/tenant/**`**, confirmado
+deliberadamente diferido (fallback de un modal Bootstrap hand-rolled
+vivo, hallazgo #5c del inventario F33.0, requiere retirar el modal HTML
+completo, no un swap de linea).
+
+**Hallazgo real durante la verificacion (no ambiental, no cosmetico):**
+2 specs E2E existentes (`10-clientes-crud.spec.js`,
+`30-contabilidad-cuenta-crud.spec.js`) dependian de
+`page.once('dialog', (dialog) => dialog.accept())` -- el patron de
+Playwright para `window.confirm()` **nativo**. `UIManager.confirm()`
+renderiza un modal SweetAlert2 real (DOM), no dispara el evento
+`dialog` del navegador -- el handler quedaba inerte y el flujo de
+eliminar nunca se completaba en el test (la fila permanecia visible tras
+"eliminar"). Corregido en los 2 specs (clic real sobre `.swal2-confirm`
+tras el boton eliminar), no en el codigo de produccion -- el
+comportamiento nuevo es correcto/mejorado, el test asumia el mecanismo
+viejo. Verificado que ningun otro spec comparte el patron contra un
+archivo de este batch (`20-inventario-productos-crud.spec.js` usa el
+mismo handler pero contra `productos_list.js`, no tocado, sigue
+correcto).
+
+Verificacion: `manage.py check` PASS, governance FINAL STATUS PASS. E2E:
+2 corridas intermedias con fallos masivos (10 y 26 fallos) se
+investigaron y confirmaron `AnonRateThrottle` agotado -- error `429`
+literal en el texto de fallo de Playwright, mismo patron ya documentado
+en el batch 2; el contenedor `web` se reinicio 2 veces mas en el proceso
+para limpiar el cache en memoria (`LocMemCache`, no destructivo). Corrida
+limpia final: **28/29 PASS** -- el unico fallo restante
+(`63-f3310-empresa-pilot.spec.js`) es la flakiness de login()
+pre-existente ya documentada en el propio comentario de
+`tests/e2e/specs/_helpers.js`, no relacionada con este batch. Los 2
+specs objetivo de la correccion pasaron limpiamente. Detalle completo:
+`documentacion/F33_APP_EXPANSION_MATRIX.md`, `F33_STATUS_REPORT.md`.
+
+**Actualizacion previa:** 2026-08-14 (DOC-M26) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
 que. Cubre F33.13 (expansion controlada, batches 1/2/4/5-parte1) y F33-R
 (revalidacion y reconciliacion formal), ambas posteriores a DOC-M25.
@@ -1428,7 +1476,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.39.0 — 2026-08-14, DOC-M26)
+## 12. Metricas del Proyecto (v3.40.0 — 2026-08-14, DOC-M27)
+
+**[DOC-M27]** F33.13 batch 5 parte 2 no toca modelos ni migraciones --
+solo frontend (JS: 25 archivos con 27 sitios de `confirm()` nativo
+migrados a `UIManager.confirm()`) mas 2 archivos de test E2E corregidos
+(`10-clientes-crud.spec.js`, `30-contabilidad-cuenta-crud.spec.js`, 0
+tests nuevos -- correccion de un supuesto de test desactualizado, no
+cobertura nueva). Ninguna fila de esta tabla cambia.
 
 **[DOC-M26]** F33.13 (batches 1/2/4/5-parte1) y F33-R (revalidacion) no
 tocan modelos ni migraciones -- solo frontend (JS: 11 archivos
