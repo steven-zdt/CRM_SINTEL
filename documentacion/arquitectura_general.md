@@ -1,11 +1,54 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.41.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M28) — FASE 33 (Shared UI / Design
+**Version:** 3.42.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M29) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre F33.13-B: cierre completo de `confirm()` nativo en todo
-`apps/tenant/**` (bancos + un gap real detectado en el grep de batch 5),
-posterior a DOC-M27.
+que. Cubre F33.14-A: inventario evidence-based de Card KPI en las 17 apps
+tenant + adopcion controlada (2 archivos migrados), posterior a DOC-M28.
+
+**F33.14-A** (Card KPI, inventario ANTES de tocar codigo -- regla
+explicita de la mision): auditoria en 3 pasadas de precision creciente
+sobre `apps/tenant/**/*.html` encontro **16 candidatos** (no los 7 que
+declaraba el inventario original de F33.0). Clasificacion:
+`SHARED_CANDIDATE`=3, `APP_SPECIFIC`=3, `DUPLICATE`=6, `KEEP`=4 (falsos
+positivos -- circulos de avatar/foto, no metricas). Detalle completo:
+`documentacion/F33_14A_CARD_KPI_INVENTORY.md`.
+
+**Correccion real al inventario de F33.0:** de los "7 sitios copiados
+verbatim" que F33.0 declaraba, la lectura completa de cada archivo
+(no solo el grep de la firma superficial) encontro que **solo 3 son
+realmente byte-identicos** al target `sintel_kpi_card` -- `clientes`,
+`proyectos` (parcial) y `cotizaciones`. Los otros 4
+(`ventas`/`gastos`/`facturas`) tienen personalizaciones visuales reales
+(tamano de circulo distinto, acento de color de 3px, tipografia de
+label en mayusculas, tamanos de fuente mixtos) que el grep original no
+distinguio -- migrarlos habria violado la regla explicita del propio
+`sintel_ui.py`: "no se cambia ningun pixel de lo que ya funciona".
+`cotizaciones`, aunque byte-identico en markup, actualiza sus valores
+por JavaScript via `id=` (`cotizaciones.table.js`) -- el primitivo
+actual no acepta un parametro `id`, migrarlo habria roto el mecanismo
+de actualizacion. Se encontraron ademas **2 implementaciones de KPI
+card completamente independientes**, no detectadas en F33.0
+(`compras/partials/tabla_compras.html`, estilo plano sin icono;
+`inventario/partials/{tabla_activos,tabla_productos}.html`, estilo
+"chip compacto" duplicado dos veces dentro de la misma app).
+
+**Migrado (verificado sin riesgo):**
+`clientes/partials/tabla_clientes.html` (6/6 cards) y
+`proyectos/partials/tabla_proyectos.html` (4/6 cards -- las 2 restantes,
+"Avance Prom." con color `purple` no estandar y "Cartera Total" con
+font-size custom para un valor monetario largo, se dejan intactas por
+ser personalizacion real). Verificado con `Template().render()` antes
+de aplicar a los templates: output byte-identico al markup original.
+`manage.py check` PASS, governance FINAL STATUS PASS, E2E **29/29 PASS**
+(contenedor `web` reiniciado preventivamente, limpio en el primer
+intento).
+
+**Actualizacion previa:** 2026-08-14 (DOC-M28) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre F33.13-B: cierre completo de `confirm()`
+nativo en todo `apps/tenant/**` (bancos + un gap real detectado en el
+grep de batch 5), posterior a DOC-M27.
 
 **F33.13-B** (cierre de `confirm()` nativo, prioridad explicita:
 auditoria completa antes de tocar codigo): `bancos.main.js` -- unico
@@ -1521,7 +1564,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.41.0 — 2026-08-14, DOC-M28)
+## 12. Metricas del Proyecto (v3.42.0 — 2026-08-14, DOC-M29)
+
+**[DOC-M29]** F33.14-A no toca modelos ni migraciones -- solo frontend
+(HTML: 2 archivos migrados a `sintel_kpi_card`, sin cambios de codigo
+Python -- el templatetag ya existia desde F33.9) mas 1 documento de
+inventario nuevo (`F33_14A_CARD_KPI_INVENTORY.md`) y 0 archivos de test
+E2E nuevos (se reutilizo la suite existente). Ninguna fila de esta tabla
+cambia.
 
 **[DOC-M28]** F33.13-B no toca modelos ni migraciones -- solo frontend
 (JS: `bancos.main.js` + 3 archivos de inventario migrados a
