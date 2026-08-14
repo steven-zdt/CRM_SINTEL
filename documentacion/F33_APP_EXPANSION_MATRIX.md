@@ -437,6 +437,27 @@ overlays globales (`workspace.html`, `editor_cotizacion.html`).
 
 `manage.py check` PASS, governance PASS, E2E ver `F33_STATUS_REPORT.md`.
 
+## F33.14-D — Filter/Search Bar: inventario y adopción controlada (EJECUTADO)
+
+Auditoría de 21 candidatos (`keyup changed delay:400ms`) en las apps
+tenant, mismo rigor que F33.14-A/B/C. Detalle completo:
+`documentacion/F33_14D_FILTER_BAR_INVENTORY.md`.
+
+**Resumen:** solo `compras/compras_list.html` (1/1 sitio) y
+`gastos/gastos_list.html` (2/2 sitios) eran el markup byte-idéntico al
+target (`input-group input-group-sm w-auto` + `data-search-input` +
+boton `data-action="search"`) -- migrados. Los otros 19 candidatos se
+dividen en: una familia real de 4 archivos "icono-prefijo, sin boton"
+(`clientes`, `proyectos`, `ventas`, `facturas`) con `hx-include` para
+combinar con filtros por pestaña; una familia de 2 archivos cuyo wrapper
+coincide pero difiere en el boton (`bancos` no tiene boton de busqueda
+en absoluto, `proveedores` tiene un boton con su propio `hx-get`
+autosuficiente en vez del handler JS del target); y 13 archivos con un
+patron "input bare" sin wrapper ni boton (`contabilidad` x5, `empleados`
+x5 sitios, `empresa` x2 archivos, `perfil`, `inventario` x4).
+
+`manage.py check` PASS, governance PASS, E2E ver `F33_STATUS_REPORT.md`.
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
@@ -445,6 +466,7 @@ overlays globales (`workspace.html`, `editor_cotizacion.html`).
 | 6b | `cotizaciones` (Card KPI, bloqueado por acoplamiento JS) + `ventas`/`gastos`/`facturas`/`compras`/`inventario` (Card KPI, estilos propios reales) | cotizaciones, ventas, gastos, facturas, compras, inventario | Ver `F33_14A_CARD_KPI_INVENTORY.md` §Pendiente -- cada uno requiere su propia decisión de diseño (extender el primitivo, crear una variante, o confirmar que es intencional), no un swap mecánico |
 | 7b | Empty state "compacto" (`clientes`, `proveedores`) + 2 variantes `alert-info` inconsistentes entre sí en `proveedores` + patrón tabla `{% empty %}` (`bancos`, `facturas`) | clientes, proveedores, bancos, facturas | Ver `F33_14B_EMPTY_STATE_INVENTORY.md` §Pendiente -- cada sub-variante requiere su propia decisión de diseño, no un swap mecánico. `proveedores` en particular tiene una inconsistencia interna real (2 archivos, mismo concepto, 2 estilos) que amerita resolverse antes de tocar el primitivo global |
 | 7c | Loading state "compacto py-4" (`clientes`, `facturas` x2 archivos) con 2 sub-variantes internas + `data-spinner` JS-toggled en `clientes_list.html` + near-miss de accesibilidad en `contabilidad/reporte_page.html` | clientes, facturas, contabilidad | Ver `F33_14C_LOADING_STATE_INVENTORY.md` §Pendiente -- misma lógica que 7b: cada sub-variante requiere su propia decisión de diseño antes de tocar el primitivo o crear uno nuevo |
+| 9b | Filter bar "icono-prefijo, sin boton" (`clientes`, `proyectos`, `ventas`, `facturas`) + `bancos` (falta boton) + `proveedores` (boton con mecanismo distinto) + familia "input bare" sin wrapper ni boton (13 archivos: `contabilidad`, `empleados`, `empresa`, `perfil`, `inventario`) | clientes, proyectos, ventas, facturas, bancos, proveedores, contabilidad, empleados, empresa, perfil, inventario | Ver `F33_14D_FILTER_BAR_INVENTORY.md` §Pendiente -- la familia "icono-prefijo" es la candidata mas fuerte para una 2a variante del primitivo, pero requiere decision de diseno explicita antes de extenderlo; la familia "input bare" (13 archivos) implicaria anadir wrapper+boton donde hoy no existen, cambio visual real fuera de "adopcion controlada" |
 | 8 | Badges de estado (17 métodos, 7 apps) | inventario, clientes, contabilidad, gastos, ventas, empresa | Mayor divergencia visual real, requiere decisión de wording unificado antes de tocar código (no solo consolidación mecánica) |
 | 9 | Filtro/búsqueda wrapper → `filter_bar.html` | bancos, compras, gastos, proveedores, clientes, facturas, ventas, cotizaciones | Cambio visual en 8 apps, requiere spot-check navegador |
 | 10 | `routes.js`/`crud.js` (`core/js/helpers/`) | global | Investigado: **NO están muertos** — `routes.js` tiene un consumidor real y guardado (`inventario.api.js:getApiBase()`, con fallback si no está disponible). Fuera del alcance de F33 (Shared UI) — es capa de datos ("Aislamiento Gradual"), no UI. Se deja documentado, no se toca. |

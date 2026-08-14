@@ -240,7 +240,26 @@ tests que si corrieron pasaron. Re-corrida completa tras confirmar el
 puerto activo (`curl` 200 en `/static/tenant/core/auth/login.html`):
 **29/29 PASS** (4.4m).
 
-**Batches 6b-7b-7c-9 (resto de Card KPI, Empty state, Loading states,
+**F33.14-D (Filter/search bar, inventario + adopcion controlada):**
+auditoria de 21 candidatos (`keyup changed delay:400ms`) en las apps
+tenant (detalle: `documentacion/F33_14D_FILTER_BAR_INVENTORY.md`). Solo
+`compras/compras_list.html` (1/1 sitio) y `gastos/gastos_list.html`
+(2/2 sitios) eran el markup byte-identico al target (`input-group
+input-group-sm w-auto` + `data-search-input` + boton
+`data-action="search"`) -- migrados. Los otros 19 se dividen en: una
+familia real de 4 archivos "icono-prefijo, sin boton" (`clientes`,
+`proyectos`, `ventas`, `facturas`), casi siempre con `hx-include` para
+combinar con filtros por pestaña/estado; 2 archivos cuyo wrapper
+coincide pero el boton difiere (`bancos` no tiene boton de busqueda en
+absoluto, `proveedores` tiene un boton con su propio `hx-get`
+autosuficiente en vez del handler JS del target); y 13 archivos con un
+patron "input bare" sin wrapper ni boton (`contabilidad` x5, `empleados`
+x5 sitios, `empresa` x2 archivos, `perfil`, `inventario` x4). `manage.py
+check` PASS, governance PASS, E2E **29/29 PASS** (4.7m, contenedor `web`
+verificado activo -- `curl` 200 -- antes de correr, tras el mismo
+hallazgo de carrera de arranque que F33.14-C).
+
+**Batches 6b-7b-7c-8-9b (resto de Card KPI, Empty state, Loading states,
 Badges de estado, Filtros) — pendientes**, documentados con evidencia en
 la matriz junto con su motivo de diferimiento (requieren spot-check
 visual en navegador por app, o decisiones de diseno sobre el primitivo,
@@ -248,7 +267,7 @@ no solo grep mecanico). No son omision silenciosa -- son decisiones de
 alcance explicitas para no violar la regla "nunca refactor masivo +
 migracion masiva en la misma operacion".
 
-## F33.14-D a F33.19 — Filtros, Governance rules, Accesibilidad,
+## F33.15 a F33.19 — Governance rules, Accesibilidad,
 Responsive, Performance, Tests, Regresion final: **NOT_STARTED**
 
 Accesibilidad, Responsive y Performance (F33.15-17) requieren su propia
