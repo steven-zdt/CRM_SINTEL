@@ -1,11 +1,64 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.44.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M31) — FASE 33 (Shared UI / Design
+**Version:** 3.45.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M32) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre F33.14-C: inventario evidence-based de Loading States en las
+que. Cubre F33.14-D: inventario evidence-based de Filter/Search Bar en las
 apps tenant + adopcion controlada (2 archivos migrados, 3 sitios),
-posterior a DOC-M30.
+posterior a DOC-M31.
+
+**F33.14-D** (Filter/search bar, mismo rigor que F33.14-A/B/C): auditoria
+de **21 candidatos** (`keyup changed delay:400ms`) en las apps tenant.
+Clasificacion: `SHARED_CANDIDATE`=2 (3 sitios), `DUPLICATE`=8 (2
+sub-familias reales, 10 sitios), `KEEP` (patron "input bare", sin
+wrapper ni boton)=13 (19 sitios). Detalle completo:
+`documentacion/F33_14D_FILTER_BAR_INVENTORY.md`.
+
+**Migrado:** `compras/compras_list.html` (1/1 sitio) y
+`gastos/gastos_list.html` (2/2 sitios) -- los 3 eran el markup
+byte-identico al target `filter_bar.html` (`input-group input-group-sm
+w-auto` + `data-search-input`/`data-module` + boton
+`data-action="search"`, creado en F33.8 pero sin consumidores hasta
+ahora). La URL de cada boton se resuelve con `{% url ... as var %}`
+(mismo patron ya usado en `empleados/partials/tabla_liquidacion_detalle.html`)
+y se pasa como `search_url` al `{% include %}` -- misma resolucion de
+URL que la version inline anterior, sin cambio de comportamiento.
+Verificado con `Template().render()` (estructura byte-identica con una
+URL de prueba; la resolucion real de `{% url %}` requiere contexto de
+tenant/schema no disponible en un shell aislado).
+
+**No migrado, con evidencia real:** una familia consistente de 4
+archivos "icono-prefijo, sin boton" (`clientes/clientes_list.html`,
+`proyectos/proyectos_list.html`, `ventas/list_ventas.html`,
+`facturas/list_factura.html`) -- `input-group-text` con icono ANTES del
+input en vez de un boton DESPUES, casi siempre con `hx-include` para
+combinar con filtros activos por pestaña/estado; es la candidata mas
+fuerte para una 2a variante del primitivo, pero requiere decision de
+diseno explicita. `bancos/list_bancos.html` (2 sitios) tiene el wrapper
+correcto pero **no tiene boton de busqueda en absoluto**. 
+`proveedores/proveedores_list.html` (2 sitios) tiene wrapper y boton,
+pero el boton dispara su propio `hx-get`+`hx-include` autosuficiente en
+vez del handler JS `data-action="search"` del target. 13 archivos
+(`contabilidad` x5, `empleados` x5 sitios, `empresa` x2 archivos,
+`perfil`, `inventario` x4) usan un input `form-control` bare sin
+wrapper `input-group` ni boton -- migrarlos anadiria elementos de UI que
+hoy no existen, cambio de diseno real en 13 archivos, fuera del alcance
+de "adopcion controlada".
+
+`manage.py check` PASS, governance FINAL STATUS PASS. E2E: mismo
+hallazgo de carrera de arranque del contenedor `web` que F33.14-C (la
+primera verificacion post-restart con `manage.py check` via `docker
+compose exec` no prueba que el puerto 8000 este escuchando en red) --
+esta vez detectado y corregido ANTES de correr el suite completo
+(esperando a que `curl` devolviera 200 en
+`/static/tenant/core/auth/login.html`): **29/29 PASS** (4.7m), sin
+fallos intermedios.
+
+**Actualizacion previa:** 2026-08-14 (DOC-M31) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre F33.14-C: inventario evidence-based de Loading
+States en las apps tenant + adopcion controlada (2 archivos migrados, 3
+sitios), posterior a DOC-M30.
 
 **F33.14-C** (Loading states, mismo rigor que F33.14-A/B): auditoria de
 **17 candidatos** (`spinner-border`) en las apps tenant. Clasificacion:
@@ -1656,7 +1709,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.44.0 — 2026-08-14, DOC-M31)
+## 12. Metricas del Proyecto (v3.45.0 — 2026-08-14, DOC-M32)
+
+**[DOC-M32]** F33.14-D no toca modelos ni migraciones -- solo frontend
+(HTML: 2 archivos migrados a `filter_bar.html`, sin cambios de codigo
+Python -- el partial ya existia desde F33.8) mas 1 documento de
+inventario nuevo (`F33_14D_FILTER_BAR_INVENTORY.md`) y 0 archivos de
+test E2E nuevos (se reutilizo la suite existente, 29/29 PASS). Ninguna
+fila de esta tabla cambia.
 
 **[DOC-M31]** F33.14-C no toca modelos ni migraciones -- solo frontend
 (HTML: 2 archivos migrados a `loading_state.html`, sin cambios de codigo
