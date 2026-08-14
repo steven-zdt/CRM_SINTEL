@@ -312,65 +312,26 @@
 
   /**
    * Maneja la apertura/cierre de Offcanvas Bootstrap 5 de forma segura
-   * ⚠️ v3.5: Implementa limpieza de backdrops y destrucción de instancias previas
-   * 
+   *
+   * F33.4: alias delgado sobre Sintel.Core.mostrarOffcanvasSeguro -- este
+   * archivo tenia su propia reimplementacion independiente del mismo
+   * problema (F33.0 §12b, ~22 consumidores con adopcion comparable al
+   * helper "oficial" de AGENTS.md §26). Un solo cuerpo de logica real
+   * ahora vive en offcanvas.helper.js; esta funcion solo traduce el
+   * contrato boolean que sus consumidores existentes esperan.
+   *
    * @param {string|Element} selector - Selector CSS o Elemento DOM
    * @param {string} action - 'show' o 'hide'
    * @returns {boolean}
    */
   function handleOffcanvas(selector, action = 'show') {
     if (!selector) return false;
-    const el = (typeof selector === 'string') ? d.querySelector(selector) : selector;
-    if (!el) {
-      console.warn(`[UIManager] handleOffcanvas: Elemento ${selector} no encontrado`);
-      // ⚠️ v3.7: Si intentamos ocultar pero el elemento ya no existe, 
-      // forzar limpieza de backdrops por si acaso
-      if (action === 'hide') {
-        _forceCleanup();
-      }
+    if (!w.Sintel || !w.Sintel.Core || !w.Sintel.Core.mostrarOffcanvasSeguro) {
+      console.error('[UIManager] Sintel.Core.mostrarOffcanvasSeguro no disponible');
       return false;
     }
-
-    if (typeof bootstrap === 'undefined' || !bootstrap.Offcanvas) {
-      console.error('[UIManager] Bootstrap Offcanvas no disponible');
-      return false;
-    }
-
-    try {
-      let instance = bootstrap.Offcanvas.getInstance(el);
-      
-      if (action === 'show') {
-        // ⚠️ v3.5: Limpieza preventiva de backdrops huérfanos que bloquean la UI
-        _forceCleanup();
-
-        // Si ya existe una instancia, la destruimos para evitar conflictos de estado
-        if (instance) {
-          instance.dispose();
-        }
-        
-        instance = new bootstrap.Offcanvas(el);
-        instance.show();
-      } else {
-        // ⚠️ v3.6: Si no hay instancia pero el elemento existe, crear una para cerrar
-        if (!instance) {
-          instance = new bootstrap.Offcanvas(el);
-        }
-        instance.hide();
-        // Limpieza de instancia tras el cierre para liberar recursos
-        el.addEventListener('hidden.bs.offcanvas', () => {
-            // Verificar que el elemento siga en el DOM antes de disponer
-            if (d.body.contains(el)) {
-                const currentInstance = bootstrap.Offcanvas.getInstance(el);
-                if (currentInstance) currentInstance.dispose();
-            }
-        }, { once: true });
-      }
-      return true;
-    } catch (e) {
-      console.error('[UIManager] Error handleOffcanvas:', e);
-      _forceCleanup(); // Fallback de seguridad
-      return false;
-    }
+    const result = w.Sintel.Core.mostrarOffcanvasSeguro(selector, { action });
+    return result !== null;
   }
 
   /**
