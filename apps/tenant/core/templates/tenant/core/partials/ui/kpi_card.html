@@ -1,0 +1,14 @@
+{# F33.9: markup identico al ya usado en 7 archivos (F33_SHARED_UI_INVENTORY.md §1) #}
+<div class="{{ col_class }}">
+  <div class="card border-0 shadow-sm h-100">
+    <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+      <div class="rounded-circle bg-{{ color }} bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+        <i class="bi bi-{{ icon }} text-{{ color }}"></i>
+      </div>
+      <div class="min-w-0">
+        <div class="fs-4 fw-bold lh-1 mb-1">{{ value }}</div>
+        <div class="small text-muted text-truncate">{{ label }}</div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,21 @@
+{# F33.8: markup identico a la variante mas usada de barra de busqueda #}
+{# (F33_SHARED_UI_INVENTORY.md §6, input-group + boton). El comportamiento #}
+{# HTMX (debounce 400ms, name="q") ya era consistente antes de este partial #}
+{# -- esto solo deja de copiar-pegar el wrapper de markup. #}
+<div class="input-group input-group-sm w-auto">
+  <input type="text"
+         id="{{ search_id }}"
+         name="q"
+         class="form-control"
+         placeholder="{{ placeholder }}"
+         data-module="{{ module }}"
+         data-search-input
+         hx-get="{{ search_url }}"
+         hx-trigger="keyup changed delay:400ms, search"
+         hx-target="{{ target }}"
+         hx-swap="innerHTML">
+  <button class="btn btn-outline-secondary" type="button"
+          data-action="search" data-module="{{ module }}" title="Buscar">
+    <i class="bi bi-search"></i>
+  </button>
+</div>
