@@ -110,19 +110,63 @@ helper y las 2 excepciones documentadas abajo.
   estructura de llaves intacta (sin `node --check` disponible en este
   entorno, mismo entorno reportado en F31.2).
 
+## Batch 2 — OBSOLETE con evidencia (EJECUTADO)
+
+Regla aplicada: solo se elimina con evidencia de 0 consumidores reales
+(F33.24). Cada candidato del inventario se re-verificó individualmente
+antes de tocarlo -- uno de los 5 originalmente listados resultó tener
+más matices de los que el inventario capturaba (ver abajo).
+
+| Candidato | Verificación | Acción |
+|---|---|---|
+| `compras_list.html` -- modal `#confirmarEliminarModalCompras` | 0 referencias JS (grep del ID y de `#btn-confirmar-eliminar-compras` en toda la app: solo el propio template y el doc de auditoría) | Eliminado (18 líneas de markup muerto) |
+| `gastos_list.html` -- modal `#confirmarEliminarModal` (sin sufijo) | 0 referencias JS. Bonus: compartía el mismo `id` sin sufijo que `empleados_list.html:408` (que sí está vivo) -- riesgo real de colisión de ID si ambos fragmentos coexistieran en el DOM | Eliminado |
+| `core/static/tenant/core/contabilidad/index.html` | 0 render/redirect real -- solo mencionado en comentarios/docstrings de `views_ui.py` (vista deprecada que retorna 404) | Eliminado |
+| `core/static/tenant/core/empresa/index.html` | Igual -- solo mencionado en comentario de `urls_ui.py` | Eliminado |
+| `core/static/tenant/core/perfil/index.html` | 0 referencias en absoluto (ni siquiera en comentarios) | Eliminado |
+| `core/static/tenant/core/facturas/index.html` | 0 referencias en absoluto | Eliminado |
+| `core/static/tenant/core/dashboard/index.html` | **NO eliminado** -- a diferencia de sus 4 hermanos, este SÍ es alcanzado por tráfico real: el redirect post-login (`/dashboard/`, `apps/tenant/core/api/viewsets.py`) sirve exactamente este shell (ya documentado desde F32.5/F33.10 como "roto pero alcanzable", referencia a `core/js/lib/http.js` eliminado en F32.7). Además ya está modificado sin commitear por otra sesión en este mismo árbol de trabajo (`git status` lo mostraba `M` antes de este batch) -- tocarlo aquí arriesgaría pisar ese trabajo en curso. Queda fuera de este batch. |
+| `ModalService` (`core/js/helpers/modal-service.js`) | 0 consumidores reales (solo se referencia a sí mismo + 1 doc archivado), pero cargado globalmente en `assets_core.html` en cada página tenant | **NO eliminado en este batch** -- mayor blast radius que los anteriores (afecta las 17 apps simultáneamente), merece su propio ciclo de verificación aislado, no combinarlo con limpieza app-específica |
+
+**Total: 6 archivos eliminados** (2 modals muertos + 4 shells Tailwind
+huérfanos), 3 apps + core.
+
+### Verificación
+
+- `manage.py check`: PASS.
+- Governance: **FINAL STATUS: PASS**.
+- E2E, primer intento: **19/29 PASS, 10 fallos** -- investigado antes de
+  asumir regresión. Logs del contenedor `web` mostraron la causa real:
+  `[WARNING] django.request: Too Many Requests` +
+  `"POST /api/v1/core/auth/login/ HTTP/1.1" 429`. El `AnonRateThrottle`
+  (`config/settings.py`, ya documentado como fuente de falsos negativos en
+  sesiones anteriores) se agotó tras 2 suites E2E completas corridas
+  seguidas en la misma sesión (cada `login()` cuenta contra el limite). Los
+  10 fallos compartían el mismo síntoma (`page.waitForURL` timeout dentro
+  de `login()`), incluyendo specs que no tocan ningún archivo de este
+  batch (`62-f334-offcanvas-consolidation.spec.js`, que ni siquiera
+  navega a una app de negocio) -- confirma causa compartida en el
+  transporte de login, no en el código editado.
+- Cache de throttle es `LocMemCache` (en memoria del proceso `web`, no
+  Redis) -- se limpia reiniciando el contenedor (`docker compose restart
+  web`, no destructivo, sin perdida de datos de BD). Tras el reinicio:
+  **E2E, segundo intento: 29/29 PASS** (suite completa, incluye
+  `30-contabilidad-cuenta-crud.spec.js` y los 2 specs de F33.4/F33.10 que
+  ejercitan Offcanvas real). Confirma que los 10 fallos eran 100%
+  ambientales, cero regresión real de este batch.
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
 |---|---|---|---|
-| 2 | OBSOLETE: modals muertos `confirmarEliminarModal` | compras, gastos | Requiere confirmar 0 referencias JS por archivo antes de borrar (regla F33.24) — no ejecutado aún en esta sesión |
-| 3 | OBSOLETE: 2 prototipos Tailwind huérfanos | dashboard, contabilidad, empresa, facturas, perfil (`core/static/tenant/core/*/index.html`) | Mismo motivo — pendiente de confirmar 0 referencias |
-| 4 | `ModalService` (`core/js/helpers/modal-service.js`) | global (cargado en `assets_core.html`) | 0 consumidores reales confirmados por grep (solo se referencia a sí mismo + 1 doc archivado), pero es infraestructura cargada globalmente — mayor blast radius que Offcanvas, requiere su propio ciclo de verificación antes de eliminar |
+| 4 | `ModalService` (`core/js/helpers/modal-service.js`) | global (cargado en `assets_core.html`) | Ver batch 2 -- mayor blast radius, requiere su propio ciclo de verificación antes de eliminar |
 | 5 | Confirmaciones nativas → `UIManager.confirm()` | ~12 apps, ~30 sitios | Escala comparable a F32.7 (46 archivos) — expansión masiva explícitamente prohibida en una sola operación. Requiere su propio batch app-por-app |
 | 6 | Card KPI → `sintel_kpi_card` | clientes, gastos, proyectos, cotizaciones, facturas, ventas (7 sitios) | Primitiva ya existe (F33.6-9) pero adopción = 0 verificado. Cambio visual, requiere spot-check en navegador por app, no solo grep |
 | 7 | Empty state hand-rolled → `empty_state.html` | clientes, bancos, facturas, proveedores (6 sitios) | Igual — primitiva existe, adopción pendiente |
 | 8 | Badges de estado (17 métodos, 7 apps) | inventario, clientes, contabilidad, gastos, ventas, empresa | Mayor divergencia visual real, requiere decisión de wording unificado antes de tocar código (no solo consolidación mecánica) |
 | 9 | Filtro/búsqueda wrapper → `filter_bar.html` | bancos, compras, gastos, proveedores, clientes, facturas, ventas, cotizaciones | Cambio visual en 8 apps, requiere spot-check navegador |
-| 10 | `routes.js`/`crud.js` (`core/js/helpers/`) | global | Investigado en este batch: **NO están muertos** — `routes.js` tiene un consumidor real y guardado (`inventario.api.js:getApiBase()`, con fallback si no está disponible). Fuera del alcance de F33 (Shared UI) — es capa de datos ("Aislamiento Gradual"), no UI. Se deja documentado, no se toca. |
+| 10 | `routes.js`/`crud.js` (`core/js/helpers/`) | global | Investigado: **NO están muertos** — `routes.js` tiene un consumidor real y guardado (`inventario.api.js:getApiBase()`, con fallback si no está disponible). Fuera del alcance de F33 (Shared UI) — es capa de datos ("Aislamiento Gradual"), no UI. Se deja documentado, no se toca. |
+| 11 | `core/static/tenant/core/dashboard/index.html` | dashboard/core | Ver batch 2 -- alcanzado por tráfico real vía redirect post-login, y ya modificado por otra sesión concurrente. Requiere su propio análisis (¿arreglar el shell, o corregir el redirect para que no dependa de él?) fuera del alcance de "eliminar código muerto" |
 
 ## Apps no evaluadas todavía en este ciclo
 
