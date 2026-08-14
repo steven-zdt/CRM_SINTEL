@@ -77,7 +77,7 @@
                     return;
                 }
 
-                if (!confirm('¿Está seguro de eliminar este activo fijo?')) return;
+                if (!(await w.UIManager?.confirm('¿Está seguro de eliminar este activo fijo?'))) return;
 
                 const originalHTML = btnDelete.innerHTML;
                 btnDelete.disabled = true;

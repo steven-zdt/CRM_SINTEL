@@ -268,7 +268,7 @@
   }
 
   async function handleEliminarLinea(uuid, lineaId, tbodySel) {
-    if (!confirm('Eliminar esta linea?')) return;
+    if (!(await w.UIManager?.confirm('Eliminar esta linea?'))) return;
     try {
       await w.PlantillaAPI.eliminarLinea(uuid, lineaId);
       showSuccess('Linea eliminada');

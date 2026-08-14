@@ -29,7 +29,7 @@
 
     async function cancelarContrato(uuid) {
         if (!uuid) return;
-        if (!confirm('Confirmar cancelacion del contrato. Esta accion no se puede deshacer.')) return;
+        if (!(await w.UIManager?.confirm('Confirmar cancelacion del contrato. Esta accion no se puede deshacer.'))) return;
 
         const api = API();
         if (!api) return;

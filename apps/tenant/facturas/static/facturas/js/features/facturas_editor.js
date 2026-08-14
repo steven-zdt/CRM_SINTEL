@@ -442,14 +442,14 @@
         // ⚠️ Event Delegation: Eliminar ítem
         const tbody = d.querySelector('#tbody-items-factura');
         if (tbody) {
-            tbody.addEventListener('click', (e) => {
+            tbody.addEventListener('click', async (e) => {
                 const btnEliminar = e.target.closest('.btn-eliminar-item');
                 if (btnEliminar) {
                     e.preventDefault();
                     const itemId = btnEliminar.getAttribute('data-item-id');
                     const row = btnEliminar.closest('tr');
-                    
-                    if (row && confirm('¿Está seguro de eliminar este ítem?')) {
+
+                    if (row && (await w.UIManager?.confirm('¿Está seguro de eliminar este ítem?'))) {
                         row.remove();
                         actualizarTotalesEnDOM();
                         

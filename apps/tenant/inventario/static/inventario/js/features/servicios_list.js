@@ -58,7 +58,7 @@
                 e.preventDefault();
                 const uuid = btnDelete.dataset.uuid;
                 if (!uuid) return;
-                if (!confirm('¿Está seguro de eliminar este servicio? Esta acción no se puede deshacer.')) return;
+                if (!(await w.UIManager?.confirm('¿Está seguro de eliminar este servicio? Esta acción no se puede deshacer.'))) return;
 
                 const originalHTML = btnDelete.innerHTML;
                 btnDelete.disabled = true;

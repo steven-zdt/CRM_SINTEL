@@ -29,7 +29,7 @@
     const panel = d.querySelector(PANEL_SELECTOR);
     if (!panel) return;
 
-    panel.addEventListener('click', (ev) => {
+    panel.addEventListener('click', async (ev) => {
       const btnVer = ev.target.closest('.btn-ver-plantilla');
       const btnEditar = ev.target.closest('.btn-editar-plantilla');
       const btnEliminar = ev.target.closest('.btn-eliminar-plantilla');
@@ -51,7 +51,7 @@
       if (btnEliminar) {
         ev.preventDefault();
         const uuid = btnEliminar.dataset.uuid;
-        if (uuid && confirm('Eliminar esta plantilla contable? Se eliminaran todas sus lineas.')) {
+        if (uuid && (await w.UIManager?.confirm('Eliminar esta plantilla contable? Se eliminaran todas sus lineas.'))) {
           if (w.PlantillaEditor && typeof w.PlantillaEditor.delete === 'function') {
             w.PlantillaEditor.delete(uuid);
           }

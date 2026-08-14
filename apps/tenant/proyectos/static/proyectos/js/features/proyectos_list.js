@@ -65,7 +65,7 @@
                 e.stopPropagation();
                 const uuid = btnDel.getAttribute('data-uuid');
                 if (!uuid) return;
-                if (!confirm('¿Eliminar este proyecto? Esta acción no se puede deshacer.')) return;
+                if (!(await w.UIManager?.confirm('¿Eliminar este proyecto? Esta acción no se puede deshacer.'))) return;
                 const orig = btnDel.innerHTML;
                 btnDel.disabled = true;
                 btnDel.innerHTML = '<i class="bi bi-hourglass-split"></i>';

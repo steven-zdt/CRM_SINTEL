@@ -304,7 +304,7 @@ window.Sintel.Proveedores = window.Sintel.Proveedores || {};
    * @param {string|null} proveedorUuid  Para recargar la tabla correcta tras eliminar.
    */
   mod.eliminarRepresentante = async (representanteUuid, proveedorUuid) => {
-    if (!confirm('¿Está seguro de eliminar este representante?')) return false;
+    if (!(await w.UIManager?.confirm('¿Está seguro de eliminar este representante?'))) return false;
     try {
       await api.eliminar(representanteUuid);
       _notify('Representante eliminado correctamente', 'success');

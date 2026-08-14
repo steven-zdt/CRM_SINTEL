@@ -116,7 +116,7 @@
     }
 
     async function eliminar(uuid, button) {
-        if (!uuid || !confirm('Eliminar esta tarea corta?')) return;
+        if (!uuid || !(await w.UIManager?.confirm('Eliminar esta tarea corta?'))) return;
         if (button) button.disabled = true;
         try {
             const response = await w.proyectosAPI?.tareasCortas?.delete(uuid);

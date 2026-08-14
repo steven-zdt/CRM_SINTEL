@@ -187,7 +187,7 @@
      * Anular nómina
      */
     async function anular(id) {
-        if (!confirm('¿Está seguro de que desea anular esta nómina?')) return;
+        if (!(await w.UIManager?.confirm('¿Está seguro de que desea anular esta nómina?'))) return;
 
         try {
             const resp = await w.Sintel.Core.Http.request('POST', `${API_BASE}devengos/${id}/anular/`);

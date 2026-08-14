@@ -375,7 +375,7 @@
    * Acción de eliminación
    */
   async function eliminar(id) {
-    if (!confirm('¿Seguro que desea eliminar este proveedor?')) return;
+    if (!(await w.UIManager?.confirm('¿Seguro que desea eliminar este proveedor?'))) return;
 
     const api = w.Sintel.Proveedores.API;
     if (!api) return;

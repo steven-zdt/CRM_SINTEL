@@ -65,7 +65,7 @@
 
     async function anularDevengo(uuid) {
         if (!uuid) return;
-        if (!confirm('¿Confirma anular esta nómina? La operación no puede revertirse.')) return;
+        if (!(await w.UIManager?.confirm('¿Confirma anular esta nómina? La operación no puede revertirse.'))) return;
         try {
             const resp = await w.Sintel.Core.Http.request('POST', `/api/v1/empleados/devengos/${uuid}/anular/`);
             if (resp.ok) {

@@ -45,13 +45,13 @@
         const panel = d.querySelector(PANEL_SELECTOR);
         if (!panel) return;
 
-        panel.addEventListener('click', (ev) => {
+        panel.addEventListener('click', async (ev) => {
             const btn = ev.target.closest('.btn-eliminar-resolucion');
             if (!btn) return;
             ev.preventDefault();
             const uuid = btn.dataset.uuid;
             if (!uuid) return;
-            if (!confirm('¿Eliminar esta resolución DIAN? Esta acción no se puede deshacer.')) return;
+            if (!(await w.UIManager?.confirm('¿Eliminar esta resolución DIAN? Esta acción no se puede deshacer.'))) return;
             _eliminar(uuid);
         });
     }

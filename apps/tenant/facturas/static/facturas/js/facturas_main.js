@@ -193,7 +193,7 @@
         }
 
         // Confirmación
-        if (!confirm('¿Está seguro de eliminar esta factura? Esta acción no se puede deshacer.')) {
+        if (!(await w.UIManager?.confirm('¿Está seguro de eliminar esta factura? Esta acción no se puede deshacer.'))) {
             return false;
         }
 

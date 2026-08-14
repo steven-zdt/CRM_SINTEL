@@ -57,7 +57,7 @@
                 e.preventDefault();
                 e.stopPropagation();
                 const id = btnDelete.getAttribute('data-id');
-                if (!id || !confirm('Eliminar esta configuracion de buzon?')) return;
+                if (!id || !(await w.UIManager?.confirm('Eliminar esta configuracion de buzon?'))) return;
                 const originalHTML = btnDelete.innerHTML;
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';

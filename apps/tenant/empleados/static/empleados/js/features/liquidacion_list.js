@@ -93,7 +93,7 @@
         const panel = d.querySelector(DETAIL_PANEL);
         if (!panel) return;
 
-        panel.addEventListener('click', (ev) => {
+        panel.addEventListener('click', async (ev) => {
             const btnNueva = ev.target.closest('.btn-nueva-liquidacion-header');
             if (btnNueva) {
                 ev.preventDefault();
@@ -112,7 +112,7 @@
             const btnEliminar = ev.target.closest('.btn-eliminar-liquidacion');
             if (btnEliminar) {
                 ev.preventDefault();
-                if (!confirm('Eliminar esta liquidacion? Esta accion no se puede deshacer.')) return;
+                if (!(await w.UIManager?.confirm('Eliminar esta liquidacion? Esta accion no se puede deshacer.'))) return;
                 eliminarLiquidacion(btnEliminar.dataset.uuid);
             }
         });

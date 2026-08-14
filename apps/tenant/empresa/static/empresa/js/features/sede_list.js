@@ -53,7 +53,7 @@
                 e.preventDefault();
                 e.stopPropagation();
                 const uuid = btnDelete.getAttribute('data-uuid');
-                if (!uuid || !confirm('Eliminar esta sede?')) return;
+                if (!uuid || !(await w.UIManager?.confirm('Eliminar esta sede?'))) return;
                 const originalHTML = btnDelete.innerHTML;
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';

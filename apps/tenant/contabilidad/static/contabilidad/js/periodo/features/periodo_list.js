@@ -29,7 +29,7 @@
     const panel = d.querySelector(PANEL_SELECTOR);
     if (!panel) return;
 
-    panel.addEventListener('click', (ev) => {
+    panel.addEventListener('click', async (ev) => {
       const btnVer = ev.target.closest('.btn-ver-periodo');
       const btnEditar = ev.target.closest('.btn-editar-periodo');
       const btnCerrar = ev.target.closest('.btn-cerrar-periodo');
@@ -61,7 +61,7 @@
       if (btnEliminar) {
         ev.preventDefault();
         const uuid = btnEliminar.dataset.uuid;
-        if (uuid && confirm('¿Está seguro de que desea eliminar este periodo contable?')) {
+        if (uuid && (await w.UIManager?.confirm('¿Está seguro de que desea eliminar este periodo contable?'))) {
           if (w.PeriodoEditor && typeof w.PeriodoEditor.delete === 'function') {
             w.PeriodoEditor.delete(uuid);
           }

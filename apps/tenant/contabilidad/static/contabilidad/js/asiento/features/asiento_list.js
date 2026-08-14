@@ -29,7 +29,7 @@
     const panel = d.querySelector(PANEL_SELECTOR);
     if (!panel) return;
 
-    panel.addEventListener('click', (ev) => {
+    panel.addEventListener('click', async (ev) => {
       const btnVer = ev.target.closest('.btn-ver-asiento');
       const btnEditar = ev.target.closest('.btn-editar-asiento');
       const btnAprobar = ev.target.closest('.btn-aprobar-asiento');
@@ -61,7 +61,7 @@
       if (btnEliminar) {
         ev.preventDefault();
         const uuid = btnEliminar.dataset.uuid;
-        if (uuid && confirm('¿Está seguro de que desea eliminar este asiento contable?')) {
+        if (uuid && (await w.UIManager?.confirm('¿Está seguro de que desea eliminar este asiento contable?'))) {
           if (w.AsientoEditor && typeof w.AsientoEditor.delete === 'function') {
             w.AsientoEditor.delete(uuid);
           }

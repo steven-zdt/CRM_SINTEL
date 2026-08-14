@@ -29,7 +29,7 @@
     const panel = d.querySelector(PANEL_SELECTOR);
     if (!panel) return;
 
-    panel.addEventListener('click', (ev) => {
+    panel.addEventListener('click', async (ev) => {
       const btnVer = ev.target.closest('.btn-ver-cuenta');
       const btnEditar = ev.target.closest('.btn-editar-cuenta');
       const btnEliminar = ev.target.closest('.btn-eliminar-cuenta');
@@ -51,7 +51,7 @@
       if (btnEliminar) {
         ev.preventDefault();
         const uuid = btnEliminar.dataset.uuid;
-        if (uuid && confirm('¿Está seguro de que desea eliminar esta cuenta contable?')) {
+        if (uuid && (await w.UIManager?.confirm('¿Está seguro de que desea eliminar esta cuenta contable?'))) {
           if (w.CuentaEditor && typeof w.CuentaEditor.delete === 'function') {
             w.CuentaEditor.delete(uuid);
           }

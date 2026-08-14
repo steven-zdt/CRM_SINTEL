@@ -52,7 +52,7 @@
                 e.preventDefault();
                 const uuid = btnDelete.dataset.uuid;
                 if (!uuid) return;
-                if (!confirm('¿Está seguro de eliminar esta categoría? Los ítems asociados quedarán sin categoría.')) return;
+                if (!(await w.UIManager?.confirm('¿Está seguro de eliminar esta categoría? Los ítems asociados quedarán sin categoría.'))) return;
 
                 btnDelete.disabled = true;
                 const originalHTML = btnDelete.innerHTML;

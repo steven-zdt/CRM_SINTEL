@@ -1490,7 +1490,7 @@
         },
 
         async eliminar(itemId) {
-            if (!confirm('¿Eliminar este ítem de presupuesto?')) return;
+            if (!(await w.UIManager?.confirm('¿Eliminar este ítem de presupuesto?'))) return;
 
             const resp = await w.proyectosAPI.presupuesto.delete(itemId);
             if (!resp.ok) {
@@ -1735,7 +1735,7 @@
         },
 
         async eliminar(tareaId) {
-            if (!confirm('¿Eliminar esta tarea?')) return;
+            if (!(await w.UIManager?.confirm('¿Eliminar esta tarea?'))) return;
 
             const resp = await w.proyectosAPI.tareasDiarias.delete(tareaId);
             if (!resp.ok) {
