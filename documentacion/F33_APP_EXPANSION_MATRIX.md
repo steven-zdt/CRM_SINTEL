@@ -155,11 +155,39 @@ huérfanos), 3 apps + core.
   ejercitan Offcanvas real). Confirma que los 10 fallos eran 100%
   ambientales, cero regresión real de este batch.
 
+## Batch 4 — `ModalService` (código muerto global, EJECUTADO)
+
+Diferido en el batch 2 explícitamente por su mayor blast radius (carga
+global vía `assets_core.html`, no app-específica). Ejecutado como su
+propio ciclo aislado de verificación, tal como se documentó que
+requeriría:
+
+1. **Re-verificación de 0 consumidores** (grep repo-wide de `ModalService`):
+   solo el propio archivo + 2 menciones documentales (`documentacion/_archive/COOKBOOK_MODALES_CRUD.md`,
+   docs de esta misma fase). Ningún `.open(`/`.close(`/`.clear(` invocado
+   en ningún JS de `apps/tenant/**`.
+2. **Impact Analysis** (`tools/ekg/impact.py --path "modal-service.js" --offline`):
+   4 impactados (los 3 shells `workspace.html`/`assets_dashboard.html`/
+   `assets_landing.html` que incluyen `assets_core.html`, mismo patrón ya
+   documentado en F33.12), 0 tests en el grafo -- consistente con "0
+   consumidores reales", no una alarma nueva.
+3. **Eliminación**: `apps/tenant/core/static/core/js/helpers/modal-service.js`
+   borrado + su `<script>` tag en `assets_core.html` removido + la línea
+   que lo documentaba en `core/js/helpers/README.md` corregida (quedaba
+   describiendo un archivo que ya no existe).
+
+### Verificación
+
+- `manage.py check`: PASS.
+- Governance: **FINAL STATUS: PASS**.
+- E2E: **29/29 PASS** (suite completa, contenedor Playwright efímero
+  fresco), corrida completa por ser cambio de carga global, mismo
+  criterio que exigió diferir este batch en primer lugar.
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
 |---|---|---|---|
-| 4 | `ModalService` (`core/js/helpers/modal-service.js`) | global (cargado en `assets_core.html`) | Ver batch 2 -- mayor blast radius, requiere su propio ciclo de verificación antes de eliminar |
 | 5 | Confirmaciones nativas → `UIManager.confirm()` | ~12 apps, ~30 sitios | Escala comparable a F32.7 (46 archivos) — expansión masiva explícitamente prohibida en una sola operación. Requiere su propio batch app-por-app |
 | 6 | Card KPI → `sintel_kpi_card` | clientes, gastos, proyectos, cotizaciones, facturas, ventas (7 sitios) | Primitiva ya existe (F33.6-9) pero adopción = 0 verificado. Cambio visual, requiere spot-check en navegador por app, no solo grep |
 | 7 | Empty state hand-rolled → `empty_state.html` | clientes, bancos, facturas, proveedores (6 sitios) | Igual — primitiva existe, adopción pendiente |

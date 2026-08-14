@@ -13,7 +13,6 @@
 - **crud.js**: `create/read/update/delete/readSingleton/updateSingleton` (devuelve `{ok,status,data}`).
 - **module.js**: bootstrap estándar con `onInit/onBindEvents`.
 - **error-service.js**: `DataTable.ext.errMode='none'` + listener `dt-error`. [dtdocs.com](https://dtdocs.com/), [stackoverflow.com](https://stackoverflow.com/questions/74244263/how-do-i-make-deferrender-work-for-datatables-on-a-page-client-side-processing)
-- **modal-service.js**: modales base (open/close, onSubmit).
 
 ## Convenciones
 
