@@ -416,6 +416,27 @@ tocarlo) -- eliminado, no migrado.
 
 `manage.py check` PASS, governance PASS, E2E 29/29.
 
+## F33.14-C — Loading States: inventario y adopción controlada (EJECUTADO)
+
+Auditoría de 17 candidatos (`spinner-border`) en las apps tenant, mismo
+rigor que F33.14-A/B. Detalle completo:
+`documentacion/F33_14C_LOADING_STATE_INVENTORY.md`.
+
+**Resumen:** solo `gastos/gastos_list.html` (2/2 sitios) y
+`compras/compras_list.html` (1/1 sitio) eran el contenido inicial
+byte-idéntico de un panel `hx-trigger="load"` -- migrados. Los otros 14
+candidatos se dividen en: una familia "compacta py-4" con 2 sub-variantes
+internas inconsistentes entre sí, repetida en `clientes` y `facturas` (4
+sitios, 3 archivos); un spinner JS-toggled por `data-spinner` con color
+propio en `clientes_list.html` (mecanismo distinto al del target); un
+near-miss de un solo sitio en `contabilidad/reporte_page.html` (le falta
+`role="status"`/`span.visually-hidden`, migrar sería a la vez un cambio
+visual y una mejora de accesibilidad no solicitada); 8 archivos con
+spinners inline de botón/celda de tabla (estado de envío, no panel); y 2
+overlays globales (`workspace.html`, `editor_cotizacion.html`).
+
+`manage.py check` PASS, governance PASS, E2E ver `F33_STATUS_REPORT.md`.
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
@@ -423,6 +444,7 @@ tocarlo) -- eliminado, no migrado.
 | 5d | `empleados_list.html`/`empleado_list.js` (patrón modal hermano, sin `confirm()` nativo) | empleados | Modal hand-rolled vivo sin fallback nativo -- mismo target (`UIManager.confirm()`) pero requiere retirar el modal HTML completo, no un swap de línea. Sin urgencia (no aparece en ningún grep de `confirm()` nativo restante) |
 | 6b | `cotizaciones` (Card KPI, bloqueado por acoplamiento JS) + `ventas`/`gastos`/`facturas`/`compras`/`inventario` (Card KPI, estilos propios reales) | cotizaciones, ventas, gastos, facturas, compras, inventario | Ver `F33_14A_CARD_KPI_INVENTORY.md` §Pendiente -- cada uno requiere su propia decisión de diseño (extender el primitivo, crear una variante, o confirmar que es intencional), no un swap mecánico |
 | 7b | Empty state "compacto" (`clientes`, `proveedores`) + 2 variantes `alert-info` inconsistentes entre sí en `proveedores` + patrón tabla `{% empty %}` (`bancos`, `facturas`) | clientes, proveedores, bancos, facturas | Ver `F33_14B_EMPTY_STATE_INVENTORY.md` §Pendiente -- cada sub-variante requiere su propia decisión de diseño, no un swap mecánico. `proveedores` en particular tiene una inconsistencia interna real (2 archivos, mismo concepto, 2 estilos) que amerita resolverse antes de tocar el primitivo global |
+| 7c | Loading state "compacto py-4" (`clientes`, `facturas` x2 archivos) con 2 sub-variantes internas + `data-spinner` JS-toggled en `clientes_list.html` + near-miss de accesibilidad en `contabilidad/reporte_page.html` | clientes, facturas, contabilidad | Ver `F33_14C_LOADING_STATE_INVENTORY.md` §Pendiente -- misma lógica que 7b: cada sub-variante requiere su propia decisión de diseño antes de tocar el primitivo o crear uno nuevo |
 | 8 | Badges de estado (17 métodos, 7 apps) | inventario, clientes, contabilidad, gastos, ventas, empresa | Mayor divergencia visual real, requiere decisión de wording unificado antes de tocar código (no solo consolidación mecánica) |
 | 9 | Filtro/búsqueda wrapper → `filter_bar.html` | bancos, compras, gastos, proveedores, clientes, facturas, ventas, cotizaciones | Cambio visual en 8 apps, requiere spot-check navegador |
 | 10 | `routes.js`/`crud.js` (`core/js/helpers/`) | global | Investigado: **NO están muertos** — `routes.js` tiene un consumidor real y guardado (`inventario.api.js:getApiBase()`, con fallback si no está disponible). Fuera del alcance de F33 (Shared UI) — es capa de datos ("Aislamiento Gradual"), no UI. Se deja documentado, no se toca. |

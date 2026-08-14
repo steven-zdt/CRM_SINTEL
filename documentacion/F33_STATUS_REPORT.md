@@ -214,15 +214,41 @@ de fila de tabla `{% empty %}` estructuralmente incompatible (`bancos`,
 codigo muerto real (0 referencias repo-wide) -- eliminado, no migrado.
 `manage.py check` PASS, governance PASS, E2E 29/29.
 
-**Batches 6b-7b-9 (resto de Card KPI, Empty state, Badges de estado,
-Filtros) — pendientes**, documentados con evidencia en la matriz junto
-con su motivo de diferimiento (requieren spot-check visual en navegador
-por app, o decisiones de diseno sobre el primitivo, no solo grep
-mecanico). No son omision silenciosa -- son decisiones de alcance
-explicitas para no violar la regla "nunca refactor masivo + migracion
-masiva en la misma operacion".
+**F33.14-C (Loading states, inventario + adopcion controlada):**
+auditoria de 17 candidatos (`spinner-border`) en las apps tenant
+(detalle: `documentacion/F33_14C_LOADING_STATE_INVENTORY.md`). Solo
+`gastos/gastos_list.html` (2/2 sitios) y `compras/compras_list.html`
+(1/1 sitio) eran el contenido inicial byte-identico de un panel
+`hx-trigger="load"` -- migrados. Los otros 14 se dividen en: una familia
+"compacta py-4" con 2 sub-variantes internas inconsistentes entre si,
+repetida en `clientes` y `facturas` (4 sitios, 3 archivos); un spinner
+JS-toggled por `data-spinner` con color propio en `clientes_list.html`
+(mecanismo distinto al del target, mismo patron que el hallazgo
+`data-empty-state` de F33.14-B); un near-miss de un solo sitio en
+`contabilidad/reporte_page.html` (le falta `role="status"` +
+`span.visually-hidden`, migrarlo seria a la vez un cambio visual y una
+mejora de accesibilidad no solicitada); 8 archivos con spinners inline
+de boton/celda de tabla (estado de envio de formulario, no panel); y 2
+overlays globales (`workspace.html`, `editor_cotizacion.html`).
+`manage.py check` PASS, governance PASS. E2E: primera corrida post-
+restart del contenedor `web` arrojo 18 fallos `ERR_CONNECTION_REFUSED`
+(el puerto 8000 aun no aceptaba conexiones pese a que `manage.py check`
+via `docker compose exec` ya pasaba -- ese comando no prueba que el
+servidor este escuchando en red) -- confirmado como carrera de arranque
+del contenedor, no una regresion del cambio, verificando que los 11
+tests que si corrieron pasaron. Re-corrida completa tras confirmar el
+puerto activo (`curl` 200 en `/static/tenant/core/auth/login.html`):
+**29/29 PASS** (4.4m).
 
-## F33.14-C a F33.19 — Badges/Filtros, Governance rules, Accesibilidad,
+**Batches 6b-7b-7c-9 (resto de Card KPI, Empty state, Loading states,
+Badges de estado, Filtros) — pendientes**, documentados con evidencia en
+la matriz junto con su motivo de diferimiento (requieren spot-check
+visual en navegador por app, o decisiones de diseno sobre el primitivo,
+no solo grep mecanico). No son omision silenciosa -- son decisiones de
+alcance explicitas para no violar la regla "nunca refactor masivo +
+migracion masiva en la misma operacion".
+
+## F33.14-D a F33.19 — Filtros, Governance rules, Accesibilidad,
 Responsive, Performance, Tests, Regresion final: **NOT_STARTED**
 
 Accesibilidad, Responsive y Performance (F33.15-17) requieren su propia
