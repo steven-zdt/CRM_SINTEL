@@ -487,12 +487,11 @@
                             configurarEventosOffcanvasPendientes(offcanvasEl, offcanvasData);
                             
                             // Mostrar offcanvas
-                            if (w.bootstrap && w.bootstrap.Offcanvas) {
-                                const bsOffcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
-                                bsOffcanvas.show();
+                            if (w.Sintel?.Core?.mostrarOffcanvasSeguro) {
+                                w.Sintel.Core.mostrarOffcanvasSeguro(offcanvasEl);
                                 console.log(`${MOD} Offcanvas de facturas pendientes abierto`);
                             } else {
-                                console.error(`${MOD} Bootstrap.Offcanvas no está disponible`);
+                                console.error(`${MOD} Sintel.Core.mostrarOffcanvasSeguro no está disponible`);
                             }
                         } else {
                             console.error(`${MOD} Offcanvas no encontrado después de cargar HTML`);

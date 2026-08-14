@@ -577,11 +577,7 @@
             abrir: function() {
                 const el = d.querySelector(SELECTORS.OFFCANVAS);
                 if (el) {
-                    d.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
-                    d.body.classList.remove('overflow-hidden', 'modal-open');
-                    var prev = w.bootstrap?.Offcanvas?.getInstance(el);
-                    if (prev) prev.dispose();
-                    if (w.bootstrap?.Offcanvas) new w.bootstrap.Offcanvas(el).show();
+                    w.Sintel?.Core?.mostrarOffcanvasSeguro(el);
                 }
             },
             cerrar: cerrarOffcanvas

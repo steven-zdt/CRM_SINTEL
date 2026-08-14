@@ -107,8 +107,7 @@
                     if (!offcanvasEl) return;
 
                     try {
-                        const offcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
-                        offcanvas.show();
+                        w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
 
                         const formGasto = offcanvasEl.querySelector('#gasto-form');
                         if (formGasto) {
@@ -268,8 +267,7 @@
                 const offcanvasEl = target.querySelector('.offcanvas');
                 if (offcanvasEl && w.bootstrap?.Offcanvas) {
                     try {
-                        const offcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
-                        offcanvas.show();
+                        w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
 
                         const formGasto = offcanvasEl.querySelector('#gasto-form');
                         if (formGasto) {

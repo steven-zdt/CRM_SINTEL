@@ -55,8 +55,7 @@
         if (container) {
           container.innerHTML = html;
           var offcanvasEl = d.getElementById('offcanvas-perfil-editar');
-          var bsOffcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
-          bsOffcanvas.show();
+          w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
         }
       })
       .catch(err => {
@@ -78,8 +77,7 @@
         if (container) {
           container.innerHTML = html;
           var offcanvasEl = d.getElementById('offcanvas-perfil-detalle');
-          var bsOffcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
-          bsOffcanvas.show();
+          w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
         }
       })
       .catch(err => {

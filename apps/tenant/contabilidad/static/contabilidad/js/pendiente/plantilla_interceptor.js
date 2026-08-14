@@ -143,9 +143,8 @@
       return;
     }
 
-    // Mostrar offcanvas con Bootstrap
-    const bsOffcanvas = new w.bootstrap.Offcanvas(offcanvasEl, { backdrop: true, scroll: false });
-    bsOffcanvas.show();
+    // Mostrar offcanvas con Bootstrap (dispose + limpieza de backdrop -- AGENTS.md §26)
+    const bsOffcanvas = w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
 
     // Agregar boton "Guardar y Activar" si no existe ya en el offcanvas
     _inyectarBotonActivar(offcanvasEl, uuid, bsOffcanvas, onActivadaCallback);

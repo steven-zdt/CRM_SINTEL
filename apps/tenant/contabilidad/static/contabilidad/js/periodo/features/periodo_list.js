@@ -16,14 +16,7 @@
   function showOffcanvas(id) {
     const el = d.getElementById(id);
     if (!el) return;
-    if (w.UIManager?.handleOffcanvas) {
-      w.UIManager.handleOffcanvas(el, 'show');
-    } else {
-      const p = w.bootstrap?.Offcanvas?.getInstance(el);
-      if (p) p.dispose();
-      d.querySelectorAll('.offcanvas-backdrop').forEach((b) => b.remove());
-      new w.bootstrap.Offcanvas(el).show();
-    }
+    w.Sintel?.Core?.mostrarOffcanvasSeguro(el);
   }
 
   function htmxLoad(url, offcanvasId) {

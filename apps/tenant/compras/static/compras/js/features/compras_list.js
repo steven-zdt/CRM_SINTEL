@@ -86,8 +86,7 @@
                     if (!offcanvasEl) return;
 
                     try {
-                        const offcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
-                        offcanvas.show();
+                        w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
 
                         const formCompra = offcanvasEl.querySelector('#compra-crear-form') || offcanvasEl.querySelector('#compra-editar-form');
                         if (formCompra) {
@@ -290,8 +289,7 @@
                 const offcanvasEl = target.querySelector('.offcanvas');
                 if (offcanvasEl && w.bootstrap?.Offcanvas) {
                     try {
-                        const offcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
-                        offcanvas.show();
+                        w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
                         const formCompra = offcanvasEl.querySelector('#compra-crear-form') || offcanvasEl.querySelector('#compra-editar-form');
                         if (formCompra) {
                             d.body.dispatchEvent(new CustomEvent('compra-editor-init', { detail: { form: formCompra } }));
@@ -308,8 +306,7 @@
                 const offcanvasEl = target.querySelector('.offcanvas');
                 if (offcanvasEl && w.bootstrap?.Offcanvas) {
                     try {
-                        const offcanvas = new w.bootstrap.Offcanvas(offcanvasEl);
-                        offcanvas.show();
+                        w.Sintel?.Core?.mostrarOffcanvasSeguro(offcanvasEl);
                         initPlantillaForm(offcanvasEl);
                     } catch (error) {
                         console.error('[ComprasList] Error abriendo offcanvas plantilla HTMX:', error);
