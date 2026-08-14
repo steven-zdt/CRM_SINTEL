@@ -1,5 +1,7 @@
+{% load sintel_ui %}
 {# clientes_list.html - Clientes & Contactos Module v3.10 #}
 {# ⚠️ ZERO JS IN HTML: All logic in clientes.list.js #}
+{# F33.14-B: empty states migrados a sintel_empty_state (F33.6) -- markup identico. #}
 
 <div class="ui-module ui-clientes" role="region" aria-label="Modulo de Clientes">
 
@@ -129,10 +131,7 @@
             <p class="mt-2 text-muted small">Cargando contactos...</p>
           </div>
           <div id="grid-contactos" data-grid="contactos" style="min-height:360px;"></div>
-          <div data-empty-state="contactos" class="text-center py-5" style="display:none;">
-            <i class="bi bi-inbox text-muted" style="font-size:2.5rem;"></i>
-            <p class="mt-2 text-muted">No hay contactos registrados</p>
-          </div>
+          {% sintel_empty_state "No hay contactos registrados" data_attr="contactos" %}
         </div>
       </div>
     </div>
@@ -188,10 +187,7 @@
             <p class="mt-2 text-muted small">Cargando cartera...</p>
           </div>
           <div id="grid-cartera" data-grid="cartera" style="min-height:360px;"></div>
-          <div data-empty-state="cartera" class="text-center py-5" style="display:none;">
-            <i class="bi bi-inbox text-muted" style="font-size:2.5rem;"></i>
-            <p class="mt-2 text-muted">No hay cuentas por cobrar registradas</p>
-          </div>
+          {% sintel_empty_state "No hay cuentas por cobrar registradas" data_attr="cartera" %}
         </div>
       </div>
     </div>
