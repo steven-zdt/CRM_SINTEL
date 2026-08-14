@@ -224,11 +224,92 @@ nunca peor que el comportamiento anterior.
   suite E2E, que sí ejecuta interacciones reales de Playwright contra el
   servidor.
 
+## Batch 5, parte 2 — Confirmaciones nativas, resto de sitios aislados (EJECUTADO)
+
+Continuación directa de la parte 1, mismo criterio explícito acordado:
+`confirm() aislado → UIManager.confirm()` mecánico; `confirm() integrado
+en modal vivo → auditar primero, no reemplazo mecánico`.
+
+**Auditoría previa a tocar código:** se re-grepeó `bootstrap\.Modal` en
+todo `apps/tenant/**/*.js` (6 archivos) y se cruzó contra los ~28 sitios
+de `confirm()` restantes. Solo `bancos.main.js` y `empleado_list.js`
+(ya migrado en F33.10/no tenía confirm() nativo en la lista) resultaron
+tener Modal + confirm() relacionados. Los otros 3 archivos con
+`bootstrap.Modal` (`facturas_main.js`, `facturas_editor.js`,
+`inventario/productos_list.js`) se verificaron línea por línea: su uso
+de Modal es para una feature completamente distinta (offcanvas de
+"facturas pendientes", visor de imagen), no relacionada con sus sitios
+de `confirm()` -- confirmado **aislado**, no modal-integrado.
+
+**27 sitios migrados** en 21 archivos, 8 apps:
+
+| App | Archivos | Sitios |
+|---|---|---|
+| clientes | `clientes.list.js` | 2 (deleteCliente, deleteContacto) |
+| empleados | `resolucion_list.js`, `nomina_list.js`, `nomina_historial.js`, `liquidacion_list.js`, `contrato_list.js` | 5 |
+| empresa | `sede_list.js`, `area_list.js`, `mailinboxconfig_list.js` | 3 |
+| contabilidad | `plantilla_list.js`, `plantilla_editor.js`, `cuenta_list.js`, `periodo_list.js`, `asiento_list.js` | 5 |
+| proyectos | `proyectos_list.js`, `proyectos_editor.js` (x2), `nueva_tarea_list.js` | 4 |
+| proveedores | `proveedores_form.js`, `representante_editor.js` | 2 |
+| inventario | `categorias_list.js`, `activos_list.js`, `servicios_list.js` | 3 |
+| facturas | `facturas_main.js`, `facturas_editor.js`, `facturas_list.js` | 3 |
+
+Patrón mecánico aplicado en cada sitio: donde la función/listener ya era
+`async` (la mayoría, ~20 sitios), swap directo de
+`confirm(msg)`→`(await w.UIManager?.confirm(msg))`. Donde el listener
+era síncrono (~7 sitios: `resolucion_list.js`, `liquidacion_list.js`,
+4 de contabilidad, `facturas_editor.js`), se agregó `async` a la firma
+del listener -- cambio mínimo, sin alterar el resto de la lógica ni el
+orden de ejecución (los listeners de click no dependen de retorno
+síncrono).
+
+**Confirmado NO migrado, con motivo (igual que parte 1):**
+`bancos.main.js:138` -- fallback de un modal Bootstrap hand-rolled vivo
+(#5c del inventario), requiere retirar el modal HTML completo, alcance
+distinto. Queda como único sitio nativo restante en todo `apps/tenant/**`.
+
+### Verificación
+
+- `manage.py check`: PASS.
+- Governance: **FINAL STATUS: PASS**.
+- Los 21 archivos se releyeron completos tras cada edición (estructura
+  de llaves/paréntesis intacta, sin `node --check` disponible en este
+  entorno).
+- **E2E, hallazgo real (no ambiental) -- encontrado y corregido:**
+  primer intento del suite completo dio 2 fallos reales:
+  `10-clientes-crud.spec.js` y `30-contabilidad-cuenta-crud.spec.js`,
+  ambos en el paso "eliminar" (fila queda visible en vez de
+  desaparecer). Investigado antes de asumir nada: ambos specs usaban
+  `page.once('dialog', (dialog) => dialog.accept())` -- el patron
+  correcto de Playwright para interceptar `window.confirm()` **nativo**.
+  `UIManager.confirm()` renderiza un modal SweetAlert2 (DOM real), no
+  dispara el evento `dialog` del navegador -- el handler quedaba inerte
+  y el modal nunca se cerraba, bloqueando la eliminacion. **Corregido en
+  los tests** (no en el codigo de produccion, que es el comportamiento
+  correcto/mejorado): se reemplazo el `dialog` handler por un click real
+  sobre `.swal2-confirm` despues del boton de eliminar. Verificado que
+  ningun otro spec existente comparte este patron contra un archivo
+  tocado en este batch (`20-inventario-productos-crud.spec.js` es el
+  unico otro consumidor de `page.once('dialog', ...)`, pero
+  `productos_list.js` no fue tocado -- sigue usando `confirm()` nativo,
+  su spec permanece correcto sin cambios).
+- E2E, re-corrida tras el fix: **28/29 PASS** (una corrida intermedia
+  con 26 fallos se investigo por separado -- confirmado por texto de
+  error literal `429 (Too Many Requests)`, mismo patron de
+  `AnonRateThrottle` agotado ya documentado en batch 2; contenedor `web`
+  reiniciado, re-corrida limpia). El unico fallo restante
+  (`63-f3310-empresa-pilot.spec.js`) es la flakiness de login()
+  pre-existente y ya documentada en el propio comentario de
+  `_helpers.js` ("10s eran insuficientes en la practica... doble
+  salto") -- no relacionado con ningun archivo de este batch. Los 2
+  specs objetivo de la correccion (`10-clientes-crud`,
+  `30-contabilidad-cuenta-crud`) pasaron limpiamente.
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
 |---|---|---|---|
-| 5b | Confirmaciones nativas → `UIManager.confirm()` (resto) | ~10 apps, ~28 sitios (incl. bancos/empleados con patrón modal §5c) | Escala aún grande tras la parte 1 — continúa app por app |
+| 5c | `bancos.main.js:138` + `empleados_list.html`/`empleado_list.js` (patrón modal §5c) | bancos, empleados | Único sitio de `confirm()` nativo restante en todo el repo -- requiere retirar el modal Bootstrap hand-rolled completo (`#confirmarEliminarModalBancos`, `#confirmarEliminarModal`), no un swap de línea |
 | 6 | Card KPI → `sintel_kpi_card` | clientes, gastos, proyectos, cotizaciones, facturas, ventas (7 sitios) | Primitiva ya existe (F33.6-9) pero adopción = 0 verificado. Cambio visual, requiere spot-check en navegador por app, no solo grep |
 | 7 | Empty state hand-rolled → `empty_state.html` | clientes, bancos, facturas, proveedores (6 sitios) | Igual — primitiva existe, adopción pendiente |
 | 8 | Badges de estado (17 métodos, 7 apps) | inventario, clientes, contabilidad, gastos, ventas, empresa | Mayor divergencia visual real, requiere decisión de wording unificado antes de tocar código (no solo consolidación mecánica) |

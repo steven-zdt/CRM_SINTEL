@@ -134,14 +134,38 @@ vivo (hallazgo #5c del inventario, DUPLICATE), migracion de mayor
 alcance que un simple swap. `manage.py check` PASS, governance PASS,
 E2E 29/29.
 
-**Batches 5b-9 (resto de Confirm nativo->UIManager, Cards KPI, Empty
-states, Badges de estado, Filtros) — pendientes**, documentados con
-evidencia en la matriz junto con su motivo de diferimiento (escala
-comparable a F32.7, o requieren spot-check visual en navegador por app,
-no solo grep mecanico). No son omision silenciosa -- son decisiones de
-alcance
-explicitas para no violar la regla "nunca refactor masivo + migracion
-masiva en la misma operacion".
+**Batch 5, parte 2 (resto de Confirm nativo->UIManager, 27 sitios en 21
+archivos, 8 apps):** migrados todos los sitios de `confirm()` nativo
+confirmados aislados (auditados uno por uno contra Modal usage antes de
+tocar codigo -- clientes, empleados, empresa, contabilidad, proyectos,
+proveedores, inventario, facturas). Solo `bancos.main.js` queda como
+`confirm()` nativo en todo `apps/tenant/**` (modal-integrado, #5c del
+inventario, diferido).
+
+**Hallazgo real durante la verificacion (no ambiental):** 2 specs E2E
+existentes (`10-clientes-crud.spec.js`, `30-contabilidad-cuenta-crud.spec.js`)
+usaban `page.once('dialog', ...)` para el flujo de eliminar -- el patron
+de Playwright para `window.confirm()` nativo, que deja de dispararse con
+`UIManager.confirm()` (SweetAlert2, un modal DOM real). Corregidos ambos
+specs para clickear `.swal2-confirm`. Verificado que ningun otro spec
+comparte el patron contra un archivo tocado (`20-inventario-productos-crud.spec.js`
+usa el mismo `dialog` handler pero contra `productos_list.js`, no tocado
+en este batch, sigue correcto sin cambios).
+
+`manage.py check` PASS, governance PASS. E2E: 28/29 tras el fix (2
+corridas intermedias con fallos masivos se investigaron y confirmaron
+`AnonRateThrottle` -- error 429 literal en el texto de fallo, mismo
+patron ya documentado en batch 2; contenedor `web` reiniciado 2 veces
+mas en el proceso). El unico fallo restante en la corrida final es la
+flakiness de login() pre-existente y ya documentada en
+`tests/e2e/specs/_helpers.js`, no relacionada con este batch.
+
+**Batches 6-9 (Cards KPI, Empty states, Badges de estado, Filtros) —
+pendientes**, documentados con evidencia en la matriz junto con su
+motivo de diferimiento (requieren spot-check visual en navegador por
+app, no solo grep mecanico). No son omision silenciosa -- son decisiones
+de alcance explicitas para no violar la regla "nunca refactor masivo +
+migracion masiva en la misma operacion".
 
 ## F33.14-19 — Governance rules, Accesibilidad, Responsive, Performance,
 Tests, Regresion final: **NOT_STARTED**
