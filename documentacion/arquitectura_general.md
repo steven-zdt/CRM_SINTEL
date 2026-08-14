@@ -1,11 +1,56 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.40.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M27) — FASE 33 (Shared UI / Design
+**Version:** 3.41.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M28) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre F33.13 batch 5 parte 2 (27 sitios adicionales de `confirm()`
-nativo migrados) mas un hallazgo real de E2E encontrado y corregido en el
-proceso, posterior a DOC-M26.
+que. Cubre F33.13-B: cierre completo de `confirm()` nativo en todo
+`apps/tenant/**` (bancos + un gap real detectado en el grep de batch 5),
+posterior a DOC-M27.
+
+**F33.13-B** (cierre de `confirm()` nativo, prioridad explicita:
+auditoria completa antes de tocar codigo): `bancos.main.js` -- unico
+sitio identificado como "modal-integrado" (batch 5 lo habia diferido
+deliberadamente) -- se investigo primero quien abre el modal
+(`confirmarEliminacion`), quien lo cierra (`ejecutarEliminacion` + boton
+Cancelar nativo), sus consumidores externos (ninguno, confirmado por
+grep repo-wide) y si era migrable al patron Core (si -- sin
+comportamiento especifico de dominio bancario). Migrado a
+`UIManager.confirm()`; el modal Bootstrap hand-rolled completo
+(`#confirmarEliminarModalBancos`) eliminado de `list_bancos.html`.
+
+**Hallazgo real durante la verificacion final (no en el codigo de
+bancos, en la propia auditoria previa):** el grep usado en batch 5
+(`confirm(['"]`, solo strings literales) tenia un gap -- no detectaba
+`confirm(unaVariable)`. Un grep mas amplio encontro **3 sitios
+adicionales no migrados**: `inventario/inventario_list.js`,
+`inventario/movimientos_list.js`, `inventario/productos_list.js`.
+Migrados los tres (ya en funciones/listeners `async`, swap directo). El
+spec E2E `20-inventario-productos-crud.spec.js` (dependiente de
+`page.once('dialog', ...)` para `productos_list.js`) se corrigio con el
+mismo patron `.swal2-confirm` ya usado en batch 5 parte 2.
+
+**Verificacion final repo-wide: 0 llamadas a `confirm()` nativo
+restantes en todo `apps/tenant/**` (confirmado por grep), 0 specs E2E
+dependientes del evento `dialog` de Playwright.** `manage.py check`
+PASS, governance FINAL STATUS PASS, E2E **29/29 PASS** (contenedor `web`
+reiniciado preventivamente antes de la corrida, limpio en el primer
+intento -- incluye `63-f3310-empresa-pilot.spec.js`, flaky en corridas
+anteriores de esta sesion, verde esta vez).
+
+**Fuera de este cierre, documentado como trabajo futuro:**
+`empleados_list.html`/`empleado_list.js` -- modal hand-rolled hermano al
+de bancos, pero sin fallback `confirm()` nativo (su modal se abre
+directamente sin condicional), por lo que nunca aparecio en ningun grep
+de `confirm()` y no formaba parte de "cerrar el ultimo confirm()".
+Tambien se flageo (sin investigar en esta pasada) una duplicacion real
+entre `inventario_list.js` y `productos_list.js` -- misma logica de
+eliminar-producto casi identica, ambos archivos vivos.
+
+**Actualizacion previa:** 2026-08-14 (DOC-M27) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre F33.13 batch 5 parte 2 (27 sitios adicionales
+de `confirm()` nativo migrados) mas un hallazgo real de E2E encontrado y
+corregido en el proceso, posterior a DOC-M26.
 
 **F33.13 batch 5, parte 2** (confirm() nativo -> `UIManager.confirm()`,
 resto de sitios aislados): migrados **27 sitios en 25 archivos, 8 apps**
@@ -1476,7 +1521,15 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.40.0 — 2026-08-14, DOC-M27)
+## 12. Metricas del Proyecto (v3.41.0 — 2026-08-14, DOC-M28)
+
+**[DOC-M28]** F33.13-B no toca modelos ni migraciones -- solo frontend
+(JS: `bancos.main.js` + 3 archivos de inventario migrados a
+`UIManager.confirm()`; HTML: modal completo eliminado de
+`list_bancos.html`) mas 1 archivo de test E2E corregido
+(`20-inventario-productos-crud.spec.js`, 0 tests nuevos -- correccion de
+supuesto desactualizado, mismo patron que DOC-M27). Ninguna fila de esta
+tabla cambia.
 
 **[DOC-M27]** F33.13 batch 5 parte 2 no toca modelos ni migraciones --
 solo frontend (JS: 25 archivos con 27 sitios de `confirm()` nativo
