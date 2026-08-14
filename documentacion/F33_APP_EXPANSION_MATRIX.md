@@ -458,6 +458,28 @@ x5 sitios, `empresa` x2 archivos, `perfil`, `inventario` x4).
 
 `manage.py check` PASS, governance PASS, E2E ver `F33_STATUS_REPORT.md`.
 
+## F33.14-E — Badges de estado: auditoría de cierre de Batch 8 (EJECUTADO, 0 migraciones)
+
+Auditoría de los 179 métodos `render_*` en los 13 `tables.py` de las
+apps tenant (Fase 5-BIS, django-tables2). Detalle completo:
+`documentacion/F33_14E_BADGES_ESTADO_INVENTORY.md`.
+
+**Resumen:** a diferencia de Card KPI/Empty State/Loading/Filter Bar,
+**no existe ningún primitivo de badge compartido hoy** (`sintel_ui.py`
+solo lo menciona en un comentario). El único candidato real de
+duplicación (`render_activo`/`render_activa`, patrón booleano
+"Activo/Inactivo" en 7-8 sitios de 5 apps) tiene **3 combinaciones de
+color inconsistentes para "Inactivo"** (`bg-danger`/`bg-secondary`/
+`bg-secondary-subtle`+borde), incluso dentro de la misma app
+(`contabilidad`, `inventario`) -- unificarlo mecánicamente elegiría un
+color sin base de diseño. El resto (~50 sitios) son mapeos de estado
+genuinamente específicos de cada dominio (facturas DIAN, estados de
+compra/venta/proyecto/contrato, tipos de cuenta contable), confirmando
+con evidencia real la conclusión original del batch 8. **0 archivos de
+código modificados** -- crear un primitivo nuevo sin decisión de diseño
+previa violaría la prohibición explícita de "no crear más
+infraestructura" de la misión F33.
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
@@ -466,6 +488,7 @@ x5 sitios, `empresa` x2 archivos, `perfil`, `inventario` x4).
 | 6b | `cotizaciones` (Card KPI, bloqueado por acoplamiento JS) + `ventas`/`gastos`/`facturas`/`compras`/`inventario` (Card KPI, estilos propios reales) | cotizaciones, ventas, gastos, facturas, compras, inventario | Ver `F33_14A_CARD_KPI_INVENTORY.md` §Pendiente -- cada uno requiere su propia decisión de diseño (extender el primitivo, crear una variante, o confirmar que es intencional), no un swap mecánico |
 | 7b | Empty state "compacto" (`clientes`, `proveedores`) + 2 variantes `alert-info` inconsistentes entre sí en `proveedores` + patrón tabla `{% empty %}` (`bancos`, `facturas`) | clientes, proveedores, bancos, facturas | Ver `F33_14B_EMPTY_STATE_INVENTORY.md` §Pendiente -- cada sub-variante requiere su propia decisión de diseño, no un swap mecánico. `proveedores` en particular tiene una inconsistencia interna real (2 archivos, mismo concepto, 2 estilos) que amerita resolverse antes de tocar el primitivo global |
 | 7c | Loading state "compacto py-4" (`clientes`, `facturas` x2 archivos) con 2 sub-variantes internas + `data-spinner` JS-toggled en `clientes_list.html` + near-miss de accesibilidad en `contabilidad/reporte_page.html` | clientes, facturas, contabilidad | Ver `F33_14C_LOADING_STATE_INVENTORY.md` §Pendiente -- misma lógica que 7b: cada sub-variante requiere su propia decisión de diseño antes de tocar el primitivo o crear uno nuevo |
+| 8b | Badge booleano "Activo/Inactivo" (7-8 sitios, 5 apps) con 3 combinaciones de color inconsistentes entre sí, incluso dentro de la misma app | clientes, contabilidad, empresa, inventario, proveedores | Ver `F33_14E_BADGES_ESTADO_INVENTORY.md` §Pendiente -- requiere decidir cuál color de "Inactivo" es el intencional antes de crear cualquier helper compartido; no hay primitivo previo que adoptar (a diferencia de 6b/7b/7c/9b) |
 | 9b | Filter bar "icono-prefijo, sin boton" (`clientes`, `proyectos`, `ventas`, `facturas`) + `bancos` (falta boton) + `proveedores` (boton con mecanismo distinto) + familia "input bare" sin wrapper ni boton (13 archivos: `contabilidad`, `empleados`, `empresa`, `perfil`, `inventario`) | clientes, proyectos, ventas, facturas, bancos, proveedores, contabilidad, empleados, empresa, perfil, inventario | Ver `F33_14D_FILTER_BAR_INVENTORY.md` §Pendiente -- la familia "icono-prefijo" es la candidata mas fuerte para una 2a variante del primitivo, pero requiere decision de diseno explicita antes de extenderlo; la familia "input bare" (13 archivos) implicaria anadir wrapper+boton donde hoy no existen, cambio visual real fuera de "adopcion controlada" |
 | 8 | Badges de estado (17 métodos, 7 apps) | inventario, clientes, contabilidad, gastos, ventas, empresa | Mayor divergencia visual real, requiere decisión de wording unificado antes de tocar código (no solo consolidación mecánica) |
 | 9 | Filtro/búsqueda wrapper → `filter_bar.html` | bancos, compras, gastos, proveedores, clientes, facturas, ventas, cotizaciones | Cambio visual en 8 apps, requiere spot-check navegador |

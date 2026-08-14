@@ -259,13 +259,36 @@ check` PASS, governance PASS, E2E **29/29 PASS** (4.7m, contenedor `web`
 verificado activo -- `curl` 200 -- antes de correr, tras el mismo
 hallazgo de carrera de arranque que F33.14-C).
 
-**Batches 6b-7b-7c-8-9b (resto de Card KPI, Empty state, Loading states,
-Badges de estado, Filtros) — pendientes**, documentados con evidencia en
-la matriz junto con su motivo de diferimiento (requieren spot-check
-visual en navegador por app, o decisiones de diseno sobre el primitivo,
-no solo grep mecanico). No son omision silenciosa -- son decisiones de
-alcance explicitas para no violar la regla "nunca refactor masivo +
-migracion masiva en la misma operacion".
+**F33.14-E (Badges de estado, auditoria de cierre de Batch 8):**
+auditoria de 179 metodos `render_*` en los 13 `tables.py` de las apps
+tenant (detalle: `documentacion/F33_14E_BADGES_ESTADO_INVENTORY.md`).
+A diferencia de A-D, **no existe primitivo de badge compartido hoy**
+(`sintel_ui.py` solo lo menciona en un comentario) -- el unico
+candidato real (`render_activo`/`render_activa`, patron booleano en
+7-8 sitios de 5 apps) tiene **3 combinaciones de color inconsistentes
+para "Inactivo"**, incluso dentro de la misma app (`contabilidad`,
+`inventario`). El resto (~50 sitios) son mapeos de estado genuinamente
+especificos de cada dominio, confirmando con evidencia real la
+conclusion original del batch 8. **0 archivos de codigo modificados**
+-- crear un primitivo sin decision de diseno previa violaria la
+prohibicion explicita de "no crear mas infraestructura". Sin cambios
+de codigo, no aplica ciclo `manage.py check`/governance/E2E.
+
+**Batches 6b-7b-7c-8b-9b (resto de Card KPI, Empty state, Loading
+states, Badges booleanos, Filtros) — pendientes**, documentados con
+evidencia en la matriz junto con su motivo de diferimiento (requieren
+spot-check visual en navegador por app, o decisiones de diseno sobre
+el primitivo, no solo grep mecanico). No son omision silenciosa -- son
+decisiones de alcance explicitas para no violar la regla "nunca
+refactor masivo + migracion masiva en la misma operacion".
+
+**Batches 6-9 (Shared UI adoption) quedan asi formalmente cerrados**
+con evidencia (F33.14-A a F33.14-E): 4 sub-fases con migraciones reales
+(8 archivos, 12 sitios migrados en total) + 1 sub-fase de auditoria pura
+que confirma por que no corresponde crear un primitivo nuevo sin
+decision de diseno adicional. Roadmap original: "Una vez terminados
+Batches 6-9, hacemos F33.15 -> F33.19 como cierre formal" -- siguiente
+paso: F33.15 (Testing).
 
 ## F33.15 a F33.19 — Governance rules, Accesibilidad,
 Responsive, Performance, Tests, Regresion final: **NOT_STARTED**
