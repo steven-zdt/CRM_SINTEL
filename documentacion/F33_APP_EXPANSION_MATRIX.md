@@ -46,7 +46,7 @@ corrigió en la misma pasada. Tabla final, ya corregida:
 | contabilidad | `asiento_list.js`, `cuenta_list.js`, `periodo_list.js`, `plantilla_list.js` | Bloque idéntico `if (UIManager?.handleOffcanvas) {...} else {raw fallback}` — el fallback nunca se ejecuta en la práctica (UIManager siempre está cargado), puro código muerto duplicado 4 veces | Simplificado a llamada directa al helper (elimina la rama muerta) | CONSOLIDATE, hecho |
 | contabilidad | `libro_diario_list.js` | Mismo patrón, 5ª copia | Igual | CONSOLIDATE, hecho |
 
-**Total: 13 archivos, 6 apps** (perfil, compras, gastos, facturas,
+**Total: 11 archivos, 6 apps** (perfil, compras, gastos, facturas,
 contabilidad, inventario). Verificado con grep final
 (`new (w\.)?bootstrap\.Offcanvas\(|bootstrap\.Offcanvas\.getOrCreateInstance`
 sobre `apps/tenant/**/*.js`): 0 coincidencias restantes salvo el propio
@@ -97,16 +97,16 @@ helper y las 2 excepciones documentadas abajo.
   (`mcr.microsoft.com/playwright:v1.62.1-jammy`, red `crm_sintel_default`,
   host `qaisotest.sintel.net.co` mapeado a la IP del contenedor `web`):
   **29/30 PASS.** Incluye `30-contabilidad-cuenta-crud.spec.js`, que
-  ejercita `cuenta_list.js` (uno de los 13 archivos editados) en un flujo
+  ejercita `cuenta_list.js` (uno de los 11 archivos editados) en un flujo
   real crear→editar→eliminar con navegador. El único fallo
   (`40-tenant-edit.spec.js`) es **ambiental, no una regresión**: apunta a
   `sintel.net.co` (consola pública), un host distinto de
   `qaisotest.sintel.net.co` -- el único mapeado en este contenedor efímero
   -- y ejercita gestión de tenants en la consola pública, código no tocado
-  por este batch (ninguno de los 13 archivos editados pertenece a
+  por este batch (ninguno de los 11 archivos editados pertenece a
   `apps/public/`). Clasificación: `FALSE_POSITIVE` / `ENVIRONMENTAL`, no
   `REGRESSION`.
-- Los 13 archivos se releyeron completos tras cada edición para confirmar
+- Los 11 archivos se releyeron completos tras cada edición para confirmar
   estructura de llaves intacta (sin `node --check` disponible en este
   entorno, mismo entorno reportado en F31.2).
 

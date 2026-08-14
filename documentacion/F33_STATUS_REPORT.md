@@ -4,7 +4,8 @@
 
 **Actualizacion:** F33.13 (expansion controlada) avanzo de NOT_STARTED a
 IN_PROGRESS con 2 batches reales ejecutados y verificados (commits
-`a39fa8f`, `22373dd` -- 19 archivos tocados/eliminados en 7 apps + core,
+`a39fa8f`, `22373dd` -- 17 archivos tocados/eliminados en 7 apps (perfil,
+compras, gastos, facturas, contabilidad, inventario, core),
 ver seccion F33.13 abajo y `F33_APP_EXPANSION_MATRIX.md` para el detalle
 completo).
 
@@ -96,8 +97,8 @@ para una fase futura de EKG, no una falta real de cobertura.
 
 Detalle completo: `documentacion/F33_APP_EXPANSION_MATRIX.md`.
 
-**Batch 1 (Offcanvas #12c/#12d, commit `a39fa8f`):** 13 archivos en 6 apps
-(perfil, compras, gastos, facturas, contabilidad x7, inventario)
+**Batch 1 (Offcanvas #12c/#12d, commit `a39fa8f`):** 11 archivos en 6 apps
+(perfil, compras, gastos, facturas, contabilidad x6, inventario)
 consolidados sobre `Sintel.Core.mostrarOffcanvasSeguro`, mismo patron ya
 probado en el piloto empresa. Verificado con grep repo-wide (0
 instanciaciones crudas de `bootstrap.Offcanvas` restantes salvo el propio
