@@ -80,9 +80,12 @@ test('Clientes: crear → editar → eliminar', async ({ page }) => {
   await expect(page.locator(`#clientes-panel:has-text("${editedName}")`)).toBeVisible({ timeout: 10000 });
 
   // **ELIMINAR cliente** -- boton real: data-action="delete" data-uuid="..."
-  page.once('dialog', (dialog) => dialog.accept());
+  // F33.13 batch 5b: deleteCliente() migro de confirm() nativo a
+  // UIManager.confirm() (SweetAlert2) -- ya no dispara el evento 'dialog'
+  // de Playwright, hay que clickear el boton real del modal renderizado.
   const deleteBtn = page.locator(`#clientes-panel tr:has-text("${editedName}") [data-action="delete"]`).first();
   await deleteBtn.click();
+  await page.locator('.swal2-confirm').click();
 
   await expect(page.locator(`#clientes-panel:has-text("${editedName}")`)).toBeHidden({ timeout: 10000 });
 

@@ -64,9 +64,12 @@ test('Contabilidad: crear → editar → eliminar cuenta', async ({ page }) => {
   await expect(page.locator(`#contabilidad-cuentas-panel:has-text("${nombreEditado}")`)).toBeVisible({ timeout: 10000 });
 
   // **ELIMINAR cuenta** -- boton real: .btn-eliminar-cuenta data-uuid
-  page.once('dialog', (dialog) => dialog.accept());
+  // F33.13 batch 5b: cuenta_list.js migro de confirm() nativo a
+  // UIManager.confirm() (SweetAlert2) -- ya no dispara el evento 'dialog'
+  // de Playwright, hay que clickear el boton real del modal renderizado.
   const deleteBtn = page.locator(`#contabilidad-cuentas-panel tr:has-text("${nombreEditado}") .btn-eliminar-cuenta`).first();
   await deleteBtn.click();
+  await page.locator('.swal2-confirm').click();
 
   await expect(page.locator(`#contabilidad-cuentas-panel:has-text("${nombreEditado}")`)).toBeHidden({ timeout: 10000 });
 
