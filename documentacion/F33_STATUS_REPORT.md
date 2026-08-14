@@ -147,10 +147,11 @@ existentes (`10-clientes-crud.spec.js`, `30-contabilidad-cuenta-crud.spec.js`)
 usaban `page.once('dialog', ...)` para el flujo de eliminar -- el patron
 de Playwright para `window.confirm()` nativo, que deja de dispararse con
 `UIManager.confirm()` (SweetAlert2, un modal DOM real). Corregidos ambos
-specs para clickear `.swal2-confirm`. Verificado que ningun otro spec
-comparte el patron contra un archivo tocado (`20-inventario-productos-crud.spec.js`
-usa el mismo `dialog` handler pero contra `productos_list.js`, no tocado
-en este batch, sigue correcto sin cambios).
+specs para clickear `.swal2-confirm`. Verificado en ese momento que
+ningun otro spec compartia el patron contra un archivo tocado
+(`20-inventario-productos-crud.spec.js` usaba el mismo `dialog` handler
+pero contra `productos_list.js`, no tocado en ese batch -- **luego si
+se toco en F33.13-B, ver abajo**).
 
 `manage.py check` PASS, governance PASS. E2E: 28/29 tras el fix (2
 corridas intermedias con fallos masivos se investigaron y confirmaron
@@ -159,6 +160,31 @@ patron ya documentado en batch 2; contenedor `web` reiniciado 2 veces
 mas en el proceso). El unico fallo restante en la corrida final es la
 flakiness de login() pre-existente y ya documentada en
 `tests/e2e/specs/_helpers.js`, no relacionada con este batch.
+
+**F33.13-B (cierre completo de `confirm()` nativo -- bancos + gap de
+grep):** Prioridad explicita: `bancos.main.js` auditado por completo
+ANTES de tocar codigo (quien abre el modal, quien lo cierra, 0
+consumidores externos confirmados, migrable al patron Core sin
+comportamiento especifico de dominio) -- migrado a `UIManager.confirm()`,
+modal HTML completo eliminado de `list_bancos.html`. Durante la
+verificacion final se encontro que el grep de batch 5
+(`confirm(['"]`, solo strings literales) tenia un gap real: no detectaba
+`confirm(unaVariable)`. Un grep mas amplio encontro **3 sitios mas**:
+`inventario_list.js`, `movimientos_list.js`, `productos_list.js` --
+migrados, y el spec `20-inventario-productos-crud.spec.js` corregido con
+el mismo patron `.swal2-confirm`.
+
+**Verificacion final repo-wide: 0 confirm() nativo restante en todo
+`apps/tenant/**`, 0 specs E2E dependientes de `page.once('dialog'`.**
+`manage.py check` PASS, governance PASS, E2E **29/29 PASS** (contenedor
+`web` reiniciado preventivamente antes de correr, sin necesidad de
+segunda pasada -- incluye `63-f3310-empresa-pilot.spec.js`, verde esta
+vez tras ser flaky en corridas anteriores).
+
+`empleados_list.html`/`empleado_list.js` (patron modal hermano, sin
+fallback `confirm()` nativo) queda fuera de este cierre -- nunca aparecio
+en ningun grep de `confirm()` porque su modal se abre directamente sin
+condicional. Documentado como trabajo futuro aparte.
 
 **Batches 6-9 (Cards KPI, Empty states, Badges de estado, Filtros) —
 pendientes**, documentados con evidencia en la matriz junto con su

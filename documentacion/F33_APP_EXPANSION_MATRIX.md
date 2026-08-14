@@ -305,11 +305,80 @@ distinto. Queda como único sitio nativo restante en todo `apps/tenant/**`.
   specs objetivo de la correccion (`10-clientes-crud`,
   `30-contabilidad-cuenta-crud`) pasaron limpiamente.
 
+## F33.13-B — Cierre de `confirm()` nativo (bancos + hallazgo de gap en el grep, EJECUTADO)
+
+**Prioridad 1 de la sesión: `bancos.main.js`, con auditoría completa
+ANTES de tocar código** (no un swap directo):
+
+1. **Quién abre el modal:** `confirmarEliminacion(uuid, type)`, invocada
+   desde el delegador global de clicks al hacer click en
+   `.btn-delete-cuenta`/`.btn-delete-extracto`. Usaba
+   `bootstrap.Modal.getOrCreateInstance(...).show()`.
+2. **Quién lo cierra:** `ejecutarEliminacion()` al final del flujo
+   (`bootstrap.Modal.getInstance(...).hide()`), más el botón "Cancelar"
+   nativo (`data-bs-dismiss="modal"`, sin JS propio).
+3. **Consumidores externos:** ninguno -- confirmado por grep repo-wide,
+   el modal y su botón solo aparecían en `bancos.main.js` y su propio
+   template.
+4. **¿Migrable al patrón Core?** Sí -- el flujo usaba estado compartido
+   a nivel de módulo (`currentDeleteUuid`/`currentDeleteType`) para
+   tender el puente entre "abrir modal" y "click del usuario en su
+   botón", exactamente el problema que `UIManager.confirm()` (async,
+   `Promise<boolean>`) resuelve sin estado intermedio. Sin nada
+   específico del dominio bancario.
+
+**Ejecutado:** `confirmarEliminacion`/`ejecutarEliminacion` simplificados
+a usar `await w.UIManager?.confirm(...)`; `bindDeleteModal()` y su
+registro en `init()` eliminados (ya no hay botón de modal que atar); el
+modal HTML completo (`#confirmarEliminarModalBancos`, 18 líneas)
+eliminado de `list_bancos.html`.
+
+**Hallazgo adicional durante la verificación final:** el grep de batch 5
+(`confirm(['"]`, solo strings literales) tenía un gap real -- no
+detectaba `confirm(unaVariable)`. Un grep más amplio
+(`[^A-Za-z.?]confirm\(`) encontró **3 sitios mas** no migrados:
+`inventario/inventario_list.js`, `inventario/movimientos_list.js`,
+`inventario/productos_list.js` (los 3 ya en funciones/listeners
+`async`, swap directo sin cambios estructurales). `productos_list.js`
+tenía cobertura E2E dependiente de `page.once('dialog', ...)`
+(`20-inventario-productos-crud.spec.js`) -- corregido con el mismo
+patrón `.swal2-confirm` ya usado en batch 5 parte 2.
+
+**Verificación final repo-wide:** `[^A-Za-z.?]confirm\(` sobre
+`apps/tenant/**/*.js` → **0 coincidencias** salvo la definición de
+`UIManager.confirm` misma. `page.once('dialog'` sobre
+`tests/e2e/specs/**` → **0 coincidencias**. `confirm() nativo queda en
+0 sitios en todo el repo.**
+
+`manage.py check` PASS, governance FINAL STATUS PASS. E2E: **29/29
+PASS** (contenedor `web` reiniciado preventivamente antes de la corrida
+para evitar el falso-positivo de `AnonRateThrottle` ya visto -- corrida
+limpia sin necesidad de una segunda pasada, incluye
+`63-f3310-empresa-pilot.spec.js`, flaky en corridas anteriores de esta
+sesión, verde esta vez).
+
+**Nota de alcance:** `empleados_list.html`/`empleado_list.js` (patrón
+modal hand-rolled hermano, `#confirmarEliminarModal` sin sufijo) **NO
+fue tocado** -- es un caso distinto: nunca tuvo un fallback `confirm()`
+nativo (su modal se abre directamente sin condicional), por lo que
+nunca apareció en ningún grep de `confirm()`. Es una migración de modal
+aparte (mismo target final, `UIManager.confirm()`, pero sin la señal de
+"confirm() nativo restante" que motivó priorizar bancos). Queda
+documentado como trabajo futuro, no como parte de "cerrar el último
+confirm()" (que sí se cerró en su totalidad).
+
+**Hallazgo colateral, no corregido aquí:** `inventario_list.js` y
+`productos_list.js` tienen lógica de eliminar-producto casi idéntica
+(mismo mensaje de advertencia multi-línea, misma secuencia) -- ambos
+archivos están vivos, no es código muerto. Flageado como tarea aparte
+(no se investiga ni se toca en este batch, fuera de alcance de
+"confirm() nativo").
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
 |---|---|---|---|
-| 5c | `bancos.main.js:138` + `empleados_list.html`/`empleado_list.js` (patrón modal §5c) | bancos, empleados | Único sitio de `confirm()` nativo restante en todo el repo -- requiere retirar el modal Bootstrap hand-rolled completo (`#confirmarEliminarModalBancos`, `#confirmarEliminarModal`), no un swap de línea |
+| 5d | `empleados_list.html`/`empleado_list.js` (patrón modal hermano, sin `confirm()` nativo) | empleados | Modal hand-rolled vivo sin fallback nativo -- mismo target (`UIManager.confirm()`) pero requiere retirar el modal HTML completo, no un swap de línea. Sin urgencia (no aparece en ningún grep de `confirm()` nativo restante) |
 | 6 | Card KPI → `sintel_kpi_card` | clientes, gastos, proyectos, cotizaciones, facturas, ventas (7 sitios) | Primitiva ya existe (F33.6-9) pero adopción = 0 verificado. Cambio visual, requiere spot-check en navegador por app, no solo grep |
 | 7 | Empty state hand-rolled → `empty_state.html` | clientes, bancos, facturas, proveedores (6 sitios) | Igual — primitiva existe, adopción pendiente |
 | 8 | Badges de estado (17 métodos, 7 apps) | inventario, clientes, contabilidad, gastos, ventas, empresa | Mayor divergencia visual real, requiere decisión de wording unificado antes de tocar código (no solo consolidación mecánica) |
