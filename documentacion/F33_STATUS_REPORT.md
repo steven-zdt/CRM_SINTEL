@@ -125,11 +125,21 @@ carga global (mayor blast radius); ejecutado ahora con su propio ciclo
 de verificacion completo. `manage.py check` PASS, governance PASS, E2E
 29/29 (corrida completa, contenedor Playwright fresco).
 
-**Batches 5-9 (Confirm nativo->UIManager, Cards KPI, Empty states,
-Badges de estado, Filtros) — pendientes**, documentados con evidencia en
-la matriz junto con su motivo de diferimiento (escala comparable a F32.7,
-o requieren spot-check visual en navegador por app, no solo grep
-mecanico). No son omision silenciosa -- son decisiones de alcance
+**Batch 5, parte 1 (Confirm nativo->UIManager, subconjunto de 1 sitio):**
+migrados `ventas/resolucion_editor.js` y `perfil/perfil.modals.js` (los
+2 unicos sitios donde toda la superficie de `confirm()` nativo de la app
+vive en un solo archivo/funcion). `bancos.main.js` evaluado y diferido
+-- su `confirm()` es solo el fallback de un modal Bootstrap hand-rolled
+vivo (hallazgo #5c del inventario, DUPLICATE), migracion de mayor
+alcance que un simple swap. `manage.py check` PASS, governance PASS,
+E2E 29/29.
+
+**Batches 5b-9 (resto de Confirm nativo->UIManager, Cards KPI, Empty
+states, Badges de estado, Filtros) — pendientes**, documentados con
+evidencia en la matriz junto con su motivo de diferimiento (escala
+comparable a F32.7, o requieren spot-check visual en navegador por app,
+no solo grep mecanico). No son omision silenciosa -- son decisiones de
+alcance
 explicitas para no violar la regla "nunca refactor masivo + migracion
 masiva en la misma operacion".
 

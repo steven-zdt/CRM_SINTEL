@@ -184,11 +184,51 @@ requeriría:
   fresco), corrida completa por ser cambio de carga global, mismo
   criterio que exigió diferir este batch en primer lugar.
 
+## Batch 5, parte 1 — Confirmaciones nativas → `UIManager.confirm()` (apps de 1 solo sitio, EJECUTADO)
+
+Regla aplicada: no migrar los ~30 sitios en ~12 apps de una sola vez
+(escala comparable a F32.7, expresamente prohibido). Se ejecuta primero
+el subconjunto de menor riesgo: apps donde **toda** su superficie de
+`confirm()` nativo vive en un único sitio -- migración aislada, sin
+tocar archivos con múltiples sitios que requieren más contexto.
+
+| App | Archivo | Contexto | Acción |
+|---|---|---|---|
+| ventas | `resolucion_editor.js:96` | `btn.addEventListener('click', function () {...})` síncrono, dentro de `bindPanelBotones()` | Listener convertido a `async`, `if (!w.confirm(...)) return;` → `if (!(await w.UIManager?.confirm(...))) return;` |
+| perfil | `perfil.modals.js:91` | `function deletePerfil(id) {...}`, llamado sin `await` desde `perfil.page.js:80` (fire-and-forget, no depende de retorno síncrono) | Función convertida a `async function`, mismo patrón de reemplazo |
+
+**`bancos.main.js:138` evaluado y NO migrado en este batch:** a
+diferencia de ventas/perfil, el `confirm()` nativo ahí es solo el
+*fallback* de un patrón más grande -- el camino primario ya usa un modal
+Bootstrap hand-rolled (`bootstrap.Modal.getOrCreateInstance('confirmarEliminarModalBancos')`),
+exactamente el hallazgo #5c del inventario F33.0 (`DUPLICATE`, modal vivo
+que reimplementa lo que `UIManager.confirm()` ya resuelve). Migrarlo
+correctamente implica retirar el modal HTML completo, no solo cambiar
+una línea -- alcance distinto, se difiere a un batch propio junto con
+`empleados_list.html` (mismo patrón, ver inventario §5c).
+
+`UIManager.confirm()` verificado (`ui-manager.js:466-484`): `async
+function confirm(message, title)`, usa SweetAlert2 si está cargado (que
+lo está en todas las páginas tenant vía `assets_core.html`), con
+fallback a `w.confirm()` nativo si no -- upgrade estrictamente seguro,
+nunca peor que el comportamiento anterior.
+
+### Verificación
+
+- `manage.py check`: PASS.
+- Governance: **FINAL STATUS: PASS**.
+- E2E: **29/29 PASS** (suite completa). Verificación visual en navegador
+  real no fue posible en este entorno (el host `qaisotest.sintel.net.co`
+  usado por el contenedor Playwright efímero no es resoluble desde el
+  Browser pane de esta sesión) -- la cobertura funcional real vino de la
+  suite E2E, que sí ejecuta interacciones reales de Playwright contra el
+  servidor.
+
 ## Batches pendientes (NO ejecutados en esta pasada — con evidencia, no omisión)
 
 | # | Alcance | Apps afectadas | Por qué no en este batch |
 |---|---|---|---|
-| 5 | Confirmaciones nativas → `UIManager.confirm()` | ~12 apps, ~30 sitios | Escala comparable a F32.7 (46 archivos) — expansión masiva explícitamente prohibida en una sola operación. Requiere su propio batch app-por-app |
+| 5b | Confirmaciones nativas → `UIManager.confirm()` (resto) | ~10 apps, ~28 sitios (incl. bancos/empleados con patrón modal §5c) | Escala aún grande tras la parte 1 — continúa app por app |
 | 6 | Card KPI → `sintel_kpi_card` | clientes, gastos, proyectos, cotizaciones, facturas, ventas (7 sitios) | Primitiva ya existe (F33.6-9) pero adopción = 0 verificado. Cambio visual, requiere spot-check en navegador por app, no solo grep |
 | 7 | Empty state hand-rolled → `empty_state.html` | clientes, bancos, facturas, proveedores (6 sitios) | Igual — primitiva existe, adopción pendiente |
 | 8 | Badges de estado (17 métodos, 7 apps) | inventario, clientes, contabilidad, gastos, ventas, empresa | Mayor divergencia visual real, requiere decisión de wording unificado antes de tocar código (no solo consolidación mecánica) |

@@ -86,9 +86,9 @@
       });
   }
 
-  function deletePerfil(id) {
+  async function deletePerfil(id) {
     if (!id) return;
-    if (!confirm('Esta seguro de que desea eliminar este perfil?')) return;
+    if (!(await w.UIManager?.confirm('Esta seguro de que desea eliminar este perfil?'))) return;
     var API_URL = getApiBase();
     fetch(API_URL + id + '/', {
       method: 'DELETE',

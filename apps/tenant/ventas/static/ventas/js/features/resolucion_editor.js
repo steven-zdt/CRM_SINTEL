@@ -89,11 +89,12 @@
 
     function bindPanelBotones(panelEl) {
         panelEl.querySelectorAll('[data-action="eliminar-resolucion"]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
+            btn.addEventListener('click', async function () {
                 var uuid   = btn.getAttribute('data-uuid');
                 var numero = btn.getAttribute('data-numero') || uuid;
                 if (!uuid) return;
-                if (!w.confirm('Eliminar resolucion "' + numero + '"?\nSolo se puede si no tiene ventas asociadas.')) return;
+                var confirmado = await w.UIManager?.confirm('Eliminar resolucion "' + numero + '"?\nSolo se puede si no tiene ventas asociadas.');
+                if (!confirmado) return;
 
                 var API = w.Sintel && w.Sintel.Ventas && w.Sintel.Ventas.API;
                 if (!API) { console.error(MOD, 'API no disponible'); return; }
