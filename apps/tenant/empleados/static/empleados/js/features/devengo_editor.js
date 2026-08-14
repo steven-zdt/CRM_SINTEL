@@ -188,7 +188,10 @@
             target: '#devengo-campos-calculados-wrapper',
             swap: 'innerHTML',
             headers: {
-                'X-CSRFToken': w.getCookie?.('csrftoken')
+                // F32.9: w.getCookie ya no existe (removido en F32.7 junto con
+                // lib/http.js) -- referencia muerta detectada en la
+                // revalidacion de gobernanza, corregida a Sintel.Core.Http.csrf().
+                'X-CSRFToken': w.Sintel?.Core?.Http?.csrf?.()
                     || d.querySelector('[name=csrfmiddlewaretoken]')?.value
             },
             values: {
