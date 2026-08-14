@@ -1,85 +1,15 @@
 {% load django_tables2 %}
+{% load sintel_ui %}
 {# Fragmento HTMX: KPIs + tabla de Clientes. Reemplaza #clientes-panel completo. #}
+{# F33.14-A: migrado a sintel_kpi_card (F33.9) -- markup identico, ya no copiado. #}
 
 <div class="row g-3 mb-3" id="clientes-kpis">
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-          <i class="bi bi-people text-primary"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.total }}</div>
-          <div class="small text-muted text-truncate">Total</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-          <i class="bi bi-person-check text-success"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.activos }}</div>
-          <div class="small text-muted text-truncate">Activos</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-          <i class="bi bi-building text-info"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.juridicas }}</div>
-          <div class="small text-muted text-truncate">Jurídicas</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-          <i class="bi bi-person text-secondary"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.naturales }}</div>
-          <div class="small text-muted text-truncate">Naturales</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-          <i class="bi bi-shield-check text-warning"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.retenedores }}</div>
-          <div class="small text-muted text-truncate">Retenedores</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle bg-danger bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-          <i class="bi bi-person-x text-danger"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.inactivos }}</div>
-          <div class="small text-muted text-truncate">Inactivos</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  {% sintel_kpi_card icon="people" color="primary" value=kpis.total label="Total" %}
+  {% sintel_kpi_card icon="person-check" color="success" value=kpis.activos label="Activos" %}
+  {% sintel_kpi_card icon="building" color="info" value=kpis.juridicas label="Jurídicas" %}
+  {% sintel_kpi_card icon="person" color="secondary" value=kpis.naturales label="Naturales" %}
+  {% sintel_kpi_card icon="shield-check" color="warning" value=kpis.retenedores label="Retenedores" %}
+  {% sintel_kpi_card icon="person-x" color="danger" value=kpis.inactivos label="Inactivos" %}
 </div>
 
 <div class="card shadow-sm border-0">
