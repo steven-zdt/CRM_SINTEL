@@ -196,7 +196,7 @@
                 mensajeConfirmacion += '\n- Todo el historial de movimientos (Kardex)';
                 mensajeConfirmacion += '\n\nEsta acción es irreversible.';
 
-                if (!confirm(mensajeConfirmacion)) return;
+                if (!(await w.UIManager?.confirm(mensajeConfirmacion))) return;
 
                 _eliminandoProducto = true;
                 const originalHTML = btnDelete.innerHTML;

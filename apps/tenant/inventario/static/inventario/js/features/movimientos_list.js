@@ -263,7 +263,7 @@
             ? 'Eliminar este registro de Historial de Servicio? Esta accion es irreversible.'
             : 'Eliminar este movimiento? El stock del producto sera recalculado automaticamente.';
 
-        if (!confirm(msgConfirm)) return;
+        if (!(await w.UIManager?.confirm(msgConfirm))) return;
 
         const original = btn.innerHTML;
         btn.disabled = true;

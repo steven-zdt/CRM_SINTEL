@@ -108,24 +108,4 @@
 {# Offcanvas Container #}
 <div id="offcanvas-container-bancos"></div>
 
-{# Modal de Confirmacion Eliminar #}
-<div class="modal fade" id="confirmarEliminarModalBancos" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Confirmar Eliminacion</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <p>Esta seguro de que desea eliminar este registro?</p>
-        <p class="text-danger"><strong>Esta accion no se puede deshacer y puede afectar las transacciones asociadas.</strong></p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-danger" id="btn-confirmar-eliminar-bancos">Eliminar</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 {% include 'tenant/bancos/assets_bancos.html' %}

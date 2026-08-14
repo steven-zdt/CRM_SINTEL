@@ -28,10 +28,7 @@
     // 2. Escuchar cambios de sub-pestañas
     bindSubTabs();
 
-    // 3. Configurar modal de eliminación
-    bindDeleteModal();
-
-    // 4. Delegar eventos de acciones de filas (Listado y Tablas)
+    // 3. Delegar eventos de acciones de filas (Listado y Tablas)
     bindActionsDelegation();
 
     initialized = true;
@@ -60,15 +57,8 @@
     }
   }
 
-  function bindDeleteModal() {
-    const btnConfirmarEliminar = d.getElementById('btn-confirmar-eliminar-bancos');
-    if (btnConfirmarEliminar) {
-      btnConfirmarEliminar.addEventListener('click', ejecutarEliminacion);
-    }
-  }
-
   function bindActionsDelegation() {
-    d.body.addEventListener('click', function(e) {
+    d.body.addEventListener('click', async function(e) {
       // 1. Editar Cuenta
       const btnEditCuenta = e.target.closest('.btn-edit-cuenta');
       if (btnEditCuenta) {
@@ -127,18 +117,12 @@
     });
   }
 
-  function confirmarEliminacion(uuid, type) {
+  async function confirmarEliminacion(uuid, type) {
+    const confirmado = await w.UIManager?.confirm('Esta seguro de que desea eliminar este registro? Esta accion no se puede deshacer y puede afectar las transacciones asociadas.');
+    if (!confirmado) return;
     currentDeleteUuid = uuid;
     currentDeleteType = type;
-    const modalEl = d.getElementById('confirmarEliminarModalBancos');
-    if (modalEl) {
-      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-      modal.show();
-    } else {
-      if (confirm('¿Está seguro de que desea eliminar este registro?')) {
-        ejecutarEliminacion();
-      }
-    }
+    await ejecutarEliminacion();
   }
 
   async function ejecutarEliminacion() {
@@ -164,12 +148,6 @@
       if (w.UIManager?.handleError) {
         w.UIManager.handleError(res, MOD);
       }
-    }
-
-    const modalEl = d.getElementById('confirmarEliminarModalBancos');
-    if (modalEl) {
-      const modal = bootstrap.Modal.getInstance(modalEl);
-      if (modal) modal.hide();
     }
 
     currentDeleteUuid = null;

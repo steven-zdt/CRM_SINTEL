@@ -385,7 +385,7 @@
                 mensajeConfirmacion += '\n- Todo el historial de movimientos (Kardex)';
                 mensajeConfirmacion += '\n\nEsta acción es irreversible.';
 
-                if (!confirm(mensajeConfirmacion)) {
+                if (!(await w.UIManager?.confirm(mensajeConfirmacion))) {
                     return;
                 }
 
