@@ -1,11 +1,43 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.47.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M34) — FASE 33 (Shared UI / Design
+**Version:** 3.48.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M35) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre F33.15 (Testing): coleccion de la suite confirmada en 2064/0
-errores, marker `pytest.mark.e2e` registrado, y un hallazgo real de
-entorno documentado en detalle -- el motor de Docker Desktop colapso
+que. Cubre F33.17 (Accesibilidad, primera pasada sobre componentes
+modificados): 3 hallazgos reales corregidos en los primitivos Shared UI
+(`aria-hidden` en iconos decorativos de `kpi_card.html`/`empty_state.html`,
+`aria-label` en el boton icon-only de `filter_bar.html`), 0 hallazgos en
+el modal/offcanvas/formularios revisados (ya delegan correctamente en
+Bootstrap/SweetAlert2 nativos o ya tienen labels asociados). Cambios de
+solo atributos ARIA, sin impacto visual ni funcional, verificados con
+`Template().render()` + `manage.py check` + governance. Posterior a
+DOC-M34.
+
+**F33.17** (Accesibilidad, componentes modificados -- no un WCAG audit
+completo): auditoria por lectura de codigo de `UIManager.confirm()`
+(SweetAlert2, maneja foco/ARIA nativamente -- sin cambios),
+`mostrarOffcanvasSeguro` (delega en `bootstrap.Offcanvas` nativo -- sin
+cambios), un formulario offcanvas muestreado (`offcanvas_crear_cliente.html`,
+12/12 inputs con `<label for="id">` correctamente asociado -- sin
+cambios), y los 4 primitivos Shared UI de F33.6/F33.8/F33.9. Hallazgos
+reales corregidos en 3 de los 4: `kpi_card.html`/`empty_state.html`
+tenian un icono decorativo (`<i class="bi bi-...">`) sin
+`aria-hidden="true"`; `filter_bar.html` tenia un boton de busqueda
+icon-only dependiendo solo de `title="Buscar"` (no un sustituto
+confiable de nombre accesible, WCAG 4.1.2) -- se agrego `aria-label`
+explicito. `loading_state.html` ya seguia el patron correcto
+(`role="status"` + `span.visually-hidden`), sin cambios. Los 3 fixes se
+propagan automaticamente a las adopciones ya hechas (12+ sitios entre
+Card KPI, Empty State y Filter Bar). **No cubierto en esta pasada:**
+contraste de color real (solo inspeccion de clases, no medicion),
+navegacion por teclado end-to-end, headers de tablas django-tables2.
+
+**Actualizacion previa:** 2026-08-14 (DOC-M34) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre F33.15 (Testing): coleccion de la suite
+confirmada en 2064/0 errores, marker `pytest.mark.e2e` registrado, y un
+hallazgo real de entorno documentado en detalle -- el motor de Docker
+Desktop colapso
 repetidamente al intentar correr la suite completa, causa raiz aislada
 por lectura de codigo a `ConsoleAPIConsumptionTests` (creacion real de 2
 tenants/schemas Postgres por test en `setUp()`) mas 5 tests que fallan
@@ -1806,7 +1838,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.47.0 — 2026-08-14, DOC-M34)
+## 12. Metricas del Proyecto (v3.48.0 — 2026-08-14, DOC-M35)
+
+**[DOC-M35]** F33.17 no toca modelos ni migraciones -- 3 archivos HTML
+(atributos ARIA unicamente, `apps/tenant/core/templates/tenant/core/partials/ui/`)
+mas 0 documentos nuevos (hallazgos documentados directamente en
+`F33_STATUS_REPORT.md`/`arquitectura_general.md`, sin inventario
+separado dado el alcance acotado de esta pasada). 0 archivos de test
+E2E nuevos. Ninguna fila de esta tabla cambia.
 
 **[DOC-M34]** F33.15 no toca modelos ni migraciones -- 1 archivo de
 configuracion (`pytest.ini`, marker `e2e` registrado) mas 0 archivos de

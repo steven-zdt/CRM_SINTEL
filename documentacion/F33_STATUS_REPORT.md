@@ -367,17 +367,52 @@ pendiente real, bloqueada por el entorno, con el diagnostico de causa
 mas probable ya documentado para no repetir el mismo ciclo de
 diagnostico en el proximo intento.
 
-## F33.16 a F33.19 — E2E (clean 29/29 baseline), Accesibilidad,
-Responsive, Performance, Release Gate: **NOT_STARTED**
+## F33.17 — Accesibilidad (componentes modificados): **PARCIAL**
 
-Accesibilidad, Responsive y Performance (F33.17-19) requieren su propia
-auditoria real (lectura de markup para aria/contraste/teclado, pruebas de
-`resize_window` en mobile/tablet, deteccion de listeners/requests
-duplicados) -- no se hicieron pasadas superficiales para "marcar la
-casilla"; genuinamente no se ejecutaron. F33.16 (E2E) tiene evidencia
-parcial acumulada: cada batch de F33.13/F33.14 corrio la suite E2E
-completa (29/29 PASS en cada cierre exitoso), pero el objetivo explicito
-de F33.16 -- resolver definitivamente la flakiness historica de
+Auditoria enfocada, no un WCAG audit completo -- solo los componentes
+tocados por F33.13/F33.14 (modal/confirm, offcanvas, forms, tables,
+labels/ARIA), por lectura de codigo (sin depender de ejecucion pesada
+de Docker, dado el hallazgo de F33.15).
+
+**Hallazgos reales, corregidos** (solo atributos ARIA, 0 cambio visual
+o funcional, verificado con `Template().render()`):
+- `kpi_card.html` / `empty_state.html`: icono decorativo (`<i
+  class="bi bi-...">`) sin `aria-hidden="true"` -- puede ser anunciado
+  como ruido por algunos lectores de pantalla. Corregido en ambos.
+- `filter_bar.html`: el boton de busqueda es icon-only (sin texto
+  visible), dependia solo de `title="Buscar"` -- no es un sustituto
+  confiable de un nombre accesible (WCAG 4.1.2 Name, Role, Value).
+  Se agrego `aria-label="Buscar"` explicito.
+
+Los 3 fixes se propagan automaticamente a las adopciones ya hechas
+(Card KPI: `clientes` 6 sitios + `proyectos` 4 sitios; Empty State:
+`clientes` 2 sitios; Filter Bar: `compras` 1 sitio + `gastos` 2
+sitios). `manage.py check` + governance PASS.
+
+**Revisado sin hallazgos** (ya siguen buenas practicas, sin cambios
+necesarios): `UIManager.confirm()` (delega en SweetAlert2, que maneja
+foco/ARIA nativamente); `mostrarOffcanvasSeguro` (delega en
+`bootstrap.Offcanvas` nativo, que maneja `aria-hidden`/foco/restauracion);
+formulario muestreado (`offcanvas_crear_cliente.html`, 12/12 inputs con
+`<label for="id">` correctamente asociado).
+
+**No cubierto en esta pasada** (fuera del foco "componentes
+modificados", o requiere herramientas de contraste/lectura de pantalla
+real no disponibles por lectura de codigo): contraste de color real
+(solo inspeccion de clases Bootstrap, no medicion), navegacion por
+teclado end-to-end en flujos completos, tablas django-tables2 (headers
+`<th>` -- la libreria los genera automaticamente, no auditado a fondo).
+
+## F33.16, F33.18, F33.19 — E2E (clean 29/29 baseline), Responsive,
+Performance, Release Gate: **NOT_STARTED**
+
+Responsive y Performance (F33.18-19) requieren su propia auditoria real
+(pruebas de `resize_window` en mobile/tablet, deteccion de
+listeners/requests duplicados) -- no se hicieron pasadas superficiales
+para "marcar la casilla"; genuinamente no se ejecutaron. F33.16 (E2E)
+tiene evidencia parcial acumulada: cada batch de F33.13/F33.14 corrio la
+suite E2E completa (29/29 PASS en cada cierre exitoso), pero el objetivo
+explicito de F33.16 -- resolver definitivamente la flakiness historica de
 `login()` y declarar un baseline limpio como parte del Release Gate, no
 solo "paso en la ultima corrida de un batch" -- no se ha ejecutado como
 sub-fase propia todavia.
@@ -402,11 +437,15 @@ State, Loading State, Filter Bar), 1 auditoria de Badges que confirma
 con evidencia por que no crear una 5a primitiva sin decision de diseno,
 6+ archivos de codigo muerto eliminados con evidencia, coleccion de
 tests establecida en 2064/0 errores, y cada batch de codigo validado
-individualmente con `manage.py check` + governance + E2E 29/29.
+individualmente con `manage.py check` + governance + E2E 29/29. F33.17
+(accesibilidad de componentes modificados) tiene una primera pasada
+real ejecutada con 3 hallazgos corregidos.
 
 **Siguiente paso recomendado:** retomar F33.15 resolviendo primero el
 hallazgo de causa raiz documentado arriba (aislar
 `ConsoleAPIConsumptionTests` en un entorno Docker sano), luego F33.16
 (E2E baseline limpio como cierre formal, no solo re-uso de corridas de
-batch) y F33.17-19 (accesibilidad, responsive, performance -- auditorias
-reales, no listas de verificacion superficiales).
+batch), completar F33.17 (contraste real, navegacion por teclado
+end-to-end, tablas django-tables2 -- no cubierto en la primera pasada),
+y F33.18-19 (responsive, performance -- auditorias reales, no listas de
+verificacion superficiales).
