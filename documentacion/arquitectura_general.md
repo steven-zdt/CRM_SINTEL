@@ -1,13 +1,62 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.46.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M33) — FASE 33 (Shared UI / Design
+**Version:** 3.47.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M34) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre F33.14-E: auditoria evidence-based de Badges de Estado (cierre
-del Batch 8, 0 migraciones -- no existe primitivo previo y el unico
-candidato real tiene 3 variantes de color inconsistentes), posterior a
-DOC-M32. **Cierra formalmente los "Batches 6-9" (Shared UI adoption)** del
-roadmap: F33.14-A a F33.14-E completos, 8 archivos/12 sitios migrados en
+que. Cubre F33.15 (Testing): coleccion de la suite confirmada en 2064/0
+errores, marker `pytest.mark.e2e` registrado, y un hallazgo real de
+entorno documentado en detalle -- el motor de Docker Desktop colapso
+repetidamente al intentar correr la suite completa, causa raiz aislada
+por lectura de codigo a `ConsoleAPIConsumptionTests` (creacion real de 2
+tenants/schemas Postgres por test en `setUp()`) mas 5 tests que fallan
+de forma genuina en `ConsoleIsolationAndPermissionsTests`. F33.15 queda
+**PARCIAL**, no completada -- ver `F33_STATUS_REPORT.md` §F33.15 para el
+diagnostico completo. Posterior a DOC-M33.
+
+**F33.15** (Testing, consolidacion de la suite existente): `pytest
+--collect-only` confirma **2064 tests, 0 errores de coleccion**,
+verificando que ningun cambio de F33.13/F33.14 (frontend puro) rompio
+la coleccion. Se registro el marker `e2e` (usado sin declarar en
+`tests/e2e/test_workspace_facturas_forensics.py`, generaba
+`PytestUnknownMarkWarning`) en `pytest.ini`.
+
+**Bloqueo real de entorno, no de codigo:** la corrida completa de
+`pytest` (2064 tests) no se pudo completar de forma confiable -- el
+motor de Docker Desktop (backend WSL2) colapso repetidamente
+(`500 Internal Server Error`, contenedores forzados a reiniciar) en 4+
+intentos sucesivos, incluso tras descartar falta de memoria (se
+detuvieron `neo4j`/`cloudflared`, sin cambio en el patron) y
+acumulacion de schemas huerfanos (verificado con SQL directo: solo 3
+schemas no-publicos en la base). Una corrida en modo verbose, matada
+manualmente tras confirmar que el corte real ocurria en
+`apps/public/console/tests/test_legacy_public_tenants_api.py`, aislo la
+causa mas probable: `ConsoleAPIConsumptionTests.setUp()` crea 2 tenants
+reales (`TenantClient.objects.create(...)`) por cada test -- operacion
+DDL pesada (`CREATE SCHEMA` + migraciones completas) que se degrada bajo
+la inestabilidad de I/O que el propio entorno ya arrastraba. La misma
+corrida tambien confirmo, por ejecucion completa (no interrumpida), **5
+fallos genuinos** en `ConsoleIsolationAndPermissionsTests` -- lectura de
+`config/urls_public.py` (lineas 107-108) senala un posible conflicto de
+enrutamiento (`console/urls.py` registra su propia ruta `impuestos/`
+que shadowea `path('console/impuestos/', include('apps.public.impuestos.dashboard.urls_dashboard'))`)
+como hipotesis no verificada por ejecucion.
+
+**No se sigue reintentando la ejecucion masiva en esta sesion** --
+instruccion explicita del usuario tras el patron de cuelgues repetidos:
+documentar el hallazgo y continuar, no esperar indefinidamente una
+respuesta que no llega. Detalle completo, incluyendo la ruta
+recomendada para quien retome la investigacion (aislar
+`ConsoleAPIConsumptionTests` en un entorno Docker sano con `-x` y
+timeout largo): `documentacion/F33_STATUS_REPORT.md` §F33.15.
+
+**Actualizacion previa:** 2026-08-14 (DOC-M33) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre F33.14-E: auditoria evidence-based de Badges
+de Estado (cierre del Batch 8, 0 migraciones -- no existe primitivo
+previo y el unico candidato real tiene 3 variantes de color
+inconsistentes), posterior a DOC-M32. **Cierra formalmente los "Batches
+6-9" (Shared UI adoption)** del roadmap: F33.14-A a F33.14-E completos,
+8 archivos/12 sitios migrados en
 total, siguiente paso F33.15 (Testing).
 
 **F33.14-E** (Badges de estado, cierre de Batch 8): auditoria de **179
@@ -1757,7 +1806,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.46.0 — 2026-08-14, DOC-M33)
+## 12. Metricas del Proyecto (v3.47.0 — 2026-08-14, DOC-M34)
+
+**[DOC-M34]** F33.15 no toca modelos ni migraciones -- 1 archivo de
+configuracion (`pytest.ini`, marker `e2e` registrado) mas 0 archivos de
+codigo de aplicacion modificados (el hallazgo de fallos/cuelgues en
+`test_legacy_public_tenants_api.py` quedo documentado, no corregido en
+esta sub-fase). Coleccion de tests confirmada en 2064/0 errores
+(sin cambio respecto al baseline). Ninguna fila de esta tabla cambia.
 
 **[DOC-M33]** F33.14-E no toca modelos, migraciones NI codigo de
 aplicacion -- auditoria pura (13 `tables.py` leidos, 0 modificados) mas

@@ -290,36 +290,123 @@ decision de diseno adicional. Roadmap original: "Una vez terminados
 Batches 6-9, hacemos F33.15 -> F33.19 como cierre formal" -- siguiente
 paso: F33.15 (Testing).
 
-## F33.15 a F33.19 — Governance rules, Accesibilidad,
-Responsive, Performance, Tests, Regresion final: **NOT_STARTED**
+## F33.15 — Testing (consolidacion de la suite existente): **PARCIAL, con hallazgos reales, bloqueada por inestabilidad del entorno Docker local**
 
-Accesibilidad, Responsive y Performance (F33.15-17) requieren su propia
+**Ejecutado y verificado:**
+- `pytest --collect-only`: **2064 tests, 0 errores de coleccion** -- confirma
+  que ninguno de los cambios de F33.13/F33.14 (frontend puro) rompio la
+  coleccion de tests, mismo baseline que la validacion F33-R previa.
+- Registrado el marker `pytest.mark.e2e` en `pytest.ini` (estaba en uso
+  en `tests/e2e/test_workspace_facturas_forensics.py` sin declarar,
+  generaba `PytestUnknownMarkWarning` en cada coleccion). Verificado:
+  2064 tests siguen coleccionando, 0 errores, antes y despues del
+  cambio. Commit aislado.
+
+**Bloqueado -- corrida completa de `pytest` (2064 tests) no se pudo
+completar de forma confiable en este entorno:**
+
+El motor de Docker Desktop (backend WSL2) colapso repetidamente
+(`500 Internal Server Error` en la API, contenedores forzados a
+reiniciar) durante intentos sucesivos de correr la suite completa y,
+tras dividirla, incluso el subconjunto `apps/public` (mas pequeno).
+Diagnostico real, no descartado a la primera:
+
+1. **No fue falta de memoria** -- se detuvieron `neo4j`/`cloudflared`
+   para liberar RAM (la VM de Docker tiene 5.7GiB, uso en reposo ~1.4GB)
+   y el patron de corte persistio identico.
+2. **No fue acumulacion de schemas huerfanos** -- verificado con SQL
+   directo (`information_schema.schemata`): solo 3 schemas no-publicos
+   en la base, sin residuos `test_*`/`empresa*` de corridas previas.
+   `TenantTestCase` limpia correctamente.
+3. **Causa real identificada:** una corrida en modo verbose (`-v
+   --tb=no`, matada manualmente tras confirmar que el buffer de
+   `docker compose exec -T` no se vacia hasta el final del proceso)
+   revelo que el corte real ocurre en
+   `apps/public/console/tests/test_legacy_public_tenants_api.py`, en la
+   clase `ConsoleAPIConsumptionTests` -- su `setUp()` crea 2 tenants
+   reales (`TenantClient.objects.create(schema_name=...)`) por cada
+   test, lo cual dispara `CREATE SCHEMA` + migraciones completas de
+   tenant en PostgreSQL, una operacion DDL pesada que se vuelve
+   progresivamente mas lenta bajo la degradacion de I/O que el propio
+   entorno Docker Desktop ya arrastraba tras los reinicios forzados
+   anteriores -- probablemente entrando en una espiral: timeout del
+   comando -> proceso pytest no finaliza limpio dentro del contenedor
+   -> conexiones/transacciones Postgres no liberadas -> siguiente
+   corrida arranca en peor estado -> nuevo colapso.
+4. **Hallazgo colateral, tambien real, verificado por ejecucion
+   completa (no interrumpida) de la clase mas corta:** 5 tests de
+   `ConsoleIsolationAndPermissionsTests` en el mismo archivo **fallan**
+   (no se cuelgan): `test_console_only_accessible_from_public_schema`,
+   `test_dashboard_requires_staff`, `test_impuestos_catalogo_requires_staff`,
+   `test_tenants_list_requires_staff`, `test_users_list_requires_staff`.
+   Lectura de codigo (`config/urls_public.py` lineas 107-108) muestra
+   un candidato de causa: `path('console/', include('apps.public.console.urls'))`
+   se registra ANTES que `path('console/impuestos/', include('apps.public.impuestos.dashboard.urls_dashboard'))`,
+   y `console/urls.py` linea 26 ya define su propia ruta
+   `impuestos/` (`ImpuestosIndexView`) -- un posible conflicto de
+   enrutamiento donde la vista de `console/urls.py` shadowea a la de
+   `impuestos.dashboard` en `console/impuestos/`. **No verificado por
+   ejecucion** (el entorno no lo permitio de forma confiable) -- es una
+   hipotesis fundamentada por lectura de codigo, no una causa
+   confirmada.
+
+**No se sigue reintentando la ejecucion masiva** -- instruccion
+explicita del usuario tras observar el patron de cuelgues repetidos:
+identificar el bug, documentarlo, y continuar con el resto de tareas en
+vez de esperar indefinidamente una respuesta que no llega. El archivo
+`apps/public/console/tests/test_legacy_public_tenants_api.py` (700
+lineas, nombre "legacy") queda senalado como el punto de partida real
+para quien retome esta investigacion: aislar `ConsoleAPIConsumptionTests`
+en un entorno Docker sano y en reposo, con timeout largo (>10 min) y
+`-x` (parar en el primer fallo) para confirmar si el cuelgue es del
+`setUp()` (creacion de tenant) o de un test especifico posterior.
+
+**F33.15 no se declara COMPLETED** -- coleccion y marker quedan
+resueltos con evidencia; la corrida completa/regresion queda como
+pendiente real, bloqueada por el entorno, con el diagnostico de causa
+mas probable ya documentado para no repetir el mismo ciclo de
+diagnostico en el proximo intento.
+
+## F33.16 a F33.19 — E2E (clean 29/29 baseline), Accesibilidad,
+Responsive, Performance, Release Gate: **NOT_STARTED**
+
+Accesibilidad, Responsive y Performance (F33.17-19) requieren su propia
 auditoria real (lectura de markup para aria/contraste/teclado, pruebas de
 `resize_window` en mobile/tablet, deteccion de listeners/requests
 duplicados) -- no se hicieron pasadas superficiales para "marcar la
-casilla"; genuinamente no se ejecutaron.
+casilla"; genuinamente no se ejecutaron. F33.16 (E2E) tiene evidencia
+parcial acumulada: cada batch de F33.13/F33.14 corrio la suite E2E
+completa (29/29 PASS en cada cierre exitoso), pero el objetivo explicito
+de F33.16 -- resolver definitivamente la flakiness historica de
+`login()` y declarar un baseline limpio como parte del Release Gate, no
+solo "paso en la ultima corrida de un batch" -- no se ha ejecutado como
+sub-fase propia todavia.
 
 **Esto NO es un bloqueo (`BLOCKED_SAFE`)** -- no hay ningun impedimento
-tecnico, de permisos, ni de credenciales. Es una decision de alcance:
-la evidencia y la infraestructura para continuar existen completas
-(inventario, contrato, helper consolidado y verificado, piloto validado,
-2 batches de expansion ya ejecutados), lo que falta es tiempo de ejecucion
-adicional del mismo patron ya probado.
+tecnico, de permisos, ni de credenciales. Es una decision de alcance y,
+para F33.15/16, tambien una limitacion real del entorno Docker local en
+esta maquina (ver seccion F33.15 arriba) que debe resolverse o
+investigarse mas antes de correr regresiones masivas con confianza.
 
 ## Conclusion
 
 **F33 no se declara COMPLETED.** Los criterios de exito de la mision
-("componentes realmente compartidos consolidados" en plural -- mas de un
-piloto --, "responsive validado", "accessibility validado") genuinamente
-no se cumplen todavia. Lo que SI esta completo y verificado con evidencia
-real (no solo documentado): inventario, clasificacion, contrato, la
-consolidacion tecnica de Offcanvas (el hallazgo de mayor severidad) ahora
-extendida a las 6 apps con violaciones reales (no solo el piloto), 4
-primitivas UI nuevas, 6 archivos de codigo muerto eliminados con
-evidencia, y el piloto original real ejecutado + validado con navegador +
-governance + regresion completa.
+("componentes realmente compartidos consolidados" en plural, "testing
+consolidado", "responsive validado", "accessibility validado")
+genuinamente no se cumplen todavia. Lo que SI esta completo y verificado
+con evidencia real (no solo documentado): inventario, clasificacion,
+contrato, la consolidacion tecnica de Offcanvas (el hallazgo de mayor
+severidad) extendida a las 6 apps con violaciones reales, 4 primitivas
+UI nuevas todas con al menos 1 adopcion real verificada (Card KPI, Empty
+State, Loading State, Filter Bar), 1 auditoria de Badges que confirma
+con evidencia por que no crear una 5a primitiva sin decision de diseno,
+6+ archivos de codigo muerto eliminados con evidencia, coleccion de
+tests establecida en 2064/0 errores, y cada batch de codigo validado
+individualmente con `manage.py check` + governance + E2E 29/29.
 
-**Siguiente paso recomendado (no ejecutado todavia):** batches 3-9 de
-F33.13 (documentados en `F33_APP_EXPANSION_MATRIX.md` con su motivo de
-diferimiento cada uno), seguidos de F33.15-17 (accesibilidad, responsive,
-performance -- auditorias reales, no listas de verificacion superficiales).
+**Siguiente paso recomendado:** retomar F33.15 resolviendo primero el
+hallazgo de causa raiz documentado arriba (aislar
+`ConsoleAPIConsumptionTests` en un entorno Docker sano), luego F33.16
+(E2E baseline limpio como cierre formal, no solo re-uso de corridas de
+batch) y F33.17-19 (accesibilidad, responsive, performance -- auditorias
+reales, no listas de verificacion superficiales).
