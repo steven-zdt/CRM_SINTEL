@@ -2,6 +2,9 @@
 Context processors globales del workspace tenant (ver config/settings.py's
 TEMPLATES['OPTIONS']['context_processors']).
 """
+from django.db import connection
+from django_tenants.utils import get_public_schema_name
+
 from apps.tenant.core.services.sede_context import resolve_sede_activa_id
 
 
@@ -13,7 +16,19 @@ def contexto_organizacional(request):
 
     Vacio (sin llaves) para requests anonimos o sin tenant_profile - no
     rompe ningun template existente que no las use.
+
+    F33.15: `TEMPLATES` es una unica configuracion global (config/settings.py),
+    por lo que este context processor tambien se ejecuta al renderizar
+    vistas del schema publico (p.ej. /console/). `perfil.TenantProfile`
+    esta en TENANT_APPS -- su tabla no existe en el schema publico, asi
+    que `user.tenant_profile` ahi no lanza un simple DoesNotExist (que
+    getattr(..., None) ya capturaba bien) sino un ProgrammingError real
+    de "relation does not exist". Guard explicito antes de tocar la
+    relacion, mismo patron ya usado en apps/tenant/core/admin.py.
     """
+    if connection.schema_name == get_public_schema_name():
+        return {}
+
     user = getattr(request, 'user', None)
     if not user or not user.is_authenticated:
         return {}
