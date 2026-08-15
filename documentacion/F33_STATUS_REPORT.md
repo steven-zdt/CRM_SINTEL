@@ -367,6 +367,93 @@ pendiente real, bloqueada por el entorno, con el diagnostico de causa
 mas probable ya documentado para no repetir el mismo ciclo de
 diagnostico en el proximo intento.
 
+## F33.15 — Continuacion (Mision Autonoma de Saneamiento): 3 bugs reales corregidos, regresion parcial confirmada, BLOCKED_SAFE en el resto
+
+Ejecucion completa documentada en `documentacion/F33.15_TESTING_EXECUTION_STATUS.md`
+(fases numeradas F33.15.0 a F33.15.3c). Retoma exactamente el hallazgo
+de causa raiz dejado pendiente arriba (`ConsoleAPIConsumptionTests`),
+siguiendo la regla "medir antes de modificar" y "no asumir causa
+unica".
+
+**Bug 1 (produccion real, no solo de tests) -- CORREGIDO:**
+`apps/tenant/core/context_processors.py::contexto_organizacional` esta
+registrado globalmente (unica config `TEMPLATES`), por lo que tambien
+se ejecuta en vistas del schema publico (`/console/`). `perfil.TenantProfile`
+esta en `TENANT_APPS` -- su tabla no existe en el schema publico, y
+`user.tenant_profile` ahi lanzaba `ProgrammingError` (no un
+`DoesNotExist` capturable por `getattr(..., None)`), crasheando la
+request con 500 para cualquier staff autenticado. Fix: guard con
+`connection.schema_name == get_public_schema_name()`, mismo patron ya
+usado en `apps/tenant/core/admin.py`. **Los 5 fallos de
+`ConsoleIsolationAndPermissionsTests` documentados en la sesion
+anterior pasan de FAILED a PASSED** con este unico fix.
+
+**Bug 2 (performance de testing, causa real del "cuelgue" de sesiones
+previas) -- CORREGIDO:** medido con `--durations=0` (sin modificar
+nada primero): `ConsoleAPIConsumptionTests.setUp()` crea 2 tenants
+reales (~79s/tenant, `CREATE SCHEMA` + migraciones completas via
+`TenantMixin.save()`, confirmado por lectura de codigo con
+`inspect.getsource()`). El test `test_tenants_api_pagination_follows_standard`
+ademas crea **30 tenants adicionales en un loop** -- ~40 min solo para
+ese loop, explicando por que este test especifico parecia "colgado
+indefinidamente" en cada intento anterior (mis propios timeouts
+cortaban el proceso a mitad de un `CREATE SCHEMA`, dejando
+conexiones/locks Postgres huerfanos que degradaban el motor Docker en
+la siguiente corrida -- esa era la verdadera causa de los colapsos de
+Docker Desktop de la sesion anterior, no un problema del motor en si).
+Fix: `.create()` en loop -> `.bulk_create()` (el endpoint probado solo
+lee filas de la tabla publica, no requiere schemas reales; verificado
+seguro por lectura de codigo -- `Client` no sobreescribe `save()`).
+Test: de "nunca termina" a **PASSED en 326.92s**.
+
+**Bug 3 (drift test vs codigo real, independiente del Bug 2) --
+CORREGIDO:** al acelerar el test lo suficiente para que terminara por
+primera vez, revelo `AssertionError: 20 != 25` genuino.
+`apps/config/api/pagination.py::StandardResultsSetPagination` usa
+`page_size=20`/`max_page_size=200`; el test asumia `25`/`100`. Drift
+nunca detectado porque el test jamas llegaba a ejecutar la aserción.
+Fix: docstring + asserts corregidos a los valores reales.
+
+**Regresion parcial confirmada:** `ConsoleIsolationAndPermissionsTests`
+(5/5), `ConsoleAPIConsumptionTests` (6/6), `test_api_views.py` (34/34)
+-- **41 tests console confirmados PASS** con los 3 fixes aplicados.
+`manage.py check` + governance PASS despues de cada fix.
+
+**BLOCKED_SAFE real (entorno, no codigo):** al continuar la regresion
+hacia `ConsoleBusinessLogicTests` (4 tests, `setUp()` ligero, el propio
+test mockea el servicio de creacion -- confirmado por lectura de
+codigo que NO es un test pesado), el contenedor `web` se reinicio
+automaticamente 2 veces (la 2a con `exit: 137` / SIGKILL en el propio
+comando `docker compose exec`, sin producir ningun output). `docker
+stats` en reposo inmediatamente despues: ~440MiB de 5.69GiB en uso --
+sin evidencia de memory leak persistente. Patron consistente con
+inestabilidad intermitente del backend Docker Desktop/WSL2 bajo carga
+acumulada tras varias horas de sesion continua con decenas de ciclos
+`CREATE SCHEMA`/`DROP SCHEMA`, no un problema del codigo de la
+aplicacion. Regla de la mision aplicada: "Maximo 1 reinicio por
+problema ambiental... no entrar en restart loop" -- ya ocurrieron 2
+reinicios automaticos, se detiene aqui la ejecucion de mas suites
+pesadas en esta sesion en vez de seguir reintentando.
+
+**No verificado por ejecucion en esta sesion (impacto del
+BLOCKED_SAFE):** `ConsoleBusinessLogicTests` (4), `ConsoleIntegrationTests`
+(1), `ConsoleLegalDataTests` (5), `test_views.py` de console (sin
+auditar), regresion por capas del resto de la suite publica (2064
+tests totales, fuera de `console/`), y todas las fases que dependen de
+Docker estable para ejecuciones largas: F33.16 (E2E), F33.18
+(Responsive), F33.19 (Performance), Release Gate.
+
+**Recomendacion para continuar:** reiniciar Docker Desktop
+completamente (no solo el contenedor) fuera de esta sesion, idealmente
+tras reiniciar la maquina host, antes de retomar regresion pesada.
+Accion fuera del alcance de lo que se puede hacer de forma segura y
+repetible via CLI dentro de esta sesion ya extendida.
+
+**F33 = IN_PROGRESS** (no `COMPLETED`, no `BLOCKED_SAFE` global -- el
+bloqueo es especifico a "continuar regresion pesada en esta sesion de
+Docker", no a la fase completa; los 3 fixes de codigo estan
+COMPLETOS y verificados con evidencia solida).
+
 ## F33.17 — Accesibilidad (componentes modificados): **PARCIAL**
 
 Auditoria enfocada, no un WCAG audit completo -- solo los componentes
@@ -417,11 +504,18 @@ explicito de F33.16 -- resolver definitivamente la flakiness historica de
 solo "paso en la ultima corrida de un batch" -- no se ha ejecutado como
 sub-fase propia todavia.
 
-**Esto NO es un bloqueo (`BLOCKED_SAFE`)** -- no hay ningun impedimento
-tecnico, de permisos, ni de credenciales. Es una decision de alcance y,
-para F33.15/16, tambien una limitacion real del entorno Docker local en
-esta maquina (ver seccion F33.15 arriba) que debe resolverse o
-investigarse mas antes de correr regresiones masivas con confianza.
+**Actualizacion (mision autonoma de saneamiento, ver §"F33.15 —
+Continuacion" arriba):** para F33.16/18/19 especificamente **SI existe
+ahora un `BLOCKED_SAFE` real y documentado con evidencia**, no solo una
+decision de alcance -- 2 reinicios automaticos de Docker (el 2o con
+`exit: 137`/SIGKILL) durante regresion de tests dentro de esta misma
+sesion extendida, con `docker stats` descartando memory leak
+persistente en reposo. F33.17 (parcial, sin este bloqueo -- se hizo por
+lectura de codigo, no requirio ejecucion pesada). Para F33 en su
+conjunto: no es un `BLOCKED_SAFE` global (los hallazgos de codigo estan
+completos), es especifico a "continuar ejecutando suites pesadas contra
+Docker en esta sesion" -- requiere reinicio completo de Docker
+Desktop/maquina host fuera de esta sesion antes de retomar F33.16/18/19.
 
 ## Conclusion
 
@@ -449,3 +543,18 @@ batch), completar F33.17 (contraste real, navegacion por teclado
 end-to-end, tablas django-tables2 -- no cubierto en la primera pasada),
 y F33.18-19 (responsive, performance -- auditorias reales, no listas de
 verificacion superficiales).
+
+**Actualizacion (mision autonoma de saneamiento de testing, misma
+sesion):** el hallazgo de causa raiz de `ConsoleAPIConsumptionTests`
+**fue resuelto** -- 3 bugs reales distintos identificados y corregidos
+con evidencia (context processor crasheando vistas publicas, 30x
+provisioning innecesario de schemas, drift de aserciones de paginacion).
+41 tests de `console/` confirmados PASS. La continuacion de la
+regresion se topo con un `BLOCKED_SAFE` real de entorno (2 reinicios
+automaticos de Docker, 1 con SIGKILL) -- ver §"F33.15 — Continuacion"
+arriba para el detalle completo y la recomendacion (reiniciar Docker
+Desktop/maquina host fuera de esta sesion). **F33 sigue IN_PROGRESS**:
+los 3 fixes de codigo de esta sub-fase estan completos y verificados;
+F33.16/18/19 y el resto de la regresion de F33.15 quedan pendientes,
+bloqueados por el mismo problema de entorno, no por falta de diagnostico
+o evidencia.

@@ -1,7 +1,71 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.48.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M35) — FASE 33 (Shared UI / Design
+**Version:** 3.49.0
+**Ultima actualizacion:** 2026-08-14 (DOC-M36) — FASE 33 (Shared UI / Design
+System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
+que. Cubre la mision autonoma de saneamiento de F33.15 (Testing):
+3 bugs reales corregidos con evidencia (context processor crasheando
+vistas del schema publico, provisioning innecesario de 30 schemas en un
+test, drift de aserciones de paginacion), 41 tests de `console/`
+confirmados PASS, y un `BLOCKED_SAFE` real de entorno documentado (2
+reinicios automaticos de Docker, 1 con SIGKILL) que detiene la
+continuacion de regresion pesada en esta sesion. Detalle completo:
+`documentacion/F33.15_TESTING_EXECUTION_STATUS.md`. Posterior a DOC-M35.
+
+**F33.15 (continuacion, mision autonoma):** siguiendo el punto de
+partida dejado en DOC-M34 (causa raiz de `ConsoleAPIConsumptionTests`
+sin resolver), se aplicaron 3 fixes independientes, cada uno medido e
+investigado por separado (regla "no asumir causa unica"):
+
+1. **`apps/tenant/core/context_processors.py`** -- `contexto_organizacional`
+   esta registrado globalmente (unica config `TEMPLATES`), tambien se
+   ejecuta en vistas del schema publico. `perfil.TenantProfile` esta en
+   `TENANT_APPS` -- su tabla no existe en publico, y `user.tenant_profile`
+   ahi lanzaba `ProgrammingError` real (no un `DoesNotExist` capturable),
+   crasheando con 500 cualquier vista publica para un staff autenticado
+   -- **bug de produccion real, no solo de tests**. Fix: guard con
+   `connection.schema_name == get_public_schema_name()`. Resuelve los 5
+   fallos de `ConsoleIsolationAndPermissionsTests` documentados en
+   DOC-M34.
+
+2. **`apps/public/console/tests/test_legacy_public_tenants_api.py`**
+   (`ConsoleAPIConsumptionTests`) -- `test_tenants_api_pagination_follows_standard`
+   creaba 30 tenants reales en un loop (`~79s/tenant` medido,
+   `CREATE SCHEMA` + migraciones completas via `TenantMixin.save()`) --
+   causa real del "cuelgue indefinido" observado en sesiones previas
+   (mis propios timeouts cortaban el proceso a mitad de un
+   `CREATE SCHEMA`, degradando Docker en la siguiente corrida). Fix:
+   `.create()` en loop -> `.bulk_create()` (el endpoint probado solo lee
+   filas de la tabla publica, no requiere schemas reales).
+
+3. **Mismo archivo** -- al acelerar el test lo suficiente para que
+   terminara, revelo un `AssertionError` real: el test asumia
+   `page_size=25`/`max_page_size=100`, pero
+   `apps/config/api/pagination.py::StandardResultsSetPagination` usa
+   `20`/`200` -- drift nunca detectado porque el test jamas llegaba a
+   ejecutar la aserción. Fix: docstring + asserts corregidos.
+
+**Regresion confirmada:** `ConsoleIsolationAndPermissionsTests` (5/5),
+`ConsoleAPIConsumptionTests` (6/6), `test_api_views.py` (34/34) -- 41
+tests. `manage.py check` + governance PASS tras cada fix.
+
+**`BLOCKED_SAFE` real, no fabricado como PASS:** al continuar hacia
+`ConsoleBusinessLogicTests` (test ligero, mockeado, confirmado por
+lectura de codigo que no es el causante), el contenedor `web` se
+reinicio automaticamente 2 veces, la 2a con `exit: 137` (SIGKILL) sin
+producir ningun output de pytest. `docker stats` en reposo: ~440MiB de
+5.69GiB, sin evidencia de leak persistente -- patron de inestabilidad
+intermitente del backend Docker Desktop/WSL2 bajo carga acumulada tras
+horas de sesion continua, no un problema de codigo. Regla aplicada:
+"maximo 1 reinicio por problema ambiental, no restart loop" -- se
+detiene la ejecucion de mas suites pesadas en esta sesion. Pendiente:
+`ConsoleBusinessLogicTests`, `ConsoleIntegrationTests`,
+`ConsoleLegalDataTests`, `test_views.py`, regresion del resto de la
+suite (2064 tests), F33.16 (E2E), F33.18 (Responsive), F33.19
+(Performance), Release Gate -- todos requieren Docker estable,
+recomendado reiniciar Docker Desktop/maquina host fuera de esta sesion.
+
+**Actualizacion previa:** 2026-08-14 (DOC-M35) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
 que. Cubre F33.17 (Accesibilidad, primera pasada sobre componentes
 modificados): 3 hallazgos reales corregidos en los primitivos Shared UI
@@ -1838,7 +1902,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.48.0 — 2026-08-14, DOC-M35)
+## 12. Metricas del Proyecto (v3.49.0 — 2026-08-14, DOC-M36)
+
+**[DOC-M36]** F33.15 (continuacion) no toca modelos ni migraciones --
+2 archivos de codigo (`apps/tenant/core/context_processors.py`,
+`apps/public/console/tests/test_legacy_public_tenants_api.py`) mas 1
+documento nuevo (`F33.15_TESTING_EXECUTION_STATUS.md`) y 1 documento
+nuevo (`F33.15_TEST_MATRIX.md`). 0 archivos de test E2E nuevos.
+Ninguna fila de esta tabla cambia.
 
 **[DOC-M35]** F33.17 no toca modelos ni migraciones -- 3 archivos HTML
 (atributos ARIA unicamente, `apps/tenant/core/templates/tenant/core/partials/ui/`)
