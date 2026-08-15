@@ -249,30 +249,46 @@ class ConsoleAPIConsumptionTests(TenantTestCase):
         """
         Verifica que la paginación sigue StandardResultsSetPagination.
 
-        StandardResultsSetPagination:
-        - page_size: 25 (default)
+        StandardResultsSetPagination (apps/config/api/pagination.py):
+        - page_size: 20 (default)
         - page_size_query_param: 'page_size'
-        - max_page_size: 100
+        - max_page_size: 200
+
+        F33.15: docstring y asserts corregidos -- decian 25/100, la
+        implementacion real siempre fue 20/200. El drift nunca se detecto
+        porque este test tardaba varios minutos (30x create() con
+        provisioning real de schema, ver fix de bulk_create abajo) y
+        jamas se ejecutaba hasta el final en las corridas previas.
         """
         # Asegurar esquema public antes de crear más tenants
         connection.set_schema_to_public()
 
-        # Crear más tenants para probar paginación
-        for i in range(30):
-            TenantClient.objects.create(
-                schema_name=f"empresa{i + 3}", nombre=f"Empresa {i + 3}", on_trial=True
-            )
+        # Crear más tenants para probar paginación. bulk_create() en vez de
+        # 30x create() en loop: este test solo necesita 30 FILAS en la tabla
+        # publica tenants_client para ejercer la paginacion del endpoint
+        # (StandardResultsSetPagination), no 30 schemas PostgreSQL reales con
+        # migraciones -- create() dispara TenantMixin.save(), que SIEMPRE
+        # crea el schema completo (auto_create_schema=True a nivel de
+        # modelo). bulk_create() hace INSERT directo sin invocar save() por
+        # instancia, evitando el provisioning innecesario (F33.15: medido en
+        # ~80s/tenant con create(), este test tardaba varios minutos).
+        TenantClient.objects.bulk_create(
+            [
+                TenantClient(schema_name=f"empresa{i + 3}", nombre=f"Empresa {i + 3}", on_trial=True)
+                for i in range(30)
+            ]
+        )
 
-        # Primera página (debería tener 25 resultados)
+        # Primera página (debería tener 20 resultados -- page_size real)
         response = self.api_client.get("/api/public/v1/tenants/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["results"]), 25)
+        self.assertEqual(len(response.data["results"]), 20)
         self.assertIsNotNone(response.data["next"])  # Hay más páginas
 
         # Segunda página
         response = self.api_client.get("/api/public/v1/tenants/?page=2")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertLessEqual(len(response.data["results"]), 25)
+        self.assertLessEqual(len(response.data["results"]), 20)
 
         # Cambiar tamaño de página
         response = self.api_client.get("/api/public/v1/tenants/?page_size=10")
@@ -282,8 +298,8 @@ class ConsoleAPIConsumptionTests(TenantTestCase):
         # Máximo tamaño de página
         response = self.api_client.get("/api/public/v1/tenants/?page_size=200")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # No debería exceder max_page_size (100)
-        self.assertLessEqual(len(response.data["results"]), 100)
+        # No debería exceder max_page_size (200)
+        self.assertLessEqual(len(response.data["results"]), 200)
 
     def test_tenants_api_filtering(self):
         """Verifica que los filtros de la API funcionan correctamente."""
