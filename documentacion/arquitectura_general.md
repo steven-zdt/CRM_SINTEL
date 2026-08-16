@@ -1,13 +1,70 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.49.0
-**Ultima actualizacion:** 2026-08-14 (DOC-M36) — FASE 33 (Shared UI / Design
+**Version:** 3.50.0
+**Ultima actualizacion:** 2026-08-16 (DOC-M37) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
-que. Cubre la mision autonoma de saneamiento de F33.15 (Testing):
-3 bugs reales corregidos con evidencia (context processor crasheando
-vistas del schema publico, provisioning innecesario de 30 schemas en un
-test, drift de aserciones de paginacion), 41 tests de `console/`
-confirmados PASS, y un `BLOCKED_SAFE` real de entorno documentado (2
+que. Cubre la auditoria directa del entorno Docker/WSL2 (F33.15-B, a
+peticion explicita del usuario): diagnostico completo (ausencia de
+`.wslconfig`, memoria dinamica de WSL2 hasta 50% de 11.8GB RAM total del
+host, disco virtual sin compactacion automatica) + correccion real
+aplicada (`.wslconfig` con memoria/CPU fijos, `sparseVhd`,
+`autoMemoryReclaim`) + resultado: mejora parcial verificada (el motor ya
+no colapsa siempre por completo), causa de fondo (inestabilidad
+intermitente bajo I/O especifico de `TenantTestCase`) no eliminada.
+Detalle completo: `documentacion/F33.15_TESTING_EXECUTION_STATUS.md`
+§"F33.15-B — Auditoria del entorno Docker/WSL2: cierre consolidado".
+Posterior a DOC-M36.
+
+**F33.15-B (auditoria de entorno):** el usuario pidio explicitamente
+"revisa el entorno docker audita y corrige" tras varios colapsos
+recurrentes del motor de Docker Desktop durante la regresion de
+`ConsoleBusinessLogicTests`. Auditoria directa (PowerShell, fuera de
+los contenedores) encontro: **no existia `C:\Users\steve\.wslconfig`**
+-- WSL2 operaba con limites dinamicos por defecto (memoria hasta 50%
+de los 11.8GB de RAM total del host, coincide exactamente con el
+`Total Memory: 5.692GiB` visto en `docker info` en diagnosticos
+previos), sin `swap` explicito ni compactacion de disco virtual
+(`docker_data.vhdx`, 15.35GB, sin `sparseVhd`). Espacio en disco de
+Windows (134.92GB libres) descartado como causa. Exclusiones de
+Windows Defender no verificables (requiere admin, fuera del alcance de
+esta sesion) -- permanece como hipotesis no descartada.
+
+**Correccion aplicada** (archivo de perfil de usuario, fuera del repo
+git, no commiteable): `.wslconfig` con `memory=4GB`, `processors=6`,
+`swap=2GB`, `sparseVhd=true`, `autoMemoryReclaim=gradual`. Verificado
+con `docker info`: `CPUs: 6, Total Memory: 3.824GiB` tras aplicar con
+`wsl --shutdown`.
+
+**Resultado:** mejora real observada -- los colapsos posteriores dejaron
+de ser SIEMPRE totales (antes tumbaban `db`/`redis`/`web` simultaneamente;
+despues, en varios intentos, solo `web` se reinicio, o hubo corridas
+exitosas completas verificadas, p.ej. un test de 156.49s con Docker
+permaneciendo sano 44+ minutos). **La causa de fondo no se elimino por
+completo**: `ConsoleBusinessLogicTests` siguio sin completarse de forma
+confiable en intentos posteriores. Se descartaron 2 hipotesis
+especificas por evidencia directa (mock mal dirigido -- el import es
+local y se resuelve tras el patch, deberia funcionar; cold-start del
+framework compartido en una misma sesion de pytest -- no lo evito, y
+se identifico que cada invocacion de `pytest` es un proceso Python
+nuevo que no comparte estado de "warmup" con invocaciones anteriores).
+
+**Recomendaciones para el usuario** (fuera del alcance de esta
+sesion): verificar/agregar exclusiones de Windows Defender para rutas
+de Docker/WSL2 (requiere admin); considerar subir `memory=4GB` a `6GB`
+si el uso del host lo permite; evaluar migrar los casos de
+`TenantTestCase` que no requieren un schema real (servicios mockeados,
+aserciones de permisos) a `TestCase` simple, reduciendo la superficie
+de operaciones DDL costosas; reconsiderar si 11.8GB de RAM total es
+suficiente para el flujo de trabajo completo de desarrollo.
+
+**Actualizacion previa:** 2026-08-14 (DOC-M36) — FASE 33 (Shared UI /
+Design System), continua EN PROGRESO -- no cerrada, documentado con
+evidencia por que. Cubre la mision autonoma de saneamiento de F33.15
+(Testing): 3 bugs reales corregidos con evidencia (context processor
+crasheando vistas del schema publico, provisioning innecesario de 30
+schemas en un test, drift de aserciones de paginacion), 41 tests de
+`console/` confirmados PASS, y un `BLOCKED_SAFE` real de entorno
+documentado (2
 reinicios automaticos de Docker, 1 con SIGKILL) que detiene la
 continuacion de regresion pesada en esta sesion. Detalle completo:
 `documentacion/F33.15_TESTING_EXECUTION_STATUS.md`. Posterior a DOC-M35.
@@ -1902,7 +1959,16 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.49.0 — 2026-08-14, DOC-M36)
+## 12. Metricas del Proyecto (v3.50.0 — 2026-08-16, DOC-M37)
+
+**[DOC-M37]** F33.15-B (auditoria de entorno) no toca modelos,
+migraciones NI codigo de aplicacion -- auditoria de infraestructura
+Windows/WSL2/Docker Desktop fuera del repositorio. 1 archivo de
+configuracion creado fuera del repo git (`C:\Users\steve\.wslconfig`,
+perfil de usuario, no commiteable). 0 documentos nuevos (hallazgos
+documentados como seccion nueva en
+`F33.15_TESTING_EXECUTION_STATUS.md` existente). 0 archivos de test
+nuevos. Ninguna fila de esta tabla cambia.
 
 **[DOC-M36]** F33.15 (continuacion) no toca modelos ni migraciones --
 2 archivos de codigo (`apps/tenant/core/context_processors.py`,
