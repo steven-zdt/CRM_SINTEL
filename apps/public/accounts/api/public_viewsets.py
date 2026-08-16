@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import get_user_model
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, permissions, status, viewsets
@@ -17,8 +19,11 @@ from apps.public.accounts.api.services.user_service import (
     create_user_service,
     update_user_service,
 )
+from apps.public.accounts.services.delete_user_service import delete_user_service
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 
 class PublicUserViewSet(
@@ -77,6 +82,16 @@ class PublicUserViewSet(
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        serializer = self.get_serializer(data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        try:
+            user = update_user_service(user=user, **serializer.validated_data)
+            return Response(UserListSerializer(user).data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     def partial_update(self, request, *args, **kwargs):
         user = self.get_object()
         serializer = self.get_serializer(data=request.data, partial=True)
@@ -86,6 +101,26 @@ class PublicUserViewSet(
             return Response(UserListSerializer(user).data, status=status.HTTP_200_OK)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Elimina un usuario. Usa `delete_user_service` para limpieza cross-schema
+        (TenantProfile via signal) antes del borrado; si falla, intenta el
+        borrado ORM directo como fallback (mismo patron que UserAdminViewSet).
+        """
+        user = self.get_object()
+        logger.info("PublicUserViewSet.destroy: requested delete user_id=%s by=%s", user.pk, getattr(request.user, 'pk', None))
+        try:
+            delete_user_service(user.pk, cascade=True, deleted_by_id=request.user.pk)
+            logger.info("PublicUserViewSet.destroy: delete_user_service completed for user_id=%s", user.pk)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception:
+            logger.exception("PublicUserViewSet.destroy: delete_user_service failed for user_id=%s, falling back to super().destroy", user.pk)
+            try:
+                return super().destroy(request, *args, **kwargs)
+            except Exception:
+                logger.exception("PublicUserViewSet.destroy: fallback ORM destroy also failed for user_id=%s", user.pk)
+                return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=["get", "put", "patch"], url_path="me")
     def me(self, request):
