@@ -2,8 +2,9 @@
 Tests de API para la app tenants.
 
 Verifica:
-- ReadOnly para Client y Domain (list/detail)
-- 405 en POST/PUT/DELETE
+- ClientViewSet: CRUD admin completo (IsAdminUser); create/update/destroy con
+  payload incompleto o precondiciones no cumplidas -> 400 (no ReadOnly).
+- DomainViewSet: ReadOnly (405 en POST/PUT/DELETE)
 - Paginación estándar
 - Filtros y búsqueda
 """
@@ -71,25 +72,27 @@ class ClientViewSetTests(PublicAPITestCase):
         self.assertEqual(response.data["id"], self.tenant1.id)
         self.assertEqual(response.data["nombre"], "Empresa 1")
 
-    def test_create_tenant_405(self):
-        """Test: POST /api/public/v1/tenants/ devuelve 405 (ReadOnly)."""
+    def test_create_tenant_incomplete_payload_400(self):
+        """Test: ClientViewSet es CRUD admin completo (no ReadOnly);
+        POST sin schema_name devuelve 400, no 405."""
         data = {
             "nombre": "Nueva Empresa",
             "on_trial": True,
         }
         response = self.json("post", "/api/public/v1/tenants/", data)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_update_tenant_405(self):
-        """Test: PUT /api/public/v1/tenants/{id}/ devuelve 405 (ReadOnly)."""
+    def test_update_tenant_incomplete_payload_400(self):
+        """Test: PUT (full update) sin los campos requeridos devuelve 400."""
         data = {"nombre": "Empresa Actualizada"}
         response = self.json("put", f"/api/public/v1/tenants/{self.tenant1.id}/", data)
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_delete_tenant_405(self):
-        """Test: DELETE /api/public/v1/tenants/{id}/ devuelve 405 (ReadOnly)."""
+    def test_delete_tenant_requires_suspended_400(self):
+        """Test: DELETE (hard delete) exige is_active=False; sobre un tenant
+        activo devuelve 400 (precondicion documentada en ClientViewSet.destroy)."""
         response = self.json("delete", f"/api/public/v1/tenants/{self.tenant1.id}/")
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_filter_by_on_trial(self):
         """Test: Filtrar por on_trial."""
