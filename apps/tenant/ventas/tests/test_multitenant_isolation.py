@@ -84,7 +84,11 @@ def test_multitenant_isolation_ventas(client, tenant1, tenant2):
         )
 
     # --- NIVEL 1: Aislamiento en listado ---
-    client.force_login(user1)
+    # force_login debe escribir la sesion en el esquema del tenant: sessions
+    # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
+    # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant1.schema_name):
+        client.force_login(user1)
     resp = client.get("/api/v1/ventas/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_200_OK
     numeros = [item["numero_factura"] for item in resp.json().get("results", [])]
@@ -165,7 +169,11 @@ def test_multitenant_isolation_ventas_tabla_html(client, tenant1, tenant2):
             numero_factura="VENTA-TABLA-T2", subtotal="200.00", total_neto="200.00",
         )
 
-    client.force_login(user1)
+    # force_login debe escribir la sesion en el esquema del tenant: sessions
+    # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
+    # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant1.schema_name):
+        client.force_login(user1)
     resp = client.get("/ui/ventas/tabla/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_200_OK
     body = resp.content.decode()

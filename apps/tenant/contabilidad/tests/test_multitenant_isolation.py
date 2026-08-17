@@ -66,7 +66,11 @@ def test_multitenant_isolation_contabilidad_tablas_html(client, tenant1, tenant2
     with schema_context(tenant1.schema_name):
         user1 = User.objects.get(username="cuser1")
 
-    client.force_login(user1)
+    # force_login debe escribir la sesion en el esquema del tenant: sessions
+    # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
+    # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant1.schema_name):
+        client.force_login(user1)
     host1 = f"{tenant1.schema_name}.sintel.net.co"
 
     # Cuentas
