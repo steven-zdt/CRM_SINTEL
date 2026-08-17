@@ -11,13 +11,13 @@ class ImpuestosTemplateTests(PublicAPITestCase):
     """Tests de templates para endpoints de impuestos."""
 
     def test_api_endpoints_no_render_templates(self):
-        """Test: Los endpoints /api/v1/impuestos/ no renderizan templates."""
+        """Test: Los endpoints /api/public/v1/impuestos/ no renderizan templates."""
         endpoints = [
-            "/api/v1/impuestos/tipos/",
-            "/api/v1/impuestos/tarifas-iva/",
-            "/api/v1/impuestos/conceptos-retencion/",
-            "/api/v1/impuestos/codigos-tributarios/",
-            "/api/v1/impuestos/actividades-economicas/",
+            "/api/public/v1/impuestos/tipos/",
+            "/api/public/v1/impuestos/tarifas-iva/",
+            "/api/public/v1/impuestos/conceptos-retencion/",
+            "/api/public/v1/impuestos/codigos-tributarios/",
+            "/api/public/v1/impuestos/actividades-economicas/",
         ]
 
         for endpoint in endpoints:

@@ -64,7 +64,7 @@ class IngestaViewSetTests(PublicAPITestCase):
         # Verificar que se creó en BD
         doc = DocumentoFuente.objects.get(id=response.data["id"])
         self.assertIsNotNone(doc.url_origen)
-        self.assertIsNone(doc.archivo)
+        self.assertFalse(doc.archivo)
 
     def test_create_mutual_exclusion(self):
         """Test: Validación de mutua exclusión archivo/url_origen."""
