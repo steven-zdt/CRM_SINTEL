@@ -1,7 +1,24 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.50.0
-**Ultima actualizacion:** 2026-08-16 (DOC-M37) — FASE 33 (Shared UI / Design
+**Version:** 3.51.0
+**Ultima actualizacion:** 2026-08-16 (DOC-M38) — FASE 33 (Shared UI / Design
+System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
+que. Cubre el cierre del Nivel 2 de la regresion incremental
+(`apps/public/**`): 4 hallazgos reales corregidos con evidencia
+(`PublicUserViewSet` sin `update()`/`destroy()` -> 500 en produccion;
+prefijo de URL publico obsoleto en tests de `impuestos`; assertion
+incorrecta sobre `FieldFile`; leak de `connection.schema_name` entre
+tests por ser estado de sesion Postgres no transaccional). 61/61 tests
+PASS en `accounts`/`core`/`impuestos`/`tenants`. Ademas, ante un nuevo
+colapso total de Docker a mitad de sesion, se piloto con exito ejecucion
+de pytest **local** (`venv/Scripts/python.exe` contra `db`/`redis`
+dockerizados en `localhost`) por instruccion explicita del usuario,
+confirmando viabilidad pero con ~9x mas lentitud que en contenedor.
+Detalle completo: `documentacion/F33.15_TESTING_EXECUTION_STATUS.md`
+§"F33.15-B Nivel 2 — `apps/public/**` por modulo: CERRADO". Posterior a
+DOC-M37.
+
+**Actualizacion previa:** 2026-08-16 (DOC-M37) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
 que. Cubre la auditoria directa del entorno Docker/WSL2 (F33.15-B, a
 peticion explicita del usuario): diagnostico completo (ausencia de
@@ -1959,7 +1976,18 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.50.0 — 2026-08-16, DOC-M37)
+## 12. Metricas del Proyecto (v3.51.0 — 2026-08-16, DOC-M38)
+
+**[DOC-M38]** F33.15-B Nivel 2 no toca modelos ni migraciones -- 5
+archivos de codigo modificados: 1 fix de produccion
+(`apps/public/accounts/api/public_viewsets.py`, +35 lineas: `update()`
+y `destroy()`) y 4 archivos de test corregidos
+(`apps/config/tests/base_public.py`,
+`apps/public/tenants/tests/test_api_tenants.py`,
+`apps/public/impuestos/tests/test_api_impuestos.py`,
+`apps/public/impuestos/tests/test_api_ingesta.py`,
+`apps/public/impuestos/tests/test_templates.py`). 0 archivos nuevos, 0
+migraciones. Ninguna fila de esta tabla cambia.
 
 **[DOC-M37]** F33.15-B (auditoria de entorno) no toca modelos,
 migraciones NI codigo de aplicacion -- auditoria de infraestructura
