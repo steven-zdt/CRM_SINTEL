@@ -9,7 +9,7 @@ Tests para validar:
 """
 from decimal import Decimal
 import pytest
-from django.test import TestCase
+from django_tenants.utils import schema_context
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.empresa.models import Empresa
@@ -22,23 +22,24 @@ class TestPresupuestoProyecto:
     """Suite de tests para ItemPresupuestoProyecto."""
 
     @pytest.fixture(autouse=True)
-    def setup(self):
-        """Configuracion inicial para cada test."""
-        self.empresa1 = Empresa.objects.create(
-            razon_social='Empresa 1',
-            nit='123456789'
-        )
-        self.empresa2 = Empresa.objects.create(
-            razon_social='Empresa 2',
-            nit='987654321'
-        )
-        self.proyecto = Proyecto.objects.create(
-            empresa=self.empresa1,
-            nombre='Proyecto Test',
-            tipo_servicio='PROYECTO_INTEGRAL',
-            valor_contrato_proyectado=Decimal('1000000.00'),
-            fase_actual='PLANEACION'
-        )
+    def setup(self, tenant):
+        """Configuracion inicial para cada test, dentro del esquema del tenant.
+
+        WARNING: Empresa es singleton por esquema (UniqueConstraint en
+        singleton_key, ver apps/tenant/empresa/models.py) -- no es posible
+        crear una "empresa2" real en el mismo tenant. self.proyecto usa la
+        unica Empresa del esquema (self.empresa1).
+        """
+        with schema_context(tenant.schema_name):
+            self.empresa1 = Empresa.objects.first()
+            self.proyecto = Proyecto.objects.create(
+                empresa=self.empresa1,
+                nombre='Proyecto Test',
+                tipo_servicio='PROYECTO_INTEGRAL',
+                valor_contrato_proyectado=Decimal('1000000.00'),
+                fase_actual='PLANEACION'
+            )
+            yield
 
     def test_calculo_utilidad_planeada_correcta(self):
         """
@@ -83,16 +84,23 @@ class TestPresupuestoProyecto:
 
     def test_dsv_item_otro_empresa_rechazado(self):
         """
-        TEST 2: DSV (Double Semantic Verification) - rechaza item de otro tenant.
+        TEST 2: DSV (Double Semantic Verification) - rechaza item de otra empresa.
 
         Scenario:
         - Crear proyecto en Empresa 1
-        - Intentar agregar item vinculado a Empresa 2
+        - Intentar agregar item vinculado a una empresa con id distinto
         - Debe lanzar ValidationError
+
+        WARNING: Empresa es singleton por esquema (no se puede persistir una
+        segunda Empresa real en el mismo tenant, ver setup()). Se usa una
+        instancia de Empresa NO persistida, solo para tener un id distinto al
+        de empresa1 y ejercitar la comparacion DSV (proyecto.empresa_id !=
+        empresa.id) sin necesitar una fila real en la base de datos.
         """
+        empresa_otra = Empresa(id=self.empresa1.id + 1)
         with pytest.raises(ValidationError):
             PresupuestoBusinessService.crear_item(
-                empresa=self.empresa2,  # <- Diferente empresa
+                empresa=empresa_otra,  # <- Diferente empresa (id distinto)
                 proyecto=self.proyecto,  # <- Proyecto pertenece a empresa1
                 data={
                     'categoria': 'EQUIPOS',

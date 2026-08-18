@@ -13,20 +13,34 @@ from apps.public.accounts.models import User
 from apps.tenant.perfil.models import TenantProfile
 
 
-@pytest.mark.django_db(databases={'default', 'tenant1'})
+@pytest.mark.django_db
 class TestProyectoFaseValidation:
     """Tests para validacion de responsables por fase."""
 
     @pytest.fixture(autouse=True)
     def setup(self, tenant1):
-        """Setup: usuario y empresa para tests."""
+        """Setup: usuario y empresa para tests.
+
+        WARNING: IsTenantMember (permission_classes de ProyectoViewSet)
+        exige TenantMembership activa en el esquema public (ver
+        apps/tenant/api/permissions.py -> check_membership_exists), no
+        solo TenantProfile en el esquema del tenant -- son dos modelos
+        distintos. Mismo patron ya usado en TenantAPITestCase.setUp().
+        """
         self.tenant = tenant1
-        with schema_context(self.tenant.schema_name):
-            self.empresa = Empresa.objects.first()
+        with schema_context('public'):
             self.user = User.objects.create_user(
                 email='test@test.com',
                 password='test123'
             )
+            from apps.public.tenants.models import TenantMembership
+            TenantMembership.objects.update_or_create(
+                client=self.tenant,
+                user=self.user,
+                defaults={'rol': 'ADMIN', 'is_active': True, 'is_primary_admin': True},
+            )
+        with schema_context(self.tenant.schema_name):
+            self.empresa = Empresa.objects.first()
             self.profile = TenantProfile.objects.create(
                 user=self.user,
                 empresa=self.empresa,
@@ -56,7 +70,8 @@ class TestProyectoFaseValidation:
             response = client.post(
                 '/api/v1/proyectos/',
                 payload,
-                format='json'
+                format='json',
+                HTTP_HOST=f'{tenant1.schema_name}.sintel.net.co',
             )
 
             # Should succeed (201 Created)
@@ -96,7 +111,8 @@ class TestProyectoFaseValidation:
             response = client.patch(
                 f'/api/v1/proyectos/{proyecto.uuid}/',
                 payload,
-                format='json'
+                format='json',
+                HTTP_HOST=f'{tenant1.schema_name}.sintel.net.co',
             )
 
             # Should succeed (200 OK)

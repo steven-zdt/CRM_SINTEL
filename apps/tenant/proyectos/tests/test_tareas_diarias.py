@@ -11,10 +11,10 @@ import pytest
 from datetime import date, timedelta
 from decimal import Decimal
 
-from rest_framework.test import APITestCase
 from rest_framework import status
 from django_tenants.utils import schema_context
 
+from apps.config.tests.base_tenant import TenantAPITestCase
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.proyectos.models import Proyecto, TareaDiariaProyecto
 from apps.tenant.proyectos.services import (
@@ -89,18 +89,23 @@ class TestTareasDiariasBusinessService:
                     titulo='Tarea Invalida'
                 )
 
-    def test_dsv_tarea_otro_empresa(self, tenant1, tenant2):
-        """[ERROR] DSV: Rechaza crear tarea con empresa distinta a la del proyecto."""
-        with schema_context(tenant1.schema_name):
-            empresa1 = Empresa.objects.first()
+    def test_dsv_tarea_otro_empresa(self, tenant1):
+        """[ERROR] DSV: Rechaza crear tarea con empresa distinta a la del proyecto.
 
-        with schema_context(tenant2.schema_name):
-            empresa2 = Empresa.objects.first()
-
+        WARNING: Empresa es singleton por esquema (no se puede persistir una
+        segunda empresa real en el mismo tenant) y comparar Empresa.id entre
+        esquemas distintos no es confiable (secuencias de PK independientes
+        por esquema, ej. ambos pueden tener id=1). _validar_empresa_dsv()
+        compara solo proyecto.empresa_id != empresa.id ANTES de persistir
+        nada, asi que una instancia de Empresa no guardada con un id distinto
+        es suficiente para ejercitar el rechazo DSV de forma determinista.
+        """
         with schema_context(tenant1.schema_name):
+            empresa_otra = Empresa(id=self.empresa.id + 1)
+
             with pytest.raises(ValidationError):
                 TareasDiariasBusinessService.crear_tarea(
-                    empresa=empresa2,  # Empresa diferente
+                    empresa=empresa_otra,  # Empresa diferente (id distinto)
                     proyecto=self.proyecto,
                     fecha=self.proyecto.fecha_inicio,
                     titulo='Tarea DSV Falla'
@@ -197,16 +202,19 @@ class TestTareasDiariasBusinessService:
                 )
 
 
-@pytest.mark.django_db
-class TestTareaDiariaAPI(APITestCase):
-    """Tests para endpoints REST de tareas diarias."""
+class TestTareaDiariaAPI(TenantAPITestCase):
+    """Tests para endpoints REST de tareas diarias.
+
+    TenantAPITestCase (django_tenants.TenantTestCase) fija el esquema del
+    tenant para toda la duracion del test y provee self.client ya apuntando
+    al dominio correcto -- mismo patron ya usado por TestCierreProyectoBloqueo/
+    TestServicioAsociado en test_legacy_smoke_financials.py.
+    """
 
     def setUp(self):
-        """Setup: Crear empresa, proyecto y usuario autenticado."""
-        self.empresa = Empresa.objects.create(
-            razon_social='Empresa Test',
-            nit='123456789'
-        )
+        """Setup: usar la Empresa singleton creada por TenantAPITestCase y crear el proyecto."""
+        super().setUp()
+        self.empresa = Empresa.objects.first()
 
         hoy = date.today()
         self.proyecto = Proyecto.objects.create(
@@ -215,7 +223,7 @@ class TestTareaDiariaAPI(APITestCase):
             tipo_servicio='PROYECTO_INTEGRAL',
             fase_actual='EJECUCION',
             valor_contrato_proyectado=Decimal('1000000.00'),
-            fecha_inicio_real=hoy,
+            fecha_inicio=hoy,
             fecha_fin_estimada=hoy + timedelta(days=30)
         )
 
@@ -225,7 +233,7 @@ class TestTareaDiariaAPI(APITestCase):
         TareasDiariasBusinessService.crear_tarea(
             empresa=self.empresa,
             proyecto=self.proyecto,
-            fecha=self.proyecto.fecha_inicio_real,
+            fecha=self.proyecto.fecha_inicio,
             titulo='Tarea API Test'
         )
 
@@ -237,9 +245,15 @@ class TestTareaDiariaAPI(APITestCase):
 
     def test_api_post_crear_tarea_201(self):
         """[OK] POST /api/v1/proyectos/tareas-diarias/ con datos validos retorna 201."""
+        # WARNING: TareaDiariaSerializer (contrato HTTP real) exige
+        # fecha_inicio/fecha_fin -- 'fecha' es solo un alias que existe a
+        # nivel de TareasDiariasBusinessService.crear_tarea() (Python), no
+        # del serializer/endpoint HTTP.
+        fecha = str(self.proyecto.fecha_inicio + timedelta(days=2))
         data = {
             'proyecto_uuid': str(self.proyecto.uuid),
-            'fecha': str(self.proyecto.fecha_inicio_real + timedelta(days=2)),
+            'fecha_inicio': fecha,
+            'fecha_fin': fecha,
             'titulo': 'Tarea Creada por API',
             'prioridad': 'ALTA'
         }
@@ -251,9 +265,14 @@ class TestTareaDiariaAPI(APITestCase):
 
     def test_api_post_crear_tarea_fecha_invalida_400(self):
         """[ERROR] POST con fecha fuera de rango retorna 400."""
+        # WARNING: usaba 'fecha' (alias solo del service layer, no del
+        # serializer HTTP) -- el 400 anterior era por campo requerido
+        # ausente, no por la validacion de rango que este test dice probar.
+        fecha_invalida = str(self.proyecto.fecha_fin_estimada + timedelta(days=10))
         data = {
             'proyecto_uuid': str(self.proyecto.uuid),
-            'fecha': str(self.proyecto.fecha_fin_estimada + timedelta(days=10)),
+            'fecha_inicio': fecha_invalida,
+            'fecha_fin': fecha_invalida,
             'titulo': 'Tarea Fecha Invalida'
         }
 
@@ -266,11 +285,11 @@ class TestTareaDiariaAPI(APITestCase):
         tarea = TareasDiariasBusinessService.crear_tarea(
             empresa=self.empresa,
             proyecto=self.proyecto,
-            fecha=self.proyecto.fecha_inicio_real,
+            fecha=self.proyecto.fecha_inicio,
             titulo='Tarea Cambio Estado'
         )
 
-        url = f'/api/v1/proyectos/tareas-diarias/{tarea.id}/cambiar-estado/'
+        url = f'/api/v1/proyectos/tareas-diarias/{tarea.uuid}/cambiar-estado/'
         data = {'nuevo_estado': 'EN_PROCESO'}
 
         response = self.client.post(url, data, content_type='application/json')
@@ -284,11 +303,11 @@ class TestTareaDiariaAPI(APITestCase):
         tarea = TareasDiariasBusinessService.crear_tarea(
             empresa=self.empresa,
             proyecto=self.proyecto,
-            fecha=self.proyecto.fecha_inicio_real,
+            fecha=self.proyecto.fecha_inicio,
             titulo='Tarea a Eliminar'
         )
 
-        url = f'/api/v1/proyectos/tareas-diarias/{tarea.id}/'
+        url = f'/api/v1/proyectos/tareas-diarias/{tarea.uuid}/'
         response = self.client.delete(url)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
