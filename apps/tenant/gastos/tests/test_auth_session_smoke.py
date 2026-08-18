@@ -8,6 +8,7 @@ Valida que:
 3. El handler del workspace NO redirija a login para este modulo no critico
 """
 import pytest
+from django_tenants.utils import schema_context
 
 from apps.public.tenants.models import TenantMembership
 
@@ -16,12 +17,12 @@ from apps.public.tenants.models import TenantMembership
 def test_gastos_list_session_ok(client, django_user_model, tenant1):
     """
     Verifica que tras login, el endpoint de gastos NO devuelva 401.
-    
+
     Si el ViewSet acepta SessionAuthentication, NO debe devolver 401 tras login.
     """
     # Crear usuario
     user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    
+
     # Crear membresia activa en el tenant
     TenantMembership.objects.create(
         client=tenant1,
@@ -29,9 +30,14 @@ def test_gastos_list_session_ok(client, django_user_model, tenant1):
         is_active=True,
         rol="ADMIN"
     )
-    
-    # Autenticar usuario (simula login con sesion)
-    client.force_login(user)
+
+    # Autenticar usuario (simula login con sesion). django.contrib.sessions esta
+    # en TENANT_APPS (sesiones aisladas por esquema, ver config/settings.py) y el
+    # request real solo lee la sesion despues de que TenantMainMiddleware cambia
+    # al esquema del tenant, asi que force_login debe escribirla en ese mismo
+    # esquema o la sesion sera invisible durante la request (401 falso).
+    with schema_context(tenant1.schema_name):
+        client.force_login(user)
     
     # Si el ViewSet acepta SessionAuthentication, NO debe devolver 401
     # 200 si funciona correctamente, 404 si falta include en TENANT_URLCONF

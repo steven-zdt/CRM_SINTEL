@@ -49,8 +49,9 @@ class TestProveedorIntegration:
     def test_create_gasto_with_valid_proveedor(self, client, tenant1):
         """Verifica que se pueda crear un gasto con un proveedor del mismo tenant."""
         user, empresa, res, prov = self._setup_tenant_data(tenant1, "user1", "u1@t1.com")
-        
-        client.force_login(user)
+
+        with schema_context(tenant1.schema_name):
+            client.force_login(user)
         payload = {
             "descripcion": "Gasto Valido",
             "documento_soporte": {
@@ -90,7 +91,8 @@ class TestProveedorIntegration:
         # Setup T2 (Proveedor intruso)
         user2, emp2, res2, prov2 = self._setup_tenant_data(tenant2, "user2", "u2@t2.com")
         
-        client.force_login(user1)
+        with schema_context(tenant1.schema_name):
+            client.force_login(user1)
         payload = {
             "descripcion": "Intento de Ataque IDOR",
             "documento_soporte": {
@@ -126,7 +128,8 @@ class TestProveedorIntegration:
                 descripcion="Gasto con Proveedor"
             )
             
-        client.force_login(user)
+        with schema_context(tenant1.schema_name):
+            client.force_login(user)
         resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
         
         assert resp.status_code == status.HTTP_200_OK

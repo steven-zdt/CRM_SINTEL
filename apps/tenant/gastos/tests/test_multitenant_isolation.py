@@ -86,7 +86,11 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
         )
 
     # 3. Validar Aislamiento en Listado
-    client.force_login(user1)
+    # force_login debe escribir la sesion en el esquema del tenant: sessions
+    # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
+    # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant1.schema_name):
+        client.force_login(user1)
     resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
@@ -173,7 +177,8 @@ def test_multitenant_isolation_gastos_tabla_html(client, tenant1, tenant2):
         )
 
     # Nivel 1: listado HTML no debe filtrar datos de otro tenant
-    client.force_login(user1)
+    with schema_context(tenant1.schema_name):
+        client.force_login(user1)
     resp = client.get("/ui/gastos/tabla-documentos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_200_OK
     body = resp.content.decode()
