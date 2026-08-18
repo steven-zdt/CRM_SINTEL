@@ -53,8 +53,12 @@ def test_api_list_clientes_smoke(client, django_user_model, tenant):
     """Smoke test: lista de clientes."""
     user = django_user_model.objects.create(username="testuser", email="test@example.com")
     TenantMembership.objects.create(client=tenant, user=user, is_active=True, rol="ADMIN")
-    client.force_login(user)
-    
+    # force_login debe escribir la sesion en el esquema del tenant: sessions
+    # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
+    # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant.schema_name):
+        client.force_login(user)
+
     # 200 si TENANT_URLCONF ya incluye /api/v1/clientes/
     resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     assert resp.status_code in (200, 404), f"Expected 200 or 404, got {resp.status_code}"

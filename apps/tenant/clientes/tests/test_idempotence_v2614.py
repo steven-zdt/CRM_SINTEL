@@ -151,11 +151,16 @@ class TestHTTPStatusCodes:
             cliente_id = data1.get('id')
             assert cliente_id is not None, "Should return created cliente ID"
     
-    def test_api_create_cliente_http_200_second_post(self, tenant, admin_user):
+    def test_api_create_cliente_http_400_second_post_duplicado(self, tenant, admin_user):
         """
-        # WARNING: v2.61.4: Second POST (idempotencia) = HTTP 200 OK
-        
-        Valida que ViewSet.create() retorna 200 cuando creado=False:
+        Hallazgo real: FASE 4 anti-duplicidad (Zero Trust,
+        ClienteDetailSerializer.validate()) rechaza con 400 un documento
+        duplicado en CREATE, ANTES de llegar a la logica de upsert de
+        registrar_cliente_completo() -- esta expectativa reemplaza la
+        v2.61.4 original (200 idempotente), superada por ese cambio
+        posterior. La idempotencia upsert real sigue probada y viva a
+        nivel de servicio en TestIdempotenciaClientes (crear_cliente(),
+        que no pasa por el serializer del ViewSet).
         """
         api_client = APIClient()
         api_client.force_authenticate(user=admin_user)
@@ -190,18 +195,15 @@ class TestHTTPStatusCodes:
             )
             assert response1.status_code == 201
             
-            # # WARNING: SEGUNDO POST: Update (idempotencia)
+            # # WARNING: SEGUNDO POST: mismo documento -> rechazado (FASE 4 anti-duplicidad)
             response2 = api_client.post(
                 '/api/v1/clientes/',
                 payload,
                 format='json',
                 HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
             )
-            assert response2.status_code == 200, f"Expected 200, got {response2.status_code}: {response2.data}"
-            data2 = response2.json()
-            
-            # # WARNING: Validar que el ID no cambió (así es mismo cliente)
-            assert data2.get('id') == response1.json().get('id'), "Should be same cliente"
+            assert response2.status_code == 400, f"Expected 400, got {response2.status_code}: {response2.data}"
+            assert 'numero_documento' in response2.json()
 
 
 @pytest.mark.django_db

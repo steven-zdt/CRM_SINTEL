@@ -30,8 +30,12 @@ def test_clientes_crud_completo(client, admin_user, tenant):
     6. LIST después de DELETE: Verificar que el cliente fue eliminado
     7. LIST final: verificar que el cliente persiste y está inactivo
     """
-    client.force_login(admin_user)
-    
+    # force_login debe escribir la sesion en el esquema del tenant: sessions
+    # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
+    # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     # Datos de prueba
     cliente_data = {
         "tipo_persona": "JURIDICA",
@@ -149,8 +153,9 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
     - Unicidad de documento
     - Valores válidos para campos con choices
     """
-    client.force_login(admin_user)
-    
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     with schema_context(tenant.schema_name):
         # Test: Campos requeridos faltantes
         resp = client.post(
@@ -179,14 +184,20 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
         assert resp.status_code == 201
         cliente_id = resp.json()["id"]
         
-        # Test: Intentar crear cliente duplicado (mismo documento)
+        # Test: Intentar crear cliente duplicado (mismo documento).
+        # Hallazgo real: ClienteDetailSerializer.validate() (FASE 4
+        # anti-duplicidad, Zero Trust) rechaza documentos duplicados en
+        # CREATE con 400 antes de llegar a registrar_cliente_completo()
+        # -- la idempotencia upsert (update_or_create) solo sigue viva
+        # en la capa de servicio crear_cliente(), usada por flujos ETL
+        # que no pasan por el serializer (test_idempotence_v2614.py).
         resp = client.post(
             "/api/v1/clientes/",
             data=cliente_data,
             content_type="application/json",
             HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
-        assert resp.status_code == 200, "Should return 200 for idempotent duplicate document"
+        assert resp.status_code == 400, "Should reject duplicate document (Zero Trust anti-duplicidad)"
         
         # Cleanup omitido: en este schema de pruebas no se validan cascadas de módulos externos.
 
@@ -196,8 +207,9 @@ def test_clientes_list_filtros_y_ordenamiento(client, admin_user, tenant):
     """
     Test de filtros y ordenamiento en listado de clientes.
     """
-    client.force_login(admin_user)
-    
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     with schema_context(tenant.schema_name):
         empresa = Empresa.objects.first()
         # Crear clientes de prueba

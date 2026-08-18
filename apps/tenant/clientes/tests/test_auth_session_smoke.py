@@ -8,6 +8,7 @@ Valida que:
 3. El handler del workspace NO redirija a login para este módulo no crítico
 """
 import pytest
+from django_tenants.utils import schema_context
 
 from apps.public.tenants.models import TenantMembership
 
@@ -30,9 +31,13 @@ def test_clientes_list_session_ok(client, django_user_model, tenant):
         rol="ADMIN"
     )
     
-    # Autenticar usuario (simula login con sesión)
-    client.force_login(user)
-    
+    # Autenticar usuario (simula login con sesión). django.contrib.sessions esta
+    # en TENANT_APPS (sesiones aisladas por esquema) y el request real solo lee
+    # la sesion despues de que TenantMainMiddleware cambia al esquema del
+    # tenant, asi que force_login debe escribirla en ese mismo esquema.
+    with schema_context(tenant.schema_name):
+        client.force_login(user)
+
     # Si el ViewSet acepta SessionAuthentication, NO debe devolver 401
     # 200 si funciona correctamente, 404 si falta include en TENANT_URLCONF
     r = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
@@ -59,8 +64,9 @@ def test_ventas_cliente_list_session_ok(client, django_user_model, tenant):
     """
     user = django_user_model.objects.create(username="testuser", email="test@example.com")
     TenantMembership.objects.create(client=tenant, user=user, is_active=True, rol="ADMIN")
-    client.force_login(user)
-    
+    with schema_context(tenant.schema_name):
+        client.force_login(user)
+
     r = client.get("/api/v1/ventas-cliente/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     assert r.status_code != 401, f"VentaClienteViewSet devolvió 401. Status: {r.status_code}"
     assert r.status_code in (200, 404), f"Status inesperado: {r.status_code}"
