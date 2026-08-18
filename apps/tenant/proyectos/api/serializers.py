@@ -366,6 +366,31 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         except Exception:
             return None
 
+    def to_internal_value(self, data):
+        """
+        Convierte strings vacios a None en los campos responsable_*_id ANTES
+        de la validacion de tipo por campo.
+
+        WARNING: responsable_*_id son IntegerField -- DRF rechaza '' con
+        "Introduzca un numero entero valido" durante run_validation() del
+        campo individual, que ocurre ANTES de validate(). La limpieza de
+        string vacio que ya existia en validate() (mas abajo) nunca se
+        alcanzaba para estos campos por esta razon; se mantiene ahi para
+        los campos que SI llegan (ya limpios) como defensa adicional.
+        """
+        responsable_id_fields = [
+            'responsable_comercial_id',
+            'responsable_tecnico_id',
+            'responsable_operativo_id',
+            'responsable_administrativo_id',
+        ]
+        if hasattr(data, 'copy'):
+            data = data.copy()
+            for field in responsable_id_fields:
+                if field in data and data[field] == '':
+                    data[field] = None
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
         """
         # WARNING: Zero Trust: Limpieza y normalizacion de todos los datos ingresados.
@@ -405,7 +430,27 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
 
         current_phase_level = PHASE_LEVELS.get(fase_actual, 0)
 
-        # Convert empty strings to None for responsable fields (avoid "invalid integer" errors)
+        # Bloqueo de edicion en fase CIERRE: mismo criterio ya aplicado a
+        # asignaciones/pedidos/tareas/presupuesto (ver AsignacionPersonalSerializer,
+        # PedidoProyectoSerializer, tareas_service.py, presupuesto_service.py).
+        # Solo se permite actualizar los campos de cierre administrativo
+        # (avance, estado, fecha de cierre, actas/informes de entrega).
+        if proyecto and proyecto.fase_actual == 'CIERRE':
+            CIERRE_ALLOWED_FIELDS = {
+                'porcentaje_avance', 'estado_tarea', 'fecha_cierre_real',
+                'acta_entrega_archivo', 'informe_final_archivo',
+            }
+            campos_bloqueados = set(attrs.keys()) - CIERRE_ALLOWED_FIELDS
+            if campos_bloqueados:
+                raise serializers.ValidationError(
+                    'No se pueden modificar datos generales de un proyecto en fase de CIERRE.'
+                )
+
+        # Convert empty strings to None for responsable_*_id fields (avoid
+        # "invalid integer" errors). WARNING: los campos _nombre companion
+        # son CharField sin null=True en BD (solo blank=True) -- convertirlos
+        # a None aqui causaba NotNullViolation al guardar. '' ya es su valor
+        # vacio correcto, no se tocan.
         responsable_fields = [
             'responsable_comercial_id',
             'responsable_tecnico_id',
@@ -416,10 +461,6 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         for field in responsable_fields:
             if field in attrs and attrs[field] == '':
                 attrs[field] = None
-            # Also handle the corresponding name fields
-            name_field = field.replace('_id', '_nombre')
-            if name_field in attrs and attrs[name_field] == '':
-                attrs[name_field] = None
 
         # Phase-based validation: require responsables only if fase_actual allows it
         if current_phase_level >= PHASE_LEVELS['INICIO']:

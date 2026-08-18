@@ -123,6 +123,11 @@ class PresupuestoBusinessService:
         - Persiste
         - Recalcula proyecto padre
         """
+        if proyecto.empresa_id != empresa.id:
+            raise ValidationError(
+                "La empresa del item no coincide con la empresa del proyecto (DSV fallo)"
+            )
+
         if proyecto.fase_actual == 'CIERRE':
             raise ValidationError(
                 "No se puede agregar items de presupuesto en fase Cierre"
