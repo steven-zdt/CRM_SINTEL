@@ -27,7 +27,7 @@ from apps.tenant.perfil.models import TenantProfile
 User = get_user_model()
 
 
-def _setup_tenant(tenant, username, email, empresa_nit_suffix, sufijo):
+def _setup_tenant(tenant, username, email, empresa_nit_suffix, sufijo, mes):
     with schema_context(tenant.schema_name):
         emp = Empresa.objects.first()
         user = User.objects.create_user(username=username, email=email, password="password")
@@ -39,7 +39,7 @@ def _setup_tenant(tenant, username, email, empresa_nit_suffix, sufijo):
             empresa=emp, codigo=f"11{sufijo}", nombre=f"Caja General {sufijo}", tipo="ACTIVO",
         )
         PeriodoContable.objects.create(
-            empresa=emp, periodo=f"2026-0{sufijo}", fecha_inicio="2026-01-01", fecha_fin="2026-01-31",
+            empresa=emp, periodo=f"2026-{mes}", fecha_inicio=f"2026-{mes}-01", fecha_fin=f"2026-{mes}-28",
             estado="ABIERTO",
         )
         AsientoContable.objects.create(
@@ -60,8 +60,8 @@ def _setup_tenant(tenant, username, email, empresa_nit_suffix, sufijo):
 
 @pytest.mark.django_db
 def test_multitenant_isolation_contabilidad_tablas_html(client, tenant1, tenant2):
-    _setup_tenant(tenant1, "cuser1", "cu1@t.com", "111", "Uno")
-    _setup_tenant(tenant2, "cuser2", "cu2@t.com", "222", "Dos")
+    _setup_tenant(tenant1, "cuser1", "cu1@t.com", "111", "Uno", mes="01")
+    _setup_tenant(tenant2, "cuser2", "cu2@t.com", "222", "Dos", mes="02")
 
     with schema_context(tenant1.schema_name):
         user1 = User.objects.get(username="cuser1")
@@ -84,8 +84,8 @@ def test_multitenant_isolation_contabilidad_tablas_html(client, tenant1, tenant2
     resp = client.get("/ui/contabilidad/periodos/tabla/", HTTP_HOST=host1)
     assert resp.status_code == status.HTTP_200_OK
     body = resp.content.decode()
-    assert "2026-0Uno" in body
-    assert "2026-0Dos" not in body
+    assert "2026-01" in body
+    assert "2026-02" not in body
 
     # Asientos
     resp = client.get("/ui/contabilidad/asientos/tabla/", HTTP_HOST=host1)

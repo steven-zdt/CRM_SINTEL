@@ -190,21 +190,7 @@ class RetencionAPITestCase(TenantAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('missing_params', response.json()['error'])
 
-    def tpost(self, url, data):
-        """Helper: POST request con JSON."""
-        return self.client.post(
-            url,
-            data=data,
-            content_type='application/json',
-            HTTP_AUTHORIZATION=f'Bearer {self.jwt_token}' if self.jwt_token else None,
-        )
 
-    def tdelete(self, url):
-        """Helper: DELETE request."""
-        return self.client.delete(
-            url,
-            HTTP_AUTHORIZATION=f'Bearer {self.jwt_token}' if self.jwt_token else None,
-        )
 
 
 class ConfiguracionRetencionesAPITestCase(TenantAPITestCase):
@@ -257,8 +243,8 @@ class ConfiguracionRetencionesAPITestCase(TenantAPITestCase):
         )
 
     def test_retrieve_configuracion(self):
-        """Test: GET /api/v1/contabilidad/configuraciones-retenciones/{id}/"""
-        url = f'{self.api_url}{self.config.id}/'
+        """Test: GET /api/v1/contabilidad/configuraciones-retenciones/{uuid}/"""
+        url = f'{self.api_url}{self.config.uuid}/'
         response = self.tget(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
@@ -284,8 +270,8 @@ class ConfiguracionRetencionesAPITestCase(TenantAPITestCase):
         self.assertEqual(data['tipo_retencion'], 'RETEICA')
 
     def test_destroy_configuracion(self):
-        """Test: DELETE /api/v1/contabilidad/configuraciones-retenciones/{id}/"""
-        url = f'{self.api_url}{self.config.id}/'
+        """Test: DELETE /api/v1/contabilidad/configuraciones-retenciones/{uuid}/"""
+        url = f'{self.api_url}{self.config.uuid}/'
         response = self.tdelete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
@@ -294,18 +280,4 @@ class ConfiguracionRetencionesAPITestCase(TenantAPITestCase):
         ).exists()
         self.assertFalse(config_exists)
 
-    def tpost(self, url, data):
-        """Helper: POST request con JSON."""
-        return self.client.post(
-            url,
-            data=data,
-            content_type='application/json',
-            HTTP_AUTHORIZATION=f'Bearer {self.jwt_token}' if self.jwt_token else None,
-        )
 
-    def tdelete(self, url):
-        """Helper: DELETE request."""
-        return self.client.delete(
-            url,
-            HTTP_AUTHORIZATION=f'Bearer {self.jwt_token}' if self.jwt_token else None,
-        )
