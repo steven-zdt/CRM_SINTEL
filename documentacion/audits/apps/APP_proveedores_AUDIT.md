@@ -80,11 +80,10 @@ persona NATURAL). Hallazgos principales:
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/proveedores/tests/`. Regresion
-lanzada en background tras confirmar `db`/`redis` healthy. Sin
-cambios de codigo en esta app (FASE K no elimino nada), por lo que no
-se espera ningun riesgo de regresion -- la regresion sirve como
-confirmacion de baseline, no de verificacion de un cambio.
+18 tests coleccionados (`apps/tenant/proveedores/tests/`). Regresion
+ejecutada: **18 passed, 0 failed, 2 warnings preexistentes (min_value
+DRF) en 1655.60s (0:27:35)**. Sin cambios de codigo en esta app, la
+regresion confirma el baseline.
 
 ## Deferred
 
@@ -102,14 +101,12 @@ Ver tabla completa en `APP_proveedores_NORMATIVE_MATRIX.md`. Resumen:
 - [x] Service Layer auditado, sin codigo muerto para eliminar (FASE C/D/K)
 - [x] Matriz normativa colombiana completa, con hallazgo P1 real (FASE M)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 18 passed, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso (aunque sin cambios de codigo, se confirma el baseline antes
-de cerrar). Se espera `COMPLETED_WITH_DEFERRED` dado el hallazgo P1
-(CONTRACT_DRIFT de retenciones vs `gastos`), que no bloquea el cierre
-de esta app individual pero SI queda registrado como prioridad alta
-para cuando se audite `gastos`.
+**COMPLETED_WITH_DEFERRED** -- 18/18 tests pasan, 0 regresiones. Se
+usa `_WITH_DEFERRED` por el hallazgo P1 (CONTRACT_DRIFT de retenciones
+vs `gastos`), que no bloquea el cierre de esta app individual pero
+queda registrado como prioridad alta para cuando se audite `gastos`.

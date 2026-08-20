@@ -78,8 +78,8 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 3 | perfil | COMPLETED | `documentacion/audits/apps/APP_perfil_AUDIT.md` |
 | 4 | empleados | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_empleados_AUDIT.md` |
 | 5 | clientes | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_clientes_AUDIT.md` |
-| 6 | proveedores | EN PROGRESO | `documentacion/audits/apps/APP_proveedores_AUDIT.md` |
-| 7 | inventario | PENDIENTE | `documentacion/audits/apps/APP_inventario_AUDIT.md` |
+| 6 | proveedores | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_proveedores_AUDIT.md` |
+| 7 | inventario | EN PROGRESO | `documentacion/audits/apps/APP_inventario_AUDIT.md` |
 | 8 | compras | PENDIENTE | `documentacion/audits/apps/APP_compras_AUDIT.md` |
 | 9 | ventas | PENDIENTE | `documentacion/audits/apps/APP_ventas_AUDIT.md` |
 | 10 | cotizaciones | PENDIENTE | `documentacion/audits/apps/APP_cotizaciones_AUDIT.md` |
@@ -90,7 +90,7 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (5/16 -- 4 COMPLETED_WITH_DEFERRED,
+**APP_AUDIT_PROGRAM:** EN PROGRESO (6/16 -- 5 COMPLETED_WITH_DEFERRED,
 1 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
@@ -133,6 +133,16 @@ por tener 2 consumidores reales). Confirmado hallazgo Nivel3: Cartera
 usa Pull Model para listado (lee de Facturas), modelo `Cartera` en si
 sigue vivo para escritura. Cerrado como `COMPLETED_WITH_DEFERRED` (3
 items P3).
+
+**Regresion proveedores (FASE Q, cierre):** `apps/tenant/proveedores/`
+-- 18 passed, 0 failed, 2 warnings preexistentes en 1655.60s
+(0:27:35). Sin cambios de codigo (0 codigo muerto encontrado, a
+diferencia de clientes). **Hallazgo P1 (CONTRACT_DRIFT):**
+`obtener_configuracion_retenciones()`/`calcular_componentes_retencion()`
+(Retefuente 4%, ReteICA 0.966%) documentadas como integradas con
+`gastos` pero sin ningun consumidor real confirmado -- pendiente de
+resolver con evidencia completa al auditar `gastos` (app 12/16).
+Cerrado como `COMPLETED_WITH_DEFERRED`.
 
 ---
 
