@@ -73,8 +73,8 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 
 | # | App | Estado | Doc |
 |---|-----|--------|-----|
-| 1 | core | COMPLETED_WITH_DEFERRED (regresion en curso) | `documentacion/audits/apps/APP_core_AUDIT.md` |
-| 2 | empresa | PENDIENTE | `documentacion/audits/apps/APP_empresa_AUDIT.md` |
+| 1 | core | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_core_AUDIT.md` |
+| 2 | empresa | EN PROGRESO | `documentacion/audits/apps/APP_empresa_AUDIT.md` |
 | 3 | perfil | PENDIENTE | `documentacion/audits/apps/APP_perfil_AUDIT.md` |
 | 4 | empleados | PENDIENTE | `documentacion/audits/apps/APP_empleados_AUDIT.md` |
 | 5 | clientes | PENDIENTE | `documentacion/audits/apps/APP_clientes_AUDIT.md` |
@@ -90,7 +90,14 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (0/16 COMPLETED)
+**APP_AUDIT_PROGRAM:** EN PROGRESO (1/16 COMPLETED_WITH_DEFERRED)
+
+**Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
+19 skipped, 0 failed, 1 warning (min_value en DocumentoUploadAPITests,
+preexistente, no relacionado con esta mision) en 8010s -- coincide
+exactamente con el baseline conocido. Core cerrado como
+`COMPLETED_WITH_DEFERRED` (2 items P2/P3 diferidos documentados en su
+audit doc, no bloquean cierre segun regla de la mision).
 
 ---
 
