@@ -127,11 +127,10 @@ DIAN. **NO_APLICA**.
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/perfil/tests/` (4 archivos:
-`test_models.py`, `test_organizational_context_adoption.py`,
-`test_tabla_view.py`, `conftest.py`). Regresion lanzada en background
-(`REDIS_URL=... pytest apps/tenant/perfil/ -v`) tras confirmar
-`db`/`redis` healthy. Pendiente de resultado.
+4 tests coleccionados (`apps/tenant/perfil/tests/`). Regresion
+ejecutada (db/redis healthy): **4 passed, 0 failed, 1 warning
+preexistente (min_value en DRF, mismo hallazgo ya visto en core/empresa,
+no relacionado) en 1499.94s (0:24:59)**.
 
 ## Deferred
 
@@ -146,13 +145,12 @@ tuvieron 4 y 3 items diferidos respectivamente).
 - [x] Seguridad confirmada, sin hallazgos nuevos (FASE I)
 - [x] Normativa colombiana evaluada (FASE M -- NO_APLICA)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 4 passed, 0 failed
 - [x] Sin deferred items pendientes de documentar
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado unicamente por el resultado de la
-regresion en curso. Dado que no hubo cambios de codigo en esta app
-(0 hallazgos de codigo muerto, sin fixes aplicados), se espera cierre
-como `COMPLETED` puro (no `_WITH_DEFERRED`) si la regresion confirma
-el baseline sin fallos.
+**COMPLETED** -- 4/4 tests pasan, 0 regresiones, 0 hallazgos de codigo
+muerto, sin items deferred. Segunda app cerrada como `COMPLETED` puro
+(la primera fue ninguna hasta ahora -- core y empresa cerraron
+`_WITH_DEFERRED`).
