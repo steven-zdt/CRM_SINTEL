@@ -13,7 +13,6 @@ SintelExceptionMiddleware - Sistema de Manejo de Errores Centralizado v2.40
 import logging
 import traceback
 
-from django.conf import settings
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 
@@ -69,8 +68,7 @@ class SintelExceptionMiddleware(MiddlewareMixin):
             status_code = 500
             error_code = "INTERNAL_SERVER_ERROR"
             message = "Error interno del servidor"
-            detail = None
-            
+
             # Mapear excepciones comunes a códigos HTTP
             if hasattr(exception, 'status_code'):
                 status_code = exception.status_code
@@ -108,21 +106,19 @@ class SintelExceptionMiddleware(MiddlewareMixin):
                 message = str(exception.message)
             elif str(exception):
                 message = str(exception)
-            
-            # Incluir detail solo en DEBUG
-            if settings.DEBUG:
-                detail = error_traceback
-            
+
+            # SEGURIDAD: el traceback NUNCA se envia al cliente, ni siquiera en
+            # DEBUG=True (el traceback completo ya quedo en el log de arriba).
+            # Un entorno con DEBUG=True accesible por error desde una red publica
+            # no debe poder filtrar rutas de servidor ni internals via la API.
+
             # Construir respuesta JSON estandarizada
             response_data = {
                 "status": status_code,
                 "message": message,
                 "code": error_code,
             }
-            
-            if detail:
-                response_data["detail"] = detail
-            
+
             return JsonResponse(response_data, status=status_code)
         
         # Para peticiones no-API, delegar al handler estándar de Django
