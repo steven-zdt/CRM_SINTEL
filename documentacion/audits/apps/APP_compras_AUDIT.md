@@ -76,9 +76,11 @@ automatica.
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/compras/tests/`. Regresion lanzada
-en background tras confirmar `db`/`redis` healthy. Sin cambios de
-codigo en esta app.
+31 tests coleccionados (`apps/tenant/compras/tests/`, incluye
+`test_scope_pilot_f5.py` -- alcance organizacional SEDE/AREA en
+compras, todas verdes). Regresion ejecutada: **31 passed, 0 failed, 2
+warnings preexistentes (min_value DRF + `format_html()` sin args) en
+5383.42s (1:29:43)**.
 
 ## Deferred
 
@@ -94,11 +96,10 @@ codigo en esta app.
 - [x] Seguridad: 2 correcciones criticas/medias re-verificadas vigentes (FASE I)
 - [x] Matriz normativa colombiana completa (FASE M)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 31 passed, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED_WITH_DEFERRED` (2 items P3, ninguno
-bloqueante) si la regresion confirma el baseline sin fallos.
+**COMPLETED_WITH_DEFERRED** -- 31/31 tests pasan, 0 regresiones. 2
+items P3, ninguno bloqueante.
