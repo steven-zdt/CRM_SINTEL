@@ -145,11 +145,11 @@ para esta app especificamente.
 ## FASE Q — Tests / Regresion
 
 30 tests coleccionados (`apps/tenant/empresa/tests/`, 9 archivos).
-Regresion post-limpieza lanzada en background
-(`REDIS_URL=... pytest apps/tenant/empresa/ -v`) tras confirmar
-`db`/`redis` healthy. Pendiente de resultado -- ver
-`APP_AUDIT_MASTER_STATUS.md` para el resultado final antes de cerrar
-esta app como `COMPLETED`.
+Regresion post-limpieza ejecutada (`REDIS_URL=... pytest
+apps/tenant/empresa/ -v`, db/redis healthy): **30 passed, 0 failed,
+1 warning preexistente (min_value en DRF, no relacionado) en 2525s
+(0:42:05)**. Coincide exactamente con el conteo esperado -- 0
+regresiones introducidas por la eliminacion de codigo muerto.
 
 ## Deferred (no bloquean cierre)
 
@@ -167,12 +167,13 @@ esta app como `COMPLETED`.
 - [x] Normativa colombiana evaluada (FASE M -- NO_APLICA)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
 - [x] `py_compile` limpio en todos los archivos editados
-- [ ] Regresion de la app (30 tests) -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app (30 tests) -- 30 passed, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado unicamente por el resultado de la
-regresion en curso. Se actualizara a `COMPLETED` (si 30/30 sin
-regresiones) o `COMPLETED_WITH_DEFERRED` (si hay skips esperados,
-igual que core) en `APP_AUDIT_MASTER_STATUS.md`.
+**COMPLETED_WITH_DEFERRED** -- 30/30 tests pasan, 0 regresiones. Se
+usa `_WITH_DEFERRED` (no `COMPLETED` puro) por el item #1 de la tabla
+de diferidos (cifrado de `MailInboxConfig.password`, P2 -- requiere
+decision de producto, no bloquea cierre por regla explicita de la
+mision).
