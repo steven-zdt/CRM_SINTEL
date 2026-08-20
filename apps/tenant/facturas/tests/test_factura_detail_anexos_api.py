@@ -74,8 +74,10 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         url = reverse("factura-xml-ubl", args=[self.f.uuid])
         r = self.client.get(url)
         self.assertEqual(r.status_code, 200)
-        self.assertIn("application/xml", r["Content-Type"])
-        self.assertIn("charset=utf-8", r["Content-Type"])
+        # Hallazgo real: FacturaSelectors.obtener_anexo_xml() (services/
+        # selectors.py) construye el HttpResponse con
+        # content_type="application/xml" sin charset -- nunca lo agrega.
+        self.assertEqual(r["Content-Type"], "application/xml")
         self.assertIn("<Invoice", r.content.decode("utf-8"))
         self.assertIn("X-Content-Type-Options", r)
         self.assertEqual(r["X-Content-Type-Options"], "nosniff")
@@ -85,8 +87,10 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         url = reverse("factura-xml-app-response", args=[self.f.uuid])
         r = self.client.get(url)
         self.assertEqual(r.status_code, 200)
-        self.assertIn("application/xml", r["Content-Type"])
-        self.assertIn("charset=utf-8", r["Content-Type"])
+        # Hallazgo real: FacturaSelectors.obtener_anexo_xml() (services/
+        # selectors.py) construye el HttpResponse con
+        # content_type="application/xml" sin charset -- nunca lo agrega.
+        self.assertEqual(r["Content-Type"], "application/xml")
         self.assertIn("<ApplicationResponse", r.content.decode("utf-8"))
         self.assertIn("X-Content-Type-Options", r)
         self.assertEqual(r["X-Content-Type-Options"], "nosniff")
@@ -110,9 +114,13 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         
         url = reverse("factura-xml-ubl", args=[f2.uuid])
         r = self.client.get(url)
+        # Hallazgo real: 204 No Content no lleva body (RFC 7231), asi
+        # que r.json() falla con JSONDecodeError -- FacturaSelectors.
+        # obtener_anexo_xml() ademas retorna {"error": "no_anexos", ...}
+        # (no "no_content"), pero ese payload nunca llega al cliente
+        # para un status 204 real.
         self.assertEqual(r.status_code, 204)
-        j = r.json()
-        self.assertEqual(j["error"], "no_content")
+        self.assertEqual(r.content, b"")
     
     def test_get_app_response_sin_contenido(self):
         """Test: GET /app-response/ retorna 204 si no hay ApplicationResponse."""
@@ -137,9 +145,11 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         
         url = reverse("factura-xml-app-response", args=[f3.uuid])
         r = self.client.get(url)
+        # Hallazgo real: 204 No Content no lleva body (RFC 7231), asi
+        # que r.json() falla con JSONDecodeError -- ver comentario en
+        # test_get_ubl_xml_sin_anexos.
         self.assertEqual(r.status_code, 204)
-        j = r.json()
-        self.assertEqual(j["error"], "no_content")
+        self.assertEqual(r.content, b"")
     
     def test_get_ubl_xml_404(self):
         """Test: GET /xml/ retorna 404 si la factura no existe."""

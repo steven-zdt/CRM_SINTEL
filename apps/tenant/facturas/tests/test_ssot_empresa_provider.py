@@ -17,14 +17,24 @@ class SSoTEmpresaProviderTests(TenantTestCase):
     
     def test_sin_nit_lanza(self):
         """Valida que si Empresa existe pero sin NIT, lanza EmpresaNotConfiguredError."""
-        Empresa.objects.create(
+        # Hallazgo real: Empresa.nit es requerido (blank=False) a nivel de
+        # modelo -- Empresa.objects.create(nit="") ahora es rechazado por
+        # full_clean() (Model.save() lo llama explicitamente, ver
+        # apps/tenant/empresa/models.py:217) antes de que este test llegue
+        # a probar la rama defensiva de get_empresa_emisor_data(). Se usa
+        # .update() (queryset, no invoca full_clean()) para simular el
+        # registro con nit vacio que la rama defensiva debe seguir
+        # manejando (p.ej. datos legacy/corruptos insertados antes de que
+        # la validacion del modelo se endureciera).
+        empresa = Empresa.objects.create(
             razon_social="SINTEL",
-            nit="",  # Sin NIT
+            nit="900000000",
             dv="",
             direccion="Calle 123",
             telefono="3001234567",
         )
-        
+        Empresa.objects.filter(pk=empresa.pk).update(nit="")
+
         with self.assertRaises(EmpresaNotConfiguredError):
             get_empresa_emisor_data()
     
