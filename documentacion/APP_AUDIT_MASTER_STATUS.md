@@ -82,16 +82,16 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 7 | inventario | COMPLETED | `documentacion/audits/apps/APP_inventario_AUDIT.md` |
 | 8 | compras | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_compras_AUDIT.md` |
 | 9 | ventas | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_ventas_AUDIT.md` |
-| 10 | cotizaciones | EN PROGRESO | `documentacion/audits/apps/APP_cotizaciones_AUDIT.md` |
-| 11 | proyectos | PENDIENTE | `documentacion/audits/apps/APP_proyectos_AUDIT.md` |
+| 10 | cotizaciones | COMPLETED | `documentacion/audits/apps/APP_cotizaciones_AUDIT.md` |
+| 11 | proyectos | EN PROGRESO | `documentacion/audits/apps/APP_proyectos_AUDIT.md` |
 | 12 | gastos | PENDIENTE | `documentacion/audits/apps/APP_gastos_AUDIT.md` |
 | 13 | bancos | PENDIENTE | `documentacion/audits/apps/APP_bancos_AUDIT.md` |
 | 14 | facturas | PENDIENTE | `documentacion/audits/apps/APP_facturas_AUDIT.md` |
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (9/16 -- 7 COMPLETED_WITH_DEFERRED,
-2 COMPLETED)
+**APP_AUDIT_PROGRAM:** EN PROGRESO (10/16 -- 7 COMPLETED_WITH_DEFERRED,
+3 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
 19 skipped, 0 failed, 1 warning (min_value en DocumentoUploadAPITests,
@@ -165,6 +165,13 @@ verde. 0 codigo muerto. Normativa: alcance delimitado -- ventas
 gestiona `ResolucionFacturacion`/consecutivo, pero CUFE/UBL2.1/XAdES
 se delegan a `facturas` (pendiente de auditar esa app). Cerrado como
 `COMPLETED_WITH_DEFERRED` (2 items P2 + 1 puntero a `facturas`).
+
+**Regresion cotizaciones (FASE Q, cierre):** `apps/tenant/cotizaciones/`
+-- 14 passed, 0 failed, 1 warning preexistente en 2829.69s (0:47:09).
+Se elimino un pipeline PDF completo y huerfano (`services/pdf/`, ~180
+lineas) que duplicaba al realmente usado. Corregido conteo de modelos
+en la matriz (5 reales, no 4 -- `ConfiguracionCotizacion` vive en
+`configuracion/models.py`). Cerrado como `COMPLETED` puro.
 
 ---
 

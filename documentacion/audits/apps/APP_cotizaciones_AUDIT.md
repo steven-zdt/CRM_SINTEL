@@ -94,9 +94,12 @@ como observacion informal si se retoma en una fase posterior).
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/cotizaciones/tests/`. Regresion
-lanzada en background tras confirmar `db`/`redis` healthy, sobre el
-working tree (incluye el WIP preexistente de `test_api.py`).
+14 tests coleccionados (`apps/tenant/cotizaciones/tests/`). Regresion
+ejecutada: **14 passed, 0 failed, 1 warning preexistente (min_value
+DRF) en 2829.69s (0:47:09)**. Incluye `test_api_crear_cotizacion`
+(consumidor directo del pipeline PDF, via `crear_preforma()`) --
+PASSED, confirma que la eliminacion de `services/pdf/` no afecto el
+pipeline real.
 
 ## Deferred
 
@@ -111,12 +114,10 @@ Ninguno nuevo mas alla de lo ya mencionado informalmente en FASE M
 - [x] Normativa colombiana evaluada (FASE M -- NO_APLICA formalmente)
 - [x] `py_compile`/`ast.parse` limpio en los archivos afectados
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 14 passed, 0 failed
 - [x] Sin deferred items formales pendientes
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED` puro (sin items normativos formales,
-el hallazgo de codigo muerto ya fue corregido) si la regresion
-confirma 0 fallos.
+**COMPLETED** -- 14/14 tests pasan, 0 regresiones. Codigo muerto
+eliminado, sin items normativos formales.
