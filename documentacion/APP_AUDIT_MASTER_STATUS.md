@@ -77,8 +77,8 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 2 | empresa | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_empresa_AUDIT.md` |
 | 3 | perfil | COMPLETED | `documentacion/audits/apps/APP_perfil_AUDIT.md` |
 | 4 | empleados | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_empleados_AUDIT.md` |
-| 5 | clientes | EN PROGRESO | `documentacion/audits/apps/APP_clientes_AUDIT.md` |
-| 6 | proveedores | PENDIENTE | `documentacion/audits/apps/APP_proveedores_AUDIT.md` |
+| 5 | clientes | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_clientes_AUDIT.md` |
+| 6 | proveedores | EN PROGRESO | `documentacion/audits/apps/APP_proveedores_AUDIT.md` |
 | 7 | inventario | PENDIENTE | `documentacion/audits/apps/APP_inventario_AUDIT.md` |
 | 8 | compras | PENDIENTE | `documentacion/audits/apps/APP_compras_AUDIT.md` |
 | 9 | ventas | PENDIENTE | `documentacion/audits/apps/APP_ventas_AUDIT.md` |
@@ -90,7 +90,7 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (4/16 -- 3 COMPLETED_WITH_DEFERRED,
+**APP_AUDIT_PROGRAM:** EN PROGRESO (5/16 -- 4 COMPLETED_WITH_DEFERRED,
 1 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
@@ -124,6 +124,15 @@ colombiana completa (`APP_empleados_NORMATIVE_MATRIX.md`, 15
 obligaciones). Cerrado como `COMPLETED_WITH_DEFERRED` (4 items P1-P3,
 principal: DSPNE sin transmision XML real a DIAN, DEUDA-11 ya
 conocida).
+
+**Regresion clientes (FASE Q, cierre):** `apps/tenant/clientes/` -- 35
+passed, 0 failed, 3 warnings preexistentes en 1732.36s (0:28:52).
+Se eliminaron 39 lineas de codigo muerto confirmado (4 clases sombra
+sin consumidores en `services/services.py`, se conservo `crear_cliente()`
+por tener 2 consumidores reales). Confirmado hallazgo Nivel3: Cartera
+usa Pull Model para listado (lee de Facturas), modelo `Cartera` en si
+sigue vivo para escritura. Cerrado como `COMPLETED_WITH_DEFERRED` (3
+items P3).
 
 ---
 

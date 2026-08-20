@@ -103,10 +103,12 @@ Tests coleccionados: `apps/tenant/clientes/tests/` (7 archivos segun
 `.agent/` doc: `test_auth_session_smoke`, `test_clientes_api_and_
 service`, `test_clientes_crud_workspace`, `test_contacto_cliente_crud`,
 `test_cartera_crud_api`, `test_idempotence_v2614`, `conftest`).
-Regresion lanzada en background tras confirmar `db`/`redis` healthy y
-tras la eliminacion de codigo muerto (incluye los 2 tests que
-consumen `crear_cliente()`, para confirmar que el cambio en
-`services.py` no rompe nada). Pendiente de resultado.
+Regresion ejecutada tras la eliminacion de codigo muerto: **35 passed,
+0 failed, 3 warnings preexistentes (min_value DRF, ya visto en apps
+anteriores) en 1732.36s (0:28:52)**. Confirmado especificamente:
+`test_idempotence_v2614.py` (los 2 tests que consumen `crear_cliente()`
+desde el archivo editado) -- ambos PASSED, sin efectos secundarios del
+cambio en `services/services.py`.
 
 ## Deferred
 
@@ -124,14 +126,12 @@ consumen `crear_cliente()`, para confirmar que el cambio en
 - [x] Matriz normativa colombiana completa (FASE M, documento separado)
 - [x] `py_compile` limpio en el archivo editado
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 35 passed, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED_WITH_DEFERRED` (3 items deferred,
-ninguno bloqueante) si la regresion confirma 0 fallos nuevos --
-particular atencion a `test_idempotence_v2614.py` y
-`test_clientes_api_and_service.py` (consumidores directos del codigo
-tocado en `services/services.py`).
+**COMPLETED_WITH_DEFERRED** -- 35/35 tests pasan, 0 regresiones,
+confirmado especificamente que el cambio en `services/services.py` no
+afecto a sus consumidores directos. 3 items deferred (ninguno
+bloqueante, todos P3).
