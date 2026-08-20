@@ -76,8 +76,8 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 1 | core | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_core_AUDIT.md` |
 | 2 | empresa | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_empresa_AUDIT.md` |
 | 3 | perfil | COMPLETED | `documentacion/audits/apps/APP_perfil_AUDIT.md` |
-| 4 | empleados | EN PROGRESO | `documentacion/audits/apps/APP_empleados_AUDIT.md` |
-| 5 | clientes | PENDIENTE | `documentacion/audits/apps/APP_clientes_AUDIT.md` |
+| 4 | empleados | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_empleados_AUDIT.md` |
+| 5 | clientes | EN PROGRESO | `documentacion/audits/apps/APP_clientes_AUDIT.md` |
 | 6 | proveedores | PENDIENTE | `documentacion/audits/apps/APP_proveedores_AUDIT.md` |
 | 7 | inventario | PENDIENTE | `documentacion/audits/apps/APP_inventario_AUDIT.md` |
 | 8 | compras | PENDIENTE | `documentacion/audits/apps/APP_compras_AUDIT.md` |
@@ -90,7 +90,7 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (3/16 -- 2 COMPLETED_WITH_DEFERRED,
+**APP_AUDIT_PROGRAM:** EN PROGRESO (4/16 -- 3 COMPLETED_WITH_DEFERRED,
 1 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
@@ -115,6 +115,15 @@ en 1499.94s. **0 codigo muerto encontrado** -- primera app auditada sin
 hallazgos de limpieza (arquitectura ya limpia: separacion
 autoservicio/admin clara, sin shims huerfanos). Cerrado como
 `COMPLETED` puro (sin items deferred).
+
+**Regresion empleados (FASE Q, cierre):** `apps/tenant/empleados/` --
+64 passed, 0 failed, 7 warnings preexistentes en 5089.06s (1:24:49).
+**0 codigo muerto encontrado** (reutilizo el `.agent/` doc propio de
+la app, de alta calidad, en vez de re-derivar). Matriz normativa
+colombiana completa (`APP_empleados_NORMATIVE_MATRIX.md`, 15
+obligaciones). Cerrado como `COMPLETED_WITH_DEFERRED` (4 items P1-P3,
+principal: DSPNE sin transmision XML real a DIAN, DEUDA-11 ya
+conocida).
 
 ---
 

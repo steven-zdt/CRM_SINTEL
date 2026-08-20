@@ -122,15 +122,16 @@ cita verificable). Hallazgos principales:
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/empleados/tests/` (9 archivos:
-`test_api_smoke`, `test_crud_smoke_v38`, `test_devengos_api_smoke`,
-`test_empleados_crud`, `test_empleados_delete`,
-`test_multitenant_isolation_tablas_html`, `test_routing_smoke`,
-`test_scope_isolation_f14`, `test_scope_object_level_f13`,
-`test_scope_selectors_f7`, `test_scope_write_validation_f8` --
-11 archivos reales, matriz FASE 1 conto 12). Regresion lanzada en
-background tras confirmar `db`/`redis` healthy. Pendiente de
-resultado.
+64 tests coleccionados (`apps/tenant/empleados/tests/`, 11 archivos).
+Regresion ejecutada sobre el working tree (incluyendo el WIP
+preexistente no commiteado en `tables.py` y 5 archivos de test,
+documentado como ajeno a esta mision): **64 passed, 0 failed, 7
+warnings preexistentes (min_value DRF ya visto en apps anteriores +
+`format_html()` sin args, `RemovedInDjango60Warning`, no relacionados
+con esta auditoria) en 5089.06s (1:24:49)**. Incluye 3 suites de
+`scope_*` (F7/F8/F13/F14 -- alcance organizacional EMPRESA/SEDE/AREA)
+todas verdes, confirma que la logica de `alcance` documentada en
+`perfil` (ADR-003) esta correctamente aplicada aqui tambien.
 
 ## Deferred
 
@@ -151,15 +152,14 @@ Resumen:
 - [x] Seguridad verificada puntualmente, sin hallazgos nuevos (FASE I)
 - [x] Matriz normativa colombiana completa (FASE M, documento separado)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 64 passed, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad (4 items,
       todos heredados de hallazgos normativos, ninguno de codigo)
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Dado que no hubo cambios de codigo (0 hallazgos de codigo
-muerto) pero SI hay 4 items normativos deferred (incluyendo DEUDA-11,
-potencialmente P1), se espera cierre como `COMPLETED_WITH_DEFERRED`
-independientemente del resultado de la regresion (a menos que la
-regresion revele fallos reales que requieran reclasificacion).
+**COMPLETED_WITH_DEFERRED** -- 64/64 tests pasan, 0 regresiones, 0
+hallazgos de codigo muerto. Se usa `_WITH_DEFERRED` por los 4 items
+normativos documentados en `APP_empleados_NORMATIVE_MATRIX.md`
+(principalmente DEUDA-11: DSPNE sin transmision XML real a DIAN, ya
+conocida desde 2026-06-17, confirmada vigente).
