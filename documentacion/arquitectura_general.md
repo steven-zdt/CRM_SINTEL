@@ -1,7 +1,82 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.51.0
-**Ultima actualizacion:** 2026-08-16 (DOC-M38) — FASE 33 (Shared UI / Design
+**Version:** 3.52.0
+**Ultima actualizacion:** 2026-08-20 (DOC-M39) — FASE 33 (Shared UI / Design
+System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
+que. Cubre el cierre del **Nivel 3** de la regresion incremental
+(F33.15-B): las **16/16 apps de `apps/tenant/**`** quedan confirmadas
+individualmente (nunca la suite completa durante el proceso, per
+instruccion explicita del usuario) -- `bancos`, `perfil`, `ventas`,
+`inventario`, `proveedores`, `compras`, `empleados`, `empresa`,
+`proyectos`, `gastos`, `cotizaciones`, `clientes`, `contabilidad`,
+`dashboard`, `core`, `facturas`. Hallazgos reales corregidos con
+evidencia por app (lista completa en
+`F33.15_TESTING_EXECUTION_STATUS.md`, seccion "STATUS FINAL: Nivel 3
+COMPLETO"), entre los mas significativos:
+- **`proyectos`** (3 bugs de produccion): guard de fase `CIERRE` muerto
+  en `ProyectoDetailSerializer.validate()` (permitia editar datos
+  generales de un proyecto cerrado); DSV faltante en
+  `PresupuestoBusinessService.crear_item()` (documentado en su propio
+  docstring pero nunca implementado); `NotNullViolation` por convertir
+  a `None` un `CharField` no-nullable.
+- **Descubrimiento arquitectonico (`Empresa` singleton por schema):**
+  `UniqueConstraint` en `singleton_key` impide un segundo `Empresa`
+  real por tenant -- invalida el patron de tests antiguos que creaban
+  una "segunda empresa" para simular cross-tenant. Patron de reemplazo
+  establecido: instancia `Empresa` sin persistir con `id` distinto
+  para checks DSV que ocurren antes de cualquier persistencia.
+- **`clientes`:** `CarteraViewSet.list()`/`kpis()` migraron a leer
+  `Factura.naturaleza='VENTA'` (Pull Model, no la tabla `Cartera`
+  legacy); FASE 4 anti-duplicidad (Zero Trust) reemplazo la
+  idempotencia HTTP v2.61.4 original en `ClienteViewSet.create()`.
+- **`contabilidad`:** `PeriodoContable.periodo` (`CharField(7)`,
+  formato YYYY-MM) + `uuid` vs `id` en URLs de
+  `ConfiguracionRetencionesViewSet`.
+- **`core`:** endpoint universal de documentos real en
+  `/api/v1/core/_apps/facturas/upload-document/` (no
+  `/api/v1/documentos/upload/`, protegido por
+  `FEATURE_UPLOAD_DOCUMENT_ENDPOINT`); `@override_settings(...)` como
+  **decorador de clase no tiene efecto con `TenantTestCase`**
+  (django_tenants) -- requiere `with override_settings(...):` por
+  request; `IsTenantAdminOrReadOnly` exige `TenantProfile.rol`
+  (schema tenant), no `TenantMembership.rol` (schema public) -- gap
+  recurrente en multiples apps esta fase; 16 tests de workspace
+  facturas (modal XML, `facturas.page.js`, `<th>Naturaleza</th>`
+  inline) marcados skip documentado: reemplazados por la migracion
+  FASE 5-BIS (Tabulator -> django-tables2+HTMX).
+- **`facturas`:** `content_type` de XML nunca incluye `charset=utf-8`;
+  204 No Content no lleva body (RFC 7231); detalle de factura expone
+  metadatos (`has_ubl_xml`/`anexos_meta`), no XML crudo (FASE 6);
+  mock de test apuntaba a un alias (`ingest_ubl_sync`) que produccion
+  no usa (el real es `business_service.ingest_document`); `Empresa.nit`
+  ahora requerido a nivel de modelo. Ademas: `async_mode` de
+  `ingest_document()` (pipeline universal) documentado en su propio
+  codigo como "FASE 5: placeholder para futuro" -- sin implementar,
+  2 tests marcados skip en consecuencia. Un hallazgo de produccion (la
+  rama activa del pipeline universal no capturaba excepciones de
+  `ingest_document()`, solo la rama legacy inactiva lo hacia) se
+  flageo aparte en vez de corregirse en esta pasada de saneamiento de
+  tests -- corregido por separado en sesion independiente iniciada por
+  el usuario a partir de esa sugerencia (`business_service.py`:
+  try/except agregado alrededor de `ingest_document()`, retorna
+  `{"error": "parse_error", ...}, 422`).
+- Endpoint `factura-upload-ubl` (`POST /api/v1/facturas/upload-ubl/`,
+  marcado `DEPRECATED` en su propio docstring desde antes de esta
+  sesion) queda con cobertura parcial deliberadamente sin completar:
+  decision ya documentada en sesion previa (F27/F28) de no invertir en
+  un endpoint deprecado con cobertura de negocio real ya duplicada en
+  otros archivos -- reconfirmada, no reabierta, en esta pasada.
+
+34 archivos tocados (1 nuevo: `apps/tenant/core/tests/conftest.py`; 33
+modificados, la gran mayoria tests, 2 de produccion en `proyectos`), 0
+modelos nuevos, 0 migraciones. Detalle completo con evidencia
+ANTES/DESPUES por app: `documentacion/F33.15_TESTING_EXECUTION_STATUS.md`.
+Pendiente (fuera de esta sub-fase, per plan original): Nivel 4
+(cross-cutting: `tests/api`, `tests/celery`, `tests/general`,
+`tests/multitenant`, `tests/smoke`) y Nivel 5 (suite global 2064+ tests
+como confirmacion final). Posterior a DOC-M38.
+
+**Actualizacion previa:** 2026-08-16 (DOC-M38) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
 que. Cubre el cierre del Nivel 2 de la regresion incremental
 (`apps/public/**`): 4 hallazgos reales corregidos con evidencia
@@ -1976,7 +2051,14 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.51.0 — 2026-08-16, DOC-M38)
+## 12. Metricas del Proyecto (v3.52.0 — 2026-08-20, DOC-M39)
+
+**[DOC-M39]** F33.15-B Nivel 3 (cierre completo, 16/16 apps
+`apps/tenant/**`) no toca modelos ni migraciones -- 34 archivos de
+codigo: 1 nuevo (`apps/tenant/core/tests/conftest.py`, fixture `tenant`
+faltante) y 33 modificados (2 de produccion en `proyectos` --
+`api/serializers.py`, `services/presupuesto_service.py` -- el resto
+tests). Ninguna fila de esta tabla cambia.
 
 **[DOC-M38]** F33.15-B Nivel 2 no toca modelos ni migraciones -- 5
 archivos de codigo modificados: 1 fix de produccion
