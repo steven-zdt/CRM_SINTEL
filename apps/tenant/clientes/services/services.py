@@ -4,39 +4,17 @@ Backward-compatibility layer for Clientes services.
 - selectors.py: For read-only queries
 - crud_service.py: For atomic DB mutations
 - business_service.py: For business logic and orchestration
+
+Only `crear_cliente()` remains here -- used by
+tests/test_idempotence_v2614.py y tests/test_clientes_api_and_service.py.
+Las clases `ClienteBusinessService`/`ContactoClienteService`/
+`ClienteServiceMixin`/`ContactoClienteServiceMixin` que existian antes
+en este archivo (sombra sin consumidores de las reales en
+api_mixins.py/business_service.py) fueron eliminadas -- confirmado
+via grep repo-wide que nada las importaba desde este modulo especifico.
 """
-from .selectors import ClienteSelector, ContactoSelector
-from .crud_service import ClienteCRUDService, ContactoCRUDService
 from .business_service import ClienteBusinessService
-from ..models import Cliente, ContactoCliente
-
-class ClienteBusinessService(ClienteBusinessService):
-    """Deprecated: Use business_service.ClienteBusinessService directly."""
-    def qs_list(self, empresa_id, search=None):
-        return ClienteSelector.get_cliente_list(empresa_id, search)
-    
-    def qs_detail(self, empresa_id, pk):
-        return ClienteSelector.get_cliente_detail(empresa_id, pk)
-
-class ContactoClienteService:
-    """Deprecated: Use specialized services."""
-    def qs_list(self, empresa_id, cliente_id=None):
-        return ContactoSelector.get_contacto_list(empresa_id, cliente_id)
-    
-    def eliminar_contacto(self, pk, empresa_id):
-        c = ContactoCliente.objects.filter(pk=pk, empresa_id=empresa_id).first()
-        if c:
-            ContactoCRUDService.delete_contacto(c)
-
-class ClienteServiceMixin:
-    @property
-    def service(self):
-        return ClienteBusinessService()
-
-class ContactoClienteServiceMixin:
-    @property
-    def service(self):
-        return ContactoClienteService()
+from ..models import Cliente
 
 
 def crear_cliente(empresa, data):
