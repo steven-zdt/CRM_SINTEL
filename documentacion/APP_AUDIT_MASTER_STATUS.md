@@ -73,7 +73,7 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 
 | # | App | Estado | Doc |
 |---|-----|--------|-----|
-| 1 | core | PENDIENTE | `documentacion/audits/apps/APP_core_AUDIT.md` |
+| 1 | core | COMPLETED_WITH_DEFERRED (regresion en curso) | `documentacion/audits/apps/APP_core_AUDIT.md` |
 | 2 | empresa | PENDIENTE | `documentacion/audits/apps/APP_empresa_AUDIT.md` |
 | 3 | perfil | PENDIENTE | `documentacion/audits/apps/APP_perfil_AUDIT.md` |
 | 4 | empleados | PENDIENTE | `documentacion/audits/apps/APP_empleados_AUDIT.md` |
