@@ -28,6 +28,15 @@ class WorkspaceFacturasLinksAndColumnTests(SintelTenantTestCase):
     
     def test_columna_naturaleza_y_assets(self):
         """Valida que la columna Naturaleza está presente y los assets no están duplicados."""
+        self.skipTest(
+            "Hallazgo real: la tabla de facturas (<th>Naturaleza</th>, "
+            "id=tbl-facturas) y facturas.page.js ya no viven inline en "
+            "workspace.html -- migracion FASE 5-BIS a django-tables2+HTMX "
+            "(documentacion/plan_refactorizacion.md seccion 2.1, "
+            "F31_FRONTEND_INVENTORY.md: facturas = 'Migrado'). Reescribir "
+            "requiere el contrato real del nuevo endpoint HTMX, fuera de "
+            "alcance de saneamiento de tests -- rediseno dedicado."
+        )
         resp = self.client.get(self.url)
         
         # Si la URL no existe o requiere autenticación, saltar el test

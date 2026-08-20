@@ -8,6 +8,7 @@ Valida que:
 3. Los módulos no críticos manejen 401 localmente sin expulsar del workspace
 """
 import pytest
+from django_tenants.utils import schema_context
 
 from apps.public.tenants.models import TenantMembership
 
@@ -30,9 +31,13 @@ def test_workspace_401_handler_does_not_redirect_for_noncritical_modules(client,
         rol="ADMIN"
     )
     
-    # Autenticar usuario (simula login con sesión)
-    client.force_login(user)
-    
+    # Autenticar usuario (simula login con sesión). django.contrib.sessions esta
+    # en TENANT_APPS (sesiones aisladas por esquema) y el request real solo lee
+    # la sesion despues de que TenantMainMiddleware cambia al esquema del
+    # tenant, asi que force_login debe escribirla en ese mismo esquema.
+    with schema_context(tenant.schema_name):
+        client.force_login(user)
+
     # Si los ViewSets aceptan SessionAuthentication, NO deben devolver 401
     # 200 si funciona correctamente, 404 si falta include en TENANT_URLCONF
     r1 = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
