@@ -91,25 +91,6 @@ class Command(BaseCommand):
                 except ImportError as e:
                     errors.append(f"services.py: No se puede importar get_empresa_emisor_data: {e}")
                 
-                # Verificar impl/ (paquete renombrado desde services/)
-                try:
-                    from apps.tenant.empresa.impl import (
-                        get_empresa,
-                        get_or_create_empresa,
-                        update_empresa,
-                    )
-                    self.stdout.write(self.style.SUCCESS("[OK] impl/: Funciones disponibles"))
-                    
-                    # Probar get_empresa
-                    empresa_dto = get_empresa()
-                    if empresa_dto:
-                        self.stdout.write(f"  [OK] get_empresa() retorna datos: NIT={empresa_dto.get('nit')}")
-                    else:
-                        warnings.append("get_empresa() retorna None (no hay empresa configurada)")
-                    
-                except ImportError as e:
-                    errors.append(f"services/: No se pueden importar funciones: {e}")
-                
                 # 3. Verificar APIs
                 try:
                     from apps.tenant.empresa.api.serializers import EmpresaSerializer
