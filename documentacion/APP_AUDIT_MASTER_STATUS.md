@@ -79,8 +79,8 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 4 | empleados | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_empleados_AUDIT.md` |
 | 5 | clientes | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_clientes_AUDIT.md` |
 | 6 | proveedores | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_proveedores_AUDIT.md` |
-| 7 | inventario | EN PROGRESO | `documentacion/audits/apps/APP_inventario_AUDIT.md` |
-| 8 | compras | PENDIENTE | `documentacion/audits/apps/APP_compras_AUDIT.md` |
+| 7 | inventario | COMPLETED | `documentacion/audits/apps/APP_inventario_AUDIT.md` |
+| 8 | compras | EN PROGRESO | `documentacion/audits/apps/APP_compras_AUDIT.md` |
 | 9 | ventas | PENDIENTE | `documentacion/audits/apps/APP_ventas_AUDIT.md` |
 | 10 | cotizaciones | PENDIENTE | `documentacion/audits/apps/APP_cotizaciones_AUDIT.md` |
 | 11 | proyectos | PENDIENTE | `documentacion/audits/apps/APP_proyectos_AUDIT.md` |
@@ -90,8 +90,8 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (6/16 -- 5 COMPLETED_WITH_DEFERRED,
-1 COMPLETED)
+**APP_AUDIT_PROGRAM:** EN PROGRESO (7/16 -- 5 COMPLETED_WITH_DEFERRED,
+2 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
 19 skipped, 0 failed, 1 warning (min_value en DocumentoUploadAPITests,
@@ -143,6 +143,12 @@ diferencia de clientes). **Hallazgo P1 (CONTRACT_DRIFT):**
 `gastos` pero sin ningun consumidor real confirmado -- pendiente de
 resolver con evidencia completa al auditar `gastos` (app 12/16).
 Cerrado como `COMPLETED_WITH_DEFERRED`.
+
+**Regresion inventario (FASE Q, cierre):** `apps/tenant/inventario/` --
+25 passed, 0 failed, 6 warnings preexistentes en 5210.10s (1:26:50).
+0 codigo muerto, 0 items deferred. Corregido el conteo de modelos de
+`APP_AUDIT_MATRIX.md` (6 reales, no 1 -- herencia indirecta via
+`TimeStampedModel`). Cerrado como `COMPLETED` puro.
 
 ---
 

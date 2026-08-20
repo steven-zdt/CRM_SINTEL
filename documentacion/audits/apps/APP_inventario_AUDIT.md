@@ -83,11 +83,12 @@ proveedores, ventas, clientes, bancos`). **NO_APLICA.**
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/inventario/tests/` (incluye los 4
-archivos nuevos de scope/alcance sin commitear, que se ejecutan igual
-al correr la suite sobre el working tree). Regresion lanzada en
-background tras confirmar `db`/`redis` healthy. Sin cambios de codigo
-en esta app por parte de esta auditoria.
+25 tests coleccionados (`apps/tenant/inventario/tests/`, incluye los 4
+archivos nuevos de scope/alcance sin commitear). Regresion ejecutada:
+**25 passed, 0 failed, 6 warnings preexistentes (min_value DRF +
+`format_html()` sin args, ya vistos en apps anteriores) en 5210.10s
+(1:26:50)**. Incluye `test_scope_isolation_f14.py` (WIP ajeno a esta
+mision) -- verde, sin conflicto con esta auditoria.
 
 ## Deferred
 
@@ -100,12 +101,10 @@ Ninguno nuevo generado por esta auditoria.
 - [x] Frontend verificado, WIP ajeno identificado y no tocado (FASE J)
 - [x] Normativa colombiana evaluada (FASE M -- NO_APLICA)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 25 passed, 0 failed
 - [x] Sin deferred items pendientes de documentar
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Dado que no hubo cambios de codigo ni hallazgos deferred, se
-espera cierre como `COMPLETED` puro si la regresion confirma el
-baseline sin fallos.
+**COMPLETED** -- 25/25 tests pasan, 0 regresiones, 0 codigo muerto, 0
+items deferred.
