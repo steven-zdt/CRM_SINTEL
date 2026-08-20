@@ -81,8 +81,8 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 6 | proveedores | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_proveedores_AUDIT.md` |
 | 7 | inventario | COMPLETED | `documentacion/audits/apps/APP_inventario_AUDIT.md` |
 | 8 | compras | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_compras_AUDIT.md` |
-| 9 | ventas | EN PROGRESO | `documentacion/audits/apps/APP_ventas_AUDIT.md` |
-| 10 | cotizaciones | PENDIENTE | `documentacion/audits/apps/APP_cotizaciones_AUDIT.md` |
+| 9 | ventas | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_ventas_AUDIT.md` |
+| 10 | cotizaciones | EN PROGRESO | `documentacion/audits/apps/APP_cotizaciones_AUDIT.md` |
 | 11 | proyectos | PENDIENTE | `documentacion/audits/apps/APP_proyectos_AUDIT.md` |
 | 12 | gastos | PENDIENTE | `documentacion/audits/apps/APP_gastos_AUDIT.md` |
 | 13 | bancos | PENDIENTE | `documentacion/audits/apps/APP_bancos_AUDIT.md` |
@@ -90,7 +90,7 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (8/16 -- 6 COMPLETED_WITH_DEFERRED,
+**APP_AUDIT_PROGRAM:** EN PROGRESO (9/16 -- 7 COMPLETED_WITH_DEFERRED,
 2 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
@@ -157,6 +157,14 @@ en el `.agent/` doc propio re-verificadas vigentes (DEBUG bypass
 eliminado, F() atomico). Confirmado: sin logica de retencion (a
 diferencia de proveedores) -- es workflow de Ordenes de Compra puro.
 Cerrado como `COMPLETED_WITH_DEFERRED` (2 items P3).
+
+**Regresion ventas (FASE Q, cierre):** `apps/tenant/ventas/` -- 13
+passed, 0 failed, 1 warning preexistente en 2207.31s (0:36:47),
+incluye la suite F23 completa (venta->inventario->contabilidad)
+verde. 0 codigo muerto. Normativa: alcance delimitado -- ventas
+gestiona `ResolucionFacturacion`/consecutivo, pero CUFE/UBL2.1/XAdES
+se delegan a `facturas` (pendiente de auditar esa app). Cerrado como
+`COMPLETED_WITH_DEFERRED` (2 items P2 + 1 puntero a `facturas`).
 
 ---
 

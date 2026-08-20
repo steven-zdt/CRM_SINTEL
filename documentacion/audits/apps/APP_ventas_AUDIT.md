@@ -65,9 +65,14 @@ Dentro del alcance real de `ventas`:
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/ventas/tests/`. Regresion lanzada en
-background tras confirmar `db`/`redis` healthy. Sin cambios de codigo
-en esta app.
+13 tests coleccionados (`apps/tenant/ventas/tests/`). Regresion
+ejecutada: **13 passed, 0 failed, 1 warning preexistente (min_value
+DRF) en 2207.31s (0:36:47)**. Incluye la suite completa F23
+(`test_f23_venta_inventario.py`, 7 tests: multi-item, stock
+insuficiente revierte venta+factura, reintentos no duplican
+movimiento, costo usa costo_promedio no precio_unitario, E2E hasta
+asiento contable via extractor F22) -- todas verdes, confirma el
+pipeline heredado intacto.
 
 ## Deferred
 
@@ -86,12 +91,11 @@ Ver tabla completa en `APP_ventas_NORMATIVE_MATRIX.md`. Resumen:
 - [x] Pipeline F23 (venta->inventario->contabilidad) confirmado intacto
 - [x] Matriz normativa colombiana completa, con alcance delimitado hacia `facturas` (FASE M)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 13 passed, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED_WITH_DEFERRED` (2 items P2 propios +
-1 puntero a `facturas`) si la regresion confirma el baseline sin
-fallos.
+**COMPLETED_WITH_DEFERRED** -- 13/13 tests pasan, 0 regresiones,
+incluyendo la suite F23 completa. 2 items P2 propios + 1 puntero a
+`facturas`.
