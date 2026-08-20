@@ -49,4 +49,4 @@ from .tareas_service import (
     TAREA_FIELDS
 )
 
-from .api_mixins import ProyectoServiceMixin, TareaCortaServiceMixin
+from .api_mixins import TareaCortaServiceMixin
