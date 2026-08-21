@@ -333,6 +333,38 @@ interno de atributos siguen exactamente iguales, solo reagrupados.
 
 ---
 
+## FASE Empresa — Eliminado el badge "SSoT" del sidebar (IMPLEMENTADO)
+
+**Hallazgo:** el link "Mi empresa" del sidebar tenia un badge literal
+`<span class="badge bg-info">SSoT</span>` -- jerga de arquitectura
+interna (Single Source of Truth) expuesta directamente al usuario
+final, exactamente lo que `CLAUDE.md` prohibe explicitamente
+("Conceptos tecnicos... NUNCA deben aparecer como lenguaje
+user-facing"). Se reviso el resto de la app Empresa (templates,
+JS de features, tablas) buscando `schema_name`, `TenantProfile`,
+`singleton`, `OCF`, `DSV`, `tenant_id`, `empresa_id`, `SSoT` -- las
+unicas ocurrencias de `SINGLETON`/`SSoT` encontradas estan en
+comentarios de template (invisibles al usuario) o en codigo backend,
+no en texto renderizado.
+
+**Cambio aplicado:** se elimino el badge por completo (no se
+reemplazo por otro texto) -- el dato "Empresa es singleton" no aporta
+nada util a un usuario de negocio (nunca vera mas de una empresa, no
+hay ambiguedad que aclarar), asi que quitarlo es mas simple y correcto
+que inventar una traduccion de un concepto que el usuario no
+necesita (principio "Simplicity First").
+
+### Verificacion realizada
+
+- Template parsea sin error.
+- Render real via Django test Client + `force_login()`: confirmado
+  que "SSoT" ya no aparece en ningun texto visible de la pagina (la
+  unica ocurrencia restante es un comentario HTML `<!-- SSoT: ... -->`
+  invisible para el usuario) y que el link "Mi empresa" sigue
+  apuntando exactamente igual a `#empresa`.
+
+---
+
 ## FASE Perfil — Renombrado de "Mi perfil" a "Usuarios y roles" (IMPLEMENTADO)
 
 **Hallazgo real:** el tab `#perfil` (enlazado tanto desde el sidebar
