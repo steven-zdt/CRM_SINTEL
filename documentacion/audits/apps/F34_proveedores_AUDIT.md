@@ -75,18 +75,18 @@ la auditoria previa y en esta.
 
 ## FASE 17 — Validacion puntual
 
-Cambio de codigo real -> regresion de la app en curso
-(`apps/tenant/proveedores/`, 18 tests, mismo baseline que la mision
-anterior: 18 passed, 0 failed). Se documentara el resultado al
-finalizar (ver `F34_MASTER_STATUS.md`).
+Cambio de codigo real -> regresion ejecutada
+(`apps/tenant/proveedores/`): **18 passed, 0 failed, 2 warnings
+preexistentes (min_value DRF) en 1657.64s (0:27:37)** -- coincide
+exactamente con el baseline conocido, confirma que el codigo muerto
+eliminado no tenia ningun efecto en el comportamiento real.
 
 ## FASE 22 — Release Gate
 
 - [x] Reglas de negocio clasificadas
 - [x] Mapa de dominio
 - [x] Codigo muerto eliminado (deuda pendiente de la mision anterior + 1 hallazgo nuevo), evidencia completa
-- [ ] Regresion puntual -- en curso
+- [x] Regresion puntual -- 18/18 passed, 0 failed
 - [x] `py_compile` limpio
 
-**APP = COMPLETED_WITH_DEFERRED** (pendiente de confirmar regresion;
-se actualizara a COMPLETED si 18/18 pasan).
+**APP = COMPLETED.**
