@@ -55,12 +55,12 @@ anterior):**
 | 10 | proyectos | COMPLETED | `documentacion/audits/apps/F34_proyectos_AUDIT.md` |
 | 11 | gastos | COMPLETED | `documentacion/audits/apps/F34_gastos_AUDIT.md` |
 | 12 | empleados | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/F34_empleados_AUDIT.md` |
-| 13 | bancos | EN PROGRESO | `documentacion/audits/apps/F34_bancos_AUDIT.md` |
-| 14 | facturas | PENDIENTE | `documentacion/audits/apps/F34_facturas_AUDIT.md` |
+| 13 | bancos | COMPLETED | `documentacion/audits/apps/F34_bancos_AUDIT.md` |
+| 14 | facturas | EN PROGRESO | `documentacion/audits/apps/F34_facturas_AUDIT.md` |
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/F34_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/F34_dashboard_AUDIT.md` |
 
-**F34:** EN PROGRESO (12/16 COMPLETED)
+**F34:** EN PROGRESO (13/16 COMPLETED)
 
 **Nota operativa (2026-08-21):** el usuario indico explicitamente NO
 ejecutar tests durante esta mision. A partir de este punto, la
