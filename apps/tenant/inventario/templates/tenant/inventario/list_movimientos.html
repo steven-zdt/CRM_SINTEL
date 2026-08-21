@@ -9,6 +9,9 @@
             <span class="badge bg-success">Producto</span>
             <span class="badge bg-warning text-dark">Activo</span>
             <span class="badge bg-info text-dark">Servicio</span>
+            {# Mision Access Context: indicador de alcance real (los movimientos ya se #}
+            {# filtran por sede en el backend, ver inventario/services/selectors.py) #}
+            <span id="movimientos-alcance-badge" class="badge bg-light text-muted border d-none"></span>
         </div>
         <div class="btn-group shadow-sm">
             <button type="button" class="btn btn-success" id="btn-nuevo-movimiento"
@@ -33,5 +36,30 @@
     <div id="grid-movimientos" class="flex-grow-1 w-100" style="max-width: 100%; overflow-x: auto;"></div>
 </div>
 
-{# Contenedor HTMX para offcanvas de movimiento #}
-<div id="offcanvas-container-movimientos"></div>
+{% comment %}
+  offcanvas-container-movimientos ya lo declara list_inventario.html (fuente unica de
+  verdad, ver su comentario "los sub-templates NO deben duplicarlos") -- no duplicar
+  aqui (Fase 3, auditoria 2026-08-06).
+{% endcomment %}
+
+<script>
+(function () {
+  function pintarAlcance(state, data) {
+    var badge = document.getElementById('movimientos-alcance-badge');
+    var UserContext = window.Sintel && window.Sintel.Core && window.Sintel.Core.UserContext;
+    if (!badge || !UserContext || state !== UserContext.STATES.READY || !data) return;
+    badge.textContent = (data.alcance === 'EMPRESA') ? 'Toda la empresa' : 'Solo tus sedes asignadas';
+    badge.classList.remove('d-none');
+  }
+  function init() {
+    var UserContext = window.Sintel && window.Sintel.Core && window.Sintel.Core.UserContext;
+    if (!UserContext) return;
+    UserContext.onReady(pintarAlcance);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>

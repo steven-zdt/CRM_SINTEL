@@ -316,7 +316,58 @@ que la recarga completa reinicia todo el estado del cliente (incluyendo
 `Sintel.Core.UserContext`, que se re-inicializa desde cero en cada carga
 de página). Diseño simple y ya correcto -- no requiere cambios.
 
-## 12. Verificación puntual (FASE 18)
+## 12bis. FASE 12-14 — Piloto Inventario (IMPLEMENTADO, alcance acotado)
+
+**Verificado antes de tocar nada:** `inventario/services/selectors.py`
+(`get_list`/`get_detail` de Movimientos) ya filtra por `sede_ids` de forma
+NULL-safe (`Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids)`) -- es
+lectura real ya activa desde la misión OCF/OSF anterior (F7/F9), no
+infraestructura muerta. Esto confirma que Inventario es un piloto legítimo:
+el backend YA responde al contexto, solo faltaba que el usuario lo supiera.
+
+**Cambio aplicado:** badge de alcance en la pestaña "Movimientos Recientes"
+(`list_movimientos.html`) -- "Toda la empresa" o "Solo tus sedes asignadas"
+según `UserContext.get().alcance`, poblado sin ninguna llamada nueva (usa
+el mismo `Sintel.Core.UserContext` ya cargado en el workspace). Verificado
+renderizado real vía Django test Client: badge y script presentes en el
+HTML servido; para el usuario admin de prueba (`alcance=EMPRESA`)
+mostraría "Toda la empresa", consistente con que ese usuario efectivamente
+ve todas las sedes en `sedes_disponibles`.
+
+**Alcance deliberadamente NO cubierto en este piloto** (para no
+comprometer profundidad por amplitud, ver §13 sobre presupuesto de
+tiempo): auditoría de cada pantalla de Inventario (Productos, Categorías,
+Activos Fijos, Servicios) contra cada rol; pruebas de IDOR/bypass de sede
+(FASE 19); extensión del mismo patrón de badge a Compras/Ventas/etc.
+(FASE 23). Ver §13 para la propuesta de cómo continuar esto como
+subtareas divididas, tal como permite explícitamente la "Regla de Tiempo"
+de esta misión.
+
+## 13. Estado y siguiente paso recomendado (Regla de Tiempo: dividir en subtareas)
+
+Esta fase (FASE 0-14) representa un incremento real, verificado y acotado:
+descubrimiento completo, decisión de no duplicar infraestructura,
+`Sintel.UserContext` funcionando, contexto visible en header/home, y un
+piloto real (no simulado) en Inventario. **Las FASE 15-26 restantes
+(componentes UX compartidos, expansión a las 15 apps restantes, pruebas de
+seguridad IDOR por app, auditoría cross-app final) representan un volumen
+de trabajo cualitativamente distinto** -- equivalente a repetir el
+análisis + implementación + verificación de esta sección una vez por cada
+una de las 15 apps restantes, más una ronda de pruebas de seguridad
+dedicada por app (FASE 19 pide intentos reales de bypass de tenant/rol/
+sede/área, no solo lectura de código).
+
+Consistente con la "Regla de Tiempo" de esta misma misión ("si una acción
+supera 15 minutos: detener, documentar, dividir en subtareas, continuar")
+y con el patrón ya establecido por la misión OCF/OSF anterior sobre este
+mismo subsistema (fases cortas, verificadas, documentadas, sin forzar
+alcance completo en una sola pasada), este documento se entrega como
+checkpoint verificado en vez de reclamar FASE 15-26 completadas sin
+evidencia real. **Estado formal:**
+
+    UX_ACCESS_CONTEXT = COMPLETED_WITH_DEFERRED
+
+## 14. Verificación puntual (FASE 18)
 
 - `context_processors.py`, `_header.html`, `workspace.html`: parsean sin
   error.
