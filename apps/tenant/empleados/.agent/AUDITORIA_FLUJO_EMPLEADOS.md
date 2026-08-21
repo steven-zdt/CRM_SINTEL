@@ -1,10 +1,37 @@
 # [PORTAL] Auditoría y SSoT: Módulo Empleados
 
-**Versión:** v4.8.1 (SINTEL v3.16.x)
+**Versión:** v4.9.0 (SINTEL v3.16.x)
 **Estado:** ✅ PRODUCTION READY — 0 CRÍTICOS
 **Ubicación:** `apps/tenant/empleados/`
-**Última Auditoría:** 2026-06-17
-**Auditor:** Claude Haiku 4.5 (Anthropic)
+**Última Auditoría:** 2026-08-21 (v4.9.0: PeriodoNomina — ver `docs/nomina/NOMINA_FLUJO_EMPRESARIAL.md` para el detalle completo; base v4.8.1 sin cambios, auditor original Claude Haiku 4.5)
+**Auditor:** Claude Haiku 4.5 (Anthropic) — v4.9.0 por Claude Sonnet 5 (Anthropic)
+
+---
+
+## v4.9.0 — `PeriodoNomina` (mision nomina 2026-08-21)
+
+Se agrega el 7mo modelo del app: `PeriodoNomina`, que agrupa los `Devengo`
+de un mismo ciclo de pago y orquesta una máquina de estados de aprobación
+en lote (`ABIERTO → PRELIQUIDADO → EN_REVISION → APROBADO → PAGADO →
+CERRADO`, excepciones `ANULADO`/`BLOQUEADO`). **No reemplaza ni modifica
+`Devengo`** — este sigue siendo la entidad de cálculo individual,
+inmutable, con `update`/`partial_update` devolviendo `405` exactamente
+igual que antes. `PeriodoNomina` solo añade una FK opcional
+(`Devengo.periodo`, nullable) y orquesta llamadas al motor de cálculo ya
+existente (`procesar_devengo()`), nunca calcula montos por sí mismo.
+
+Nuevo endpoint base: `/api/v1/empleados/periodos-nomina/` (+ acciones
+`preliquidar`, `enviar-revision`, `rechazar-revision`, `aprobar`,
+`marcar-pagado`, `cerrar`, `anular`, `bloquear`, `desbloquear`, `resumen`).
+Permisos por acción vía `HasTenantRole` (ya existente, sin permission
+class nueva): `VISOR` solo consulta; `OPERADOR` + crear/preliquidar/
+revisión; `ADMIN` + aprobar/pagar/cerrar/anular.
+
+**Documentación completa, decisiones y supuestos:** ver
+`docs/nomina/NOMINA_BASELINE.md` (auditoría previa) y
+`docs/nomina/NOMINA_FLUJO_EMPRESARIAL.md` (diseño final + qué queda
+deliberadamente fuera de alcance: DIAN XML real, PILA, integración
+bancaria real, modelo `Novedad` separado, frontend).
 
 ---
 
