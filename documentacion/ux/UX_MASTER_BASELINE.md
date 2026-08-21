@@ -333,6 +333,60 @@ interno de atributos siguen exactamente iguales, solo reagrupados.
 
 ---
 
+## FASE Inventario/Cotizaciones/Proyectos — Consolidacion de offcanvas duplicados (IMPLEMENTADO)
+
+**Revision realizada:** se busco jerga tecnica (`schema_name`,
+`TenantProfile`, `singleton`, `OCF`, `DSV`, `IDOR`) en las 3 apps --
+sin ocurrencias user-facing. Cotizaciones no presento hallazgos.
+
+**Hallazgo real en Inventario y Proyectos:** violacion directa de la
+regla no-negociable de `CLAUDE.md` ("`getOrCreateInstance().show()`
+en Offcanvas -- PROHIBIDO -- acumula backdrops. Usar
+`mostrarOffcanvasSeguro(el)`") -- 2 reimplementaciones locales,
+crudas, del manejo de Offcanvas que la consolidacion F33.4 ya habia
+resuelto para otras apps (Empresa, ver FASE Empresa arriba) pero que
+nunca llegaron a Inventario ni a Proyectos:
+
+- `apps/tenant/inventario/templates/tenant/inventario/list_inventario.html`
+  -- `window.sintelAbrirOffcanvas` reimplementaba manualmente
+  `bootstrap.Offcanvas.getInstance()` + `dispose()` +
+  `new bootstrap.Offcanvas().show()`, limpiando solo
+  `.offcanvas-backdrop` y 2 clases de `body` (menos que el helper
+  central, que tambien limpia `.modal-backdrop`, `offcanvas-open` y
+  estilos de overflow/padding). Usado en 5 sitios del modulo
+  (`list_activos.html`, `list_movimientos.html`, `list_productos.html`,
+  `list_servicios.html` x2).
+- `apps/tenant/proyectos/templates/tenant/proyectos/proyectos_list.html`
+  -- el boton "Nuevo Proyecto" tenia una cadena `hx-on::after-request`
+  con un fallback manual identico (`bootstrap.Offcanvas.getInstance` +
+  `dispose` + backdrop removal + `new bootstrap.Offcanvas().show()`)
+  para el caso en que `window.UIManager?.handleOffcanvas` no
+  estuviera disponible -- caso que en la practica nunca ocurre, porque
+  `UIManager` es un asset core cargado siempre (`assets_core.html`) y
+  `UIManager.handleOffcanvas` ya es el mismo alias delgado hacia
+  `mostrarOffcanvasSeguro` (confirmado leyendo `ui-manager.js:327-335`).
+
+**Cambio aplicado (ambos casos, sin cambio de comportamiento):**
+reemplazado por una llamada directa a
+`window.Sintel?.Core?.mostrarOffcanvasSeguro(...)` -- mismo patron
+"alias delgado" ya usado en Empresa. Cero logica de negocio tocada:
+es exclusivamente codigo de infraestructura de UI (como se abre un
+panel lateral), no reglas de negocio, calculos ni permisos.
+
+### Verificacion realizada
+
+- Ambos templates parsean sin error.
+- Render real via Django test Client + `force_login()`: confirmado
+  que el codigo nuevo esta presente y que el codigo crudo anterior
+  (`bootstrap.Offcanvas.getInstance(el); if (prev) prev.dispose`) ya
+  no aparece en ninguno de los 2 archivos.
+- Se confirmo que ningun test del repositorio depende del markup
+  crudo reemplazado (`sintelAbrirOffcanvas(` / `handleOffcanvas(el` /
+  `bootstrap.Offcanvas.getInstance(el)` -- 0 coincidencias en archivos
+  de test).
+
+---
+
 ## FASE Empresa — Eliminado el badge "SSoT" del sidebar (IMPLEMENTADO)
 
 **Hallazgo:** el link "Mi empresa" del sidebar tenia un badge literal

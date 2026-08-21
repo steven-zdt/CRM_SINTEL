@@ -40,7 +40,7 @@
                   hx-get="/api/v1/proyectos/gestor-offcanvas/"
                   hx-target="#offcanvas-container-proyectos"
                   hx-swap="innerHTML"
-                  hx-on::after-request="if(event.detail.successful){ const el = document.getElementById('offcanvas-proyecto'); if(el){ if(window.UIManager?.handleOffcanvas){ window.UIManager.handleOffcanvas(el,'show'); } else { const prev=bootstrap.Offcanvas.getInstance(el); if(prev) prev.dispose(); document.querySelectorAll('.offcanvas-backdrop').forEach(b=>b.remove()); new bootstrap.Offcanvas(el).show(); } } }">
+                  hx-on::after-request="if(event.detail.successful){ window.Sintel?.Core?.mostrarOffcanvasSeguro('offcanvas-proyecto'); }"
             <i class="bi bi-folder-plus me-1"></i>Nuevo Proyecto
           </button>
           <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.ProyectosModule?.refresh()" title="Refrescar">

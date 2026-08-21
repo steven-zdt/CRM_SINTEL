@@ -84,19 +84,12 @@
 <div id="offcanvas-container-proyectos"></div>
 
 <script>
-(function() {
-    // sintelAbrirOffcanvas — helper global contra backdrops huerfanos (v3.9.0)
-    // Limpia TODOS los backdrops del body antes de mostrar, evitando pantalla negra
-    // en el segundo intento de apertura de cualquier offcanvas HTMX del modulo.
-    window.sintelAbrirOffcanvas = function(id) {
-        document.querySelectorAll('.offcanvas-backdrop').forEach(function(b) { b.remove(); });
-        document.body.classList.remove('overflow-hidden', 'modal-open');
-        var el = document.getElementById(id);
-        if (el && window.bootstrap && window.bootstrap.Offcanvas) {
-            var prev = bootstrap.Offcanvas.getInstance(el);
-            if (prev) prev.dispose();
-            new bootstrap.Offcanvas(el).show();
-        }
-    };
-})();
+// sintelAbrirOffcanvas: alias delgado al helper SSoT ya consolidado (offcanvas.helper.js),
+// mismo patron ya aplicado en Empresa (F33.4/F33.10) para sus reimplementaciones locales
+// equivalentes. La version local anterior solo limpiaba '.offcanvas-backdrop' y 2 clases de
+// body; el helper central limpia ademas '.modal-backdrop', 'offcanvas-open' y los estilos de
+// overflow/padding -- sin cambio de comportamiento observable, solo consolidacion.
+window.sintelAbrirOffcanvas = function(id) {
+    window.Sintel?.Core?.mostrarOffcanvasSeguro(id);
+};
 </script>
