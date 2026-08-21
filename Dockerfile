@@ -36,6 +36,16 @@ COPY . /app
 # Crear directorios necesarios para evitar warnings de staticfiles
 RUN mkdir -p /app/static /app/media /app/staticfiles
 
+# ⚠️ Recolectar staticfiles durante el BUILD (defensa en profundidad para
+# imagenes de produccion sin bind-mount, donde nadie corre collectstatic a
+# mano). Seguro en build time: SECRET_KEY y DATABASES tienen defaults en
+# settings.py, collectstatic no necesita conexion real a la BD.
+# ⚠️ En DESARROLLO (bind-mount ./:/app) esto queda sobre-escrito por el
+# volumen del host al arrancar el contenedor -- entrypoint.sh ya vuelve a
+# correr collectstatic en cada arranque/restart para ese caso; sigue siendo
+# necesario reiniciar el contenedor tras editar JS/CSS en dev.
+RUN python manage.py collectstatic --noinput
+
 # Copiar y hacer ejecutable el entrypoint
 COPY entrypoint.sh entrypoint-celery.sh /app/
 RUN chmod +x /app/entrypoint.sh /app/entrypoint-celery.sh

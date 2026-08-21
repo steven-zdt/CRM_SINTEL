@@ -39,6 +39,13 @@ debug_*.txt
 # Documentacion (no requerida para runtime)
 documentacion/_archive/
 
+# Dependencias/artefactos de Node (tests/e2e Playwright) — nunca hacen falta
+# en la imagen Python/Django, y node_modules/.bin/ contiene symlinks que
+# rompen el build de Docker ("invalid file request tests/e2e/node_modules/.bin/...")
+node_modules/
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+
 # Configuracion local de asistentes/IDEs
 .claude/
 .vscode/
