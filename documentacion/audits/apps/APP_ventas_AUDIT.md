@@ -82,7 +82,7 @@ Ver tabla completa en `APP_ventas_NORMATIVE_MATRIX.md`. Resumen:
 |---|---|---|
 | 1 | `ResolucionFacturacion.clean()` no ejecuta en bulk_create/ORM directo -- falta `CheckConstraint` DB (ya documentado, no nuevo) | P2 |
 | 2 | `porcentaje_iva` sin validar contra tarifas de IVA vigentes -- afecta facturas DIAN reales | P2 |
-| 3 | Correccion tecnica CUFE/UBL2.1/XAdES -- fuera de alcance, pendiente de `facturas` | Ver app 14/16 |
+| 3 | ~~Correccion tecnica CUFE/UBL2.1/XAdES -- fuera de alcance, pendiente de `facturas`~~ -- **RESUELTO**: verificado en `APP_facturas_AUDIT.md`. CUFE/XAdES tecnicamente correctos (formula SHA-384, Anexo Tecnico DIAN v1.9, defaults seguros). **Hallazgo nuevo P1**: la transmision real del documento firmado al webservice DIAN nunca ocurre en ningun punto del sistema (mismo patron que DEUDA-11 de `empleados`) | ~~Ver app 14/16~~ -> **P1** (ver `APP_facturas_AUDIT.md`/`APP_facturas_NORMATIVE_MATRIX.md`) |
 
 ## FASE X — Release Gate (checklist)
 
