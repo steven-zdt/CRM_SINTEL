@@ -424,6 +424,72 @@ una correccion apurada dentro de esta pasada de UX general.
 
 ---
 
+## FASE dedicada: Facturas — Investigacion profunda del offcanvas (CONFIRMA decision anterior + 1 fix nuevo)
+
+Autorizada explicitamente por el usuario como fase separada, dado el
+riesgo ya senalado en FASE Facturas/Contabilidad/Bancos. Se leyo
+`apps/tenant/facturas/static/facturas/js/facturas_main.js` completo
+(2000+ lineas) para decidir con evidencia real, no solo con la lectura
+parcial anterior, si el offcanvas duplicado se puede consolidar de
+forma segura.
+
+**Conclusion: se confirma la decision anterior de NO tocarlo -- con
+evidencia adicional que la refuerza:**
+
+1. **Doble llamada a `initOffcanvas()` en el flujo normal de apertura,
+   aparentemente redundante pero probablemente necesaria:**
+   `cargarOffcanvas()` (el flujo principal, usado por `ver()` y
+   `subirNueva()`) llama `htmx.ajax()` para inyectar el HTML del
+   offcanvas -- eso dispara el evento global `htmx:afterSettle`, que
+   ya tiene un listener propio (`initHTMXListeners()`, linea ~1835)
+   que llama `initOffcanvas()`. Inmediatamente despues,
+   `cargarOffcanvas()` tambien llama `showOffcanvas()` (que internamente
+   vuelve a llamar `initOffcanvas()` + `.show()`). Es decir,
+   `initOffcanvas()` se ejecuta 2 veces seguidas para la misma
+   apertura. Esto no es necesariamente un bug, pero es una señal clara
+   de que el timing de Bootstrap Offcanvas en este archivo ya fue
+   ajustado por prueba y error -- consistente con el `setTimeout(50ms)`
+   explicito que `cargarOffcanvas()` inserta antes de mostrar
+   ("Esperar un momento para que el DOM se actualice"), el mismo tipo
+   de workaround de timing que ya se documento en Empleados
+   (`devengo_editor.js`, `setTimeout(0)` para evitar `null.scroll`).
+2. **`getOffcanvasInstance()` (la razon original de cautela sobre "otros
+   modulos podrian depender de la instancia cruda") se confirma como
+   API muerta**: esta definida en `AppFacturasPublic` pero **no se
+   invoca en ningun lugar del codebase** (verificado por grep en toda
+   la app) -- reduce el riesgo real de ese punto especifico, pero no
+   cambia la conclusion general dado el hallazgo #1.
+
+Migrar esto al helper central (`mostrarOffcanvasSeguro`, que no tiene
+ningun delay ni maneja el caso de doble-inicializacion) probablemente
+reintroduciria exactamente el tipo de bug de timing que este codigo ya
+tuvo que resolver. Sin poder probar interactivamente en un navegador
+real (limite ya documentado de esta sesion), tocar esto seria cambiar
+codigo de timing critico a ciegas -- se mantiene sin tocar.
+
+**Hallazgo nuevo encontrado durante la lectura profunda (corregido):**
+`offcanvas_importar_factura.html` tenia una SEGUNDA mencion visible de
+"DTO" que el barrido automatizado anterior no reporto -- el boton de
+guardar decia **"Guardar desde DTO"**. Corregido a "Guardar Factura"
+(coherente con el titulo ya corregido "Vista Previa de los Datos
+Extraidos").
+
+**Revision adicional:** se revisaron todos los mensajes de
+error/exito visibles al usuario en `facturas_main.js` (`alert()`,
+`SintelFeedback.error/success()`) -- todos en español, lenguaje de
+negocio claro. Las pocas excepciones tecnicas ("Error: API no
+disponible") solo aparecen en ramas defensivas de fallo de
+configuracion del sistema (no en el flujo normal de uso), no se
+consideraron prioritarias para reescribir.
+
+### Verificacion realizada
+
+- Template modificado parsea sin error.
+- Busqueda de `UUID`/`DTO`/jerga tecnica en el resto de templates de
+  Facturas: sin otras ocurrencias.
+
+---
+
 ## FASE Formularios — Barrido sistematico de offcanvas de crear/editar (IMPLEMENTADO)
 
 Continuacion autorizada explicitamente por el usuario ("continua...
