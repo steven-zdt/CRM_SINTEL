@@ -210,10 +210,123 @@ existente porque nada existente resuelve esta pregunta hoy.
 
 **Estado de esta fase: 🟢 COMPLETED.**
 
-**Siguiente paso propuesto, pendiente de confirmación del usuario dado el
-hallazgo de §0:** si se autoriza continuar, FASE 3 sería trivial (no
-extender nada, ya está todo servido por 2 endpoints existentes) y FASE 4
-empezaría el trabajo real: un `Sintel.UserContext` delgado en
-`apps/tenant/core/static/core/js/common/`, que haga las 2 llamadas ya
-existentes y las combine en memoria, más el mapa rol→módulos (la única
-pieza genuinamente nueva) para la navegación dinámica de FASE 7.
+**Autorización recibida del usuario para continuar automáticamente con
+FASE 3+.** Ver implementación y hallazgos de las fases siguientes abajo.
+
+---
+
+## 6. FASE 3 — Extender `/me/`: decisión ejecutada
+
+**No se extendió `/me/` ni se creó ningún endpoint nuevo**, tal como
+recomendaba §3. `Sintel.UserContext` (FASE 4, implementado) hace las 2
+llamadas ya existentes en paralelo (`Promise.all`) y las combina en un solo
+objeto en memoria.
+
+## 7. FASE 4-6 — `Sintel.UserContext`, estados, integración Home (IMPLEMENTADO)
+
+- **`apps/tenant/core/static/core/js/common/user_context.js`** — cliente
+  delgado, expone `window.Sintel.Core.UserContext` con: `onReady(fn)`,
+  `get()`, `getState()`, `getError()`, `STATES` (`loading`/`ready`/
+  `incomplete`/`unauthorized`/`error`, tal como pide FASE 5). Una sola carga
+  inicial (`Promise.all`), sin llamadas duplicadas, cacheado en memoria
+  hasta el proximo reload.
+- **Verificado** replicando la logica de combinacion en Python contra las
+  respuestas REALES de `/me/` y `/core/contexto/` (no simuladas) del
+  tenant `home` -- produce `state: READY` con los 13 campos esperados,
+  sin ningun `undefined`/`null` inesperado.
+- **`apps/tenant/core/context_processors.py`** (`contexto_organizacional`)
+  extendido para exponer tambien `perfil_actual`/`empresa_actual` en TODO
+  template del tenant -- **cero consultas nuevas** (`perfil` y `perfil.empresa`
+  ya se resolvian antes para calcular `sedes_disponibles`). Esto alimenta al
+  header (`_header.html`) con rol (`perfil_actual.get_rol_display`, ya
+  traducido: "Administrador"/"Operador"/"Visor") y empresa
+  (`empresa_actual.razon_social`) sin ninguna llamada JS.
+- **`_header.html`**: el dropdown de cuenta ahora muestra nombre + rol +
+  empresa antes de los items de menu -- verificado renderizado real:
+  `"Administrador · home"` para el usuario admin de prueba.
+- **`welcome_context.js`**: pinta "Hola, {nombre}" + "{rol} · {sede activa}"
+  en la pantalla de bienvenida del workspace, usando `UserContext.onReady()`
+  -- el nombre de la sede se lee del DOM ya renderizado por el header
+  (`#sede-dropdown-toggle`), sin una tercera fuente/llamada para un dato que
+  el servidor ya resolvio. Si el contexto no esta `READY`, el banner
+  simplemente no se muestra (FASE 5: nunca pintar undefined/null).
+
+## 8. FASE 7 — Navegación dinámica: decisión de NO ocultar módulos
+
+**Hallazgo central de esta fase:** no existe, en ningún backend de las 16
+apps, una restricción real de "qué módulos puede VER cada rol" — todo
+`IsTenantMember` (cualquier rol) puede acceder a las 16 apps a nivel de
+lectura; los roles solo restringen *acciones* (crear/editar/eliminar)
+dentro de cada módulo, no la *visibilidad* del módulo en sí (confirmado:
+`ROLE_ACTIONS` de Perfil es sobre gestión de usuarios, no sobre módulos de
+negocio; grep de cualquier variante de "modulos permitidos" en todo el
+proyecto: 0 resultados).
+
+**Decisión (Regla Absoluta #2 de esta misión: no modificar reglas de
+negocio sin evidencia de necesidad):** el sidebar sigue mostrando los 15
+módulos a cualquier miembro del tenant. Ocultar módulos por rol sin que el
+backend realmente los restrinja sería **fabricar una regla de negocio que
+no existe** — exactamente lo que la misión anterior (OCF/OSF) evitó
+consistentemente ("no construir infraestructura especulativa sin
+consumidor/caso de uso real"). Si en el futuro se decide que ciertos roles
+NO deben siquiera ver ciertos módulos, esa es una decisión de producto que
+debe tomarse explícitamente (y aplicarse primero en el backend) antes de
+reflejarla en la navegación — no al revés.
+
+**Lo que SÍ se hizo** en esta fase: la navegación ahora tiene, vía el
+header, contexto real visible (rol + empresa) que ya contextualiza al
+usuario sobre quién es — sin necesidad de ocultar nada.
+
+## 9. FASE 8 — Permisos por acción: ya existe el patrón, no se generaliza sin evidencia
+
+`Perfil` ya implementa exactamente el patrón que pide esta fase
+(`permissions_context` → botones habilitados/deshabilitados en
+`perfil.page.js`). Generalizar esto a las 16 apps (una matriz
+módulo→acciones→UI centralizada) es un esfuerzo real de varias fases,
+app por app, tocando cada `permissions.py` existente — **no se improvisa
+aquí una abstracción nueva sin auditar primero, app por app, qué botones
+de acción ya respetan sus propios `permission_classes` de DRF** (varios ya
+lo hacen de forma dispersa, ver FASE 24/piloto Inventario más abajo).
+Queda como trabajo de la fase de expansión por app (FASE 23-24), no de
+esta fase transversal.
+
+## 10. FASE 9-10 — Contexto Empresa/Sede/Área y contexto activo: ya satisfecho por ADR-003
+
+Verificado en `context_processors.py` (`contexto_organizacional`, ya
+existente antes de esta misión): si `perfil.alcance == 'EMPRESA'`, se
+listan TODAS las sedes de la empresa; si no, solo
+`perfil.sedes_asignadas` — **nunca permite seleccionar una sede no
+asignada**, exactamente lo que pide FASE 9. La sede activa persiste en
+`request.session['sede_activa_id']`, mutada exclusivamente por
+`ContextoSedeView.post()` con DSV (verifica que la sede pertenezca a la
+empresa y esté en el alcance del perfil) — exactamente lo que pide FASE
+10. **Área activa NO se implementa** (ya documentado en §1 como límite
+deliberado, sin algoritmo de "área activa" en ningún lado del backend, y
+sin caso de uso real que lo pida hoy) — consistente con el mismo criterio
+que la misión OCF/OSF aplicó en FASE 10 de esa iniciativa ("no fabricar
+infraestructura especulativa").
+
+## 11. FASE 11 — Regla crítica de contexto: ya satisfecha por diseño
+
+Verificado en `apps/tenant/core/static/core/js/common/sede_selector.js`:
+tras un cambio de sede exitoso, `w.location.reload()` — **recarga completa
+de la página**. Esto significa que no puede existir mezcla de datos de la
+sede anterior con la nueva: nada persiste en memoria de JS entre sedes, ya
+que la recarga completa reinicia todo el estado del cliente (incluyendo
+`Sintel.Core.UserContext`, que se re-inicializa desde cero en cada carga
+de página). Diseño simple y ya correcto -- no requiere cambios.
+
+## 12. Verificación puntual (FASE 18)
+
+- `context_processors.py`, `_header.html`, `workspace.html`: parsean sin
+  error.
+- Render real vía Django test Client + `force_login()`: el dropdown de
+  cuenta muestra rol/empresa correctamente; `user_context.js` y
+  `welcome_context.js` están incluidos en el HTML servido.
+- Lógica de combinación de `user_context.js` replicada en Python contra
+  las respuestas reales (no simuladas) de `/me/` y `/core/contexto/` —
+  produce el objeto esperado, estado `READY`.
+- No se ejecutó la suite de tests completa (fuera del alcance de esta
+  fase, sin cambios a `permission_classes` ni a ningún endpoint existente
+  — solo un context processor aditivo y 2 archivos JS nuevos que son
+  puramente de lectura).

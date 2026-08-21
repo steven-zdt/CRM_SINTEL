@@ -52,4 +52,9 @@ def contexto_organizacional(request):
     return {
         'sede_activa': sede_activa,
         'sedes_disponibles': sedes_disponibles,
+        # Access Context (mision 2026-08-21): perfil/empresa ya estaban resueltos
+        # arriba para calcular sedes_disponibles -- se exponen aqui tambien para
+        # que el header pueda mostrar rol/empresa sin ninguna consulta nueva.
+        'perfil_actual': perfil,
+        'empresa_actual': perfil.empresa,
     }

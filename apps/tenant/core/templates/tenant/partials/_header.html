@@ -47,10 +47,19 @@
                         <i class="fas fa-chevron-down small"></i>
                     </button>
                     <!-- Dropdown menu -->
-                    <ul id="account-dropdown-menu" 
+                    <ul id="account-dropdown-menu"
                         class="dropdown-menu dropdown-menu-end shadow"
-                        role="menu" 
+                        role="menu"
                         aria-orientation="vertical">
+                        {% if perfil_actual %}
+                        <li class="px-3 py-2">
+                            <div class="fw-semibold text-truncate">{{ user.get_full_name|default:user.email }}</div>
+                            <div class="small text-muted">
+                                {{ perfil_actual.get_rol_display }}{% if empresa_actual %} · {{ empresa_actual.razon_social }}{% endif %}
+                            </div>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        {% endif %}
                         <li>
                             <a href="#perfil"
                                id="account-menu-perfil"
