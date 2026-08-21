@@ -38,7 +38,6 @@ from apps.tenant.inventario.services.selectors import (
 from apps.tenant.inventario.services.business_service import (
     KardexService,
     TrasladoInventarioService,
-    ajustar_stock,
 )
 
 
@@ -99,10 +98,6 @@ class ProductoServiceMixin:
         with transaction.atomic():
             instance.delete()
         return True
-
-    def service_producto_ajustar_stock(self, producto_id, empresa_id, cantidad, observaciones):
-        """Wrapper para ajustar stock desde el ViewSet."""
-        return ajustar_stock(producto_id, empresa_id, cantidad, observaciones)
 
     def service_producto_get_stock(self, empresa, pk):
         """Retorna solo campos de stock (id, nombre, stock_actual)."""

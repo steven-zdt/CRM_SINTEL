@@ -14,14 +14,12 @@ Reglas:
 """
 
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from apps.tenant.empresa.models import Empresa
 from apps.tenant.inventario.models import (
     ActivoFijo,
     CategoriaItem,
@@ -192,35 +190,6 @@ class KardexService:
         if tipo in KardexService.TIPOS_ENTRADA or tipo in KardexService.TIPOS_SALIDA:
             KardexService.recalcular_stock_producto(producto.id, empresa_id)
         return movimiento
-
-    @staticmethod
-    def registrar_entrada(**kwargs) -> MovimientoInventario:
-        """Registra una entrada de inventario."""
-        kwargs.setdefault('tipo', MovimientoInventario.TipoMovimiento.ENTRADA_COMPRA)
-        return KardexService.registrar_movimiento(**kwargs)
-
-    @staticmethod
-    def registrar_salida(**kwargs) -> MovimientoInventario:
-        """Registra una salida de inventario."""
-        kwargs.setdefault('tipo', MovimientoInventario.TipoMovimiento.SALIDA_VENTA)
-        return KardexService.registrar_movimiento(**kwargs)
-
-    @staticmethod
-    def ajustar_stock(producto_id: int, empresa_id: int, cantidad_ajuste: Decimal, observaciones: str = None):
-        """Crea un movimiento de ajuste positivo o negativo."""
-        cantidad_ajuste = Decimal(str(cantidad_ajuste or "0"))
-        tipo = (
-            MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE
-            if cantidad_ajuste > 0
-            else MovimientoInventario.TipoMovimiento.SALIDA_BAJA
-        )
-        return KardexService.registrar_movimiento(
-            empresa_id=empresa_id,
-            producto_id=producto_id,
-            tipo=tipo,
-            cantidad=abs(cantidad_ajuste),
-            observaciones=observaciones or f"Ajuste de inventario: {cantidad_ajuste} unidades",
-        )
 
     # Mapeo de tipo de movimiento de activo fijo al nuevo estado del activo
     _TRANSICION_ESTADO_ACTIVO = {
@@ -547,133 +516,5 @@ class TrasladoInventarioService:
         return traslado
 
 
-def calcular_stock(producto_id: int) -> Decimal:
-    """
-    Calcula el stock actual de un producto basado en sus movimientos (solo lectura).
-    No actualiza el campo stock_actual. Usar recalcular_stock_producto() para actualizar.
-
-    Returns:
-        Decimal: Stock calculado (entradas - salidas + ajustes).
-    """
-    producto = Producto.objects.filter(pk=producto_id).only('id', 'empresa_id').first()
-    if not producto:
-        return Decimal("0")
-    return KardexService.calcular_stock(producto.id, producto.empresa_id)
-
-
-def recalcular_stock_producto(producto_id: int) -> Decimal:
-    """
-    Recalcula el stock fisico de un producto y actualiza el campo desnormalizado
-    `stock_actual`. Usa select_for_update() para lock optimista.
-
-    Returns:
-        Decimal: El nuevo stock calculado.
-    """
-    with transaction.atomic():
-        producto = Producto.objects.only('id', 'empresa_id').get(id=producto_id)
-        return KardexService.recalcular_stock_producto(producto.id, producto.empresa_id)
-
-
-# ==============================================================================
-# 2. OPERACIONES DE MOVIMIENTO (Transaccionales)
-# ==============================================================================
-
-@transaction.atomic
-def registrar_entrada(
-    producto_id: int,
-    empresa_id: int,
-    cantidad: Decimal,
-    tipo_movimiento: Optional[str] = None,
-    costo_unitario: Optional[Decimal] = None,
-    origen_referencia: Optional[str] = None,
-    observaciones: Optional[str] = None,
-) -> MovimientoInventario:
-    """
-    Registra una entrada de producto (compra, devolucion, ajuste positivo) con Zero Trust.
-
-    Raises:
-        ValidationError: Si la cantidad es negativa o el producto no pertenece al tenant.
-    """
-    return KardexService.registrar_movimiento(
-        empresa_id=empresa_id,
-        producto_id=producto_id,
-        tipo=tipo_movimiento or MovimientoInventario.TipoMovimiento.ENTRADA_COMPRA,
-        cantidad=cantidad,
-        costo_unitario=costo_unitario or Decimal('0'),
-        origen_referencia=origen_referencia,
-        observaciones=observaciones,
-    )
-
-
-@transaction.atomic
-def registrar_salida(
-    producto_id: int,
-    empresa_id: int,
-    cantidad: Decimal,
-    tipo_movimiento: Optional[str] = None,
-    costo_unitario: Optional[Decimal] = None,
-    origen_referencia: Optional[str] = None,
-    cliente_referencia: Optional[str] = None,
-    observaciones: Optional[str] = None,
-) -> MovimientoInventario:
-    """
-    Registra una salida de producto (venta, baja, consumo) con Zero Trust.
-
-    Raises:
-        ValidationError: Si stock insuficiente o el producto no pertenece al tenant.
-    """
-    return KardexService.registrar_movimiento(
-        empresa_id=empresa_id,
-        producto_id=producto_id,
-        tipo=tipo_movimiento or MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
-        cantidad=cantidad,
-        costo_unitario=costo_unitario or Decimal('0'),
-        origen_referencia=origen_referencia,
-        cliente_referencia=cliente_referencia,
-        observaciones=observaciones,
-    )
-
-
-@transaction.atomic
-def ajustar_stock(
-    producto_id: int,
-    empresa_id: int,
-    cantidad_ajuste: Decimal,
-    observaciones: str = None,
-) -> MovimientoInventario:
-    """
-    Ajusta el stock de un producto (positivo o negativo). Zero Trust.
-
-    Raises:
-        ValidationError: Si el ajuste resultaria en stock negativo o producto no existe.
-    """
-    return KardexService.ajustar_stock(producto_id, empresa_id, cantidad_ajuste, observaciones)
-
-
-def registrar_movimiento(
-    producto_id: int,
-    tipo: str,
-    cantidad: Decimal,
-    empresa: Empresa,
-    costo_unitario: Decimal = 0,
-    origen_referencia: str = None,
-    cliente_referencia: str = None,
-    observaciones: str = None,
-    usuario=None,
-) -> MovimientoInventario:
-    """
-    Funcion generica para registrar un movimiento desde APIs externas (Ventas, Compras).
-    Para entradas simples, preferir registrar_entrada().
-    """
-    return KardexService.registrar_movimiento(
-        empresa_id=empresa.id,
-        producto_id=producto_id,
-        tipo=tipo,
-        cantidad=cantidad,
-        costo_unitario=costo_unitario,
-        origen_referencia=origen_referencia,
-        cliente_referencia=cliente_referencia,
-        observaciones=observaciones,
-    )
 
 
