@@ -1,9 +1,9 @@
 # [PORTAL] Auditoria y SSoT: Modulo Perfil (Gestion de Usuarios y Roles)
 
-**Version:** 3.10.2
+**Version:** 3.10.3
 **Estado:** PRODUCTION READY
 **Ubicacion:** `apps/tenant/perfil/`
-**Ultima Auditoria:** 2026-05-25
+**Ultima Auditoria:** 2026-08-21 (validacion de estado tras mision UX -- ver §"Cambios UX 2026-08-21" abajo; backend/API/modelos sin cambios desde v3.10.2, 2026-05-25)
 
 ---
 
@@ -130,6 +130,80 @@ En el formulario de **Nuevo Usuario + Perfil** (`offcanvas_crear_perfil.html`), 
 Los endpoints de renderizado del `offcanvas` en `viewsets.py` (`render_offcanvas_crear` y `render_offcanvas_editar`) utilizan consultas altamente optimizadas:
 - Se limitan los campos consultados en la base de datos utilizando `.only('uuid', 'nombre')` en `Departamento`, `Sede` y `Area`.
 - Se restringen las consultas de departamentos a la empresa activa (`empresa=empresa`) para aislamiento SaaS Multi-Tenant absoluto.
+
+---
+
+## Cambios UX 2026-08-21 (mision de transformacion UX/UI)
+
+Durante la mision de transformacion UX/UI de esta fecha se tocaron 2 puntos
+puramente de presentacion en este modulo -- **cero cambios de backend, API,
+modelos, permisos o logica de negocio**. Detalle completo en
+`documentacion/ux/UX_MASTER_BASELINE.md` §"FASE Perfil"; resumen aqui:
+
+### 1. Rotulo de navegacion corregido: "Mi perfil" -> "Usuarios y roles"
+
+**Hallazgo:** el tab `#perfil` (enlazado desde el sidebar del workspace y desde
+el dropdown de cuenta, ambos con el rotulo "Mi perfil"/"Perfil") **nunca
+mostro un editor de datos personales del usuario autenticado** -- siempre
+mostro la tabla completa de todos los perfiles del tenant con sus roles (ver
+§"Responsabilidades Core" arriba, punto 2, RBAC), visible para cualquier
+miembro (`permission_classes = [IsTenantMember]` en `PerfilViewSet`, no solo
+ADMIN). El rotulo prometia una pantalla personal y entregaba gestion de todo
+el equipo -- confusion real para cualquier usuario, no solo nuevos.
+
+**No existe hoy, en ningun lugar del codebase, una pantalla separada de
+"editar mi propio perfil"** distinta de esta tabla de gestion de usuarios.
+Si en el futuro se decide construir una, este documento es el punto de
+partida correcto (el modelo `TenantProfile` y el endpoint `GET
+/api/v1/perfil/perfiles/me/` ya devuelven los datos del usuario actual, listo
+para alimentar un formulario personal si se construye).
+
+**Cambio aplicado (solo texto de navegacion, verificado que no toca
+`href`/destino ni logica):**
+- `apps/tenant/core/templates/tenant/core/workspace.html` -- link del sidebar.
+- `apps/tenant/core/templates/tenant/partials/_header.html` -- link del
+  dropdown de cuenta.
+- `apps/tenant/core/static/core/js/workspace.js` -- mapa de titulos de
+  `viewTitle` usado por `showTab()`.
+
+### 2. Comentario de seguridad [SEC-A1] que se filtraba como texto visible (bug critico, ya corregido)
+
+**Hallazgo:** `apps/tenant/perfil/templates/tenant/perfil/offcanvas_detalle_perfil.html`
+tenia un comentario Django `{# ... #}` que abarcaba 2 lineas -- Django's
+`{# #}` **no soporta comentarios multilinea** (limitacion documentada del
+motor de templates: si el contenido cruza un salto de linea, el tokenizer no
+lo reconoce como comentario y lo pasa como texto plano sin procesar). El
+comentario en cuestion explicaba una decision de seguridad real:
+
+> [SEC-A1] Sin `|safe`: `profile.cargo` es texto editable por el usuario; el
+> placeholder "No definido" es el unico HTML literal y vive fuera del valor
+> interpolado.
+
+Esto se estaba renderizando literalmente en el offcanvas de detalle de
+perfil, visible para cualquier usuario que lo abriera -- no era una falla de
+la proteccion `|safe` en si (esa seguia funcionando correctamente en el
+codigo), pero exponia texto de documentacion interna de seguridad en la UI de
+produccion, ademas de verse como un bug visual.
+
+**Cambio aplicado:** convertido a `{% comment %}...{% endcomment %}` (el tag
+de Django que si soporta contenido multilinea correctamente) -- mismo texto,
+solo cambia el delimitador, cero cambio de logica. El mismo patron de bug se
+encontro y corrigio en otros 10 archivos de otras 8 apps del sistema en la
+misma pasada (ver `UX_MASTER_BASELINE.md` para el listado completo).
+
+### Verificacion realizada (2026-08-21)
+
+- Ambos templates (`workspace.html`, `offcanvas_detalle_perfil.html`) y
+  `_header.html` parsean sin error.
+- Render real via Django test Client + `force_login()`: el sidebar y el
+  dropdown de cuenta muestran "Usuarios y roles" (no "Mi perfil"/"Perfil"),
+  ambos apuntando exactamente igual a `#perfil`.
+- El guard SEG-5 (`destroy()` en `viewsets.py`, lineas ~248-255) se releyo
+  directamente del codigo fuente en esta fecha -- coincide exactamente con lo
+  documentado arriba, sin drift.
+- No se ejecuto la suite de tests de Perfil en esta pasada (a peticion
+  explicita del usuario, "no corras test") -- esta seccion documenta el
+  estado del codigo verificado por lectura directa, no por corrida de tests.
 
 ---
 
