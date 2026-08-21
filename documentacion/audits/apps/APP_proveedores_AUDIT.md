@@ -87,13 +87,30 @@ regresion confirma el baseline.
 
 ## Deferred
 
-Ver tabla completa en `APP_proveedores_NORMATIVE_MATRIX.md`. Resumen:
+**ACTUALIZACION 2026-08-20 (post-auditoria de `gastos`, app 12/16):**
+el item #1 (P1) fue **resuelto con evidencia directa**. Se confirmo
+que `gastos.GastoBusinessService.procesar_gasto()` calcula
+retenciones via `contabilidad.RetencionesService.obtener_retenciones_
+desde_tercero()` -- una tercera implementacion, independiente y
+correctamente centralizada, NO las funciones de esta app. El
+mecanismo real funciona correctamente (Pull Model, sin gap
+funcional); `obtener_configuracion_retenciones()`/
+`calcular_componentes_retencion()` de `proveedores` son
+**DEAD_CONFIRMED** (superseded, nunca conectadas). Ver
+`documentacion/audits/apps/APP_gastos_NORMATIVE_MATRIX.md` para el
+detalle completo. **Reclasificado de P1 a P3** -- limpieza de codigo
+muerto pendiente (no se ejecuta en esta sesion para no reabrir una
+app ya cerrada con regresion confirmada; queda para una sesion de
+limpieza dedicada o para la FASE FINAL de esta mision).
+
+Ver tabla completa (items #2/#3, sin cambios) en
+`APP_proveedores_NORMATIVE_MATRIX.md`. Resumen actualizado:
 
 | # | Item | Prioridad |
 |---|---|---|
-| 1 | SSoT de retenciones (`obtener_configuracion_retenciones`) documentada como integrada con `gastos` pero sin consumidor real -- verificar con evidencia completa al auditar `gastos` | **P1** |
-| 2 | Tarifa Retefuente deberia parametrizarse por concepto (no 4% plano) + validar cuantia minima UVT -- condicionado a resolver #1 primero | P2 |
-| 3 | Tarifa ReteICA deberia parametrizarse por municipio/actividad -- condicionado a resolver #1 primero | P2 |
+| 1 | ~~SSoT de retenciones desconectada de `gastos`~~ -- **RESUELTO**: `gastos` usa `contabilidad.RetencionesService` (mecanismo real, correcto). Las funciones de `proveedores` son codigo muerto confirmado, pendiente de eliminar en limpieza futura. | ~~P1~~ -> **P3** |
+| 2 | Tarifa Retefuente deberia parametrizarse por concepto (no 4% plano) + validar cuantia minima UVT -- aplica solo si se decide reactivar/eliminar el codigo muerto del item #1 | P3 (informativo, codigo no se ejecuta) |
+| 3 | Tarifa ReteICA deberia parametrizarse por municipio/actividad -- mismo condicionamiento que #2 | P3 (informativo, codigo no se ejecuta) |
 
 ## FASE X — Release Gate (checklist)
 
@@ -106,7 +123,9 @@ Ver tabla completa en `APP_proveedores_NORMATIVE_MATRIX.md`. Resumen:
 
 ## FASE Y — Decision
 
-**COMPLETED_WITH_DEFERRED** -- 18/18 tests pasan, 0 regresiones. Se
-usa `_WITH_DEFERRED` por el hallazgo P1 (CONTRACT_DRIFT de retenciones
-vs `gastos`), que no bloquea el cierre de esta app individual pero
-queda registrado como prioridad alta para cuando se audite `gastos`.
+**COMPLETED_WITH_DEFERRED** -- 18/18 tests pasan, 0 regresiones. El
+hallazgo original (P1, CONTRACT_DRIFT de retenciones) fue **resuelto**
+al auditar `gastos` (app 12/16): el mecanismo real es correcto, vive
+en `contabilidad`. Se mantiene `_WITH_DEFERRED` por 3 items P3
+(limpieza de codigo muerto confirmado, informativos, sin riesgo
+funcional) en vez de `COMPLETED` puro.

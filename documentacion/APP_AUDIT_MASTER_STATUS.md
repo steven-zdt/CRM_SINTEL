@@ -137,11 +137,16 @@ items P3).
 **Regresion proveedores (FASE Q, cierre):** `apps/tenant/proveedores/`
 -- 18 passed, 0 failed, 2 warnings preexistentes en 1655.60s
 (0:27:35). Sin cambios de codigo (0 codigo muerto encontrado, a
-diferencia de clientes). **Hallazgo P1 (CONTRACT_DRIFT):**
+diferencia de clientes). **Hallazgo P1 (CONTRACT_DRIFT) -- RESUELTO al
+auditar `gastos` (app 12/16):**
 `obtener_configuracion_retenciones()`/`calcular_componentes_retencion()`
-(Retefuente 4%, ReteICA 0.966%) documentadas como integradas con
-`gastos` pero sin ningun consumidor real confirmado -- pendiente de
-resolver con evidencia completa al auditar `gastos` (app 12/16).
+(Retefuente 4%, ReteICA 0.966%) confirmadas como codigo muerto real
+(nunca conectadas) -- `gastos.GastoBusinessService.procesar_gasto()`
+usa `contabilidad.RetencionesService.obtener_retenciones_desde_tercero()`,
+una implementacion independiente y correcta, ya centralizada segun
+ADR-001 Pull Model. Sin gap funcional real. Reclasificado P1 -> P3
+(limpieza de codigo muerto pendiente, no ejecutado en esta sesion para
+no reabrir la app).
 Cerrado como `COMPLETED_WITH_DEFERRED`.
 
 **Regresion inventario (FASE Q, cierre):** `apps/tenant/inventario/` --
