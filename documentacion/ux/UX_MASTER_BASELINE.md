@@ -285,6 +285,54 @@ componente simplemente no se muestra -- queda solo el mensaje generico
 
 ---
 
+## FASE 3.1 — Correccion de uniformidad del sidebar (IMPLEMENTADO)
+
+**Hallazgo del usuario:** el grupo original "Operación" (FASE 3) no
+era logicamente uniforme con el resto de grupos -- mezclaba en un
+solo cajon 6 modulos de naturaleza distinta (Inventario, Cotizaciones,
+Proyectos, Gastos, Compras, Ventas), mientras que "Finanzas" (Facturas,
+Bancos, Contabilidad) si tenia un criterio claro y unico ("registro
+fiscal/contable"). La agrupacion original de FASE 3 se hizo copiando
+literalmente el ejemplo de la mision sin definir explicitamente un
+criterio de clasificacion aplicado por igual a los 15 modulos --
+resultado: 4 grupos con criterio claro (Inicio, Configuración,
+Relaciones, Finanzas) y 1 grupo ("Operación") que era en realidad la
+bolsa de "todo lo que sobraba".
+
+**Criterio unico aplicado ahora, explicito y verificable, a las 6
+categorias:**
+
+| Grupo | Criterio | Modulos |
+|---|---|---|
+| Inicio | Vista general, no transaccional | Dashboard |
+| Configuración | Administracion del tenant en si (acceso, datos de la empresa, personal) | Usuarios y roles, Mi empresa, Equipo |
+| Relaciones | Contrapartes externas con las que se hacen negocios | Clientes, Proveedores |
+| **Comercial** | Documentos de negociacion/transaccion con esas contrapartes | Cotizaciones, Ventas, Compras |
+| **Operación** | Gestion de recursos internos de ejecucion (no son documentos de negociacion con un tercero) | Inventario, Proyectos, Gastos |
+| Finanzas | Registro fiscal/contable formal (documento legal, caja, libro contable) | Facturas, Bancos, Contabilidad |
+
+"Comercial" y "Operación" reemplazan al antiguo cajon unico
+"Operación" de FASE 3 -- mismo total de modulos (6), pero ahora cada
+uno de los 2 grupos resultantes tiene un criterio tan preciso como
+"Finanzas" ya lo tenia. Se paso de 5 a 6 grupos.
+
+**Cambio aplicado:** solo reordenamiento de `<li>` dentro de
+`apps/tenant/core/templates/tenant/core/workspace.html` + 1 nuevo
+`<li class="nav-section-header">Comercial</li>`. Cero `href`/`data-tab`
+modificados o eliminados -- verificado que los 15 tabs y su orden
+interno de atributos siguen exactamente iguales, solo reagrupados.
+
+### Verificacion realizada
+
+- Template parsea sin error.
+- Render real via Django test Client + `force_login()`: se extrajeron
+  los 6 encabezados (`Inicio, Configuración, Relaciones, Comercial,
+  Operación, Finanzas`) y los 15 `data-tab` en su nuevo orden -- se
+  confirmo que son exactamente los mismos 15 modulos que antes de
+  este cambio, ninguno perdido ni duplicado.
+
+---
+
 ## FASE Perfil — Renombrado de "Mi perfil" a "Usuarios y roles" (IMPLEMENTADO)
 
 **Hallazgo real:** el tab `#perfil` (enlazado tanto desde el sidebar
