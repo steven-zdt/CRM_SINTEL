@@ -83,15 +83,15 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 8 | compras | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_compras_AUDIT.md` |
 | 9 | ventas | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_ventas_AUDIT.md` |
 | 10 | cotizaciones | COMPLETED | `documentacion/audits/apps/APP_cotizaciones_AUDIT.md` |
-| 11 | proyectos | EN PROGRESO | `documentacion/audits/apps/APP_proyectos_AUDIT.md` |
-| 12 | gastos | PENDIENTE | `documentacion/audits/apps/APP_gastos_AUDIT.md` |
+| 11 | proyectos | COMPLETED | `documentacion/audits/apps/APP_proyectos_AUDIT.md` |
+| 12 | gastos | EN PROGRESO | `documentacion/audits/apps/APP_gastos_AUDIT.md` |
 | 13 | bancos | PENDIENTE | `documentacion/audits/apps/APP_bancos_AUDIT.md` |
 | 14 | facturas | PENDIENTE | `documentacion/audits/apps/APP_facturas_AUDIT.md` |
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (10/16 -- 7 COMPLETED_WITH_DEFERRED,
-3 COMPLETED)
+**APP_AUDIT_PROGRAM:** EN PROGRESO (11/16 -- 7 COMPLETED_WITH_DEFERRED,
+4 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
 19 skipped, 0 failed, 1 warning (min_value en DocumentoUploadAPITests,
@@ -172,6 +172,13 @@ Se elimino un pipeline PDF completo y huerfano (`services/pdf/`, ~180
 lineas) que duplicaba al realmente usado. Corregido conteo de modelos
 en la matriz (5 reales, no 4 -- `ConfiguracionCotizacion` vive en
 `configuracion/models.py`). Cerrado como `COMPLETED` puro.
+
+**Regresion proyectos (FASE Q, cierre):** `apps/tenant/proyectos/` --
+56 passed, 2 skipped preexistentes, 0 failed, 1 warning preexistente
+en 6506.80s (1:48:26). Se elimino una clase `ProyectoServiceMixin`
+sombra en `services/api_mixins.py` -- copy-paste de `gastos`
+(docstring: "Service mixin para Gasto ViewSet"), sin consumidores
+reales. Cerrado como `COMPLETED` puro.
 
 ---
 

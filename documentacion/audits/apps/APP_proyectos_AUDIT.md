@@ -80,11 +80,17 @@ matriz normativa. **NO_APLICA.**
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/proyectos/tests/` (incluye
-`test_legacy_smoke_financials.py`, que ejercita directamente
-`orchestrate_create_proyecto`/`orchestrate_update_proyecto` -- las
-funciones reales, no la clase eliminada). Regresion lanzada en
-background tras confirmar `db`/`redis` healthy.
+58 tests coleccionados (`apps/tenant/proyectos/tests/`). Regresion
+ejecutada: **56 passed, 2 skipped, 0 failed, 1 warning preexistente
+(min_value DRF) en 6506.80s (1:48:26)**. Los 2 skips
+(`TestServicioAsociado::test_dsv_asociar_servicio_otro_tenant`,
+`test_serializer_queryset_filtrado_por_empresa`, ambos en
+`test_legacy_smoke_financials.py`) son preexistentes, no relacionados
+con el cambio de esta auditoria. `test_legacy_smoke_financials.py`
+(que ejercita directamente `orchestrate_create_proyecto`/
+`orchestrate_update_proyecto`, las funciones reales cerca de donde se
+elimino la clase sombra) -- todos los tests no-skip PASSED, confirma
+que el cambio no afecto el codigo real.
 
 ## Deferred
 
@@ -97,12 +103,10 @@ Ninguno nuevo.
 - [x] Normativa colombiana evaluada (FASE M -- NO_APLICA)
 - [x] `py_compile`/`ast.parse` limpio en los archivos editados
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 56 passed, 2 skipped preexistentes, 0 failed
 - [x] Sin deferred items pendientes de documentar
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED` puro si la regresion confirma 0
-fallos (particular atencion a `test_legacy_smoke_financials.py`, que
-ejercita el codigo real cerca de donde se hizo el cambio).
+**COMPLETED** -- 0 fallos, 0 regresiones causadas por el cambio de
+esta auditoria. Los 2 skips son preexistentes y no relacionados.
