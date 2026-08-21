@@ -25,13 +25,15 @@
   color: var(--text); 
 }
 
-.ws-aside { 
-  border-right: 1px solid var(--border); 
-  background: var(--panel); 
-  position: sticky; 
-  top: 0; 
-  height: calc(100vh - 64px); 
-  box-shadow: 1px 0 3px rgba(0,0,0,0.05); 
+.ws-aside {
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: 1px 0 3px rgba(0,0,0,0.05);
 }
 
 .ws-main { 
