@@ -246,6 +246,16 @@
 
 {% endblock content %}
 
+{% comment %}
+El workspace es un shell de app de altura completa con sidebar sticky --
+el footer de copyright de base.html (bg-dark, fuera de <main>) queda
+visualmente pegado al final del sidebar (ultimo grupo "Finanzas") en vez
+de al final de la pagina, por la interaccion con position:sticky. Se
+suprime aqui via el bloque vacio -- el mecanismo ya existia en base.html
+pero ninguna pagina lo usaba todavia.
+{% endcomment %}
+{% block footer %}{% endblock %}
+
 {% block extra_js %}
   {# [ALERT] ORDEN CRÍTICO DE CARGA - v2.60 #}
   {# 0. NOTYF (Feedback visual) #}
