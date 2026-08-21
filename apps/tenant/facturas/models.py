@@ -904,12 +904,12 @@ class ItemNotaCredito(SintelTenantBaseModel):
 
     def save(self, *args, **kwargs):
         """Calcula total automáticamente si no está definido."""
-        # # WARNING: v2.40: Auto-asignar empresa desde factura si no está asignada
-        if not self.empresa_id and self.factura_id:
-            self.empresa = self.factura.empresa
-        
+        # Auto-asignar empresa desde nota_credito si no está asignada
+        if not self.empresa_id and self.nota_credito_id:
+            self.empresa = self.nota_credito.empresa
+
         if self.total is None or self.total == Decimal('0.00'):
-            self.total = (self.subtotal or Decimal('0.00')) + (self.impuestos or Decimal('0.00'))
+            self.total = (self.subtotal or Decimal('0.00')) + (self.valor_iva or Decimal('0.00'))
         super().save(*args, **kwargs)
 
 
