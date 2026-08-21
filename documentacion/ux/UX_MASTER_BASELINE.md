@@ -334,6 +334,20 @@ corrige aqui (fuera del alcance de la mision UX; requeriria decidir
 si la intencion original -- sacar Perfil del sidebar -- sigue vigente,
 lo cual es una decision de producto, no de UI).
 
+**Confirmado por ejecucion real** (`pytest tests/tenant/core/test_workspace_account_dropdown.py`,
+5 passed / 2 failed): `test_perfil_removed_from_sidebar` esta entre
+los 5 que pasan -- confirma la lectura de codigo de arriba (pasa de
+forma vacia). Los 2 que fallan (`test_hash_routing_still_works`,
+`test_workspace_contains_all_view_sections`) son de una arquitectura
+anterior por completo: buscan `hydrateView`/`currentViewFromHash` (JS)
+e `id="view-perfil"`/`id="view-empresa"`/etc. (HTML), ninguno de los
+cuales existe en el codigo actual (que usa `showTab()`/`popstate` e
+`id="tab-*"`) -- confirmado que **no tienen relacion con el rotulo
+renombrado en este cambio**, son staleness pre-existente de un
+refactor de arquitectura anterior que nunca actualizo este archivo de
+test. No se corrigen aqui (mismo criterio que arriba: fuera de
+alcance de la mision UX).
+
 ### Verificacion realizada
 
 - **Render de ambos templates:** confirmado que
