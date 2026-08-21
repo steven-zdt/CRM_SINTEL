@@ -60,7 +60,7 @@ anterior):**
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/F34_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/F34_dashboard_AUDIT.md` |
 
-**F34:** EN PROGRESO (5/16 COMPLETED)
+**F34:** EN PROGRESO (5/16 COMPLETED, inventario con regresion en curso)
 
 **core (cierre):** sin cambios de codigo -- 2 items deferred de la
 auditoria previa (N+1 sospechado en organizational_*, workspace.html
