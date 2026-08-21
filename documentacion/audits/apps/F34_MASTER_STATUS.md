@@ -45,8 +45,8 @@ anterior):**
 |---|-----|--------|-----|
 | 1 | core | COMPLETED | `documentacion/audits/apps/F34_core_AUDIT.md` |
 | 2 | empresa | COMPLETED | `documentacion/audits/apps/F34_empresa_AUDIT.md` |
-| 3 | perfil | EN PROGRESO | `documentacion/audits/apps/F34_perfil_AUDIT.md` |
-| 4 | clientes | PENDIENTE | `documentacion/audits/apps/F34_clientes_AUDIT.md` |
+| 3 | perfil | COMPLETED | `documentacion/audits/apps/F34_perfil_AUDIT.md` |
+| 4 | clientes | EN PROGRESO | `documentacion/audits/apps/F34_clientes_AUDIT.md` |
 | 5 | proveedores | PENDIENTE | `documentacion/audits/apps/F34_proveedores_AUDIT.md` |
 | 6 | inventario | PENDIENTE | `documentacion/audits/apps/F34_inventario_AUDIT.md` |
 | 7 | compras | PENDIENTE | `documentacion/audits/apps/F34_compras_AUDIT.md` |
@@ -60,7 +60,7 @@ anterior):**
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/F34_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/F34_dashboard_AUDIT.md` |
 
-**F34:** EN PROGRESO (2/16 COMPLETED)
+**F34:** EN PROGRESO (3/16 COMPLETED)
 
 **core (cierre):** sin cambios de codigo -- 2 items deferred de la
 auditoria previa (N+1 sospechado en organizational_*, workspace.html
