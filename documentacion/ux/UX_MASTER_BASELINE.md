@@ -176,6 +176,21 @@ sistema:
   (contenido servido correcto, HTML renderizado correcto, JS sin
   errores de sintaxis en ejecucion) es solida, pero no reemplaza un
   vistazo visual humano.
+- **Descartado explicitamente: cache de nginx.** Se confirmo via
+  `curl` directo (fuera del navegador sandbox) que tanto
+  `http://home.sintel.net.co:8000/static/.../workspace.css` (contenedor
+  `web` directo) como `http://home.sintel.net.co/static/.../workspace.css`
+  y `https://home.sintel.net.co/static/.../workspace.css` (a traves de
+  `nginx`, contenedor `crm_sintel-nginx-1`) devuelven el contenido
+  actualizado con la regla `.nav-section-header`. El bloqueo es 100%
+  atribuible al sandbox del navegador de esta herramienta
+  (`net::ERR_BLOCKED_BY_CLIENT` en la propia peticion `GET
+  .../workspace.css`, confirmado via `read_network_requests`), no a
+  ningun problema de infraestructura. Nota aparte (no relacionada, no
+  corregida aqui): el contenedor `nginx` reporta healthcheck
+  `unhealthy` en `docker compose ps`, aunque sirve trafico
+  correctamente -- candidato a revisar en otra sesion, fuera del
+  alcance de esta mision UX.
 
 ---
 
