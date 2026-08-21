@@ -285,6 +285,68 @@ componente simplemente no se muestra -- queda solo el mensaje generico
 
 ---
 
+## FASE Perfil — Renombrado de "Mi perfil" a "Usuarios y roles" (IMPLEMENTADO)
+
+**Hallazgo real:** el tab `#perfil` (enlazado tanto desde el sidebar
+como desde el dropdown de cuenta, ambos con el rotulo "Perfil"/"Mi
+perfil") **no muestra un formulario de "editar mis propios datos"**
+-- muestra una tabla completa de TODOS los perfiles del tenant
+(columnas reales confirmadas en `apps/tenant/perfil/tables.py`:
+Usuario, Cargo, Departamento, Telefono, Rol, Avatar, Acciones), con
+permiso `IsTenantMember` (cualquier miembro puede verla, no solo
+administradores). Es decir: es una pantalla de **gestion de usuarios
+y roles del equipo** (ADMIN/OPERADOR/VISOR), no un perfil personal --
+y no existe en todo el codebase ninguna pantalla separada de "editar
+mi propio perfil". El rotulo "Mi perfil"/"Perfil" prometia una cosa
+(mis datos personales) y entregaba otra (gestion de todo el equipo) --
+viola directamente el principio "¿Donde estoy? ¿Que es esto?" de la
+mision, para cualquier usuario, no solo los nuevos.
+
+**Cambio aplicado (solo texto de navegacion, cero logica tocada):**
+"Mi perfil" -> **"Usuarios y roles"** en los 3 lugares donde aparecia
+el rotulo:
+- `apps/tenant/core/templates/tenant/core/workspace.html` (link del
+  sidebar).
+- `apps/tenant/core/templates/tenant/partials/_header.html` (link del
+  dropdown de cuenta).
+- `apps/tenant/core/static/core/js/workspace.js` (mapa de titulos de
+  `viewTitle`, usado por `showTab()`).
+
+**Deliberadamente NO tocado en este incremento** (fuera de alcance,
+para mantener el cambio acotado y revisable): el texto interno del
+modulo ("Nuevo Perfil", tooltips, columnas de la tabla) y la pregunta
+mas profunda de si deberia existir una pantalla separada de "editar mi
+propio perfil" (hoy no existe ninguna) -- ambas cosas quedan anotadas
+para una pasada futura de esta misma fase si el usuario lo confirma.
+
+**Hallazgo secundario (no corregido, informativo):**
+`tests/tenant/core/test_workspace_account_dropdown.py::test_perfil_removed_from_sidebar`
+busca el sidebar con el string literal `'<ul class="nav" id="nav">'`,
+pero el markup real siempre ha sido `<ul class="nav flex-column"
+id="nav">` (incluso antes de esta mision) -- el `.find()` nunca
+encuentra el marcador, `sidebar_start` queda en `-1`, y el bloque
+`if sidebar_start != -1 and sidebar_end != -1:` que contiene las
+aserciones reales nunca se ejecuta. El test pasa en verde de forma
+vacia (no verifica nada) independientemente de si `#perfil` esta o no
+en el sidebar -- confirmado por lectura de codigo, es un gap de
+cobertura pre-existente, no introducido por este cambio. No se
+corrige aqui (fuera del alcance de la mision UX; requeriria decidir
+si la intencion original -- sacar Perfil del sidebar -- sigue vigente,
+lo cual es una decision de producto, no de UI).
+
+### Verificacion realizada
+
+- **Render de ambos templates:** confirmado que
+  `tenant/core/workspace.html` y `tenant/partials/_header.html`
+  parsean sin error.
+- **Render real via Django test Client + `force_login()`:** el
+  sidebar contiene "Usuarios y roles" (ya no "Mi perfil") y el
+  dropdown de cuenta contiene "Usuarios y roles" (ya no "Perfil"),
+  ambos enlazando igual que antes a `#perfil` -- cero cambio de
+  destino/comportamiento, solo el rotulo visible.
+
+---
+
 ## Estado de la mision UX
 
 Esta es la PRIMERA pasada de una mision de transformacion de gran

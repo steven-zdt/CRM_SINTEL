@@ -46,7 +46,7 @@
             'proyectos': '📋 Proyectos',
             'ventas': 'Ventas',
             'compras': 'Compras',
-            'perfil': '👤 Perfil',
+            'perfil': '👥 Usuarios y roles',
             'mailinbox': '📧 Correo Entrante'
           };
           title.textContent = titles[tabName] || 'Workspace';
