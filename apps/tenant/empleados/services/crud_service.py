@@ -12,7 +12,7 @@ from decimal import Decimal
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, PeriodoNomina
 
 logger = logging.getLogger(__name__)
 
@@ -197,4 +197,33 @@ class DevengoCRUDService:
             f"[DevengoCRUD] Prestamo actualizado: contrato {contrato.id}, "
             f"diferencia={monto_diferencia}, nuevo_saldo={nuevo_prestamo}"
         )
+
+
+class PeriodoNominaCRUDService:
+    """Operaciones CRUD puras para PeriodoNomina. Sin logica de negocio ni
+    validaciones de maquina de estados -- eso vive en business_service.py."""
+
+    @staticmethod
+    @transaction.atomic
+    def crear_periodo(data: dict, empresa, creado_por=None) -> PeriodoNomina:
+        """Crea un periodo de nomina en estado ABIERTO (default del modelo)."""
+        periodo = PeriodoNomina.objects.create(empresa=empresa, creado_por=creado_por, **data)
+        logger.info(f"[PeriodoNominaCRUD] Creado periodo ID={periodo.id} ({periodo.periodo_mes})")
+        return periodo
+
+    @staticmethod
+    @transaction.atomic
+    def actualizar_estado(periodo: PeriodoNomina, estado: str, **campos_auditoria) -> PeriodoNomina:
+        """Persiste una transicion de estado + los campos de auditoria que la
+        acompanan (aprobado_por/fecha_aprobacion, pagado_por/fecha_pago_real, etc.).
+        No valida que la transicion sea legal -- esa responsabilidad es de
+        PeriodoNominaBusinessService."""
+        periodo.estado = estado
+        update_fields = ['estado', 'updated_at']
+        for campo, valor in campos_auditoria.items():
+            setattr(periodo, campo, valor)
+            update_fields.append(campo)
+        periodo.save(update_fields=update_fields)
+        logger.info(f"[PeriodoNominaCRUD] Periodo ID={periodo.id} -> estado={estado}")
+        return periodo
         return contrato

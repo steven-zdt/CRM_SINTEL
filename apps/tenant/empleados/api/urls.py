@@ -7,7 +7,7 @@ from rest_framework.routers import DefaultRouter
 logger = logging.getLogger(__name__)
 
 # WARNING: CRITICO: Importar ViewSets directamente (sin try/except para ver errores reales)
-from .viewsets import ContratoViewSet, DevengoViewSet, EmpleadoViewSet, ResolucionDIANViewSet, LiquidacionPrestacionViewSet
+from .viewsets import ContratoViewSet, DevengoViewSet, EmpleadoViewSet, ResolucionDIANViewSet, LiquidacionPrestacionViewSet, PeriodoNominaViewSet
 
 # Router para esta app
 router = DefaultRouter()
@@ -19,6 +19,7 @@ router.register(r'contratos', ContratoViewSet, basename='contrato')
 router.register(r'devengos', DevengoViewSet, basename='devengo')
 router.register(r'resoluciones-dian', ResolucionDIANViewSet, basename='resolucion-dian')
 router.register(r'liquidaciones-prestaciones', LiquidacionPrestacionViewSet, basename='liquidacion-prestacion')
+router.register(r'periodos-nomina', PeriodoNominaViewSet, basename='periodo-nomina')
 # WARNING: CRITICO: EmpleadoViewSet debe registrarse AL FINAL con r'' para que sea la ruta base
 # Esto genera: /api/v1/empleados/ y /api/v1/empleados/summary/
 router.register(r'', EmpleadoViewSet, basename='empleado')

@@ -14,7 +14,7 @@ from django.core.validators import EmailValidator
 from rest_framework import serializers
 
 from apps.tenant.api.utils import NormalizationMixin as BaseMixin
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado, ResolucionDIAN, LiquidacionPrestacion
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, ResolucionDIAN, LiquidacionPrestacion, PeriodoNomina
 
 class NullableUUIDField(serializers.UUIDField):
     """UUIDField que convierte cadena vacia en None (util con FormData/HTMX)."""
@@ -765,3 +765,58 @@ class LiquidacionPrestacionSerializer(BaseMixin, serializers.ModelSerializer):
             
         return attrs
 
+
+
+class PeriodoNominaSerializer(NormalizationMixin, serializers.ModelSerializer):
+    """
+    Serializer para PeriodoNomina (mision nomina 2026-08-21). Solo expone
+    los campos que el modelo realmente tiene (FASE 2 de la mision: "no
+    agregar campos especulativos") -- estado y campos de auditoria son
+    read_only, se cambian exclusivamente via las acciones dedicadas del
+    ViewSet (preliquidar/aprobar/marcar-pagado/etc.), nunca por PATCH directo.
+    """
+    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+    creado_por_nombre = serializers.SerializerMethodField()
+    aprobado_por_nombre = serializers.SerializerMethodField()
+    pagado_por_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PeriodoNomina
+        fields = [
+            'id', 'uuid', 'periodo_mes', 'fecha_inicio', 'fecha_fin', 'fecha_pago',
+            'estado', 'estado_display',
+            'creado_por_nombre', 'aprobado_por_nombre', 'pagado_por_nombre',
+            'fecha_aprobacion', 'fecha_pago_real', 'observaciones',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'uuid', 'estado', 'created_at', 'updated_at',
+            'fecha_aprobacion', 'fecha_pago_real',
+        ]
+
+    def _nombre_perfil(self, perfil):
+        if not perfil:
+            return None
+        nombre = f"{perfil.user.first_name} {perfil.user.last_name}".strip() if perfil.user else ''
+        return nombre or (perfil.user.email if perfil.user else None)
+
+    def get_creado_por_nombre(self, obj):
+        return self._nombre_perfil(obj.creado_por)
+
+    def get_aprobado_por_nombre(self, obj):
+        return self._nombre_perfil(obj.aprobado_por)
+
+    def get_pagado_por_nombre(self, obj):
+        return self._nombre_perfil(obj.pagado_por)
+
+    def validate_periodo_mes(self, value):
+        if not re.match(r'^\d{4}-(0[1-9]|1[0-2])$', value or ''):
+            raise serializers.ValidationError('Formato invalido, use YYYY-MM.')
+        return value
+
+    def validate(self, attrs):
+        fecha_inicio = attrs.get('fecha_inicio')
+        fecha_fin = attrs.get('fecha_fin')
+        if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
+            raise serializers.ValidationError({'fecha_fin': 'La fecha de fin no puede ser anterior a la fecha de inicio.'})
+        return attrs

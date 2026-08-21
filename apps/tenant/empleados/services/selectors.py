@@ -13,7 +13,7 @@ from django.db.models import Count, Exists, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, PeriodoNomina
 
 
 # ==============================================================================
@@ -441,6 +441,64 @@ class NominaSummarySelector:
             "total_nomina_mes": str(totales['total_neto']),
             "empleados_pagados": totales['count_pagos'],
         }
+
+
+PERIODO_NOMINA_LIST_FIELDS = (
+    'id', 'uuid', 'empresa_id', 'periodo_mes', 'fecha_inicio', 'fecha_fin',
+    'fecha_pago', 'estado', 'fecha_pago_real', 'created_at',
+)
+
+
+class PeriodoNominaSelector:
+    """Read-only selectors para PeriodoNomina."""
+
+    @staticmethod
+    def get_list(empresa_id: int, estado: str = None):
+        qs = PeriodoNomina.objects.filter(empresa_id=empresa_id).only(*PERIODO_NOMINA_LIST_FIELDS)
+        if estado:
+            qs = qs.filter(estado=estado)
+        return qs.order_by('-periodo_mes', '-id')
+
+    @staticmethod
+    def get_detail(empresa_id: int, periodo_uuid):
+        return PeriodoNomina.objects.filter(
+            empresa_id=empresa_id, uuid=periodo_uuid
+        ).select_related('creado_por', 'aprobado_por', 'pagado_por').get()
+
+    @staticmethod
+    def get_by_id(empresa_id: int, periodo_id: int):
+        """PK lookup solo para orquestacion interna (payloads ya validados)."""
+        return PeriodoNomina.objects.filter(empresa_id=empresa_id, pk=periodo_id).get()
+
+    @staticmethod
+    def get_resumen(empresa_id: int, periodo_id: int) -> dict:
+        """
+        Resumen agregado para la pantalla de revision (FASE 9 de la mision
+        nomina): total devengado, total deducciones, total neto, y conteo
+        de empleados incluidos -- calculado SOLO sobre Devengo no anulados
+        del periodo (Devengo sigue siendo la fuente de verdad del calculo
+        individual, este selector solo agrega, nunca recalcula).
+        """
+        qs = Devengo.objects.filter(
+            empresa_id=empresa_id, periodo_id=periodo_id, anulado=False
+        ).only(
+            'id', 'salario_base', 'auxilio_transporte', 'otros_devengos',
+            'valor_horas_extras', 'salud_empleado', 'pension_empleado',
+            'prestamos', 'descuentos_operativos', 'neto_pagar',
+        )
+        agregados = qs.aggregate(
+            total_devengado=Coalesce(
+                Sum('salario_base') + Sum('auxilio_transporte') + Sum('otros_devengos') + Sum('valor_horas_extras'),
+                Decimal('0.00'),
+            ),
+            total_deducciones=Coalesce(
+                Sum('salud_empleado') + Sum('pension_empleado') + Sum('prestamos') + Sum('descuentos_operativos'),
+                Decimal('0.00'),
+            ),
+            total_neto=Coalesce(Sum('neto_pagar'), Decimal('0.00')),
+            empleados_incluidos=Count('id'),
+        )
+        return {k: (str(v) if isinstance(v, Decimal) else v) for k, v in agregados.items()}
 
 
 # Compatibilidad legacy - tuplas de campos por modelo

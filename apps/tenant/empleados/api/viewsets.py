@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.api.permissions import HasTenantRole, IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.empleados.api.serializers import (
     ContratoNestedSerializer,
@@ -30,8 +30,11 @@ from apps.tenant.empleados.api.serializers import (
     EmpleadoListSerializer,
     ResolucionDIANSerializer,
     LiquidacionPrestacionSerializer,
+    PeriodoNominaSerializer,
 )
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado, ResolucionDIAN, LiquidacionPrestacion
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, ResolucionDIAN, LiquidacionPrestacion, PeriodoNomina
+from apps.tenant.empleados.services.business_service import PeriodoNominaBusinessService
+from apps.tenant.empleados.services.selectors import PeriodoNominaSelector
 from apps.tenant.empleados.choices import (
     EPS_CHOICES,
     AFP_CHOICES,
@@ -2098,3 +2101,136 @@ class LiquidacionPrestacionViewSet(SintelDSVMixin, BaseTenantViewSet):
         }
         return Response(context, template_name='tenant/empleados/liquidacion_pdf.html')
 
+
+
+class PeriodoNominaViewSet(SintelDSVMixin, BaseTenantViewSet):
+    """
+    ViewSet para PeriodoNomina (mision nomina 2026-08-21).
+
+    WARNING: permisos por accion (FASE 22 de la mision, tabla de ejemplo):
+    VISOR consulta; OPERADOR + consultar/crear/preliquidar/enviar-revision;
+    ADMIN + aprobar/marcar-pagado/cerrar/anular/bloquear/desbloquear.
+    Se reutiliza HasTenantRole (ya existente) fijando required_roles por
+    accion en get_permissions() -- no se crea ninguna clase de permiso nueva.
+    """
+    queryset = PeriodoNomina.objects.none()
+    serializer_class = PeriodoNominaSerializer
+    permission_classes = [IsTenantMember]
+
+    _ROLES_POR_ACCION = {
+        'create': ['ADMIN', 'OPERADOR'],
+        'preliquidar': ['ADMIN', 'OPERADOR'],
+        'enviar_a_revision': ['ADMIN', 'OPERADOR'],
+        'rechazar_revision': ['ADMIN', 'OPERADOR'],
+        'aprobar': ['ADMIN'],
+        'marcar_pagado': ['ADMIN'],
+        'cerrar': ['ADMIN'],
+        'anular': ['ADMIN'],
+        'bloquear': ['ADMIN'],
+        'desbloquear': ['ADMIN'],
+    }
+
+    def get_permissions(self):
+        self.required_roles = self._ROLES_POR_ACCION.get(self.action, [])
+        return [IsTenantMember(), HasTenantRole()]
+
+    @cached_property
+    def tenant_empresa(self):
+        return resolve_tenant_empresa(self.request, self)
+
+    def get_empresa(self):
+        return self.tenant_empresa
+
+    def get_queryset(self):
+        empresa = self.get_empresa()
+        if not empresa:
+            return PeriodoNomina.objects.none()
+        estado = self.request.query_params.get('estado')
+        return PeriodoNominaSelector.get_list(empresa.id, estado=estado)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        empresa = self.get_empresa()
+        context['empresa_id'] = empresa.id if empresa else None
+        return context
+
+    def perform_create(self, serializer):
+        empresa = self.get_empresa()
+        perfil = getattr(self.request.user, 'tenant_profile', None)
+        periodo = PeriodoNominaBusinessService.crear_periodo(
+            data=serializer.validated_data, empresa=empresa, creado_por=perfil,
+        )
+        serializer.instance = periodo
+
+    def _get_periodo_or_404(self):
+        empresa = self.get_empresa()
+        try:
+            return PeriodoNominaSelector.get_detail(empresa.id, self.kwargs.get(self.lookup_field))
+        except PeriodoNomina.DoesNotExist:
+            raise NotFound('Periodo de nomina no encontrado.')
+
+    @action(detail=True, methods=['get'])
+    def resumen(self, request, **kwargs):
+        """GET /periodos-nomina/<uuid>/resumen/ -- FASE 9: pantalla de revision."""
+        periodo = self._get_periodo_or_404()
+        data = PeriodoNominaSelector.get_resumen(self.get_empresa().id, periodo.id)
+        data['periodo'] = PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data
+        return Response(data)
+
+    @action(detail=True, methods=['post'])
+    def preliquidar(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        resultado = PeriodoNominaBusinessService.preliquidar_periodo(periodo, self.get_empresa().id)
+        return Response(resultado, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='enviar-revision')
+    def enviar_a_revision(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        periodo = PeriodoNominaBusinessService.enviar_a_revision(periodo)
+        return Response(PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'], url_path='rechazar-revision')
+    def rechazar_revision(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        periodo = PeriodoNominaBusinessService.rechazar_revision(periodo)
+        return Response(PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'])
+    def aprobar(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        perfil = getattr(request.user, 'tenant_profile', None)
+        periodo = PeriodoNominaBusinessService.aprobar_periodo(periodo, aprobado_por=perfil)
+        return Response(PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'], url_path='marcar-pagado')
+    def marcar_pagado(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        perfil = getattr(request.user, 'tenant_profile', None)
+        fecha_pago_real = request.data.get('fecha_pago_real')
+        periodo = PeriodoNominaBusinessService.marcar_pagado(periodo, pagado_por=perfil, fecha_pago_real=fecha_pago_real)
+        return Response(PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'])
+    def cerrar(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        periodo = PeriodoNominaBusinessService.cerrar_periodo(periodo)
+        return Response(PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'])
+    def anular(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        periodo = PeriodoNominaBusinessService.anular_periodo(periodo, self.get_empresa().id)
+        return Response(PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'])
+    def bloquear(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        periodo = PeriodoNominaBusinessService.bloquear_periodo(periodo)
+        return Response(PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=['post'])
+    def desbloquear(self, request, **kwargs):
+        periodo = self._get_periodo_or_404()
+        estado_destino = request.data.get('estado_destino')
+        periodo = PeriodoNominaBusinessService.desbloquear_periodo(periodo, estado_destino)
+        return Response(PeriodoNominaSerializer(periodo, context=self.get_serializer_context()).data)

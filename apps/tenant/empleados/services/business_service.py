@@ -15,12 +15,14 @@ from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, PeriodoNomina
 from apps.tenant.empleados.services.crud_service import (
     ContratoCRUDService,
     DevengoCRUDService,
     EmpleadoCRUDService,
+    PeriodoNominaCRUDService,
 )
+from apps.tenant.empleados.services.selectors import ContratoSelector, EmpleadoSelector
 
 logger = logging.getLogger(__name__)
 
@@ -498,6 +500,216 @@ class DevengoBusinessService:
             )
 
         return DevengoCRUDService.eliminar_devengo(devengo)
+
+
+class PeriodoNominaBusinessService:
+    """
+    Orquestacion del ciclo de vida de un PeriodoNomina (mision nomina
+    2026-08-21). NO calcula montos por si mismo -- delega siempre a
+    DevengoBusinessService.procesar_devengo() (el mismo motor ya existente
+    y probado), una vez por empleado elegible. Devengo sigue siendo la
+    unica fuente de verdad del calculo individual.
+
+    Ver docs/nomina/NOMINA_FLUJO_EMPRESARIAL.md para el detalle completo
+    de cada transicion y las suposiciones documentadas donde no habia
+    evidencia normativa (Regla Critica de la mision: documentar, no inventar).
+    """
+
+    # Mapa de transiciones legales -- una sola fuente de verdad para toda
+    # validacion de estado (FASE 3/FASE 27: "nomina aprobada -> no modificar
+    # libremente").
+    TRANSICIONES_VALIDAS = {
+        'ABIERTO':      {'PRELIQUIDADO', 'ANULADO', 'BLOQUEADO'},
+        'PRELIQUIDADO': {'EN_REVISION', 'ABIERTO', 'ANULADO', 'BLOQUEADO'},
+        'EN_REVISION':  {'APROBADO', 'PRELIQUIDADO', 'ANULADO', 'BLOQUEADO'},
+        'APROBADO':     {'PAGADO', 'ANULADO', 'BLOQUEADO'},
+        'PAGADO':       {'CERRADO'},
+        'CERRADO':      set(),
+        'ANULADO':      set(),
+        'BLOQUEADO':    set(),  # se desbloquea con desbloquear_periodo(), no con transicionar()
+    }
+
+    @staticmethod
+    def _validar_transicion(periodo: PeriodoNomina, estado_destino: str):
+        permitidos = PeriodoNominaBusinessService.TRANSICIONES_VALIDAS.get(periodo.estado, set())
+        if estado_destino not in permitidos:
+            raise ValidationError({
+                'estado': f'No se puede pasar de {periodo.estado} a {estado_destino}. '
+                          f'Transiciones validas desde {periodo.estado}: {sorted(permitidos) or "ninguna"}.'
+            })
+
+    @staticmethod
+    @transaction.atomic
+    def crear_periodo(data: dict, empresa, creado_por=None) -> PeriodoNomina:
+        """Crea un periodo en ABIERTO. La unicidad empresa+periodo_mes (entre
+        periodos no ANULADOS) la garantiza el constraint de base de datos --
+        aqui solo se traduce a un error legible."""
+        try:
+            return PeriodoNominaCRUDService.crear_periodo(data, empresa, creado_por)
+        except Exception as exc:
+            if 'uniq_periodo_nomina_activo_per_empresa_mes' in str(exc):
+                raise ValidationError({
+                    'periodo_mes': f"Ya existe un periodo de nomina activo para {data.get('periodo_mes')} en esta empresa."
+                })
+            raise
+
+    @staticmethod
+    @transaction.atomic
+    def preliquidar_periodo(periodo: PeriodoNomina, empresa_id: int) -> dict:
+        """
+        FASE 7 de la mision: periodo -> empleados elegibles -> contratos ->
+        NominaCalculationService (via procesar_devengo) -> Devengos.
+
+        SUPUESTO DOCUMENTADO (sin evidencia normativa de un flujo de
+        "novedades" separado -- ver NOMINA_BASELINE.md bloqueador #2): al no
+        existir hoy un modelo Novedad, la preliquidacion genera el devengo
+        BASE de cada empleado elegible (salario/auxilio/deducciones de ley,
+        30 dias, sin horas extras/prestamos/descuentos) usando el mismo
+        procesar_devengo() que ya usa la creacion individual. Si un empleado
+        especifico necesita horas extras/descuentos reales, se corrige
+        despues con el patron ya existente (anular ese devengo puntual +
+        crear uno nuevo con los valores correctos vinculado al mismo
+        periodo) -- consistente con la Regla de Inmutabilidad (FASE 11), sin
+        inventar edicion de devengos ya creados.
+
+        Cada empleado se procesa en su propia unidad atomica (no todo o
+        nada): un fallo puntual (ej. limite de dias, sin resolucion DIAN
+        vigente) no bloquea al resto de la nomina de la empresa -- se
+        reporta en 'fallidos', no se descarta silenciosamente.
+        """
+        PeriodoNominaBusinessService._validar_transicion(periodo, 'PRELIQUIDADO')
+
+        empleados = EmpleadoSelector.get_disponibles_para_periodo(
+            empresa_id=empresa_id,
+            fecha_inicio=periodo.fecha_inicio,
+            fecha_fin=periodo.fecha_fin,
+        )
+
+        creados, fallidos = [], []
+        for empleado in empleados:
+            contrato = ContratoSelector.get_activo_for_empleado(empresa_id, empleado.id)
+            if not contrato:
+                fallidos.append({'empleado_uuid': str(empleado.uuid), 'error': 'Sin contrato activo.'})
+                continue
+            try:
+                with transaction.atomic():
+                    devengo = DevengoBusinessService.procesar_devengo(
+                        empleado=empleado,
+                        contrato=contrato,
+                        data={
+                            'contrato': contrato,
+                            'dias_laborados': Decimal('30'),
+                            'periodo_mes': periodo.periodo_mes,
+                            'fecha_inicio': periodo.fecha_inicio,
+                            'fecha_fin': periodo.fecha_fin,
+                            'fecha_pago': periodo.fecha_pago,
+                        },
+                        empresa_id=empresa_id,
+                    )
+                    devengo.periodo = periodo
+                    devengo.save(update_fields=['periodo'])
+                creados.append({'empleado_uuid': str(empleado.uuid), 'devengo_uuid': str(devengo.uuid)})
+            except ValidationError as exc:
+                fallidos.append({'empleado_uuid': str(empleado.uuid), 'error': str(exc.detail if hasattr(exc, 'detail') else exc)})
+
+        if not creados:
+            raise ValidationError({
+                'periodo': 'Ningun empleado elegible pudo preliquidarse. Revise los errores en "fallidos".',
+                'fallidos': fallidos,
+            })
+
+        PeriodoNominaCRUDService.actualizar_estado(periodo, 'PRELIQUIDADO')
+        logger.info(
+            "[PeriodoNominaBusiness] Periodo ID=%s preliquidado: %s creados, %s fallidos",
+            periodo.id, len(creados), len(fallidos)
+        )
+        return {'creados': creados, 'fallidos': fallidos}
+
+    @staticmethod
+    @transaction.atomic
+    def enviar_a_revision(periodo: PeriodoNomina) -> PeriodoNomina:
+        PeriodoNominaBusinessService._validar_transicion(periodo, 'EN_REVISION')
+        if not periodo.devengos.filter(anulado=False).exists():
+            raise ValidationError({'periodo': 'No hay devengos activos para revisar en este periodo.'})
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'EN_REVISION')
+
+    @staticmethod
+    @transaction.atomic
+    def rechazar_revision(periodo: PeriodoNomina) -> PeriodoNomina:
+        """Devuelve el periodo a PRELIQUIDADO para permitir corregir devengos
+        puntuales (anular + recrear) antes de re-enviar a revision."""
+        PeriodoNominaBusinessService._validar_transicion(periodo, 'PRELIQUIDADO')
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'PRELIQUIDADO')
+
+    @staticmethod
+    @transaction.atomic
+    def aprobar_periodo(periodo: PeriodoNomina, aprobado_por) -> PeriodoNomina:
+        """
+        FASE 10 de la mision: separar calcular de aprobar. Backend valida
+        SIEMPRE (no confia solo en la UI) -- el ViewSet debe restringir esta
+        accion con permission_classes de solo-ADMIN ademas de esta validacion
+        de estado.
+        """
+        PeriodoNominaBusinessService._validar_transicion(periodo, 'APROBADO')
+        return PeriodoNominaCRUDService.actualizar_estado(
+            periodo, 'APROBADO', aprobado_por=aprobado_por, fecha_aprobacion=timezone.now(),
+        )
+
+    @staticmethod
+    @transaction.atomic
+    def marcar_pagado(periodo: PeriodoNomina, pagado_por, fecha_pago_real=None) -> PeriodoNomina:
+        """
+        SUPUESTO DOCUMENTADO (NOMINA_BASELINE.md §4): no existe integracion
+        real con Bancos para nomina hoy. Este metodo es un registro MANUAL
+        del hecho "se pago" -- no ejecuta ninguna transferencia ni valida
+        contra un saldo bancario real. Ver FASE 12/13 de la mision para el
+        trabajo pendiente de integracion real, documentado como gap, no
+        fabricado aqui.
+        """
+        PeriodoNominaBusinessService._validar_transicion(periodo, 'PAGADO')
+        return PeriodoNominaCRUDService.actualizar_estado(
+            periodo, 'PAGADO',
+            pagado_por=pagado_por,
+            fecha_pago_real=fecha_pago_real or timezone.now().date(),
+        )
+
+    @staticmethod
+    @transaction.atomic
+    def cerrar_periodo(periodo: PeriodoNomina) -> PeriodoNomina:
+        PeriodoNominaBusinessService._validar_transicion(periodo, 'CERRADO')
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'CERRADO')
+
+    @staticmethod
+    @transaction.atomic
+    def anular_periodo(periodo: PeriodoNomina, empresa_id: int) -> PeriodoNomina:
+        """Anula el periodo Y, en cascada, todos sus devengos activos (misma
+        semantica de anulacion ya usada por DevengoBusinessService.anular_devengo
+        -- nunca hard-delete, mismo principio de inmutabilidad/trazabilidad)."""
+        PeriodoNominaBusinessService._validar_transicion(periodo, 'ANULADO')
+        for devengo in periodo.devengos.filter(anulado=False):
+            DevengoBusinessService.anular_devengo(devengo, empresa_id)
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'ANULADO')
+
+    @staticmethod
+    @transaction.atomic
+    def bloquear_periodo(periodo: PeriodoNomina) -> PeriodoNomina:
+        """Pausa reversible -- guarda el estado previo en observaciones para
+        que desbloquear_periodo() pueda restaurarlo sin exigir que el
+        llamador lo recuerde (sin agregar un campo nuevo solo para esto)."""
+        PeriodoNominaBusinessService._validar_transicion(periodo, 'BLOQUEADO')
+        estado_previo = periodo.estado
+        periodo.observaciones = (periodo.observaciones or '') + f'\n[BLOQUEADO desde {estado_previo} en {timezone.now().isoformat()}]'
+        periodo.save(update_fields=['observaciones'])
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'BLOQUEADO')
+
+    @staticmethod
+    @transaction.atomic
+    def desbloquear_periodo(periodo: PeriodoNomina, estado_destino: str) -> PeriodoNomina:
+        if periodo.estado != 'BLOQUEADO':
+            raise ValidationError({'estado': 'El periodo no esta bloqueado.'})
+        if estado_destino not in {'ABIERTO', 'PRELIQUIDADO', 'EN_REVISION', 'APROBADO'}:
+            raise ValidationError({'estado_destino': f'Destino de desbloqueo invalido: {estado_destino}.'})
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, estado_destino)
 
 
 class NominaCalculationService:

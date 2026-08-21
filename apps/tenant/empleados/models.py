@@ -348,7 +348,22 @@ class Devengo(SintelTenantBaseModel):
     # WARNING: SSoT: neto_pagar se calcula en service layer (en COP)
     neto_pagar = models.DecimalField(max_digits=12, decimal_places=2, editable=False, help_text="Neto a pagar en COP")
     anulado = models.BooleanField(default=False, help_text="Nómina anulada (no se puede editar)")
-    
+
+    # WARNING: mision Access Context nomina 2026-08-21 -- FK opcional al periodo de
+    # nomina que orquesto su creacion en lote (ver PeriodoNomina abajo). Nullable:
+    # los Devengo historicos anteriores a esta migracion no pertenecen a ningun
+    # periodo, y procesar_devengo() sigue funcionando igual sin periodo (creacion
+    # individual). Devengo NO se convierte en periodo/lote -- sigue siendo la
+    # entidad de calculo individual e inmutable; PeriodoNomina es el contenedor.
+    periodo = models.ForeignKey(
+        'PeriodoNomina',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='devengos',
+        help_text='Periodo de nomina al que pertenece (nullable por compatibilidad historica)',
+    )
+
     class Meta:
         verbose_name = _('Nómina')
         verbose_name_plural = _('Nóminas')
@@ -539,4 +554,96 @@ class LiquidacionPrestacion(SintelTenantBaseModel):
         verbose_name_plural = 'Liquidaciones de Prestaciones'
         indexes = [
             models.Index(fields=['empresa', 'empleado']),
-        ]
+        ]
+
+
+class PeriodoNomina(SintelTenantBaseModel):
+    """
+    Periodo de nomina: agrupa los Devengo de todos los empleados de un mismo
+    ciclo de pago y orquesta su flujo de aprobacion en lote.
+
+    WARNING [mision nomina 2026-08-21, docs/nomina/NOMINA_BASELINE.md]: NO
+    reemplaza a Devengo. Devengo sigue siendo la entidad de calculo
+    individual, inmutable (update/partial_update -> 405). PeriodoNomina es
+    el CONTENEDOR/PROCESO que orquesta la creacion en lote (llamando al
+    mismo procesar_devengo() ya existente, una vez por empleado elegible) y
+    el flujo de aprobacion sobre ese conjunto de Devengo -- nunca calcula ni
+    persiste montos por si mismo.
+
+    Maquina de estados (ver docs/nomina/NOMINA_FLUJO_EMPRESARIAL.md para el
+    detalle completo de cada transicion):
+
+        ABIERTO -> PRELIQUIDADO -> EN_REVISION -> APROBADO -> PAGADO -> CERRADO
+
+    Excepciones: ANULADO (desde cualquier estado antes de PAGADO -- anula en
+    cascada los Devengo del periodo), BLOQUEADO (pausa reversible, no
+    transiciona automaticamente a ningun otro estado).
+
+    WARNING: Pago -- no existe integracion real con Bancos para nomina hoy
+    (ver NOMINA_BASELINE.md §2/§4). fecha_pago_real/pagado_por son un
+    registro MANUAL minimo, no una integracion automatica -- documentado
+    como gap conocido, no fabricado como si ya existiera.
+    """
+    ESTADOS = [
+        ('ABIERTO', 'Abierto'),
+        ('PRELIQUIDADO', 'Preliquidado'),
+        ('EN_REVISION', 'En revisión'),
+        ('APROBADO', 'Aprobado'),
+        ('PAGADO', 'Pagado'),
+        ('CERRADO', 'Cerrado'),
+        ('ANULADO', 'Anulado'),
+        ('BLOQUEADO', 'Bloqueado'),
+    ]
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name='periodos_nomina')
+
+    periodo_mes = models.CharField(max_length=7, help_text="Formato: YYYY-MM")
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    fecha_pago = models.DateField(help_text="Fecha de pago planeada para el periodo")
+
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='ABIERTO', db_index=True)
+
+    # WARNING: FK a perfil.TenantProfile (nunca directo al modelo de usuario global, AGENTS.md).
+    # SET_NULL: conserva el registro historico del periodo aunque el perfil que
+    # lo creo/aprobo/pago sea eliminado despues -- se pierde la atribucion
+    # puntual, no el periodo en si (decision documentada, no verificada con
+    # normativa contable real -- ver NOMINA_BASELINE.md bloqueador #2).
+    creado_por = models.ForeignKey(
+        'perfil.TenantProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='periodos_nomina_creados',
+    )
+    aprobado_por = models.ForeignKey(
+        'perfil.TenantProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='periodos_nomina_aprobados',
+    )
+    fecha_aprobacion = models.DateTimeField(null=True, blank=True)
+
+    fecha_pago_real = models.DateField(null=True, blank=True, help_text="Fecha en que se marcó como pagado (registro manual)")
+    pagado_por = models.ForeignKey(
+        'perfil.TenantProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='periodos_nomina_pagados',
+    )
+
+    observaciones = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'Periodo de Nómina'
+        verbose_name_plural = 'Periodos de Nómina'
+        indexes = [
+            models.Index(fields=['empresa', 'estado']),
+            models.Index(fields=['periodo_mes']),
+        ]
+        constraints = [
+            # Un solo periodo "vivo" por empresa+mes -- permite recrear el
+            # periodo del mismo mes si el anterior fue ANULADO.
+            models.UniqueConstraint(
+                fields=['empresa', 'periodo_mes'],
+                condition=~Q(estado='ANULADO'),
+                name='uniq_periodo_nomina_activo_per_empresa_mes',
+            )
+        ]
+
+    def __str__(self):
+        return f"Período {self.periodo_mes} ({self.get_estado_display()})"
