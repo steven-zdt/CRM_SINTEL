@@ -57,9 +57,9 @@ ETL (deferred P3, informativo).
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/bancos/tests/`. Regresion lanzada
-en background tras confirmar `db`/`redis` healthy. Sin cambios de
-codigo en esta app.
+4 tests coleccionados (`apps/tenant/bancos/tests/`). Regresion
+ejecutada: **4 passed, 0 failed, 3 warnings preexistentes (min_value
+DRF + `format_html()` sin args) en 1649.01s (0:27:29)**.
 
 ## Deferred
 
@@ -73,11 +73,10 @@ codigo en esta app.
 - [x] Service Layer auditado, sin codigo muerto encontrado (FASE C/D/K)
 - [x] Matriz normativa colombiana completa -- confirmado sin logica tributaria (FASE M)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 4 passed, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED_WITH_DEFERRED` (1 item P3 informativo)
-si la regresion confirma 0 fallos.
+**COMPLETED_WITH_DEFERRED** -- 4/4 tests pasan, 0 regresiones. 1 item
+P3 informativo.
