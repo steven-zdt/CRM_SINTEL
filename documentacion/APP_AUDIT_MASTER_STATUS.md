@@ -86,11 +86,11 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 11 | proyectos | COMPLETED | `documentacion/audits/apps/APP_proyectos_AUDIT.md` |
 | 12 | gastos | COMPLETED | `documentacion/audits/apps/APP_gastos_AUDIT.md` |
 | 13 | bancos | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_bancos_AUDIT.md` |
-| 14 | facturas | EN PROGRESO | `documentacion/audits/apps/APP_facturas_AUDIT.md` |
-| 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
+| 14 | facturas | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_facturas_AUDIT.md` |
+| 15 | contabilidad | EN PROGRESO | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (13/16 -- 8 COMPLETED_WITH_DEFERRED,
+**APP_AUDIT_PROGRAM:** EN PROGRESO (14/16 -- 9 COMPLETED_WITH_DEFERRED,
 5 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
@@ -197,6 +197,20 @@ passed, 0 failed, 3 warnings preexistentes en 1649.01s (0:27:29). 0
 codigo muerto. Confirmado sin logica tributaria (modulo de
 conciliacion/ETL puro). Cerrado como `COMPLETED_WITH_DEFERRED` (1
 item P3 informativo).
+
+**Regresion facturas (FASE Q, cierre):** `apps/tenant/facturas/` --
+133 passed, 12 skipped, 0 failed, 41 warnings preexistentes en
+14173.47s (3:56:13) -- coincide de cerca con el baseline conocido de
+F33.15-B Nivel 3 (132/13). **Hallazgo P1 (el mas importante de la
+mision hasta ahora):** CUFE (`services/dian/cufe.py`) y XAdES
+(`xades_signer.py`) verificados tecnicamente correctos (formula
+SHA-384, Anexo Tecnico FE DIAN v1.9 §5.4.3/§5.5, defaults seguros) --
+pero **ningun archivo del sistema transmite el documento firmado al
+webservice real de la DIAN** (grep exhaustivo de
+requests.post/zeep/SOAP/wsdl, cero resultados). Mismo patron que
+DEUDA-11 de `empleados`, aqui aplicado al caso de uso central
+(facturas de venta). Resuelve y cierra el hallazgo pendiente de
+`ventas` (app 9/16). Cerrado como `COMPLETED_WITH_DEFERRED`.
 
 ---
 

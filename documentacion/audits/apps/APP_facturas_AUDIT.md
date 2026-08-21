@@ -88,10 +88,15 @@ pendiente desde la auditoria de `ventas` (app 9/16).
 
 ## FASE Q — Tests / Regresion
 
-31 archivos de test segun `APP_AUDIT_MATRIX.md`. Regresion lanzada en
-background tras confirmar `db`/`redis` healthy, sobre el working tree
-(incluye el WIP de `task_c077c6a7`, no tocado). Baseline conocido de
-F33.15-B Nivel 3: 132 passed, 13 skipped documentados.
+145 tests coleccionados (`apps/tenant/facturas/tests/`, 31 archivos).
+Regresion ejecutada sobre el working tree (incluye el WIP de
+`task_c077c6a7`, no tocado): **133 passed, 12 skipped, 0 failed, 41
+warnings (naive datetime + min_value DRF + format_html, todas
+preexistentes) en 14173.47s (3:56:13)**. Coincide de cerca con el
+baseline conocido de F33.15-B Nivel 3 (132 passed, 13 skipped) -- la
+pequeña variacion (133/12 vs 132/13) es consistente con el WIP de
+`task_c077c6a7` presente en el working tree, no indica una
+regresion.
 
 ## Deferred
 
@@ -109,13 +114,13 @@ Ver tabla completa en `APP_facturas_NORMATIVE_MATRIX.md`. Resumen:
 - [x] Codigo muerto: barrido parcial, sin nuevos hallazgos confirmados, limitacion documentada (FASE C/D/K)
 - [x] Matriz normativa colombiana completa -- resuelve hallazgo pendiente de `ventas`, hallazgo P1 nuevo confirmado (FASE M)
 - [x] `manage.py check` PASS (heredado de FASE 0)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 133 passed, 12 skipped, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED_WITH_DEFERRED` dado el hallazgo P1
+**COMPLETED_WITH_DEFERRED** -- 0 fallos, resultado consistente con el
+baseline conocido. Se usa `_WITH_DEFERRED` por el hallazgo P1
 (transmision DIAN no implementada) y las limitaciones de cobertura
-explicitas de esta pasada, independientemente de que la regresion
-confirme 0 fallos nuevos.
+explicitas de esta pasada (barrido de codigo muerto parcial, dado el
+tamaño de la app).
