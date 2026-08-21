@@ -164,9 +164,9 @@
         const tabName = this.getAttribute('data-tab');
         showTab(tabName);
         
-        // Actualizar clase activa en sidebar
-        navLinks.forEach(l => l.classList.remove('active'));
-        this.classList.add('active');
+        // Actualizar estado activo en sidebar (aria-current, ya estilizado en workspace.css)
+        navLinks.forEach(l => l.removeAttribute('aria-current'));
+        this.setAttribute('aria-current', 'page');
         
         // Actualizar hash en URL (sin parámetros de descuento)
         const url = new URL(window.location.href);
@@ -194,7 +194,7 @@
       const hash = window.location.hash.substring(1);
       showTab(hash);
       const activeLink = document.querySelector(`#nav a[data-tab="${hash}"]`);
-      if (activeLink) activeLink.classList.add('active');
+      if (activeLink) activeLink.setAttribute('aria-current', 'page');
     }
     
     // Manejar navegación del navegador (back/forward)
@@ -207,8 +207,8 @@
         showTab(hash);
         const activeLink = document.querySelector(`#nav a[data-tab="${hash}"]`);
         if (activeLink) {
-          document.querySelectorAll('#nav a').forEach(l => l.classList.remove('active'));
-          activeLink.classList.add('active');
+          document.querySelectorAll('#nav a').forEach(l => l.removeAttribute('aria-current'));
+          activeLink.setAttribute('aria-current', 'page');
         }
       } else {
         hideAllTabs();
