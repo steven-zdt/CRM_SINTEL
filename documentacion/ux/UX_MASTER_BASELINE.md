@@ -333,6 +333,46 @@ interno de atributos siguen exactamente iguales, solo reagrupados.
 
 ---
 
+## FASE Empleados/Dashboard — Revision (SIN CAMBIOS DE CODIGO)
+
+**Empleados y Dashboard:** sin jerga tecnica user-facing. Buen
+ejemplo de traduccion correcta ya presente en el codigo: el tab de
+Nominas se titula **"Nóminas (Devengos)"** -- combina el termino de
+negocio ("Nóminas") con el termino contable tecnico entre parentesis
+("Devengos"), exactamente el patron que la mision pide (lenguaje de
+negocio primero, tecnico solo como aclaracion opcional). Sin cambios
+necesarios en ninguno de los 2 modulos.
+
+**Hallazgo revisado y descartado deliberadamente (no es una
+violacion real):**
+`apps/tenant/empleados/static/empleados/js/features/devengo_editor.js`
+tiene una funcion local `_mostrarOffcanvasSeguro()` (linea 139) que a
+primera vista coincide con el patron prohibido
+(`bootstrap.Offcanvas.getOrCreateInstance(el).show()`, linea 152).
+Al leer el contexto completo se confirma que **no es una duplicacion
+descuidada**:
+- Limpia exactamente el mismo conjunto de backdrops/clases/estilos
+  que el helper central (`.offcanvas-backdrop`, `overflow-hidden`,
+  `modal-open`, `offcanvas-open`, `overflow`, `paddingRight`) --
+  igual de completa, no una version debil como los casos de
+  Inventario/Proyectos.
+- Envuelve la creacion de la instancia en `setTimeout(() => ..., 0)`,
+  con un comentario explicito: *"Tick minimo para que Bootstrap
+  complete cualquier ciclo interno pendiente antes de crear la nueva
+  instancia (evita null.scroll en offcanvas.js)"* -- es decir, es un
+  workaround deliberado para un bug real y especifico de timing de
+  Bootstrap en este componente. El helper central
+  (`mostrarOffcanvasSeguro`) NO tiene este delay -- dispone y crea de
+  forma sincronica.
+
+Migrar esta funcion al helper central eliminaria el `setTimeout` y
+podria **reintroducir el bug de `null.scroll` que este codigo existe
+especificamente para evitar**. Se descarta como hallazgo -- coincidir
+superficialmente con un patron de grep no es lo mismo que ser una
+violacion real; la lectura completa del contexto es lo que decide.
+
+---
+
 ## FASE Facturas/Contabilidad/Bancos — Revision (SIN CAMBIOS DE CODIGO)
 
 **Contabilidad y Bancos:** sin jerga tecnica user-facing, sin
@@ -560,8 +600,35 @@ y se documenta el hallazgo real (ruta shadowed en `urls_public.py`,
 ausencia de onboarding guiado) antes de continuar con mas fases, para
 que el usuario pueda revisar el resultado visualmente.
 
-**FASE 2 (Home/Onboarding) completada** en este incremento -- ver
-seccion dedicada arriba. Con Home/Onboarding cerrado, el orden fijo
-de la mision indica continuar con **Perfil**, luego **Empresa**
-(ya con datos reales visibles a traves del propio checklist), antes
-de tocar Clientes/Proveedores/Inventario/el resto de apps.
+**Primera pasada completa sobre las 16 apps, en el orden fijo exacto
+de la mision, cerrada:** Home/Onboarding -> Perfil -> Empresa ->
+Clientes/Proveedores -> Inventario/Cotizaciones/Proyectos ->
+Gastos/Compras/Ventas -> Facturas/Contabilidad/Bancos ->
+Empleados/Dashboard. 9 commits en total. Resumen por bloque:
+
+| Bloque | Resultado |
+|---|---|
+| Home/Onboarding | Navegacion agrupada (FASE 3) + fix aria-current + checklist de primeros pasos (FASE 2) |
+| Perfil | Rotulo "Mi perfil" -> "Usuarios y roles" (mismatch real de contenido) |
+| Empresa | Badge "SSoT" eliminado del sidebar |
+| Sidebar (correccion transversal) | "Operacion" dividido en "Comercial"+"Operacion" con criterio uniforme |
+| Clientes/Proveedores | Sin hallazgos -- ya en buen estado |
+| Inventario/Cotizaciones/Proyectos | Offcanvas duplicado consolidado en Inventario y Proyectos (Cotizaciones sin hallazgos) |
+| Gastos/Compras/Ventas | Sin hallazgos -- ya en buen estado |
+| Facturas/Contabilidad/Bancos | Contabilidad/Bancos sin hallazgos; Facturas: hallazgo de offcanvas detectado pero **no corregido** (alto riesgo, documentado para fase futura dedicada) |
+| Empleados/Dashboard | Sin hallazgos -- caso de offcanvas revisado y descartado (workaround deliberado de un bug real de Bootstrap, no una duplicacion descuidada) |
+
+**Patron consistente en toda la revision:** de las 16 apps, solo 6
+requirieron cambios de codigo (todos de bajo riesgo: rotulos,
+agrupacion de navegacion, consolidacion de infraestructura de UI ya
+existente). Las otras 10 ya estaban en buen estado o el hallazgo
+encontrado se determino, tras leer el contexto completo, que no era
+una violacion real o que corregirlo era mas riesgoso que dejarlo --
+consistente con el mandato de la mision de cautela sobre velocidad y
+"cambios quirurgicos, solo tocar lo necesario".
+
+**Pendiente para una proxima fase (no iniciado):** FASE 1 (mapa de
+experiencia completo, documento dedicado), revision mas profunda de
+formularios/offcanvas de creacion-edicion (esta pasada se centro en
+listados/navegacion, no en los formularios individuales de cada
+modulo), y la fase dedicada a Facturas mencionada arriba.
