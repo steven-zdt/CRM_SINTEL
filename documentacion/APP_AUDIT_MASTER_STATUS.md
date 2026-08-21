@@ -90,9 +90,13 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 15 | contabilidad | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | COMPLETED | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** 16/16 apps individuales COMPLETADAS (10
-COMPLETED_WITH_DEFERRED, 6 COMPLETED). FASE FINAL en curso -- ver
-`documentacion/APP_AUDIT_MASTER_FINAL.md`.
+**APP_AUDIT_PROGRAM: COMPLETED_WITH_DEFERRED** -- 16/16 apps
+individuales cerradas (10 COMPLETED_WITH_DEFERRED, 6 COMPLETED).
+FASE FINAL cerrada (governance gates PASS, contratos cross-app
+consolidados, ~2509 lineas de codigo muerto eliminadas en total, 2
+hallazgos P1 reales documentados). **Ver
+`documentacion/APP_AUDIT_MASTER_FINAL.md` para el reporte de cierre
+completo.**
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
 19 skipped, 0 failed, 1 warning (min_value en DocumentoUploadAPITests,
