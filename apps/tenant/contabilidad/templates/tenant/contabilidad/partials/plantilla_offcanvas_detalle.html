@@ -18,7 +18,7 @@
           {% elif plantilla.tipo_transaccion == 'GASTO' %}bg-warning text-dark
           {% elif plantilla.tipo_transaccion == 'NOMINA' %}bg-info text-dark
           {% else %}bg-secondary{% endif %}">
-          {{ plantilla.tipo_transaccion|default:"Resolver" }}
+          {{ plantilla.tipo_transaccion|default:"Clásica" }}
         </span>
       {% endif %}
     </h5>
@@ -56,7 +56,7 @@
               {{ plantilla.tipo_transaccion }}
             </span>
           {% else %}
-            <span class="badge bg-light text-dark border">Resolver (legacy)</span>
+            <span class="badge bg-light text-dark border">Clásica (2 cuentas)</span>
           {% endif %}
         </div>
       </div>
@@ -65,9 +65,9 @@
         <label class="form-label small fw-bold text-muted">Modo</label>
         <div class="form-control-plaintext bg-light p-2 rounded">
           {% if plantilla.modo == 'MOTOR' %}
-            <span class="badge bg-dark"><i class="bi bi-cpu me-1"></i>Motor</span>
+            <span class="badge bg-dark"><i class="bi bi-cpu me-1"></i>Automática</span>
           {% else %}
-            <span class="badge bg-light text-dark border">Resolver</span>
+            <span class="badge bg-light text-dark border">Clásica</span>
           {% endif %}
         </div>
       </div>
@@ -86,7 +86,7 @@
       {% if plantilla.cuenta_debe_codigo or plantilla.cuenta_credito_codigo %}
       <div class="col-12">
         <h6 class="text-muted border-bottom pb-1 small fw-bold text-uppercase">
-          <i class="bi bi-arrow-left-right me-1"></i>Modo Resolver (Legacy)
+          <i class="bi bi-arrow-left-right me-1"></i>Modo Clásico (2 cuentas)
         </h6>
       </div>
       <div class="col-md-6">
@@ -233,9 +233,6 @@
       </div>
       <div class="col-md-6">
         <i class="bi bi-clock me-1"></i>Actualizada: {{ plantilla.updated_at|default:'-' }}
-      </div>
-      <div class="col-12">
-        UUID: <code>{{ plantilla.uuid }}</code>
       </div>
     </div>
 

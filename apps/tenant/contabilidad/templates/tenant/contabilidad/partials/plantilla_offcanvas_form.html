@@ -15,7 +15,7 @@
       <i class="bi bi-{% if plantilla %}pencil-square{% else %}cpu-fill{% endif %} me-2"></i>
       {% if plantilla %}Editar{% else %}Nueva{% endif %} Plantilla Contable
       {% if plantilla %}
-        <span class="badge bg-light text-dark ms-2 small fw-normal">{{ plantilla.tipo_transaccion|default:"Resolver" }}</span>
+        <span class="badge bg-light text-dark ms-2 small fw-normal">{{ plantilla.tipo_transaccion|default:"Clásica" }}</span>
       {% endif %}
     </h5>
     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
@@ -53,13 +53,13 @@
           <div class="col-md-3">
             <label class="form-label small fw-bold">Tipo de Transaccion *</label>
             <select class="form-select" name="tipo_transaccion">
-              <option value="">-- Modo Resolver --</option>
+              <option value="">-- Modo Clásico (2 cuentas) --</option>
               <option value="VENTA"  {% if plantilla.tipo_transaccion == 'VENTA'  %}selected{% endif %}>Venta</option>
               <option value="COMPRA" {% if plantilla.tipo_transaccion == 'COMPRA' %}selected{% endif %}>Compra</option>
               <option value="GASTO"  {% if plantilla.tipo_transaccion == 'GASTO'  %}selected{% endif %}>Gasto</option>
               <option value="NOMINA" {% if plantilla.tipo_transaccion == 'NOMINA' %}selected{% endif %}>Nomina</option>
             </select>
-            <div class="form-text">Motor Fase 3 activo cuando se selecciona un tipo.</div>
+            <div class="form-text">Al seleccionar un tipo, la plantilla pasa a modo automático (genera las lineas por si sola).</div>
           </div>
 
           <div class="col-md-2 d-flex align-items-end pb-1">
@@ -217,13 +217,7 @@
 
   <div class="offcanvas-footer border-top p-3 bg-light">
     <div class="d-flex align-items-center gap-2">
-      {% if plantilla %}
-      <span class="text-muted small me-auto">
-        UUID: <code>{{ plantilla.uuid }}</code>
-      </span>
-      {% else %}
       <span class="me-auto"></span>
-      {% endif %}
       <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">Cancelar</button>
       <button type="button" class="btn btn-primary btn-sm"
               id="btn-guardar-plantilla-{{ modo }}">

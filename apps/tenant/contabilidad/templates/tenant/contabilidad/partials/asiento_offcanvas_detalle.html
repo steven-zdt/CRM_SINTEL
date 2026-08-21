@@ -109,8 +109,10 @@
                 <td>
                   {% if movimiento.cuenta_codigo and movimiento.cuenta_nombre %}
                     <strong>{{ movimiento.cuenta_codigo }}</strong> - {{ movimiento.cuenta_nombre }}
+                  {% elif movimiento.cuenta_codigo %}
+                    <strong>{{ movimiento.cuenta_codigo }}</strong>
                   {% else %}
-                    ID: {{ movimiento.cuenta }}
+                    Cuenta no disponible
                   {% endif %}
                 </td>
                 <td>{{ movimiento.descripcion|default:'---' }}</td>
