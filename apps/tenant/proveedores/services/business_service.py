@@ -3,7 +3,7 @@ Business Service for Proveedores v3.5 - Business Logic & orchestration.
 """
 import re
 
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal
 from django.apps import apps
 from django.db import transaction, IntegrityError
 from rest_framework.exceptions import ValidationError
@@ -82,29 +82,6 @@ class ProveedorBusinessService:
         return proveedor, True
 
     @staticmethod
-    def _to_decimal(value, field_name):
-        try:
-            return Decimal(str(value or 0))
-        except (InvalidOperation, TypeError, ValueError) as exc:
-            raise ValidationError({field_name: [f"Valor numerico invalido para {field_name}."]}) from exc
-
-    @staticmethod
-    def _normalize_percentage_for_calculation(value):
-        dec = ProveedorBusinessService._to_decimal(value, "porcentaje")
-        # Compatibilidad con payloads de gastos que usan base-1 (0.04 => 4%).
-        if Decimal("0") < dec < Decimal("0.5"):
-            return (dec * Decimal("100")).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
-        return dec
-
-    @staticmethod
-    def _format_percentage_choice(value):
-        dec = ProveedorBusinessService._to_decimal(value, "porcentaje")
-        if dec == Decimal("0"):
-            return "0.00"
-        text = format(dec.normalize(), "f")
-        return text.rstrip("0").rstrip(".") if "." in text else text
-
-    @staticmethod
     def _get_contacto_proveedor_model():
         """Return ContactoProveedor model if it exists after refactors."""
         try:
@@ -137,78 +114,7 @@ class ProveedorBusinessService:
         return payload
 
     # ==============================================================================
-
-    # 2. FINANCIAL CALCULATIONS (SSoT)
-    # ==============================================================================
-
-    @staticmethod
-    def calcular_neto_gasto(subtotal, porcentaje_retencion):
-        """
-        Fuente unica de verdad matematica para gastos.
-        Formula: neto = subtotal - (subtotal * porcentaje_retencion / 100)
-        """
-        subtotal_dec = ProveedorBusinessService._to_decimal(subtotal, "subtotal")
-        porcentaje_retencion_dec = ProveedorBusinessService._to_decimal(porcentaje_retencion, "porcentaje_retencion")
-
-        if subtotal_dec < Decimal("0"):
-            raise ValidationError({"subtotal": ["El subtotal no puede ser negativo."]})
-        if porcentaje_retencion_dec < Decimal("0") or porcentaje_retencion_dec > Decimal("100"):
-            raise ValidationError({"porcentaje_retencion": ["El porcentaje de retencion debe estar entre 0 y 100."]})
-
-        descuento = (subtotal_dec * (porcentaje_retencion_dec / Decimal("100"))).quantize(
-            Decimal("0.01"),
-            rounding=ROUND_HALF_UP,
-        )
-        return (subtotal_dec - descuento).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    @staticmethod
-    def obtener_configuracion_retenciones(proveedor):
-        """Configuracion base de retenciones por proveedor (v2.61.4)."""
-        retefuente_porcentaje = Decimal("0")
-        reteica_porcentaje = Decimal("0")
-
-        if not proveedor:
-            return {
-                "retefuente_porcentaje": retefuente_porcentaje,
-                "reteica_porcentaje": reteica_porcentaje,
-                "porcentaje_retencion_total": Decimal("0"),
-            }
-
-        if not bool(getattr(proveedor, "autoretenedor", False)):
-            retefuente_porcentaje = Decimal("4")
-
-        if str(getattr(proveedor, "tipo_persona", "")).upper() == "NATURAL":
-            reteica_porcentaje = Decimal("0.966")
-
-        return {
-            "retefuente_porcentaje": retefuente_porcentaje,
-            "reteica_porcentaje": reteica_porcentaje,
-            "porcentaje_retencion_total": retefuente_porcentaje + reteica_porcentaje,
-        }
-
-    @staticmethod
-    def calcular_componentes_retencion(subtotal, retefuente_porcentaje=0, reteica_porcentaje=0):
-        subtotal_dec = ProveedorBusinessService._to_decimal(subtotal, "subtotal")
-        retefuente_pct = ProveedorBusinessService._normalize_percentage_for_calculation(retefuente_porcentaje)
-        reteica_pct = ProveedorBusinessService._normalize_percentage_for_calculation(reteica_porcentaje)
-
-        retefuente = (subtotal_dec * (retefuente_pct / Decimal("100"))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        reteica = (subtotal_dec * (reteica_pct / Decimal("100"))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        porcentaje_total = retefuente_pct + reteica_pct
-        total_neto = ProveedorBusinessService.calcular_neto_gasto(subtotal_dec, porcentaje_total)
-
-        return {
-            "subtotal": subtotal_dec,
-            "retefuente": retefuente,
-            "reteica": reteica,
-            "retefuente_porcentaje": retefuente_pct,
-            "reteica_porcentaje": reteica_pct,
-            "porcentaje_retencion_total": porcentaje_total,
-            "total": total_neto,
-        }
-
-    # ==============================================================================
-    # 3. CRUD ORCHESTRATION
+    # 2. CRUD ORCHESTRATION
     # ==============================================================================
 
     def crear_proveedor(self, empresa_id, data):
