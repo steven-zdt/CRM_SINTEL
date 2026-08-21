@@ -92,6 +92,10 @@ services:
       - DATABASE_HOST=db
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     restart: unless-stopped
+    extra_hosts:
+      # Alta local de tenants (ver apps/public/tenants/management/commands/ensure_tenant_dns.py).
+      # Registro local en desarrollo -- NO usar Cloudflare todavia (aun en desarrollo).
+      - "home.sintel.net.co:192.168.2.200"
     # DEVOPS-M3: usa el endpoint /health ya existente (config/urls_public.py)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -114,7 +118,14 @@ services:
       - ./staticfiles:/app/staticfiles:ro
       - ./media:/app/media:ro
     depends_on:
-      - web
+      # DEVOPS-M4: "depends_on: - web" solo esperaba a que el CONTENEDOR arrancara,
+      # no a que Django estuviera realmente escuchando -- entrypoint.sh corre
+      # migraciones/collectstatic antes de "runserver", asi que nginx podia quedar
+      # aceptando trafico varios segundos antes de que el upstream respondiera,
+      # devolviendo 502 Bad Gateway. condition: service_healthy hace que nginx
+      # espere al healthcheck real de web (GET /health) antes de arrancar.
+      web:
+        condition: service_healthy
     restart: unless-stopped
     # DEVOPS-M3: wget de busybox (incluido en nginx:alpine), sin dependencias extra
     healthcheck:
@@ -135,6 +146,9 @@ services:
       - DATABASE_HOST=db
     command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "high_priority,default"]
     restart: unless-stopped
+    extra_hosts:
+      # Alta local de tenants (ver apps/public/tenants/management/commands/ensure_tenant_dns.py).
+      - "home.sintel.net.co:192.168.2.200"
     # DEVOPS-M3: celery inspect ping falla si el worker no responde
     healthcheck:
       test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME || exit 1"]
