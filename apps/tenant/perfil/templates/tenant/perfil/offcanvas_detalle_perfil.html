@@ -30,8 +30,10 @@
         <dd class="col-sm-8">{{ profile.user.email }}</dd>
         
         <dt class="col-sm-4 text-muted">Cargo</dt>
-        {# [SEC-A1] Sin |safe: profile.cargo es texto editable por el usuario; el placeholder
-           "No definido" es el unico HTML literal y vive fuera del valor interpolado. #}
+        {% comment %}
+        [SEC-A1] Sin |safe: profile.cargo es texto editable por el usuario; el placeholder
+        "No definido" es el unico HTML literal y vive fuera del valor interpolado.
+        {% endcomment %}
         <dd class="col-sm-8">{% if profile.cargo %}{{ profile.cargo }}{% else %}<span class="text-muted font-italic">No definido</span>{% endif %}</dd>
 
         <dt class="col-sm-4 text-muted">Departamento</dt>

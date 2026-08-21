@@ -22,8 +22,10 @@
         <td>
           <details class="cursor-pointer">
             <summary class="text-xs text-gray-500">Ver payload</summary>
-            {# [SEC-M2] Sin |safe: log.payload es un JSONField que puede contener texto
-               no confiable (p.ej. la URL rechazada por politica SSRF, ver tasks.py). #}
+            {% comment %}
+            [SEC-M2] Sin |safe: log.payload es un JSONField que puede contener texto
+            no confiable (p.ej. la URL rechazada por politica SSRF, ver tasks.py).
+            {% endcomment %}
             <pre class="text-xs bg-gray-50 p-2 mt-2 rounded border">{{log.payload}}</pre>
           </details>
         </td>

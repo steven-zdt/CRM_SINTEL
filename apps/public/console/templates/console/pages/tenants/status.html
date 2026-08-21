@@ -34,9 +34,9 @@
   {% endif %}
 
   <div class="bg-white shadow rounded-lg p-6">
-    {# 
+    {% comment %}
       Incluir el partial HTMX que maneja el polling automáticamente.
-      
+
       Arquitectura Server-Side First (Zero-JS):
       - El partial se renderiza inicialmente sin estado
       - HTMX actualiza automáticamente cada 2 segundos (hx-trigger="load delay:2s")
@@ -44,7 +44,7 @@
       - El servidor decide cuándo detener polling (estados SUCCESS/FAILURE)
       - Zero JavaScript: Todo el control está en el HTML renderizado por Django
       - HTMX solo intercambia HTML, sin parsing de JSON ni manipulación manual del DOM
-    #}
+    {% endcomment %}
     {% include 'console/pages/tenants/_status_card.html' with task_id=task_id %}
   </div>
 </div>

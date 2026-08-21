@@ -35,10 +35,12 @@
     </div>
   </div>
 
-  {# Panel HTMX: KPIs + tabla server-rendered (django-tables2). Cargado/refrescado
-     via JS (nueva_tarea_list.js) porque necesita parametros dinamicos (empleado
-     de contexto, estado, busqueda) que un hx-trigger="load" estatico no puede
-     expresar. #}
+  {% comment %}
+  Panel HTMX: KPIs + tabla server-rendered (django-tables2). Cargado/refrescado
+  via JS (nueva_tarea_list.js) porque necesita parametros dinamicos (empleado
+  de contexto, estado, busqueda) que un hx-trigger="load" estatico no puede
+  expresar.
+  {% endcomment %}
   <div class="card-body p-0">
     <div id="tareas-cortas-panel" style="min-height:360px;"></div>
   </div>

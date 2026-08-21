@@ -1,7 +1,9 @@
 {% load static %}
 {# list_factura.html — v4.0 Compact UI: tabs Ventas / Compras #}
-{# PLAN_UNICO_CORRECCIONES.md Fase 5-BIS: tabla server-rendered (django-tables2 + HTMX),
-   ya no Tabulator — ver apps/tenant/facturas/tables.py y views.py. #}
+{% comment %}
+PLAN_UNICO_CORRECCIONES.md Fase 5-BIS: tabla server-rendered (django-tables2 + HTMX),
+ya no Tabulator — ver apps/tenant/facturas/tables.py y views.py.
+{% endcomment %}
 
 <style>
   .ui-facturas .table { font-size: 0.82rem; }
@@ -110,9 +112,11 @@
     <div class="tab-pane fade show active" id="tab-pane-ventas"
          role="tabpanel" aria-labelledby="tab-ventas-btn">
 
-      {# Panel HTMX: filtros de pago + tabla server-rendered (django-tables2).
-         Ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS — reemplaza el Tabulator
-         que antes poblaba #grid-ventas via JS. #}
+      {% comment %}
+      Panel HTMX: filtros de pago + tabla server-rendered (django-tables2).
+      Ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS — reemplaza el Tabulator
+      que antes poblaba #grid-ventas via JS.
+      {% endcomment %}
       <div id="panel-ventas" data-facturas-panel
            hx-get="{% url 'facturas:tabla' naturaleza='venta' %}"
            hx-trigger="load, keyup changed delay:400ms from:#search-factura, search from:#search-factura, facturaGuardada from:document"

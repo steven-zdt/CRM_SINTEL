@@ -20,9 +20,11 @@
     
     {% if tipo_formulario == 'ajuste' %}
       <form id="form-ajuste-inventario" method="POST" onsubmit="return false;">
-        {# [FE-C2] El hidden y el select comparten name="producto" pero son mutuamente
-           excluyentes: el hidden solo debe existir cuando ya hay un producto pre-seleccionado
-           (rama sin producto usa el select); antes vivian ambos siempre en el DOM a la vez. #}
+        {% comment %}
+        [FE-C2] El hidden y el select comparten name="producto" pero son mutuamente
+        excluyentes: el hidden solo debe existir cuando ya hay un producto pre-seleccionado
+        (rama sin producto usa el select); antes vivian ambos siempre en el DOM a la vez.
+        {% endcomment %}
         {% if not producto %}
         <div class="mb-3">
           <label for="ajuste-producto-select" class="form-label text-danger fw-bold">Producto *</label>

@@ -1,11 +1,13 @@
 {% load django_tables2 %}
 {% load sintel_ui %}
 {# Fragmento HTMX: KPIs + tabla de Proyectos. Reemplaza #proyectos-panel completo. #}
-{# F33.14-A: 4 de 6 KPIs migrados a sintel_kpi_card (F33.9) -- markup identico.
-   Los otros 2 (Avance Prom., Cartera Total) NO se migraron: usan un color
-   "purple" no estandar y un font-size custom para el valor (moneda larga),
-   personalizaciones reales que el primitivo actual no soporta sin cambiar
-   su contrato -- se dejan como estaban, sin forzar una migracion visual. #}
+{% comment %}
+F33.14-A: 4 de 6 KPIs migrados a sintel_kpi_card (F33.9) -- markup identico.
+Los otros 2 (Avance Prom., Cartera Total) NO se migraron: usan un color
+"purple" no estandar y un font-size custom para el valor (moneda larga),
+personalizaciones reales que el primitivo actual no soporta sin cambiar
+su contrato -- se dejan como estaban, sin forzar una migracion visual.
+{% endcomment %}
 
 <div class="row g-3 mb-3" id="proyectos-kpis">
   {% sintel_kpi_card icon="folder2-open" color="primary" value=kpis.total label="Total Proyectos" %}
@@ -15,7 +17,7 @@
   <div class="col-6 col-md-4 col-xl-2">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle bg-purple bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;background:rgba(111,66,193,.1) !important;">
+        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;background:rgba(111,66,193,.1) !important;">
           <i class="bi bi-bar-chart-line" style="color:#6f42c1;"></i>
         </div>
         <div class="min-w-0">

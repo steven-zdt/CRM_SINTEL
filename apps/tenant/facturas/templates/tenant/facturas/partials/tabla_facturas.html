@@ -1,7 +1,9 @@
 {% load django_tables2 %}
-{# Fragmento HTMX: filtros rapidos de pago + tabla de Facturas (Ventas o Compras
-   segun la naturaleza de la vista). Reemplaza el panel completo en cada
-   busqueda/filtro/orden/paginacion/evento facturaGuardada. #}
+{% comment %}
+Fragmento HTMX: filtros rapidos de pago + tabla de Facturas (Ventas o Compras
+segun la naturaleza de la vista). Reemplaza el panel completo en cada
+busqueda/filtro/orden/paginacion/evento facturaGuardada.
+{% endcomment %}
 
 <div class="d-flex gap-1 px-1 pt-2 pb-1 flex-wrap align-items-center border-bottom" style="background:#fafafa;">
   <span class="text-muted me-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">Pago:</span>

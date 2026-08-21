@@ -40,9 +40,11 @@
       </div>
     </div>
     
-    {# Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el
-       antiguo #compras-summary + spinner + #grid-ordenes-compra Tabulator
-       (ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS). #}
+    {% comment %}
+    Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el
+    antiguo #compras-summary + spinner + #grid-ordenes-compra Tabulator
+    (ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS).
+    {% endcomment %}
     <div id="compras-panel"
          data-grid="ordenes-compra"
          hx-get="{% url 'compras:tabla' %}"

@@ -48,9 +48,11 @@
           </button>
         </div>
 
-        {# Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el antiguo
-           #gastos-summary + spinner + #grid-gastos Tabulator (ver PLAN_UNICO_CORRECCIONES.md
-           Fase 5-BIS). Se recarga completo en cada busqueda/orden/paginacion/evento de refresco. #}
+        {% comment %}
+        Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el antiguo
+        #gastos-summary + spinner + #grid-gastos Tabulator (ver PLAN_UNICO_CORRECCIONES.md
+        Fase 5-BIS). Se recarga completo en cada busqueda/orden/paginacion/evento de refresco.
+        {% endcomment %}
         <div id="gastos-panel"
              data-grid="gastos"
              hx-get="{% url 'gastos:documentos-tabla' %}"

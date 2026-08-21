@@ -269,12 +269,14 @@
   </div>
 </div>
 
-{# [SEC-A2] json_script debe renderizarse fuera de cualquier <script> -- anidar un
-   <script type="application/json"> dentro de otro <script> rompe el parseo HTML
-   (el primer </script> que aparece cierra el bloque exterior). sugerencias_puc
-   incluye texto configurable por el tenant (concepto de ReglaContable, nombre de
-   CuentaContable) que con |safe permitia romper el bloque de script padre e
-   inyectar JS arbitrario. #}
+{% comment %}
+[SEC-A2] json_script debe renderizarse fuera de cualquier <script> -- anidar un
+<script type="application/json"> dentro de otro <script> rompe el parseo HTML
+(el primer </script> que aparece cierra el bloque exterior). sugerencias_puc
+incluye texto configurable por el tenant (concepto de ReglaContable, nombre de
+CuentaContable) que con |safe permitia romper el bloque de script padre e
+inyectar JS arbitrario.
+{% endcomment %}
 {{ sugerencias_puc|json_script:"sugerencias-puc-data" }}
 <script>
 (function () {
