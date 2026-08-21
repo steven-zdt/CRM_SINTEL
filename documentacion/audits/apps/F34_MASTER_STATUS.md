@@ -49,8 +49,8 @@ anterior):**
 | 4 | clientes | COMPLETED | `documentacion/audits/apps/F34_clientes_AUDIT.md` |
 | 5 | proveedores | COMPLETED | `documentacion/audits/apps/F34_proveedores_AUDIT.md` |
 | 6 | inventario | COMPLETED | `documentacion/audits/apps/F34_inventario_AUDIT.md` |
-| 7 | compras | EN PROGRESO | `documentacion/audits/apps/F34_compras_AUDIT.md` |
-| 8 | ventas | PENDIENTE | `documentacion/audits/apps/F34_ventas_AUDIT.md` |
+| 7 | compras | COMPLETED | `documentacion/audits/apps/F34_compras_AUDIT.md` |
+| 8 | ventas | EN PROGRESO | `documentacion/audits/apps/F34_ventas_AUDIT.md` |
 | 9 | cotizaciones | PENDIENTE | `documentacion/audits/apps/F34_cotizaciones_AUDIT.md` |
 | 10 | proyectos | PENDIENTE | `documentacion/audits/apps/F34_proyectos_AUDIT.md` |
 | 11 | gastos | PENDIENTE | `documentacion/audits/apps/F34_gastos_AUDIT.md` |
@@ -60,7 +60,7 @@ anterior):**
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/F34_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/F34_dashboard_AUDIT.md` |
 
-**F34:** EN PROGRESO (6/16 COMPLETED)
+**F34:** EN PROGRESO (7/16 COMPLETED)
 
 **Nota operativa (2026-08-21):** el usuario indico explicitamente NO
 ejecutar tests durante esta mision. A partir de este punto, la
