@@ -1,7 +1,119 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.52.0
-**Ultima actualizacion:** 2026-08-20 (DOC-M39) — FASE 33 (Shared UI / Design
+**Version:** 3.53.0
+**Ultima actualizacion:** 2026-08-21 (DOC-M40) — **Dos misiones de
+auditoria integral consecutivas, ambas sobre las 16 apps de
+`apps/tenant/**`, ambas cerradas.** Distintas de F33.15-B (Nivel 3,
+DOC-M39): esas eran de regresion de tests; estas dos son de
+**auditoria de codigo/arquitectura/negocio**, con tests usados solo
+como evidencia puntual (mision 1) o sin ejecucion de tests en
+absoluto (mision 2, por instruccion explicita del usuario).
+
+**Mision 1 ("MISION PRINCIPAL", `APP_AUDIT_MASTER_FINAL.md`,
+`APP_AUDIT_PROGRAM: COMPLETED_WITH_DEFERRED`):** ciclo FASE A-Y por
+app (modelos, service layer, ORM, API, permisos, multitenant,
+frontend, codigo muerto, duplicacion, normativa colombiana, tests),
+con regresion completa de cada app individual confirmada (0 fallos
+nuevos en las 16). Hallazgos principales:
+- **~2509 lineas de codigo muerto eliminadas** entre `core` (1271,
+  5 adaptadores huerfanos), `empresa` (445, `impl/empresa_service.py`
+  + shim de permisos + script obsoleto), `clientes` (39, clases
+  sombra en `services/services.py`), `cotizaciones` (~180, pipeline
+  PDF duplicado y huerfano), `proyectos` (25, `ProyectoServiceMixin`
+  copiado de `gastos`), `gastos` (`services.py` inalcanzable por
+  shadowing con el paquete `services/` del mismo nombre, verificado
+  **empiricamente** con un import real), `contabilidad` (151,
+  `scratch/` sin `__init__.py` + `api/datatables.py` deprecado con
+  import ya comentado).
+- **Hallazgo P1 mas critico de la mision:** verificado linea por
+  linea que `services/dian/cufe.py`/`xades_signer.py` de `facturas`
+  calculan el CUFE y firman XAdES-EPES **correctamente** (formula
+  SHA-384, Anexo Tecnico FE DIAN v1.9 §5.4.3/§5.5), pero **ningun
+  archivo del sistema transmite el documento firmado al webservice
+  real de la DIAN** (grep exhaustivo de
+  `requests.post`/`zeep`/`SOAP`/`wsdl`, cero resultados) -- las
+  facturas de venta generadas por el sistema no tendrian validez
+  legal como factura electronica ante la DIAN sin ese paso.
+- **Segundo hallazgo P1 (ya conocido, re-confirmado vigente):**
+  DEUDA-11 en `empleados` -- mismo patron que el anterior mas
+  circunscrito a nomina electronica (DSPNE): infraestructura de datos
+  completa, transmision XML real nunca implementada.
+- **Tercer hallazgo P1, resuelto durante la propia mision:** las
+  auditorias de `proveedores`/`gastos`/`contabilidad`, en secuencia,
+  confirmaron que `ProveedorBusinessService.obtener_configuracion_
+  retenciones()`/`calcular_componentes_retencion()` (tarifas
+  hardcodeadas Retefuente 4%/ReteICA 0.966%) eran codigo muerto real
+  -- el mecanismo REAL de retenciones (`contabilidad.
+  RetencionesService` + `ConfiguracionRetenciones`, tarifas
+  configurables por tenant/tercero/naturaleza, NO hardcodeadas) ya
+  funciona correctamente end-to-end. Reclasificado de P1 a P3.
+- 4 correcciones de matrices de conteo (modelos undercounted por el
+  grep automatico de FASE 1 en `inventario` -- 6 reales no 1, via
+  herencia indirecta `TimeStampedModel`; `cotizaciones` -- 5 reales no
+  4, `ConfiguracionCotizacion` vive en un submodulo separado).
+- Matrices normativas colombianas completas y con evidencia de codigo
+  para `empleados`, `clientes`, `proveedores`, `compras`, `ventas`,
+  `facturas`, `contabilidad`, `bancos` (9 documentos
+  `APP_<app>_NORMATIVE_MATRIX.md` nuevos).
+
+**Mision 2 (F34, `F34_MASTER_FINAL.md`, `F34: COMPLETED_WITH_
+DEFERRED`):** segunda pasada sobre las mismas 16 apps, con enfoque
+explicito en reglas de negocio clasificadas (CRITICAL/IMPORTANT/
+SUPPORTING/DERIVED/PRESENTATIONAL), mapa de dominio, verificacion
+real de N+1 (no solo sospecha) y un barrido de codigo muerto
+simbolo-por-simbolo mas profundo que el de la mision 1 -- sin asumir
+que "ya se audito antes" significa que no queda nada por encontrar.
+12/16 apps sin hallazgos nuevos (confirma que la mision 1 ya habia
+sido exhaustiva en la mayoria de los casos); 2 apps con codigo muerto
+adicional real:
+- **`proveedores`:** ejecuta la limpieza de retenciones que la mision
+  1 dejo diferida (P3), mas descubre un cuarto metodo muerto no
+  detectado antes (`_format_percentage_choice`, cero consumidores en
+  todo el repo). ~76 lineas.
+- **`inventario`:** encuentra una capa COMPLETA de conveniencia sobre
+  `KardexService` (funciones module-level + wrappers de clase +
+  `ProductoServiceMixin.service_producto_ajustar_stock()`, este
+  ultimo documentado en el `.agent/` doc de la app pero nunca
+  conectado a ningun `@action` de ViewSet) que ningun consumidor real
+  adopto -- todos los consumidores reales (`ventas`, `compras`,
+  `facturas`, `contabilidad`) siempre llamaron
+  `KardexService.registrar_movimiento(tipo=...)` directamente. ~165
+  lineas.
+- **Hallazgo transversal consolidado:** el patron "capa de
+  compatibilidad legacy conviviendo con la capa FSD moderna"
+  (`services.py` junto a paquete `services/`, o funciones
+  module-level duplicando metodos de clase) aparecio en 5 apps a lo
+  largo de ambas misiones, con destino distinto en cada caso: 3
+  genuinamente muertas (`empresa`, `gastos`, `inventario`), 1 viva
+  por diseño deliberado (`dashboard`, resuelto con
+  `importlib.util.spec_from_file_location()` para cargar el archivo
+  sombreado por su ruta exacta, confirmado con consumidores reales en
+  `api/permissions.py`/`api/views.py`), 1 parcialmente viva
+  (`facturas`, atada a un endpoint ya deprecado conocido). Leccion:
+  este patron nunca debe asumirse muerto o vivo sin verificar
+  consumidores caso por caso.
+- A partir del segundo cambio de codigo (`inventario`), el usuario
+  indico explicitamente no ejecutar tests durante el resto de la
+  mision -- validacion de ambas eliminaciones (`proveedores`,
+  `inventario`) via `py_compile` + grep repo-wide de consumidores
+  unicamente (barra de evidencia mas alta posible: cero referencias
+  en absolutamente ningun archivo del repo, incluyendo tests y
+  management commands, verificado ANTES de eliminar en ambos casos).
+
+**Governance final de ambas misiones:** `manage.py check` PASS,
+`makemigrations --check --dry-run` "No changes detected" PASS (0
+migraciones nuevas en ninguna de las 55 commits de ambas misiones --
+todos los cambios de codigo fueron eliminacion pura en la capa de
+servicios), `pytest --collect-only` 2064 tests / 0 errores de
+coleccion (verificado tras el cierre de la mision 1, identico al
+baseline de F33.15-B). 25 archivos de codigo de produccion tocados en
+total (24 en `apps/`, 1 en `scripts/`), **~2745 lineas netas
+eliminadas**, 45 documentos nuevos en `documentacion/audits/apps/`
+(16 `APP_<app>_AUDIT.md` + 9 `APP_<app>_NORMATIVE_MATRIX.md` + 16
+`F34_<app>_AUDIT.md` + `APP_AUDIT_MASTER_STATUS.md`/`_FINAL.md` +
+`F34_MASTER_STATUS.md`/`_FINAL.md`).
+
+**Actualizacion previa:** 2026-08-20 (DOC-M39) — FASE 33 (Shared UI / Design
 System), continua EN PROGRESO -- no cerrada, documentado con evidencia por
 que. Cubre el cierre del **Nivel 3** de la regresion incremental
 (F33.15-B): las **16/16 apps de `apps/tenant/**`** quedan confirmadas
@@ -1952,6 +2064,8 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | Compras -> Recepcion -> Inventario -> Sede -> Kardex -> Traslados -> Contabilidad (F21, 2026-08-09) | `documentacion/F21_FINAL_REPORT.md` | Cierra la brecha `compras->inventario`: `RecepcionCompra`/`RecepcionCompraItem` (`documentacion/F21_RECEPCION_INVENTARIO.md`), `TrasladoInventario` entre sedes (`documentacion/F21_TRASLADOS_SEDES.md`), decisiones de alcance organizacional (`F21_ORGANIZATIONAL_DECISIONS.md`), 16/16 tests reales (`F21_TEST_MATRIX.md`), estado fase por fase (`F21_EXECUTION_STATUS.md`) |
 | Integracion Contable Real de Inventario (F22, 2026-08-10) | `documentacion/F22_FINAL_REPORT.md` | Activa `ExtractorInventario` (Pull real, antes deshabilitado): matriz de movimientos y contrato contable (`documentacion/F22_ACCOUNTING_CONTRACT.md`), flujo operativo (`F22_INVENTORY_ACCOUNTING.md`), auditoria de inventario/extractor (`F22_INVENTARIO_BASELINE.md`, `F22_EXTRACTOR_INVENTARIO_BASELINE.md`), analisis de backfill historico (`F22_HISTORICAL_BACKFILL_ANALYSIS.md`), 20/20 tests reales + 19/19 F21 sin regresion (`F22_TEST_MATRIX.md`), estado fase por fase (`F22_EXECUTION_STATUS.md`) |
 | Venta -> Inventario -> Kardex -> Costo -> Contabilidad (F23, 2026-08-10) | `documentacion/F23_FINAL_REPORT.md` | Cierra la brecha `ventas->inventario`: contrato Venta->Inventario (`documentacion/F23_SALE_INVENTORY_CONTRACT.md`), politica del evento de salida (`F23_INVENTORY_ISSUE_POLICY.md`), auditoria de ventas/facturas (`F23_VENTAS_BASELINE.md`, `F23_FACTURAS_BASELINE.md`), bug de atomicidad real encontrado y corregido en `procesar_y_facturar_venta()`, 9/9 tests reales + 45/45 en regresion consolidada F21+F22+F23 (`F23_TEST_MATRIX.md`), estado fase por fase (`F23_EXECUTION_STATUS.md`) |
+| Auditoria integral de codigo/arquitectura, mision 1 (16/16 apps, 2026-08-20/21) | `documentacion/APP_AUDIT_MASTER_FINAL.md` | Ciclo FASE A-Y por app con regresion real confirmada. ~2509 lineas de codigo muerto eliminadas, tabla consolidada por app, contratos cross-app, hallazgo P1 principal (transmision DIAN de facturas nunca implementada, `documentacion/audits/apps/APP_facturas_NORMATIVE_MATRIX.md`). Progreso vivo: `documentacion/APP_AUDIT_MASTER_STATUS.md`. 16 `APP_<app>_AUDIT.md` + 9 `APP_<app>_NORMATIVE_MATRIX.md` en `documentacion/audits/apps/` |
+| Auditoria integral de negocio/arquitectura, mision 2 / F34 (16/16 apps, 2026-08-21) | `documentacion/audits/apps/F34_MASTER_FINAL.md` | Segunda pasada sobre las mismas 16 apps: reglas de negocio clasificadas, mapa de dominio, N+1 verificado (no solo sospechado), barrido de codigo muerto simbolo-por-simbolo. ~241 lineas adicionales eliminadas (`proveedores`, `inventario`), hallazgo transversal sobre el patron "capa de compatibilidad legacy". Sin ejecucion de tests (instruccion explicita del usuario) -- validado con `py_compile` + grep de consumidores. Progreso vivo: `documentacion/audits/apps/F34_MASTER_STATUS.md`. 16 `F34_<app>_AUDIT.md` en `documentacion/audits/apps/` |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
@@ -2051,7 +2165,17 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.52.0 — 2026-08-20, DOC-M39)
+## 12. Metricas del Proyecto (v3.53.0 — 2026-08-21, DOC-M40)
+
+**[DOC-M40]** Dos misiones de auditoria integral (mision 1 +
+F34, ambas 16/16 apps `apps/tenant/**`, ver header) no agregan
+modelos ni migraciones -- ambas fueron de eliminacion de codigo
+muerto confirmado en la capa de servicios, nunca de esquema. 25
+archivos de codigo de produccion tocados (24 `apps/` + 1 `scripts/`),
+~2745 lineas netas eliminadas, 0 archivos nuevos de codigo de
+produccion, 45 documentos nuevos en `documentacion/audits/apps/`
+(auditorias + matrices normativas + master status/final de ambas
+misiones). Ninguna fila de esta tabla cambia.
 
 **[DOC-M39]** F33.15-B Nivel 3 (cierre completo, 16/16 apps
 `apps/tenant/**`) no toca modelos ni migraciones -- 34 archivos de
