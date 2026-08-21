@@ -58,9 +58,17 @@ anterior):**
 | 13 | bancos | COMPLETED | `documentacion/audits/apps/F34_bancos_AUDIT.md` |
 | 14 | facturas | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/F34_facturas_AUDIT.md` |
 | 15 | contabilidad | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/F34_contabilidad_AUDIT.md` |
-| 16 | dashboard | EN PROGRESO | `documentacion/audits/apps/F34_dashboard_AUDIT.md` |
+| 16 | dashboard | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/F34_dashboard_AUDIT.md` |
 
-**F34:** EN PROGRESO (15/16 COMPLETED)
+**F34: COMPLETED_WITH_DEFERRED** -- 16/16 apps cerradas (12 COMPLETED
+puro, 4 COMPLETED_WITH_DEFERRED). Governance final: `manage.py check`
+PASS, `makemigrations --check --dry-run` "No changes detected" PASS.
+~241 lineas de codigo muerto adicionales eliminadas (`proveedores`,
+`inventario`), sin ejecucion de tests por instruccion explicita del
+usuario -- validado con `py_compile` + grep repo-wide de consumidores
+antes de cada eliminacion. Ver
+`documentacion/audits/apps/F34_MASTER_FINAL.md` para el cierre
+consolidado completo (FASE 24/25).
 
 **Nota operativa (2026-08-21):** el usuario indico explicitamente NO
 ejecutar tests durante esta mision. A partir de este punto, la
