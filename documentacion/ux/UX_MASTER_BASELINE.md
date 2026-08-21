@@ -333,6 +333,57 @@ interno de atributos siguen exactamente iguales, solo reagrupados.
 
 ---
 
+## FASE Facturas/Contabilidad/Bancos — Revision (SIN CAMBIOS DE CODIGO)
+
+**Contabilidad y Bancos:** sin jerga tecnica user-facing, sin
+reimplementaciones de Offcanvas (las unicas menciones a
+`bootstrap.Offcanvas` en estas 2 apps estan en comentarios de
+documentacion `.agent/*.md`, no en codigo real). Rotulos como
+"Asientos Contables", "Libro Diario", "Retenciones", "Extractos
+Bancarios" son terminologia contable/bancaria estandar, no jerga de
+arquitectura interna. Sin cambios.
+
+**Facturas -- hallazgo detectado pero NO corregido (decision
+deliberada):** `apps/tenant/facturas/static/facturas/js/facturas_main.js`
+(`initOffcanvas()`, linea 49) reimplementa manualmente
+`bootstrap.Offcanvas.getInstance()` + `dispose()` + limpieza de
+backdrops + `new bootstrap.Offcanvas()`, el mismo patron ya
+consolidado en `mostrarOffcanvasSeguro` (mismo tipo de hallazgo que
+en Inventario/Proyectos). A diferencia de esos 2 casos, aqui se
+decidio **no tocarlo en esta pasada**, por 3 razones concretas:
+
+1. **Ya hace `dispose()` antes de crear** -- a diferencia del bug real
+   que la regla de `CLAUDE.md` describe (`getOrCreateInstance()` SIN
+   dispose previo), este codigo no tiene el bug de acumulacion de
+   backdrops; la diferencia con el helper central es de amplitud de
+   limpieza (le falta limpiar `.modal-backdrop` y algunos estilos),
+   no una falla activa.
+2. **Tiene un modo de uso real que el helper central no soporta**:
+   `initOffcanvas()` se llama en 3 sitios (via `htmx:afterSettle`)
+   *sin* mostrar el panel inmediatamente despues -- solo re-crea la
+   instancia de Bootstrap tras un swap de HTMX. `mostrarOffcanvasSeguro`
+   siempre llama `.show()` de inmediato; no existe hoy un modo
+   "preparar sin mostrar". Migrar esto exigiria o bien extender el
+   helper central (cambio con impacto en TODOS sus ~25 llamadores
+   existentes) o reescribir la logica de re-inicializacion de
+   Facturas -- ninguna de las dos es un cambio de UI de bajo riesgo.
+3. **Alto radio de impacto**: la funcion se usa en mas de 10 sitios
+   dentro de un archivo de 2000+ lineas, y ademas expone
+   `AppFacturas.getOffcanvasInstance()` publicamente (otros modulos
+   podrian depender de la instancia cruda). Facturas es, segun toda
+   la documentacion de auditorias previas de esta sesion, el modulo
+   mas critico y fragil del sistema (pipeline de importacion XML
+   DIAN, Kardex, Contabilidad Pull Model). El mandato explicito de la
+   mision es "si una duda de bajo riesgo existe, no tocar" -- aqui la
+   duda es real.
+
+Se documenta como hallazgo abierto para una fase futura dedicada
+exclusivamente a Facturas, con presupuesto de tiempo para leer el
+archivo completo y probar cada uno de los 10+ call-sites, en vez de
+una correccion apurada dentro de esta pasada de UX general.
+
+---
+
 ## FASE Inventario/Cotizaciones/Proyectos — Consolidacion de offcanvas duplicados (IMPLEMENTADO)
 
 **Revision realizada:** se busco jerga tecnica (`schema_name`,
