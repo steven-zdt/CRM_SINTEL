@@ -87,10 +87,10 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 12 | gastos | COMPLETED | `documentacion/audits/apps/APP_gastos_AUDIT.md` |
 | 13 | bancos | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_bancos_AUDIT.md` |
 | 14 | facturas | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_facturas_AUDIT.md` |
-| 15 | contabilidad | EN PROGRESO | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
-| 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
+| 15 | contabilidad | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
+| 16 | dashboard | EN PROGRESO | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (14/16 -- 9 COMPLETED_WITH_DEFERRED,
+**APP_AUDIT_PROGRAM:** EN PROGRESO (15/16 -- 10 COMPLETED_WITH_DEFERRED,
 5 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
@@ -211,6 +211,18 @@ requests.post/zeep/SOAP/wsdl, cero resultados). Mismo patron que
 DEUDA-11 de `empleados`, aqui aplicado al caso de uso central
 (facturas de venta). Resuelve y cierra el hallazgo pendiente de
 `ventas` (app 9/16). Cerrado como `COMPLETED_WITH_DEFERRED`.
+
+**Regresion contabilidad (FASE Q, cierre):** `apps/tenant/contabilidad/`
+-- 94 passed, 0 failed, 9 warnings preexistentes en 6642.03s
+(1:50:42), incluye la suite F22 completa (extractor de inventario)
+verde. Se eliminaron 151 lineas de codigo muerto (`scratch/` --
+scripts de debug sin `__init__.py`, uno hardcodeaba un tenant;
+`api/datatables.py` -- deprecado con import ya comentado). **Cierra
+positivamente el ciclo de retenciones**: `ConfiguracionRetenciones`/
+`RetencionesService` verificados linea por linea, arquitectura
+correcta y configurable, tarifas NO hardcodeadas (contrasta con el
+codigo muerto de `proveedores`). Cerrado como `COMPLETED_WITH_DEFERRED`
+(2 items P2/P3, validacion de seeds normativos pendiente).
 
 ---
 

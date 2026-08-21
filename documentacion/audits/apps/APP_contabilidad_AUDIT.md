@@ -80,9 +80,12 @@ documentados en la matriz.
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/contabilidad/tests/` (14 archivos
-segun `APP_AUDIT_MATRIX.md`, la app con mas tests junto a `facturas`).
-Regresion lanzada en background tras confirmar `db`/`redis` healthy.
+94 tests coleccionados (`apps/tenant/contabilidad/tests/`, 14
+archivos). Regresion ejecutada: **94 passed, 0 failed, 9 warnings
+preexistentes (min_value DRF + `format_html()` sin args) en 6642.03s
+(1:50:42)**. Incluye la suite completa `test_f22_extractor_
+inventario_mapping.py` (extractor F22, mapeo de tipos de movimiento a
+asientos contables) -- todas verdes.
 
 ## Deferred
 
@@ -99,11 +102,10 @@ Ver tabla completa en `APP_contabilidad_NORMATIVE_MATRIX.md`. Resumen:
 - [x] Codigo muerto encontrado y eliminado -- 151 lineas (FASE C/D/K)
 - [x] Matriz normativa colombiana completa -- cierra ciclo de retenciones (FASE M)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 94 passed, 0 failed
 - [x] Deferred items documentados con razon/riesgo/prioridad
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED_WITH_DEFERRED` (2 items P2/P3, ninguno
-bloqueante) si la regresion confirma 0 fallos nuevos.
+**COMPLETED_WITH_DEFERRED** -- 94/94 tests pasan, 0 regresiones. 2
+items P2/P3, ninguno bloqueante.
