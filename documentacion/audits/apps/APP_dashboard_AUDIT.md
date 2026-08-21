@@ -74,9 +74,9 @@ tributarias propias).
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/dashboard/tests/`. Regresion
-lanzada en background tras confirmar `db`/`redis` healthy. Sin
-cambios de codigo en esta app.
+36 tests coleccionados (`apps/tenant/dashboard/tests/`). Regresion
+ejecutada: **36 passed, 0 failed, 13 warnings preexistentes (naive
+datetime + min_value DRF) en 3115.41s (0:51:55)**.
 
 ## Deferred
 
@@ -88,14 +88,12 @@ Ninguno nuevo.
 - [x] Codigo muerto investigado a fondo -- confirmado que NO hay nada que eliminar, incluyendo verificacion empirica del patron services.py/services/ (FASE C/D/K)
 - [x] Normativa colombiana evaluada (FASE M -- NO_APLICA)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 36 passed, 0 failed
 - [x] Sin deferred items pendientes
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED` puro (sin hallazgos, sin cambios de
-codigo) si la regresion confirma 0 fallos. **Esta es la ultima app
-individual de las 16 -- al cerrarse, se avanza a FASE FINAL
-(regresion global, auditoria cross-app, governance,
-APP_AUDIT_MASTER_FINAL.md).**
+**COMPLETED** -- 36/36 tests pasan, 0 regresiones, 0 codigo muerto,
+sin items deferred. **Esta fue la ultima app individual de las 16 --
+la mision avanza ahora a FASE FINAL (regresion global, auditoria
+cross-app, governance, `APP_AUDIT_MASTER_FINAL.md`).**

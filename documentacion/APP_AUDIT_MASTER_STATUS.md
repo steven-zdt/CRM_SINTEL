@@ -88,10 +88,11 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 13 | bancos | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_bancos_AUDIT.md` |
 | 14 | facturas | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_facturas_AUDIT.md` |
 | 15 | contabilidad | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
-| 16 | dashboard | EN PROGRESO | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
+| 16 | dashboard | COMPLETED | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (15/16 -- 10 COMPLETED_WITH_DEFERRED,
-5 COMPLETED)
+**APP_AUDIT_PROGRAM:** 16/16 apps individuales COMPLETADAS (10
+COMPLETED_WITH_DEFERRED, 6 COMPLETED). FASE FINAL en curso -- ver
+`documentacion/APP_AUDIT_MASTER_FINAL.md`.
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
 19 skipped, 0 failed, 1 warning (min_value en DocumentoUploadAPITests,
