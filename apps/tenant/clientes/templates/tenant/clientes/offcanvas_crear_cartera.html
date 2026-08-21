@@ -44,13 +44,13 @@
           <input type="text" class="form-control" id="cartera-numero-factura" name="numero_factura"
                  required maxlength="50" placeholder="Ej: FV-001234">
         </div>
-        {# UUID Factura (soft reference) #}
+        {# Referencia interna a la factura (soft reference, uso opcional para soporte) #}
         <div class="col-md-6">
-          <label for="cartera-factura-uuid" class="form-label">UUID Factura <span class="text-muted">(opcional)</span></label>
+          <label for="cartera-factura-uuid" class="form-label">Referencia de Factura <span class="text-muted">(opcional)</span></label>
           <input type="text" class="form-control font-monospace" id="cartera-factura-uuid" name="factura_uuid"
                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                  pattern="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}">
-          <div class="form-text">Referencia soft a la factura en el sistema.</div>
+          <div class="form-text">Solo si necesitas vincular esta cuenta a una factura especifica ya registrada en el sistema.</div>
         </div>
         {# Fecha emisión #}
         <div class="col-md-6">
@@ -59,7 +59,7 @@
         </div>
         {# Fecha vencimiento #}
         <div class="col-md-6">
-          <label for="cartera-fecha-vencimiento" class="form-label fw-semibold">Fecha Vencimiento *</label>
+          <label for="cartera-fecha-vencimiento" class="form-label fw-semibold">Fecha de Vencimiento *</label>
           <input type="date" class="form-control" id="cartera-fecha-vencimiento" name="fecha_vencimiento" required>
         </div>
         {# Valor total #}
