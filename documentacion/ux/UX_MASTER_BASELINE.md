@@ -424,6 +424,119 @@ una correccion apurada dentro de esta pasada de UX general.
 
 ---
 
+## FASE Formularios — Barrido sistematico de offcanvas de crear/editar (IMPLEMENTADO)
+
+Continuacion autorizada explicitamente por el usuario ("continua...
+de manera ciclica y auto autorizada hasta terminar todas las app")
+tras cerrar el mapa de experiencia (FASE 1). Cubre los ~80 formularios
+`offcanvas_*.html` de las 14 apps con formularios de creacion/edicion
+(perfil, empresa, empleados, clientes, proveedores, cotizaciones,
+proyectos, inventario, gastos, compras, ventas, facturas, bancos,
+contabilidad) -- barrido hecho con un agente de exploracion dedicado
+(cobertura confirmada archivo por archivo), cada hallazgo verificado
+manualmente antes de corregir (2 hallazgos del agente resultaron
+imprecisos y se corrigieron con lectura directa del codigo -- ver
+detalle en Contabilidad mas abajo).
+
+**Apps sin hallazgos:** Perfil, Empresa, Proveedores, Inventario,
+Gastos, Compras, Bancos.
+
+**Clientes:**
+- `offcanvas_crear_cartera.html`: campo "UUID Factura" con
+  placeholder de UUID crudo y texto de ayuda "referencia soft" ->
+  "Referencia de Factura" en lenguaje de negocio (mismo campo
+  opcional, sin cambio de funcionalidad).
+- "Fecha Vencimiento" -> "Fecha de Vencimiento" (unificado con Ventas
+  y Facturas).
+- 3 formularios de contacto con verbos de guardado distintos
+  ("Guardar Contacto" / "Guardar" / "Actualizar") -> unificados a
+  "Guardar Contacto" / "Actualizar Contacto".
+
+**Cotizaciones:**
+- UUID interno truncado mostrado junto al numero de cotizacion en el
+  detalle -- eliminado (sin proposito de negocio).
+- Selector de plantilla de numeracion: label decia "Configuracion"
+  pero el boton y el resto de la app dicen "Plantilla" -- unificado a
+  "Plantilla" (solo texto visible, ids/names/endpoints internos
+  ` configuracion` sin tocar).
+- 2 formularios (crear producto, crear servicio) con labels sin
+  atributo `for` ni inputs con `id` -- accesibilidad rota, corregida.
+- Campo "Semilla inicial" sin explicacion -- renombrado a "Numero
+  Inicial de Consecutivo" + texto de ayuda.
+
+**Proyectos:**
+- Panel "Cotizacion Vinculada" mostraba el UUID crudo de la
+  cotizacion -- ocultado (verificado que `proyectos_editor.js` solo
+  ESCRIBE en ese elemento, nunca lo lee como fuente de datos, asi que
+  ocultarlo con `d-none` es seguro sin tocar el JS).
+
+**Ventas:** "Fecha Vencimiento" -> "Fecha de Vencimiento".
+
+**Facturas:** "Vista Previa del DTO" (Data Transfer Object) ->
+"Vista Previa de los Datos Extraidos".
+
+**Empleados:** botones "Crear Contrato"/"Crear Resolucion" unificados
+a "Guardar Contrato"/"Guardar Resolucion", consistente con "Guardar
+Empleado"/"Guardar Nomina" ya existentes en la misma app (el estado
+de carga de ambos botones ya decia "Guardando...", confirmando cual
+era la convencion real). "Registrar Liquidacion" se dejo igual --
+es una transaccion, no un catalogo.
+
+**Contabilidad -- el bloque mas delicado de esta fase (Plantillas
+Contables):**
+- "Motor Fase 3" (nombre de fase de desarrollo interno) aparecia en
+  3 textos visibles al usuario -- eliminado.
+- El campo real `plantilla.modo` (valores `MOTOR` / legacy) se
+  mostraba como badges "Motor"/"Resolver" -- **se verifico que es una
+  distincion de negocio real** (Motor = genera automaticamente las
+  lineas de partida doble por tipo de transaccion; legacy = esquema
+  simple de 2 cuentas, backward-compat) antes de traducir, no una
+  eliminacion simple como el resto de hallazgos. Traducido a
+  "Automatica" / "Clasica (2 cuentas)".
+- UUID interno mostrado en metadatos del detalle y en el footer del
+  formulario -- eliminado en ambos.
+- `cuenta_offcanvas_detalle.html` y `asiento_offcanvas_detalle.html`:
+  fallback mostraba el ID entero crudo de la cuenta padre / cuenta del
+  movimiento cuando el nombre no estaba resuelto. **Se verifico
+  primero que esto era un ID crudo real y no un `__str__()` de Django**
+  -- ambas vistas (`api/viewsets.py`) renderizan `serializer.data`
+  (un dict), no un objeto ORM, asi que `{{ cuenta.cuenta_padre }}`
+  efectivamente imprimia el entero de la FK sin resolver. Se intento
+  primero mostrar codigo/nombre del padre asumiendo que existian
+  campos `cuenta_padre_codigo`/`cuenta_padre_nombre` en el
+  serializer -- **verificado que NO existen**
+  (`CUENTA_DETAIL_FIELDS` en `contabilidad/services/selectors.py`
+  solo expone `cuenta_padre` crudo) -- se corrigio el intento inicial
+  a un mensaje honesto ("Cuenta asignada"/"Cuenta no disponible") en
+  vez de inventar campos que no estan disponibles sin un cambio de
+  backend.
+
+**Hallazgo transversal, documentado pero NO corregido masivamente
+(decision deliberada):** el verbo del boton principal de creacion
+varia entre apps sin una convencion unica documentada ("Nueva
+Cuenta"/"Crear Orden"/"Guardar Cotizacion"/"Crear Gasto"/"Crear
+Perfil"/"Crear Proveedor"/"Guardar y Facturar DIAN"). A diferencia de
+las inconsistencias DENTRO de la misma app (Empleados, Clientes) que
+si se corrigieron por ser un alcance acotado y de bajo riesgo,
+uniformar esto a traves de TODAS las apps significaria tocar ~20+
+botones en archivos ya estables sin una ganancia de UX proporcional
+al riesgo de regresion -- se documenta como recomendacion de guia de
+estilo para el equipo hacia adelante, no como correccion de esta
+pasada.
+
+### Verificacion realizada
+
+- Los ~21 templates modificados en esta fase parsean sin error
+  (verificado por lotes via `get_template()`).
+- Se confirmo que ningun test del repositorio depende del texto
+  visible reemplazado (botones, labels, badges) -- las unicas
+  coincidencias de grep fueron comentarios de codigo no relacionados.
+- Cada eliminacion de UUID/ID crudo se verifico contra el JS/vista
+  real que puebla ese campo antes de tocarlo (no se asumio
+  ciegamente el reporte del agente de exploracion).
+
+---
+
 ## FASE Inventario/Cotizaciones/Proyectos — Consolidacion de offcanvas duplicados (IMPLEMENTADO)
 
 **Revision realizada:** se busco jerga tecnica (`schema_name`,
