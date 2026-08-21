@@ -194,6 +194,97 @@ sistema:
 
 ---
 
+## FASE 2 — Onboarding / primeros pasos (IMPLEMENTADO)
+
+Construida la pantalla de progreso de configuracion inicial que el
+baseline (FASE 0) identifico como inexistente. Vive dentro de
+`#workspace-welcome` (la pantalla que ya se mostraba al entrar al
+workspace sin ningun tab activo) -- no es una pantalla nueva separada,
+sino que enriquece la ya existente.
+
+**Diseño de datos: 100% API-First, cero informacion inventada.** El
+checklist consulta en paralelo los endpoints REST YA EXISTENTES de
+cada app (no se creo ningun endpoint nuevo, cero backend nuevo):
+
+| Paso | Señal real | Endpoint reutilizado |
+|---|---|---|
+| Cuenta | Siempre true (llegar a `/workspace/` ya exige `LoginRequiredMixin` + membresia activa) | -- |
+| Empresa | `razon_social`, `nit`, `direccion` y `ciudad` todos no vacios | `GET /api/v1/empresas/mi-empresa/` |
+| Equipo | Al menos 1 empleado registrado | `GET /api/v1/empleados/?page_size=1` (campo `count`) |
+| Clientes | Al menos 1 cliente registrado | `GET /api/v1/clientes/?page_size=1` |
+| Proveedores | Al menos 1 proveedor registrado | `GET /api/v1/proveedores/?page_size=1` |
+| Inventario | Al menos 1 producto O 1 servicio (una empresa de puros servicios legitimamente tiene 0 productos) | `GET /api/v1/inventario/productos/?page_size=1` + `.../servicios/?page_size=1` |
+
+Cada paso pendiente muestra un boton "Configurar" que simplemente
+dispara `.click()` sobre el link real de navegacion
+(`#nav a[data-tab="X"]`) -- reutiliza 100% la logica de navegacion ya
+existente en `workspace.js` (mismo `showTab()`/`pushState()` de
+siempre), cero duplicacion de routing.
+
+**Se oculta sola cuando ya no aplica** (FASE 2 exige no insistir con
+lo que el sistema ya sabe): si los 6 pasos estan completos, el
+componente simplemente no se muestra -- queda solo el mensaje generico
+"Selecciona un modulo para comenzar la gestion" que ya existia.
+
+**Archivos nuevos:**
+- `apps/tenant/core/templates/tenant/core/partials/onboarding_checklist.html`
+  -- markup del card (Bootstrap `.card`, mismo lenguaje visual que
+  `kpi_card.html`/`empty_state.html` ya existentes en
+  `partials/ui/`, sin depender de ellos porque ninguno cubre un
+  checklist de progreso).
+- `apps/tenant/core/static/core/js/common/onboarding_checklist.js`
+  -- IIFE vanilla JS, mismo patron exacto que `common/sede_selector.js`
+  (namespaced en `window.Sintel.Core.OnboardingChecklist`). Sin
+  dependencias nuevas, sin frameworks.
+
+**Archivos editados:**
+- `apps/tenant/core/templates/tenant/core/workspace.html` -- 1 linea
+  `{% include %}` dentro de `#workspace-welcome`, 1 linea `<script>`
+  en `extra_js`. Cero cambios a la logica de tabs existente.
+
+### Verificacion realizada
+
+- **Render del template:** confirmado via Django test Client +
+  `force_login()` (mismo patron ya usado en FASE 3) que
+  `GET /workspace/` (200) incluye el markup del checklist y el
+  `<script>` del nuevo JS.
+- **Endpoints reales, con datos reales del tenant `home`:** se
+  consultaron los 6 endpoints con el mismo test Client. Resultado real
+  observado: `mi-empresa` existe pero `ciudad=""` (Empresa incompleta,
+  correctamente detectado como pendiente); `empleados.count=1`,
+  `clientes.count=1`, `proveedores.count=2` (completos);
+  `productos.count=0` y `servicios.count=0` (Inventario
+  correctamente detectado como pendiente). Ningun dato fue inventado
+  ni asumido -- se leyo el estado real de esta empresa de prueba.
+- **Logica del widget (calculo de progreso + render del DOM):**
+  dado que el navegador sandbox de esta herramienta bloquea
+  **absolutamente todas** las peticiones de subrecursos a
+  `home.sintel.net.co:8000` (confirmado exhaustivamente: no solo
+  `workspace.css`, sino tambien el propio `onboarding_checklist.js`,
+  y de hecho los ~60 archivos JS/HTMX de TODAS las apps del
+  workspace -- incluso `workspace.js` mismo nunca llega a ejecutarse
+  en este navegador, por lo que ni siquiera el click en un link del
+  nav dispara `showTab()`), se verifico la logica inyectando el
+  codigo identico del archivo directamente en el contexto de la
+  pagina ya cargada, con `window.fetch` interceptado para devolver
+  las respuestas REALES capturadas del test Client (no inventadas).
+  Resultado: el checklist calcula correctamente 4/6 pasos completos,
+  barra de progreso al 67%, los 4 pasos completos muestran el icono
+  de check y los 2 pendientes (Empresa, Inventario) muestran el
+  boton "Configurar" -- exactamente el comportamiento esperado dado
+  el estado real de datos del tenant.
+- **Conclusion sobre la herramienta de navegador de esta sesion:**
+  esta confirmado que el bloqueo (`net::ERR_BLOCKED_BY_CLIENT`) es
+  total para este dominio local personalizado (`home.sintel.net.co`),
+  no parcial ni especifico de un archivo -- afecta a TODOS los JS/CSS
+  del workspace, no solo a los tocados en esta mision. **Es un limite
+  pre-existente de esta herramienta especifica, no un defecto de la
+  aplicacion ni de este cambio.** Se recomienda de nuevo verificacion
+  visual e interactiva (probar el boton "Configurar") en un navegador
+  real antes de dar este incremento por validado visualmente.
+
+---
+
 ## Estado de la mision UX
 
 Esta es la PRIMERA pasada de una mision de transformacion de gran
@@ -208,7 +299,8 @@ y se documenta el hallazgo real (ruta shadowed en `urls_public.py`,
 ausencia de onboarding guiado) antes de continuar con mas fases, para
 que el usuario pueda revisar el resultado visualmente.
 
-**Siguiente paso propuesto (no ejecutado aun):** FASE 2 (Home/
-Onboarding) -- construir la pantalla de progreso de configuracion
-inicial descrita en la mision (checklist Cuenta/Empresa/Equipo/
-Clientes/Proveedores/Inventario), que hoy no existe.
+**FASE 2 (Home/Onboarding) completada** en este incremento -- ver
+seccion dedicada arriba. Con Home/Onboarding cerrado, el orden fijo
+de la mision indica continuar con **Perfil**, luego **Empresa**
+(ya con datos reales visibles a traves del propio checklist), antes
+de tocar Clientes/Proveedores/Inventario/el resto de apps.
