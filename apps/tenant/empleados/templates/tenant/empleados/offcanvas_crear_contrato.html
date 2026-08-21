@@ -177,7 +177,7 @@
               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
               hx-on::htmx:before-request="this.disabled=true; this.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\'></span>Guardando...';"
               hx-on::htmx:response-error="window.UIManager&&window.UIManager.handleError&&window.UIManager.handleError(event.detail,'[contratos.crear]',{errorContainerSelector:'#form-contrato-crear-feedback'});">
-        <i class="bi bi-check-lg me-1"></i>Crear Contrato
+        <i class="bi bi-check-lg me-1"></i>Guardar Contrato
       </button>
     </div>
   </div>
