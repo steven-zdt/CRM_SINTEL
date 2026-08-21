@@ -130,7 +130,20 @@ son los primeros puntos a ajustar:
 | **PILA / seguridad social** | No existe ninguna infraestructura previa ni caso de uso confirmado — construir algo aquí sería exactamente la "infraestructura especulativa" que este proyecto evita consistentemente (mismo criterio aplicado por la misión OCF/OSF anterior). | Confirmación del usuario de que se necesita, más el operador/formato real de integración (¿API de un PILA provider? ¿archivo plano?). |
 | **Integración bancaria real para pago de nómina** | Mismo criterio — no existe hoy, "marcar pagado" es un registro manual honesto en vez de una integración fingida. | Confirmar con el usuario si `apps/tenant/bancos` ya tiene algo reutilizable para esto (no auditado a fondo en esta pasada) antes de diseñar nada nuevo. |
 | **Modelo `Novedad` separado del `Devengo`** | Separar "hecho" de "resultado calculado" (FASE 6 de la misión) es un cambio real al contrato de `procesar_devengo()` — mayor riesgo sobre el motor de cálculo ya probado, sin un caso de uso de UI confirmado para justificarlo en esta pasada. | Confirmar con el usuario el flujo de captura de novedades deseado (¿un formulario por empleado antes de preliquidar? ¿carga masiva?). |
-| **Frontend (UI) de `PeriodoNomina`** | Esta fase se concentró en un núcleo backend correcto y verificado; construir la UI (Master-Detail de períodos, pantalla de revisión con alertas, etc.) es la fase natural siguiente, no incluida aquí por presupuesto de la sesión. | Ninguno técnico — la API ya está lista para consumirse; es trabajo de FASE 21 (UX del proceso) de la misión, pendiente. |
+
+**Frontend de `PeriodoNomina` — ya NO diferido**, construido en el
+incremento siguiente (mismo día): nuevo sub-tab "Períodos de Nómina" en
+`empleados_list.html` (django-tables2 + HTMX, patrón Fase 5-BIS, igual que
+Resoluciones DIAN), offcanvas de creación, y un offcanvas de
+detalle/gestión que consume `GET .../resumen/` y ofrece solo las acciones
+válidas para el estado actual del período (preliquidar / enviar a revisión
+/ rechazar / aprobar / marcar pagado / cerrar / anular / bloquear /
+desbloquear) — la UI es una guía de UX, la autoridad real de qué transición
+se permite sigue siendo el backend (`TRANSICIONES_VALIDAS` +
+`HasTenantRole`). Verificado end-to-end vía Django test Client con
+rollback: render de la página, tabla vacía y poblada, formulario de
+creación, creación real, resumen, y una acción de transición ejecutada
+contra datos reales.
 
 ---
 

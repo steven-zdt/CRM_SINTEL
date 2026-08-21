@@ -13,8 +13,8 @@ from django_tables2 import SingleTableView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado, LiquidacionPrestacion, ResolucionDIAN
-from apps.tenant.empleados.services.selectors import ContratoSelector, DevengoSelector, EmpleadoSelector
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, LiquidacionPrestacion, PeriodoNomina, ResolucionDIAN
+from apps.tenant.empleados.services.selectors import ContratoSelector, DevengoSelector, EmpleadoSelector, PeriodoNominaSelector
 from apps.tenant.empleados.tables import (
     ContratoTable,
     DevengoDetailTable,
@@ -22,6 +22,7 @@ from apps.tenant.empleados.tables import (
     LiquidacionDetailTable,
     LiquidacionEmpleadoMasterTable,
     NominaEmpleadoMasterTable,
+    PeriodoNominaTable,
     ResolucionDIANTable,
 )
 
@@ -96,6 +97,18 @@ class ResolucionDIANTableView(_EmpleadosTableViewBase):
         if search:
             qs = qs.filter(numero_resolucion__icontains=search)
         return qs
+
+
+class PeriodoNominaTableView(_EmpleadosTableViewBase):
+    table_class = PeriodoNominaTable
+    template_name = "tenant/empleados/partials/tabla_periodos.html"
+
+    def get_queryset(self):
+        empresa_id = self._resolver_empresa_id()
+        if not empresa_id:
+            return PeriodoNomina.objects.none()
+        estado = (self.request.GET.get("estado") or "").strip() or None
+        return PeriodoNominaSelector.get_list(empresa_id, estado=estado)
 
 
 # ============================================================================

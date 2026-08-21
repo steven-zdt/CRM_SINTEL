@@ -14,7 +14,7 @@ import django_tables2 as tables
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado, LiquidacionPrestacion, ResolucionDIAN
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, LiquidacionPrestacion, PeriodoNomina, ResolucionDIAN
 
 _BADGE_ESTADO_EMPLEADO = {
     "ACTIVO": ("bg-success", "bi-check-circle"),
@@ -241,6 +241,57 @@ class ResolucionDIANTable(tables.Table):
         )
 
 
+_BADGE_ESTADO_PERIODO = {
+    "ABIERTO": ("bg-primary", "bi-unlock"),
+    "PRELIQUIDADO": ("bg-info text-dark", "bi-calculator"),
+    "EN_REVISION": ("bg-warning text-dark", "bi-eye"),
+    "APROBADO": ("bg-info text-dark", "bi-hand-thumbs-up"),
+    "PAGADO": ("bg-success", "bi-cash-coin"),
+    "CERRADO": ("bg-secondary", "bi-lock"),
+    "ANULADO": ("bg-danger", "bi-x-circle"),
+    "BLOQUEADO": ("bg-dark", "bi-slash-circle"),
+}
+
+
+class PeriodoNominaTable(tables.Table):
+    periodo_mes = tables.Column(verbose_name="Período")
+    vigencia = tables.Column(empty_values=(), orderable=False, verbose_name="Vigencia")
+    fecha_pago = tables.Column(verbose_name="Fecha de Pago")
+    estado = tables.Column(verbose_name="Estado")
+    acciones = tables.Column(empty_values=(), orderable=False, verbose_name="")
+
+    class Meta:
+        model = PeriodoNomina
+        fields = ()
+        sequence = ("periodo_mes", "vigencia", "fecha_pago", "estado", "acciones")
+        attrs = {"class": "table table-hover align-middle mb-0", "id": "tabla-periodos-nomina"}
+        empty_text = "No hay períodos de nómina registrados"
+        order_by = ("-periodo_mes",)
+
+    def render_periodo_mes(self, value):
+        return format_html('<span class="fw-semibold font-monospace">{}</span>', value)
+
+    def render_vigencia(self, record):
+        return format_html(
+            '<span class="small"><i class="bi bi-calendar-range text-muted me-1"></i>{} → {}</span>',
+            record.fecha_inicio, record.fecha_fin,
+        )
+
+    def render_estado(self, value, record):
+        cls, icon = _BADGE_ESTADO_PERIODO.get(value, ("bg-secondary", "bi-question-circle"))
+        return format_html(
+            '<span class="badge {}"><i class="bi {} me-1"></i>{}</span>',
+            cls, icon, record.get_estado_display(),
+        )
+
+    def render_acciones(self, record):
+        return format_html(
+            '<button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-gestionar-periodo" '
+            'data-uuid="{0}" title="Ver / Gestionar"><i class="bi bi-arrow-right-circle me-1"></i>Gestionar</button>',
+            record.uuid,
+        )
+
+
 # ============================================================================
 # MASTER-DETAIL: Nominas
 # ============================================================================
@@ -281,7 +332,12 @@ class NominaEmpleadoMasterTable(tables.Table):
 class DevengoDetailTable(tables.Table):
     """Detail: historico de nominas (Devengo) del empleado seleccionado en el master."""
 
-    periodo = tables.Column(accessor="fecha_inicio", verbose_name="Período", orderable=False)
+    # accessor="periodo_mes" (no "fecha_inicio", que es opcional/nulo): django-tables2
+    # omite render_periodo() cuando el valor resuelto por accessor esta en empty_values
+    # (None esta ahi por defecto), y fecha_inicio suele ser None porque el flujo de
+    # creacion de nomina solo exige periodo_mes. Con ese accessor la columna salia
+    # siempre vacia aunque render_periodo tuviera el fallback correcto a periodo_mes.
+    periodo = tables.Column(accessor="periodo_mes", verbose_name="Período", orderable=False)
     dias_laborados = tables.Column(verbose_name="Días")
     fecha_pago = tables.DateColumn(verbose_name="Fecha Pago", format="d M Y")
     salario_base = tables.Column(verbose_name="Salario Base")

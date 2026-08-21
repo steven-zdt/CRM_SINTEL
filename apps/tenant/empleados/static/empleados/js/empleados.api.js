@@ -64,6 +64,22 @@
             detail:          (uuid) => `/api/v1/empleados/resoluciones-dian/${uuid}/`,
             crearOffcanvas:  '/api/v1/empleados/resoluciones-dian/render-offcanvas/crear/',
         },
+        // Periodos de Nomina
+        periodos: {
+            list:            '/api/v1/empleados/periodos-nomina/',
+            detail:          (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/`,
+            crearOffcanvas:  '/api/v1/empleados/periodos-nomina/render-offcanvas/crear/',
+            resumen:         (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/resumen/`,
+            preliquidar:     (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/preliquidar/`,
+            enviarRevision:  (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/enviar-revision/`,
+            rechazarRevision:(uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/rechazar-revision/`,
+            aprobar:         (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/aprobar/`,
+            marcarPagado:    (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/marcar-pagado/`,
+            cerrar:          (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/cerrar/`,
+            anular:          (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/anular/`,
+            bloquear:        (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/bloquear/`,
+            desbloquear:     (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/desbloquear/`,
+        },
         // Liquidaciones de Prestaciones
         liquidaciones: {
             list:            '/api/v1/empleados/liquidaciones-prestaciones/',

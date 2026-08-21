@@ -15,6 +15,7 @@ from apps.tenant.empleados.views import (
     LiquidacionMasterTableView,
     NominaDetailTableView,
     NominaMasterTableView,
+    PeriodoNominaTableView,
     ResolucionDIANTableView,
 )
 
@@ -38,6 +39,7 @@ urlpatterns = [
     path('tabla/', EmpleadoTableView.as_view(), name='empleado-tabla'),
     path('contratos/tabla/', ContratoTableView.as_view(), name='contrato-tabla'),
     path('resoluciones/tabla/', ResolucionDIANTableView.as_view(), name='resolucion-tabla'),
+    path('periodos/tabla/', PeriodoNominaTableView.as_view(), name='periodo-tabla'),
     # Master-Detail: Nominas y Liquidaciones
     path('nominas/master/tabla/', NominaMasterTableView.as_view(), name='nomina-master-tabla'),
     path('nominas/detalle/tabla/', NominaDetailTableView.as_view(), name='nomina-detalle-tabla'),

@@ -1,0 +1,62 @@
+{# offcanvas_crear_periodo.html - Formulario para CREAR Periodo de Nomina #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-periodo-crear" aria-labelledby="offcanvas-periodo-crear-label" style="width: 90%; max-width: 600px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-periodo-crear-label">
+      <i class="bi bi-calendar-plus text-primary me-2"></i>
+      <span>Nuevo Período de Nómina</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div id="form-periodo-crear-feedback" class="alert d-none mb-3" role="alert"></div>
+
+    <form id="form-periodo-crear" onsubmit="return false;">
+      {% csrf_token %}
+
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-calendar-range me-2"></i>Identificación del Período
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <label for="periodo-crear-mes" class="form-label text-danger fw-bold">Mes del Período *</label>
+            <input type="month" class="form-control" id="periodo-crear-mes" name="periodo_mes" required>
+          </div>
+          <div class="col-md-6">
+            <label for="periodo-crear-fecha-inicio" class="form-label text-danger fw-bold">Fecha Inicio *</label>
+            <input type="date" class="form-control" id="periodo-crear-fecha-inicio" name="fecha_inicio" required>
+          </div>
+          <div class="col-md-6">
+            <label for="periodo-crear-fecha-fin" class="form-label text-danger fw-bold">Fecha Fin *</label>
+            <input type="date" class="form-control" id="periodo-crear-fecha-fin" name="fecha_fin" required>
+          </div>
+          <div class="col-md-12">
+            <label for="periodo-crear-fecha-pago" class="form-label text-danger fw-bold">Fecha de Pago Planeada *</label>
+            <input type="date" class="form-control" id="periodo-crear-fecha-pago" name="fecha_pago" required>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <h6 class="text-primary border-bottom pb-2 mb-3">
+          <i class="bi bi-chat-left-text me-2"></i>Observaciones
+        </h6>
+        <div class="row g-3">
+          <div class="col-md-12">
+            <textarea class="form-control" id="periodo-crear-observaciones" name="observaciones" rows="3" placeholder="Observaciones (opcional)"></textarea>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-lg me-1"></i>Cancelar
+      </button>
+      <button type="button" class="btn btn-success" id="btn-guardar-periodo-crear">
+        <i class="bi bi-check-lg me-1"></i>Crear Período
+      </button>
+    </div>
+  </div>
+</div>

@@ -158,6 +158,15 @@
             </span>
           </button>
         </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="tab-periodos" data-bs-toggle="tab" data-bs-target="#tab-pane-periodos"
+            type="button" role="tab" aria-controls="tab-pane-periodos" aria-selected="false">
+            <i class="bi bi-calendar-week me-2"></i>Períodos de Nómina
+            <span data-module="periodos" data-loading-icon class="ms-2 d-none">
+              <i class="bi bi-hourglass-split"></i>
+            </span>
+          </button>
+        </li>
       </ul>
     </div>
 
@@ -391,7 +400,61 @@
 
           </div>{# /liq-master-detail #}
         </div>
+
+        {# TAB 6: PERIODOS DE NOMINA #}
+        <div class="tab-pane fade" id="tab-pane-periodos" role="tabpanel" aria-labelledby="tab-periodos" tabindex="0">
+
+          {# Toolbar #}
+          <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
+            data-module="periodos">
+            <select id="empleados-filtro-estado-periodo" class="form-select form-select-sm" style="max-width: 260px;"
+              data-module="periodos"
+              hx-get="{% url 'empleados:periodo-tabla' %}"
+              hx-trigger="change"
+              hx-target="#empleados-periodos-panel"
+              name="estado">
+              <option value="">Todos los estados</option>
+              <option value="ABIERTO">Abierto</option>
+              <option value="PRELIQUIDADO">Preliquidado</option>
+              <option value="EN_REVISION">En revisión</option>
+              <option value="APROBADO">Aprobado</option>
+              <option value="PAGADO">Pagado</option>
+              <option value="CERRADO">Cerrado</option>
+              <option value="ANULADO">Anulado</option>
+              <option value="BLOQUEADO">Bloqueado</option>
+            </select>
+            <button class="btn btn-primary btn-sm ms-2" id="btn-nuevo-periodo">
+              <i class="bi bi-plus-lg me-1"></i>Nuevo Período
+            </button>
+          </div>
+
+          {# Tabla server-rendered (django-tables2 + HTMX) -- carga solo al abrir este sub-tab #}
+          <div id="empleados-periodos-panel" class="w-100 flex-grow-1"
+               hx-get="{% url 'empleados:periodo-tabla' %}"
+               hx-trigger="shown.bs.tab from:#tab-periodos once, periodo-updated from:body"
+               hx-target="this"
+               hx-swap="innerHTML"
+               hx-boost="true">
+          </div>
+        </div>
       </div>
+    </div>
+  </div>
+</div>
+
+{# Offcanvas: detalle/gestion de un Periodo de Nomina — contenido renderizado por JS (periodo_detail.js) #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-periodo-detalle" aria-labelledby="offcanvas-periodo-detalle-label" style="width: 90%; max-width: 640px;">
+  <div class="offcanvas-header border-bottom bg-light">
+    <h5 class="offcanvas-title" id="offcanvas-periodo-detalle-label">
+      <i class="bi bi-calendar-week text-primary me-2"></i>
+      <span id="periodo-detalle-titulo">Período de Nómina</span>
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body" id="periodo-detalle-body">
+    <div class="d-flex flex-column align-items-center justify-content-center py-5 text-muted">
+      <i class="bi bi-hourglass-split" style="font-size:1.6rem;"></i>
+      <p class="mt-2 small mb-0">Cargando...</p>
     </div>
   </div>
 </div>
@@ -402,6 +465,7 @@
 <div id="offcanvas-container-nominas"></div>
 <div id="offcanvas-container-resoluciones"></div>
 <div id="offcanvas-container-liquidaciones"></div>
+<div id="offcanvas-container-periodos"></div>
 
 
 {# Modal de Confirmacion Eliminar #}

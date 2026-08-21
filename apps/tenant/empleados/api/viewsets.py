@@ -2162,6 +2162,14 @@ class PeriodoNominaViewSet(SintelDSVMixin, BaseTenantViewSet):
         )
         serializer.instance = periodo
 
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear', permission_classes=[IsTenantMember])
+    def render_offcanvas_crear(self, request):
+        """GET /api/v1/empleados/periodos-nomina/render-offcanvas/crear/"""
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({"error": "Sin tenant asignado"}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'empresa_id': empresa.id}, template_name='tenant/empleados/offcanvas_crear_periodo.html')
+
     def _get_periodo_or_404(self):
         empresa = self.get_empresa()
         try:
