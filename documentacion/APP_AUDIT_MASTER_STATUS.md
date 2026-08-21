@@ -84,14 +84,14 @@ Ver `documentacion/APP_AUDIT_MATRIX.md` para el inventario completo
 | 9 | ventas | COMPLETED_WITH_DEFERRED | `documentacion/audits/apps/APP_ventas_AUDIT.md` |
 | 10 | cotizaciones | COMPLETED | `documentacion/audits/apps/APP_cotizaciones_AUDIT.md` |
 | 11 | proyectos | COMPLETED | `documentacion/audits/apps/APP_proyectos_AUDIT.md` |
-| 12 | gastos | EN PROGRESO | `documentacion/audits/apps/APP_gastos_AUDIT.md` |
-| 13 | bancos | PENDIENTE | `documentacion/audits/apps/APP_bancos_AUDIT.md` |
+| 12 | gastos | COMPLETED | `documentacion/audits/apps/APP_gastos_AUDIT.md` |
+| 13 | bancos | EN PROGRESO | `documentacion/audits/apps/APP_bancos_AUDIT.md` |
 | 14 | facturas | PENDIENTE | `documentacion/audits/apps/APP_facturas_AUDIT.md` |
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/APP_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/APP_dashboard_AUDIT.md` |
 
-**APP_AUDIT_PROGRAM:** EN PROGRESO (11/16 -- 7 COMPLETED_WITH_DEFERRED,
-4 COMPLETED)
+**APP_AUDIT_PROGRAM:** EN PROGRESO (12/16 -- 7 COMPLETED_WITH_DEFERRED,
+5 COMPLETED)
 
 **Regresion core (FASE Q, cierre):** `apps/tenant/core/` -- 73 passed,
 19 skipped, 0 failed, 1 warning (min_value en DocumentoUploadAPITests,
@@ -148,6 +148,13 @@ ADR-001 Pull Model. Sin gap funcional real. Reclasificado P1 -> P3
 (limpieza de codigo muerto pendiente, no ejecutado en esta sesion para
 no reabrir la app).
 Cerrado como `COMPLETED_WITH_DEFERRED`.
+
+**Regresion gastos (FASE Q, cierre):** `apps/tenant/gastos/` -- 21
+passed, 0 failed, 3 warnings preexistentes en 3944.24s (1:05:44). Se
+elimino `services.py` inalcanzable (shadowing con el paquete
+`services/` del mismo nombre, verificado empiricamente con un import
+real en interprete Python -- mismo bug historico de `empresa` 2025,
+nunca corregido aqui). Cerrado como `COMPLETED` puro.
 
 **Regresion inventario (FASE Q, cierre):** `apps/tenant/inventario/` --
 25 passed, 0 failed, 6 warnings preexistentes en 5210.10s (1:26:50).

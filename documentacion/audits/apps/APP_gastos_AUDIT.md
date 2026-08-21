@@ -95,8 +95,9 @@ prioridad, no reabre la auditoria ni requiere re-testear esa app).
 
 ## FASE Q — Tests / Regresion
 
-Tests coleccionados: `apps/tenant/gastos/tests/`. Regresion lanzada
-en background tras confirmar `db`/`redis` healthy.
+21 tests coleccionados (`apps/tenant/gastos/tests/`). Regresion
+ejecutada: **21 passed, 0 failed, 3 warnings preexistentes (min_value
+DRF + `format_html()` sin args) en 3944.24s (1:05:44)**.
 
 ## Deferred
 
@@ -110,12 +111,10 @@ Ninguno nuevo para `gastos` en si. Ver actualizacion de
 - [x] Service Layer auditado, codigo muerto encontrado y eliminado (FASE C/D/K, verificado empiricamente)
 - [x] Matriz normativa colombiana completa -- resuelve hallazgo P1 pendiente de `proveedores` (FASE M)
 - [x] `manage.py check` PASS (heredado de FASE 0, sin cambios de modelos)
-- [ ] Regresion de la app -- **PENDIENTE**, en curso en background
+- [x] Regresion de la app -- 21 passed, 0 failed
 - [x] Sin deferred items nuevos pendientes
 
 ## FASE Y — Decision
 
-**PENDIENTE DE CIERRE** -- bloqueado por el resultado de la regresion
-en curso. Se espera `COMPLETED` puro (el codigo muerto eliminado no
-tenia consumidores reales por definicion, riesgo de regresion minimo)
-si la regresion confirma 0 fallos.
+**COMPLETED** -- 21/21 tests pasan, 0 regresiones. Codigo muerto
+eliminado sin impacto (confirmado inalcanzable por definicion).
