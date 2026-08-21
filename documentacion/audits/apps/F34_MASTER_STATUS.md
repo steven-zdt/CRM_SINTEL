@@ -48,8 +48,8 @@ anterior):**
 | 3 | perfil | COMPLETED | `documentacion/audits/apps/F34_perfil_AUDIT.md` |
 | 4 | clientes | COMPLETED | `documentacion/audits/apps/F34_clientes_AUDIT.md` |
 | 5 | proveedores | COMPLETED | `documentacion/audits/apps/F34_proveedores_AUDIT.md` |
-| 6 | inventario | EN PROGRESO | `documentacion/audits/apps/F34_inventario_AUDIT.md` |
-| 7 | compras | PENDIENTE | `documentacion/audits/apps/F34_compras_AUDIT.md` |
+| 6 | inventario | COMPLETED | `documentacion/audits/apps/F34_inventario_AUDIT.md` |
+| 7 | compras | EN PROGRESO | `documentacion/audits/apps/F34_compras_AUDIT.md` |
 | 8 | ventas | PENDIENTE | `documentacion/audits/apps/F34_ventas_AUDIT.md` |
 | 9 | cotizaciones | PENDIENTE | `documentacion/audits/apps/F34_cotizaciones_AUDIT.md` |
 | 10 | proyectos | PENDIENTE | `documentacion/audits/apps/F34_proyectos_AUDIT.md` |
@@ -60,7 +60,16 @@ anterior):**
 | 15 | contabilidad | PENDIENTE | `documentacion/audits/apps/F34_contabilidad_AUDIT.md` |
 | 16 | dashboard | PENDIENTE | `documentacion/audits/apps/F34_dashboard_AUDIT.md` |
 
-**F34:** EN PROGRESO (5/16 COMPLETED, inventario con regresion en curso)
+**F34:** EN PROGRESO (6/16 COMPLETED)
+
+**Nota operativa (2026-08-21):** el usuario indico explicitamente NO
+ejecutar tests durante esta mision. A partir de este punto, la
+validacion de cualquier cambio de codigo se apoya en evidencia
+estatica (`py_compile` + grep repo-wide de consumidores), no en
+ejecucion de pytest. Coincide en espiritu con la regla F34 original
+("los tests son solo evidencia puntual, nunca el mecanismo de
+descubrimiento") pero va mas alla: ni siquiera se usan como evidencia
+puntual salvo que el usuario indique lo contrario.
 
 **core (cierre):** sin cambios de codigo -- 2 items deferred de la
 auditoria previa (N+1 sospechado en organizational_*, workspace.html

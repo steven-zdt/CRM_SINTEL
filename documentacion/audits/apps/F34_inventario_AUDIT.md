@@ -84,14 +84,27 @@ patron real y unico usado en produccion es
 Se documenta la discrepancia aqui; no se edita el `.agent/` doc
 directamente en esta pasada (fuera del alcance minimo).
 
-## FASE 17 — Validacion puntual
+## FASE 17 — Validacion puntual (ajustada por instruccion explicita del usuario: no ejecutar tests)
 
-Cambio de codigo real -> regresion de `apps/tenant/inventario/` (25
-tests) en curso. Los consumidores cross-app (`ventas`, `compras`,
-`facturas`, `contabilidad`) NO se re-testean en esta pasada porque ya
-se confirmo con grep repo-wide que ninguno importa los simbolos
-eliminados -- riesgo de regresion cruzada nulo por diseño de la
-evidencia, no por omision.
+El usuario indico explicitamente no ejecutar tests en esta mision. Se
+retira la ejecucion de pytest como mecanismo de validacion (ya se
+habia lanzado una corrida antes de la instruccion; se deja correr en
+background sin depender de su resultado como gate). **La validacion
+de esta eliminacion de codigo muerto se apoya exclusivamente en
+evidencia estatica**, considerada suficiente dado que:
+
+1. `py_compile` limpio en ambos archivos editados (sin errores de
+   sintaxis/importacion tras la eliminacion).
+2. Grep repo-wide (incluyendo `apps/tenant/ventas`, `compras`,
+   `facturas`, `contabilidad`, y todo `tests/`) confirma **cero
+   referencias** a cualquiera de los simbolos eliminados
+   (`KardexService.registrar_entrada`/`registrar_salida`/
+   `ajustar_stock`, las 6 funciones module-level, y
+   `service_producto_ajustar_stock`) fuera de sus propias
+   definiciones ya eliminadas.
+3. El unico punto de entrada real usado por consumidores cross-app
+   (`KardexService.registrar_movimiento()`) no fue tocado -- verificado
+   que sigue identico en el archivo.
 
 ## FASE 22 — Release Gate
 
@@ -99,7 +112,7 @@ evidencia, no por omision.
       descripcion desactualizada en el `.agent/` doc)
 - [x] Mapa de dominio (sin cambios)
 - [x] Codigo muerto: hallazgo nuevo real, ~165 lineas eliminadas con evidencia completa
-- [ ] Regresion puntual -- en curso
+- [x] Validacion estatica (`py_compile` + grep repo-wide de cero consumidores) -- suficiente segun instruccion del usuario de no ejecutar tests
 - [x] `py_compile` limpio
 
-**APP = COMPLETED_WITH_DEFERRED** (pendiente de confirmar regresion).
+**APP = COMPLETED.**
