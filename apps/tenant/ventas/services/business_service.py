@@ -477,8 +477,10 @@ class VentaBusinessService:
             return True, venta, 201
 
         except ValueError as exc:
+            transaction.set_rollback(True)
             return False, {"detail": str(exc)}, 400
         except Exception as exc:
+            transaction.set_rollback(True)
             logger.error("[VentaBS] crear_venta_borrador error: %s", exc, exc_info=True)
             return False, {"detail": "Error interno al crear la venta."}, 500
 
