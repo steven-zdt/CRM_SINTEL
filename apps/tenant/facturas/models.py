@@ -918,6 +918,65 @@ class ItemNotaCredito(SintelTenantBaseModel):
         super().save(*args, **kwargs)
 
 
+class TransmisionFactura(SintelTenantBaseModel):
+    """
+    Historial de intentos de transmision de una Factura al transporte
+    electronico (FISCAL-02A) -- una fila por cada llamada real a
+    `ElectronicDocumentTransportPort.send()`, sin importar si el adaptador
+    detras es `MockTransportAdapter` (hoy, unico usado en desarrollo) o un
+    adaptador real en el futuro. Complementa (no reemplaza) `Factura.estado`
+    -- ese sigue siendo el ancla de idempotencia real (FISCAL-03/04); esta
+    tabla es la traza de auditoria de CADA intento, incluyendo reintentos.
+
+    `environment` separa "fue una transmision simulada o real" del `status`
+    en si (decision del usuario, FISCAL-02A: "status=ACCEPTED,
+    environment=TEST" es mas limpio que inflar el enum de estados con
+    sufijos "_TEST").
+    """
+    class Environment(models.TextChoices):
+        TEST = 'TEST', _('Prueba / Simulado')
+        PRODUCTION = 'PRODUCTION', _('Producción')
+
+    class Status(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', _('Pendiente de respuesta')
+        ACEPTADO = 'ACEPTADO', _('Aceptado')
+        RECHAZADO = 'RECHAZADO', _('Rechazado')
+        ERROR_TRANSMISION = 'ERROR_TRANSMISION', _('Error de transmisión')
+        AMBIGUO = 'AMBIGUO', _('Ambiguo (timeout/error de red, sin confirmar)')
+
+    factura = models.ForeignKey(Factura, on_delete=models.CASCADE, related_name='transmisiones')
+
+    # WARNING: no declarar un segundo campo "uuid" en esta clase: dentro del
+    # cuerpo de la clase, "uuid" (nombre) queda ligado al campo, tapando el
+    # modulo `import uuid` para las lineas siguientes -- transmission_id ya
+    # cumple el mismo rol (identificador publico unico, lookup_field de API).
+    transmission_id = models.UUIDField(
+        default=uuid.uuid4, unique=True, db_index=True, editable=False,
+        help_text=_('Identificador propio del intento (SSoT interno, independiente del track_id del proveedor).'),
+    )
+    environment = models.CharField(max_length=20, choices=Environment.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDIENTE, db_index=True)
+
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    track_id = models.CharField(max_length=128, blank=True, null=True, help_text=_('track_id/XmlDocumentKey del proveedor, si aplica.'))
+    response_code = models.CharField(max_length=20, blank=True, null=True)
+    response_message = models.TextField(blank=True, default='')
+    raw_response = models.TextField(blank=True, default='', help_text=_('Cuerpo crudo de la respuesta -- nunca secretos.'))
+
+    class Meta:
+        verbose_name = _('Transmisión de Factura')
+        verbose_name_plural = _('Transmisiones de Factura')
+        ordering = ['-submitted_at']
+        indexes = [
+            models.Index(fields=['empresa', 'factura', '-submitted_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.factura.numero} [{self.environment}] {self.status} ({self.submitted_at:%Y-%m-%d %H:%M})"
+
+
 # Backward-compat alias for legacy imports in tests and old modules.
 NaturalezaFactura = Factura.Naturaleza
 

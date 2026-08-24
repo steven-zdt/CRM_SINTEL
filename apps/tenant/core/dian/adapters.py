@@ -169,3 +169,21 @@ class DIANAdapter:
             contentFile=contenido_b64,
         )
         return self._parsear_respuesta(respuesta)
+
+    def get_status(self, tracking_key: str) -> TransmissionResult:
+        """
+        # WARNING: NO IMPLEMENTADO. La operacion real de consulta de estado
+        # DIAN (nombre/parametros exactos no confirmados -- posiblemente
+        # `GetStatus`/`GetStatusZip` segun el Anexo Tecnico, sin verificar)
+        # no se implemento para no inventar una segunda operacion SOAP sin
+        # WSDL real contra el cual validarla. Retorna un resultado honesto
+        # de "no soportado" en vez de fingir una consulta real.
+        """
+        return TransmissionResult(
+            success=False, status="ERROR_TRANSMISION",
+            response_message=(
+                "DIANAdapter.get_status() no esta implementado -- operacion real de "
+                "la DIAN no confirmada. Ver docs/fiscal/FISCAL_05_DIAN_ADAPTER.md."
+            ),
+            errors=["not_supported"],
+        )

@@ -14,6 +14,10 @@ Modulos:
   xades_signer      -- Firma XAdES-EPES (ds:Signature) sobre bytes XML
   attached_document -- Contenedor AttachedDocument DIAN + ApplicationResponse
   transport         -- Puerto de transporte (FISCAL-02) + NullTransportAdapter
+                        + MockTransportAdapter (FISCAL-02A, simulacion
+                        controlada, cero conexion externa -- usar este
+                        para desarrollo/tests hasta tener credenciales DIAN
+                        reales).
   adapters          -- DIANAdapter (FISCAL-05) -- implementacion SOAP real,
                         **NO VERIFICADA** contra el ambiente DIAN real. Ver
                         advertencia completa en adapters.py y
@@ -24,6 +28,7 @@ from apps.tenant.core.dian.attached_document import AttachedDocumentService
 from apps.tenant.core.dian.transport import (
     ElectronicDocument,
     ElectronicDocumentTransportPort,
+    MockTransportAdapter,
     NullTransportAdapter,
     TransmissionResult,
 )
@@ -34,6 +39,7 @@ __all__ = [
     "AttachedDocumentService",
     "ElectronicDocument",
     "ElectronicDocumentTransportPort",
+    "MockTransportAdapter",
     "NullTransportAdapter",
     "TransmissionResult",
     "DIANAdapter",
